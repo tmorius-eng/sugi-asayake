@@ -103,9 +103,13 @@ FLUSH PRIVILEGES;
 - `ComponentShowcase.tsx` (1437 мөр), ашиглагдаагүй `AIChatBox`/`ManusDialog` — routing хийгдээгүй хэдий ч repo дотор үлдсэн dead code
 
 ## Дараагийн ажлын санал
-TIER 0, TIER 1 дууссан. TIER 5-ын CI (локал git+GitHub Actions бэлтгэл) болон автомат DB backup+restore (Windows Task Scheduler, `scripts/db-backup.ps1`/`db-restore.ps1`) мөн дууссан — дэлгэрэнгүй [ROADMAP.md](ROADMAP.md). Одоо UX-RESEARCH.md-ийн тэргүүлэх №1 (guest checkout) дээр ажиллаж байна. Дараа нь: TIER 5-ын үлдсэн зүйлс (Sentry, staging, CDN, uptime monitoring) болон TIER 2/3/4.
+TIER 0, TIER 1, TIER 5-ын CI+backup (локал бэлтгэл) дууссан. **Guest checkout (UX-RESEARCH.md тэргүүлэх №1) мөн дууссан (2026-08-20)** — `cart.*`/`checkout.createOrder` одоо `publicProcedure`, `guest_cart_token` cookie-оор зочны сагс, нэвтрэхэд автомат нэгтгэгддэг. Дэлгэрэнгүй [UX-RESEARCH.md](UX-RESEARCH.md), [ROADMAP.md](ROADMAP.md).
+
+Дараагийн санал: UX-RESEARCH.md-ийн №2 (хүргэлтийн үнэ эрт харуулах), эсвэл ROADMAP TIER 5-ын үлдсэн зүйлс (Sentry, staging, CDN, uptime monitoring).
 
 **SECURITY.md, UX-RESEARCH.md** нэмэгдсэн (CLAUDE.md/ROADMAP.md-ийн хамтрагч баримт) — аюулгүй байдал болон UX/зах зээлийн судалгааны checklist тус тус.
+
+**Төсөл одоо git repo** (`git init` хийсэн, GitHub-руу push хийгээгүй — хэрэглэгч өөрөө шийднэ).
 
 **`pnpm dev` одоо стандарт байдлаар ажилладаг (2026-08-20-с хойш).** Өмнө нь `package.json`/`pnpm-lock.yaml` файлууд Windows-ийн "High Mandatory Level" integrity label-тай байсан тул Claude Code засаж чадахгүй байсан бол, хэрэглэгч elevated PowerShell-ээс `icacls ... /setintegritylevel Medium` ажиллуулж зассан. Одооноос localhost дээр туршихдаа зүгээр л:
 ```powershell

@@ -19,7 +19,7 @@ function createContext(role: "user" | "admin" | null): TrpcContext {
   return {
     user,
     req: { protocol: "https", headers: {} } as TrpcContext["req"],
-    res: { clearCookie: () => undefined } as TrpcContext["res"],
+    res: { cookie: () => undefined, clearCookie: () => undefined } as TrpcContext["res"],
   };
 }
 
@@ -65,9 +65,9 @@ describe("commerce router", () => {
     await expect(caller.admin.createPost({ title: "New Japanese care", slug: "new-japanese-care", content: "A sufficiently long post body for authorization testing.", isPublished: false })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
   });
 
-  it("requires authentication before reading a persistent customer cart", async () => {
+  it("gives an anonymous shopper an empty cart instead of requiring an account (guest checkout)", async () => {
     const caller = appRouter.createCaller(createContext(null));
-    await expect(caller.cart.current()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller.cart.current()).resolves.toBeNull();
   });
 
   it("requires authentication before a customer can create a QPay invoice", async () => {
@@ -75,16 +75,20 @@ describe("commerce router", () => {
     await expect(caller.payments.qpayCreateInvoice({ orderId: 1 })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 
-  it("requires authentication for customer order history and checkout order creation", async () => {
+  it("requires authentication for customer order history", async () => {
     const caller = appRouter.createCaller(createContext(null));
     await expect(caller.orders.mine()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("allows an anonymous shopper to attempt checkout (guest checkout), rejecting only because the cart is empty", async () => {
+    const caller = appRouter.createCaller(createContext(null));
     await expect(caller.checkout.createOrder({
-      customerName: "Checkout Test",
+      customerName: "Guest Checkout Test",
       customerPhone: "99112233",
       deliveryMethod: "store_pickup",
       pickupBranch: "Орос элчингийн салбар",
       paymentMethod: "cash_on_delivery",
-    })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    })).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 
   it("rejects a store-pickup checkout when no SUGI branch is selected", async () => {

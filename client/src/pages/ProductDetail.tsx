@@ -4,8 +4,6 @@ import { Link, useRoute } from "wouter";
 import { toast } from "sonner";
 import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
-import { useAuth } from "@/_core/hooks/useAuth";
-import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
 
 const previewGallery = ["/manus-storage/sugi-professional-assortment_74fa4e31.jpg", "/manus-storage/sugi-professional-hero_d1a42bb9.jpg", "/manus-storage/sugi-care-retail_e5616f81.jpg"];
@@ -17,10 +15,9 @@ export default function ProductDetail() {
   const [activeImage, setActiveImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [cartOpen, setCartOpen] = useState(false);
-  const { isAuthenticated } = useAuth();
   const utils = trpc.useUtils();
   const productQuery = trpc.catalog.bySlug.useQuery({ slug: params?.slug ?? "hada-labo-gokujyun-lotion" });
-  const cartQuery = trpc.cart.current.useQuery(undefined, { enabled: isAuthenticated });
+  const cartQuery = trpc.cart.current.useQuery();
   const addItem = trpc.cart.addItem.useMutation({ onSuccess: () => { utils.cart.current.invalidate(); setCartOpen(true); }, onError: error => toast.error(messageFrom(error)) });
   const product = productQuery.data;
   const cartCount = cartQuery.data?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
@@ -47,7 +44,6 @@ export default function ProductDetail() {
   const currentImage = gallery[Math.min(activeImage, Math.max(0, gallery.length - 1))] ?? previewGallery[0];
 
   const addToCart = () => {
-    if (!isAuthenticated) { toast.message("Нэвтрэх шаардлагатай", { description: "Сагсаа хадгалахын тулд нэвтэрнэ үү." }); startLogin(); return; }
     addItem.mutate({ productId: product.id, quantity });
   };
 

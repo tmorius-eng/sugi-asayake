@@ -87,7 +87,7 @@ describeWithDatabase("commerce database integration", () => {
     await db.insert(cartItems).values({ cartId, productId: publishedProductId, quantity: 2 });
 
     const order = await createOrderFromActiveCart({
-      userId,
+      owner: { userId },
       customerName: "Integration test",
       customerPhone: "00000000",
       deliveryMethod: "store_pickup",

@@ -188,14 +188,26 @@ export async function getProductBySlug(slug: string) {
   return result[0] ?? null;
 }
 
-export async function getActiveCartForUser(userId: number) {
+/**
+ * Identifies who a cart (or an in-progress checkout) belongs to: either a
+ * logged-in account, or an anonymous shopper via the guest-cart cookie (see
+ * shared/const.ts GUEST_CART_COOKIE_NAME). Exactly one of the two is set —
+ * mirrors the nullable `carts.userId` / `carts.guestToken` columns.
+ */
+export type CartOwner = { userId: number; guestToken?: undefined } | { userId?: undefined; guestToken: string };
+
+function cartOwnerCondition(owner: CartOwner) {
+  return owner.userId !== undefined ? eq(carts.userId, owner.userId) : eq(carts.guestToken, owner.guestToken);
+}
+
+export async function getActiveCartForOwner(owner: CartOwner) {
   const db = await getDb();
   if (!db) return null;
 
   const cart = await db
     .select({ id: carts.id, status: carts.status, updatedAt: carts.updatedAt })
     .from(carts)
-    .where(and(eq(carts.userId, userId), eq(carts.status, "active")))
+    .where(and(cartOwnerCondition(owner), eq(carts.status, "active")))
     .orderBy(desc(carts.updatedAt))
     .limit(1);
 
@@ -219,24 +231,24 @@ export async function getActiveCartForUser(userId: number) {
   return { ...cart[0], items };
 }
 
-async function getOrCreateActiveCart(userId: number) {
+async function getOrCreateActiveCart(owner: CartOwner) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  const active = await getActiveCartForUser(userId);
+  const active = await getActiveCartForOwner(owner);
   if (active) return active;
-  const inserted = await db.insert(carts).values({ userId, status: "active" });
+  const inserted = await db.insert(carts).values({ userId: owner.userId ?? null, guestToken: owner.guestToken ?? null, status: "active" });
   const created = await db.select({ id: carts.id, status: carts.status, updatedAt: carts.updatedAt }).from(carts).where(eq(carts.id, Number(inserted[0].insertId))).limit(1);
   if (!created[0]) throw new Error("Unable to create an active cart.");
   return { ...created[0], items: [] };
 }
 
-export async function addCartItem(input: { userId: number; productId: number; quantity: number }) {
+export async function addCartItem(input: { owner: CartOwner; productId: number; quantity: number }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const product = await db.select({ id: products.id, stockQuantity: products.stockQuantity, isPublished: products.isPublished }).from(products).where(eq(products.id, input.productId)).limit(1);
   if (!product[0]?.isPublished) throw new Error("This product is not currently available for ordering.");
 
-  const cart = await getOrCreateActiveCart(input.userId);
+  const cart = await getOrCreateActiveCart(input.owner);
   const existing = await db.select().from(cartItems).where(and(eq(cartItems.cartId, cart.id), eq(cartItems.productId, input.productId))).limit(1);
   const quantity = (existing[0]?.quantity ?? 0) + input.quantity;
   if (quantity > product[0].stockQuantity) throw new Error("The requested quantity is not available in stock.");
@@ -246,10 +258,10 @@ export async function addCartItem(input: { userId: number; productId: number; qu
   } else {
     await db.insert(cartItems).values({ cartId: cart.id, productId: input.productId, quantity });
   }
-  return getActiveCartForUser(input.userId);
+  return getActiveCartForOwner(input.owner);
 }
 
-export async function updateCartItemQuantity(input: { userId: number; itemId: number; quantity: number }) {
+export async function updateCartItemQuantity(input: { owner: CartOwner; itemId: number; quantity: number }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const row = await db
@@ -257,7 +269,7 @@ export async function updateCartItemQuantity(input: { userId: number; itemId: nu
     .from(cartItems)
     .innerJoin(carts, eq(cartItems.cartId, carts.id))
     .innerJoin(products, eq(cartItems.productId, products.id))
-    .where(and(eq(cartItems.id, input.itemId), eq(carts.userId, input.userId), eq(carts.status, "active")))
+    .where(and(eq(cartItems.id, input.itemId), cartOwnerCondition(input.owner), eq(carts.status, "active")))
     .limit(1);
   if (!row[0]) throw new Error("Cart item not found.");
   if (input.quantity === 0) {
@@ -266,11 +278,34 @@ export async function updateCartItemQuantity(input: { userId: number; itemId: nu
     if (input.quantity > row[0].stockQuantity) throw new Error("The requested quantity is not available in stock.");
     await db.update(cartItems).set({ quantity: input.quantity, updatedAt: new Date() }).where(eq(cartItems.id, row[0].itemId));
   }
-  return getActiveCartForUser(input.userId);
+  return getActiveCartForOwner(input.owner);
+}
+
+/**
+ * Folds a guest cart into the now-logged-in user's cart (called right after
+ * auth.login / auth.register when a guest-cart cookie is present). Best
+ * effort: a line that no longer fits in stock is silently dropped rather
+ * than failing the login. The guest cart itself is marked "converted" so its
+ * (now stale) cookie can't be reused.
+ */
+export async function mergeGuestCartIntoUserCart(guestToken: string, userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  const guestCart = await getActiveCartForOwner({ guestToken });
+  if (!guestCart || guestCart.items.length === 0) return;
+
+  for (const item of guestCart.items) {
+    try {
+      await addCartItem({ owner: { userId }, productId: item.productId, quantity: item.quantity });
+    } catch {
+      // Out of stock, or the product was unpublished since it was added — skip this line.
+    }
+  }
+  await db.update(carts).set({ status: "converted", updatedAt: new Date() }).where(eq(carts.id, guestCart.id));
 }
 
 export async function createOrderFromActiveCart(input: {
-  userId: number;
+  owner: CartOwner;
   customerName: string;
   customerPhone: string;
   customerEmail?: string | null;
@@ -281,7 +316,7 @@ export async function createOrderFromActiveCart(input: {
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  const cart = await getActiveCartForUser(input.userId);
+  const cart = await getActiveCartForOwner(input.owner);
   if (!cart?.items.length) throw new Error("Your cart is empty.");
   const availabilityFailure = getInventoryReservationFailure(cart.items);
   if (availabilityFailure) throw new Error(availabilityFailure);
@@ -301,7 +336,7 @@ export async function createOrderFromActiveCart(input: {
       }
     }
     const inserted = await tx.insert(orders).values({
-      userId: input.userId,
+      userId: input.owner.userId ?? null,
       orderNumber,
       paymentMethod: input.paymentMethod,
       deliveryMethod: input.deliveryMethod,

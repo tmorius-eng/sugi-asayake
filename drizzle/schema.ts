@@ -73,12 +73,17 @@ export const products = mysqlTable("products", {
 
 export const carts = mysqlTable("carts", {
   id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  // Exactly one of userId / guestToken is set. Nullable (guest checkout):
+  // an anonymous shopper's cart is identified by an opaque cookie token
+  // instead of an account. See server/db.ts's CartOwner type.
+  userId: int("userId").references(() => users.id, { onDelete: "cascade" }),
+  guestToken: varchar("guestToken", { length: 64 }),
   status: mysqlEnum("status", ["active", "converted", "abandoned"]).notNull().default("active"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => [
   index("carts_user_idx").on(table.userId),
+  index("carts_guest_token_idx").on(table.guestToken),
   index("carts_status_idx").on(table.status),
 ]);
 

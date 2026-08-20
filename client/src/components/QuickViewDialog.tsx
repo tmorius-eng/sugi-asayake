@@ -2,9 +2,7 @@ import { Eye, LoaderCircle, Minus, Plus, ShoppingBag } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { toast } from "sonner";
-import { startLogin } from "@/const";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 
 export type QuickViewProduct = {
@@ -32,7 +30,6 @@ const messageFrom = (error: unknown) => error instanceof Error ? error.message :
 
 export default function QuickViewDialog({ open, product, onOpenChange, onAdded }: QuickViewDialogProps) {
   const [quantity, setQuantity] = useState(1);
-  const { isAuthenticated } = useAuth();
   const utils = trpc.useUtils();
   const detail = trpc.catalog.bySlug.useQuery({ slug: product?.slug ?? "catalog-preview" }, { enabled: open && Boolean(product) });
   const addItem = trpc.cart.addItem.useMutation({
@@ -50,11 +47,6 @@ export default function QuickViewDialog({ open, product, onOpenChange, onAdded }
 
   const addToCart = () => {
     if (!display) return;
-    if (!isAuthenticated) {
-      toast.message("Нэвтрэх шаардлагатай", { description: "Сагсаа хадгалахын тулд нэвтэрнэ үү." });
-      startLogin();
-      return;
-    }
     addItem.mutate({ productId: display.id, quantity });
   };
 

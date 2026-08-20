@@ -1,16 +1,18 @@
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME, GUEST_CART_COOKIE_NAME } from "@shared/const";
 import { TRPCError } from "@trpc/server";
+import { parse as parseCookieHeader } from "cookie";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
-import { getSessionCookieOptions } from "./_core/cookies";
+import { getGuestCartCookieOptions, getSessionCookieOptions } from "./_core/cookies";
 import { notifyOwner, sendAccountEmail } from "./_core/notification";
 import { systemRouter } from "./_core/systemRouter";
-import { signSessionToken } from "./_core/context";
+import { signSessionToken, type TrpcContext } from "./_core/context";
 import { hashPassword, verifyPassword } from "./_core/password";
 import {
   acceptStaffInvitation,
   addCartItem,
   bumpUserSessionVersion,
+  type CartOwner,
   categoryExists,
   createAdminCategory,
   createAdminPost,
@@ -18,12 +20,12 @@ import {
   createEmailVerificationToken,
   createOrderFromActiveCart,
   createPasswordResetToken,
+  getActiveCartForOwner,
   createQPayPaymentAttempt,
   createStaffInvitation,
   createUserWithPassword,
   deleteAdminPost,
   deleteAdminProduct,
-  getActiveCartForUser,
   getAdminCategories,
   getAdminOrders,
   getAdminPosts,
@@ -43,6 +45,7 @@ import {
   getStaffInvitationByTokenHash,
   getUserByEmail,
   logAdminAction,
+  mergeGuestCartIntoUserCart,
   postSlugExists,
   resetPasswordWithToken,
   revokeStaffInvitation,
@@ -138,6 +141,46 @@ function parseAppOrigin(originInput: string): URL {
   return origin;
 }
 
+// Called right after auth.login/auth.register issue a session: if the
+// browser was shopping as a guest, fold that cart into the now-known
+// account's cart and stop treating the browser as a guest.
+async function mergeGuestCartAndClearCookie(ctx: TrpcContext, userId: number) {
+  const guestToken = currentGuestCartToken(ctx);
+  if (!guestToken) return;
+  try {
+    await mergeGuestCartIntoUserCart(guestToken, userId);
+  } catch (error) {
+    console.error("[auth] Failed to merge guest cart into user cart", error);
+  }
+  ctx.res.clearCookie(GUEST_CART_COOKIE_NAME, { ...getGuestCartCookieOptions(ctx.req), maxAge: -1 });
+}
+
+function currentGuestCartToken(ctx: TrpcContext): string | undefined {
+  const cookies = parseCookieHeader(ctx.req.headers.cookie ?? "");
+  return cookies[GUEST_CART_COOKIE_NAME];
+}
+
+// Used by cart/checkout *queries*: never issues a new guest-cart cookie (a
+// page load that never adds anything shouldn't set one), so an anonymous
+// shopper with no cookie yet simply has no cart (null) rather than one being
+// silently created.
+function resolveCartOwnerForRead(ctx: TrpcContext): CartOwner | null {
+  if (ctx.user) return { userId: ctx.user.id };
+  const guestToken = currentGuestCartToken(ctx);
+  return guestToken ? { guestToken } : null;
+}
+
+// Used by cart/checkout *mutations*: mints and sets a fresh guest-cart
+// cookie the first time an anonymous shopper actually adds something.
+function resolveCartOwnerForWrite(ctx: TrpcContext): CartOwner {
+  if (ctx.user) return { userId: ctx.user.id };
+  const existingToken = currentGuestCartToken(ctx);
+  if (existingToken) return { guestToken: existingToken };
+  const guestToken = randomBytes(24).toString("base64url");
+  ctx.res.cookie(GUEST_CART_COOKIE_NAME, guestToken, getGuestCartCookieOptions(ctx.req));
+  return { guestToken };
+}
+
 async function sendVerificationEmail(userId: number, email: string, originInput: string) {
   const origin = parseAppOrigin(originInput);
   const token = randomBytes(32).toString("base64url");
@@ -202,6 +245,7 @@ export const appRouter = router({
         }
         const token = await signSessionToken(user.id, user.sessionVersion);
         ctx.res.cookie(COOKIE_NAME, token, getSessionCookieOptions(ctx.req));
+        await mergeGuestCartAndClearCookie(ctx, user.id);
         // Best-effort: a failed verification email should never block registration.
         if (input.origin) {
           try {
@@ -227,6 +271,7 @@ export const appRouter = router({
         await touchUserLastSignedIn(user.id);
         const token = await signSessionToken(user.id, user.sessionVersion);
         ctx.res.cookie(COOKIE_NAME, token, getSessionCookieOptions(ctx.req));
+        await mergeGuestCartAndClearCookie(ctx, user.id);
         const { passwordHash: _omit, ...safeUser } = user;
         return safeUser;
       }),
@@ -305,12 +350,31 @@ export const appRouter = router({
     siteMedia: publicProcedure.query(() => getSiteMedia()),
   }),
   cart: router({
-    current: protectedProcedure.query(({ ctx }) => getActiveCartForUser(ctx.user.id)),
-    addItem: protectedProcedure.input(z.object({ productId: z.number().int().positive(), quantity: z.number().int().min(1).max(100) })).mutation(({ ctx, input }) => addCartItem({ ...input, userId: ctx.user.id })),
-    updateItemQuantity: protectedProcedure.input(z.object({ itemId: z.number().int().positive(), quantity: z.number().int().min(0).max(100) })).mutation(({ ctx, input }) => updateCartItemQuantity({ ...input, userId: ctx.user.id })),
+    // publicProcedure, not protectedProcedure: UX-RESEARCH.md priority #1 is
+    // guest checkout — a shopper can browse, add to cart, and order without
+    // an account. See resolveCartOwnerForRead/Write below for how an
+    // anonymous cart is identified.
+    current: publicProcedure.query(({ ctx }) => {
+      const owner = resolveCartOwnerForRead(ctx);
+      return owner ? getActiveCartForOwner(owner) : null;
+    }),
+    addItem: publicProcedure.input(z.object({ productId: z.number().int().positive(), quantity: z.number().int().min(1).max(100) })).mutation(async ({ ctx, input }) => {
+      try {
+        return await addCartItem({ owner: resolveCartOwnerForWrite(ctx), ...input });
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to add this item to the cart." });
+      }
+    }),
+    updateItemQuantity: publicProcedure.input(z.object({ itemId: z.number().int().positive(), quantity: z.number().int().min(0).max(100) })).mutation(async ({ ctx, input }) => {
+      try {
+        return await updateCartItemQuantity({ owner: resolveCartOwnerForWrite(ctx), ...input });
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to update this cart item." });
+      }
+    }),
   }),
   checkout: router({
-    createOrder: protectedProcedure.input(z.object({
+    createOrder: publicProcedure.input(z.object({
       customerName: z.string().trim().min(2).max(160),
       customerPhone: z.string().trim().min(6).max(40),
       customerEmail: z.string().trim().email().max(320).nullable().optional(),
@@ -325,7 +389,13 @@ export const appRouter = router({
       if (value.deliveryMethod === "store_pickup" && !value.pickupBranch) {
         context.addIssue({ code: z.ZodIssueCode.custom, message: "Select a SUGI branch for store pickup.", path: ["pickupBranch"] });
       }
-    })).mutation(({ ctx, input }) => createOrderFromActiveCart({ ...input, userId: ctx.user.id })),
+    })).mutation(async ({ ctx, input }) => {
+      try {
+        return await createOrderFromActiveCart({ owner: resolveCartOwnerForWrite(ctx), ...input });
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to place this order." });
+      }
+    }),
   }),
   orders: router({
     mine: protectedProcedure.query(({ ctx }) => getOrdersForUser(ctx.user.id)),

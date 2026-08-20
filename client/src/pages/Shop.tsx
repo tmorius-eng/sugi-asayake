@@ -4,7 +4,6 @@ import { Link } from "wouter";
 import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
 import QuickViewDialog, { type QuickViewProduct } from "@/components/QuickViewDialog";
-import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { filterCatalogProducts, filterCatalogStock, getCatalogCategories, sortCatalogProducts, type CatalogSortOption } from "@shared/catalog-filter";
 import { rememberRecentlyViewed, resolveRecentlyViewed } from "@shared/recently-viewed";
@@ -57,9 +56,8 @@ export default function Shop() {
   const [cartOpen, setCartOpen] = useState(false);
   const [quickViewProduct, setQuickViewProduct] = useState<QuickViewProduct | null>(null);
   const [recentlyViewedIds, setRecentlyViewedIds] = useState<number[]>([]);
-  const { isAuthenticated } = useAuth();
   const catalog = trpc.catalog.list.useQuery();
-  const cart = trpc.cart.current.useQuery(undefined, { enabled: isAuthenticated });
+  const cart = trpc.cart.current.useQuery();
   const products = catalog.data ?? [];
   const cartCount = cart.data?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   const categories = useMemo(() => getCatalogCategories(products), [products]);
