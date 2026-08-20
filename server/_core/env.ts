@@ -37,11 +37,18 @@ export const ENV = {
   // endpoint, or a CDN/CloudFront/R2 custom domain in front of it).
   s3PublicBaseUrl: (process.env.S3_PUBLIC_BASE_URL ?? "").replace(/\/+$/, ""),
 
-  // Optional transactional email (Resend). If unset, staff-invitation and
-  // order notifications fall back to server-log output, exactly like the
-  // previous "owner notification fallback" behaviour.
-  resendApiKey: process.env.RESEND_API_KEY ?? "",
-  resendFromEmail: process.env.RESEND_FROM_EMAIL ?? "SUGI ASAYAKE <onboarding@resend.dev>",
+  // Optional transactional email + SMS (Brevo, formerly Sendinblue — one API
+  // key covers both). If unset, staff-invitation/account emails and any SMS
+  // fall back to server-log output, exactly like the previous "owner
+  // notification fallback" behaviour.
+  brevoApiKey: process.env.BREVO_API_KEY ?? "",
+  brevoSenderEmail: process.env.BREVO_SENDER_EMAIL ?? "",
+  brevoSenderName: process.env.BREVO_SENDER_NAME ?? "SUGI ASAYAKE",
+  // Shown as the SMS "from" — an alphanumeric sender name (max 11 chars) on
+  // most routes. Brevo may silently substitute a shared numeric sender for
+  // countries that don't support alpha senders, so don't assume this string
+  // reaches the recipient's phone unchanged.
+  brevoSmsSender: process.env.BREVO_SMS_SENDER ?? "SUGI",
 
   isProduction: process.env.NODE_ENV === "production",
 };

@@ -39,7 +39,7 @@ DATABASE_URL=mysql://root:Zulaa123@127.0.0.1:3306/sugi_asayake
 JWT_SECRET=local-test-secret-12345
 OWNER_EMAIL=owner@example.com
 S3_BUCKET=sugi-asayake
-S3_REGION=Mongolia   ← АНХААР: энгийн "us-east-1" биш! MinIO серверийн region нь "Mongolia" гэж тохиргоологдсон, зөрвөл "authorization header is malformed" алдаа өгнө.
+S3_REGION=us-east-1
 S3_ENDPOINT=http://127.0.0.1:9000
 S3_ACCESS_KEY_ID=minioadmin
 S3_SECRET_ACCESS_KEY=minioadmin
@@ -56,7 +56,7 @@ $env:DATABASE_URL="mysql://root:Zulaa123@127.0.0.1:3306/sugi_asayake"
 $env:JWT_SECRET="local-test-secret-12345"
 $env:OWNER_EMAIL="owner@example.com"
 $env:S3_BUCKET="sugi-asayake"
-$env:S3_REGION="Mongolia"
+$env:S3_REGION="us-east-1"
 $env:S3_ENDPOINT="http://127.0.0.1:9000"
 $env:S3_ACCESS_KEY_ID="minioadmin"
 $env:S3_SECRET_ACCESS_KEY="minioadmin"
@@ -85,29 +85,39 @@ FLUSH PRIVILEGES;
 **Ажиллаж байгаа нь баталгаажсан:**
 - Бүртгэл/нэвтрэлт (эхний хэрэглэгч автоматаар admin болдог)
 - Role-based хамгаалалт (`/admin` зөвхөн admin-д)
-- Admin панель: бүтээгдэхүүн үүсгэх/засах, зураг upload (S3_REGION=Mongolia тохиргоотой)
+- Admin панель: бүтээгдэхүүн үүсгэх/засах, зураг upload (S3_REGION=us-east-1 тохиргоотой — MinIO-ийн анхны region нь "Mongolia" байсан нь алдаа өгдөг байсныг 2026-08-20 бүр мөсөн `us-east-1` (MinIO/AWS S3-ийн стандарт анхны утга) болгож MinIO серверийг дахин асаасан, `.env` мөн шинэчилсэн — доорх бүх жишээ, тэмдэглэл харгалзан "Mongolia" гэсэн хуучин утгыг ашиглахгүй, зөвхөн `us-east-1`)
 - Пост үүсгэх, нийтлэх, олон нийтэд харуулах (`/:slug`)
 - Каталог/дэлгүүрийн жагсаалт, бүтээгдэхүүний дэлгэрэнгүй хуудас
 - **Нууц үг сэргээх, имэйл баталгаажуулах, login/register rate limiting (TIER 0, 2026-08-20 дуусгасан)** — дэлгэрэнгүй, туршилтын бүх алхам: [ROADMAP.md](ROADMAP.md)-ийн TIER 0 хэсэг
+- **Бүртгэл/нууц үг сэргээлт нь холбоос (link) биш 6 оронтой код (OTP)-оор ажилладаг (2026-08-20-с хойш)** — `auth.register` шууд нэвтрүүлдэггүй, зөвхөн `auth.confirmRegistration`-д кодоо баталгаажуулсны дараа л session олгодог; `auth.login` одоо `emailVerifiedAt` шаарддаг (энэ өөрчлөлтөөс өмнөх бүх хэрэглэгч `drizzle/0016_backfill_email_verified.sql`-аар автоматаар "grandfathered" verified болсон тул түгжигдээгүй). Код 15 минут хүчинтэй, буруу 5 оролдлогын дараа шатдаг (`MAX_CODE_ATTEMPTS`, `server/db.ts`). `/reset-password/:token`, `/verify-email/:token` route-ууд устсан — бүгд `/login` (бүртгэлийн 2-р алхам), `/forgot-password`, `/verify-email` (нэвтэрсэн ч баталгаажаагүй хэрэглэгчид) дотор код оруулах маягтаар ажилладаг. Бодит HTTP-ээр (Brevo-г түр унтраагаад log fallback-аар код унших замаар) бүрэн урсгал шалгасан: register→login (татгалзсан, FORBIDDEN)→буруу код (татгалзсан)→зөв код (амжилттай, session олгосон)→forgot-password→5 буруу код (шатсан)→зөв код ч татгалзсан→шинэ код хүсэлт→амжилттай сэргээлт→шинэ нууц үгээр нэвтэрсэн, хуучин нууц үгээр татгалзсан; мөн баталгаажуулаагүй имэйлээр дахин бүртгүүлэхэд (resend/retry) хуучин код автоматаар хүчингүй болдгийг баталгаажуулсан.
 
 **Шалгагдаагүй, анхаарах ёстой:**
 - Checkout/захиалгын бүтэн урсгал (сагс → захиалга үүсгэх)
 - QPay төлбөр (жинхэнэ merchant credential шаардана, localhost дээр бүрэн туршигдахгүй)
-- Staff invitation имэйл (одоогоор `RESEND_API_KEY` тохируулаагүй тул зөвхөн server log-д бичигддэг)
+- Staff invitation имэйл (email провайдер **Resend-ээс Brevo руу шилжсэн, 2026-08-20** — `server/_core/notification.ts`, `BREVO_API_KEY`/`BREVO_SENDER_EMAIL`; `BREVO_API_KEY` тохируулаагүй бол зөвхөн server log-д бичигддэг, өмнөх Resend fallback-тай ижил зарчим)
+- SMS мэдэгдэл (Brevo Transactional SMS, `server/_core/notification.ts`-ийн `sendAccountSms` + `normalizePhoneForSms` — зөвхөн +976 Монгол дугаарт зориулагдсан) шинээр нэмэгдсэн ч **одоогоор ямар ч урсгалд холбогдоогүй** (зөвхөн provider-ийн API-тэй холбогдсон бэлэн функц). Brevo-ийн SMS нь имэйлээс ялгаатай — free tier-д ороогүй, зээлийн үлдэгдэл худалдаж авах шаардлагатай, Монгол улс руу route/үнийн дэмжлэгийг Brevo dashboard дотроос (Transactional SMS → Country pricing) заавал шалгах
 - Хэрэглэгчийн удирдлага (`/admin` → Хэрэглэгч хэсэг)
 
 ## Мэдэгдэж буй бусад зүйлс (өмнөх бүрэн аудитаас, засаагүй үлдсэн)
-- Drizzle schema-д foreign key constraint байхгүй (12 хүснэгтийн аль нь ч)
 - QPay callback route (`/api/payments/qpay/callback`) rate limiting-д хамрагдахгүй
 - Security headers дотор Content-Security-Policy байхгүй
 - `ComponentShowcase.tsx` (1437 мөр), ашиглагдаагүй `AIChatBox`/`ManusDialog` — routing хийгдээгүй хэдий ч repo дотор үлдсэн dead code
 
+## ⚠️ Чухал bug олж заслаа: MySQL timestamp 8 цагаар зөрдөг байсан (2026-08-20, TIER4)
+Локал MySQL серверийн session `time_zone = SYSTEM` (энэ машины Windows local timezone, Asia/Ulaanbaatar = **UTC+8**) байсан бол `drizzle-orm`-ийн mysql `timestamp` багана нь DB-ээс ирсэн raw утгыг **үргэлж UTC гэж таамаглаж** уншдаг (`+0000` нэмдэг). Үүний үр дүнд `NOW()`/`defaultNow()`-ээр автоматаар үүсдэг **бараг бүх хүснэгтийн `createdAt`/`updatedAt`** (users, orders, products, audit log гэх мэт бүгд) нь app-ын `new Date()`/`Date.now()`-тэй шууд харьцуулахад **бодит утгаасаа 8 цагаар түрүүлж** харагддаг байсан. Энэ нь TIER4-ийн Audit Log-ийн огнооны шүүлтүүр (`dateFrom`/`dateTo`) бичих явцад бодит DB дээрх тестээр илэрсэн. **Засаж, root cause-д нь шийдсэн:** `server/db.ts`-ийн `getDb()`-д MySQL connection pool-ийн `'connection'` event дээр `SET time_zone = '+00:00'` ажиллуулдаг болгосон — DB холболт бүр одооноос UTC session-той. `pnpm exec tsx` жижиг probe script-ээр (устгасан) заслын өмнө/дараа шалгаж баталгаажуулсан.
+
+**Яагаад өмнөх бүх тест үүнийг олж чадаагүй бэ:** Token/session expiry шалгалт бүгд **app-аас бичигдэж, app-аас уншигддаг** утгыг (`expiresAt: new Date(Date.now()+X)`) ашигладаг байсан тул бичих/унших хоёр тал ижил (буруу ч гэсэн тогтмол) хазайлтаар давхар "цуцлагддаг" — зөвхөн **DB талаас автоматаар үүссэн** (`defaultNow()`) утгыг app-ын шинэ `Date`-тэй шууд харьцуулах үед л алдаа гарч ирдэг байсан (яг TIER4-ийн шинэ filter feature шиг). Хэрэв ирээдүйд ижил төрлийн (DB `defaultNow()` vs app `Date`) харьцуулалт хийх код бичвэл энэ засвар аль хэдийн орсон эсэхийг (`server/db.ts`-ийн `getDb()`) шалгаарай — production-д өөр MySQL хост ашиглах үед session timezone дахин өөр байж магадгүй тул энэ connection-level fix нь хостоос үл хамааран найдвартай ажиллана.
+
 ## Дараагийн ажлын санал
 TIER 0, TIER 1, TIER 5-ын CI+backup (локал бэлтгэл) дууссан. **Guest checkout (UX-RESEARCH.md тэргүүлэх №1) мөн дууссан (2026-08-20)** — `cart.*`/`checkout.createOrder` одоо `publicProcedure`, `guest_cart_token` cookie-оор зочны сагс, нэвтрэхэд автомат нэгтгэгддэг. Дэлгэрэнгүй [UX-RESEARCH.md](UX-RESEARCH.md), [ROADMAP.md](ROADMAP.md).
 
-Дараагийн санал: UX-RESEARCH.md-ийн №2 (хүргэлтийн үнэ эрт харуулах), эсвэл ROADMAP TIER 5-ын үлдсэн зүйлс (Sentry, staging, CDN, uptime monitoring).
+**ADMIN-PANEL.md-ийн TIER 1–6 бүгд дууссан (2026-08-20)** — Dashboard+Global Search, хэрэглэгч suspend/force-logout, `staff` RBAC role, Audit Log+Login History (Security Center), Bulk Actions+CSV Export, DB/S3 health widget. Дэлгэрэнгүй, туршилтын бүх алхам тус бүрийн TIER-д: [ADMIN-PANEL.md](ADMIN-PANEL.md). Энэ явцад чухал timezone bug олж заслаа — дэлгэрэнгүй дээрх хэсэгт.
+
+Дараагийн санал: UX-RESEARCH.md-ийн №2 (хүргэлтийн үнэ эрт харуулах), ROADMAP-ийн TIER 2 (зурган боловсруулалт, сервер талын хайлт, refund урсгал), эсвэл TIER 5-ын үлдсэн зүйлс (Sentry, staging, CDN, uptime monitoring).
 
 **SECURITY.md, UX-RESEARCH.md** нэмэгдсэн (CLAUDE.md/ROADMAP.md-ийн хамтрагч баримт) — аюулгүй байдал болон UX/зах зээлийн судалгааны checklist тус тус.
+
+**LAPTOP-MIGRATION.md нэмэгдсэн (2026-08-20)** — Tom ажлын компьютерээс гэрийн компьютер руу шилжихэд зориулсан бүрэн заавар (код/DB/MinIO зураг/`.env`-ийг зөөх 4 тусдаа алхам + гэрийн компьютерийн шинэ тохиргооны checklist). Бодит DB backup (`scripts/db-backup.ps1`) ажиллуулж `backups/`-т бэлэн болгосон.
 
 **Төсөл одоо git repo** (`git init` хийсэн, GitHub-руу push хийгээгүй — хэрэглэгч өөрөө шийднэ).
 

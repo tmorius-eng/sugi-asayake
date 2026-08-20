@@ -18,8 +18,22 @@ export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
   return next({ ctx: { ...ctx, user: ctx.user } });
 });
 
+// Full admin only — user management (role changes, suspend, force logout,
+// staff invitations) and anything financial (revenue, active-user counts).
+// TIER 3: `staff` is a separate, narrower role (see staffProcedure below),
+// not a synonym for admin.
 export const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== "admin") {
+    throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+  }
+  return next({ ctx });
+});
+
+// Admin or staff — day-to-day storefront operations (products, categories,
+// orders, posts, media). Staff cannot touch user accounts/roles or see
+// financial figures; those stay behind adminProcedure.
+export const staffProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role !== "admin" && ctx.user.role !== "staff") {
     throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
   }
   return next({ ctx });

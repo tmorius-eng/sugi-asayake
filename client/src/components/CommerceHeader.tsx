@@ -1,8 +1,6 @@
 import { ArrowLeft, MailWarning, ShoppingBag } from "lucide-react";
 import { Link } from "wouter";
-import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { trpc } from "@/lib/trpc";
 
 type CommerceHeaderProps = {
   cartCount?: number;
@@ -12,10 +10,6 @@ type CommerceHeaderProps = {
 
 function VerifyEmailBanner() {
   const { user } = useAuth();
-  const resend = trpc.auth.resendVerificationEmail.useMutation({
-    onSuccess: () => toast.success("Баталгаажуулах имэйл дахин илгээгдлээ. Инбоксоо шалгана уу."),
-    onError: error => toast.error(error instanceof Error ? error.message : "Илгээж чадсангүй."),
-  });
 
   if (!user || user.emailVerifiedAt) return null;
 
@@ -23,14 +17,9 @@ function VerifyEmailBanner() {
     <div className="flex flex-wrap items-center justify-center gap-2 bg-[#fff7e0] px-4 py-2 text-center text-xs font-semibold text-[#8a6a10]">
       <MailWarning size={14} aria-hidden="true" />
       Та имэйл хаягаа баталгаажуулаагүй байна.
-      <button
-        type="button"
-        disabled={resend.isPending}
-        onClick={() => resend.mutate({ origin: window.location.origin })}
-        className="underline underline-offset-2 hover:text-[#df1f3d] disabled:opacity-60"
-      >
-        {resend.isPending ? "Илгээж байна…" : "Дахин илгээх"}
-      </button>
+      <Link href="/verify-email" className="underline underline-offset-2 hover:text-[#df1f3d]">
+        Баталгаажуулах код оруулах
+      </Link>
     </div>
   );
 }

@@ -17,7 +17,6 @@ const MyOrders = lazy(() => import("./pages/MyOrders"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 const PostDetail = lazy(() => import("./pages/PostDetail"));
 const ProductDetail = lazy(() => import("./pages/ProductDetail"));
-const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const Shop = lazy(() => import("./pages/Shop"));
 const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 
@@ -40,8 +39,7 @@ function Router() {
     <Route path={"/admin"} component={AdminDashboard} />
     <Route path={"/login"} component={Login} />
     <Route path={"/forgot-password"} component={ForgotPassword} />
-    <Route path={"/reset-password/:token"} component={ResetPassword} />
-    <Route path={"/verify-email/:token"} component={VerifyEmail} />
+    <Route path={"/verify-email"} component={VerifyEmail} />
     <Route path={"/invite/:token"} component={AcceptInvitation} />
     <Route path={"/privacy"} component={Legal} />
     <Route path={"/terms"} component={Legal} />

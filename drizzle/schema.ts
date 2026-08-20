@@ -16,7 +16,10 @@ export const users = mysqlTable("users", {
   email: varchar("email", { length: 320 }).notNull().unique(),
   /** scrypt("<saltHex>:<hashHex>") — see server/_core/password.ts. Never sent to the client. */
   passwordHash: varchar("passwordHash", { length: 200 }).notNull(),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  // "staff" (TIER 3): can manage products/categories/orders/posts/media but
+  // not user accounts, roles, or financial figures — see staffProcedure in
+  // server/_core/trpc.ts for the enforcement.
+  role: mysqlEnum("role", ["user", "staff", "admin"]).default("user").notNull(),
   /** Set the moment the user completes the email verification link. Null means unverified. */
   emailVerifiedAt: timestamp("emailVerifiedAt"),
   /**
@@ -27,6 +30,13 @@ export const users = mysqlTable("users", {
    * sessions are still long-lived JWTs, but they can now be revoked early.
    */
   sessionVersion: int("sessionVersion").notNull().default(0),
+  /**
+   * Set by an admin to lock the account out (TIER 2 admin panel). Checked on
+   * every request in server/_core/context.ts, so it takes effect immediately
+   * for already-issued sessions too — not just at the next login.
+   */
+  suspendedAt: timestamp("suspendedAt"),
+  suspendedReason: varchar("suspendedReason", { length: 300 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -189,6 +199,33 @@ export const siteMedia = mysqlTable("site_media", {
   index("site_media_updated_by_idx").on(table.updatedByUserId),
 ]);
 
+/**
+ * TIER 4: one row per login attempt (successful or not) — auth.login writes
+ * this unconditionally (see server/routers.ts), independent of the
+ * transient in-memory rate limiter, so it survives a restart and backs the
+ * admin "login history" view. `userId` is nullable both because a failed
+ * attempt against a nonexistent email has no user to attach to, and because
+ * an attempt shouldn't vanish (or block deletion) if the account is later
+ * removed — see the SET NULL below.
+ */
+export const loginAttempts = mysqlTable("login_attempts", {
+  id: int("id").autoincrement().primaryKey(),
+  email: varchar("email", { length: 320 }).notNull(),
+  userId: int("userId").references(() => users.id, { onDelete: "set null" }),
+  success: boolean("success").notNull(),
+  // "invalid_credentials" | "suspended" | "unverified" | null (success)
+  reason: varchar("reason", { length: 60 }),
+  ipAddress: varchar("ipAddress", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  index("login_attempts_email_idx").on(table.email),
+  index("login_attempts_created_idx").on(table.createdAt),
+  index("login_attempts_user_idx").on(table.userId),
+]);
+
+export type LoginAttempt = typeof loginAttempts.$inferSelect;
+export type InsertLoginAttempt = typeof loginAttempts.$inferInsert;
+
 export const adminAuditLogs = mysqlTable("admin_audit_logs", {
   id: int("id").autoincrement().primaryKey(),
   // RESTRICT: the audit trail must not be able to vanish just because the
@@ -208,7 +245,7 @@ export const adminAuditLogs = mysqlTable("admin_audit_logs", {
 export const staffInvitations = mysqlTable("staff_invitations", {
   id: int("id").autoincrement().primaryKey(),
   email: varchar("email", { length: 320 }).notNull(),
-  role: mysqlEnum("role", ["user", "admin"]).notNull().default("user"),
+  role: mysqlEnum("role", ["user", "staff", "admin"]).notNull().default("user"),
   tokenHash: varchar("tokenHash", { length: 64 }).notNull().unique(),
   invitedByUserId: int("invitedByUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
   acceptedUserId: int("acceptedUserId").references(() => users.id, { onDelete: "set null" }),
@@ -231,7 +268,15 @@ export const staffInvitations = mysqlTable("staff_invitations", {
 export const passwordResetTokens = mysqlTable("password_reset_tokens", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
-  tokenHash: varchar("tokenHash", { length: 64 }).notNull().unique(),
+  // sha256 of a 6-digit numeric code (not a long random token — see
+  // server/routers.ts auth.requestPasswordReset). NOT unique: with only 1e6
+  // possible codes, two different users' pending codes can legitimately hash
+  // to the same value; every lookup is always scoped by userId as well.
+  tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+  // Failed-code guesses against this row. verifyPasswordResetCode burns the
+  // row (sets usedAt) once this hits MAX_CODE_ATTEMPTS, independent of the
+  // IP-based rate limit on the procedure itself.
+  attempts: int("attempts").notNull().default(0),
   expiresAt: timestamp("expiresAt").notNull(),
   usedAt: timestamp("usedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -240,11 +285,14 @@ export const passwordResetTokens = mysqlTable("password_reset_tokens", {
   index("password_reset_tokens_expires_idx").on(table.expiresAt),
 ]);
 
-/** Single-use tokens for the (optional) "verify your email" flow. */
+/** Single-use 6-digit codes for confirming a registration / verifying an email. */
 export const emailVerificationTokens = mysqlTable("email_verification_tokens", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
-  tokenHash: varchar("tokenHash", { length: 64 }).notNull().unique(),
+  // sha256 of a 6-digit numeric code — see passwordResetTokens.tokenHash above
+  // for why this isn't unique.
+  tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+  attempts: int("attempts").notNull().default(0),
   expiresAt: timestamp("expiresAt").notNull(),
   usedAt: timestamp("usedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

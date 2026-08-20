@@ -1,6 +1,6 @@
-import { and, asc, desc, eq, gte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, like, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { adminAuditLogs, cartItems, carts, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, products, siteMedia, staffInvitations, users } from "../drizzle/schema";
+import { adminAuditLogs, cartItems, carts, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, loginAttempts, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, products, siteMedia, staffInvitations, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { getInventoryReservationFailure, shouldRestoreStock } from "./commerce-lifecycle";
 
@@ -11,12 +11,41 @@ export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
       _db = drizzle(process.env.DATABASE_URL);
+      // drizzle-orm's mysql `timestamp` column hard-assumes the DB session
+      // is UTC: it reads a raw wire value and appends "+0000" (see
+      // node_modules/drizzle-orm/mysql-core/columns/timestamp.js), and
+      // writes a Date by stripping its own UTC ISO string down to a plain
+      // "YYYY-MM-DD HH:MM:SS". If the MySQL session's time_zone is
+      // anything else (MySQL's default is `SYSTEM`, i.e. the server OS's
+      // local zone — not UTC), `NOW()`/`defaultNow()` columns come back
+      // shifted by the local UTC offset relative to app-computed Date
+      // values (confirmed locally: an 8-hour skew against Asia/Ulaanbaatar,
+      // caught by a `dateFrom`/`dateTo` audit-log filter test that compared
+      // a `createdAt` column straight against `new Date()`). Force every
+      // pooled connection to UTC so app-computed and DB-generated
+      // timestamps are always comparable.
+      _db.$client.on("connection", connection => connection.query("SET time_zone = '+00:00'"));
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
     }
   }
   return _db;
+}
+
+// TIER 6: lightweight admin-panel "is the database reachable" check — a bare
+// SELECT 1, not a real query, so it's cheap enough to run on every dashboard
+// load. Never throws: reports the failure instead, same contract as
+// storagePing() in server/storage.ts.
+export async function dbPing(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const db = await getDb();
+    if (!db) return { ok: false, error: "DATABASE_URL тохируулаагүй байна." };
+    await db.execute(sql`SELECT 1`);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Unknown database error" };
+  }
 }
 
 export async function getUserByEmail(email: string) {
@@ -65,6 +94,17 @@ export async function createUserWithPassword(input: { email: string; passwordHas
   return created;
 }
 
+// Re-submitting the register form with an email that already has an
+// unconfirmed (emailVerifiedAt is null) account refreshes that account's
+// credentials instead of hard-failing on the email uniqueness constraint —
+// see auth.register in server/routers.ts for the caller-side guard that
+// makes sure this never touches an already-verified account.
+export async function updatePendingRegistration(input: { userId: number; passwordHash: string; name?: string | null }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.update(users).set({ passwordHash: input.passwordHash, ...(input.name !== undefined ? { name: input.name } : {}), updatedAt: new Date() }).where(eq(users.id, input.userId));
+}
+
 export async function touchUserLastSignedIn(id: number) {
   const db = await getDb();
   if (!db) return;
@@ -85,51 +125,65 @@ export async function bumpUserSessionVersion(id: number) {
 // --- Password reset (TIER 0: this was entirely missing before — a user who
 // forgot their password had no way back into their account) ---------------
 
-export async function createPasswordResetToken(input: { userId: number; tokenHash: string; expiresAt: Date }) {
+// Failed-code guesses allowed against a single OTP row before it's burned
+// (usedAt set) regardless of remaining time-to-expiry — a second line of
+// defense against brute force beyond the IP-based rate limit on the
+// procedures that call these, since a 6-digit code only has 1e6 possibilities.
+const MAX_CODE_ATTEMPTS = 5;
+
+export async function createPasswordResetCode(input: { userId: number; codeHash: string; expiresAt: Date }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  // Requesting a new reset link invalidates any still-pending ones for the
-  // same user, so only the most recently issued link can ever be used.
+  // Requesting a new code invalidates any still-pending one for the same
+  // user, so only the most recently issued code can ever be used.
   await db.update(passwordResetTokens).set({ usedAt: new Date() }).where(and(eq(passwordResetTokens.userId, input.userId), sql`${passwordResetTokens.usedAt} is null`));
-  await db.insert(passwordResetTokens).values(input);
+  await db.insert(passwordResetTokens).values({ userId: input.userId, tokenHash: input.codeHash, expiresAt: input.expiresAt });
 }
 
-export async function resetPasswordWithToken(input: { tokenHash: string; passwordHash: string }) {
+export async function resetPasswordWithCode(input: { userId: number; codeHash: string; passwordHash: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  const found = await db.select().from(passwordResetTokens).where(eq(passwordResetTokens.tokenHash, input.tokenHash)).limit(1);
+  const found = await db.select().from(passwordResetTokens).where(and(eq(passwordResetTokens.userId, input.userId), sql`${passwordResetTokens.usedAt} is null`)).orderBy(desc(passwordResetTokens.createdAt)).limit(1);
   const token = found[0];
-  if (!token) throw new Error("Энэ холбоос хүчингүй байна. Дахин нууц үг сэргээх хүсэлт илгээнэ үү.");
-  if (token.usedAt) throw new Error("Энэ холбоос аль хэдийн ашиглагдсан байна. Дахин нууц үг сэргээх хүсэлт илгээнэ үү.");
-  if (token.expiresAt.getTime() <= Date.now()) throw new Error("Энэ холбоосны хугацаа дууссан байна. Дахин нууц үг сэргээх хүсэлт илгээнэ үү.");
+  if (!token) throw new Error("Идэвхтэй код олдсонгүй. Дахин нууц үг сэргээх хүсэлт илгээнэ үү.");
+  if (token.expiresAt.getTime() <= Date.now()) throw new Error("Кодны хугацаа дууссан байна. Дахин нууц үг сэргээх хүсэлт илгээнэ үү.");
+  if (token.tokenHash !== input.codeHash) {
+    const attempts = token.attempts + 1;
+    const exhausted = attempts >= MAX_CODE_ATTEMPTS;
+    await db.update(passwordResetTokens).set({ attempts, ...(exhausted ? { usedAt: new Date() } : {}) }).where(eq(passwordResetTokens.id, token.id));
+    throw new Error(exhausted ? "Оролдлогын хязгаарт хүрлээ. Дахин нууц үг сэргээх хүсэлт илгээнэ үү." : `Код буруу байна. ${MAX_CODE_ATTEMPTS - attempts} оролдлого үлдлээ.`);
+  }
 
   // Bumping sessionVersion in the same update invalidates every session
   // token issued before the reset — if the account was ever compromised, the
   // attacker's existing cookie stops working the moment the password changes.
   await db.update(users).set({ passwordHash: input.passwordHash, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: new Date() }).where(eq(users.id, token.userId));
-  // Mark this token used, and invalidate any other outstanding tokens for
-  // this user so an older, still-unread email can't reset the password again.
-  await db.update(passwordResetTokens).set({ usedAt: new Date() }).where(and(eq(passwordResetTokens.userId, token.userId), sql`${passwordResetTokens.usedAt} is null`));
+  await db.update(passwordResetTokens).set({ usedAt: new Date() }).where(eq(passwordResetTokens.id, token.id));
   return { userId: token.userId };
 }
 
 // --- Email verification (TIER 0: optional, but good practice) -------------
 
-export async function createEmailVerificationToken(input: { userId: number; tokenHash: string; expiresAt: Date }) {
+export async function createEmailVerificationCode(input: { userId: number; codeHash: string; expiresAt: Date }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.update(emailVerificationTokens).set({ usedAt: new Date() }).where(and(eq(emailVerificationTokens.userId, input.userId), sql`${emailVerificationTokens.usedAt} is null`));
-  await db.insert(emailVerificationTokens).values(input);
+  await db.insert(emailVerificationTokens).values({ userId: input.userId, tokenHash: input.codeHash, expiresAt: input.expiresAt });
 }
 
-export async function verifyEmailWithToken(input: { tokenHash: string }) {
+export async function verifyEmailWithCode(input: { userId: number; codeHash: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  const found = await db.select().from(emailVerificationTokens).where(eq(emailVerificationTokens.tokenHash, input.tokenHash)).limit(1);
+  const found = await db.select().from(emailVerificationTokens).where(and(eq(emailVerificationTokens.userId, input.userId), sql`${emailVerificationTokens.usedAt} is null`)).orderBy(desc(emailVerificationTokens.createdAt)).limit(1);
   const token = found[0];
-  if (!token) throw new Error("Энэ баталгаажуулах холбоос хүчингүй байна.");
-  if (token.usedAt) throw new Error("Энэ имэйл хаяг аль хэдийн баталгаажсан байна.");
-  if (token.expiresAt.getTime() <= Date.now()) throw new Error("Энэ баталгаажуулах холбоосны хугацаа дууссан байна. Шинэ холбоос илгээлгэнэ үү.");
+  if (!token) throw new Error("Идэвхтэй код олдсонгүй. Шинэ код илгээнэ үү.");
+  if (token.expiresAt.getTime() <= Date.now()) throw new Error("Кодны хугацаа дууссан байна. Шинэ код илгээнэ үү.");
+  if (token.tokenHash !== input.codeHash) {
+    const attempts = token.attempts + 1;
+    const exhausted = attempts >= MAX_CODE_ATTEMPTS;
+    await db.update(emailVerificationTokens).set({ attempts, ...(exhausted ? { usedAt: new Date() } : {}) }).where(eq(emailVerificationTokens.id, token.id));
+    throw new Error(exhausted ? "Оролдлогын хязгаарт хүрлээ. Шинэ код илгээнэ үү." : `Код буруу байна. ${MAX_CODE_ATTEMPTS - attempts} оролдлого үлдлээ.`);
+  }
 
   await db.update(users).set({ emailVerifiedAt: new Date(), updatedAt: new Date() }).where(eq(users.id, token.userId));
   await db.update(emailVerificationTokens).set({ usedAt: new Date() }).where(eq(emailVerificationTokens.id, token.id));
@@ -461,6 +515,77 @@ export async function getAdminOrders() {
   return orderRows.map(order => ({ ...order, items: lineItems.filter(item => item.orderId === order.id) }));
 }
 
+const LOW_STOCK_THRESHOLD = 5;
+
+export async function getAdminDashboardSummary() {
+  const db = await getDb();
+  if (!db) {
+    return { totalOrders: 0, totalRevenueMnt: 0, activeUsers: 0, recentOrders: [], lowStockProducts: [], failedPayments: [] };
+  }
+
+  const activeSince = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  const [[orderCountRow], [revenueRow], [activeUserRow], recentOrders, lowStockProducts, failedPayments] = await Promise.all([
+    db.select({ count: sql<number>`count(*)` }).from(orders),
+    db.select({ total: sql<number>`coalesce(sum(${orders.totalMnt}), 0)` }).from(orders).where(eq(orders.paymentStatus, "paid")),
+    db.select({ count: sql<number>`count(*)` }).from(users).where(gte(users.lastSignedIn, activeSince)),
+    db.select({
+      id: orders.id,
+      orderNumber: orders.orderNumber,
+      customerName: orders.customerName,
+      totalMnt: orders.totalMnt,
+      status: orders.status,
+      paymentStatus: orders.paymentStatus,
+      createdAt: orders.createdAt,
+    }).from(orders).orderBy(desc(orders.createdAt)).limit(10),
+    db.select({
+      id: products.id,
+      name: products.name,
+      sku: products.sku,
+      stockQuantity: products.stockQuantity,
+    }).from(products).where(and(eq(products.isPublished, true), sql`${products.stockQuantity} <= ${LOW_STOCK_THRESHOLD}`)).orderBy(asc(products.stockQuantity)).limit(10),
+    db.select({
+      id: paymentAttempts.id,
+      orderId: paymentAttempts.orderId,
+      orderNumber: orders.orderNumber,
+      provider: paymentAttempts.provider,
+      createdAt: paymentAttempts.createdAt,
+    }).from(paymentAttempts).leftJoin(orders, eq(paymentAttempts.orderId, orders.id)).where(eq(paymentAttempts.status, "failed")).orderBy(desc(paymentAttempts.createdAt)).limit(10),
+  ]);
+
+  return {
+    totalOrders: Number(orderCountRow?.count ?? 0),
+    totalRevenueMnt: Number(revenueRow?.total ?? 0),
+    activeUsers: Number(activeUserRow?.count ?? 0),
+    recentOrders,
+    lowStockProducts,
+    failedPayments,
+  };
+}
+
+export async function adminGlobalSearch(queryText: string) {
+  const db = await getDb();
+  if (!db) return { products: [], orders: [], users: [] };
+  const term = `%${queryText}%`;
+
+  const [productRows, orderRows, userRows] = await Promise.all([
+    db.select({ id: products.id, name: products.name, sku: products.sku, slug: products.slug })
+      .from(products)
+      .where(or(like(products.name, term), like(products.sku, term)))
+      .limit(5),
+    db.select({ id: orders.id, orderNumber: orders.orderNumber, customerName: orders.customerName, customerPhone: orders.customerPhone, totalMnt: orders.totalMnt, status: orders.status })
+      .from(orders)
+      .where(or(like(orders.orderNumber, term), like(orders.customerName, term), like(orders.customerPhone, term)))
+      .limit(5),
+    db.select({ id: users.id, name: users.name, email: users.email, role: users.role })
+      .from(users)
+      .where(or(like(users.name, term), like(users.email, term)))
+      .limit(5),
+  ]);
+
+  return { products: productRows, orders: orderRows, users: userRows };
+}
+
 const orderStatusRank = { pending: 0, confirmed: 1, packed: 2, out_for_delivery: 3, completed: 4 } as const;
 export type FulfilmentStatus = keyof typeof orderStatusRank | "cancelled";
 
@@ -585,6 +710,63 @@ export async function logAdminAction(input: { actorUserId: number; action: strin
   const db = await getDb();
   if (!db) return;
   await db.insert(adminAuditLogs).values({ actorUserId: input.actorUserId, action: input.action, entityType: input.entityType, entityId: input.entityId ?? null, metadataJson: input.metadata ? JSON.stringify(input.metadata) : null });
+}
+
+// TIER 4: admin-only Audit Log viewer — every filter is optional/additive.
+export async function getAdminAuditLogs(filters: { action?: string; actorEmail?: string; dateFrom?: Date; dateTo?: Date; limit?: number }) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [
+    filters.action ? eq(adminAuditLogs.action, filters.action) : undefined,
+    filters.actorEmail ? like(users.email, `%${filters.actorEmail}%`) : undefined,
+    filters.dateFrom ? gte(adminAuditLogs.createdAt, filters.dateFrom) : undefined,
+    filters.dateTo ? lte(adminAuditLogs.createdAt, filters.dateTo) : undefined,
+  ].filter(condition => condition !== undefined);
+
+  return db.select({
+    id: adminAuditLogs.id,
+    actorUserId: adminAuditLogs.actorUserId,
+    actorEmail: users.email,
+    actorName: users.name,
+    action: adminAuditLogs.action,
+    entityType: adminAuditLogs.entityType,
+    entityId: adminAuditLogs.entityId,
+    metadataJson: adminAuditLogs.metadataJson,
+    createdAt: adminAuditLogs.createdAt,
+  })
+    .from(adminAuditLogs)
+    .leftJoin(users, eq(adminAuditLogs.actorUserId, users.id))
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(adminAuditLogs.createdAt))
+    .limit(Math.min(filters.limit ?? 100, 200));
+}
+
+// Best-effort: a DB hiccup while recording history should never be the
+// reason a legitimate login fails, so this swallows its own errors (same
+// pattern as the email/SMS senders in _core/notification.ts).
+export async function recordLoginAttempt(input: { email: string; userId: number | null; success: boolean; reason?: string | null; ipAddress: string | null }) {
+  const db = await getDb();
+  if (!db) return;
+  try {
+    await db.insert(loginAttempts).values({ email: input.email, userId: input.userId, success: input.success, reason: input.reason ?? null, ipAddress: input.ipAddress });
+  } catch (error) {
+    console.error("[Login attempt] Failed to record:", error);
+  }
+}
+
+// TIER 4: admin-only Login History viewer.
+export async function getLoginHistory(filters: { email?: string; success?: boolean; limit?: number }) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [
+    filters.email ? like(loginAttempts.email, `%${filters.email}%`) : undefined,
+    filters.success !== undefined ? eq(loginAttempts.success, filters.success) : undefined,
+  ].filter(condition => condition !== undefined);
+
+  return db.select().from(loginAttempts)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(loginAttempts.createdAt))
+    .limit(Math.min(filters.limit ?? 100, 200));
 }
 
 export async function getAdminCategories() {
@@ -757,9 +939,65 @@ export async function getAdminUsers() {
       role: users.role,
       createdAt: users.createdAt,
       lastSignedIn: users.lastSignedIn,
+      suspendedAt: users.suspendedAt,
+      suspendedReason: users.suspendedReason,
     })
     .from(users)
     .orderBy(desc(users.lastSignedIn));
+}
+
+export async function getAdminUserDetail(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = await db.select({
+    id: users.id,
+    name: users.name,
+    email: users.email,
+    role: users.role,
+    createdAt: users.createdAt,
+    lastSignedIn: users.lastSignedIn,
+    suspendedAt: users.suspendedAt,
+    suspendedReason: users.suspendedReason,
+  }).from(users).where(eq(users.id, userId)).limit(1);
+  const user = rows[0];
+  if (!user) return null;
+
+  const [userOrders, [spendRow]] = await Promise.all([
+    db.select({
+      id: orders.id,
+      orderNumber: orders.orderNumber,
+      status: orders.status,
+      paymentStatus: orders.paymentStatus,
+      totalMnt: orders.totalMnt,
+      createdAt: orders.createdAt,
+    }).from(orders).where(eq(orders.userId, userId)).orderBy(desc(orders.createdAt)),
+    db.select({ total: sql<number>`coalesce(sum(${orders.totalMnt}), 0)` }).from(orders).where(and(eq(orders.userId, userId), eq(orders.paymentStatus, "paid"))),
+  ]);
+
+  return { ...user, orders: userOrders, totalSpentMnt: Number(spendRow?.total ?? 0) };
+}
+
+export async function suspendUser(input: { userId: number; reason?: string | null }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const current = await db.select({ id: users.id }).from(users).where(eq(users.id, input.userId)).limit(1);
+  if (!current[0]) throw new Error("User not found.");
+  await db.update(users).set({ suspendedAt: new Date(), suspendedReason: input.reason?.trim() || null, updatedAt: new Date() }).where(eq(users.id, input.userId));
+  const updated = await db.select().from(users).where(eq(users.id, input.userId)).limit(1);
+  const { passwordHash: _passwordHash, ...safeUser } = updated[0];
+  return safeUser;
+}
+
+export async function unsuspendUser(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const current = await db.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1);
+  if (!current[0]) throw new Error("User not found.");
+  await db.update(users).set({ suspendedAt: null, suspendedReason: null, updatedAt: new Date() }).where(eq(users.id, userId));
+  const updated = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  const { passwordHash: _passwordHash, ...safeUser } = updated[0];
+  return safeUser;
 }
 
 export async function getAdminStaffInvitations() {
@@ -780,7 +1018,7 @@ export async function getAdminStaffInvitations() {
     .orderBy(desc(staffInvitations.createdAt));
 }
 
-export async function createStaffInvitation(input: { email: string; role: "user" | "admin"; tokenHash: string; invitedByUserId: number; expiresAt: Date }) {
+export async function createStaffInvitation(input: { email: string; role: "user" | "staff" | "admin"; tokenHash: string; invitedByUserId: number; expiresAt: Date }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const email = input.email.trim().toLocaleLowerCase();
@@ -825,7 +1063,7 @@ export async function revokeStaffInvitation(id: number) {
   return { id };
 }
 
-export async function updateAdminUserRole(input: { userId: number; role: "user" | "admin" }) {
+export async function updateAdminUserRole(input: { userId: number; role: "user" | "staff" | "admin" }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const user = await db.select({ id: users.id, name: users.name, email: users.email, role: users.role }).from(users).where(eq(users.id, input.userId)).limit(1);

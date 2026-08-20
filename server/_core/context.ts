@@ -40,6 +40,10 @@ async function userFromToken(token: string | undefined): Promise<SessionUser | n
     // password reset carries the old sessionVersion — reject it just like an
     // expired token, rather than trusting a session that should be dead.
     if (Number(payload.sv) !== user.sessionVersion) return null;
+    // An admin-suspended account loses access immediately, even for a
+    // session token that was issued (and is otherwise still valid) before
+    // the suspension — no re-login or sessionVersion bump required.
+    if (user.suspendedAt) return null;
     const { passwordHash: _passwordHash, ...safeUser } = user;
     return safeUser;
   } catch {

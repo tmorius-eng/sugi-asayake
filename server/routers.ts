@@ -1,7 +1,7 @@
 import { COOKIE_NAME, GUEST_CART_COOKIE_NAME } from "@shared/const";
 import { TRPCError } from "@trpc/server";
 import { parse as parseCookieHeader } from "cookie";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomInt } from "node:crypto";
 import { z } from "zod";
 import { getGuestCartCookieOptions, getSessionCookieOptions } from "./_core/cookies";
 import { notifyOwner, sendAccountEmail } from "./_core/notification";
@@ -11,29 +11,35 @@ import { hashPassword, verifyPassword } from "./_core/password";
 import {
   acceptStaffInvitation,
   addCartItem,
+  adminGlobalSearch,
   bumpUserSessionVersion,
   type CartOwner,
   categoryExists,
   createAdminCategory,
   createAdminPost,
   createAdminProduct,
-  createEmailVerificationToken,
+  createEmailVerificationCode,
   createOrderFromActiveCart,
-  createPasswordResetToken,
+  createPasswordResetCode,
   getActiveCartForOwner,
   createQPayPaymentAttempt,
   createStaffInvitation,
   createUserWithPassword,
+  dbPing,
   deleteAdminPost,
   deleteAdminProduct,
+  getAdminAuditLogs,
   getAdminCategories,
+  getAdminDashboardSummary,
   getAdminOrders,
   getAdminPosts,
   getAdminProducts,
   getAdminStaffInvitations,
+  getAdminUserDetail,
   getAdminUsers,
   getCategoryWriteConflicts,
   getLatestQPayPaymentAttemptForOrder,
+  getLoginHistory,
   getOrderForUser,
   getOrdersForUser,
   getProductBySlug,
@@ -47,10 +53,13 @@ import {
   logAdminAction,
   mergeGuestCartIntoUserCart,
   postSlugExists,
-  resetPasswordWithToken,
+  recordLoginAttempt,
+  resetPasswordWithCode,
   revokeStaffInvitation,
   deleteSiteMedia,
+  suspendUser,
   touchUserLastSignedIn,
+  unsuspendUser,
   upsertSiteMedia,
   updateAdminCategory,
   updateAdminOrder,
@@ -58,10 +67,11 @@ import {
   updateAdminProduct,
   updateAdminUserRole,
   updateCartItemQuantity,
-  verifyEmailWithToken,
+  updatePendingRegistration,
+  verifyEmailWithCode,
 } from "./db";
-import { adminProcedure, moderateRateLimitedProcedure, protectedProcedure, publicProcedure, router, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure } from "./_core/trpc";
-import { storagePut } from "./storage";
+import { adminProcedure, moderateRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure } from "./_core/trpc";
+import { storagePing, storagePut } from "./storage";
 import { createQPayInvoice, getQPayAvailability } from "./qpay";
 import { getCategoryWriteViolation, getProductWriteViolation } from "./catalog-validation";
 import { siteMediaSlotKeys } from "../shared/site-media";
@@ -128,10 +138,14 @@ const orderUpdateSchema = z.object({
 );
 
 const imageContentTypes = ["image/jpeg", "image/png", "image/webp"] as const;
-const staffRoleSchema = z.enum(["user", "admin"]);
+const staffRoleSchema = z.enum(["user", "staff", "admin"]);
 const siteMediaSlotSchema = z.enum(siteMediaSlotKeys);
 const invitationTokenSchema = z.string().trim().min(32).max(256);
 const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
+// 6-digit OTP codes (email verification + password reset) — validity window
+// and the input shape the client submits them in.
+const OTP_TTL_MS = 15 * 60 * 1000;
+const otpCodeSchema = z.string().trim().regex(/^\d{6}$/, "6 оронтой кодоо оруулна уу.");
 
 // A syntactically valid but unusable scrypt hash (correct salt/hash lengths,
 // see server/_core/password.ts), used to run `verifyPassword` through its
@@ -190,15 +204,18 @@ function resolveCartOwnerForWrite(ctx: TrpcContext): CartOwner {
   return { guestToken };
 }
 
-async function sendVerificationEmail(userId: number, email: string, originInput: string) {
-  const origin = parseAppOrigin(originInput);
-  const token = randomBytes(32).toString("base64url");
-  await createEmailVerificationToken({ userId, tokenHash: tokenHash(token), expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) });
-  const verifyUrl = `${origin.origin}/verify-email/${token}`;
-  await sendAccountEmail({
+// Generates a 6-digit OTP, stores its hash, and emails it. Shared by
+// register (new account), resendRegistrationCode (pending account, not
+// logged in yet) and resendVerificationEmail (already logged in, legacy
+// unverified account). Returns whether the email was actually dispatched via
+// Brevo (false = only logged to the server console — see notification.ts).
+async function sendVerificationCode(userId: number, email: string): Promise<boolean> {
+  const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+  await createEmailVerificationCode({ userId, codeHash: tokenHash(code), expiresAt: new Date(Date.now() + OTP_TTL_MS) });
+  return sendAccountEmail({
     to: email,
-    subject: "SUGI ASAYAKE — Имэйл хаягаа баталгаажуулна уу",
-    content: `Бүртгэлээ баталгаажуулахын тулд доорх холбоос дээр дарна уу (24 цагийн дотор хүчинтэй):\n\n${verifyUrl}`,
+    subject: "SUGI ASAYAKE — Баталгаажуулах код",
+    content: `Таны баталгаажуулах код: ${code}\n\nЭнэ код 15 минутын дотор хүчинтэй. Хэрэв та энэ хүсэлтийг илгээгээгүй бол энэ имэйлийг үл тоомсорлож болно.`,
   });
 }
 
@@ -237,34 +254,77 @@ export const appRouter = router({
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
+    // Creates the account but does NOT log the caller in — that only
+    // happens once auth.confirmRegistration checks out the emailed code, so
+    // an account with an unconfirmed email address can never shop or log in
+    // (see the emailVerifiedAt gate on auth.login below).
     register: strictRateLimitedProcedure
       .input(z.object({
         email: z.string().trim().email().max(320),
         password: z.string().min(8).max(200),
         name: z.string().trim().min(1).max(160).optional(),
-        origin: z.string().url().max(500).optional(),
       }))
-      .mutation(async ({ ctx, input }) => {
+      .mutation(async ({ input }) => {
         const passwordHash = await hashPassword(input.password);
-        let user;
-        try {
-          user = await createUserWithPassword({ email: input.email, passwordHash, name: input.name ?? null });
-        } catch (error) {
-          throw new TRPCError({ code: "CONFLICT", message: error instanceof Error ? error.message : "Энэ имэйлээр бүртгэл үүссэн байна." });
+        const existing = await getUserByEmail(input.email);
+        let userId: number;
+        let email: string;
+        if (existing) {
+          if (existing.emailVerifiedAt) {
+            throw new TRPCError({ code: "CONFLICT", message: "Энэ имэйлээр бүртгэл үүссэн байна. Нэвтэрнэ үү." });
+          }
+          // A previous registration with this email was never confirmed —
+          // treat this submission as a retry rather than hard-failing on the
+          // email uniqueness constraint: refresh the credentials and send a
+          // fresh code.
+          await updatePendingRegistration({ userId: existing.id, passwordHash, name: input.name ?? null });
+          userId = existing.id;
+          email = existing.email;
+        } else {
+          let user;
+          try {
+            user = await createUserWithPassword({ email: input.email, passwordHash, name: input.name ?? null });
+          } catch (error) {
+            throw new TRPCError({ code: "CONFLICT", message: error instanceof Error ? error.message : "Энэ имэйлээр бүртгэл үүссэн байна." });
+          }
+          userId = user.id;
+          email = user.email;
         }
+        const codeSent = await sendVerificationCode(userId, email);
+        return { pendingVerification: true, email, codeSent } as const;
+      }),
+    // Second step of registration: exchanges the emailed 6-digit code for
+    // the account's first session.
+    confirmRegistration: strictRateLimitedProcedure
+      .input(z.object({ email: z.string().trim().email().max(320), code: otpCodeSchema }))
+      .mutation(async ({ ctx, input }) => {
+        const pending = await getUserByEmail(input.email);
+        if (!pending) throw new TRPCError({ code: "BAD_REQUEST", message: "Код буруу эсвэл хугацаа дууссан байна." });
+        try {
+          await verifyEmailWithCode({ userId: pending.id, codeHash: tokenHash(input.code) });
+        } catch (error) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Код баталгаажуулж чадсангүй." });
+        }
+        const user = await getUserByEmail(input.email); // refetch: emailVerifiedAt just changed
+        if (!user) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Бүртгэл олдсонгүй." });
+        await touchUserLastSignedIn(user.id);
         const token = await signSessionToken(user.id, user.sessionVersion);
         ctx.res.cookie(COOKIE_NAME, token, getSessionCookieOptions(ctx.req));
         await mergeGuestCartAndClearCookie(ctx, user.id);
-        // Best-effort: a failed verification email should never block registration.
-        if (input.origin) {
-          try {
-            await sendVerificationEmail(user.id, user.email, input.origin);
-          } catch (error) {
-            console.error("[auth.register] Failed to send verification email", error);
-          }
-        }
         const { passwordHash: _omit, ...safeUser } = user;
         return safeUser;
+      }),
+    // Public (not logged in yet) resend, for the pending-registration step.
+    resendRegistrationCode: strictRateLimitedProcedure
+      .input(z.object({ email: z.string().trim().email().max(320) }))
+      .mutation(async ({ input }) => {
+        const pending = await getUserByEmail(input.email);
+        // Same generic-response shape as requestPasswordReset: don't reveal
+        // whether the address has a pending registration.
+        if (pending && !pending.emailVerifiedAt) {
+          await sendVerificationCode(pending.id, pending.email);
+        }
+        return { success: true } as const;
       }),
     login: strictRateLimitedProcedure
       .input(z.object({
@@ -276,10 +336,29 @@ export const appRouter = router({
         // Always run the full password check, even for a nonexistent user
         // (against a dummy hash) — see DUMMY_PASSWORD_HASH above.
         const valid = await verifyPassword(input.password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
+        const ipAddress = ctx.req.ip || ctx.req.socket.remoteAddress || null;
+        const logAttempt = (success: boolean, reason?: string) => recordLoginAttempt({ email: input.email, userId: user?.id ?? null, success, reason, ipAddress });
+
         if (!user || !valid) {
+          await logAttempt(false, "invalid_credentials");
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Имэйл эсвэл нууц үг буруу байна." });
         }
+        if (user.suspendedAt) {
+          await logAttempt(false, "suspended");
+          throw new TRPCError({ code: "FORBIDDEN", message: "Таны эрх түр хаагдсан байна. Дэлгүүрийн админтай холбогдоно уу." });
+        }
+        // Accounts created after the OTP-code registration flow shipped
+        // never get a session until confirmRegistration succeeds; this
+        // closes the loophole of registering, ignoring the code, and just
+        // logging in directly. Accounts that existed before this flow
+        // shipped were backfilled to verified (drizzle/0016) so this never
+        // locks out a pre-existing user.
+        if (!user.emailVerifiedAt) {
+          await logAttempt(false, "unverified");
+          throw new TRPCError({ code: "FORBIDDEN", message: "Имэйл хаягаа баталгаажуулаагүй байна. Бүртгүүлэх хуудас руу ижил имэйлээрээ дахин орж, код дахин авна уу." });
+        }
         await touchUserLastSignedIn(user.id);
+        await logAttempt(true);
         const token = await signSessionToken(user.id, user.sessionVersion);
         ctx.res.cookie(COOKIE_NAME, token, getSessionCookieOptions(ctx.req));
         await mergeGuestCartAndClearCookie(ctx, user.id);
@@ -303,55 +382,57 @@ export const appRouter = router({
       return { success: true } as const;
     }),
     requestPasswordReset: strictRateLimitedProcedure
-      .input(z.object({ email: z.string().trim().email().max(320), origin: z.string().url().max(500) }))
+      .input(z.object({ email: z.string().trim().email().max(320) }))
       .mutation(async ({ input }) => {
-        const origin = parseAppOrigin(input.origin);
         const user = await getUserByEmail(input.email);
-        // Always generate a token, whether or not the email is registered:
+        // Always generate a code, whether or not the email is registered:
         // both branches should pay the same CPU cost, so this endpoint can't
         // be used to enumerate accounts via a response-time side channel (the
         // 8-request/15min cap on this procedure also makes that attack hard
         // to mount in practice, but there's no reason to leave the gap open).
-        const token = randomBytes(32).toString("base64url");
+        const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
         if (user) {
-          await createPasswordResetToken({ userId: user.id, tokenHash: tokenHash(token), expiresAt: new Date(Date.now() + 60 * 60 * 1000) });
-          const resetUrl = `${origin.origin}/reset-password/${token}`;
+          await createPasswordResetCode({ userId: user.id, codeHash: tokenHash(code), expiresAt: new Date(Date.now() + OTP_TTL_MS) });
           await sendAccountEmail({
             to: user.email,
-            subject: "SUGI ASAYAKE — Нууц үг сэргээх",
-            content: `Та SUGI ASAYAKE дэлгүүрийн нууц үгээ сэргээх хүсэлт илгээлээ. Доорх холбоос дээр дарж 1 цагийн дотор шинэ нууц үг тохируулна уу:\n\n${resetUrl}\n\nХэрэв та энэ хүсэлтийг илгээгээгүй бол энэ имэйлийг үл тоомсорлож болно.`,
+            subject: "SUGI ASAYAKE — Нууц үг сэргээх код",
+            content: `Таны нууц үг сэргээх код: ${code}\n\nЭнэ код 15 минутын дотор хүчинтэй. Хэрэв та энэ хүсэлтийг илгээгээгүй бол энэ имэйлийг үл тоомсорлож болно.`,
           });
         }
         // Always return the same generic response either way.
         return { success: true } as const;
       }),
     resetPassword: strictRateLimitedProcedure
-      .input(z.object({ token: invitationTokenSchema, password: z.string().min(8).max(200) }))
+      .input(z.object({ email: z.string().trim().email().max(320), code: otpCodeSchema, password: z.string().min(8).max(200) }))
       .mutation(async ({ input }) => {
+        const user = await getUserByEmail(input.email);
+        if (!user) throw new TRPCError({ code: "BAD_REQUEST", message: "Код буруу эсвэл хугацаа дууссан байна." });
         const passwordHash = await hashPassword(input.password);
         try {
-          await resetPasswordWithToken({ tokenHash: tokenHash(input.token), passwordHash });
+          await resetPasswordWithCode({ userId: user.id, codeHash: tokenHash(input.code), passwordHash });
         } catch (error) {
           throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Нууц үг сэргээж чадсангүй." });
         }
         return { success: true } as const;
       }),
-    verifyEmail: strictRateLimitedProcedure
-      .input(z.object({ token: invitationTokenSchema }))
-      .mutation(async ({ input }) => {
+    // For an already-logged-in user with an unverified email (legacy
+    // accounts only — every account created after this flow shipped is
+    // already verified by the time it has a session, see auth.login above).
+    verifyEmailCode: strictRateLimitedProtectedProcedure
+      .input(z.object({ code: otpCodeSchema }))
+      .mutation(async ({ ctx, input }) => {
         try {
-          await verifyEmailWithToken({ tokenHash: tokenHash(input.token) });
+          await verifyEmailWithCode({ userId: ctx.user.id, codeHash: tokenHash(input.code) });
         } catch (error) {
           throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Имэйл хаягийг баталгаажуулж чадсангүй." });
         }
         return { success: true } as const;
       }),
     resendVerificationEmail: strictRateLimitedProtectedProcedure
-      .input(z.object({ origin: z.string().url().max(500) }))
-      .mutation(async ({ ctx, input }) => {
+      .mutation(async ({ ctx }) => {
         if (!ctx.user.email) throw new TRPCError({ code: "BAD_REQUEST", message: "Таны бүртгэлд имэйл хаяг байхгүй байна." });
         if (ctx.user.emailVerifiedAt) return { success: true, alreadyVerified: true } as const;
-        await sendVerificationEmail(ctx.user.id, ctx.user.email, input.origin);
+        await sendVerificationCode(ctx.user.id, ctx.user.email);
         return { success: true, alreadyVerified: false } as const;
       }),
   }),
@@ -463,16 +544,40 @@ export const appRouter = router({
     }),
   }),
   admin: router({
-    products: adminProcedure.query(() => getAdminProducts()),
-    categories: adminProcedure.query(() => getAdminCategories()),
-    orders: adminProcedure.query(() => getAdminOrders()),
-    posts: adminProcedure.query(() => getAdminPosts()),
-    siteMedia: adminProcedure.query(() => getSiteMedia()),
+    // staffProcedure, not adminProcedure: staff should still see what's
+    // going on operationally (orders, low stock), just not the money —
+    // revenue and the active-user count are redacted below the plain-admin
+    // tier.
+    dashboardSummary: staffProcedure.query(async ({ ctx }) => {
+      const summary = await getAdminDashboardSummary();
+      if (ctx.user.role === "admin") return summary;
+      return { ...summary, totalRevenueMnt: null, activeUsers: null };
+    }),
+    // TIER 6: basic DB/storage reachability — not Sentry, just two pings for
+    // a small dashboard widget. Non-sensitive (no data, just up/down + a
+    // terse error string), so staff can see it too — the same audience as
+    // the rest of the dashboard.
+    systemHealth: staffProcedure.query(async () => {
+      const [db, storage] = await Promise.all([dbPing(), storagePing()]);
+      return { db, storage };
+    }),
+    // Same idea for search: staff can look up products/orders, but user
+    // records (and thus any way to reach user management from a search hit)
+    // are admin-only.
+    search: staffProcedure.input(z.object({ query: z.string().trim().min(1).max(120) })).query(async ({ ctx, input }) => {
+      const result = await adminGlobalSearch(input.query);
+      if (ctx.user.role === "admin") return result;
+      return { ...result, users: [] };
+    }),
+    products: staffProcedure.query(() => getAdminProducts()),
+    categories: staffProcedure.query(() => getAdminCategories()),
+    orders: staffProcedure.query(() => getAdminOrders()),
+    posts: staffProcedure.query(() => getAdminPosts()),
+    siteMedia: staffProcedure.query(() => getSiteMedia()),
     users: adminProcedure.query(() => getAdminUsers()),
     staffInvitations: adminProcedure.query(() => getAdminStaffInvitations()),
     inviteStaff: adminProcedure.input(z.object({ email: z.string().trim().email().max(320), role: staffRoleSchema.default("user"), origin: z.string().url().max(500) })).mutation(async ({ ctx, input }) => {
-      const origin = new URL(input.origin);
-      if (origin.protocol !== "https:" && origin.protocol !== "http:") throw new TRPCError({ code: "BAD_REQUEST", message: "A secure application origin is required for the invitation link." });
+      const origin = parseAppOrigin(input.origin);
       const token = randomBytes(32).toString("base64url");
       const invitation = await createStaffInvitation({ email: input.email, role: input.role, tokenHash: tokenHash(token), invitedByUserId: ctx.user.id, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) });
       const inviteUrl = `${origin.origin}/invite/${token}`;
@@ -495,7 +600,61 @@ export const appRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: error instanceof Error ? error.message : "Unable to update user role." });
       }
     }),
-    updateOrder: adminProcedure.input(orderUpdateSchema).mutation(async ({ ctx, input }) => {
+    userDetail: adminProcedure.input(z.object({ userId: z.number().int().positive() })).query(async ({ input }) => {
+      const detail = await getAdminUserDetail(input.userId);
+      if (!detail) throw new TRPCError({ code: "NOT_FOUND", message: "User not found." });
+      return detail;
+    }),
+    suspendUser: adminProcedure.input(z.object({ userId: z.number().int().positive(), reason: z.string().trim().max(300).optional() })).mutation(async ({ ctx, input }) => {
+      if (ctx.user.id === input.userId) throw new TRPCError({ code: "BAD_REQUEST", message: "You cannot suspend your own account." });
+      try {
+        const updated = await suspendUser(input);
+        await logAdminAction({ actorUserId: ctx.user.id, action: "user.suspended", entityType: "user", entityId: input.userId, metadata: { reason: input.reason ?? null } });
+        return updated;
+      } catch (error) {
+        throw new TRPCError({ code: "NOT_FOUND", message: error instanceof Error ? error.message : "Unable to suspend this user." });
+      }
+    }),
+    unsuspendUser: adminProcedure.input(z.object({ userId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      try {
+        const updated = await unsuspendUser(input.userId);
+        await logAdminAction({ actorUserId: ctx.user.id, action: "user.unsuspended", entityType: "user", entityId: input.userId });
+        return updated;
+      } catch (error) {
+        throw new TRPCError({ code: "NOT_FOUND", message: error instanceof Error ? error.message : "Unable to unsuspend this user." });
+      }
+    }),
+    forceLogoutUser: adminProcedure.input(z.object({ userId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      await bumpUserSessionVersion(input.userId);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "user.force_logout", entityType: "user", entityId: input.userId });
+      return { success: true } as const;
+    }),
+    // TIER 4, admin-only (same tier as user management — this is exactly the
+    // kind of data staff shouldn't see): who did what, and who's been
+    // trying to log in.
+    auditLogs: adminProcedure.input(z.object({
+      action: z.string().trim().max(100).optional(),
+      actorEmail: z.string().trim().max(320).optional(),
+      dateFrom: z.coerce.date().optional(),
+      dateTo: z.coerce.date().optional(),
+      limit: z.number().int().positive().max(200).optional(),
+    })).query(({ input }) => getAdminAuditLogs({
+      action: input.action || undefined,
+      actorEmail: input.actorEmail || undefined,
+      dateFrom: input.dateFrom,
+      dateTo: input.dateTo,
+      limit: input.limit,
+    })),
+    loginHistory: adminProcedure.input(z.object({
+      email: z.string().trim().max(320).optional(),
+      outcome: z.enum(["all", "success", "failed"]).default("all"),
+      limit: z.number().int().positive().max(200).optional(),
+    })).query(({ input }) => getLoginHistory({
+      email: input.email || undefined,
+      success: input.outcome === "success" ? true : input.outcome === "failed" ? false : undefined,
+      limit: input.limit,
+    })),
+    updateOrder: staffProcedure.input(orderUpdateSchema).mutation(async ({ ctx, input }) => {
       try {
         const order = await updateAdminOrder(input);
         await logAdminAction({ actorUserId: ctx.user.id, action: "order.updated", entityType: "order", entityId: order.id, metadata: { status: order.status, deliveryTrackingRef: order.deliveryTrackingRef } });
@@ -504,53 +663,95 @@ export const appRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to update order." });
       }
     }),
-    createPost: adminProcedure.input(postWriteSchema).mutation(async ({ ctx, input }) => {
+    // TIER 5: bulk status change. Re-runs the exact same per-order rules as
+    // updateOrder (can't move backward, can't touch a closed order) for each
+    // id individually — one bad id in the batch (e.g. already completed)
+    // fails only that one and doesn't block the rest.
+    bulkUpdateOrderStatus: staffProcedure.input(z.object({
+      ids: z.array(z.number().int().positive()).min(1).max(200),
+      status: orderStatusSchema,
+    })).mutation(async ({ ctx, input }) => {
+      const succeeded: number[] = [];
+      const failed: { id: number; message: string }[] = [];
+      for (const id of input.ids) {
+        try {
+          const order = await updateAdminOrder({ id, status: input.status });
+          await logAdminAction({ actorUserId: ctx.user.id, action: "order.updated", entityType: "order", entityId: order.id, metadata: { status: order.status, bulk: true } });
+          succeeded.push(id);
+        } catch (error) {
+          failed.push({ id, message: error instanceof Error ? error.message : "Unable to update order." });
+        }
+      }
+      return { succeeded, failed };
+    }),
+    createPost: staffProcedure.input(postWriteSchema).mutation(async ({ ctx, input }) => {
       await validatePostSlug(input.slug);
       const post = await createAdminPost({ ...input, createdByUserId: ctx.user.id });
       await logAdminAction({ actorUserId: ctx.user.id, action: "post.created", entityType: "post", entityId: post.id, metadata: { slug: post.slug, published: post.isPublished } });
       return post;
     }),
-    updatePost: adminProcedure.input(postUpdateSchema).mutation(async ({ ctx, input }) => {
+    updatePost: staffProcedure.input(postUpdateSchema).mutation(async ({ ctx, input }) => {
       await validatePostSlug(input.slug, input.id);
       const post = await updateAdminPost(input);
       await logAdminAction({ actorUserId: ctx.user.id, action: "post.updated", entityType: "post", entityId: post.id, metadata: { slug: post.slug, published: post.isPublished } });
       return post;
     }),
-    deletePost: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    deletePost: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const result = await deleteAdminPost(input.id);
       await logAdminAction({ actorUserId: ctx.user.id, action: "post.deleted", entityType: "post", entityId: input.id });
       return result;
     }),
-    createProduct: adminProcedure.input(productWriteSchema).mutation(async ({ ctx, input }) => {
+    createProduct: staffProcedure.input(productWriteSchema).mutation(async ({ ctx, input }) => {
       await validateProductWrite(input);
       const product = await createAdminProduct(input);
       await logAdminAction({ actorUserId: ctx.user.id, action: "product.created", entityType: "product", entityId: product.id, metadata: { slug: product.slug, published: product.isPublished } });
       return product;
     }),
-    updateProduct: adminProcedure.input(productUpdateSchema).mutation(async ({ ctx, input }) => {
+    updateProduct: staffProcedure.input(productUpdateSchema).mutation(async ({ ctx, input }) => {
       await validateProductWrite(input);
       const product = await updateAdminProduct(input);
       await logAdminAction({ actorUserId: ctx.user.id, action: "product.updated", entityType: "product", entityId: product.id, metadata: { slug: product.slug, published: product.isPublished } });
       return product;
     }),
-    deleteProduct: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    deleteProduct: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const result = await deleteAdminProduct(input.id);
       await logAdminAction({ actorUserId: ctx.user.id, action: "product.deleted", entityType: "product", entityId: input.id });
       return result;
     }),
-    createCategory: adminProcedure.input(categoryWriteSchema).mutation(async ({ ctx, input }) => {
+    // TIER 5: bulk publish/unpublish. Only touches isPublished, so none of
+    // the slug/sku/category conflict checks in validateProductWrite apply —
+    // this can't collide with another product the way a full edit could.
+    bulkUpdateProductPublishStatus: staffProcedure.input(z.object({
+      ids: z.array(z.number().int().positive()).min(1).max(200),
+      isPublished: z.boolean(),
+    })).mutation(async ({ ctx, input }) => {
+      const succeeded: number[] = [];
+      const failed: { id: number; message: string }[] = [];
+      for (const id of input.ids) {
+        try {
+          const product = await updateAdminProduct({ id, isPublished: input.isPublished });
+          if (!product) throw new Error("Product not found.");
+          await logAdminAction({ actorUserId: ctx.user.id, action: "product.updated", entityType: "product", entityId: product.id, metadata: { isPublished: input.isPublished, bulk: true } });
+          succeeded.push(id);
+        } catch (error) {
+          failed.push({ id, message: error instanceof Error ? error.message : "Unable to update product." });
+        }
+      }
+      return { succeeded, failed };
+    }),
+    createCategory: staffProcedure.input(categoryWriteSchema).mutation(async ({ ctx, input }) => {
       await validateCategoryWrite(input);
       const category = await createAdminCategory(input);
       await logAdminAction({ actorUserId: ctx.user.id, action: "category.created", entityType: "category", entityId: category.id, metadata: { slug: category.slug } });
       return category;
     }),
-    updateCategory: adminProcedure.input(categoryUpdateSchema).mutation(async ({ ctx, input }) => {
+    updateCategory: staffProcedure.input(categoryUpdateSchema).mutation(async ({ ctx, input }) => {
       await validateCategoryWrite(input);
       const category = await updateAdminCategory(input);
       await logAdminAction({ actorUserId: ctx.user.id, action: "category.updated", entityType: "category", entityId: category.id, metadata: { slug: category.slug } });
       return category;
     }),
-    updateSiteMedia: adminProcedure.input(z.object({
+    updateSiteMedia: staffProcedure.input(z.object({
       slotKey: siteMediaSlotSchema,
       imageUrl: z.string().trim().min(1).max(1_000),
       altText: nullableText(240),
@@ -559,12 +760,12 @@ export const appRouter = router({
       await logAdminAction({ actorUserId: ctx.user.id, action: "site_media.updated", entityType: "site_media", entityId: media.id, metadata: { slotKey: input.slotKey } });
       return media;
     }),
-    clearSiteMedia: adminProcedure.input(z.object({ slotKey: siteMediaSlotSchema })).mutation(async ({ ctx, input }) => {
+    clearSiteMedia: staffProcedure.input(z.object({ slotKey: siteMediaSlotSchema })).mutation(async ({ ctx, input }) => {
       await deleteSiteMedia(input.slotKey);
       await logAdminAction({ actorUserId: ctx.user.id, action: "site_media.cleared", entityType: "site_media", metadata: { slotKey: input.slotKey } });
       return { slotKey: input.slotKey };
     }),
-    uploadProductImage: adminProcedure
+    uploadProductImage: staffProcedure
       .input(z.object({
         fileName: z.string().trim().min(1).max(120),
         contentType: z.enum(imageContentTypes),
@@ -583,7 +784,7 @@ export const appRouter = router({
         const stored = await storagePut(`catalog/products/${ctx.user.id}/${safeStem}.${extension}`, buffer, input.contentType);
         return { url: stored.url, key: stored.key };
       }),
-    uploadSiteMediaImage: adminProcedure
+    uploadSiteMediaImage: staffProcedure
       .input(z.object({
         fileName: z.string().trim().min(1).max(120),
         contentType: z.enum(imageContentTypes),

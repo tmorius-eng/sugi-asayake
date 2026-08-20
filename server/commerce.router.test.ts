@@ -3,7 +3,7 @@ import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 import { NOT_ADMIN_ERR_MSG } from "../shared/const";
 
-function createContext(role: "user" | "admin" | null): TrpcContext {
+function createContext(role: "user" | "staff" | "admin" | null): TrpcContext {
   const user = role ? {
     id: 1,
     email: "test@example.com",
@@ -79,6 +79,22 @@ describe("commerce router", () => {
     await expect(caller.admin.createPost({ title: "New Japanese care", slug: "new-japanese-care", content: "A sufficiently long post body for authorization testing.", isPublished: false })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
   });
 
+  it("does not expose bulk product/order status changes to a standard user, but does allow staff (TIER 5)", async () => {
+    const userCaller = appRouter.createCaller(createContext("user"));
+    await expect(userCaller.admin.bulkUpdateProductPublishStatus({ ids: [1], isPublished: true })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+    await expect(userCaller.admin.bulkUpdateOrderStatus({ ids: [1], status: "confirmed" })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+
+    // Staff is allowed through the gate — without a DB, updateAdminProduct/
+    // updateAdminOrder resolve to undefined/throw "not found" per id, which
+    // the bulk handler reports as a failed id rather than a FORBIDDEN
+    // rejection. That's the behavior under test here: the RBAC gate opens
+    // for staff; server/admin.bulk-actions.integration.test.ts covers the
+    // actual partial-success bookkeeping against a real DB.
+    const staffCaller = appRouter.createCaller(createContext("staff"));
+    await expect(staffCaller.admin.bulkUpdateProductPublishStatus({ ids: [999999], isPublished: true })).resolves.toMatchObject({ succeeded: [], failed: [{ id: 999999 }] });
+    await expect(staffCaller.admin.bulkUpdateOrderStatus({ ids: [999999], status: "confirmed" })).resolves.toMatchObject({ succeeded: [], failed: [{ id: 999999 }] });
+  });
+
   it("gives an anonymous shopper an empty cart instead of requiring an account (guest checkout)", async () => {
     const caller = appRouter.createCaller(createContext(null));
     await expect(caller.cart.current()).resolves.toBeNull();
@@ -119,6 +135,61 @@ describe("commerce router", () => {
   it("requires authentication before an invitation token can be accepted", async () => {
     const caller = appRouter.createCaller(createContext(null));
     await expect(caller.invites.accept({ token: "a".repeat(43) })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("lets staff manage products, orders, posts, and media, but not user accounts, roles, or staff invitations (TIER 3)", async () => {
+    const caller = appRouter.createCaller(createContext("staff"));
+
+    // Storefront operations: allowed — resolves to an array (empty without a
+    // DB, real rows when this suite runs against the shared dev DB
+    // alongside the other integration suites — see the "keeps the public
+    // catalog query available" test above for why this doesn't assert on
+    // contents), rather than a FORBIDDEN rejection.
+    await expect(caller.admin.products()).resolves.toSatisfy(Array.isArray);
+    await expect(caller.admin.orders()).resolves.toSatisfy(Array.isArray);
+    await expect(caller.admin.posts()).resolves.toSatisfy(Array.isArray);
+    await expect(caller.admin.siteMedia()).resolves.toSatisfy(Array.isArray);
+
+    // User/role management: still admin-only.
+    await expect(caller.admin.users()).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+    await expect(caller.admin.staffInvitations()).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+    await expect(caller.admin.inviteStaff({ email: "someone@example.com", role: "staff", origin: "https://sugi.example" })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+    await expect(caller.admin.updateUserRole({ userId: 2, role: "admin" })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+    await expect(caller.admin.suspendUser({ userId: 2 })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+    await expect(caller.admin.forceLogoutUser({ userId: 2 })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+  });
+
+  it("keeps the audit log and login history admin-only, off limits to staff (TIER 4)", async () => {
+    const staffCaller = appRouter.createCaller(createContext("staff"));
+    await expect(staffCaller.admin.auditLogs({})).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+    await expect(staffCaller.admin.loginHistory({ outcome: "all" })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+
+    const adminCaller = appRouter.createCaller(createContext("admin"));
+    await expect(adminCaller.admin.auditLogs({})).resolves.toSatisfy(Array.isArray);
+    await expect(adminCaller.admin.loginHistory({ outcome: "all" })).resolves.toSatisfy(Array.isArray);
+  });
+
+  it("exposes the basic DB/storage health widget to staff, but not to a standard user (TIER 6)", async () => {
+    const userCaller = appRouter.createCaller(createContext("user"));
+    await expect(userCaller.admin.systemHealth()).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+
+    const staffCaller = appRouter.createCaller(createContext("staff"));
+    const health = await staffCaller.admin.systemHealth();
+    expect(health).toMatchObject({ db: { ok: expect.any(Boolean) }, storage: { ok: expect.any(Boolean) } });
+  });
+
+  it("redacts revenue/active-user figures and user search hits from staff, but not from a full admin", async () => {
+    const staffCaller = appRouter.createCaller(createContext("staff"));
+    const staffSummary = await staffCaller.admin.dashboardSummary();
+    expect(staffSummary.totalRevenueMnt).toBeNull();
+    expect(staffSummary.activeUsers).toBeNull();
+    const staffSearch = await staffCaller.admin.search({ query: "test" });
+    expect(staffSearch.users).toEqual([]);
+
+    const adminCaller = appRouter.createCaller(createContext("admin"));
+    const adminSummary = await adminCaller.admin.dashboardSummary();
+    expect(adminSummary.totalRevenueMnt).not.toBeNull();
+    expect(adminSummary.activeUsers).not.toBeNull();
   });
 
   it("does not let an administrator remove their own role from the admin workflow", async () => {

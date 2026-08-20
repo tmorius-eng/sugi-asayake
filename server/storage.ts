@@ -7,7 +7,7 @@
 // non-AWS S3-compatible providers).
 
 import { randomUUID } from "node:crypto";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, HeadBucketCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { ENV } from "./_core/env";
@@ -75,4 +75,18 @@ export async function storageGetSignedUrl(relKey: string): Promise<string> {
   const key = normalizeKey(relKey);
   const command = new GetObjectCommand({ Bucket: ENV.s3Bucket, Key: key });
   return getSignedUrl(client, command, { expiresIn: 3600 });
+}
+
+// TIER 6: lightweight admin-panel "is storage reachable" check — a HeadBucket
+// call, not a full upload, so it's cheap enough to run on every dashboard
+// load. Never throws: reports the failure instead, so a down S3/MinIO never
+// takes the admin panel itself down with it.
+export async function storagePing(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const client = getClient();
+    await client.send(new HeadBucketCommand({ Bucket: ENV.s3Bucket }));
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Unknown storage error" };
+  }
 }
