@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /invite/
+Disallow: /checkout
+Sitemap: https://sugi-mongo-detasex2.manus.space/sitemap.xml

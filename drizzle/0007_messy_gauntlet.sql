@@ -1,0 +1,1 @@
+ALTER TABLE `orders` ADD `pickupBranch` varchar(120);

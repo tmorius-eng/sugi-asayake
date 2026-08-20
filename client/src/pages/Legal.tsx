@@ -1,0 +1,15 @@
+import { ArrowLeft } from "lucide-react";
+import { Link, useLocation } from "wouter";
+
+const documents = {
+  privacy: { title: "Хувийн нууцлал", lead: "SUGI ASAYAKE Mongolia нь захиалга, хүргэлт, үйлчлүүлэгчийн дэмжлэг үзүүлэхэд шаардлагатай мэдээллийг л ашиглана.", sections: [["Цуглуулдаг мэдээлэл", "Захиалга хийх үед таны нэр, утас, хүргэлтийн хаяг болон сайн дураар өгсөн имэйл хаягийг авна."], ["Ашиглалт", "Энэ мэдээллийг захиалга баталгаажуулах, хүргэлт зохион байгуулах, төлбөрийн асуудлыг шалгах болон үйлчлүүлэгчийн хүсэлтэд хариулахад ашиглана."], ["Хамгаалалт ба хүсэлт", "Төлбөрийн картын мэдээллийг сайт хадгалахгүй. Хувийн мэдээлэлтэй холбоотой хүсэлтээ 9450-9911 дугаарт гаргаж болно."]] },
+  terms: { title: "Үйлчилгээний нөхцөл", lead: "Энэхүү нөхцөл нь SUGI ASAYAKE Mongolia онлайн захиалгын үйлчилгээнд хамаарна.", sections: [["Захиалга", "Бараа, үнэ, үлдэгдэл болон хүргэлтийн боломж захиалга баталгаажих үед шалгагдана. Системийн алдаатай үнэ, дууссан үлдэгдэлтэй захиалгыг дэлгүүр баталгаажуулахгүй байж болно."], ["Төлбөр", "Онлайн төлбөр нь баталгаажсан төлбөрийн сувгаар хийгдэнэ. Төлбөрийн статус зөвхөн төлбөрийн үйлчилгээ үзүүлэгчийн баталгаагаар өөрчлөгдөнө."], ["Харилцах", "Захиалгатай холбоотой асуулт, засвар хүсэх бол 9450-9911 дугаар эсвэл салбарын ажилтанд хандана уу."]] },
+  returns: { title: "Буцаалт ба солилцоо", lead: "Бүтээгдэхүүний аюулгүй байдал, савлагааны бүрэн байдлыг хамгаалах зорилгоор буцаалт, солилцоог захиалга тус бүрээр шалгана.", sections: [["Хүсэлт гаргах", "Хүлээн авсан бараанд гэмтэл, зөрүү илэрвэл савлагаа, баримтын хамт 9450-9911 дугаарт аль болох хурдан мэдэгдэнэ үү."], ["Эрүүл ахуйн бүтээгдэхүүн", "Нээлттэй, хэрэглэсэн, ариун цэврийн лац болон савлагаа нь алдагдсан бүтээгдэхүүнийг солих, буцаах боломж хязгаарлагдаж болно."], ["Шийдвэр", "Баталгаажсан асуудлыг SUGI ASAYAKE Mongolia-ийн баг бүтээгдэхүүний төлөв, баримт, холбогдох хууль тогтоомжийн дагуу шийдвэрлэнэ."]] },
+} as const;
+
+export default function Legal() {
+  const [location] = useLocation();
+  const key = location.includes("terms") ? "terms" : location.includes("returns") ? "returns" : "privacy";
+  const document = documents[key];
+  return <main className="min-h-screen bg-[#f8f5ef] px-5 py-10 text-[#17181b] sm:px-8"><div className="mx-auto max-w-3xl"><Link href="/" className="inline-flex items-center gap-2 text-xs font-bold text-[#a51630]"><ArrowLeft size={15} />Нүүр хуудас руу буцах</Link><p className="mt-14 text-[10px] font-extrabold tracking-[.16em] text-[#df1f3d]">SUGI ASAYAKE MONGOLIA</p><h1 className="mt-3 font-[var(--font-display)] text-4xl font-semibold tracking-[-.07em] sm:text-5xl">{document.title}</h1><p className="mt-5 max-w-2xl text-base leading-7 text-[#5f6065]">{document.lead}</p><p className="mt-4 text-xs text-[#77787d]">Сүүлд шинэчилсэн: 2026.08.13</p><div className="mt-12 grid gap-7">{document.sections.map(([heading, text]) => <section key={heading} className="rounded-3xl bg-white p-6 shadow-[0_12px_26px_rgba(20,22,24,.05)]"><h2 className="text-lg font-bold">{heading}</h2><p className="mt-3 text-sm leading-7 text-[#5f6065]">{text}</p></section>)}</div></div></main>;
+}

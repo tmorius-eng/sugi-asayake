@@ -1,0 +1,88 @@
+# SUGI ASAYAKE — Олон улсын жишигт хүргэх бүрэн замын зураглал
+
+Энэ файл `CLAUDE.md`-ийн хамтрагч баримт бичиг. Claude Code үүнийг уншаад, доорх TIER-үүдийг **дараалан, нэг нэгээр нь** ажиллах ёстой — бүгдийг нэг дор хийлгэх гэж бүү оролд, учир нь энэ бол бодитоор хэдэн долоо хоногийн ажил.
+
+**Хэрэглэх заавар:** Claude Code-доо "TIER 0-г бүхэлд нь хий" гэж хэлээд эхэл. Тухайн TIER дуусаад bодитоор туршиж (localhost дээрээ) баталгаажуулсны дараа л дараагийн TIER рүү шилж.
+
+---
+
+## TIER 0 — Яаралтай, миний өөрийн хийсэн шилжилтээс үүссэн цоорхойнууд ✅ ДУУССАН (2026-08-20)
+
+Manus-с email+password руу шилжихдээ би дараах чухал хэсгүүдийг бүтээгээгүй үлдээсэн — эдгээрийг **хамгийн эхэнд** засах ёстой, учир нь бодит хэрэглэгч нууц үгээ мартвал одоогоор сэргээх боломжгүй:
+
+- [x] **Нууц үг сэргээх урсгал** (forgot password) — Хийгдсэн. `password_reset_tokens` хүснэгт (migration `drizzle/0010_tier0_account_recovery.sql`), `auth.requestPasswordReset`/`auth.resetPassword` procedure, `/forgot-password` ба `/reset-password/:token` хуудас. Имэйл enumeration-оос сэргийлж, бүртгэлтэй эсэхээс үл хамааран ижил "success" хариу буцаана. Token нэг удаа ашиглагдана, 1 цагийн дараа хугацаа дуусна, шинэ хүсэлт гарахад хуучин токенууд автоматаар хүчингүй болно. `RESEND_API_KEY` тохируулаагүй үед холбоосыг server log-д бичдэг (`notifyOwner`-тай ижил fallback).
+- [x] **Имэйл баталгаажуулалт** (email verification) — Хийгдсэн. `email_verification_tokens` хүснэгт, бүртгүүлэхэд автоматаар баталгаажуулах имэйл илгээгдэнэ (`auth.register`-д `origin` дамжуулбал), `/verify-email/:token` хуудас, `auth.resendVerificationEmail`. Баталгаажаагүй хэрэглэгчид `CommerceHeader`-т сануулга харагдана ("Дахин илгээх" товчтой). Login-г хориглохгүй — зөвхөн сонголт.
+- [x] **Login/Register-д тусгайлсан rate limit** — Хийгдсэн. `server/_core/security.ts`-ийн `checkAuthRateLimit` + `server/_core/trpc.ts`-ийн `authRateLimitedProcedure`/`authRateLimitedProtectedProcedure`, IP+procedure-ээр 8 оролдлого/15мин. `auth.login`, `auth.register`, `auth.requestPasswordReset`, `auth.resetPassword`, `auth.verifyEmail`, `auth.resendVerificationEmail` бүгд хамрагдсан.
+
+**Баталгаажуулалт:** `pnpm check` ✅, `pnpm test` 36/36 (шинэ 9 тест нэмэгдсэн, үүнээс 3 нь `RUN_AUTH_INTEGRATION_TESTS=1`-ээр бодит MySQL дээр ажилладаг integration тест), `pnpm build` ✅. Бодит localhost сервер дээр HTTP-ээр гараар бүрэн урсгал шалгасан: бүртгэл → баталгаажуулах имэйл (log-д гарсан) → гарах → нууц үг сэргээх хүсэлт → email log-оос token унших → шинэ нууц үг тохируулах → шинэ нууц үгээр нэвтрэх (амжилттай) → хуучин нууц үгээр нэвтрэх (татгалзсан) → token дахин ашиглах (татгалзсан) → имэйл баталгаажуулах → дахин ашиглах (татгалзсан) → 8 удаагийн буруу login-ий дараа 429 (Too Many Requests) угтсан. Бүгд ажилласан.
+
+**Мэдэгдэж буй, засаагүй үлдсэн жижиг зүйл:** `server/routers.ts`-ийн `auth.logout`-д Express-ийн `res.clearCookie(name, { maxAge: -1, ... })` дуудлага нь Express 5-д хэрэгсэхгүй болох тухай deprecation warning өгдөг (функционал зөв ажиллаж байгаа ч сервер лог дээр анхааруулга гардаг) — TIER1/3-т жижиг цэвэрлэгээ хийж болно.
+
+**Windows dev орчны нэмэлт олдвор — ЗАСАГДСАН (2026-08-20):** `pnpm dev` script (`NODE_ENV=development tsx watch ...`) нь native PowerShell дээр `'NODE_ENV' is not recognized...` гэж эвдэрдэг байсан. Учир нь `C:\Sugi-asayake\package.json` болон `pnpm-lock.yaml` файлууд "High Mandatory Level" Windows integrity label-тай байсан тул Claude Code (non-elevated процесс) тэднийг засаж чадаагүй. Хэрэглэгч elevated PowerShell-ээс `icacls <file> /setintegritylevel Medium` ажиллуулсны дараа засагдсан:
+  - `server/_core/index.ts`-д `.env`-ээс NODE_ENV ирэхгүй үед `development`-ийг өгсгөл болгож тавьсан (dotenv/config-ийн дараа, бусад бүх import-ын өмнө).
+  - `package.json`-ий `dev` script одоо зүгээр л `"tsx watch server/_core/index.ts"` — эвдэрсэн `NODE_ENV=development` prefix хасагдсан.
+  - **Бодитоор баталгаажуулсан**: `pnpm dev` (ямар ч нэмэлт `$env:` алхамгүйгээр) шууд асаж, `Server running on http://localhost:3000/` хэвлэж, Vite HMR идэвхтэй, CSP header dev-д гараагүй (зөв), `/api/trpc/auth.me` 200 буцаж байгааг шалгасан.
+  - **Одооноос `pnpm dev`-ийг стандарт байдлаар ашиглаж болно** — CLAUDE.md-ийн доорх гар `$env:` block нь зөвхөн `.env`-ийг ямар нэг шалтгаанаар (жишээ нь буруу утгатай S3_REGION гэх мэт) override хийх шаардлагатай үед л хэрэгтэй.
+
+## TIER 1 — Аюулгүй байдал, өгөгдлийн бүрэн бүтэн байдал ✅ ДУУССАН (2026-08-20)
+
+- [x] Drizzle schema-ийн 12 хүснэгтийн аль нэгэнд ч **foreign key constraint байхгүй** — Хийгдсэн. Бүх 15 хамаарлыг `drizzle/0011_tier1_foreign_keys.sql`-д нэмсэн (`drizzle/schema.ts`-д `.references()`). Cascade дүрэм: token/cart-item/order-item/payment-attempt хүснэгтүүд эцэг мөрөө дагаж **CASCADE** устдаг; `orders.userId`, `order_items.productId`, `staff_invitations.acceptedUserId` — эх мөр уствал **SET NULL** (захиалгын түүх, тайлан хадгалагдана); хэрэглэгчийн бичсэн агуулгатай холбоотой багана (`posts.createdByUserId`, `site_media.updatedByUserId`, `admin_audit_logs.actorUserId`, `staff_invitations.invitedByUserId`) болон `products.categoryId` — **RESTRICT** (агуулга/аудит чимээгүй алга болохгүй). Локал DB дээр орхигдсон мөр байгаа эсэхийг урьдчилан шалгаад migration-ыг амжилттай ажиллуулж баталгаажуулсан.
+- [x] Security headers дотор **Content-Security-Policy байхгүй** — Хийгдсэн (`server/_core/security.ts`). Зөвхөн production-д идэвхжинэ (Vite dev-ийн HMR/inline-модуль ачааллагч strict script-src-тэй зөрчилддөг тул) — `pnpm build` + production горимд бодитоор ажиллуулж header гарч байгааг шалгасан.
+- [x] QPay callback route (`/api/payments/qpay/callback`) **rate limiting-д хамрагдахгүй** байсныг засав. `limitQPayCallbackTraffic` (30 хүсэлт/мин/IP) нэмсэн.
+- [x] JWT session-ийн **refresh/rotation стратеги байхгүй** — Full refresh-token rotation биш, харин "бусад бүх төхөөрөмжөөс гарах" хувилбарыг сонгосон (users.sessionVersion + JWT-д `sv` claim, mismatch бол session хүчингүй). `auth.logoutAllDevices` procedure, admin dashboard-ийн profile menu-д товч нэмсэн. Нууц үг сэргээхэд ч автоматаар бүх session хүчингүй болдог. **Бодитоор шалгасан**: хуулбарласан (stolen) cookie-г logoutAllDevices дуудсаны дараа яг тэр л токеноор дахин хандахад `null` буцаж байгааг, мөн нууц үг сэргээсний дараа хуучин session мөн адил хүчингүй болдгийг HTTP-ээр баталгаажуулсан.
+- [x] `admin_audit_logs` хүснэгт бодитоор бүх admin үйлдэл дээр бичигдэж байгаа эсэхийг баталгаажуулах — Шалгаад цоорхойг олсон: `inviteStaff`, `revokeStaffInvitation`, `updateUserRole`, `createProduct`/`updateProduct`/`deleteProduct`, `createCategory`/`updateCategory` procedure-үүд огт лог бичдэггүй байсан (зөвхөн order/post/site-media л бичигддэг байсан). Бүгдэд `logAdminAction` дуудлага нэмсэн.
+- [x] Хэрэглэгчийн оруулсан текст (пост агуулга, бүтээгдэхүүний тайлбар) XSS — Шалгасан: `client/src`-д зөвхөн нэг `dangerouslySetInnerHTML` байгаа (`components/ui/chart.tsx`, chart theme CSS — хэрэглэгчийн өгөгдөлтэй огт хамааралгүй). Пост/бүтээгдэхүүний контент бүгд ердийн JSX text interpolation-оор (`{post.content}`) render хийгддэг тул React автоматаар escape хийдэг — HTML огт interpret хийгддэггүй. Сервер талд ч SSR/dynamic HTML template байхгүй (`server/_core/vite.ts` статик SPA л дамжуулдаг). **Одоогийн кодод бодит XSS цоорхой алга** — код өөрчлөлт хийгээгүй, зөвхөн баталгаажуулсан.
+- [x] Production дээр `.env`-ийг secrets manager-т хадгалах төлөвлөгөө — `.env`/`.env.*` аль хэдийн `.gitignore`-т орсон байгаа (шалгасан). Санал: hosting provider (Render/Railway/Fly/VPS+systemd гэх мэт)-ийн **encrypted env vars** ашиглах, эсвэл тусгай secrets manager (Doppler, 1Password Secrets Automation, AWS Secrets Manager). Жинхэнэ нээлтийн өмнө заавал сэргээх ёстой нууц зүйлс: `JWT_SECRET` (одоо `local-test-secret-12345` — dev утга!), `S3_SECRET_ACCESS_KEY`, MySQL нууц үг, `RESEND_API_KEY`, `QPAY_PASSWORD`. Энэ бол баримтжуулалт — кодоор шийдэх зүйл биш тул TODO хэвээр үлдээв (checkbox тэмдэглэсэн нь "төлөвлөгөө бичигдсэн" гэсэн утгатай).
+
+**Баталгаажуулалт:** `pnpm check` ✅, `pnpm test` (DATABASE_URL/S3 тохируулаагүй үед) 32/32 ✅, DATABASE_URL+S3 тохируулаад бүх integration тестүүдийг оруулбал 37/38 ✅ (1 өмнөх алдаа бол зөвхөн миний нэг удаагийн туршилтын орчинд DATABASE_URL зориудаар зарлаж, dev DB-д байсан жинхэнэ бүтээгдэхүүнийг unit тест олж харснаас — TIER1-тэй хамааралгүй, `pnpm test` энгийнээр (DATABASE_URL зарлаагүй) ажиллуулахад давдаг), `pnpm build` ✅. Бодит `dist/index.js`-г `NODE_ENV=production`-оор ажиллуулж, CSP header бодитоор гарч байгааг, FK constraint-ууд (15ш) DB дээр амжилттай нэмэгдсэнийг, session-revocation (`logoutAllDevices` + password reset) хуулбарласан cookie-г бодитоор хүчингүй болгож байгааг localhost дээр HTTP-ээр баталгаажуулсан.
+
+## TIER 2 — Э-commerce-ийн үндсэн бүрэн бүтэн байдал
+
+- [ ] **Зурган боловсруулалт байхгүй** — upload хийсэн зураг шууд хадгалагддаг, thumbnail/compress/resize хийдэггүй (`sharp` package нэмэх санал болгож байна). Энэ нь page load хурдад шууд нөлөөлнө
+- [ ] **Хайлт зөвхөн клиент талд** (аль хэдийн ачаалсан жагсаалтыг JS-ээр шүүдэг) — каталог томрох тусам удаашрана. Сервер талын full-text search руу шилжих (жишээ нь MySQL FULLTEXT index, эсвэл каталог 500+ бараа болбол Meilisearch/Algolia гэх мэт)
+- [ ] Захиалга цуцлах/буцаах (refund) урсгал — админ талд `updateAdminOrder` бий ч, буцаалтын логик (нөөц буцаах, төлбөр буцаах) бүрэн шалгагдаагүй
+- [ ] Захиалгын баталгаажуулах имэйл, хүргэлтийн статус мэдэгдэл — Resend тохируулагдсаны дараа идэвхжүүлэх
+- [ ] Зочин (guest) checkout боломж — одоогоор бүх cart/checkout procedure `protectedProcedure` (заавал нэвтэрсэн байх ёстой). Олон улсын жишигт guest checkout сонголт байдаг байх нь элбэг
+- [ ] Хямдралын код/купон систем — байхгүй бол нэмэх эсэхийг шийдэх
+- [ ] Бүтээгдэхүүний сэтгэгдэл/үнэлгээ (reviews) — олон улсын жишиг дэлгүүрт түгээмэл, одоогоор байхгүй
+
+## TIER 3 — Frontend чанар, хэрэглэгчийн туршлага
+
+- [ ] **Хандалт (accessibility)**: alt text бүх зурган дээр, keyboard navigation, color contrast (WCAG AA), aria-label-ууд — бүрэн audit хийгээгүй
+- [ ] Бүх хуудсанд ачаалах/алдааны төлөв нэгдсэн, тогтвортой байдлаар харагдаж байгааг шалгах
+- [ ] Гар утасны дэлгэц дээр бүх урсгалыг (checkout, admin панель) дахин шалгах
+- [ ] Код форматлалт — `prettier` аль хэдийн devDependency-д байгаа тул `pnpm exec prettier --write .` ажиллуулж, JSX-ийн нягт бичлэгийг цэгцлэх
+- [ ] **Хэрэглэгддэггүй код устгах**: `ComponentShowcase.tsx` (1437 мөр!), ашиглагдаагүй `AIChatBox.tsx`, `ManusDialog.tsx`, `AdminPreview.tsx` — routing хийгдээгүй ч repo-г хүндрүүлж байна
+- [ ] SEO: бүтээгдэхүүн бүрийн meta tag, structured data (Product schema.org), sitemap автоматаар шинэчлэгддэг эсэхийг шалгах
+- [ ] Performance: зураг lazy-load хийгдэж байгаа эсэх, bundle size, Lighthouse score
+
+## TIER 4 — Тест, чанарын баталгаажуулалт
+
+- [ ] **E2E тест байхгүй** (Playwright/Cypress) — одоогоор зөвхөн vitest unit/integration тест (27ш). Гол урсгалуудад (бүртгэл→нэвтрэлт→сагслах→захиалга, admin CRUD) E2E тест нэмэх
+- [ ] Тестийн хамрах хүрээг (coverage) нэмэгдүүлэх
+
+## TIER 5 — Дэд бүтэц, үйл ажиллагаа (жинхэнэ нээлтийн өмнө заавал)
+
+- [ ] CI pipeline (push бүрд `pnpm check && pnpm test && pnpm build`)
+- [ ] Staging орчин (prod-с тусдаа)
+- [ ] Алдааны хяналт (Sentry эсвэл ижил төстэй)
+- [ ] Бүтэцтэй logging
+- [ ] Автомат DB backup + сэргээх төлөвлөгөө баримтжуулах
+- [ ] S3/R2-ийн өмнө CDN тавих (зурган ачаалалт хурдасгах)
+- [ ] Uptime/health monitoring
+- [ ] Жинхэнэ нээлтийн өмнө load testing
+
+## TIER 6 — Хууль эрх зүй, нийцэл (Монголын дэлгүүрт зориулсан)
+
+- [ ] Privacy/Terms/Returns хуудсуудын агуулга **бодитоор хуулийн зөвлөгөө авсан эсэхийг** шалгах (би энэ талаар хуульч биш, зөвлөгөө өгөх боломжгүй — тусгай хуульчаас шалгуулах санал болгож байна)
+- [ ] Хэрэглэгчийн өгөгдөл устгах/экспортлох хүсэлтийг зохицуулах бодлого (хэрэглэгч эрх зүйн шаардлагаас үл хамааран сайн дадал)
+
+---
+
+## Тэргүүлэх дараалал (санал)
+
+1. ~~**TIER 0**~~ ✅ дууссан (2026-08-20)
+2. ~~**TIER 1**~~ ✅ дууссан (2026-08-20)
+3. **TIER 5-ын CI + backup** — бусад бүхнээс өмнө байвал аюулгүй ажиллах
+4. **TIER 2, 3, 4** — зэрэгцээ, тэргүүлэх ач холбогдлоороо
+5. **TIER 6** — бизнес жинхэнэ нээгдэхээс өмнө
