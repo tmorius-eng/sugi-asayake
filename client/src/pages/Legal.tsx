@@ -11,5 +11,28 @@ export default function Legal() {
   const [location] = useLocation();
   const key = location.includes("terms") ? "terms" : location.includes("returns") ? "returns" : "privacy";
   const document = documents[key];
-  return <main className="min-h-screen bg-[#f8f5ef] px-5 py-10 text-[#17181b] sm:px-8"><div className="mx-auto max-w-3xl"><Link href="/" className="inline-flex items-center gap-2 text-xs font-bold text-[#a51630]"><ArrowLeft size={15} />Нүүр хуудас руу буцах</Link><p className="mt-14 text-[10px] font-extrabold tracking-[.16em] text-[#df1f3d]">SUGI ASAYAKE MONGOLIA</p><h1 className="mt-3 font-[var(--font-display)] text-4xl font-semibold tracking-[-.07em] sm:text-5xl">{document.title}</h1><p className="mt-5 max-w-2xl text-base leading-7 text-[#5f6065]">{document.lead}</p><p className="mt-4 text-xs text-[#77787d]">Сүүлд шинэчилсэн: 2026.08.13</p><div className="mt-12 grid gap-7">{document.sections.map(([heading, text]) => <section key={heading} className="rounded-3xl bg-white p-6 shadow-[0_12px_26px_rgba(20,22,24,.05)]"><h2 className="text-lg font-bold">{heading}</h2><p className="mt-3 text-sm leading-7 text-[#5f6065]">{text}</p></section>)}</div></div></main>;
+  return (
+    <div className="doc-shell">
+      <main className="doc-main">
+        <Link href="/" className="doc-back"><ArrowLeft size={15} />Нүүр хуудас руу буцах</Link>
+        <div className="doc-head">
+          <p className="doc-kicker">SUGI ASAYAKE MONGOLIA</p>
+          <h1>{document.title}</h1>
+          <p>{document.lead}</p>
+          <span className="doc-updated">Сүүлд шинэчилсэн: 2026.08.13</span>
+        </div>
+        <div className="doc-sections">
+          {document.sections.map(([heading, text], index) => (
+            <section className="doc-section" key={heading}>
+              <span className="doc-section-index">{String(index + 1).padStart(2, "0")}</span>
+              <div>
+                <h2>{heading}</h2>
+                <p>{text}</p>
+              </div>
+            </section>
+          ))}
+        </div>
+      </main>
+    </div>
+  );
 }
