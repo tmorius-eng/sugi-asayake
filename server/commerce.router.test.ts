@@ -75,6 +75,17 @@ describe("commerce router", () => {
     await expect(caller.profile.addresses.create({ label: "Гэр", recipientName: "Test", phone: "99001122", addressLine: "Test address line" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     await expect(caller.profile.addresses.update({ id: 1, label: "Nope" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     await expect(caller.profile.addresses.delete({ id: 1 })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller.profile.updatePreferences({ skinType: "normal" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller.profile.updateNotifications({ emailOptIn: false })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller.profile.changePassword({ currentPassword: "x", newPassword: "BrandNewPassw0rd!" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller.profile.deleteAccount({ password: "x" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller.profile.wishlist.list()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller.profile.wishlist.toggle({ productId: 1, saved: true })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("blocks a signed-in but non-'user'-role account from self-deleting via profile.deleteAccount", async () => {
+    const caller = appRouter.createCaller(createContext("admin"));
+    await expect(caller.profile.deleteAccount({ password: "whatever" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 
   it("rejects a malformed delivery phone number on the profile and address book the same way checkout does", async () => {

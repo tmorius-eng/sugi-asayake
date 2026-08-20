@@ -1,9 +1,11 @@
-import { ArrowDownUp, ArrowUpRight, Eye, LoaderCircle, MapPin, PackageCheck, Phone, RotateCcw, Search, ShoppingBag, SlidersHorizontal, Sparkles } from "lucide-react";
+import { ArrowDownUp, ArrowUpRight, Eye, Heart, LoaderCircle, MapPin, PackageCheck, Phone, RotateCcw, Search, ShoppingBag, SlidersHorizontal, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
 import QuickViewDialog, { type QuickViewProduct } from "@/components/QuickViewDialog";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { filterCatalogProducts, filterCatalogStock, getCatalogCategories, sortCatalogProducts, type CatalogSortOption } from "@shared/catalog-filter";
 import { rememberRecentlyViewed, resolveRecentlyViewed } from "@shared/recently-viewed";
@@ -56,7 +58,16 @@ export default function Shop() {
   const [cartOpen, setCartOpen] = useState(false);
   const [quickViewProduct, setQuickViewProduct] = useState<QuickViewProduct | null>(null);
   const [recentlyViewedIds, setRecentlyViewedIds] = useState<number[]>([]);
+  const { isAuthenticated } = useAuth();
+  const utils = trpc.useUtils();
   const catalog = trpc.catalog.list.useQuery();
+  const wishlist = trpc.profile.wishlist.list.useQuery(undefined, { enabled: isAuthenticated });
+  const wishlistIds = useMemo(() => new Set(wishlist.data?.map(item => item.productId) ?? []), [wishlist.data]);
+  const toggleWishlist = trpc.profile.wishlist.toggle.useMutation({ onSuccess: () => utils.profile.wishlist.list.invalidate() });
+  const onToggleWishlist = (productId: number) => {
+    if (!isAuthenticated) { startLogin(); return; }
+    toggleWishlist.mutate({ productId, saved: !wishlistIds.has(productId) });
+  };
   const cart = trpc.cart.current.useQuery();
   const products = catalog.data ?? [];
   const cartCount = cart.data?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
@@ -103,6 +114,7 @@ export default function Shop() {
         <div className="shop-category-deck">{discoveryCategories.map(item => <div className={`shop-category-card ${item.tone}`} key={item.number}><span>{item.number}</span><div><small>SUGI DAILY CARE</small><h3>{item.title}</h3><p>{item.detail}</p></div><ArrowUpRight size={20} /></div>)}</div>
         <div className="shop-discovery-cta" id="shop-contact"><div><MapPin size={20} /><span><strong>3 салбар, нэг өдөр тутмын сонголт.</strong><small>Таны хайж буй бүтээгдэхүүнийг ойр салбараас асуугаарай.</small></span></div><div><Link href="/#stores">Салбар олох <ArrowUpRight size={16} /></Link><a href="tel:94509911">9450-9911 <Phone size={15} /></a></div></div>
       </section> : filtered.length ? <section className="shop-product-grid">{filtered.map((product, index) => <article key={product.id} className="shop-product-card" data-reveal style={{ transitionDelay: `${Math.min(index * 55, 300)}ms` }}>
+        <button type="button" className={`shop-wishlist-toggle${wishlistIds.has(product.id) ? " active" : ""}`} onClick={() => onToggleWishlist(product.id)} aria-label={wishlistIds.has(product.id) ? `${product.name}-г хүслийн жагсаалтаас хасах` : `${product.name}-г хүслийн жагсаалтад нэмэх`}><Heart size={15} /></button>
         <Link href={`/product/${product.slug}`} onClick={() => rememberProduct(product.id)} className="shop-product-link"><div className="shop-product-image"><img src={product.imageUrl ?? fallbackImage} alt={product.name} /><span>{product.stockQuantity > 0 ? `${product.stockQuantity} ширхэг үлдсэн` : "Нөөц дууссан"}</span><i aria-hidden="true">VIEW</i></div><div className="shop-product-copy"><p>{product.brand ?? product.categoryName ?? "SUGI ASAYAKE"}</p><h2>{product.name}</h2><small>{product.shortDescription ?? "Японоос баталгаат бүтээгдэхүүн"}</small><div><strong>{formatMnt(product.priceMnt)}</strong><span><ShoppingBag size={15} /></span></div></div></Link>
         <button type="button" className="quick-view-trigger" onClick={() => openQuickView(product)} aria-label={`${product.name} шуурхай харах`}><Eye size={15} /> Шуурхай харах</button>
       </article>)}</section> : <section className="shop-status-card" data-reveal><Search size={26} /><h2>Энэ удаа тохирох бүтээгдэхүүн олдсонгүй.</h2><p>Өөр хайлтын үг хэрэглэж үзэх эсвэл бүх ангиллыг дахин хараарай.</p><button type="button" onClick={resetControls}><RotateCcw size={14} /> Шүүлтүүр арилгах</button></section>}
