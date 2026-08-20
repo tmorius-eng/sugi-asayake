@@ -37,7 +37,7 @@
 ```
 DATABASE_URL=mysql://root:Zulaa123@127.0.0.1:3306/sugi_asayake
 JWT_SECRET=local-test-secret-12345
-OWNER_EMAIL=owner@example.com
+OWNER_EMAIL=t.morius@gmail.com
 S3_BUCKET=sugi-asayake
 S3_REGION=us-east-1
 S3_ENDPOINT=http://127.0.0.1:9000
@@ -129,3 +129,20 @@ pnpm dev
 хангалттай — доорх гар `$env:` block нь зөвхөн `.env`-ийн утгыг (жишээ нь S3_REGION) түр override хийх шаардлагатай үед л хэрэгтэй.
 
 **Мэдэгдэж буй blocker:** `C:\Sugi-asayake\package.json` болон `pnpm-lock.yaml` нь Windows "High Mandatory Level" integrity label-тай тул non-elevated Claude Code процесс тэдгээрийг засаж/хадгалж чадахгүй (`pnpm add` ч lockfile дээр EPERM өгнө). Засах бол elevated PowerShell-ээс `icacls <file> /setintegritylevel Medium` — дэлгэрэнгүй ROADMAP.md-ийн TIER 0 хэсэгт.
+
+## ⚠️ Admin эрх хэн авдаг вэ — bootstrap логик (`server/db.ts`-ийн `createUserWithPassword`)
+
+Шинээр бүртгүүлж буй хэрэглэгч **admin** эрхтэй болдог ЗӨВХӨН дараах 2 тохиолдолд:
+1. Тэр бол `users` хүснэгт хоосон үед бүртгүүлж буй **хамгийн ЭХНИЙ** хэрэглэгч (`isFirstUser`) — фрэш deployment бүр наад зах нь 1 admin-тай байхын тулд, ГАРААР DB заслах шаардлагагүй.
+2. Тухайн имэйл `.env`-ийн `OWNER_EMAIL`-тэй **яг таарч** байвал (`isOwnerEmail`) — эзэмшигчийн имэйл (`t.morius@gmail.com`) DB дахин цэвэрлэгдсэн ч (жишээ нь шинэ компьютерт шинээр суулгах үед) үргэлж admin болохын баталгаа.
+
+**Бусад бүх шинэ бүртгэл** (2-р, 3-р... хэрэглэгч, `OWNER_EMAIL`-тэй тохирохгүй) → энгийн `"user"` эрхтэйгээр л бүртгэгдэнэ, admin биш. `staff`/`admin` эрхийг зөвхөн одоо байгаа admin `/admin`-аас гараар (эсвэл `admin.updateUserRole`/`admin.inviteStaff` procedure-оор) л оноож болно.
+
+⚠️ **Production/deploy хийхээсээ өмнө заавал шалгах:** `.env`-ийн `OWNER_EMAIL=t.morius@gmail.com` байх ёстой (placeholder `owner@example.com`-оор биш) — эс тэгвэл (1)-р дүрэм л ажиллана (зөвхөн хамгийн эхний бүртгэл admin болно, дараа нь эзэмшигчийн имэйл ч onцгой эрхгүй энгийн user болно).
+
+## 2026-08-20: Гэрийн (хувийн) лаптоп дээр амжилттай асуулгасан
+
+Ажлын компьютерээс `LAPTOP-MIGRATION.md`-ийн дагуу шилжиж, GitHub private repo-оос clone хийгээд (`C:\Users\hero_\Documents\Projects\sugi-asayake`) Node.js/pnpm/MySQL 8/MinIO AIStor-ийг шинэ лаптоп дээр бүрэн шинээр суулгаж, `pnpm dev` ажиллуулж, `t.morius@gmail.com`-ээр анхны (admin) акаунт бүртгүүлж баталгаажуулсан. Тэмдэглэх зүйлс:
+- **pnpm build-script figuration**: шинэ pnpm (`onlyBuiltDependencies`) тохиргоог `package.json`-ий `"pnpm"` field-ээс уншихаа больсон тул **`pnpm-workspace.yaml`**-д зөөсөн (`packages: ['.']` + `onlyBuiltDependencies: [@tailwindcss/oxide, esbuild]`) — эс тэгвэл `pnpm install`-ийн дараа native build scripts (esbuild, tailwindcss/oxide) ажиллаагүй үлдэнэ, `pnpm approve-builds` interactive тул CI/скрипт орчинд ашиглах боломжгүй.
+- **Migration 0009 (`drizzle/0009_independent_auth.sql`)-ийн `DROP INDEX \`openId\`` мөр бодит DB дээр ажиллахгүй байсан** — drizzle-ийн бодит auto-generated индексийн нэр `users_openId_unique` байсан (`openId` биш). Гараар зассан (`ALTER TABLE users DROP INDEX users_openId_unique;`). Хэрэв ирээдүйд ижил migration-ыг шинэ DB дээр ажиллуулбал энэ мөрийг заавал шалгаарай.
+- MySQL/MinIO-ийн бодит өгөгдөл (backups zip, `C:\minio\data`) энэ лаптоп руу хараахан зөөгдөөгүй — хоосон орчноор эхэлсэн, шаардлагатай үед `LAPTOP-MIGRATION.md`-ийн §2/§3-ийн дагуу зөөнө.
