@@ -12,6 +12,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
 import type { RouterOutputs } from "@/lib/trpc";
+import { useScrollReveal } from "@/hooks/useScrollReveal";
 
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Гүйцэтгэж чадсангүй. Дахин оролдоно уу.";
 const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
@@ -82,6 +83,7 @@ export default function Profile() {
     return (TAB_KEYS as string[]).includes(requested ?? "") ? (requested as TabKey) : "overview";
   })();
   const goToTab = (next: TabKey) => setLocation(`/profile?tab=${next}`);
+  useScrollReveal(tab);
 
   const uploadAvatar = trpc.profile.uploadAvatar.useMutation({
     onSuccess: () => { utils.auth.me.invalidate(); toast.success("Зураг шинэчлэгдлээ."); },
@@ -124,7 +126,7 @@ export default function Profile() {
     <div className="sugi-commerce" style={{ overflow: "visible" }}>
       <CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="SUGI ASAYAKE профайл" />
       <main className="profile-main" style={{ paddingBottom: "0" }}>
-        <div className="profile-head">
+        <div className="profile-head" data-reveal>
           <div className="profile-avatar">
             <div className="profile-avatar-circle">
               {uploadAvatar.isPending ? <LoaderCircle className="animate-spin" size={22} /> : user?.avatarUrl ? <img src={user.avatarUrl} alt="" /> : initial}
@@ -185,13 +187,13 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: TabKey) => void }) {
 
   return (
     <div style={{ display: "grid", gap: "20px" }}>
-      <div className="overview-hero">
+      <div className="overview-hero" data-reveal>
         <p>SUGI ASAYAKE / ТАНЫ ӨДӨР БҮР</p>
         <h2>Сайн байна уу, {firstName}.</h2>
         <span>Өглөөний туяа шиг гэрэлтээрэй — таны бүх мэдээлэл эндээс нэг дороос харагдана.</span>
       </div>
 
-      <div className="overview-stats">
+      <div className="overview-stats" data-reveal>
         <button type="button" className="overview-stat" style={{ cursor: "pointer", textAlign: "left" }} onClick={() => onNavigate("orders")}>
           <strong>{orders.data?.length ?? "—"}</strong>
           <span>Нийт захиалга</span>
@@ -206,7 +208,7 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: TabKey) => void }) {
         </button>
       </div>
 
-      <section className="profile-section">
+      <section className="profile-section" data-reveal>
         <div className="profile-section-head"><div><h2>Сүүлийн захиалга</h2></div></div>
         {orders.isLoading ? (
           <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#77787c", fontSize: "13px" }}><LoaderCircle className="animate-spin" size={16} /> Ачааллаж байна…</div>
@@ -274,7 +276,7 @@ function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
   };
 
   return (
-    <section className="profile-section">
+    <section className="profile-section" data-reveal>
       <div className="profile-section-head"><div><h2>Захиалгын түүх</h2><p>Захиалгын явц болон дахин захиалах</p></div></div>
       {orders.isLoading ? (
         <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#77787c", fontSize: "13px" }}><LoaderCircle className="animate-spin" size={16} /> Ачааллаж байна…</div>
@@ -350,7 +352,7 @@ function PreferencesTab() {
 
   return (
     <div style={{ display: "grid", gap: "20px" }}>
-      <section className="profile-section">
+      <section className="profile-section" data-reveal>
         <div className="profile-section-head"><div><h2>Хувийн мэдээлэл</h2><p>Нэр болон хүргэлтэд хэрэглэх утасны дугаар</p></div></div>
         <form onSubmit={event => { event.preventDefault(); updateProfile.mutate({ name: name.trim() || null, phone: phone.trim() || null }); }} className="profile-form-grid">
           <label className="auth-field">
@@ -371,7 +373,7 @@ function PreferencesTab() {
         </form>
       </section>
 
-      <section className="profile-section">
+      <section className="profile-section" data-reveal>
         <div className="profile-section-head"><div><h2>Гоо сайхны &amp; Гэрийн профайл</h2><p>Таны арьс, орон сууцны хэв маягийн санал хүсэлт — ирээдүйд танд тохирсон бүтээгдэхүүн санал болгоход ашиглагдана</p></div></div>
         <form onSubmit={event => { event.preventDefault(); updatePreferences.mutate({ skinType: (skinType || null) as "dry" | "oily" | "combination" | "sensitive" | "normal" | null, skinConcerns: skinConcerns.length ? skinConcerns.join(",") : null, interiorStyle: interiorStyle || null }); }} style={{ display: "grid", gap: "16px" }}>
           <div>
@@ -423,7 +425,7 @@ function WishlistTab({ onCartOpen }: { onCartOpen: () => void }) {
   });
 
   return (
-    <section className="profile-section">
+    <section className="profile-section" data-reveal>
       <div className="profile-section-head"><div><h2>Хүслийн жагсаалт</h2><p>Таны хадгалсан бүтээгдэхүүнүүд</p></div></div>
       {wishlist.isLoading ? (
         <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#77787c", fontSize: "13px" }}><LoaderCircle className="animate-spin" size={16} /> Ачааллаж байна…</div>
@@ -543,7 +545,7 @@ function AddressesTab() {
   type AddressRow = RouterOutputs["profile"]["addresses"]["list"][number];
 
   return (
-    <section className="profile-section">
+    <section className="profile-section" data-reveal>
       <div className="profile-section-head">
         <div><h2>Хүргэлтийн хаяг</h2><p>Захиалга хийхэд үндсэн хаяг автоматаар бөглөгдөнө</p></div>
         {!addingAddress && <button type="button" onClick={() => { setEditingAddressId(null); setAddingAddress(true); }} className="address-add-button"><Plus size={14} /> Хаяг нэмэх</button>}
@@ -606,7 +608,7 @@ function NotificationsTab() {
   });
 
   return (
-    <section className="profile-section">
+    <section className="profile-section" data-reveal>
       <div className="profile-section-head"><div><h2>Мэдэгдэл</h2><p>Ямар мэдээллийг имэйл/SMS-ээр авахаа удирдана</p></div></div>
       <p style={{ margin: "0 0 4px", padding: "10px 13px", background: "#f1f6fb", color: "#3970a7", fontSize: "11px", lineHeight: 1.6 }}>
         Одоогоор эдгээр тохиргоо зөвхөн "Ирэхээр мэдэгдэх" (хүслийн жагсаалтын back-in-stock) мэдэгдэлд хамаарна. Захиалгын баталгаажуулах имэйл систем ирээдүйд нэмэгдэхэд мөн адил дагана.
@@ -657,7 +659,7 @@ function SecurityTab() {
 
   return (
     <div style={{ display: "grid", gap: "20px" }}>
-      <section className="profile-section">
+      <section className="profile-section" data-reveal>
         <div className="profile-section-head"><div><h2>Нууц үг солих</h2></div></div>
         <form onSubmit={submitPasswordChange} className="profile-form-grid">
           <label className="auth-field" style={{ gridColumn: "1 / -1" }}>
@@ -678,7 +680,7 @@ function SecurityTab() {
         </form>
       </section>
 
-      <section className="profile-section">
+      <section className="profile-section" data-reveal>
         <div className="profile-section-head"><div><h2>Session удирдлага</h2><p>Бусад төхөөрөмж/хөтчөөс гарах</p></div></div>
         <button type="button" onClick={() => { if (window.confirm("Энэ таны БҮХ төхөөрөмж дээрх session-г хүчингүй болгоно (энэ хөтчийг оруулаад). Үргэлжлүүлэх үү?")) logoutAllDevices.mutate(); }} disabled={logoutAllDevices.isPending} className="button" style={{ background: "#17181b", color: "#fff" }}>
           <ShieldOff size={15} /> Бүх төхөөрөмжөөс гарах
@@ -686,7 +688,7 @@ function SecurityTab() {
       </section>
 
       {user?.role === "user" && (
-        <section className="danger-zone">
+        <section className="danger-zone" data-reveal>
           <h3>Акаунт устгах</h3>
           <p>Энэ үйлдлийг буцаах боломжгүй. Таны хувийн мэдээлэл, хаяг, хүслийн жагсаалт бүрмөсөн устана (захиалгын түүх нягтлан бодох бүртгэлийн зорилгоор хадгалагдана).</p>
           {!confirmingDelete ? (
@@ -716,7 +718,7 @@ function SecurityTab() {
 function SupportTab() {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
   return (
-    <section className="profile-section">
+    <section className="profile-section" data-reveal>
       <div className="profile-section-head"><div><h2>Тусламж</h2><p>Түгээмэл асуултууд болон холбоо барих</p></div></div>
       <div>
         {FAQ_ITEMS.map((item, index) => (

@@ -1,5 +1,5 @@
 import { ArrowLeft, MailWarning, ShoppingBag, User } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 
 type CommerceHeaderProps = {
@@ -26,6 +26,7 @@ function VerifyEmailBanner() {
 
 export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = "SUGI ASAYAKE" }: CommerceHeaderProps) {
   const { user } = useAuth();
+  const [location] = useLocation();
   const initial = user?.name?.trim()?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? null;
 
   return (
@@ -39,8 +40,12 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
             <span>{backLabel}</span>
           </Link>
           <div className="commerce-header-actions">
-            <Link href="/shop">Дэлгүүр</Link>
-            <Link href="/profile" className="profile-link" aria-label="Миний профайл">
+            <Link href="/shop" className={location.startsWith("/shop") ? "is-current" : ""}>Дэлгүүр</Link>
+            {/* Order history lives inside Профайл -> Захиалга (with a
+                buy-again + status timeline the old standalone "Миний
+                захиалга" link didn't have) — one nav entry into the account
+                area instead of two links to overlapping content. */}
+            <Link href="/profile" className={`profile-link${location.startsWith("/profile") ? " is-current" : ""}`} aria-label="Миний профайл">
               {user ? (
                 <span className="profile-avatar-chip">{user.avatarUrl ? <img src={user.avatarUrl} alt="" /> : initial}</span>
               ) : (
@@ -48,7 +53,6 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
               )}
               <span>Профайл</span>
             </Link>
-            <Link href="/orders">Миний захиалга</Link>
             <button type="button" onClick={onCartOpen} aria-label={cartCount > 0 ? `Сагс нээх, ${cartCount} бараатай` : "Сагс нээх"}>
               <ShoppingBag size={15} aria-hidden="true" /> Сагс
               {cartCount > 0 && <span className="grid size-5 place-items-center rounded-full bg-[#f0b52d] text-[10px] text-[#17181b]">{cartCount}</span>}
