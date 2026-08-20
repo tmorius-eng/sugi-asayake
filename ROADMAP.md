@@ -63,11 +63,11 @@ Manus-с email+password руу шилжихдээ би дараах чухал �
 
 ## TIER 5 — Дэд бүтэц, үйл ажиллагаа (жинхэнэ нээлтийн өмнө заавал)
 
-- [ ] CI pipeline (push бүрд `pnpm check && pnpm test && pnpm build`)
+- [x] **CI pipeline** — ДУУССАН (2026-08-20, зөвхөн локал бэлтгэл, GitHub-руу push хийгээгүй). Төсөл анх удаа git repo болсон (`git init`, Git суулгасан — өмнө нь огт суугаагүй байсан). `.github/workflows/ci.yml` нэмсэн: push/PR бүрд `pnpm check && pnpm test && pnpm build` ажиллана (MySQL/S3 service шаардахгүй, учир нь DB-gated integration тестүүд өөрсдөө env var байхгүй үед skip хийдэг — баталгаажсан, TIER 0/1-ийн тэмдэглэл харна уу). **Дараагийн алхам (хэрэглэгч өөрөө хийх ёстой):** GitHub дээр repo үүсгэж `git remote add origin ... && git push -u origin main` хийвэл л Actions идэвхжинэ.
 - [ ] Staging орчин (prod-с тусдаа)
 - [ ] Алдааны хяналт (Sentry эсвэл ижил төстэй)
 - [ ] Бүтэцтэй logging
-- [ ] Автомат DB backup + сэргээх төлөвлөгөө баримтжуулах
+- [x] **Автомат DB backup + сэргээх төлөвлөгөө** — ДУУССАН (2026-08-20, локал dev DB-д зориулав). `scripts/db-backup.ps1` (`mysqldump` → zip, `DATABASE_URL`-аас холбогдоно, сүүлийн 14 backup хадгална) болон `scripts/db-restore.ps1` (**анхдагч байдлаараа `<db>_restore_drill` нэртэй тусдаа DB рүү сэргээдэг — жинхэнэ өгөгдлийг санамсаргүй дарахгүй**, зөвхөн `-Force`-той үед жинхэнэ DB рүү бичдэг). **Windows Task Scheduler**-д `SugiAsayake-DbBackup` нэртэй, өдөр бүр 03:00 цагт ажилладаг task бүртгэгдсэн (`Register-ScheduledTask`, System32-ийн `powershell.exe`-ээр — `pwsh.exe` нь WindowsApps багцын хязгаарлалтаас болж Task Scheduler-т ажилладаггүйг олж, засав). **Бодитоор бүрэн шалгасан**: backup → drill DB руу restore → эх болон сэргээсэн DB-ийн бүх хүснэгтийн бодит мөрийн тоо (COUNT(*), FK constraint 15ш) яг таарч байгааг баталгаажуулсан; Task Scheduler-ээр гар аргаар нэг удаа асааж (`Start-ScheduledTask`) `LastTaskResult=0`, шинэ backup файл бодитоор үүссэнийг харсан. **Жинхэнэ нээлтийн production төлөвлөгөө** (одоогоор prod host сонгогдоогүй тул зөвхөн баримтжуулалт): hosting provider-ийн managed MySQL байвал түүний built-in автомат backup (жишээ нь daily snapshot + PITR) ашиглах; өөрөө удирддаг VPS бол дээрхтэй адилхан script-ийг systemd timer-ээр (`crontab`-ын оронд) ажиллуулж, backup файлыг **тухайн серверээс тусдаа** байршилд (S3/R2 bucket, эсвэл өөр серверт rsync) хадгалах ёстой — ганцхан серверт л байгаа backup нь диск бүтэн эвдрэхэд юу ч хамгаалахгүй. Сар тутам сэргээх drill хийж, script бодитоор ажиллаж байгаа эсэхийг баталгаажуулж байх санал.
 - [ ] S3/R2-ийн өмнө CDN тавих (зурган ачаалалт хурдасгах)
 - [ ] Uptime/health monitoring
 - [ ] Жинхэнэ нээлтийн өмнө load testing
@@ -83,6 +83,6 @@ Manus-с email+password руу шилжихдээ би дараах чухал �
 
 1. ~~**TIER 0**~~ ✅ дууссан (2026-08-20)
 2. ~~**TIER 1**~~ ✅ дууссан (2026-08-20)
-3. **TIER 5-ын CI + backup** — бусад бүхнээс өмнө байвал аюулгүй ажиллах
+3. ~~**TIER 5-ын CI + backup**~~ ✅ дууссан (2026-08-20, локал бэлтгэл — GitHub push, Sentry, staging, CDN, uptime monitoring, load testing зэрэг TIER 5-ийн бусад зүйлс хэвээрээ үлдсэн)
 4. **TIER 2, 3, 4** — зэрэгцээ, тэргүүлэх ач холбогдлоороо
 5. **TIER 6** — бизнес жинхэнэ нээгдэхээс өмнө

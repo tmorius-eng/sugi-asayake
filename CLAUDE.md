@@ -103,7 +103,9 @@ FLUSH PRIVILEGES;
 - `ComponentShowcase.tsx` (1437 мөр), ашиглагдаагүй `AIChatBox`/`ManusDialog` — routing хийгдээгүй хэдий ч repo дотор үлдсэн dead code
 
 ## Дараагийн ажлын санал
-TIER 0 (нууц үг сэргээх, имэйл баталгаажуулалт, auth rate limit) болон TIER 1 (FK constraint, CSP, QPay rate limit, session revocation, audit log coverage, XSS баталгаажуулалт) хоёулаа дууссан — дэлгэрэнгүй, туршилтын бүх алхам: [ROADMAP.md](ROADMAP.md). Дараагийн санал: TIER 5-ын CI/backup, дараа нь TIER 2/3/4 зэрэгцээ.
+TIER 0, TIER 1 дууссан. TIER 5-ын CI (локал git+GitHub Actions бэлтгэл) болон автомат DB backup+restore (Windows Task Scheduler, `scripts/db-backup.ps1`/`db-restore.ps1`) мөн дууссан — дэлгэрэнгүй [ROADMAP.md](ROADMAP.md). Одоо UX-RESEARCH.md-ийн тэргүүлэх №1 (guest checkout) дээр ажиллаж байна. Дараа нь: TIER 5-ын үлдсэн зүйлс (Sentry, staging, CDN, uptime monitoring) болон TIER 2/3/4.
+
+**SECURITY.md, UX-RESEARCH.md** нэмэгдсэн (CLAUDE.md/ROADMAP.md-ийн хамтрагч баримт) — аюулгүй байдал болон UX/зах зээлийн судалгааны checklist тус тус.
 
 **`pnpm dev` одоо стандарт байдлаар ажилладаг (2026-08-20-с хойш).** Өмнө нь `package.json`/`pnpm-lock.yaml` файлууд Windows-ийн "High Mandatory Level" integrity label-тай байсан тул Claude Code засаж чадахгүй байсан бол, хэрэглэгч elevated PowerShell-ээс `icacls ... /setintegritylevel Medium` ажиллуулж зассан. Одооноос localhost дээр туршихдаа зүгээр л:
 ```powershell
