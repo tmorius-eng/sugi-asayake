@@ -38,7 +38,7 @@ export default function ForgotPassword() {
         {requestReset.isSuccess ? (
           <div className="rounded-3xl bg-white p-6 shadow-[0_18px_45px_rgba(20,22,24,.06)] sm:p-8">
             <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-[#e7f2ec] text-[#2c7650]">
-              <CheckCircle2 size={23} />
+              <CheckCircle2 size={23} aria-hidden="true" />
             </div>
             <p className="mt-5 text-sm leading-6 text-[#626368]">
               Хэрэв <strong>{email.trim()}</strong> хаягаар бүртгэл байгаа бол, түүн рүү нууц үг сэргээх холбоос илгээгдлээ. Имэйлээ шалгана уу (спам хавтас руу орсон эсэхийг мөн шалгаарай).
@@ -55,7 +55,7 @@ export default function ForgotPassword() {
             <label className="grid gap-2 text-xs font-bold">
               Имэйл
               <div className="flex items-center gap-2 rounded-xl border border-black/12 bg-[#fffdf9] px-3">
-                <Mail size={16} className="text-[#a9a49a]" />
+                <Mail size={16} className="text-[#a9a49a]" aria-hidden="true" />
                 <input
                   type="email"
                   value={email}
@@ -73,7 +73,7 @@ export default function ForgotPassword() {
               disabled={requestReset.isPending}
               className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#df1f3d] px-5 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#c8112e] active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-55"
             >
-              {requestReset.isPending && <LoaderCircle className="animate-spin" size={17} />}
+              {requestReset.isPending && <LoaderCircle className="animate-spin" size={17} aria-hidden="true" />}
               Сэргээх холбоос илгээх
             </button>
           </form>

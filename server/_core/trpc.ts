@@ -2,7 +2,7 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { UNAUTHED_ERR_MSG, NOT_ADMIN_ERR_MSG } from "@shared/const";
 import type { TrpcContext } from "./context";
-import { checkAuthRateLimit } from "./security";
+import { checkRateLimit } from "./security";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
@@ -25,17 +25,33 @@ export const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
   return next({ ctx });
 });
 
-// Applied to auth endpoints that are attractive brute-force/enumeration
-// targets (login, register, password reset, resend verification). Keyed by
-// IP + procedure path, independent of the general `/api/trpc` traffic cap.
-const authRateLimit = t.middleware(({ ctx, path, next }) => {
-  const key = `${path}:${ctx.req.ip || ctx.req.socket.remoteAddress || "unknown"}`;
-  const result = checkAuthRateLimit(key);
-  if (!result.allowed) {
-    throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: `Хэт олон оролдлого хийлээ. ${result.retryAfterSeconds} секундын дараа дахин оролдоно уу.` });
-  }
-  return next();
-});
+function requestKey(ctx: TrpcContext): string {
+  return ctx.req.ip || ctx.req.socket.remoteAddress || "unknown";
+}
 
-export const authRateLimitedProcedure = publicProcedure.use(authRateLimit);
-export const authRateLimitedProtectedProcedure = protectedProcedure.use(authRateLimit);
+function rateLimitMiddleware(bucketName: string, maxAttempts: number, windowMs: number) {
+  return t.middleware(({ ctx, path, next }) => {
+    const result = checkRateLimit(bucketName, `${path}:${requestKey(ctx)}`, maxAttempts, windowMs);
+    if (!result.allowed) {
+      throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: `Хэт олон оролдлого хийлээ. ${result.retryAfterSeconds} секундын дараа дахин оролдоно уу.` });
+    }
+    return next();
+  });
+}
+
+// Strict tier (8 attempts/15min/IP): brute-force/enumeration/abuse targets
+// where each request is either security-sensitive (login, register,
+// password reset) or writes a real business record (checkout — it also
+// decrements stock, so leaving it under only the general 300/15min cap would
+// let one IP place enough garbage orders to exhaust inventory).
+const strictRateLimit = rateLimitMiddleware("strict", 8, 15 * 60 * 1000);
+export const strictRateLimitedProcedure = publicProcedure.use(strictRateLimit);
+export const strictRateLimitedProtectedProcedure = protectedProcedure.use(strictRateLimit);
+
+// Moderate tier (30 attempts/15min/IP): cart mutations. Guest checkout means
+// these no longer require an account first, so an anonymous visitor could
+// otherwise spam `carts` rows with no friction at all — but a real shopper
+// legitimately adding several different products needs more headroom than
+// the strict tier gives.
+const moderateRateLimit = rateLimitMiddleware("moderate", 30, 15 * 60 * 1000);
+export const moderateRateLimitedProcedure = publicProcedure.use(moderateRateLimit);

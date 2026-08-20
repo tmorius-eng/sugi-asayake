@@ -249,15 +249,25 @@ export async function addCartItem(input: { owner: CartOwner; productId: number; 
   if (!product[0]?.isPublished) throw new Error("This product is not currently available for ordering.");
 
   const cart = await getOrCreateActiveCart(input.owner);
-  const existing = await db.select().from(cartItems).where(and(eq(cartItems.cartId, cart.id), eq(cartItems.productId, input.productId))).limit(1);
-  const quantity = (existing[0]?.quantity ?? 0) + input.quantity;
-  if (quantity > product[0].stockQuantity) throw new Error("The requested quantity is not available in stock.");
 
-  if (existing[0]) {
-    await db.update(cartItems).set({ quantity, updatedAt: new Date() }).where(eq(cartItems.id, existing[0].id));
-  } else {
-    await db.insert(cartItems).values({ cartId: cart.id, productId: input.productId, quantity });
-  }
+  // Read-modify-write on the existing quantity used to happen outside any
+  // lock: two concurrent "add to cart" calls for the same product (a double
+  // click, two open tabs, guest-cart merge racing a manual add) could both
+  // read the same starting quantity and clobber each other's increment. The
+  // cart-row lock below serializes every addItem for this cart so that can't
+  // happen, while still throwing the same "not enough stock" error as before.
+  await db.transaction(async tx => {
+    await tx.select({ id: carts.id }).from(carts).where(eq(carts.id, cart.id)).for("update");
+    const existing = await tx.select().from(cartItems).where(and(eq(cartItems.cartId, cart.id), eq(cartItems.productId, input.productId))).limit(1);
+    const quantity = (existing[0]?.quantity ?? 0) + input.quantity;
+    if (quantity > product[0].stockQuantity) throw new Error("The requested quantity is not available in stock.");
+
+    if (existing[0]) {
+      await tx.update(cartItems).set({ quantity, updatedAt: new Date() }).where(eq(cartItems.id, existing[0].id));
+    } else {
+      await tx.insert(cartItems).values({ cartId: cart.id, productId: input.productId, quantity });
+    }
+  });
   return getActiveCartForOwner(input.owner);
 }
 

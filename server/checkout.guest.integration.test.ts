@@ -22,6 +22,8 @@ function makeGuestContext(existingGuestToken?: string): { ctx: TrpcContext; cook
     req: {
       protocol: "https",
       headers: { cookie: existingGuestToken ? `${GUEST_CART_COOKIE_NAME}=${existingGuestToken}` : "" },
+      ip: "203.0.113.5",
+      socket: { remoteAddress: "203.0.113.5" },
     } as unknown as TrpcContext["req"],
     res: {
       cookie: (name: string, value: string) => { cookiesSet[name] = value; },
@@ -34,7 +36,7 @@ function makeGuestContext(existingGuestToken?: string): { ctx: TrpcContext; cook
 function makeUserContext(userId: number): TrpcContext {
   return {
     user: { id: userId } as TrpcContext["user"],
-    req: { protocol: "https", headers: {} } as unknown as TrpcContext["req"],
+    req: { protocol: "https", headers: {}, ip: "203.0.113.6", socket: { remoteAddress: "203.0.113.6" } } as unknown as TrpcContext["req"],
     res: { cookie: () => undefined, clearCookie: () => undefined } as unknown as TrpcContext["res"],
   };
 }

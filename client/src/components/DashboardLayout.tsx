@@ -246,15 +246,18 @@ function DashboardLayoutContent({
                   onClick={logout}
                   className="cursor-pointer text-destructive focus:text-destructive"
                 >
-                  <LogOut className="mr-2 h-4 w-4" />
+                  <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
                   <span>Sign out</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   disabled={logoutAllDevicesMutation.isPending}
-                  onClick={() => logoutAllDevicesMutation.mutate()}
+                  onClick={() => {
+                    if (!window.confirm("Энэ таны БҮХ төхөөрөмж дээрх session-г хүчингүй болгоно (энэ хөтчийг оруулаад). Үргэлжлүүлэх үү?")) return;
+                    logoutAllDevicesMutation.mutate();
+                  }}
                   className="cursor-pointer text-destructive focus:text-destructive"
                 >
-                  <ShieldOff className="mr-2 h-4 w-4" />
+                  <ShieldOff className="mr-2 h-4 w-4" aria-hidden="true" />
                   <span>Бүх төхөөрөмжөөс гарах</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>

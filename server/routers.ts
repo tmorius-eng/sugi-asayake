@@ -60,7 +60,7 @@ import {
   updateCartItemQuantity,
   verifyEmailWithToken,
 } from "./db";
-import { adminProcedure, authRateLimitedProcedure, authRateLimitedProtectedProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { adminProcedure, moderateRateLimitedProcedure, protectedProcedure, publicProcedure, router, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure } from "./_core/trpc";
 import { storagePut } from "./storage";
 import { createQPayInvoice, getQPayAvailability } from "./qpay";
 import { getCategoryWriteViolation, getProductWriteViolation } from "./catalog-validation";
@@ -132,6 +132,15 @@ const staffRoleSchema = z.enum(["user", "admin"]);
 const siteMediaSlotSchema = z.enum(siteMediaSlotKeys);
 const invitationTokenSchema = z.string().trim().min(32).max(256);
 const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
+
+// A syntactically valid but unusable scrypt hash (correct salt/hash lengths,
+// see server/_core/password.ts), used to run `verifyPassword` through its
+// full computation even when no account matches the submitted email. Without
+// this, a login attempt for a real account pays for a scrypt derivation
+// while one for a nonexistent email returns almost instantly — an attacker
+// can use that timing gap alone to enumerate registered emails without ever
+// guessing a password.
+const DUMMY_PASSWORD_HASH = `${"0".repeat(32)}:${"0".repeat(128)}`;
 
 function parseAppOrigin(originInput: string): URL {
   const origin = new URL(originInput);
@@ -228,7 +237,7 @@ export const appRouter = router({
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
-    register: authRateLimitedProcedure
+    register: strictRateLimitedProcedure
       .input(z.object({
         email: z.string().trim().email().max(320),
         password: z.string().min(8).max(200),
@@ -257,14 +266,16 @@ export const appRouter = router({
         const { passwordHash: _omit, ...safeUser } = user;
         return safeUser;
       }),
-    login: authRateLimitedProcedure
+    login: strictRateLimitedProcedure
       .input(z.object({
         email: z.string().trim().email().max(320),
         password: z.string().min(1).max(200),
       }))
       .mutation(async ({ ctx, input }) => {
         const user = await getUserByEmail(input.email);
-        const valid = user ? await verifyPassword(input.password, user.passwordHash) : false;
+        // Always run the full password check, even for a nonexistent user
+        // (against a dummy hash) — see DUMMY_PASSWORD_HASH above.
+        const valid = await verifyPassword(input.password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
         if (!user || !valid) {
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Имэйл эсвэл нууц үг буруу байна." });
         }
@@ -291,15 +302,18 @@ export const appRouter = router({
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
-    requestPasswordReset: authRateLimitedProcedure
+    requestPasswordReset: strictRateLimitedProcedure
       .input(z.object({ email: z.string().trim().email().max(320), origin: z.string().url().max(500) }))
       .mutation(async ({ input }) => {
         const origin = parseAppOrigin(input.origin);
         const user = await getUserByEmail(input.email);
-        // Always return the same generic response whether or not the email is
-        // registered, so this endpoint can't be used to enumerate accounts.
+        // Always generate a token, whether or not the email is registered:
+        // both branches should pay the same CPU cost, so this endpoint can't
+        // be used to enumerate accounts via a response-time side channel (the
+        // 8-request/15min cap on this procedure also makes that attack hard
+        // to mount in practice, but there's no reason to leave the gap open).
+        const token = randomBytes(32).toString("base64url");
         if (user) {
-          const token = randomBytes(32).toString("base64url");
           await createPasswordResetToken({ userId: user.id, tokenHash: tokenHash(token), expiresAt: new Date(Date.now() + 60 * 60 * 1000) });
           const resetUrl = `${origin.origin}/reset-password/${token}`;
           await sendAccountEmail({
@@ -308,9 +322,10 @@ export const appRouter = router({
             content: `Та SUGI ASAYAKE дэлгүүрийн нууц үгээ сэргээх хүсэлт илгээлээ. Доорх холбоос дээр дарж 1 цагийн дотор шинэ нууц үг тохируулна уу:\n\n${resetUrl}\n\nХэрэв та энэ хүсэлтийг илгээгээгүй бол энэ имэйлийг үл тоомсорлож болно.`,
           });
         }
+        // Always return the same generic response either way.
         return { success: true } as const;
       }),
-    resetPassword: authRateLimitedProcedure
+    resetPassword: strictRateLimitedProcedure
       .input(z.object({ token: invitationTokenSchema, password: z.string().min(8).max(200) }))
       .mutation(async ({ input }) => {
         const passwordHash = await hashPassword(input.password);
@@ -321,7 +336,7 @@ export const appRouter = router({
         }
         return { success: true } as const;
       }),
-    verifyEmail: publicProcedure
+    verifyEmail: strictRateLimitedProcedure
       .input(z.object({ token: invitationTokenSchema }))
       .mutation(async ({ input }) => {
         try {
@@ -331,7 +346,7 @@ export const appRouter = router({
         }
         return { success: true } as const;
       }),
-    resendVerificationEmail: authRateLimitedProtectedProcedure
+    resendVerificationEmail: strictRateLimitedProtectedProcedure
       .input(z.object({ origin: z.string().url().max(500) }))
       .mutation(async ({ ctx, input }) => {
         if (!ctx.user.email) throw new TRPCError({ code: "BAD_REQUEST", message: "Таны бүртгэлд имэйл хаяг байхгүй байна." });
@@ -358,14 +373,14 @@ export const appRouter = router({
       const owner = resolveCartOwnerForRead(ctx);
       return owner ? getActiveCartForOwner(owner) : null;
     }),
-    addItem: publicProcedure.input(z.object({ productId: z.number().int().positive(), quantity: z.number().int().min(1).max(100) })).mutation(async ({ ctx, input }) => {
+    addItem: moderateRateLimitedProcedure.input(z.object({ productId: z.number().int().positive(), quantity: z.number().int().min(1).max(100) })).mutation(async ({ ctx, input }) => {
       try {
         return await addCartItem({ owner: resolveCartOwnerForWrite(ctx), ...input });
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to add this item to the cart." });
       }
     }),
-    updateItemQuantity: publicProcedure.input(z.object({ itemId: z.number().int().positive(), quantity: z.number().int().min(0).max(100) })).mutation(async ({ ctx, input }) => {
+    updateItemQuantity: moderateRateLimitedProcedure.input(z.object({ itemId: z.number().int().positive(), quantity: z.number().int().min(0).max(100) })).mutation(async ({ ctx, input }) => {
       try {
         return await updateCartItemQuantity({ owner: resolveCartOwnerForWrite(ctx), ...input });
       } catch (error) {
@@ -374,9 +389,13 @@ export const appRouter = router({
     }),
   }),
   checkout: router({
-    createOrder: publicProcedure.input(z.object({
+    // Strict tier, not moderate: unlike cart mutations this both writes a
+    // permanent order row and decrements real stock (see
+    // createOrderFromActiveCart), so it needs the same tight cap as
+    // login/register rather than the browsing-friendly cart limit.
+    createOrder: strictRateLimitedProcedure.input(z.object({
       customerName: z.string().trim().min(2).max(160),
-      customerPhone: z.string().trim().min(6).max(40),
+      customerPhone: z.string().trim().min(6).max(40).regex(/^[0-9+()\-\s]{6,40}$/, "Утасны дугаараа зөв оруулна уу.").refine(value => value.replace(/\D/g, "").length >= 8, "Утасны дугаараа зөв оруулна уу."),
       customerEmail: z.string().trim().email().max(320).nullable().optional(),
       deliveryMethod: z.enum(["ub_delivery", "store_pickup"]),
       deliveryAddress: z.string().trim().min(8).max(2_000).nullable().optional(),

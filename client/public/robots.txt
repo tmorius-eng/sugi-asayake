@@ -3,4 +3,7 @@ Allow: /
 Disallow: /admin
 Disallow: /invite/
 Disallow: /checkout
+Disallow: /reset-password/
+Disallow: /verify-email/
+Disallow: /forgot-password
 Sitemap: https://sugi-mongo-detasex2.manus.space/sitemap.xml

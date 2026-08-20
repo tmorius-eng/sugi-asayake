@@ -12,11 +12,16 @@ export default function VerifyEmail() {
   const hasValidTokenShape = token.length >= 32;
   const utils = trpc.useUtils();
   const verifyEmail = trpc.auth.verifyEmail.useMutation();
-  const attempted = useRef(false);
+  // Tracks *which* token was last submitted (not just "have we submitted
+  // anything yet") — client-side routing can swap the :token param without
+  // remounting this component (e.g. a resent verification link opened in the
+  // same tab), and a plain boolean guard would then silently skip the second
+  // token's verification.
+  const attemptedToken = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!hasValidTokenShape || attempted.current) return;
-    attempted.current = true;
+    if (!hasValidTokenShape || attemptedToken.current === token) return;
+    attemptedToken.current = token;
     verifyEmail.mutate({ token }, { onSuccess: () => { void utils.auth.me.invalidate(); } });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasValidTokenShape, token]);
@@ -32,22 +37,22 @@ export default function VerifyEmail() {
           </h1>
         </div>
 
-        <div className="rounded-3xl bg-white p-6 shadow-[0_18px_45px_rgba(20,22,24,.06)] sm:p-8">
+        <div className="rounded-3xl bg-white p-6 shadow-[0_18px_45px_rgba(20,22,24,.06)] sm:p-8" role="status" aria-live="polite">
           {!hasValidTokenShape ? (
             <>
-              <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-[#fff0f2] text-[#a51630]"><XCircle size={23} /></div>
+              <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-[#fff0f2] text-[#a51630]"><XCircle size={23} aria-hidden="true" /></div>
               <p className="mt-5 text-sm leading-6 text-[#626368]">Холбоос буруу эсвэл дутуу байна.</p>
             </>
           ) : verifyEmail.isPending || verifyEmail.isIdle ? (
-            <p className="flex items-center gap-2 text-sm text-[#707176]"><LoaderCircle size={16} className="animate-spin" />Баталгаажуулж байна…</p>
+            <p className="flex items-center gap-2 text-sm text-[#707176]"><LoaderCircle size={16} className="animate-spin" aria-hidden="true" />Баталгаажуулж байна…</p>
           ) : verifyEmail.isSuccess ? (
             <>
-              <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-[#e7f2ec] text-[#2c7650]"><CheckCircle2 size={23} /></div>
+              <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-[#e7f2ec] text-[#2c7650]"><CheckCircle2 size={23} aria-hidden="true" /></div>
               <p className="mt-5 text-sm leading-6 text-[#626368]">Таны имэйл хаяг амжилттай баталгаажлаа. Баярлалаа!</p>
             </>
           ) : (
             <>
-              <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-[#fff0f2] text-[#a51630]"><XCircle size={23} /></div>
+              <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-[#fff0f2] text-[#a51630]"><XCircle size={23} aria-hidden="true" /></div>
               <p className="mt-5 text-sm leading-6 text-[#a51630]">{messageFrom(verifyEmail.error)}</p>
             </>
           )}

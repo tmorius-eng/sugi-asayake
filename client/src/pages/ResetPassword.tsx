@@ -55,7 +55,7 @@ export default function ResetPassword() {
         ) : resetPassword.isSuccess ? (
           <div className="rounded-3xl bg-white p-6 shadow-[0_18px_45px_rgba(20,22,24,.06)] sm:p-8">
             <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-[#e7f2ec] text-[#2c7650]">
-              <CheckCircle2 size={23} />
+              <CheckCircle2 size={23} aria-hidden="true" />
             </div>
             <p className="mt-5 text-sm leading-6 text-[#626368]">Таны нууц үг амжилттай шинэчлэгдлээ. Одоо шинэ нууц үгээрээ нэвтэрч болно.</p>
             <button
@@ -74,7 +74,7 @@ export default function ResetPassword() {
             <label className="grid gap-2 text-xs font-bold">
               Шинэ нууц үг
               <div className="flex items-center gap-2 rounded-xl border border-black/12 bg-[#fffdf9] px-3">
-                <Lock size={16} className="text-[#a9a49a]" />
+                <Lock size={16} className="text-[#a9a49a]" aria-hidden="true" />
                 <input
                   type="password"
                   value={password}
@@ -89,7 +89,7 @@ export default function ResetPassword() {
             <label className="grid gap-2 text-xs font-bold">
               Шинэ нууц үг давтах
               <div className="flex items-center gap-2 rounded-xl border border-black/12 bg-[#fffdf9] px-3">
-                <Lock size={16} className="text-[#a9a49a]" />
+                <Lock size={16} className="text-[#a9a49a]" aria-hidden="true" />
                 <input
                   type="password"
                   value={confirmPassword}
@@ -106,7 +106,7 @@ export default function ResetPassword() {
               disabled={resetPassword.isPending}
               className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#df1f3d] px-5 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#c8112e] active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-55"
             >
-              {resetPassword.isPending && <LoaderCircle className="animate-spin" size={17} />}
+              {resetPassword.isPending && <LoaderCircle className="animate-spin" size={17} aria-hidden="true" />}
               Нууц үг шинэчлэх
             </button>
           </form>

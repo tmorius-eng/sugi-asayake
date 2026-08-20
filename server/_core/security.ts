@@ -52,6 +52,7 @@ export function setSecurityHeaders(request: Request, response: Response, next: N
 export function limitApiTraffic(request: Request, response: Response, next: NextFunction) {
   if (!request.path.startsWith("/api/trpc")) return next();
   const now = Date.now();
+  if (buckets.size > 10_000) sweepExpired(buckets, now);
   const key = clientKey(request);
   const bucket = buckets.get(key);
   if (!bucket || bucket.resetAt <= now) {
@@ -63,27 +64,44 @@ export function limitApiTraffic(request: Request, response: Response, next: Next
     response.setHeader("Retry-After", Math.ceil((bucket.resetAt - now) / 1000));
     return response.status(429).json({ error: "Too many requests. Please try again shortly." });
   }
-  if (buckets.size > 10_000) buckets.clear();
   next();
 }
 
-// Stricter, per-procedure limit for auth endpoints (login/register/password
-// reset). The general `/api/trpc` limit above (300/15min) is far too loose to
-// stop credential-stuffing / brute-force attempts against a single endpoint.
-const authBuckets = new Map<string, Bucket>();
-const AUTH_WINDOW_MS = 15 * 60 * 1000;
-const AUTH_MAX_ATTEMPTS = 8;
+// Stricter, per-procedure limit for endpoints that are attractive
+// brute-force/enumeration/abuse targets (login, register, password reset,
+// checkout — anything that writes a row or costs real money to process). The
+// general `/api/trpc` limit above (300/15min) is far too loose to stop that
+// on its own. Each call site gets its own bucket map (keyed by name) so a
+// generous cart-browsing limit and a strict checkout limit don't share state.
+const namedRateLimitBuckets = new Map<string, Map<string, Bucket>>();
 
-export function checkAuthRateLimit(key: string): { allowed: boolean; retryAfterSeconds: number } {
+// A single Map growing forever (one entry per distinct IP ever seen) is a
+// memory leak, and wiping the *entire* map at a size threshold resets every
+// still-active bucket too — including ones that are supposed to be blocking
+// someone right now. Sweep only the individual entries that have actually
+// expired instead.
+function sweepExpired(buckets: Map<string, Bucket>, now: number) {
+  buckets.forEach((bucket, key) => {
+    if (bucket.resetAt <= now) buckets.delete(key);
+  });
+}
+
+export function checkRateLimit(bucketName: string, key: string, maxAttempts: number, windowMs: number): { allowed: boolean; retryAfterSeconds: number } {
+  let buckets = namedRateLimitBuckets.get(bucketName);
+  if (!buckets) {
+    buckets = new Map();
+    namedRateLimitBuckets.set(bucketName, buckets);
+  }
   const now = Date.now();
-  const bucket = authBuckets.get(key);
+  if (buckets.size > 5_000) sweepExpired(buckets, now);
+
+  const bucket = buckets.get(key);
   if (!bucket || bucket.resetAt <= now) {
-    authBuckets.set(key, { count: 1, resetAt: now + AUTH_WINDOW_MS });
+    buckets.set(key, { count: 1, resetAt: now + windowMs });
     return { allowed: true, retryAfterSeconds: 0 };
   }
   bucket.count += 1;
-  if (authBuckets.size > 10_000) authBuckets.clear();
-  if (bucket.count > AUTH_MAX_ATTEMPTS) {
+  if (bucket.count > maxAttempts) {
     return { allowed: false, retryAfterSeconds: Math.ceil((bucket.resetAt - now) / 1000) };
   }
   return { allowed: true, retryAfterSeconds: 0 };
@@ -100,6 +118,7 @@ const QPAY_CALLBACK_MAX_REQUESTS = 30;
 
 export function limitQPayCallbackTraffic(request: Request, response: Response, next: NextFunction) {
   const now = Date.now();
+  if (qpayCallbackBuckets.size > 10_000) sweepExpired(qpayCallbackBuckets, now);
   const key = clientKey(request);
   const bucket = qpayCallbackBuckets.get(key);
   if (!bucket || bucket.resetAt <= now) {
@@ -107,7 +126,6 @@ export function limitQPayCallbackTraffic(request: Request, response: Response, n
     return next();
   }
   bucket.count += 1;
-  if (qpayCallbackBuckets.size > 10_000) qpayCallbackBuckets.clear();
   if (bucket.count > QPAY_CALLBACK_MAX_REQUESTS) {
     response.setHeader("Retry-After", Math.ceil((bucket.resetAt - now) / 1000));
     return response.status(429).json({ ok: false, error: "Too many requests. Please try again shortly." });
