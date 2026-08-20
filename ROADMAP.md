@@ -52,6 +52,7 @@ Manus-с email+password руу шилжихдээ би дараах чухал �
 - [ ] Захиалга цуцлах/буцаах (refund) урсгал — админ талд `updateAdminOrder` бий ч, буцаалтын логик (нөөц буцаах, төлбөр буцаах) бүрэн шалгагдаагүй
 - [ ] Захиалгын баталгаажуулах имэйл, хүргэлтийн статус мэдэгдэл — `server/_core/notification.ts`-ийн `sendAccountEmail`/`sendAccountSms` (Brevo, 2026-08-20-с холбогдсон) бэлэн, `checkout.createOrder`/`admin.updateOrder`-т дуудалт хийгээгүй л байна — дараагийн ажил
 - [x] Зочин (guest) checkout боломж — ДУУССАН (2026-08-20), дэлгэрэнгүй [UX-RESEARCH.md](UX-RESEARCH.md)
+- [x] **Хэрэглэгчийн профайл хуудас (`/profile`)** — ДУУССАН (2026-08-21). Avatar upload/remove, нэр/утас засах, олон хаяг хадгалах address book (нэг нь автоматаар "үндсэн"), `CommerceHeader`-т профайл icon, `Checkout`-д профайл/үндсэн хаягаас автомат бөглөлт. Схем: `users.phone`/`users.avatarUrl` + шинэ `user_addresses` хүснэгт (`drizzle/0019_customer_profile.sql`). Дэлгэрэнгүй, тест тоо, олдсон MinIO bucket цоорхой болон хажуугаар засагдсан pre-existing guest-checkout тестийн bug: [CLAUDE.md](CLAUDE.md)-ийн "2026-08-21" хэсэгт.
 - [ ] Хямдралын код/купон систем — байхгүй бол нэмэх эсэхийг шийдэх
 - [ ] Бүтээгдэхүүний сэтгэгдэл/үнэлгээ (reviews) — олон улсын жишиг дэлгүүрт түгээмэл, одоогоор байхгүй
 

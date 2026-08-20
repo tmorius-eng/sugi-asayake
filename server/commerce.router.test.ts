@@ -66,6 +66,23 @@ describe("commerce router", () => {
     await expect(caller.admin.uploadSiteMediaImage({ fileName: "test.png", contentType: "image/png", dataBase64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB" })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
   });
 
+  it("requires a session for every profile procedure (name/phone, avatar, address book)", async () => {
+    const caller = appRouter.createCaller(createContext(null));
+    await expect(caller.profile.update({ name: "Nope" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller.profile.uploadAvatar({ fileName: "me.png", contentType: "image/png", dataBase64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller.profile.removeAvatar()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller.profile.addresses.list()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller.profile.addresses.create({ label: "Гэр", recipientName: "Test", phone: "99001122", addressLine: "Test address line" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller.profile.addresses.update({ id: 1, label: "Nope" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller.profile.addresses.delete({ id: 1 })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("rejects a malformed delivery phone number on the profile and address book the same way checkout does", async () => {
+    const caller = appRouter.createCaller(createContext("user"));
+    await expect(caller.profile.update({ phone: "abc" })).rejects.toThrow();
+    await expect(caller.profile.addresses.create({ label: "Гэр", recipientName: "Test", phone: "abc", addressLine: "Test address line" })).rejects.toThrow();
+  });
+
   it("does not expose staff invitations or role changes to a standard user", async () => {
     const caller = appRouter.createCaller(createContext("user"));
     await expect(caller.admin.inviteStaff({ email: "staff@example.com", role: "user", origin: "https://sugi.example" })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });

@@ -1,4 +1,4 @@
-import { ArrowLeft, MailWarning, ShoppingBag } from "lucide-react";
+import { ArrowLeft, MailWarning, ShoppingBag, User } from "lucide-react";
 import { Link } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 
@@ -25,6 +25,9 @@ function VerifyEmailBanner() {
 }
 
 export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = "SUGI ASAYAKE" }: CommerceHeaderProps) {
+  const { user } = useAuth();
+  const initial = user?.name?.trim()?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? null;
+
   return (
     <>
       <VerifyEmailBanner />
@@ -37,6 +40,14 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
           </Link>
           <div className="commerce-header-actions">
             <Link href="/shop">Дэлгүүр</Link>
+            <Link href="/profile" className="profile-link" aria-label="Миний профайл">
+              {user ? (
+                <span className="profile-avatar-chip">{user.avatarUrl ? <img src={user.avatarUrl} alt="" /> : initial}</span>
+              ) : (
+                <User size={15} aria-hidden="true" />
+              )}
+              <span>Профайл</span>
+            </Link>
             <Link href="/orders">Миний захиалга</Link>
             <button type="button" onClick={onCartOpen} aria-label={cartCount > 0 ? `Сагс нээх, ${cartCount} бараатай` : "Сагс нээх"}>
               <ShoppingBag size={15} aria-hidden="true" /> Сагс

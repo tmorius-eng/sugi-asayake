@@ -12,6 +12,13 @@ export const users = mysqlTable("users", {
    */
   id: int("id").autoincrement().primaryKey(),
   name: text("name"),
+  /** Customer profile page (TIER: account). Free-form; also duplicated onto
+   *  each saved address since a delivery contact number can differ from the
+   *  account owner's own number. */
+  phone: varchar("phone", { length: 40 }),
+  /** Public S3/MinIO URL of the uploaded profile photo. Null = no avatar
+   *  (the UI falls back to an initial-letter badge). */
+  avatarUrl: varchar("avatarUrl", { length: 500 }),
   /** Unique login identifier for the app's own email+password auth. */
   email: varchar("email", { length: 320 }).notNull().unique(),
   /** scrypt("<saltHex>:<hashHex>") — see server/_core/password.ts. Never sent to the client. */
@@ -44,6 +51,31 @@ export const users = mysqlTable("users", {
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
+
+/**
+ * Customer profile address book (TIER: account). Lets a returning shopper
+ * save multiple delivery addresses ("Гэр", "Ажил", ...) instead of retyping
+ * one every checkout — the standard "world-class" ecommerce account pattern.
+ * Exactly one row per user has isDefault = true; enforced in server/db.ts
+ * (createUserAddress/updateUserAddress/deleteUserAddress), not the DB, since
+ * MySQL has no partial-unique-index equivalent here.
+ */
+export const userAddresses = mysqlTable("user_addresses", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  label: varchar("label", { length: 60 }).notNull(),
+  recipientName: varchar("recipientName", { length: 160 }).notNull(),
+  phone: varchar("phone", { length: 40 }).notNull(),
+  addressLine: text("addressLine").notNull(),
+  isDefault: boolean("isDefault").notNull().default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  index("user_addresses_user_idx").on(table.userId),
+]);
+
+export type UserAddress = typeof userAddresses.$inferSelect;
+export type InsertUserAddress = typeof userAddresses.$inferInsert;
 
 export const productCategories = mysqlTable("product_categories", {
   id: int("id").autoincrement().primaryKey(),

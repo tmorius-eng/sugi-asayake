@@ -24,8 +24,10 @@ import {
   getActiveCartForOwner,
   createQPayPaymentAttempt,
   createStaffInvitation,
+  createUserAddress,
   createUserWithPassword,
   dbPing,
+  deleteUserAddress,
   deleteAdminPost,
   deleteAdminProduct,
   getAdminAuditLogs,
@@ -57,6 +59,7 @@ import {
   resetPasswordWithCode,
   revokeStaffInvitation,
   deleteSiteMedia,
+  getUserAddresses,
   suspendUser,
   touchUserLastSignedIn,
   unsuspendUser,
@@ -68,6 +71,9 @@ import {
   updateAdminUserRole,
   updateCartItemQuantity,
   updatePendingRegistration,
+  updateUserAddress,
+  updateUserAvatar,
+  updateUserProfile,
   verifyEmailWithCode,
 } from "./db";
 import { adminProcedure, moderateRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure } from "./_core/trpc";
@@ -78,6 +84,17 @@ import { siteMediaSlotKeys } from "../shared/site-media";
 
 const slugSchema = z.string().trim().min(2).max(200).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens only.");
 const nullableText = (max: number) => z.string().trim().max(max).nullable().optional();
+// Same shape checkout.createOrder already validates customerPhone with —
+// reused here so profile.update and the address book accept exactly the
+// same phone formats a delivery actually needs.
+const phoneSchema = z.string().trim().min(6).max(40).regex(/^[0-9+()\-\s]{6,40}$/, "Утасны дугаараа зөв оруулна уу.").refine(value => value.replace(/\D/g, "").length >= 8, "Утасны дугаараа зөв оруулна уу.");
+const addressWriteSchema = z.object({
+  label: z.string().trim().min(1).max(60),
+  recipientName: z.string().trim().min(2).max(160),
+  phone: phoneSchema,
+  addressLine: z.string().trim().min(8).max(2_000),
+  isDefault: z.boolean().optional(),
+});
 
 const productWriteSchema = z.object({
   categoryId: z.number().int().positive(),
@@ -499,6 +516,69 @@ export const appRouter = router({
   }),
   orders: router({
     mine: protectedProcedure.query(({ ctx }) => getOrdersForUser(ctx.user.id)),
+  }),
+  // Customer account page: editable name/phone, an avatar photo, and a
+  // saved-address book (checkout can prefill from the default address so
+  // returning shoppers don't retype it every order).
+  profile: router({
+    update: protectedProcedure
+      .input(z.object({ name: z.string().trim().min(1).max(160).nullable().optional(), phone: phoneSchema.nullable().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const updated = await updateUserProfile(ctx.user.id, input);
+        if (!updated) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Профайл шинэчилж чадсангүй." });
+        const { passwordHash: _omit, ...safeUser } = updated;
+        return safeUser;
+      }),
+    uploadAvatar: protectedProcedure
+      .input(z.object({
+        fileName: z.string().trim().min(1).max(120),
+        contentType: z.enum(imageContentTypes),
+        dataBase64: z.string().min(16).max(7_000_000),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const rawBase64 = input.dataBase64.includes(",") ? input.dataBase64.slice(input.dataBase64.indexOf(",") + 1) : input.dataBase64;
+        const buffer = Buffer.from(rawBase64, "base64");
+        if (buffer.length === 0 || buffer.length > 4 * 1024 * 1024) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Профайл зураг 1 байт - 4 МБ хооронд байх ёстой." });
+        }
+        assertImageSignature(buffer, input.contentType);
+        const extension = input.contentType === "image/jpeg" ? "jpg" : input.contentType === "image/png" ? "png" : "webp";
+        const stored = await storagePut(`avatars/${ctx.user.id}/avatar-${Date.now()}.${extension}`, buffer, input.contentType);
+        const updated = await updateUserAvatar(ctx.user.id, stored.url);
+        if (!updated) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Зураг хадгалж чадсангүй." });
+        const { passwordHash: _omit, ...safeUser } = updated;
+        return safeUser;
+      }),
+    removeAvatar: protectedProcedure.mutation(async ({ ctx }) => {
+      const updated = await updateUserAvatar(ctx.user.id, null);
+      if (!updated) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Зураг хасаж чадсангүй." });
+      const { passwordHash: _omit, ...safeUser } = updated;
+      return safeUser;
+    }),
+    addresses: router({
+      list: protectedProcedure.query(({ ctx }) => getUserAddresses(ctx.user.id)),
+      create: protectedProcedure.input(addressWriteSchema).mutation(({ ctx, input }) => createUserAddress(ctx.user.id, input)),
+      update: protectedProcedure
+        .input(addressWriteSchema.partial().extend({ id: z.number().int().positive() }).refine(
+          value => Object.keys(value).some(key => key !== "id"),
+          { message: "Provide at least one address field to update." },
+        ))
+        .mutation(async ({ ctx, input }) => {
+          const { id, ...rest } = input;
+          try {
+            return await updateUserAddress(ctx.user.id, id, rest);
+          } catch (error) {
+            throw new TRPCError({ code: "NOT_FOUND", message: error instanceof Error ? error.message : "Хаяг олдсонгүй." });
+          }
+        }),
+      delete: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+        try {
+          return await deleteUserAddress(ctx.user.id, input.id);
+        } catch (error) {
+          throw new TRPCError({ code: "NOT_FOUND", message: error instanceof Error ? error.message : "Хаяг олдсонгүй." });
+        }
+      }),
+    }),
   }),
   payments: router({
     qpayAvailability: publicProcedure.query(() => getQPayAvailability()),

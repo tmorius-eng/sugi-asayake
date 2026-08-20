@@ -113,13 +113,15 @@ TIER 0, TIER 1, TIER 5-ын CI+backup (локал бэлтгэл) дууссан
 
 **ADMIN-PANEL.md-ийн TIER 1–6 бүгд дууссан (2026-08-20)** — Dashboard+Global Search, хэрэглэгч suspend/force-logout, `staff` RBAC role, Audit Log+Login History (Security Center), Bulk Actions+CSV Export, DB/S3 health widget. Дэлгэрэнгүй, туршилтын бүх алхам тус бүрийн TIER-д: [ADMIN-PANEL.md](ADMIN-PANEL.md). Энэ явцад чухал timezone bug олж заслаа — дэлгэрэнгүй дээрх хэсэгт.
 
-Дараагийн санал: UX-RESEARCH.md-ийн №2 (хүргэлтийн үнэ эрт харуулах), ROADMAP-ийн TIER 2 (зурган боловсруулалт, сервер талын хайлт, refund урсгал), эсвэл TIER 5-ын үлдсэн зүйлс (Sentry, staging, CDN, uptime monitoring).
+**Хэрэглэгчийн профайл хуудас (`/profile`) мөн дууссан (2026-08-21)** — avatar/нэр/утас засах, олон хаяг хадгалах address book, checkout-д автомат бөглөлт. Мөн энэ өдөр secondary pages (Login/ForgotPassword/VerifyEmail/AcceptInvitation/Legal/MyOrders/NotFound) болон admin sidebar-ийн бренд/дизайн шинэчлэл хийгдсэн. Дэлгэрэнгүй: [CLAUDE.md](CLAUDE.md)-ийн "2026-08-21" хэсэг, [ROADMAP.md](ROADMAP.md)-ийн TIER 2.
+
+Дараагийн санал: UX-RESEARCH.md-ийн №2 (хүргэлтийн үнэ эрт харуулах), ROADMAP-ийн TIER 2-ын үлдсэн зүйлс (зурган боловсруулалт, сервер талын хайлт, refund урсгал, захиалгын имэйл/SMS мэдэгдэл холбох), эсвэл TIER 5-ын үлдсэн зүйлс (Sentry, staging, CDN, uptime monitoring).
 
 **SECURITY.md, UX-RESEARCH.md** нэмэгдсэн (CLAUDE.md/ROADMAP.md-ийн хамтрагч баримт) — аюулгүй байдал болон UX/зах зээлийн судалгааны checklist тус тус.
 
 **LAPTOP-MIGRATION.md нэмэгдсэн (2026-08-20)** — Tom ажлын компьютерээс гэрийн компьютер руу шилжихэд зориулсан бүрэн заавар (код/DB/MinIO зураг/`.env`-ийг зөөх 4 тусдаа алхам + гэрийн компьютерийн шинэ тохиргооны checklist). Бодит DB backup (`scripts/db-backup.ps1`) ажиллуулж `backups/`-т бэлэн болгосон.
 
-**Төсөл одоо git repo** (`git init` хийсэн, GitHub-руу push хийгээгүй — хэрэглэгч өөрөө шийднэ).
+**Төсөл одоо GitHub private repo дээр байна** (`tmorius-eng/sugi-asayake`, `main` branch) — commit бүрийг гараар (эсвэл хэрэглэгчийн зөвшөөрсний дараа) push хийж байна, CI (`.github/workflows/ci.yml`) push/PR бүр дээр type-check+test+build ажилладаг.
 
 **`pnpm dev` одоо стандарт байдлаар ажилладаг (2026-08-20-с хойш).** Өмнө нь `package.json`/`pnpm-lock.yaml` файлууд Windows-ийн "High Mandatory Level" integrity label-тай байсан тул Claude Code засаж чадахгүй байсан бол, хэрэглэгч elevated PowerShell-ээс `icacls ... /setintegritylevel Medium` ажиллуулж зассан. Одооноос localhost дээр туршихдаа зүгээр л:
 ```powershell
@@ -146,3 +148,30 @@ pnpm dev
 - **pnpm build-script figuration**: шинэ pnpm (`onlyBuiltDependencies`) тохиргоог `package.json`-ий `"pnpm"` field-ээс уншихаа больсон тул **`pnpm-workspace.yaml`**-д зөөсөн (`packages: ['.']` + `onlyBuiltDependencies: [@tailwindcss/oxide, esbuild]`) — эс тэгвэл `pnpm install`-ийн дараа native build scripts (esbuild, tailwindcss/oxide) ажиллаагүй үлдэнэ, `pnpm approve-builds` interactive тул CI/скрипт орчинд ашиглах боломжгүй.
 - **Migration 0009 (`drizzle/0009_independent_auth.sql`)-ийн `DROP INDEX \`openId\`` мөр бодит DB дээр ажиллахгүй байсан** — drizzle-ийн бодит auto-generated индексийн нэр `users_openId_unique` байсан (`openId` биш). Гараар зассан (`ALTER TABLE users DROP INDEX users_openId_unique;`). Хэрэв ирээдүйд ижил migration-ыг шинэ DB дээр ажиллуулбал энэ мөрийг заавал шалгаарай.
 - MySQL/MinIO-ийн бодит өгөгдөл (backups zip, `C:\minio\data`) энэ лаптоп руу хараахан зөөгдөөгүй — хоосон орчноор эхэлсэн, шаардлагатай үед `LAPTOP-MIGRATION.md`-ийн §2/§3-ийн дагуу зөөнө.
+
+## 2026-08-21: UI/UX бренд шинэчлэл (secondary pages + admin sidebar) + Хэрэглэгчийн профайл хуудас (бүрэн шинэ feature)
+
+### 1. Бренд шинэчлэл — дэлгэрэнгүй `git log`-оос харагдана (commit: "Brand overhaul: unify secondary pages + fix unstyled admin sidebar")
+Гол олдвор: `/admin`-ийн sidebar яагаад "загваргүй" харагдаж байсан бэ гэвэл — shadcn Sidebar-ийн ашигладаг `--sidebar-*` CSS токенууд (`bg-sidebar`, `text-sidebar-foreground` гэх мэт) `index.css`-д **хаана ч тодорхойлогдоогүй** байсан тул unstyled fallback-аар л харагдаж байжээ (код өөрөө буруу байгаагүй, зөвхөн нэг мөр тохиргоо дутуу байсан). Мөн Login/ForgotPassword/VerifyEmail/AcceptInvitation/Legal/MyOrders/NotFound бүгд Home/Shop-ийн editorial дизайн системийг ашиглаагүй, generic Tailwind/shadcn (`rounded-3xl bg-white shadow`, англи NotFound) байсныг шинэ `.auth-shell/.auth-card`, `.doc-shell/.doc-section`, `.order-card`, `.notfound-*` CSS class-уудаар нэгтгэсэн.
+
+### 2. Хэрэглэгчийн профайл хуудас (`/profile`) — бүрэн шинэ, world-class ecommerce жишигт нийцүүлсэн
+Хэрэглэгчийн хүсэлт: нэвтэрсэн хэрэглэгч профайл зураг, нэр, утас, гэрийн хаягаа хадгалж, хожим хүргэлтэд ашиглах боломжтой болгох; `/shop`-ийн header-т "Дэлгүүр"-ийн хажууд профайл icon.
+
+**Backend (бүрэн шалгагдсан):**
+- `drizzle/schema.ts` / `drizzle/0019_customer_profile.sql`: `users`-д `phone`/`avatarUrl`, шинэ `user_addresses` хүснэгт (олон хаяг хадгалах address book — label/recipientName/phone/addressLine/isDefault). Migration локал MySQL дээр бодитоор ажиллуулж баталгаажуулсан.
+- `server/db.ts`: `updateUserProfile`, `updateUserAvatar`, `getUserAddresses`, `createUserAddress`/`updateUserAddress`/`deleteUserAddress` (эхний хаяг автоматаар "үндсэн" болно; үндсэнг устгахад дараагийнх нь автоматаар "үндсэн" болно; бусдын хаягт хандахыг `userId` давхар шүүлтээр хориглосон).
+- `server/routers.ts`: шинэ `profile` router (`update`, `uploadAvatar`/`removeAvatar` — `admin.uploadProductImage`-тэй ижил base64+signature-шалгалттай upload, `addresses.list/create/update/delete`). Утасны дугаарын validation `checkout.createOrder`-тэй яг адил regex ашигладаг (`phoneSchema`).
+- **Тест**: `server/profile.integration.test.ts` (6 тест, бодит MySQL+MinIO дээр — CRUD, default-хаяг автомат солигдол, өөр хэрэглэгчийн хаягт хандахыг NOT_FOUND-оор хориглодгийг баталгаажуулсан) + `server/commerce.router.test.ts`-д нэвтрээгүй хэрэглэгчийг бүх profile procedure-оос хориглодгийг шалгах тест нэмсэн. `RUN_AUTH_INTEGRATION_TESTS=1 COMMERCE_INTEGRATION_TESTS=1 RUN_MEDIA_INTEGRATION_TESTS=1`-тэйгээр бүрэн 70/70 тест ✅.
+
+**Frontend:**
+- `client/src/pages/Profile.tsx` (шинэ): avatar upload/remove (4MB хүртэл), нэр/утас засах маягт, хаягийн жагсаалт+нэмэх/засах/устгах/үндсэн болгох.
+- `client/src/components/CommerceHeader.tsx`: "Дэлгүүр"-ийн хажууд профайл icon (нэвтэрсэн бол avatar/эхний үсэг, эсвэл generic icon) нэмсэн, mobile дээр ч (текст нуугдсан ч) icon харагдана.
+- `client/src/pages/Checkout.tsx`: нэвтэрсэн хэрэглэгчийн профайл мэдээлэл (нэр/утас/имэйл) болон үндсэн хаяг автоматаар (зөвхөн хоосон талбарт) бөглөгддөг болсон + "Профайлаас засах" холбоос.
+- `client/src/App.tsx`: `/profile` route.
+
+**MinIO тохиргооны олдвор**: энэ лаптоп дээр `sugi-asayake` MinIO bucket огт үүсээгүй байсан (шинэ лаптоп, өгөгдөл шилжээгүй тул) — avatar upload тест анх "The specified bucket does not exist" алдаа өгсөн. Bucket-ийг гараар (`CreateBucketCommand`) үүсгэж засав. **Энэ нь зөвхөн энэ profile feature-т биш, ямар ч зураг upload (жишээ нь admin-ий бүтээгдэхүүний зураг)-д хамаарна** — хэрэв дахин шинэ орчинд суулгах бол bucket-ээ анхнаасаа үүсгэсэн эсэхээ шалгаарай.
+
+**Хажуугаар олсон, засагдсан pre-existing bug**: `server/checkout.guest.integration.test.ts`-ийн "merges a guest's cart into their account the moment they register" тест OTP бүртгэлийн 2-алхамт урсгал (TIER 0, 2026-08-20) нэвтэрсний дараа хуучирсан хэвээр үлдэж, зочны сагс cart merge-ийг `auth.register`-ийн дараа шууд шалгадаг байсан ч бодит merge одоо зөвхөн `auth.confirmRegistration`-ий дараа болдог тул тест бодитоор эвдэрсэн байсан. **CI үүнийг хэзээ ч олж чадаагүй** — учир нь энэ бол `COMMERCE_INTEGRATION_TESTS=1`-ээр л ажилладаг gated тест, CI intentionally DB стенд босгодоггүй (`.github/workflows/ci.yml`-ийн тайлбарт бичсэнчлэн). Тестийг `confirmRegistration`-ийг код оруулж дуудах шинэ 2-алхамт урсгалд тохируулж засав (production код өөрчлөгдөөгүй — зөвхөн тест хуучирсан байсан).
+
+### Websearch-ийн үр дүн (Монголын онлайн дэлгүүрийн профайл хуудасны талаар)
+shoppy.mn зэрэг Монголын том дэлгүүрүүдийн профайл хуудасны нарийн UI бүтцийг public search-ээр олж дэлгэрэнгүй харах боломжгүй байсан (нэвтрэх шаардлагатай хуудаснууд). Харин олон улсын ecommerce профайл хуудасны best-practice-ууд (avatar upload+crop, олон хаяг хадгалах address book, checkout-д автомат бөглөх) дээрх хэрэгжилттэй нийцэж байгааг баталгаажуулсан.

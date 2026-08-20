@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gte, like, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { adminAuditLogs, cartItems, carts, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, loginAttempts, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, products, siteMedia, staffInvitations, users } from "../drizzle/schema";
+import { adminAuditLogs, cartItems, carts, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, loginAttempts, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, products, siteMedia, staffInvitations, userAddresses, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { getInventoryReservationFailure, shouldRestoreStock } from "./commerce-lifecycle";
 
@@ -109,6 +109,85 @@ export async function touchUserLastSignedIn(id: number) {
   const db = await getDb();
   if (!db) return;
   await db.update(users).set({ lastSignedIn: new Date() }).where(eq(users.id, id));
+}
+
+/** Profile page (name/phone) update — email and password have their own
+ *  dedicated flows (registration, forgot-password) and aren't touched here. */
+export async function updateUserProfile(userId: number, input: { name?: string | null; phone?: string | null }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.update(users).set({
+    ...(input.name !== undefined ? { name: input.name } : {}),
+    ...(input.phone !== undefined ? { phone: input.phone } : {}),
+    updatedAt: new Date(),
+  }).where(eq(users.id, userId));
+  return getUserById(userId);
+}
+
+export async function updateUserAvatar(userId: number, avatarUrl: string | null) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.update(users).set({ avatarUrl, updatedAt: new Date() }).where(eq(users.id, userId));
+  return getUserById(userId);
+}
+
+/** Saved delivery addresses for the profile page's address book. Default
+ *  address first, then most-recently-added. */
+export async function getUserAddresses(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(userAddresses).where(eq(userAddresses.userId, userId)).orderBy(desc(userAddresses.isDefault), desc(userAddresses.createdAt));
+}
+
+export async function createUserAddress(userId: number, input: { label: string; recipientName: string; phone: string; addressLine: string; isDefault?: boolean }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const existing = await db.select({ id: userAddresses.id }).from(userAddresses).where(eq(userAddresses.userId, userId));
+  // The very first saved address is always the default — there's no "no
+  // default" state once at least one address exists, so checkout always has
+  // something to prefill from.
+  const makeDefault = input.isDefault === true || existing.length === 0;
+  if (makeDefault) {
+    await db.update(userAddresses).set({ isDefault: false }).where(eq(userAddresses.userId, userId));
+  }
+  const inserted = await db.insert(userAddresses).values({
+    userId,
+    label: input.label,
+    recipientName: input.recipientName,
+    phone: input.phone,
+    addressLine: input.addressLine,
+    isDefault: makeDefault,
+  });
+  const created = await db.select().from(userAddresses).where(eq(userAddresses.id, Number(inserted[0].insertId))).limit(1);
+  return created[0];
+}
+
+export async function updateUserAddress(userId: number, addressId: number, input: { label?: string; recipientName?: string; phone?: string; addressLine?: string; isDefault?: boolean }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const owned = await db.select({ id: userAddresses.id }).from(userAddresses).where(and(eq(userAddresses.id, addressId), eq(userAddresses.userId, userId))).limit(1);
+  if (!owned.length) throw new Error("Address not found.");
+  if (input.isDefault === true) {
+    await db.update(userAddresses).set({ isDefault: false }).where(eq(userAddresses.userId, userId));
+  }
+  await db.update(userAddresses).set({ ...input, updatedAt: new Date() }).where(eq(userAddresses.id, addressId));
+  const updated = await db.select().from(userAddresses).where(eq(userAddresses.id, addressId)).limit(1);
+  return updated[0];
+}
+
+export async function deleteUserAddress(userId: number, addressId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const owned = await db.select({ id: userAddresses.id, isDefault: userAddresses.isDefault }).from(userAddresses).where(and(eq(userAddresses.id, addressId), eq(userAddresses.userId, userId))).limit(1);
+  if (!owned.length) throw new Error("Address not found.");
+  await db.delete(userAddresses).where(eq(userAddresses.id, addressId));
+  // Deleting the default address promotes the next most-recent one so
+  // checkout still has a default to prefill from.
+  if (owned[0].isDefault) {
+    const remaining = await db.select({ id: userAddresses.id }).from(userAddresses).where(eq(userAddresses.userId, userId)).orderBy(desc(userAddresses.createdAt)).limit(1);
+    if (remaining.length) await db.update(userAddresses).set({ isDefault: true }).where(eq(userAddresses.id, remaining[0].id));
+  }
+  return { success: true } as const;
 }
 
 /**
