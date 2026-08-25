@@ -143,7 +143,10 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .hero-trust div { display: grid; gap: 2px; }
 .hero-trust strong { color: #343539; font-size: 12px; }
 .hero-trust span { font-size: 11px; }
-.hero-image { position: relative; min-height: 618px; overflow: hidden; border-radius: 18px; background-position: center; background-size: cover; box-shadow: 0 22px 50px rgba(34, 37, 38, .12); }
+/* background (not just background-image): a gradient shows through
+   whenever the slot's photo hasn't been uploaded yet via /admin -> Content
+   & Media, instead of a blank box -- see imageFor() in Home.tsx. */
+.hero-image { position: relative; min-height: 618px; overflow: hidden; border-radius: 18px; background: linear-gradient(135deg, #f8f5ef 0%, #fce7eb 100%); background-position: center; background-size: cover; box-shadow: 0 22px 50px rgba(34, 37, 38, .12); }
 .hero-image-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(13, 17, 20, .08), transparent 42%, rgba(13, 17, 20, .44)); }
 .hero-image-label { position: absolute; top: 26px; left: 27px; right: 27px; display: flex; align-items: center; justify-content: space-between; color: rgba(255, 255, 255, .84); font-size: 10px; font-weight: 800; letter-spacing: .16em; }
 .hero-image-label strong { display: grid; width: 35px; height: 35px; place-items: center; border: 1px solid rgba(255,255,255,.65); border-radius: 50%; font-family: var(--font-display); letter-spacing: 0; }
@@ -179,7 +182,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .collection-heading { display: grid; grid-template-columns: 1fr .55fr; gap: 12%; align-items: end; padding: 72px 8% 49px; }
 .collection-heading p { max-width: 370px; margin: 0; color: #6f7076; font-size: 15px; line-height: 1.75; }
 .collection-grid { display: grid; grid-template-columns: 1.08fr .92fr; gap: 24px; }
-.collection-image { position: relative; min-height: 540px; overflow: hidden; border-radius: 18px; background-position: center; background-size: cover; }
+.collection-image { position: relative; min-height: 540px; overflow: hidden; border-radius: 18px; background: linear-gradient(135deg, #eef2f0 0%, #dfe9f4 100%); background-position: center; background-size: cover; }
 .collection-image-shade { position: absolute; inset: 0; background: linear-gradient(0deg, rgba(18, 22, 24, .73), transparent 62%); }
 .collection-card { position: absolute; left: 26px; bottom: 26px; display: grid; gap: 10px; width: min(290px, calc(100% - 52px)); padding: 24px; background: rgba(255, 253, 249, .96); color: var(--foreground); box-shadow: 0 14px 30px rgba(20, 25, 29, .16); }
 .collection-card span { color: var(--primary); font-size: 9px; font-weight: 800; letter-spacing: .18em; }
@@ -199,7 +202,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .category-note img { width: 32px; height: 32px; object-fit: contain; }
 
 .care-section { display: grid; grid-template-columns: 1.05fr .95fr; width: 100%; min-height: 610px; background: var(--secondary); }
-.care-image { min-height: 610px; background-position: center; background-size: cover; }
+.care-image { min-height: 610px; background: linear-gradient(135deg, #fdf3e3 0%, #fce7eb 100%); background-position: center; background-size: cover; }
 .care-image > span { display: inline-block; margin: 28px 30px; padding: 8px 10px; background: rgba(17, 21, 23, .66); color: #fff; font-size: 10px; font-weight: 800; letter-spacing: .15em; }
 .care-copy-panel { display: flex; flex-direction: column; justify-content: center; padding: 80px clamp(34px, 8vw, 130px) 80px clamp(34px, 6vw, 96px); }
 .care-copy-panel > p:not(.eyebrow) { max-width: 420px; margin: 29px 0 0; color: #6f7076; font-size: 15px; line-height: 1.75; }
@@ -217,7 +220,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .locations-copy .eyebrow svg { color: var(--primary); }
 .locations-lede { max-width: 315px; margin: 29px 0 29px; color: #77787c; font-size: 14px; line-height: 1.75; }
 .location-side { display: grid; grid-template-columns: .88fr 1.12fr; gap: 32px; align-items: end; }
-.location-image { position: relative; min-height: 390px; overflow: hidden; border-radius: 18px; background-position: center; background-size: cover; }
+.location-image { position: relative; min-height: 390px; overflow: hidden; border-radius: 18px; background: linear-gradient(135deg, #eef0ee 0%, #f8f5ef 100%); background-position: center; background-size: cover; }
 .location-image::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(17,21,23,.56), transparent 62%); }
 .location-image span { position: absolute; z-index: 1; left: 20px; bottom: 19px; color: #fff; font-size: 10px; font-weight: 800; letter-spacing: .17em; }
 .location-list { border-top: 1px solid var(--border); }
@@ -337,7 +340,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .seasonal-copy > p:last-of-type { max-width: 390px; margin: 26px 0 0; color: #66676b; font-size: 14px; line-height: 1.8; }
 .seasonal-link { display: inline-flex; align-items: center; gap: 10px; margin-top: 31px; padding: 13px 17px; border-radius: 999px; background: #17181b; color: #fff; font-size: 11px; font-weight: 800; transition: transform .18s var(--ease-out), background .18s var(--ease-out); }
 .seasonal-link:hover { background: var(--primary); transform: translateY(-3px); }.seasonal-link:active { transform: scale(.97); }
-.seasonal-image { position: relative; overflow: hidden; background-position: center; background-size: cover; animation: seasonal-image-in .52s var(--ease-out); }
+.seasonal-image { position: relative; overflow: hidden; background: linear-gradient(135deg, #f8f5ef 0%, #fce7eb 100%); background-position: center; background-size: cover; animation: seasonal-image-in .52s var(--ease-out); }
 .seasonal-image::before { content: ""; position: absolute; inset: 0; background: linear-gradient(145deg, transparent 30%, rgba(23,24,27,.32)); }
 .seasonal-image-shade { position: absolute; right: -66px; bottom: -72px; width: 250px; height: 250px; border: 1px solid rgba(255,255,255,.76); border-radius: 50%; box-shadow: 0 0 0 30px rgba(255,255,255,.15), 0 0 0 60px rgba(255,255,255,.07); }
 .seasonal-image span { position: absolute; top: 21px; left: 22px; padding: 9px 10px; background: #17181b; color: #f7d17a; font-size: 8px; font-weight: 800; letter-spacing: .14em; }

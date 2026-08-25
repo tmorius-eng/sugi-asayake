@@ -12,7 +12,7 @@ import { rememberRecentlyViewed, resolveRecentlyViewed } from "@shared/recently-
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 
 const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
-const fallbackImage = "/manus-storage/sugi-professional-assortment_74fa4e31.jpg";
+const fallbackImage = "/product-placeholder.svg";
 const RECENTLY_VIEWED_KEY = "sugi-asayake-recently-viewed-v1";
 
 const discoveryCategories = [

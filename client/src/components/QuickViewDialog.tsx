@@ -26,7 +26,7 @@ type QuickViewDialogProps = {
   onAdded: () => void;
 };
 
-const fallbackImage = "/manus-storage/sugi-professional-assortment_74fa4e31.jpg";
+const fallbackImage = "/product-placeholder.svg";
 const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Сагсанд нэмж чадсангүй.";
 

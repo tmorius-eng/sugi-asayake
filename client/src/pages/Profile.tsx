@@ -417,7 +417,7 @@ function PreferencesTab() {
 /* Wishlist                                                                */
 /* ---------------------------------------------------------------------- */
 
-const fallbackImage = "/manus-storage/sugi-professional-assortment_74fa4e31.jpg";
+const fallbackImage = "/product-placeholder.svg";
 
 function WishlistTab({ onCartOpen }: { onCartOpen: () => void }) {
   const utils = trpc.useUtils();

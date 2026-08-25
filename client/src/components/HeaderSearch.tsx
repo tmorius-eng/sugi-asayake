@@ -11,7 +11,7 @@ import { filterCatalogProducts } from "@shared/catalog-filter";
 // (react-query dedupes the request once both are mounted) and the same
 // filterCatalogProducts matching logic, so results here are never
 // inconsistent with what /shop itself would show for the same term.
-const fallbackImage = "/manus-storage/sugi-professional-assortment_74fa4e31.jpg";
+const fallbackImage = "/product-placeholder.svg";
 const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
 
 export default function HeaderSearch() {

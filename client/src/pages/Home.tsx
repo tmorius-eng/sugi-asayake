@@ -30,10 +30,17 @@ import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { trpc } from "@/lib/trpc";
 
 const logoUrl = "/manus-storage/sugi-logo-transparent-clean_fee66cad.png";
-const heroImage = "/manus-storage/sugi-sunrise-editorial-hero_463a81c8.jpg";
-const assortmentImage = "/manus-storage/sugi-professional-assortment_74fa4e31.jpg";
-const familyImage = "/manus-storage/sugi-professional-family_07753755.jpg";
-const storeImage = "/manus-storage/sugi-care-retail_e5616f81.jpg";
+// These four have no bundled fallback photo (unlike product shots, there's
+// no generic stand-in for real store/lifestyle photography) -- null here
+// means "nothing to show until an admin uploads one for this slot", which
+// lets the .hero-image/.collection-image/etc CSS gradient show through
+// instead of a broken <img>. Upload real photos via /admin -> Content &
+// Media for slots: home-hero, home-categories, summer-slide-1/2/3,
+// home-family, home-stores.
+const heroImage = null;
+const assortmentImage = "/product-placeholder.svg";
+const familyImage = null;
+const storeImage = null;
 const symbolImage = "/manus-storage/sugi-symbol_0a534a76.png";
 
 const navItems = [
@@ -72,7 +79,15 @@ export default function Home() {
   const [scrolled, setScrolled] = useState(false);
   const siteMediaQuery = trpc.content.siteMedia.useQuery();
   const mediaBySlot = useMemo(() => new Map((siteMediaQuery.data ?? []).map(media => [media.slotKey, media.imageUrl])), [siteMediaQuery.data]);
-  const imageFor = (slotKey: string, fallbackUrl: string) => mediaBySlot.get(slotKey) || fallbackUrl;
+  const imageFor = (slotKey: string, fallbackUrl: string | null) => mediaBySlot.get(slotKey) || fallbackUrl;
+  // Only sets an inline background-image when there's an actual URL --
+  // omitting the property entirely (rather than pointing it at a known-bad
+  // URL) is what lets the CSS gradient fallback on these classes show
+  // through until a real photo is uploaded for the slot.
+  const bgStyle = (slotKey: string, fallbackUrl: string | null) => {
+    const url = imageFor(slotKey, fallbackUrl);
+    return url ? { backgroundImage: `url(${url})` } : undefined;
+  };
   useScrollReveal();
 
   useEffect(() => {
@@ -134,7 +149,7 @@ export default function Home() {
             </div>
             <div className="hero-signature" aria-label="SUGI ASAYAKE daily care signature"><Flower2 size={17} /><span>Өглөөнөөс орой хүртэл<br />таны өдөр тутмын сонголт.</span></div>
           </div>
-          <div className="hero-image" style={{ backgroundImage: `url(${imageFor("home-hero", heroImage)})` }} aria-label="SUGI ASAYAKE everyday-care products" role="img">
+          <div className="hero-image" style={bgStyle("home-hero", heroImage)} aria-label="SUGI ASAYAKE everyday-care products" role="img">
             <div className="hero-image-shade" />
             <div className="hero-image-sun" aria-hidden="true"><span>800+</span><small>DAILY<br />CHOICES</small></div>
             <div className="hero-image-marker" aria-hidden="true"><Sparkles size={15} /><span>THE MORNING<br />OF CARE</span></div>
@@ -171,7 +186,7 @@ export default function Home() {
           <div className="section-heading"><span>02</span><span>EVERYDAY JAPAN</span></div>
           <div className="collection-heading"><div><h2>Японы бүтээгдэхүүний<br /><em>үндсэн ангилал.</em></h2><div className="collection-color-key" aria-hidden="true"><i /><i /><i /><span>COLOR AS CARE</span></div></div><p>Арьс арчилгаа, гоо сайхан, эрүүл ахуй, гэр бүлийн өдөр тутмын хэрэгцээг 800+ сонголтоос нэг дороос.</p></div>
           <div className="collection-grid">
-            <div className="collection-image" style={{ backgroundImage: `url(${imageFor("home-categories", assortmentImage)})` }}>
+            <div className="collection-image" style={bgStyle("home-categories", assortmentImage)}>
               <div className="collection-image-shade" />
               <div className="collection-card"><span>OUR SELECTION</span><strong>Нэг өдөрт<br />хэрэгтэй бүх зүйл.</strong><a href="#stores">Ойр салбараа олох <ArrowUpRight size={15} /></a></div>
             </div>
@@ -182,16 +197,16 @@ export default function Home() {
           </div>
         </section>
 
-        <SeasonalCampaignCarousel imageOverrides={{ "summer-slide-1": imageFor("summer-slide-1", heroImage), "summer-slide-2": imageFor("summer-slide-2", assortmentImage), "summer-slide-3": imageFor("summer-slide-3", familyImage) }} />
+        <SeasonalCampaignCarousel imageOverrides={{ "summer-slide-1": imageFor("summer-slide-1", heroImage) ?? undefined, "summer-slide-2": imageFor("summer-slide-2", assortmentImage) ?? undefined, "summer-slide-3": imageFor("summer-slide-3", familyImage) ?? undefined }} />
 
         <section className="care-section" data-reveal>
-          <div className="care-image" style={{ backgroundImage: `url(${imageFor("home-family", familyImage)})` }}><span>03 / FAMILY CARE</span></div>
+          <div className="care-image" style={bgStyle("home-family", familyImage)}><span>03 / FAMILY CARE</span></div>
           <div className="care-copy-panel"><div className="care-sun-stamp" aria-hidden="true"><span>FAMILY<br />CARE</span></div><p className="eyebrow">ГЭР БҮЛИЙН ӨДӨР БҮРТ</p><h2>Багахан <em>итгэл.</em><br />Их халамж.</h2><p>Бидний сонголт зөвхөн бүтээгдэхүүн биш. Таны гэр бүлийн өдөр тутмын амар тайван байдал, итгэл, халамж юм.</p><div className="care-points"><div><CircleCheck size={17} /> Баталгаат Япон бүтээгдэхүүн</div><div><CircleCheck size={17} /> Гэр бүл бүрт зориулсан сонголт</div><div><CircleCheck size={17} /> Storepay-ээр төлөх боломжтой</div></div><div className="storepay-note"><strong>Storepay</strong><span>Хэрэгтэй зүйлээ өнөөдөр сонгоод,<br />төлбөрөө өөрт тохиромжтой хуваарил.</span></div></div>
         </section>
 
         <section className="locations-section page-section" id="stores" data-reveal>
           <div className="locations-copy"><div className="section-heading"><span>04</span><span>FIND YOUR ASAYAKE</span></div><p className="eyebrow"><Navigation size={14} /> 3 БАЙРШИЛ</p><h2>Танд ойрхон<br /><em>салбар дээр.</em></h2><p className="locations-lede">Улаанбаатарын өөр өөр цэгүүдэд япон чанарыг танд ойртуулж байна.</p><a className="button button-primary" href="tel:94509911">9450-9911 руу залгах <Phone size={15} /></a></div>
-          <div className="location-side"><div className="location-image" style={{ backgroundImage: `url(${imageFor("home-stores", storeImage)})` }}><span>UB / MONGOLIA</span></div><div className="location-list">{locations.map((location) => <a className="location-row" href={location.mapUrl} target="_blank" rel="noreferrer" aria-label={`${location.name} Google Maps дээр нээх`} key={location.number}><span>{location.number}</span><div><strong>{location.name}</strong><small>{location.detail}</small><small className="location-meta"><Clock3 size={11} /> {BRANCH_HOURS}<span className="location-meta-divider" aria-hidden="true">•</span><Phone size={11} /> {BRANCH_PHONE}</small></div><ArrowUpRight size={17} /></a>)}<p className="location-note"><MapPin size={14} /> Салбарын байршлыг Google Maps дээр нээх</p></div></div>
+          <div className="location-side"><div className="location-image" style={bgStyle("home-stores", storeImage)}><span>UB / MONGOLIA</span></div><div className="location-list">{locations.map((location) => <a className="location-row" href={location.mapUrl} target="_blank" rel="noreferrer" aria-label={`${location.name} Google Maps дээр нээх`} key={location.number}><span>{location.number}</span><div><strong>{location.name}</strong><small>{location.detail}</small><small className="location-meta"><Clock3 size={11} /> {BRANCH_HOURS}<span className="location-meta-divider" aria-hidden="true">•</span><Phone size={11} /> {BRANCH_PHONE}</small></div><ArrowUpRight size={17} /></a>)}<p className="location-note"><MapPin size={14} /> Салбарын байршлыг Google Maps дээр нээх</p></div></div>
         </section>
 
         <section className="final-cta" data-reveal><div className="final-cta-sun" aria-hidden="true">SUGI<br />CARE</div><div><p className="eyebrow">NEED A LITTLE HELP?</p><h2>Сайн сонголт <em>ойрхон байна.</em></h2></div><a className="button button-light" href="tel:94509911">9450-9911 <Phone size={15} /></a></section>

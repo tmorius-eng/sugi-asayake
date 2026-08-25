@@ -8,7 +8,7 @@ import { trpc } from "@/lib/trpc";
 
 // PREMIUM-FEATURES.md TIER 4: customer-facing Routine (bundle) detail page.
 const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
-const fallbackImage = "/manus-storage/sugi-professional-assortment_74fa4e31.jpg";
+const fallbackImage = "/product-placeholder.svg";
 
 export default function RoutineDetail() {
   const [, params] = useRoute("/routine/:slug");

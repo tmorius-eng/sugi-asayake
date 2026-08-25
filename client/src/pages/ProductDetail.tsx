@@ -9,7 +9,9 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { getSalePercent, LOW_STOCK_THRESHOLD } from "@shared/catalog-filter";
 
-const previewGallery = ["/manus-storage/sugi-professional-assortment_74fa4e31.jpg", "/manus-storage/sugi-professional-hero_d1a42bb9.jpg", "/manus-storage/sugi-care-retail_e5616f81.jpg"];
+// A product with no uploaded photos at all falls back to just this one
+// placeholder tile -- not a 3-item fake "gallery" of stock photography.
+const previewGallery = ["/product-placeholder.svg"];
 const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Сагсанд нэмж чадсангүй.";
 const reviewMessageFrom = (error: unknown) => error instanceof Error ? error.message : "Сэтгэгдэл илгээж чадсангүй.";

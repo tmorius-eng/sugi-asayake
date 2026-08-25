@@ -37,7 +37,7 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
         <div className="commerce-header-inner">
           <Link href="/" className="commerce-brand">
             <span className="commerce-back"><ArrowLeft size={17} aria-hidden="true" /></span>
-            <img src="/manus-storage/sugi-logo-transparent-clean_b392050b.png" alt="SUGI ASAYAKE" />
+            <img src="/manus-storage/sugi-logo-transparent-clean_fee66cad.png" alt="SUGI ASAYAKE" />
             <span>{backLabel}</span>
           </Link>
           <div className="commerce-header-actions">

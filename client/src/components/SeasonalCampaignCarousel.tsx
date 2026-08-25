@@ -9,7 +9,10 @@ type Campaign = {
   emphasis: string;
   description: string;
   tone: string;
-  image: string;
+  // null: no bundled fallback photo for this slide (real seasonal lifestyle
+  // photography, not a generic product shot) -- lets .seasonal-image's CSS
+  // gradient show through until an admin uploads one for this slotKey.
+  image: string | null;
   note: string;
   slotKey: SiteMediaSlotKey;
 };
@@ -21,7 +24,7 @@ const campaigns: Campaign[] = [
     emphasis: "зөөлнөөр эхэлье.",
     description: "Дулаан улирлын өдөр тутмын арчилгаанд тохирох цэвэрлэгээ, чийгшил, тайвшруулах хэрэгцээгээ нэг дороос нээгээрэй.",
     tone: "sun",
-    image: "/manus-storage/sugi-sunrise-editorial-hero_463a81c8.jpg",
+    image: null,
     note: "MORNING CARE EDIT",
     slotKey: "summer-slide-1",
   },
@@ -31,7 +34,7 @@ const campaigns: Campaign[] = [
     emphasis: "өнгөөр илэрхийл.",
     description: "Хөнгөн мэдрэмж, өөртөө итгэлтэй жижиг мөчүүд, өдөр бүрийн биеийн арчилгааны сонголтыг судлаарай.",
     tone: "coral",
-    image: "/manus-storage/sugi-professional-assortment_74fa4e31.jpg",
+    image: "/product-placeholder.svg",
     note: "COLORFUL DAILY EDIT",
     slotKey: "summer-slide-2",
   },
@@ -41,7 +44,7 @@ const campaigns: Campaign[] = [
     emphasis: "илүү тайван зун.",
     description: "Гэр бүл бүрийн өдөр тутмын эрүүл ахуй, арчилгааны сонголтыг SUGI ASAYAKE-ийн салбаруудаас асуугаарай.",
     tone: "sky",
-    image: "/manus-storage/sugi-professional-family_07753755.jpg",
+    image: null,
     note: "FAMILY SUMMER EDIT",
     slotKey: "summer-slide-3",
   },
@@ -51,6 +54,7 @@ export default function SeasonalCampaignCarousel({ imageOverrides = {} }: { imag
   const [active, setActive] = useState(0);
   const campaign = campaigns[active];
   const campaignImage = imageOverrides[campaign.slotKey] || campaign.image;
+  const campaignImageStyle = campaignImage ? { backgroundImage: `url(${campaignImage})` } : undefined;
 
   useEffect(() => {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -71,7 +75,7 @@ export default function SeasonalCampaignCarousel({ imageOverrides = {} }: { imag
           <p>{campaign.description}</p>
           <Link className="seasonal-link" href="/shop">Зуны сонголт харах <ArrowUpRight size={16} /></Link>
         </div>
-        <div className="seasonal-image" role="img" aria-label={campaign.note} style={{ backgroundImage: `url(${campaignImage})` }}>
+        <div className="seasonal-image" role="img" aria-label={campaign.note} style={campaignImageStyle}>
           <div className="seasonal-image-shade" />
           <span>{campaign.note}</span>
           <strong>0{active + 1}</strong>
