@@ -66,6 +66,18 @@ export const users = mysqlTable("users", {
    */
   suspendedAt: timestamp("suspendedAt"),
   suspendedReason: varchar("suspendedReason", { length: 300 }),
+  /**
+   * PREMIUM-FEATURES.md TIER 5: Loyalty & Retention, matching the real
+   * cumulative-lifetime-spend tier discount Tom's 3 physical branches
+   * already run on Smart POS (500k -> 3%, 1M -> 5%, 10M -> 10%). This app
+   * only sees online orders, so in-store history has no automatic path in
+   * — no API integration with Smart POS exists (Tom's explicit call,
+   * 2026-08-25: build native-only for now). This column is a manually
+   * admin-entered credit (e.g. "this customer has 800,000₮ of known
+   * in-store history") that's added on top of their tracked online spend
+   * when computing their tier — see getUserLoyaltyStatus in server/db.ts.
+   */
+  loyaltyManualAdjustmentMnt: int("loyaltyManualAdjustmentMnt").notNull().default(0),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -229,6 +241,16 @@ export const orders = mysqlTable("orders", {
   // kept purely for admin/order-history visibility — a routine being edited
   // or unpublished later shouldn't retroactively break old order records.
   appliedRoutineId: int("appliedRoutineId").references(() => routines.id, { onDelete: "set null" }),
+  /**
+   * PREMIUM-FEATURES.md TIER 5: applied on top of the routine discount
+   * above, computed from the shopper's real cumulative paid spend at order
+   * time (see getUserLoyaltyStatus/getApplicableLoyaltyDiscount) — same
+   * "actually enforced, not a label" discipline as the routine discount.
+   * appliedLoyaltyTierName is a plain text snapshot (tiers are a hardcoded
+   * constant, not a DB table) purely for order-history/admin display.
+   */
+  loyaltyDiscountMnt: int("loyaltyDiscountMnt").notNull().default(0),
+  appliedLoyaltyTierName: varchar("appliedLoyaltyTierName", { length: 40 }),
   totalMnt: int("totalMnt").notNull(),
   deliveryTrackingRef: varchar("deliveryTrackingRef", { length: 180 }),
   adminNote: text("adminNote"),

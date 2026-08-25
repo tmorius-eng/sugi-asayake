@@ -28,6 +28,7 @@ import {
   createProductReview,
   getActiveCartForOwner,
   getApplicableRoutineDiscount,
+  getUserLoyaltyStatus,
   createQPayPaymentAttempt,
   createStaffInvitation,
   createUserAddress,
@@ -95,6 +96,7 @@ import {
   updateAdminProduct,
   updateAdminRoutine,
   updateAdminUserRole,
+  updateUserLoyaltyAdjustment,
   updateCartItemQuantity,
   updateNotificationPreferences,
   updatePendingRegistration,
@@ -299,16 +301,17 @@ const orderStatusMessages: Record<string, string> = {
   cancelled: "Таны захиалгыг цуцаллаа. Асуух зүйл байвал бидэнтэй холбогдоно уу.",
 };
 
-async function sendOrderConfirmationEmail(order: { orderNumber: string; customerEmail: string | null; customerName: string; totalMnt: number; deliveryMethod: string; deliveryAddress: string | null; pickupBranch: string | null; items: { name: string; quantity: number; priceMnt: number }[]; discountMnt?: number; routineName?: string | null }) {
+async function sendOrderConfirmationEmail(order: { orderNumber: string; customerEmail: string | null; customerName: string; totalMnt: number; deliveryMethod: string; deliveryAddress: string | null; pickupBranch: string | null; items: { name: string; quantity: number; priceMnt: number }[]; discountMnt?: number; routineName?: string | null; loyaltyDiscountMnt?: number; appliedLoyaltyTierName?: string | null }) {
   if (!order.customerEmail) return;
   const itemLines = order.items.map(item => `- ${item.name} × ${item.quantity} (${formatMnt(item.priceMnt * item.quantity)})`).join("\n");
   const deliveryLine = order.deliveryMethod === "store_pickup" ? `Хүргэлт: ${order.pickupBranch} салбараас өөрөө авах` : `Хүргэлт: ${order.deliveryAddress ?? "Улаанбаатар хот дотор"}`;
-  // PREMIUM-FEATURES.md TIER 4: only mentioned when it actually applied.
-  const discountLine = order.discountMnt && order.discountMnt > 0 ? `\n"${order.routineName}" routine хямдрал: -${formatMnt(order.discountMnt)}` : "";
+  // PREMIUM-FEATURES.md TIER 4/5: only mentioned when either actually applied.
+  const routineDiscountLine = order.discountMnt && order.discountMnt > 0 ? `\n"${order.routineName}" routine хямдрал: -${formatMnt(order.discountMnt)}` : "";
+  const loyaltyDiscountLine = order.loyaltyDiscountMnt && order.loyaltyDiscountMnt > 0 ? `\n"${order.appliedLoyaltyTierName}" гишүүнчлэлийн хямдрал: -${formatMnt(order.loyaltyDiscountMnt)}` : "";
   await sendAccountEmail({
     to: order.customerEmail,
     subject: `SUGI ASAYAKE — Захиалга баталгаажлаа (${order.orderNumber})`,
-    content: `Сайн байна уу, ${order.customerName}!\n\nТаны ${order.orderNumber} дугаартай захиалгыг хүлээн авлаа:\n\n${itemLines}${discountLine}\n\nНийт дүн: ${formatMnt(order.totalMnt)}\n${deliveryLine}\n\nЗахиалгынхаа явцыг веб сайтаас харах боломжтой. Худалдан авалт хийсэнд баярлалаа!`,
+    content: `Сайн байна уу, ${order.customerName}!\n\nТаны ${order.orderNumber} дугаартай захиалгыг хүлээн авлаа:\n\n${itemLines}${routineDiscountLine}${loyaltyDiscountLine}\n\nНийт дүн: ${formatMnt(order.totalMnt)}\n${deliveryLine}\n\nЗахиалгынхаа явцыг веб сайтаас харах боломжтой. Худалдан авалт хийсэнд баярлалаа!`,
   });
 }
 
@@ -548,6 +551,11 @@ export const appRouter = router({
     // public, since it's meaningless without a saved preference profile to
     // match against (a guest has none).
     recommended: protectedProcedure.query(({ ctx }) => getRecommendedProducts(ctx.user.id)),
+  }),
+  // PREMIUM-FEATURES.md TIER 5: cumulative-spend loyalty tiers (mirrors
+  // Tom's Smart POS in-store membership card — see shared/loyalty.ts).
+  loyalty: router({
+    myStatus: protectedProcedure.query(({ ctx }) => getUserLoyaltyStatus(ctx.user.id)),
   }),
   // PREMIUM-FEATURES.md TIER 4: Routine Builder & Bundles.
   routines: router({
@@ -893,6 +901,15 @@ export const appRouter = router({
     userDetail: adminProcedure.input(z.object({ userId: z.number().int().positive() })).query(async ({ input }) => {
       const detail = await getAdminUserDetail(input.userId);
       if (!detail) throw new TRPCError({ code: "NOT_FOUND", message: "User not found." });
+      return detail;
+    }),
+    // PREMIUM-FEATURES.md TIER 5: bridges the physical-POS gap manually
+    // (per Tom, 2026-08-25: no Smart POS API integration for now) — credits
+    // a customer's known in-store lifetime spend onto their online total.
+    updateUserLoyaltyAdjustment: adminProcedure.input(z.object({ userId: z.number().int().positive(), adjustmentMnt: z.number().int().min(0).max(1_000_000_000) })).mutation(async ({ ctx, input }) => {
+      const detail = await updateUserLoyaltyAdjustment(input.userId, input.adjustmentMnt);
+      if (!detail) throw new TRPCError({ code: "NOT_FOUND", message: "User not found." });
+      await logAdminAction({ actorUserId: ctx.user.id, action: "user.loyalty_adjustment_updated", entityType: "user", entityId: input.userId, metadata: { adjustmentMnt: input.adjustmentMnt } });
       return detail;
     }),
     suspendUser: adminProcedure.input(z.object({ userId: z.number().int().positive(), reason: z.string().trim().max(300).optional() })).mutation(async ({ ctx, input }) => {

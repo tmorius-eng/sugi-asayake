@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import {
-  Bell, Camera, ChevronDown, ClipboardList, Heart, HelpCircle, Home, LayoutDashboard,
+  Bell, Camera, ChevronDown, ClipboardList, CreditCard, Heart, HelpCircle, Home, LayoutDashboard,
   Loader2, LoaderCircle, LogIn, LogOut, Mail, MapPin, Pencil, Phone, Plus, RotateCcw,
   ShieldCheck, ShieldOff, ShoppingBag, Sparkles, Star, Trash2, User as UserIcon,
 } from "lucide-react";
+import { LOYALTY_TIERS } from "@shared/loyalty";
 import { toast } from "sonner";
 import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
@@ -17,8 +18,8 @@ import { useScrollReveal } from "@/hooks/useScrollReveal";
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Гүйцэтгэж чадсангүй. Дахин оролдоно уу.";
 const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
 
-type TabKey = "overview" | "orders" | "preferences" | "wishlist" | "addresses" | "notifications" | "security" | "support";
-const TAB_KEYS: TabKey[] = ["overview", "orders", "preferences", "wishlist", "addresses", "notifications", "security", "support"];
+type TabKey = "overview" | "orders" | "preferences" | "wishlist" | "addresses" | "notifications" | "security" | "support" | "loyalty";
+const TAB_KEYS: TabKey[] = ["overview", "orders", "preferences", "wishlist", "addresses", "notifications", "security", "support", "loyalty"];
 const NAV_ITEMS: Array<{ key: TabKey; label: string; icon: typeof LayoutDashboard }> = [
   { key: "overview", label: "Тойм", icon: LayoutDashboard },
   { key: "orders", label: "Захиалга", icon: ClipboardList },
@@ -28,6 +29,8 @@ const NAV_ITEMS: Array<{ key: TabKey; label: string; icon: typeof LayoutDashboar
   { key: "notifications", label: "Мэдэгдэл", icon: Bell },
   { key: "security", label: "Аюулгүй байдал", icon: ShieldCheck },
   { key: "support", label: "Тусламж", icon: HelpCircle },
+  // PREMIUM-FEATURES.md TIER 5 — placed right after Тусламж per Tom's request (2026-08-25).
+  { key: "loyalty", label: "Гишүүнчлэлийн карт", icon: CreditCard },
 ];
 
 const ORDER_STATUS_LABEL: Record<string, string> = { pending: "Хүлээгдэж байна", confirmed: "Баталгаажсан", packed: "Бэлтгэж байна", out_for_delivery: "Хүргэлтэд гарсан", completed: "Дууссан", cancelled: "Цуцлагдсан" };
@@ -165,6 +168,7 @@ export default function Profile() {
           {tab === "notifications" && <NotificationsTab />}
           {tab === "security" && <SecurityTab />}
           {tab === "support" && <SupportTab />}
+          {tab === "loyalty" && <LoyaltyTab />}
         </div>
       </div>
 
@@ -735,6 +739,45 @@ function SupportTab() {
         <a href="mailto:asayake0307@gmail.com"><Mail size={14} /> asayake0307@gmail.com</a>
         <Link href="/#stores"><MapPin size={14} /> Салбар олох</Link>
       </div>
+    </section>
+  );
+}
+
+// PREMIUM-FEATURES.md TIER 5: mirrors the physical Smart POS membership
+// card (same phone-number-as-card-number concept, same cumulative-spend
+// tier thresholds) — see shared/loyalty.ts for the tier table this reads.
+function LoyaltyTab() {
+  const status = trpc.loyalty.myStatus.useQuery();
+  const data = status.data;
+
+  return (
+    <section className="profile-section" data-reveal>
+      <div className="profile-section-head"><div><h2>Гишүүнчлэлийн карт</h2><p>Нийт худалдан авалтын дүнгээр автоматаар шатлан нэмэгддэг хөнгөлөлт</p></div></div>
+
+      {status.isLoading ? <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#77787c", fontSize: "13px" }}><LoaderCircle className="animate-spin" size={16} /> Ачааллаж байна…</div> : data && <>
+        <div className="loyalty-card">
+          <div className="loyalty-card-top"><span>SUGI ASAYAKE MEMBER</span><Sparkles size={18} /></div>
+          <strong className="loyalty-card-tier">{data.currentTier.name}</strong>
+          <div className="loyalty-card-number">{data.cardNumber ? data.cardNumber : "Утасны дугаараа \"Хувийн профайл\" хэсэгт бүртгүүлж картаа идэвхжүүлээрэй"}</div>
+          {data.currentTier.discountPercent > 0 && <div className="loyalty-card-bottom">Захиалга бүрт -{data.currentTier.discountPercent}%</div>}
+        </div>
+
+        <div className="loyalty-progress">
+          <div className="loyalty-progress-row"><span>Нийт худалдан авалт</span><strong>{formatMnt(data.totalSpendMnt)}</strong></div>
+          {data.nextTier ? <>
+            <div className="loyalty-progress-bar"><div className="loyalty-progress-fill" style={{ width: `${Math.min(100, Math.round((data.totalSpendMnt / data.nextTier.minSpendMnt) * 100))}%` }} /></div>
+            <p className="loyalty-progress-note">"{data.nextTier.name}" шатанд (-{data.nextTier.discountPercent}%) хүрэхэд {formatMnt(data.amountToNextTierMnt ?? 0)} дутуу байна.</p>
+          </> : <p className="loyalty-progress-note">Та хамгийн дээд шатанд хүрсэн байна — баярлалаа!</p>}
+          {data.manualAdjustmentMnt > 0 && <p className="loyalty-progress-note">Үүнд манай салбарт биечлэн хийсэн {formatMnt(data.manualAdjustmentMnt)} худалдан авалтын түүх багтсан.</p>}
+        </div>
+
+        <div className="loyalty-tiers">
+          {LOYALTY_TIERS.map(tier => <div key={tier.name} className={`loyalty-tier-row${tier.name === data.currentTier.name ? " active" : ""}`}>
+            <span><strong>{tier.name}</strong> · {tier.minSpendMnt > 0 ? `${formatMnt(tier.minSpendMnt)}-с эхлэн` : "0₮-с эхлэн"}</span>
+            <span>{tier.discountPercent > 0 ? `-${tier.discountPercent}%` : "Хямдралгүй"}</span>
+          </div>)}
+        </div>
+      </>}
     </section>
   );
 }

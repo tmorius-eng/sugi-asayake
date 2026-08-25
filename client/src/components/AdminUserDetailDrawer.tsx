@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { LoaderCircle, LogOut, ShieldAlert, ShieldCheck, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { CreditCard, LoaderCircle, LogOut, ShieldAlert, ShieldCheck, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
@@ -19,9 +19,27 @@ export default function AdminUserDetailDrawer({ userId, onClose }: { userId: num
   const suspendUser = trpc.admin.suspendUser.useMutation({ onSuccess: refresh });
   const unsuspendUser = trpc.admin.unsuspendUser.useMutation({ onSuccess: refresh });
   const forceLogoutUser = trpc.admin.forceLogoutUser.useMutation();
+  // PREMIUM-FEATURES.md TIER 5: bridges the physical-POS gap manually.
+  const updateLoyaltyAdjustment = trpc.admin.updateUserLoyaltyAdjustment.useMutation({ onSuccess: refresh });
+  const [loyaltyAdjustment, setLoyaltyAdjustment] = useState("0");
 
   const detail = detailQuery.data;
   const isBusy = suspendUser.isPending || unsuspendUser.isPending;
+
+  useEffect(() => {
+    if (detail) setLoyaltyAdjustment(String(detail.loyalty.manualAdjustmentMnt));
+  }, [detail]);
+
+  const onSaveLoyaltyAdjustment = async () => {
+    const value = Number(loyaltyAdjustment);
+    if (!Number.isInteger(value) || value < 0) { toast.error("Эерэг бүхэл тоо оруулна уу."); return; }
+    try {
+      await updateLoyaltyAdjustment.mutateAsync({ userId, adjustmentMnt: value });
+      toast.success("Гишүүнчлэлийн урьдчилсан дүн хадгалагдлаа.");
+    } catch (error) {
+      toast.error(messageFrom(error));
+    }
+  };
 
   const onSuspend = async () => {
     if (!window.confirm("Энэ хэрэглэгчийг түр хаах уу? Идэвхтэй session нь шууд хүчингүй болно.")) return;
@@ -75,6 +93,20 @@ export default function AdminUserDetailDrawer({ userId, onClose }: { userId: num
           <div className="mt-6 grid grid-cols-2 gap-3">
             <div className="rounded-2xl bg-[#f8f5ef] p-4"><p className="text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]">НИЙТ ЗАХИАЛГА</p><p className="mt-1 font-[var(--font-display)] text-xl font-semibold">{detail.orders.length}</p></div>
             <div className="rounded-2xl bg-[#f8f5ef] p-4"><p className="text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]">НИЙТ ЗАРЦУУЛАЛТ</p><p className="mt-1 font-[var(--font-display)] text-xl font-semibold">{formatMnt(detail.totalSpentMnt)}</p></div>
+          </div>
+
+          {/* PREMIUM-FEATURES.md TIER 5 */}
+          <div className="mt-4 rounded-2xl border border-black/8 p-4">
+            <p className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]"><CreditCard size={13} /> ГИШҮҮНЧЛЭЛИЙН КАРТ</p>
+            <div className="mt-2 flex items-center justify-between"><span className="font-[var(--font-display)] text-lg font-semibold">{detail.loyalty.currentTier.name}</span><span className="text-xs font-bold text-[#df1f3d]">{detail.loyalty.currentTier.discountPercent > 0 ? `-${detail.loyalty.currentTier.discountPercent}%` : "Хямдралгүй"}</span></div>
+            <p className="mt-1 text-[11px] text-[#77787d]">Онлайн: {formatMnt(detail.loyalty.onlineSpendMnt)} + Гараар: {formatMnt(detail.loyalty.manualAdjustmentMnt)} = Нийт {formatMnt(detail.loyalty.totalSpendMnt)}</p>
+            <label className="mt-3 grid gap-1.5 text-xs font-bold">Дэлгүүрт биечлэн худалдан авсан урьдчилсан дүн (₮)
+              <div className="flex gap-2">
+                <input type="number" min="0" value={loyaltyAdjustment} onChange={event => setLoyaltyAdjustment(event.target.value)} className="h-10 flex-1 rounded-xl border border-black/10 px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" />
+                <button type="button" disabled={updateLoyaltyAdjustment.isPending} onClick={onSaveLoyaltyAdjustment} className="shrink-0 rounded-xl bg-[#17181b] px-4 text-xs font-bold text-white disabled:opacity-60">{updateLoyaltyAdjustment.isPending ? <LoaderCircle className="animate-spin" size={14} /> : "Хадгалах"}</button>
+              </div>
+            </label>
+            <p className="mt-2 text-[10px] leading-4 text-[#a9a49a]">Smart POS-той API холбоогүй тул үйлчлүүлэгчийн дэлгүүрт биечлэн худалдан авсан түүхийг эндээс гараар нэмж, тохирох шатанд шилжүүлж болно.</p>
           </div>
 
           <div className="mt-6 rounded-2xl border border-black/8 p-4">

@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 import { adminAuditLogs, cartItems, carts, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, loginAttempts, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, productReviews, products, routines, routineSteps, siteMedia, staffInvitations, userAddresses, users, wishlistItems } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { getInventoryReservationFailure, shouldRestoreStock } from "./commerce-lifecycle";
+import { getLoyaltyTier, getNextLoyaltyTier } from "../shared/loyalty";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -654,6 +655,11 @@ export async function createOrderFromActiveCart(input: {
   // now, not a client-supplied amount — see getApplicableRoutineDiscount.
   const routineDiscount = await getApplicableRoutineDiscount(cart.items);
   const discountMnt = routineDiscount?.discountMnt ?? 0;
+  // PREMIUM-FEATURES.md TIER 5: loyalty applies to the subtotal *after* the
+  // routine discount, not the raw subtotal — sequential stacking, not both
+  // percentages computed off the same base.
+  const loyaltyDiscount = await getApplicableLoyaltyDiscount(input.owner.userId, subtotalMnt - discountMnt);
+  const loyaltyDiscountMnt = loyaltyDiscount?.discountMnt ?? 0;
   const orderNumber = `SA${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
   let orderId = 0;
   await db.transaction(async tx => {
@@ -680,7 +686,9 @@ export async function createOrderFromActiveCart(input: {
       deliveryFeeMnt,
       discountMnt,
       appliedRoutineId: routineDiscount?.routineId ?? null,
-      totalMnt: subtotalMnt + deliveryFeeMnt - discountMnt,
+      loyaltyDiscountMnt,
+      appliedLoyaltyTierName: loyaltyDiscount?.tierName ?? null,
+      totalMnt: subtotalMnt + deliveryFeeMnt - discountMnt - loyaltyDiscountMnt,
     });
     orderId = Number(inserted[0].insertId);
     await tx.insert(orderItems).values(cart.items.map(item => ({
@@ -1521,11 +1529,13 @@ export async function getAdminUserDetail(userId: number) {
     id: users.id,
     name: users.name,
     email: users.email,
+    phone: users.phone,
     role: users.role,
     createdAt: users.createdAt,
     lastSignedIn: users.lastSignedIn,
     suspendedAt: users.suspendedAt,
     suspendedReason: users.suspendedReason,
+    loyaltyManualAdjustmentMnt: users.loyaltyManualAdjustmentMnt,
   }).from(users).where(eq(users.id, userId)).limit(1);
   const user = rows[0];
   if (!user) return null;
@@ -1542,7 +1552,67 @@ export async function getAdminUserDetail(userId: number) {
     db.select({ total: sql<number>`coalesce(sum(${orders.totalMnt}), 0)` }).from(orders).where(and(eq(orders.userId, userId), eq(orders.paymentStatus, "paid"))),
   ]);
 
-  return { ...user, orders: userOrders, totalSpentMnt: Number(spendRow?.total ?? 0) };
+  const onlineSpendMnt = Number(spendRow?.total ?? 0);
+  const totalSpendMnt = onlineSpendMnt + user.loyaltyManualAdjustmentMnt;
+  return {
+    ...user,
+    orders: userOrders,
+    totalSpentMnt: onlineSpendMnt, // kept for the existing admin panel display
+    loyalty: { onlineSpendMnt, totalSpendMnt, manualAdjustmentMnt: user.loyaltyManualAdjustmentMnt, currentTier: getLoyaltyTier(totalSpendMnt), nextTier: getNextLoyaltyTier(totalSpendMnt) },
+  };
+}
+
+/** admin.updateUserLoyaltyAdjustment — bridges the physical-POS gap: an
+ *  admin can credit a customer with known in-store lifetime spend so their
+ *  online tier reflects reality, without any Smart POS API integration. */
+export async function updateUserLoyaltyAdjustment(userId: number, adjustmentMnt: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const current = await db.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1);
+  if (!current[0]) throw new Error("User not found.");
+  await db.update(users).set({ loyaltyManualAdjustmentMnt: adjustmentMnt, updatedAt: new Date() }).where(eq(users.id, userId));
+  return getAdminUserDetail(userId);
+}
+
+/** /profile "Гишүүнчлэлийн карт" + the checkout discount preview. The
+ *  physical POS card number is the customer's phone number — mirrored here
+ *  so the same card concept lines up for a customer holding both. */
+export async function getUserLoyaltyStatus(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select({ phone: users.phone, loyaltyManualAdjustmentMnt: users.loyaltyManualAdjustmentMnt }).from(users).where(eq(users.id, userId)).limit(1);
+  const user = rows[0];
+  if (!user) return null;
+  const [spendRow] = await db.select({ total: sql<number>`coalesce(sum(${orders.totalMnt}), 0)` }).from(orders).where(and(eq(orders.userId, userId), eq(orders.paymentStatus, "paid")));
+  const onlineSpendMnt = Number(spendRow?.total ?? 0);
+  const totalSpendMnt = onlineSpendMnt + user.loyaltyManualAdjustmentMnt;
+  const nextTier = getNextLoyaltyTier(totalSpendMnt);
+  return {
+    cardNumber: user.phone,
+    onlineSpendMnt,
+    manualAdjustmentMnt: user.loyaltyManualAdjustmentMnt,
+    totalSpendMnt,
+    currentTier: getLoyaltyTier(totalSpendMnt),
+    nextTier,
+    amountToNextTierMnt: nextTier ? nextTier.minSpendMnt - totalSpendMnt : null,
+  };
+}
+
+/**
+ * PREMIUM-FEATURES.md TIER 5: real, enforced discount — computed from the
+ * shopper's actual cumulative paid spend at order-creation time, applied on
+ * top of whatever the routine discount already took off `amountMnt` (see
+ * createOrderFromActiveCart below). Guests (no userId) never qualify — the
+ * membership card is tied to a registered account, same as the physical one
+ * is tied to a phone number on file.
+ */
+export async function getApplicableLoyaltyDiscount(userId: number | undefined, amountMnt: number) {
+  if (!userId || amountMnt <= 0) return null;
+  const status = await getUserLoyaltyStatus(userId);
+  if (!status || status.currentTier.discountPercent <= 0) return null;
+  const discountMnt = Math.round(amountMnt * status.currentTier.discountPercent / 100);
+  if (discountMnt <= 0) return null;
+  return { tierName: status.currentTier.name, discountPercent: status.currentTier.discountPercent, discountMnt };
 }
 
 export async function suspendUser(input: { userId: number; reason?: string | null }) {

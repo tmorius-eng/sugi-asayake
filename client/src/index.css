@@ -728,3 +728,23 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .support-contact { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; }
 .support-contact a { display: inline-flex; align-items: center; gap: 8px; padding: 11px 15px; border: 1px solid rgba(23,24,27,.14); background: #fff; color: #17181b; font-size: 12px; font-weight: 800; transition: transform .18s var(--ease-out), background .18s var(--ease-out), color .18s var(--ease-out); }
 .support-contact a:hover { background: #17181b; color: #fff; transform: translateY(-2px); }
+
+/* PREMIUM-FEATURES.md TIER 5: /profile "Гишүүнчлэлийн карт" — styled to
+   read as an actual membership card, mirroring the physical Smart POS card
+   this pairs with (same phone-number-as-card-number concept). */
+.loyalty-card { position: relative; overflow: hidden; padding: 26px 28px; border-radius: 20px; background: linear-gradient(135deg, #17181b 0%, #2a2b2f 55%, #17181b 100%); color: #fff; box-shadow: 0 20px 44px rgba(20,22,24,.22); }
+.loyalty-card::after { content: ""; position: absolute; right: -60px; bottom: -60px; width: 180px; height: 180px; border: 1px solid rgba(255,255,255,.14); border-radius: 50%; box-shadow: 0 0 0 26px rgba(255,255,255,.05); }
+.loyalty-card-top { position: relative; display: flex; align-items: center; justify-content: space-between; color: #f0b52d; font-size: 10px; font-weight: 800; letter-spacing: .14em; }
+.loyalty-card-tier { position: relative; display: block; margin-top: 22px; font-family: var(--font-display); font-size: 34px; font-weight: 700; letter-spacing: -.03em; }
+.loyalty-card-number { position: relative; margin-top: 14px; font-family: var(--font-mono, monospace); font-size: 15px; letter-spacing: .1em; color: rgba(255,255,255,.75); }
+.loyalty-card-bottom { position: relative; margin-top: 20px; display: inline-flex; padding: 7px 13px; border-radius: 999px; background: rgba(240,181,45,.16); color: #f0b52d; font-size: 11px; font-weight: 800; }
+.loyalty-progress { margin-top: 22px; }
+.loyalty-progress-row { display: flex; align-items: baseline; justify-content: space-between; font-size: 12px; color: #77787c; }
+.loyalty-progress-row strong { font-family: var(--font-display); font-size: 20px; color: #17181b; }
+.loyalty-progress-bar { position: relative; margin-top: 10px; height: 8px; border-radius: 999px; background: #eee9df; overflow: hidden; }
+.loyalty-progress-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--primary), #f0b52d); transition: width .4s var(--ease-out); }
+.loyalty-progress-note { margin: 10px 0 0; color: #77787c; font-size: 12px; line-height: 1.6; }
+.loyalty-tiers { margin-top: 22px; display: grid; gap: 8px; }
+.loyalty-tier-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border: 1px solid rgba(23,24,27,.08); font-size: 12px; color: #5f6065; }
+.loyalty-tier-row.active { border-color: var(--primary); background: #fff2f4; color: #17181b; font-weight: 800; }
+.loyalty-tier-row strong { font-family: var(--font-display); font-size: 13px; }
