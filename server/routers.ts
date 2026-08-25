@@ -22,6 +22,7 @@ import {
   createAdminPost,
   createAdminProduct,
   createAdminRoutine,
+  createAdminSitePromotion,
   createEmailVerificationCode,
   createOrderFromActiveCart,
   createPasswordResetCode,
@@ -36,11 +37,14 @@ import {
   dbPing,
   deleteAdminReview,
   deleteAdminRoutine,
+  deleteAdminSitePromotion,
   deleteUserAccount,
   deleteUserAddress,
   deleteAdminPost,
   deleteAdminProduct,
+  getActiveSitePromotion,
   getAdminAuditLogs,
+  getAdminSitePromotions,
   getAdminCategories,
   getAdminDashboardSummary,
   getAdminOrders,
@@ -95,6 +99,7 @@ import {
   updateAdminPost,
   updateAdminProduct,
   updateAdminRoutine,
+  updateAdminSitePromotion,
   updateAdminUserRole,
   updateUserLoyaltyAdjustment,
   updateCartItemQuantity,
@@ -196,6 +201,22 @@ const routineUpdateSchema = routineWriteSchema.partial().extend({ id: z.number()
   { message: "Provide at least one routine field to update." },
 );
 const routineStepInputSchema = z.object({ productId: z.number().int().positive(), stepLabel: z.string().trim().min(1).max(120) });
+// Marketing popup/banner (new-arrival, sale, store event) -- see sitePromotions in drizzle/schema.ts.
+const promotionWriteSchema = z.object({
+  isActive: z.boolean(),
+  displayMode: z.enum(["popup", "banner"]),
+  headline: z.string().trim().min(2).max(160),
+  message: nullableText(1_000),
+  imageUrl: nullableText(1_000),
+  ctaLabel: nullableText(60),
+  ctaUrl: nullableText(300),
+  startsAt: z.coerce.date().nullable().optional(),
+  endsAt: z.coerce.date().nullable().optional(),
+});
+const promotionUpdateSchema = promotionWriteSchema.partial().extend({ id: z.number().int().positive() }).refine(
+  value => Object.keys(value).some(key => key !== "id"),
+  { message: "Provide at least one promotion field to update." },
+);
 const orderStatusSchema = z.enum(["pending", "confirmed", "packed", "out_for_delivery", "completed", "cancelled"]);
 const orderUpdateSchema = z.object({
   id: z.number().int().positive(),
@@ -561,6 +582,11 @@ export const appRouter = router({
   routines: router({
     bySlug: publicProcedure.input(z.object({ slug: z.string().min(1).max(200) })).query(({ input }) => getPublishedRoutineBySlug(input.slug)),
     forProduct: publicProcedure.input(z.object({ productId: z.number().int().positive() })).query(({ input }) => getRoutineForProduct(input.productId)),
+  }),
+  // Site-wide marketing popup/banner -- one admin-editable message, scheduled
+  // and toggled from the admin panel. See sitePromotions in drizzle/schema.ts.
+  promotions: router({
+    active: publicProcedure.query(() => getActiveSitePromotion()),
   }),
   // PREMIUM-FEATURES.md TIER 2: verified-purchase reviews & ratings.
   reviews: router({
@@ -1103,6 +1129,24 @@ export const appRouter = router({
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Алхмуудыг хадгалж чадсангүй." });
       }
+    }),
+    // Marketing popup/banner (new-arrival, sale, store event announcement).
+    promotions: staffProcedure.query(() => getAdminSitePromotions()),
+    createPromotion: staffProcedure.input(promotionWriteSchema).mutation(async ({ ctx, input }) => {
+      const promotion = await createAdminSitePromotion({ ...input, message: input.message ?? null, imageUrl: input.imageUrl ?? null, ctaLabel: input.ctaLabel ?? null, ctaUrl: input.ctaUrl ?? null, startsAt: input.startsAt ?? null, endsAt: input.endsAt ?? null }, ctx.user.id);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "promotion.created", entityType: "promotion", entityId: promotion.id, metadata: { headline: promotion.headline, isActive: promotion.isActive } });
+      return promotion;
+    }),
+    updatePromotion: staffProcedure.input(promotionUpdateSchema).mutation(async ({ ctx, input }) => {
+      const { id, ...changes } = input;
+      const promotion = await updateAdminSitePromotion({ id, ...changes }, ctx.user.id);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "promotion.updated", entityType: "promotion", entityId: id, metadata: { isActive: promotion.isActive } });
+      return promotion;
+    }),
+    deletePromotion: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const result = await deleteAdminSitePromotion(input.id);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "promotion.deleted", entityType: "promotion", entityId: input.id });
+      return result;
     }),
     // TIER 5: bulk publish/unpublish. Only touches isPublished, so none of
     // the slug/sku/category conflict checks in validateProductWrite apply —

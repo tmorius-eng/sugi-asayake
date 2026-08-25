@@ -391,6 +391,33 @@ export const siteMedia = mysqlTable("site_media", {
 ]);
 
 /**
+ * Admin-controlled promotional popup/banner (e.g. new-arrival announcement,
+ * seasonal sale, store event). Deliberately a plain admin-editable record —
+ * not a fake-urgency generator: whatever is shown is exactly what an admin
+ * typed in, for exactly the window they scheduled. Several rows can exist
+ * (so a sale and a launch can both be drafted ahead of time) but only the
+ * single best-matching active+in-window one is ever served publicly — see
+ * getActiveSitePromotion in server/db.ts.
+ */
+export const sitePromotions = mysqlTable("site_promotions", {
+  id: int("id").autoincrement().primaryKey(),
+  isActive: boolean("isActive").notNull().default(false),
+  displayMode: mysqlEnum("displayMode", ["popup", "banner"]).notNull().default("popup"),
+  headline: varchar("headline", { length: 160 }).notNull(),
+  message: text("message"),
+  imageUrl: text("imageUrl"),
+  ctaLabel: varchar("ctaLabel", { length: 60 }),
+  ctaUrl: varchar("ctaUrl", { length: 300 }),
+  startsAt: timestamp("startsAt"),
+  endsAt: timestamp("endsAt"),
+  updatedByUserId: int("updatedByUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  index("site_promotions_active_idx").on(table.isActive),
+]);
+
+/**
  * TIER 4: one row per login attempt (successful or not) — auth.login writes
  * this unconditionally (see server/routers.ts), independent of the
  * transient in-memory rate limiter, so it survives a restart and backs the
@@ -518,3 +545,5 @@ export type AdminAuditLog = typeof adminAuditLogs.$inferSelect;
 export type InsertAdminAuditLog = typeof adminAuditLogs.$inferInsert;
 export type StaffInvitation = typeof staffInvitations.$inferSelect;
 export type InsertStaffInvitation = typeof staffInvitations.$inferInsert;
+export type SitePromotion = typeof sitePromotions.$inferSelect;
+export type InsertSitePromotion = typeof sitePromotions.$inferInsert;

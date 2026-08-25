@@ -4,6 +4,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { lazy, Suspense, useEffect } from "react";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
+import SitePromo from "./components/SitePromo";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 
@@ -74,6 +75,7 @@ function App() {
       <TooltipProvider>
         <Toaster />
         <ResumeStaffInvitation />
+        <SitePromo />
         <Router />
       </TooltipProvider>
     </ThemeProvider>

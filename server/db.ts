@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gte, inArray, like, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { adminAuditLogs, cartItems, carts, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, loginAttempts, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, productReviews, products, routines, routineSteps, siteMedia, staffInvitations, userAddresses, users, wishlistItems } from "../drizzle/schema";
+import { adminAuditLogs, cartItems, carts, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, loginAttempts, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, productReviews, products, routines, routineSteps, siteMedia, sitePromotions, staffInvitations, userAddresses, users, wishlistItems } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { getInventoryReservationFailure, shouldRestoreStock } from "./commerce-lifecycle";
 import { getLoyaltyTier, getNextLoyaltyTier } from "../shared/loyalty";
@@ -843,6 +843,67 @@ export async function deleteAdminRoutine(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.delete(routines).where(eq(routines.id, id));
+  return { id };
+}
+
+/** The one promotion (if any) currently shown to shoppers: active, and
+ *  inside its scheduled window if it has one. When several qualify (admin
+ *  mistake, or a deliberate handoff between two promos), the most recently
+ *  updated one wins — deterministic and matches "whatever I touched last is
+ *  what's live" admin intuition. */
+export async function getActiveSitePromotion() {
+  const db = await getDb();
+  if (!db) return null;
+  const now = new Date();
+  // updatedAt has only whole-second precision, so two edits within the same
+  // second would tie -- id DESC breaks that tie deterministically (the
+  // more-recently-created/edited row is reliably the higher id in practice).
+  const rows = await db.select().from(sitePromotions).where(eq(sitePromotions.isActive, true)).orderBy(desc(sitePromotions.updatedAt), desc(sitePromotions.id));
+  const live = rows.find(row => (!row.startsAt || row.startsAt <= now) && (!row.endsAt || row.endsAt >= now));
+  return live ?? null;
+}
+
+export async function getAdminSitePromotions() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(sitePromotions).orderBy(desc(sitePromotions.updatedAt));
+}
+
+export type SitePromotionWriteInput = {
+  isActive: boolean;
+  displayMode: "popup" | "banner";
+  headline: string;
+  message?: string | null;
+  imageUrl?: string | null;
+  ctaLabel?: string | null;
+  ctaUrl?: string | null;
+  startsAt?: Date | null;
+  endsAt?: Date | null;
+};
+
+export async function createAdminSitePromotion(input: SitePromotionWriteInput, updatedByUserId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const inserted = await db.insert(sitePromotions).values({ ...input, updatedByUserId });
+  const created = await db.select().from(sitePromotions).where(eq(sitePromotions.id, Number(inserted[0].insertId))).limit(1);
+  return created[0];
+}
+
+export async function updateAdminSitePromotion(input: { id: number } & Partial<SitePromotionWriteInput>, updatedByUserId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const { id, ...changes } = input;
+  const existing = await db.select({ id: sitePromotions.id }).from(sitePromotions).where(eq(sitePromotions.id, id)).limit(1);
+  if (!existing[0]) throw new Error("Promotion not found.");
+  await db.update(sitePromotions).set({ ...changes, updatedByUserId, updatedAt: new Date() }).where(eq(sitePromotions.id, id));
+  const updated = await db.select().from(sitePromotions).where(eq(sitePromotions.id, id)).limit(1);
+  return updated[0];
+}
+
+export async function deleteAdminSitePromotion(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.delete(sitePromotions).where(eq(sitePromotions.id, id));
   return { id };
 }
 

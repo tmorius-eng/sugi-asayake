@@ -96,7 +96,10 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 }
 
 .sugi-site { overflow: hidden; background: var(--background); }
-.site-header { position: fixed; inset: 0 0 auto; z-index: 50; padding: 18px 34px; background: rgba(248, 245, 239, .9); border-bottom: 1px solid rgba(23, 24, 27, .08); backdrop-filter: blur(18px) saturate(120%); transition: padding .24s var(--ease-out), box-shadow .24s var(--ease-out), background .24s var(--ease-out); }
+/* top uses --promo-banner-offset (set by SitePromo.tsx when its banner mode
+   is showing) instead of a hardcoded 0 so a live promo banner pushes this
+   fixed header down by its own height instead of getting painted over. */
+.site-header { position: fixed; top: var(--promo-banner-offset, 0px); left: 0; right: 0; z-index: 50; padding: 18px 34px; background: rgba(248, 245, 239, .9); border-bottom: 1px solid rgba(23, 24, 27, .08); backdrop-filter: blur(18px) saturate(120%); transition: padding .24s var(--ease-out), box-shadow .24s var(--ease-out), background .24s var(--ease-out), top .2s var(--ease-out); }
 .site-header.is-scrolled { padding-top: 11px; padding-bottom: 11px; background: rgba(248, 245, 239, .98); box-shadow: 0 12px 28px rgba(20, 22, 24, .08); }
 .site-header-inner { width: min(1380px, 100%); min-height: 40px; margin: 0 auto; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 28px; }
 .site-brand { display: inline-flex; width: 172px; align-items: center; }
