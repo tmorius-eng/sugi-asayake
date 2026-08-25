@@ -162,7 +162,10 @@ export default function Shop() {
         <button type="button" onClick={() => { setPage(current => Math.min(totalPages, current + 1)); document.getElementById("shop-product-grid")?.scrollIntoView({ block: "start", behavior: "smooth" }); }} disabled={page === totalPages}>Дараах <ChevronRight size={16} /></button>
       </nav> : null}</> : <section className="shop-status-card" data-reveal><Search size={26} /><h2>Энэ удаа тохирох бүтээгдэхүүн олдсонгүй.</h2><p>Өөр хайлтын үг хэрэглэж үзэх эсвэл бүх ангиллыг дахин хараарай.</p><button type="button" onClick={resetControls}><RotateCcw size={14} /> Шүүлтүүр арилгах</button></section>}
       {isAuthenticated && recommended.data?.length ? <RecommendedForYou products={recommended.data} onRemember={rememberProduct} onQuickView={openQuickView} /> : null}
-      {!catalog.isLoading && !catalog.isError ? <RecentlyViewed products={recentlyViewed} rememberedCount={effectiveRecentIds.length} onRemember={rememberProduct} onQuickView={openQuickView} /> : null}
+      {/* A premium site doesn't show a "recently viewed" module with nothing
+          in it — that reads as an empty placeholder, not a feature. Only
+          render this once the shopper has actually looked at something. */}
+      {!catalog.isLoading && !catalog.isError && effectiveRecentIds.length > 0 ? <RecentlyViewed products={recentlyViewed} rememberedCount={effectiveRecentIds.length} onRemember={rememberProduct} onQuickView={openQuickView} /> : null}
     </main>
     <QuickViewDialog open={Boolean(quickViewProduct)} product={quickViewProduct} onOpenChange={open => { if (!open) setQuickViewProduct(null); }} onAdded={() => setCartOpen(true)} />
     <CartDrawer open={cartOpen} onOpenChange={setCartOpen} />
