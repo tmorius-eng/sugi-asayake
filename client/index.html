@@ -34,10 +34,11 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <script
-      defer
-      src="%VITE_ANALYTICS_ENDPOINT%/umami"
-      data-website-id="%VITE_ANALYTICS_WEBSITE_ID%"></script>
+    <!-- Analytics (e.g. self-hosted Umami) intentionally not wired up yet --
+         no VITE_ANALYTICS_* env vars are set (see CLAUDE.md's local env
+         list), so a %VITE_ANALYTICS_ENDPOINT%/umami placeholder here would
+         just 404 as a literal string on every page load. Add a real
+         <script src="..."> once an analytics provider is chosen. -->
   </body>
 
 </html>
