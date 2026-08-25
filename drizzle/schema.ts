@@ -216,6 +216,19 @@ export const orders = mysqlTable("orders", {
   customerEmail: varchar("customerEmail", { length: 320 }),
   subtotalMnt: int("subtotalMnt").notNull(),
   deliveryFeeMnt: int("deliveryFeeMnt").notNull().default(0),
+  /**
+   * PREMIUM-FEATURES.md TIER 4: automatically applied when the cart, at the
+   * moment of order placement, still contains every product in a published
+   * routine's steps — see getApplicableRoutineDiscount in server/db.ts. Not a
+   * coupon code or a client-supplied amount: computed server-side from real
+   * cart contents so the "Бүгдийг сагслах" savings claim on the routine page
+   * is always literally true at checkout, never just a decorative label.
+   */
+  discountMnt: int("discountMnt").notNull().default(0),
+  // Nullable + SET NULL: which routine (if any) earned the discount above,
+  // kept purely for admin/order-history visibility — a routine being edited
+  // or unpublished later shouldn't retroactively break old order records.
+  appliedRoutineId: int("appliedRoutineId").references(() => routines.id, { onDelete: "set null" }),
   totalMnt: int("totalMnt").notNull(),
   deliveryTrackingRef: varchar("deliveryTrackingRef", { length: 180 }),
   adminNote: text("adminNote"),
@@ -272,6 +285,42 @@ export const productReviews = mysqlTable("product_reviews", {
 
 export type ProductReview = typeof productReviews.$inferSelect;
 export type InsertProductReview = typeof productReviews.$inferInsert;
+
+// PREMIUM-FEATURES.md TIER 4: an admin-curated, ordered product bundle
+// ("Алхам 1: Цэвэрлэгч -> Алхам 2: Тонер -> ...") with an optional bundle
+// discount enforced at checkout (see orders.discountMnt above) rather than
+// just displayed as a marketing number.
+export const routines = mysqlTable("routines", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 180 }).notNull(),
+  slug: varchar("slug", { length: 200 }).notNull().unique(),
+  description: text("description"),
+  discountPercent: int("discountPercent").notNull().default(0),
+  isPublished: boolean("isPublished").notNull().default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const routineSteps = mysqlTable("routine_steps", {
+  id: int("id").autoincrement().primaryKey(),
+  routineId: int("routineId").notNull().references(() => routines.id, { onDelete: "cascade" }),
+  // cascade: if a product is removed from the catalog entirely, it silently
+  // drops out of any routine rather than blocking the product deletion (the
+  // way wishlistItems.productId already behaves for the same reason).
+  productId: int("productId").notNull().references(() => products.id, { onDelete: "cascade" }),
+  stepNumber: int("stepNumber").notNull(),
+  stepLabel: varchar("stepLabel", { length: 120 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  uniqueIndex("routine_steps_routine_step_idx").on(table.routineId, table.stepNumber),
+  uniqueIndex("routine_steps_routine_product_idx").on(table.routineId, table.productId),
+  index("routine_steps_product_idx").on(table.productId),
+]);
+
+export type Routine = typeof routines.$inferSelect;
+export type InsertRoutine = typeof routines.$inferInsert;
+export type RoutineStep = typeof routineSteps.$inferSelect;
+export type InsertRoutineStep = typeof routineSteps.$inferInsert;
 
 export const paymentAttempts = mysqlTable("payment_attempts", {
   id: int("id").autoincrement().primaryKey(),

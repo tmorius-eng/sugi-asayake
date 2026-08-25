@@ -18,6 +18,7 @@ const NotFound = lazy(() => import("@/pages/NotFound"));
 const PostDetail = lazy(() => import("./pages/PostDetail"));
 const ProductDetail = lazy(() => import("./pages/ProductDetail"));
 const Profile = lazy(() => import("./pages/Profile"));
+const RoutineDetail = lazy(() => import("./pages/RoutineDetail"));
 const Shop = lazy(() => import("./pages/Shop"));
 const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 
@@ -34,6 +35,7 @@ function Router() {
   return <Suspense fallback={<RouteLoadingFallback />}><Switch>
     <Route path={"/"} component={Home} />
     <Route path={"/product/:slug"} component={ProductDetail} />
+    <Route path={"/routine/:slug"} component={RoutineDetail} />
     <Route path={"/shop"} component={Shop} />
     <Route path={"/orders"} component={MyOrders} />
     <Route path={"/profile"} component={Profile} />

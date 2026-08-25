@@ -21,17 +21,20 @@ import {
   createAdminCategory,
   createAdminPost,
   createAdminProduct,
+  createAdminRoutine,
   createEmailVerificationCode,
   createOrderFromActiveCart,
   createPasswordResetCode,
   createProductReview,
   getActiveCartForOwner,
+  getApplicableRoutineDiscount,
   createQPayPaymentAttempt,
   createStaffInvitation,
   createUserAddress,
   createUserWithPassword,
   dbPing,
   deleteAdminReview,
+  deleteAdminRoutine,
   deleteUserAccount,
   deleteUserAddress,
   deleteAdminPost,
@@ -43,6 +46,8 @@ import {
   getAdminPosts,
   getAdminProducts,
   getAdminReviews,
+  getAdminRoutineDetail,
+  getAdminRoutines,
   getAdminStaffInvitations,
   getAdminUserDetail,
   getAdminUsers,
@@ -56,10 +61,12 @@ import {
   getProductStockQuantity,
   getProductWriteConflicts,
   getPublishedCatalog,
+  getPublishedRoutineBySlug,
   getRecommendedProducts,
   getPublishedPosts,
   getPublishedPostBySlug,
   getReviewEligibility,
+  getRoutineForProduct,
   getSiteMedia,
   getStaffInvitationByTokenHash,
   getUserByEmail,
@@ -75,7 +82,9 @@ import {
   revokeStaffInvitation,
   deleteSiteMedia,
   getUserAddresses,
+  routineSlugExists,
   setReviewApproval,
+  setRoutineSteps,
   suspendUser,
   touchUserLastSignedIn,
   unsuspendUser,
@@ -84,6 +93,7 @@ import {
   updateAdminOrder,
   updateAdminPost,
   updateAdminProduct,
+  updateAdminRoutine,
   updateAdminUserRole,
   updateCartItemQuantity,
   updateNotificationPreferences,
@@ -171,6 +181,19 @@ const postUpdateSchema = postWriteSchema.partial().extend({ id: z.number().int()
   value => Object.keys(value).some(key => key !== "id"),
   { message: "Provide at least one post field to update." },
 );
+// PREMIUM-FEATURES.md TIER 4.
+const routineWriteSchema = z.object({
+  name: z.string().trim().min(2).max(180),
+  slug: slugSchema,
+  description: nullableText(2_000),
+  discountPercent: z.number().int().min(0).max(100),
+  isPublished: z.boolean(),
+});
+const routineUpdateSchema = routineWriteSchema.partial().extend({ id: z.number().int().positive() }).refine(
+  value => Object.keys(value).some(key => key !== "id"),
+  { message: "Provide at least one routine field to update." },
+);
+const routineStepInputSchema = z.object({ productId: z.number().int().positive(), stepLabel: z.string().trim().min(1).max(120) });
 const orderStatusSchema = z.enum(["pending", "confirmed", "packed", "out_for_delivery", "completed", "cancelled"]);
 const orderUpdateSchema = z.object({
   id: z.number().int().positive(),
@@ -276,14 +299,16 @@ const orderStatusMessages: Record<string, string> = {
   cancelled: "Таны захиалгыг цуцаллаа. Асуух зүйл байвал бидэнтэй холбогдоно уу.",
 };
 
-async function sendOrderConfirmationEmail(order: { orderNumber: string; customerEmail: string | null; customerName: string; totalMnt: number; deliveryMethod: string; deliveryAddress: string | null; pickupBranch: string | null; items: { name: string; quantity: number; priceMnt: number }[] }) {
+async function sendOrderConfirmationEmail(order: { orderNumber: string; customerEmail: string | null; customerName: string; totalMnt: number; deliveryMethod: string; deliveryAddress: string | null; pickupBranch: string | null; items: { name: string; quantity: number; priceMnt: number }[]; discountMnt?: number; routineName?: string | null }) {
   if (!order.customerEmail) return;
   const itemLines = order.items.map(item => `- ${item.name} × ${item.quantity} (${formatMnt(item.priceMnt * item.quantity)})`).join("\n");
   const deliveryLine = order.deliveryMethod === "store_pickup" ? `Хүргэлт: ${order.pickupBranch} салбараас өөрөө авах` : `Хүргэлт: ${order.deliveryAddress ?? "Улаанбаатар хот дотор"}`;
+  // PREMIUM-FEATURES.md TIER 4: only mentioned when it actually applied.
+  const discountLine = order.discountMnt && order.discountMnt > 0 ? `\n"${order.routineName}" routine хямдрал: -${formatMnt(order.discountMnt)}` : "";
   await sendAccountEmail({
     to: order.customerEmail,
     subject: `SUGI ASAYAKE — Захиалга баталгаажлаа (${order.orderNumber})`,
-    content: `Сайн байна уу, ${order.customerName}!\n\nТаны ${order.orderNumber} дугаартай захиалгыг хүлээн авлаа:\n\n${itemLines}\n\nНийт дүн: ${formatMnt(order.totalMnt)}\n${deliveryLine}\n\nЗахиалгынхаа явцыг веб сайтаас харах боломжтой. Худалдан авалт хийсэнд баярлалаа!`,
+    content: `Сайн байна уу, ${order.customerName}!\n\nТаны ${order.orderNumber} дугаартай захиалгыг хүлээн авлаа:\n\n${itemLines}${discountLine}\n\nНийт дүн: ${formatMnt(order.totalMnt)}\n${deliveryLine}\n\nЗахиалгынхаа явцыг веб сайтаас харах боломжтой. Худалдан авалт хийсэнд баярлалаа!`,
   });
 }
 
@@ -524,6 +549,11 @@ export const appRouter = router({
     // match against (a guest has none).
     recommended: protectedProcedure.query(({ ctx }) => getRecommendedProducts(ctx.user.id)),
   }),
+  // PREMIUM-FEATURES.md TIER 4: Routine Builder & Bundles.
+  routines: router({
+    bySlug: publicProcedure.input(z.object({ slug: z.string().min(1).max(200) })).query(({ input }) => getPublishedRoutineBySlug(input.slug)),
+    forProduct: publicProcedure.input(z.object({ productId: z.number().int().positive() })).query(({ input }) => getRoutineForProduct(input.productId)),
+  }),
   // PREMIUM-FEATURES.md TIER 2: verified-purchase reviews & ratings.
   reviews: router({
     list: publicProcedure.input(z.object({ productId: z.number().int().positive() })).query(({ input }) => getProductReviews(input.productId)),
@@ -554,6 +584,16 @@ export const appRouter = router({
     current: publicProcedure.query(({ ctx }) => {
       const owner = resolveCartOwnerForRead(ctx);
       return owner ? getActiveCartForOwner(owner) : null;
+    }),
+    // PREMIUM-FEATURES.md TIER 4: checkout-preview for the routine bundle
+    // discount — mirrors exactly what createOrderFromActiveCart will charge,
+    // since both call the same getApplicableRoutineDiscount.
+    applicableRoutineDiscount: publicProcedure.query(async ({ ctx }) => {
+      const owner = resolveCartOwnerForRead(ctx);
+      if (!owner) return null;
+      const cart = await getActiveCartForOwner(owner);
+      if (!cart?.items.length) return null;
+      return getApplicableRoutineDiscount(cart.items);
     }),
     addItem: moderateRateLimitedProcedure.input(z.object({ productId: z.number().int().positive(), quantity: z.number().int().min(1).max(100) })).mutation(async ({ ctx, input }) => {
       try {
@@ -1016,6 +1056,36 @@ export const appRouter = router({
       const result = await deleteAdminReview(input.id);
       await logAdminAction({ actorUserId: ctx.user.id, action: "review.deleted", entityType: "review", entityId: input.id });
       return result;
+    }),
+    // PREMIUM-FEATURES.md TIER 4.
+    routines: staffProcedure.query(() => getAdminRoutines()),
+    routineDetail: staffProcedure.input(z.object({ id: z.number().int().positive() })).query(({ input }) => getAdminRoutineDetail(input.id)),
+    createRoutine: staffProcedure.input(routineWriteSchema).mutation(async ({ ctx, input }) => {
+      if (await routineSlugExists(input.slug)) throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ slug өмнө нь ашиглагдсан байна." });
+      const routine = await createAdminRoutine(input);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "routine.created", entityType: "routine", entityId: routine.id, metadata: { slug: routine.slug } });
+      return routine;
+    }),
+    updateRoutine: staffProcedure.input(routineUpdateSchema).mutation(async ({ ctx, input }) => {
+      const { id, ...changes } = input;
+      if (changes.slug && await routineSlugExists(changes.slug, id)) throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ slug өмнө нь ашиглагдсан байна." });
+      const routine = await updateAdminRoutine({ id, ...changes });
+      await logAdminAction({ actorUserId: ctx.user.id, action: "routine.updated", entityType: "routine", entityId: id });
+      return routine;
+    }),
+    deleteRoutine: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const result = await deleteAdminRoutine(input.id);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "routine.deleted", entityType: "routine", entityId: input.id });
+      return result;
+    }),
+    setRoutineSteps: staffProcedure.input(z.object({ routineId: z.number().int().positive(), steps: z.array(routineStepInputSchema).min(1).max(20) })).mutation(async ({ ctx, input }) => {
+      try {
+        const result = await setRoutineSteps(input.routineId, input.steps);
+        await logAdminAction({ actorUserId: ctx.user.id, action: "routine.steps_updated", entityType: "routine", entityId: input.routineId, metadata: { stepCount: input.steps.length } });
+        return result;
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Алхмуудыг хадгалж чадсангүй." });
+      }
     }),
     // TIER 5: bulk publish/unpublish. Only touches isPublished, so none of
     // the slug/sku/category conflict checks in validateProductWrite apply —
