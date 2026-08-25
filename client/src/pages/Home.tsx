@@ -46,6 +46,11 @@ const socials = [
   { label: "Instagram", href: "https://www.instagram.com/asayake_japan_cosmetics/", Icon: Instagram },
 ];
 
+// PREMIUM-FEATURES.md TIER 3 Store Locator: hours/phone are the same across
+// all 3 branches (confirmed with Tom, 2026-08-25) — daily 11:00-20:00, one
+// shared central line (already the "залгах" button just above this list).
+const BRANCH_HOURS = "Өдөр бүр 11:00–20:00";
+const BRANCH_PHONE = "9450-9911";
 const locations = [
   { number: "01", name: "Орос элчингийн салбар", detail: "Chin Van Handdorj St, SBD - 4 khoroo, Ulaanbaatar 13120", mapUrl: "https://www.google.com/maps/search/?api=1&query=Chin+Van+Handdorj+St%2C+SBD+-+4+khoroo%2C+Ulaanbaatar+13120" },
   { number: "02", name: "Их наяд плаза", detail: "Ikh Mongol State Street 4, HUD - 15 khoroo, Ulaanbaatar 17009", mapUrl: "https://www.google.com/maps/search/?api=1&query=Ikh+Mongol+State+Street+4%2C+HUD+-+15+khoroo%2C+Ulaanbaatar+17009" },
@@ -184,7 +189,7 @@ export default function Home() {
 
         <section className="locations-section page-section" id="stores" data-reveal>
           <div className="locations-copy"><div className="section-heading"><span>04</span><span>FIND YOUR ASAYAKE</span></div><p className="eyebrow"><Navigation size={14} /> 3 БАЙРШИЛ</p><h2>Танд ойрхон<br /><em>салбар дээр.</em></h2><p className="locations-lede">Улаанбаатарын өөр өөр цэгүүдэд япон чанарыг танд ойртуулж байна.</p><a className="button button-primary" href="tel:94509911">9450-9911 руу залгах <Phone size={15} /></a></div>
-          <div className="location-side"><div className="location-image" style={{ backgroundImage: `url(${imageFor("home-stores", storeImage)})` }}><span>UB / MONGOLIA</span></div><div className="location-list">{locations.map((location) => <a className="location-row" href={location.mapUrl} target="_blank" rel="noreferrer" aria-label={`${location.name} Google Maps дээр нээх`} key={location.number}><span>{location.number}</span><div><strong>{location.name}</strong><small>{location.detail}</small></div><ArrowUpRight size={17} /></a>)}<p className="location-note"><MapPin size={14} /> Салбарын байршлыг Google Maps дээр нээх</p></div></div>
+          <div className="location-side"><div className="location-image" style={{ backgroundImage: `url(${imageFor("home-stores", storeImage)})` }}><span>UB / MONGOLIA</span></div><div className="location-list">{locations.map((location) => <a className="location-row" href={location.mapUrl} target="_blank" rel="noreferrer" aria-label={`${location.name} Google Maps дээр нээх`} key={location.number}><span>{location.number}</span><div><strong>{location.name}</strong><small>{location.detail}</small><small className="location-meta"><Clock3 size={11} /> {BRANCH_HOURS}<span className="location-meta-divider" aria-hidden="true">•</span><Phone size={11} /> {BRANCH_PHONE}</small></div><ArrowUpRight size={17} /></a>)}<p className="location-note"><MapPin size={14} /> Салбарын байршлыг Google Maps дээр нээх</p></div></div>
         </section>
 
         <section className="final-cta" data-reveal><div className="final-cta-sun" aria-hidden="true">SUGI<br />CARE</div><div><p className="eyebrow">NEED A LITTLE HELP?</p><h2>Сайн сонголт <em>ойрхон байна.</em></h2></div><a className="button button-light" href="tel:94509911">9450-9911 <Phone size={15} /></a></section>
