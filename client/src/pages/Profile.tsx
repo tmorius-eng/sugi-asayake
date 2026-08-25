@@ -9,6 +9,7 @@ import { LOYALTY_TIERS } from "@shared/loyalty";
 import { toast } from "sonner";
 import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
+import { LineSkeleton, Skeleton } from "@/components/Skeleton";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
@@ -215,7 +216,7 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: TabKey) => void }) {
       <section className="profile-section" data-reveal>
         <div className="profile-section-head"><div><h2>Сүүлийн захиалга</h2></div></div>
         {orders.isLoading ? (
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#77787c", fontSize: "13px" }}><LoaderCircle className="animate-spin" size={16} /> Ачааллаж байна…</div>
+          <div className="overview-latest-order" aria-busy="true"><div><LineSkeleton width="120px" height="14px" /><LineSkeleton width="180px" height="12px" style={{ marginTop: "8px" }} /></div><Skeleton style={{ width: "90px", height: "26px", borderRadius: "999px" }} /></div>
         ) : latestOrder ? (
           <div className="overview-latest-order">
             <div>
@@ -283,7 +284,16 @@ function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
     <section className="profile-section" data-reveal>
       <div className="profile-section-head"><div><h2>Захиалгын түүх</h2><p>Захиалгын явц болон дахин захиалах</p></div></div>
       {orders.isLoading ? (
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#77787c", fontSize: "13px" }}><LoaderCircle className="animate-spin" size={16} /> Ачааллаж байна…</div>
+        <div className="order-list" style={{ marginTop: "0" }} aria-busy="true">
+          {[0, 1].map(index => (
+            <article key={index} className="order-card">
+              <div className="order-card-head">
+                <div><LineSkeleton width="140px" height="11px" /><Skeleton style={{ width: "160px", height: "22px", marginTop: "8px" }} /></div>
+                <Skeleton style={{ width: "90px", height: "26px", borderRadius: "999px" }} />
+              </div>
+            </article>
+          ))}
+        </div>
       ) : orders.data?.length ? (
         <div className="order-list" style={{ marginTop: "0" }}>
           {orders.data.map(order => (
@@ -432,7 +442,14 @@ function WishlistTab({ onCartOpen }: { onCartOpen: () => void }) {
     <section className="profile-section" data-reveal>
       <div className="profile-section-head"><div><h2>Хүслийн жагсаалт</h2><p>Таны хадгалсан бүтээгдэхүүнүүд</p></div></div>
       {wishlist.isLoading ? (
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#77787c", fontSize: "13px" }}><LoaderCircle className="animate-spin" size={16} /> Ачааллаж байна…</div>
+        <div className="wishlist-grid" aria-busy="true">
+          {[0, 1, 2].map(index => (
+            <article className="wishlist-card" key={index}>
+              <div className="wishlist-card-image"><Skeleton style={{ position: "absolute", inset: 0, borderRadius: 0 }} /></div>
+              <div className="wishlist-card-body"><LineSkeleton width="50%" height="9px" /><LineSkeleton width="85%" height="14px" style={{ marginTop: "8px" }} /><LineSkeleton width="35%" height="16px" style={{ marginTop: "8px" }} /></div>
+            </article>
+          ))}
+        </div>
       ) : wishlist.data?.length ? (
         <div className="wishlist-grid">
           {wishlist.data.map(item => (
@@ -556,7 +573,15 @@ function AddressesTab() {
       </div>
 
       {addresses.isLoading ? (
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#77787c", fontSize: "13px" }}><LoaderCircle className="animate-spin" size={16} /> Ачааллаж байна…</div>
+        <div className="profile-address-list" aria-busy="true">
+          {[0, 1].map(index => (
+            <div key={index} className="address-card">
+              <div className="address-card-head"><MapPin size={15} style={{ color: "var(--primary)", opacity: .35 }} /><LineSkeleton width="100px" height="12px" /></div>
+              <LineSkeleton width="90%" style={{ marginTop: "10px" }} />
+              <LineSkeleton width="60%" style={{ marginTop: "6px" }} />
+            </div>
+          ))}
+        </div>
       ) : (
         <div className="profile-address-list">
           {addresses.data?.length ? addresses.data.map((address: AddressRow) => (
@@ -746,6 +771,11 @@ function SupportTab() {
 // PREMIUM-FEATURES.md TIER 5: mirrors the physical Smart POS membership
 // card (same phone-number-as-card-number concept, same cumulative-spend
 // tier thresholds) — see shared/loyalty.ts for the tier table this reads.
+// Each tier upgrades the card's own gradient (bronze/silver/gold) — the
+// card visibly getting more premium as real spend climbs is the whole
+// point, not just a bigger discount number.
+const TIER_CARD_CLASS: Record<string, string> = { "Хүрэл": "tier-bronze", "Мөнгөн": "tier-silver", "Алтан": "tier-gold" };
+
 function LoyaltyTab() {
   const status = trpc.loyalty.myStatus.useQuery();
   const data = status.data;
@@ -754,8 +784,13 @@ function LoyaltyTab() {
     <section className="profile-section" data-reveal>
       <div className="profile-section-head"><div><h2>Гишүүнчлэлийн карт</h2><p>Нийт худалдан авалтын дүнгээр автоматаар шатлан нэмэгддэг хөнгөлөлт</p></div></div>
 
-      {status.isLoading ? <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#77787c", fontSize: "13px" }}><LoaderCircle className="animate-spin" size={16} /> Ачааллаж байна…</div> : data && <>
-        <div className="loyalty-card">
+      {status.isLoading ? (
+        <div aria-busy="true">
+          <Skeleton style={{ width: "100%", height: "180px", borderRadius: "20px" }} />
+          <div className="loyalty-progress"><LineSkeleton width="140px" style={{ marginTop: "18px" }} /><Skeleton style={{ width: "100%", height: "8px", marginTop: "10px", borderRadius: "999px" }} /></div>
+        </div>
+      ) : data && <>
+        <div className={`loyalty-card ${TIER_CARD_CLASS[data.currentTier.name] ?? ""}`}>
           <div className="loyalty-card-top"><span>SUGI ASAYAKE MEMBER</span><Sparkles size={18} /></div>
           <strong className="loyalty-card-tier">{data.currentTier.name}</strong>
           <div className="loyalty-card-number">{data.cardNumber ? data.cardNumber : "Утасны дугаараа \"Хувийн профайл\" хэсэгт бүртгүүлж картаа идэвхжүүлээрэй"}</div>

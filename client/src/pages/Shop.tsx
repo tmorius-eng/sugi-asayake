@@ -1,9 +1,10 @@
-import { ArrowDownUp, ArrowUpRight, ChevronLeft, ChevronRight, Eye, Heart, LoaderCircle, MapPin, PackageCheck, Phone, RotateCcw, Search, ShoppingBag, SlidersHorizontal, Sparkles, Star, Truck } from "lucide-react";
+import { ArrowDownUp, ArrowUpRight, ChevronLeft, ChevronRight, Eye, Heart, MapPin, PackageCheck, Phone, RotateCcw, Search, ShoppingBag, SlidersHorizontal, Sparkles, Star, Truck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
 import QuickViewDialog, { type QuickViewProduct } from "@/components/QuickViewDialog";
+import { ProductCardSkeleton } from "@/components/Skeleton";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
@@ -177,7 +178,7 @@ export default function Shop() {
         {skinTypes.length ? <div className="shop-filter-pills shop-skin-filter"><button type="button" onClick={() => setSkinTypeFilter("all")} className={skinTypeFilter === "all" ? "active" : ""}>Арьсны төрөл: Бүгд</button>{skinTypes.map(type => <button type="button" key={type} onClick={() => setSkinTypeFilter(type)} className={skinTypeFilter === type ? "active" : ""}>{skinTypeLabels[type]}</button>)}</div> : null}
         <div className="shop-control-row"><label className="stock-toggle"><input type="checkbox" checked={inStockOnly} onChange={event => setInStockOnly(event.target.checked)} /><span><PackageCheck size={14} /> Бэлэн нөөцтэй</span></label><label className="sort-control"><ArrowDownUp size={14} /><span>Эрэмбэ</span><select value={sort} onChange={event => setSort(event.target.value as CatalogSortOption)}><option value="featured">Онцлох</option><option value="price-low">Үнэ: багаас</option><option value="price-high">Үнэ: ихээс</option><option value="name-asc">Нэр: A–Я</option></select></label></div>
       </section>
-      {catalogLoading ? <div className="shop-loading"><LoaderCircle className="animate-spin" size={30} /> {isSearching ? "Хайж байна" : "Каталогийг бэлдэж байна"}</div> : catalogErrored ? <section className="shop-status-card error"><h2>Каталогийг ачаалж чадсангүй.</h2><p>Интернэт холболтоо шалгаад дахин оролдоно уу.</p></section> : !isSearching && products.length === 0 && !forceZeroResults ? <section className="shop-discovery" data-reveal>
+      {catalogLoading ? <section className="shop-product-grid" aria-busy="true" aria-label={isSearching ? "Хайж байна" : "Каталогийг бэлдэж байна"}>{Array.from({ length: 8 }, (_, index) => <ProductCardSkeleton key={index} />)}</section> : catalogErrored ? <section className="shop-status-card error"><h2>Каталогийг ачаалж чадсангүй.</h2><p>Интернэт холболтоо шалгаад дахин оролдоно уу.</p></section> : !isSearching && products.length === 0 && !forceZeroResults ? <section className="shop-discovery" data-reveal>
         <div className="shop-discovery-heading"><p className="shop-kicker"><span /> SUGI ASAYAKE / DISCOVER</p><h2>Өнөөдрийн хэрэгцээ<br /><em>эндээс эхэлнэ.</em></h2><p>Онлайн каталогийг бид салбарын бодит нөөцтэй нь уялдуулан шинэчилж байна. Харин та өөрт ойр салбараас дараах ангиллаар шууд асууж болно.</p></div>
         <div className="shop-category-deck">{discoveryCategories.map(item => <div className={`shop-category-card ${item.tone}`} key={item.number}><span>{item.number}</span><div><small>SUGI DAILY CARE</small><h3>{item.title}</h3><p>{item.detail}</p></div><ArrowUpRight size={20} /></div>)}</div>
         <div className="shop-discovery-cta" id="shop-contact"><div><MapPin size={20} /><span><strong>3 салбар, нэг өдөр тутмын сонголт.</strong><small>Таны хайж буй бүтээгдэхүүнийг ойр салбараас асуугаарай.</small></span></div><div><Link href="/#stores">Салбар олох <ArrowUpRight size={16} /></Link><a href="tel:94509911">9450-9911 <Phone size={15} /></a></div></div>

@@ -284,3 +284,19 @@ Tom-ий шууд хүсэлтээр (git file size-ийг шалгах + гүн
 **Reddit/сайтын судалгаа**: tRPC+Drizzle+Zod том codebase дээр TypeScript compile хурд удаашрах нь (энэ session-д мэдэгдэхүйц болоогүй), React Query-ийн `enabled` toggle бүрт cache байгаа ч дахин fetch хийдэг зан төлөв (Shop.tsx/HeaderSearch.tsx-ийн debounce+enabled дизайнд тохирсон, асуудал биш) зэргийг баталгаажуулсан.
 
 **Баталгаажуулалт**: `pnpm check`/`pnpm build` цэвэр, `pnpm test` 125/125 (бүх gate идэвхтэй), 57 passed/68 skipped (CI-тэй ижил горим).
+
+## 2026-08-25 (үргэлжлэл 3): World-class UI/UX polish — захиалгын celebration хуудас, skeleton loading, product zoom, гишүүнчлэлийн картны tier дизайн
+
+Tom-ий "world-class premium UI/UX бас server бүтцийг бүрэн болгоод, шинэ creative санаа нэмээд ug!! нэгэн зэрэг надтай brainstorm хий" гэсэн хүсэлтээр AskUserQuestion-оор баримжаалсны дараа (Tom **бүх 4 сонголтыг** нэг дор сонгосон: захиалгын celebration хуудас, skeleton loading бүх газарт, гишүүнчлэлийн карт+product zoom, data/server бүрэн бүтэн байдал [E2E/SEO/Sentry]; бодит бараа/зургийн migration-ыг хойшлуулж эхлээд UI/UX ажиллахаар шийдсэн) дараах 4 хэсгийг хийсэн:
+
+1. **Захиалгын баталгаажуулах "celebration" хуудас** (`client/src/components/OrderConfirmation.tsx`, шинэ) — `checkout.createOrder` амжилттай болмогц Checkout.tsx одоо full-page баталгаажуулах дэлгэц рүү шилждэг (жижиг toast мессежийн оронд): pop animation-той шалгах тэмдэг, захиалгын дугаарын badge, item-бүрийн задаргаа (routine/coupon/loyalty хямдрал тус тусад нь), хүргэлт/очиж авах мэдээлэл, "Захиалгаа харах" (нэвтэрсэн бол) / "Үргэлжлүүлэн худалдан авах" CTA. QPay захиалгын хувьд зөвхөн `paymentStatus === "paid"` болсны дараа л celebration харагддаг (`isOrderConfirmed` нөхцөл).
+2. **Product zoom/lightbox** (`client/src/components/ImageLightbox.tsx`, шинэ) — ProductDetail-ийн үндсэн зураг дээр дарахад (эсвэл hover-т гарч ирэх томруулах icon) бүтэн дэлгэцийн lightbox нээгддэг: сум товч+гар товчлуур (←/→)-оор gallery-ээр шилжих, зураг дээр дахин дарж 1.9x zoom toggle хийх, counter ("2 / 5").
+3. **Skeleton loading screens** — spinner-ийн оронд бодит контентын хэлбэртэй placeholder (`client/src/components/Skeleton.tsx`: `Skeleton`/`ProductCardSkeleton`/`LineSkeleton`, shimmer animation `index.css`-д) дараах бүх газарт:
+   - `Shop.tsx` — каталог ачаалж байх үед 8 ширхэг `ProductCardSkeleton` grid (өмнө нь ганц spinner байсан)
+   - `ProductDetail.tsx` — бодит хуудасны 2-баганат бүтэц (зураг+thumbnail-ууд зүүн, гарчиг/үнэ/тайлбар/товч баруун)-тэй яг адилхан skeleton
+   - `Profile.tsx`-ийн Overview (сүүлийн захиалга), Orders (захиалгын жагсаалт), Wishlist (grid карт), Addresses (хаягийн жагсаалт), Loyalty (гишүүнчлэлийн карт) таб бүрийн ачаалалт — бүгд тухайн хэсгийн бодит хэлбэртэй skeleton, ерөнхий "Ачааллаж байна…" spinner мессежийн оронд.
+4. **Гишүүнчлэлийн картны tier-ээр ялгаатай дизайн** (`Profile.tsx`-ийн `LoyaltyTab`, `index.css`) — Хүрэл/Мөнгөн/Алтан гишүүнчлэлийн тус бүрийн градиент+contrast-тохируулсан текст өнгө (`.tier-bronze`/`.tier-silver`/`.tier-gold`), карт дээр hover-т гардаг shine-sweep анимаци (`::before` `translateX`) — картын дизайн өөрөө илүү "premium" болж байгааг шатлал ахих тусам харуулна.
+
+**Баталгаажуулалт**: `pnpm check`/`pnpm build` цэвэр, `pnpm test` 125/125 (бүх gate идэвхтэй, бодит MySQL+MinIO дээр).
+
+**Дараагийн (Tom-ийн сонгосон 4 дэх зүйл, хараахан эхлээгүй)**: Data/server бүрэн бүтэн байдал — E2E тест (Playwright суулгаагүй), SEO (meta tag/structured data), Sentry error tracking. Мөн хойшлогдсон: бодит 937 барааны зураг + шинэ компьютерт өгөгдлийн migration.
