@@ -7,7 +7,7 @@ import QuickViewDialog, { type QuickViewProduct } from "@/components/QuickViewDi
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { filterCatalogProducts, filterCatalogStock, getCatalogCategories, sortCatalogProducts, type CatalogSortOption } from "@shared/catalog-filter";
+import { filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCatalogCategories, getCatalogSkinTypes, skinTypeLabels, sortCatalogProducts, type CatalogSortOption, type SkinType } from "@shared/catalog-filter";
 import { rememberRecentlyViewed, resolveRecentlyViewed } from "@shared/recently-viewed";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 
@@ -49,10 +49,37 @@ function RecentlyViewed({ products, rememberedCount, onRemember, onQuickView }: 
   </section>;
 }
 
+type RecommendedForYouProps = {
+  products: QuickViewProduct[];
+  onRemember: (id: number) => void;
+  onQuickView: (product: QuickViewProduct) => void;
+};
+
+function RecommendedForYou({ products, onRemember, onQuickView }: RecommendedForYouProps) {
+  if (!products.length) return null;
+  return <section className="recently-viewed-section" data-reveal>
+    <div className="recently-viewed-heading">
+      <div>
+        <p className="shop-kicker"><span /> ТАНД ЗОРИУЛАН</p>
+        <h2>Танд <em>санал болгож байна.</em></h2>
+      </div>
+      <p>Таны профайл дээр хадгалсан арьсны төрөл, арчилгааны сонирхол, интерьер загварт тохирсон бүтээгдэхүүнүүд.</p>
+    </div>
+    <div className="recently-viewed-grid">{products.map(product => <article className="recently-viewed-card" key={product.id}>
+      <Link href={`/product/${product.slug}`} onClick={() => onRemember(product.id)}>
+        <img src={product.imageUrl ?? fallbackImage} alt={product.name} />
+        <div><p>{product.brand ?? product.categoryName ?? "SUGI ASAYAKE"}</p><h3>{product.name}</h3><strong>{formatMnt(product.priceMnt)}</strong></div>
+      </Link>
+      <button type="button" onClick={() => onQuickView(product)} aria-label={`${product.name} шуурхай харах`}>Шуурхай харах <Eye size={14} /></button>
+    </article>)}</div>
+  </section>;
+}
+
 export default function Shop() {
   const qaHistoryMode = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("historyQa") : null;
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
+  const [skinTypeFilter, setSkinTypeFilter] = useState<SkinType | "all">("all");
   const [inStockOnly, setInStockOnly] = useState(false);
   const [sort, setSort] = useState<CatalogSortOption>("featured");
   const [cartOpen, setCartOpen] = useState(false);
@@ -62,6 +89,7 @@ export default function Shop() {
   const utils = trpc.useUtils();
   const catalog = trpc.catalog.list.useQuery();
   const wishlist = trpc.profile.wishlist.list.useQuery(undefined, { enabled: isAuthenticated });
+  const recommended = trpc.catalog.recommended.useQuery(undefined, { enabled: isAuthenticated });
   const wishlistIds = useMemo(() => new Set(wishlist.data?.map(item => item.productId) ?? []), [wishlist.data]);
   const toggleWishlist = trpc.profile.wishlist.toggle.useMutation({ onSuccess: () => utils.profile.wishlist.list.invalidate() });
   const onToggleWishlist = (productId: number) => {
@@ -72,14 +100,15 @@ export default function Shop() {
   const products = catalog.data ?? [];
   const cartCount = cart.data?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   const categories = useMemo(() => getCatalogCategories(products), [products]);
+  const skinTypes = useMemo(() => getCatalogSkinTypes(products), [products]);
   const filtered = useMemo(() => {
-    const matchingProducts = filterCatalogProducts(products, search, category);
+    const matchingProducts = filterCatalogSkinType(filterCatalogProducts(products, search, category), skinTypeFilter);
     return sortCatalogProducts(filterCatalogStock(matchingProducts, inStockOnly), sort);
-  }, [products, category, search, inStockOnly, sort]);
+  }, [products, category, search, inStockOnly, sort, skinTypeFilter]);
   const effectiveRecentIds = qaHistoryMode === "unavailable" ? [999_999] : recentlyViewedIds;
   const forceZeroResults = qaHistoryMode === "zero-filter";
   const recentlyViewed = useMemo(() => resolveRecentlyViewed(products, effectiveRecentIds), [products, effectiveRecentIds]);
-  useScrollReveal(`${catalog.isLoading}-${products.length}-${filtered.length}-${recentlyViewed.length}`);
+  useScrollReveal(`${catalog.isLoading}-${products.length}-${filtered.length}-${recentlyViewed.length}-${recommended.data?.length ?? 0}`);
 
   useEffect(() => {
     try {
@@ -88,7 +117,7 @@ export default function Shop() {
     } catch { window.localStorage.removeItem(RECENTLY_VIEWED_KEY); }
   }, []);
 
-  const resetControls = () => { setSearch(""); setCategory("all"); setInStockOnly(false); setSort("featured"); };
+  const resetControls = () => { setSearch(""); setCategory("all"); setSkinTypeFilter("all"); setInStockOnly(false); setSort("featured"); };
   const rememberProduct = (productId: number) => setRecentlyViewedIds(current => {
     const next = rememberRecentlyViewed(current, productId);
     window.localStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify(next));
@@ -107,6 +136,7 @@ export default function Shop() {
       <section className="shop-filter" data-reveal>
         <div><p><SlidersHorizontal size={15} /> АНГИЛЛААР ШҮҮХ</p><span>Таны өдөр тутмын хэрэгцээний хэмнэлээр</span></div>
         <div className="shop-filter-pills"><button type="button" onClick={() => setCategory("all")} className={category === "all" ? "active" : ""}>Бүгд</button>{categories.map(item => <button type="button" key={item} onClick={() => setCategory(item)} className={category === item ? "active" : ""}>{item}</button>)}</div>
+        {skinTypes.length ? <div className="shop-filter-pills shop-skin-filter"><button type="button" onClick={() => setSkinTypeFilter("all")} className={skinTypeFilter === "all" ? "active" : ""}>Арьсны төрөл: Бүгд</button>{skinTypes.map(type => <button type="button" key={type} onClick={() => setSkinTypeFilter(type)} className={skinTypeFilter === type ? "active" : ""}>{skinTypeLabels[type]}</button>)}</div> : null}
         <div className="shop-control-row"><label className="stock-toggle"><input type="checkbox" checked={inStockOnly} onChange={event => setInStockOnly(event.target.checked)} /><span><PackageCheck size={14} /> Бэлэн нөөцтэй</span></label><label className="sort-control"><ArrowDownUp size={14} /><span>Эрэмбэ</span><select value={sort} onChange={event => setSort(event.target.value as CatalogSortOption)}><option value="featured">Онцлох</option><option value="price-low">Үнэ: багаас</option><option value="price-high">Үнэ: ихээс</option><option value="name-asc">Нэр: A–Я</option></select></label></div>
       </section>
       {catalog.isLoading ? <div className="shop-loading"><LoaderCircle className="animate-spin" size={30} /> Каталогийг бэлдэж байна</div> : catalog.isError ? <section className="shop-status-card error"><h2>Каталогийг ачаалж чадсангүй.</h2><p>Интернэт холболтоо шалгаад дахин оролдоно уу.</p></section> : products.length === 0 && !forceZeroResults ? <section className="shop-discovery" data-reveal>
@@ -118,6 +148,7 @@ export default function Shop() {
         <Link href={`/product/${product.slug}`} onClick={() => rememberProduct(product.id)} className="shop-product-link"><div className="shop-product-image"><img src={product.imageUrl ?? fallbackImage} alt={product.name} /><span>{product.stockQuantity > 0 ? `${product.stockQuantity} ширхэг үлдсэн` : "Нөөц дууссан"}</span><i aria-hidden="true">VIEW</i></div><div className="shop-product-copy"><p>{product.brand ?? product.categoryName ?? "SUGI ASAYAKE"}</p><h2>{product.name}</h2><small>{product.shortDescription ?? "Японоос баталгаат бүтээгдэхүүн"}</small><div><strong>{formatMnt(product.priceMnt)}</strong><span><ShoppingBag size={15} /></span></div></div></Link>
         <button type="button" className="quick-view-trigger" onClick={() => openQuickView(product)} aria-label={`${product.name} шуурхай харах`}><Eye size={15} /> Шуурхай харах</button>
       </article>)}</section> : <section className="shop-status-card" data-reveal><Search size={26} /><h2>Энэ удаа тохирох бүтээгдэхүүн олдсонгүй.</h2><p>Өөр хайлтын үг хэрэглэж үзэх эсвэл бүх ангиллыг дахин хараарай.</p><button type="button" onClick={resetControls}><RotateCcw size={14} /> Шүүлтүүр арилгах</button></section>}
+      {isAuthenticated && recommended.data?.length ? <RecommendedForYou products={recommended.data} onRemember={rememberProduct} onQuickView={openQuickView} /> : null}
       {!catalog.isLoading && !catalog.isError ? <RecentlyViewed products={recentlyViewed} rememberedCount={effectiveRecentIds.length} onRemember={rememberProduct} onQuickView={openQuickView} /> : null}
     </main>
     <QuickViewDialog open={Boolean(quickViewProduct)} product={quickViewProduct} onOpenChange={open => { if (!open) setQuickViewProduct(null); }} onAdded={() => setCartOpen(true)} />

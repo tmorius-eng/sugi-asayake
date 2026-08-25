@@ -36,3 +36,29 @@ export function sortCatalogProducts<T extends CatalogDiscoveryItem>(products: T[
   if (sort === "name-asc") return copy.sort((a, b) => a.name.localeCompare(b.name, "mn"));
   return copy;
 }
+
+// PREMIUM-FEATURES.md TIER 1: skin-type filter pill, alongside the existing
+// category pills — mirrors the admin panel's skinTypeLabels.
+export type SkinType = "dry" | "oily" | "combination" | "sensitive" | "normal";
+
+export const skinTypeLabels: Record<SkinType, string> = {
+  dry: "Хуурай",
+  oily: "Тослог",
+  combination: "Холимог",
+  sensitive: "Мэдрэмтгий",
+  normal: "Хэвийн",
+};
+
+export type CatalogSkinTypeItem = {
+  skinType?: SkinType | null;
+};
+
+export function getCatalogSkinTypes<T extends CatalogSkinTypeItem>(products: T[]) {
+  const order: SkinType[] = ["dry", "oily", "combination", "sensitive", "normal"];
+  const present = new Set(products.map(product => product.skinType).filter((value): value is SkinType => Boolean(value)));
+  return order.filter(type => present.has(type));
+}
+
+export function filterCatalogSkinType<T extends CatalogSkinTypeItem>(products: T[], skinType: SkinType | "all") {
+  return skinType === "all" ? products : products.filter(product => product.skinType === skinType);
+}

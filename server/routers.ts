@@ -52,6 +52,7 @@ import {
   getProductStockQuantity,
   getProductWriteConflicts,
   getPublishedCatalog,
+  getRecommendedProducts,
   getPublishedPosts,
   getPublishedPostBySlug,
   getSiteMedia,
@@ -95,6 +96,13 @@ import { siteMediaSlotKeys } from "../shared/site-media";
 
 const slugSchema = z.string().trim().min(2).max(200).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens only.");
 const nullableText = (max: number) => z.string().trim().max(max).nullable().optional();
+// Shared between profile.updatePreferences (what a shopper says about
+// themselves) and the admin product form (what a product is tagged with) —
+// see PREMIUM-FEATURES.md TIER 1. Same vocabulary on both sides is what
+// makes "recommended for you" a plain intersection, not a lookup table.
+const skinTypeSchema = z.enum(["dry", "oily", "combination", "sensitive", "normal"]).nullable().optional();
+const skinConcernsSchema = z.string().trim().max(300).nullable().optional();
+const interiorStyleSchema = z.string().trim().max(60).nullable().optional();
 // Same shape checkout.createOrder already validates customerPhone with —
 // reused here so profile.update and the address book accept exactly the
 // same phone formats a delivery actually needs.
@@ -121,6 +129,9 @@ const productWriteSchema = z.object({
   galleryJson: nullableText(20_000),
   stockQuantity: z.number().int().min(0).max(1_000_000),
   isPublished: z.boolean(),
+  skinType: skinTypeSchema,
+  skinConcerns: skinConcernsSchema,
+  interiorStyle: interiorStyleSchema,
 });
 
 const categoryWriteSchema = z.object({
@@ -502,6 +513,10 @@ export const appRouter = router({
   catalog: router({
     list: publicProcedure.query(() => getPublishedCatalog()),
     bySlug: publicProcedure.input(z.object({ slug: z.string().min(1).max(200) })).query(({ input }) => getProductBySlug(input.slug)),
+    // PREMIUM-FEATURES.md TIER 1: "recommended for you" — protected, not
+    // public, since it's meaningless without a saved preference profile to
+    // match against (a guest has none).
+    recommended: protectedProcedure.query(({ ctx }) => getRecommendedProducts(ctx.user.id)),
   }),
   content: router({
     latestPosts: publicProcedure.query(() => getPublishedPosts()),
@@ -634,14 +649,14 @@ export const appRouter = router({
         }
       }),
     }),
-    // "Гоо сайхны профайл" tab. Captured for a future product-tag-matched
-    // recommendation engine (see the schema doc comment) — not wired into
-    // catalog filtering/ranking yet.
+    // "Гоо сайхны профайл" tab. Drives catalog.recommended (PREMIUM-FEATURES.md
+    // TIER 1) — matched against the same skinType/skinConcerns/interiorStyle
+    // tags on products.
     updatePreferences: protectedProcedure
       .input(z.object({
-        skinType: z.enum(["dry", "oily", "combination", "sensitive", "normal"]).nullable().optional(),
-        skinConcerns: z.string().trim().max(300).nullable().optional(),
-        interiorStyle: z.string().trim().max(60).nullable().optional(),
+        skinType: skinTypeSchema,
+        skinConcerns: skinConcernsSchema,
+        interiorStyle: interiorStyleSchema,
       }))
       .mutation(async ({ ctx, input }) => {
         const updated = await updateUserPreferences(ctx.user.id, input);

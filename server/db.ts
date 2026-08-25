@@ -390,11 +390,66 @@ export async function getPublishedCatalog() {
       stockQuantity: products.stockQuantity,
       categoryName: productCategories.name,
       categorySlug: productCategories.slug,
+      skinType: products.skinType,
+      skinConcerns: products.skinConcerns,
+      interiorStyle: products.interiorStyle,
     })
     .from(products)
     .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
     .where(eq(products.isPublished, true))
     .orderBy(asc(productCategories.sortOrder), desc(products.createdAt));
+}
+
+// PREMIUM-FEATURES.md TIER 1: "recommended for you", scored by how many of
+// the shopper's saved Beauty & Home preferences (server/routers.ts
+// profile.updatePreferences) a product's own tags match. Matching happens
+// in JS rather than SQL — the catalog is small enough that this is simpler
+// and more obviously correct than a fragile FIND_IN_SET/LIKE query over the
+// free-form skinConcerns string. Returns [] (not an error) for a shopper who
+// hasn't set any preferences yet — there's nothing to match against.
+export async function getRecommendedProducts(userId: number, limit = 8) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const userRows = await db.select({ skinType: users.skinType, skinConcerns: users.skinConcerns, interiorStyle: users.interiorStyle }).from(users).where(eq(users.id, userId)).limit(1);
+  const preferences = userRows[0];
+  if (!preferences || (!preferences.skinType && !preferences.skinConcerns && !preferences.interiorStyle)) return [];
+
+  const userConcerns = new Set((preferences.skinConcerns ?? "").split(",").map(value => value.trim()).filter(Boolean));
+
+  const candidates = await db.select({
+    id: products.id,
+    name: products.name,
+    slug: products.slug,
+    brand: products.brand,
+    shortDescription: products.shortDescription,
+    priceMnt: products.priceMnt,
+    compareAtPriceMnt: products.compareAtPriceMnt,
+    imageUrl: products.imageUrl,
+    stockQuantity: products.stockQuantity,
+    categoryName: productCategories.name,
+    skinType: products.skinType,
+    skinConcerns: products.skinConcerns,
+    interiorStyle: products.interiorStyle,
+  }).from(products)
+    .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
+    .where(and(eq(products.isPublished, true), gte(products.stockQuantity, 1)));
+
+  const scored = candidates
+    .map(product => {
+      let score = 0;
+      if (preferences.skinType && product.skinType === preferences.skinType) score += 2;
+      if (preferences.interiorStyle && product.interiorStyle && product.interiorStyle === preferences.interiorStyle) score += 2;
+      if (product.skinConcerns) {
+        const productConcerns = product.skinConcerns.split(",").map(value => value.trim()).filter(Boolean);
+        score += productConcerns.filter(concern => userConcerns.has(concern)).length;
+      }
+      return { product, score };
+    })
+    .filter(entry => entry.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  return scored.slice(0, limit).map(entry => entry.product);
 }
 
 export async function getProductBySlug(slug: string) {
@@ -417,6 +472,9 @@ export async function getProductBySlug(slug: string) {
       stockQuantity: products.stockQuantity,
       categoryName: productCategories.name,
       categorySlug: productCategories.slug,
+      skinType: products.skinType,
+      skinConcerns: products.skinConcerns,
+      interiorStyle: products.interiorStyle,
     })
     .from(products)
     .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
@@ -694,6 +752,9 @@ export async function getAdminProducts() {
       isPublished: products.isPublished,
       updatedAt: products.updatedAt,
       categoryName: productCategories.name,
+      skinType: products.skinType,
+      skinConcerns: products.skinConcerns,
+      interiorStyle: products.interiorStyle,
     })
     .from(products)
     .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
@@ -1019,6 +1080,9 @@ export type ProductWriteInput = {
   galleryJson?: string | null;
   stockQuantity: number;
   isPublished: boolean;
+  skinType?: "dry" | "oily" | "combination" | "sensitive" | "normal" | null;
+  skinConcerns?: string | null;
+  interiorStyle?: string | null;
 };
 
 export async function createAdminProduct(input: ProductWriteInput) {
@@ -1039,6 +1103,9 @@ export async function createAdminProduct(input: ProductWriteInput) {
     galleryJson: input.galleryJson ?? null,
     stockQuantity: input.stockQuantity,
     isPublished: input.isPublished,
+    skinType: input.skinType ?? null,
+    skinConcerns: input.skinConcerns ?? null,
+    interiorStyle: input.interiorStyle ?? null,
   });
 
   const created = await db.select().from(products).where(eq(products.slug, input.slug)).limit(1);
@@ -1073,6 +1140,9 @@ export async function updateAdminProduct(input: { id: number } & Partial<Product
   if (input.galleryJson !== undefined) changes.galleryJson = input.galleryJson;
   if (input.stockQuantity !== undefined) changes.stockQuantity = input.stockQuantity;
   if (input.isPublished !== undefined) changes.isPublished = input.isPublished;
+  if (input.skinType !== undefined) changes.skinType = input.skinType;
+  if (input.skinConcerns !== undefined) changes.skinConcerns = input.skinConcerns;
+  if (input.interiorStyle !== undefined) changes.interiorStyle = input.interiorStyle;
 
   await db.update(products).set(changes).where(eq(products.id, input.id));
   const updated = await db.select().from(products).where(eq(products.id, input.id)).limit(1);

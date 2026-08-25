@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { filterCatalogProducts, filterCatalogStock, getCatalogCategories, sortCatalogProducts } from "../shared/catalog-filter";
+import { filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCatalogCategories, getCatalogSkinTypes, sortCatalogProducts } from "../shared/catalog-filter";
 
 const catalog = [
-  { name: "Gokujyun Lotion", brand: "Hada Labo", categoryName: "Арьс арчилгаа", shortDescription: "Hyaluronic moisture", priceMnt: 29000, stockQuantity: 4 },
-  { name: "Vitamin C", brand: "DHC", categoryName: "Эрүүл мэнд", shortDescription: "Daily supplement", priceMnt: 17000, stockQuantity: 0 },
-  { name: "Aqua Gel", brand: "SUGI", categoryName: "Арьс арчилгаа", shortDescription: "Daily hydration", priceMnt: 22000, stockQuantity: 8 },
+  { name: "Gokujyun Lotion", brand: "Hada Labo", categoryName: "Арьс арчилгаа", shortDescription: "Hyaluronic moisture", priceMnt: 29000, stockQuantity: 4, skinType: "dry" as const },
+  { name: "Vitamin C", brand: "DHC", categoryName: "Эрүүл мэнд", shortDescription: "Daily supplement", priceMnt: 17000, stockQuantity: 0, skinType: null },
+  { name: "Aqua Gel", brand: "SUGI", categoryName: "Арьс арчилгаа", shortDescription: "Daily hydration", priceMnt: 22000, stockQuantity: 8, skinType: "oily" as const },
 ];
 
 describe("catalog discovery", () => {
@@ -28,5 +28,16 @@ describe("catalog discovery", () => {
     expect(sortCatalogProducts(catalog, "price-high").map(item => item.name)).toEqual(["Gokujyun Lotion", "Aqua Gel", "Vitamin C"]);
     expect(sortCatalogProducts(catalog, "name-asc").map(item => item.name)).toEqual(["Aqua Gel", "Gokujyun Lotion", "Vitamin C"]);
     expect(sortCatalogProducts(catalog, "featured")).toEqual(catalog);
+  });
+
+  it("derives the skin-type pills that actually appear in the catalog, in a fixed order", () => {
+    expect(getCatalogSkinTypes(catalog)).toEqual(["dry", "oily"]);
+    expect(getCatalogSkinTypes([{ skinType: null }])).toEqual([]);
+  });
+
+  it("filters catalog products by skin type, leaving untagged products out once a filter is picked", () => {
+    expect(filterCatalogSkinType(catalog, "all")).toEqual(catalog);
+    expect(filterCatalogSkinType(catalog, "dry")).toEqual([catalog[0]]);
+    expect(filterCatalogSkinType(catalog, "sensitive")).toEqual([]);
   });
 });

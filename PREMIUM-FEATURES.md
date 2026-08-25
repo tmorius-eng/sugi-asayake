@@ -19,11 +19,18 @@
 
 ---
 
-## TIER 1 — Personalization суурь (хамгийн хямд, хамгийн өндөр өгөөжтэй)
-- [ ] `products` хүснэгтэд `skinType`/`skinConcerns`/`interiorStyle` төрлийн tag багана нэмэх (өнөөдрийн байдлаар зөвхөн `users` дээр байгаа, `products` дээр огт байхгүй — profile-ийн дата юунд ч ашиглагдахгүй байгаагийн шалтгаан яг энэ)
-- [ ] Admin панелийн бүтээгдэхүүн засварлах маягтад эдгээр tag сонгох UI нэмэх
-- [ ] Нүүр/Shop хуудсанд "Танд санал болгох" section — нэвтэрсэн хэрэглэгчийн `skinType`/`skinConcerns`-тэй тохирох бүтээгдэхүүнийг эрэмбэлж харуулах
-- [ ] Shop хуудсанд skin-type/concern filter pill (одоо байгаа ангиллын pill-тэй зэрэгцүүлж)
+## TIER 1 — Personalization суурь (хамгийн хямд, хамгийн өндөр өгөөжтэй) — ✅ ДУУССАН (2026-08-25)
+- [x] `products` хүснэгтэд `skinType`/`skinConcerns`/`interiorStyle` төрлийн tag багана нэмэх (`drizzle/0021_product_preference_tags.sql`, `drizzle/schema.ts`) — `users`-ийн ижил гурван талбартай яг адилхан үгсийн сангаар, тусдаа tagging систем шаардалгүй intersection match хийх зорилготой
+- [x] Admin панелийн бүтээгдэхүүн засварлах маягтад эдгээр tag сонгох UI нэмэх (`AdminWorkspace.tsx` — "PERSONALIZATION TAGS" хэсэг: skin-type select, skin-concerns/interior-style text input)
+- [x] Server: `server/db.ts`-д `getRecommendedProducts(userId, limit)` — хэрэглэгчийн хадгалсан preference-той score-той тохирох (skinType/interiorStyle яг таарвал +2, skinConcerns тус бүр +1) нийтлэгдсэн, нөөцтэй бүтээгдэхүүнийг буцаана; `server/routers.ts`-д `catalog.recommended` (protected) endpoint
+- [x] Shop хуудсанд "Танд санал болгох" section (`RecommendedForYou` component, `Shop.tsx`) — зөвхөн нэвтэрсэн хэрэглэгчид, зөвхөн тохирох бараа байвал л харагдана (одоо байгаа `RecentlyViewed`-тэй ижил visual card загвар ашигласан)
+- [x] Shop хуудсанд skin-type filter pill (`shared/catalog-filter.ts`-ийн `getCatalogSkinTypes`/`filterCatalogSkinType`, зөвхөн каталогт тухайн төрлөөр tag-тай бараа байвал л pill row харагдана — categoy pill-тэй ижил UX)
+
+**Тест хийсэн байдал:**
+- `pnpm check` цэвэр (0 алдаа)
+- `pnpm test` бүх integration flag-тай: 19 файл, 83/83 тест ✅ (шинээр нэмсэн `getCatalogSkinTypes`/`filterCatalogSkinType`-ийн 2 unit тест орсон)
+- `pnpm build` амжилттай
+- Бодит HTTP-ээр (throwaway admin + shopper аккаунт, dev server `pnpm dev` ажиллаж байх үед): бүтээгдэхүүнийг admin-аар tag хийсэн → `catalog.list` public endpoint tag-ыг харуулсан → tag хийхийн өмнө `catalog.recommended` хоосон `[]` буцаасан → `profile.updatePreferences`-ээр тохирох preference хадгалсны дараа яг тэр бүтээгдэхүүнийг (зөв `stockQuantity`/`categoryName`-тай, `QuickViewProduct` төрөлд бүрэн нийцтэй) буцаасныг баталгаажуулсан. Тест дууссаны дараа бүтээгдэхүүн (`Diane shampoo`, id=1)-ийг яг анхны төлөвт нь (`stockQuantity=0`, бүх tag хоосон) сэргээж, throwaway 2 аккаунтыг `admin_audit_logs`-той хамт устгасан.
 
 ## TIER 2 — Итгэлийн систем: Reviews & Ratings
 - [ ] `product_reviews` хүснэгт (rating 1-5, сэтгэгдэл, **verified purchase** тэмдэг — зөвхөн тухайн барааг захиалсан хэрэглэгч л сэтгэгдэл бичих боломжтой)

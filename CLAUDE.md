@@ -115,7 +115,9 @@ TIER 0, TIER 1, TIER 5-ын CI+backup (локал бэлтгэл) дууссан
 
 **Хэрэглэгчийн профайл хуудас (`/profile`) мөн дууссан (2026-08-21)** — avatar/нэр/утас засах, олон хаяг хадгалах address book, checkout-д автомат бөглөлт. Мөн энэ өдөр secondary pages (Login/ForgotPassword/VerifyEmail/AcceptInvitation/Legal/MyOrders/NotFound) болон admin sidebar-ийн бренд/дизайн шинэчлэл хийгдсэн. Дэлгэрэнгүй: [CLAUDE.md](CLAUDE.md)-ийн "2026-08-21" хэсэг, [ROADMAP.md](ROADMAP.md)-ийн TIER 2.
 
-Дараагийн санал: UX-RESEARCH.md-ийн №2 (хүргэлтийн үнэ эрт харуулах), ROADMAP-ийн TIER 2-ын үлдсэн зүйлс (зурган боловсруулалт, сервер талын хайлт, refund урсгал, захиалгын имэйл/SMS мэдэгдэл холбох), эсвэл TIER 5-ын үлдсэн зүйлс (Sentry, staging, CDN, uptime monitoring).
+**Захиалгын баталгаажуулах/статус имэйл мэдэгдэл нэмэгдсэн (2026-08-25)** — `checkout.createOrder`, `admin.updateOrder`, `admin.bulkUpdateOrderStatus` бүгд Brevo-гоор захиалагчид имэйл илгээдэг (best-effort, алдаа гарвал үндсэн үйлдлийг зогсоохгүй). Мөн **PREMIUM-FEATURES.md-ийн TIER 1 (Personalization суурь) дууссан (2026-08-25)** — `products` дээр `skinType`/`skinConcerns`/`interiorStyle` tag, admin панелийн tag сонгох UI, `catalog.recommended` endpoint, Shop хуудсанд "Танд санал болгох" section + skin-type filter pill. Бүгд `pnpm check`/`pnpm test` (83/83)/`pnpm build` болон бодит HTTP-ээр баталгаажсан — дэлгэрэнгүй [PREMIUM-FEATURES.md](PREMIUM-FEATURES.md)-ийн TIER 1 хэсэгт.
+
+Дараагийн санал: PREMIUM-FEATURES.md-ийн TIER 2 (Reviews & Ratings), UX-RESEARCH.md-ийн №2 (хүргэлтийн үнэ эрт харуулах), ROADMAP-ийн TIER 2-ын үлдсэн зүйлс (зурган боловсруулалт, сервер талын хайлт, refund урсгал), эсвэл TIER 5-ын үлдсэн зүйлс (Sentry, staging, CDN, uptime monitoring).
 
 **SECURITY.md, UX-RESEARCH.md** нэмэгдсэн (CLAUDE.md/ROADMAP.md-ийн хамтрагч баримт) — аюулгүй байдал болон UX/зах зээлийн судалгааны checklist тус тус.
 

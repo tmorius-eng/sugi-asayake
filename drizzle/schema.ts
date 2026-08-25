@@ -151,6 +151,17 @@ export const products = mysqlTable("products", {
   galleryJson: text("galleryJson"),
   stockQuantity: int("stockQuantity").notNull().default(0),
   isPublished: boolean("isPublished").notNull().default(false),
+  /**
+   * PREMIUM-FEATURES.md TIER 1: matches the same three fields on `users`
+   * (see the Beauty & Home preference profile there) so "recommended for
+   * you" can just intersect a shopper's saved preferences against these —
+   * no separate tagging vocabulary to keep in sync. All nullable: a given
+   * product only fills in whichever of skinType/skinConcerns (skincare) or
+   * interiorStyle (home goods) actually applies to it.
+   */
+  skinType: mysqlEnum("skinType", ["dry", "oily", "combination", "sensitive", "normal"]),
+  skinConcerns: varchar("skinConcerns", { length: 300 }),
+  interiorStyle: varchar("interiorStyle", { length: 60 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => [
