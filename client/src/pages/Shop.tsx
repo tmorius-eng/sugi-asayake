@@ -1,4 +1,4 @@
-import { ArrowDownUp, ArrowUpRight, Eye, Heart, LoaderCircle, MapPin, PackageCheck, Phone, RotateCcw, Search, ShoppingBag, SlidersHorizontal, Sparkles, Star } from "lucide-react";
+import { ArrowDownUp, ArrowUpRight, ChevronLeft, ChevronRight, Eye, Heart, LoaderCircle, MapPin, PackageCheck, Phone, RotateCcw, Search, ShoppingBag, SlidersHorizontal, Sparkles, Star } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import CartDrawer from "@/components/CartDrawer";
@@ -105,10 +105,19 @@ export default function Shop() {
     const matchingProducts = filterCatalogSkinType(filterCatalogProducts(products, search, category), skinTypeFilter);
     return sortCatalogProducts(filterCatalogStock(matchingProducts, inStockOnly), sort);
   }, [products, category, search, inStockOnly, sort, skinTypeFilter]);
+  // ~940 real products (PRODUCT-IMPORT.md) made an unpaginated grid an
+  // endless scroll — page it like any real catalog. 24 divides evenly into
+  // the 4/3/2-column grid breakpoints (see .shop-product-grid in index.css).
+  const SHOP_PAGE_SIZE = 24;
+  const [page, setPage] = useState(1);
+  useEffect(() => setPage(1), [search, category, skinTypeFilter, inStockOnly, sort]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / SHOP_PAGE_SIZE));
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [totalPages, page]);
+  const pagedProducts = useMemo(() => filtered.slice((page - 1) * SHOP_PAGE_SIZE, page * SHOP_PAGE_SIZE), [filtered, page]);
   const effectiveRecentIds = qaHistoryMode === "unavailable" ? [999_999] : recentlyViewedIds;
   const forceZeroResults = qaHistoryMode === "zero-filter";
   const recentlyViewed = useMemo(() => resolveRecentlyViewed(products, effectiveRecentIds), [products, effectiveRecentIds]);
-  useScrollReveal(`${catalog.isLoading}-${products.length}-${filtered.length}-${recentlyViewed.length}-${recommended.data?.length ?? 0}`);
+  useScrollReveal(`${catalog.isLoading}-${products.length}-${pagedProducts.length}-${page}-${recentlyViewed.length}-${recommended.data?.length ?? 0}`);
 
   useEffect(() => {
     try {
@@ -143,11 +152,15 @@ export default function Shop() {
         <div className="shop-discovery-heading"><p className="shop-kicker"><span /> SUGI ASAYAKE / DISCOVER</p><h2>Өнөөдрийн хэрэгцээ<br /><em>эндээс эхэлнэ.</em></h2><p>Онлайн каталогийг бид салбарын бодит нөөцтэй нь уялдуулан шинэчилж байна. Харин та өөрт ойр салбараас дараах ангиллаар шууд асууж болно.</p></div>
         <div className="shop-category-deck">{discoveryCategories.map(item => <div className={`shop-category-card ${item.tone}`} key={item.number}><span>{item.number}</span><div><small>SUGI DAILY CARE</small><h3>{item.title}</h3><p>{item.detail}</p></div><ArrowUpRight size={20} /></div>)}</div>
         <div className="shop-discovery-cta" id="shop-contact"><div><MapPin size={20} /><span><strong>3 салбар, нэг өдөр тутмын сонголт.</strong><small>Таны хайж буй бүтээгдэхүүнийг ойр салбараас асуугаарай.</small></span></div><div><Link href="/#stores">Салбар олох <ArrowUpRight size={16} /></Link><a href="tel:94509911">9450-9911 <Phone size={15} /></a></div></div>
-      </section> : filtered.length ? <section className="shop-product-grid">{filtered.map((product, index) => <article key={product.id} className="shop-product-card" data-reveal style={{ transitionDelay: `${Math.min(index * 55, 300)}ms` }}>
+      </section> : filtered.length ? <><section className="shop-product-grid" id="shop-product-grid">{pagedProducts.map((product, index) => <article key={product.id} className="shop-product-card" data-reveal style={{ transitionDelay: `${Math.min(index * 55, 300)}ms` }}>
         <button type="button" className={`shop-wishlist-toggle${wishlistIds.has(product.id) ? " active" : ""}`} onClick={() => onToggleWishlist(product.id)} aria-label={wishlistIds.has(product.id) ? `${product.name}-г хүслийн жагсаалтаас хасах` : `${product.name}-г хүслийн жагсаалтад нэмэх`}><Heart size={15} /></button>
         <Link href={`/product/${product.slug}`} onClick={() => rememberProduct(product.id)} className="shop-product-link"><div className="shop-product-image"><img src={product.imageUrl ?? fallbackImage} alt={product.name} /><span>{product.stockQuantity > 0 ? `${product.stockQuantity} ширхэг үлдсэн` : "Нөөц дууссан"}</span><i aria-hidden="true">VIEW</i></div><div className="shop-product-copy"><p>{product.brand ?? product.categoryName ?? "SUGI ASAYAKE"}</p><h2>{product.name}</h2>{product.reviewCount > 0 ? <span className="shop-product-rating"><Star size={12} fill="#f0b52d" stroke="#f0b52d" /> {product.avgRating?.toFixed(1)} <em>({product.reviewCount})</em></span> : null}<small>{product.shortDescription ?? "Японоос баталгаат бүтээгдэхүүн"}</small><div><strong>{formatMnt(product.priceMnt)}</strong><span><ShoppingBag size={15} /></span></div></div></Link>
         <button type="button" className="quick-view-trigger" onClick={() => openQuickView(product)} aria-label={`${product.name} шуурхай харах`}><Eye size={15} /> Шуурхай харах</button>
-      </article>)}</section> : <section className="shop-status-card" data-reveal><Search size={26} /><h2>Энэ удаа тохирох бүтээгдэхүүн олдсонгүй.</h2><p>Өөр хайлтын үг хэрэглэж үзэх эсвэл бүх ангиллыг дахин хараарай.</p><button type="button" onClick={resetControls}><RotateCcw size={14} /> Шүүлтүүр арилгах</button></section>}
+      </article>)}</section>{totalPages > 1 ? <nav className="shop-pagination" aria-label="Хуудаслалт">
+        <button type="button" onClick={() => { setPage(current => Math.max(1, current - 1)); document.getElementById("shop-product-grid")?.scrollIntoView({ block: "start", behavior: "smooth" }); }} disabled={page === 1}><ChevronLeft size={16} /> Өмнөх</button>
+        <span>{page} / {totalPages} хуудас <em>({filtered.length} бүтээгдэхүүн)</em></span>
+        <button type="button" onClick={() => { setPage(current => Math.min(totalPages, current + 1)); document.getElementById("shop-product-grid")?.scrollIntoView({ block: "start", behavior: "smooth" }); }} disabled={page === totalPages}>Дараах <ChevronRight size={16} /></button>
+      </nav> : null}</> : <section className="shop-status-card" data-reveal><Search size={26} /><h2>Энэ удаа тохирох бүтээгдэхүүн олдсонгүй.</h2><p>Өөр хайлтын үг хэрэглэж үзэх эсвэл бүх ангиллыг дахин хараарай.</p><button type="button" onClick={resetControls}><RotateCcw size={14} /> Шүүлтүүр арилгах</button></section>}
       {isAuthenticated && recommended.data?.length ? <RecommendedForYou products={recommended.data} onRemember={rememberProduct} onQuickView={openQuickView} /> : null}
       {!catalog.isLoading && !catalog.isError ? <RecentlyViewed products={recentlyViewed} rememberedCount={effectiveRecentIds.length} onRemember={rememberProduct} onQuickView={openQuickView} /> : null}
     </main>
