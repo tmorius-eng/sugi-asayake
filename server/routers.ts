@@ -219,6 +219,41 @@ async function sendVerificationCode(userId: number, email: string): Promise<bool
   });
 }
 
+// ROADMAP.md TIER 2: order confirmation + status-change notifications.
+// Both are best-effort (see the try/catch at each call site) — a Brevo
+// hiccup should never fail or roll back a real order.
+const formatMnt = (amountMnt: number) => `${new Intl.NumberFormat("mn-MN").format(amountMnt)}₮`;
+const orderStatusMessages: Record<string, string> = {
+  confirmed: "Таны захиалгыг баталгаажууллаа.",
+  packed: "Таны захиалгыг бэлтгэж дууслаа.",
+  out_for_delivery: "Таны захиалга хүргэлтэд гарлаа.",
+  completed: "Таны захиалга амжилттай хүргэгдлээ. Худалдан авалт хийсэнд баярлалаа!",
+  cancelled: "Таны захиалгыг цуцаллаа. Асуух зүйл байвал бидэнтэй холбогдоно уу.",
+};
+
+async function sendOrderConfirmationEmail(order: { orderNumber: string; customerEmail: string | null; customerName: string; totalMnt: number; deliveryMethod: string; deliveryAddress: string | null; pickupBranch: string | null; items: { name: string; quantity: number; priceMnt: number }[] }) {
+  if (!order.customerEmail) return;
+  const itemLines = order.items.map(item => `- ${item.name} × ${item.quantity} (${formatMnt(item.priceMnt * item.quantity)})`).join("\n");
+  const deliveryLine = order.deliveryMethod === "store_pickup" ? `Хүргэлт: ${order.pickupBranch} салбараас өөрөө авах` : `Хүргэлт: ${order.deliveryAddress ?? "Улаанбаатар хот дотор"}`;
+  await sendAccountEmail({
+    to: order.customerEmail,
+    subject: `SUGI ASAYAKE — Захиалга баталгаажлаа (${order.orderNumber})`,
+    content: `Сайн байна уу, ${order.customerName}!\n\nТаны ${order.orderNumber} дугаартай захиалгыг хүлээн авлаа:\n\n${itemLines}\n\nНийт дүн: ${formatMnt(order.totalMnt)}\n${deliveryLine}\n\nЗахиалгынхаа явцыг веб сайтаас харах боломжтой. Худалдан авалт хийсэнд баярлалаа!`,
+  });
+}
+
+async function sendOrderStatusUpdateEmail(order: { orderNumber: string; customerEmail: string | null; customerName: string; status: string; deliveryTrackingRef: string | null }) {
+  if (!order.customerEmail) return;
+  const message = orderStatusMessages[order.status];
+  if (!message) return; // "pending" (initial state) has no transition to announce.
+  const trackingLine = order.deliveryTrackingRef ? `\nХүргэлтийн дугаар: ${order.deliveryTrackingRef}` : "";
+  await sendAccountEmail({
+    to: order.customerEmail,
+    subject: `SUGI ASAYAKE — Захиалга ${order.orderNumber}: шинэчлэлт`,
+    content: `Сайн байна уу, ${order.customerName}!\n\n${message}${trackingLine}\n\nЗахиалгын дугаар: ${order.orderNumber}`,
+  });
+}
+
 function assertImageSignature(buffer: Buffer, contentType: (typeof imageContentTypes)[number]) {
   const isJpeg = buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
   const isPng = buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
@@ -490,11 +525,20 @@ export const appRouter = router({
         context.addIssue({ code: z.ZodIssueCode.custom, message: "Select a SUGI branch for store pickup.", path: ["pickupBranch"] });
       }
     })).mutation(async ({ ctx, input }) => {
+      let order;
       try {
-        return await createOrderFromActiveCart({ owner: resolveCartOwnerForWrite(ctx), ...input });
+        order = await createOrderFromActiveCart({ owner: resolveCartOwnerForWrite(ctx), ...input });
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to place this order." });
       }
+      // Best-effort: a failed confirmation email should never undo an
+      // already-placed (and stock-decremented) order.
+      try {
+        await sendOrderConfirmationEmail(order);
+      } catch (error) {
+        console.error("[checkout.createOrder] Failed to send order confirmation email", error);
+      }
+      return order;
     }),
   }),
   orders: router({
@@ -655,13 +699,24 @@ export const appRouter = router({
       limit: input.limit,
     })),
     updateOrder: staffProcedure.input(orderUpdateSchema).mutation(async ({ ctx, input }) => {
+      let order;
       try {
-        const order = await updateAdminOrder(input);
-        await logAdminAction({ actorUserId: ctx.user.id, action: "order.updated", entityType: "order", entityId: order.id, metadata: { status: order.status, deliveryTrackingRef: order.deliveryTrackingRef } });
-        return order;
+        order = await updateAdminOrder(input);
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to update order." });
       }
+      await logAdminAction({ actorUserId: ctx.user.id, action: "order.updated", entityType: "order", entityId: order.id, metadata: { status: order.status, deliveryTrackingRef: order.deliveryTrackingRef } });
+      // Only notify when this call actually changed the status — editing
+      // just the tracking ref/admin note shouldn't re-announce whatever
+      // status the order already had.
+      if (input.status !== undefined) {
+        try {
+          await sendOrderStatusUpdateEmail(order);
+        } catch (error) {
+          console.error("[admin.updateOrder] Failed to send status update email", error);
+        }
+      }
+      return order;
     }),
     // TIER 5: bulk status change. Re-runs the exact same per-order rules as
     // updateOrder (can't move backward, can't touch a closed order) for each
@@ -678,6 +733,11 @@ export const appRouter = router({
           const order = await updateAdminOrder({ id, status: input.status });
           await logAdminAction({ actorUserId: ctx.user.id, action: "order.updated", entityType: "order", entityId: order.id, metadata: { status: order.status, bulk: true } });
           succeeded.push(id);
+          try {
+            await sendOrderStatusUpdateEmail(order);
+          } catch (notifyError) {
+            console.error("[admin.bulkUpdateOrderStatus] Failed to send status update email", notifyError);
+          }
         } catch (error) {
           failed.push({ id, message: error instanceof Error ? error.message : "Unable to update order." });
         }

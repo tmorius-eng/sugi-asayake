@@ -1,11 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
 import { GUEST_CART_COOKIE_NAME } from "../shared/const";
 import { carts, cartItems, orderItems, orders, productCategories, products, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
-import { getDb } from "./db";
+import { createEmailVerificationCode, getDb, getUserByEmail } from "./db";
 import { hashPassword } from "./_core/password";
 import type { TrpcContext } from "./_core/context";
+
+const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
 
 // UX-RESEARCH.md priority #1: guest checkout. This suite exercises the real
 // database (same opt-in convention as commerce.database.integration.test.ts)
@@ -127,7 +130,7 @@ describeWithDatabase("guest checkout integration", () => {
     expect(cartAfterCheckout).toBeNull();
   });
 
-  it("merges a guest's cart into their account the moment they register", async () => {
+  it("merges a guest's cart into their account the moment they confirm registration", async () => {
     const guestCtx = makeGuestContext();
     await appRouter.createCaller(guestCtx.ctx).cart.addItem({ productId, quantity: 1 });
     const guestToken = guestCtx.cookiesSet[GUEST_CART_COOKIE_NAME];
@@ -135,6 +138,9 @@ describeWithDatabase("guest checkout integration", () => {
 
     // Register while presenting that guest-cart cookie, exactly like a
     // shopper who decides to create an account right before checking out.
+    // Registration alone doesn't issue a session (or merge the cart)
+    // anymore — see server/routers.ts auth.register — so the merge only
+    // happens once confirmRegistration succeeds, below.
     const registerCtx: TrpcContext = {
       user: null,
       req: {
@@ -145,13 +151,28 @@ describeWithDatabase("guest checkout integration", () => {
       } as unknown as TrpcContext["req"],
       res: { cookie: () => undefined, clearCookie: () => undefined } as unknown as TrpcContext["res"],
     };
-    const registered = await appRouter.createCaller(registerCtx).auth.register({
-      email: `${marker}-merge@example.invalid`,
+    const email = `${marker}-merge@example.invalid`;
+    await appRouter.createCaller(registerCtx).auth.register({
+      email,
       password: "GuestMergeTestPassw0rd!",
     });
-    createdUserIds.push(registered.id);
+    const pending = await getUserByEmail(email);
+    if (!pending) throw new Error("Pending registration not found.");
+    createdUserIds.push(pending.id);
 
-    const userCart = await appRouter.createCaller(makeUserContext(registered.id)).cart.current();
+    // Seed a known code (invalidates whatever register() auto-generated and
+    // emailed) so this test doesn't depend on reading a real inbox — same
+    // technique as server/auth.account-recovery.integration.test.ts.
+    const code = "918273";
+    await createEmailVerificationCode({ userId: pending.id, codeHash: tokenHash(code), expiresAt: new Date(Date.now() + 60 * 60 * 1000) });
+    const confirmCtx: TrpcContext = {
+      user: null,
+      req: { protocol: "https", headers: { cookie: `${GUEST_CART_COOKIE_NAME}=${guestToken}` }, ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1" } } as unknown as TrpcContext["req"],
+      res: { cookie: () => undefined, clearCookie: () => undefined } as unknown as TrpcContext["res"],
+    };
+    const confirmed = await appRouter.createCaller(confirmCtx).auth.confirmRegistration({ email, code });
+
+    const userCart = await appRouter.createCaller(makeUserContext(confirmed.id)).cart.current();
     expect(userCart?.items[0]).toMatchObject({ productId, quantity: 1 });
   });
 });

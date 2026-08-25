@@ -426,7 +426,11 @@ export async function createOrderFromActiveCart(input: {
   });
 
   const order = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
-  return order[0];
+  // The cart's items are already in memory (loaded above, before the stock
+  // decrement) — reuse them here instead of a redundant order_items query,
+  // so the caller (checkout.createOrder) can build a confirmation email
+  // without a second round trip.
+  return { ...order[0], items: cart.items.map(item => ({ name: item.name, quantity: item.quantity, priceMnt: item.priceMnt })) };
 }
 
 export async function getOrderForUser(orderId: number, userId: number) {
