@@ -241,6 +241,38 @@ export const orderItems = mysqlTable("order_items", {
   index("order_items_order_idx").on(table.orderId),
 ]);
 
+/**
+ * PREMIUM-FEATURES.md TIER 2: "Итгэлийн систем" (trust system). A shopper can
+ * only review a product they've actually bought — enforced at write time by
+ * checking for a completed order line item, not by a schema constraint — and
+ * only once per product (the unique index below), so this is a genuine
+ * verified-purchase review, not an open comment board. `orderId` is captured
+ * from whichever completed order qualified them, purely so the "verified
+ * purchase" badge has something concrete to point at; it isn't re-checked on
+ * every read.
+ *
+ * Moderation is deliberately lightweight (`isApproved` toggle set by admin),
+ * not a pre-publish approval queue — reviews go live immediately since the
+ * verified-purchase gate already keeps out anonymous spam.
+ */
+export const productReviews = mysqlTable("product_reviews", {
+  id: int("id").autoincrement().primaryKey(),
+  productId: int("productId").notNull().references(() => products.id, { onDelete: "cascade" }),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  orderId: int("orderId").references(() => orders.id, { onDelete: "set null" }),
+  rating: int("rating").notNull(),
+  comment: text("comment"),
+  isApproved: boolean("isApproved").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  uniqueIndex("product_reviews_user_product_idx").on(table.userId, table.productId),
+  index("product_reviews_product_idx").on(table.productId),
+]);
+
+export type ProductReview = typeof productReviews.$inferSelect;
+export type InsertProductReview = typeof productReviews.$inferInsert;
+
 export const paymentAttempts = mysqlTable("payment_attempts", {
   id: int("id").autoincrement().primaryKey(),
   orderId: int("orderId").notNull().references(() => orders.id, { onDelete: "cascade" }),

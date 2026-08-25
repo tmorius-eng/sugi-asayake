@@ -24,12 +24,14 @@ import {
   createEmailVerificationCode,
   createOrderFromActiveCart,
   createPasswordResetCode,
+  createProductReview,
   getActiveCartForOwner,
   createQPayPaymentAttempt,
   createStaffInvitation,
   createUserAddress,
   createUserWithPassword,
   dbPing,
+  deleteAdminReview,
   deleteUserAccount,
   deleteUserAddress,
   deleteAdminPost,
@@ -40,6 +42,7 @@ import {
   getAdminOrders,
   getAdminPosts,
   getAdminProducts,
+  getAdminReviews,
   getAdminStaffInvitations,
   getAdminUserDetail,
   getAdminUsers,
@@ -49,12 +52,14 @@ import {
   getOrderForUser,
   getOrdersForUser,
   getProductBySlug,
+  getProductReviews,
   getProductStockQuantity,
   getProductWriteConflicts,
   getPublishedCatalog,
   getRecommendedProducts,
   getPublishedPosts,
   getPublishedPostBySlug,
+  getReviewEligibility,
   getSiteMedia,
   getStaffInvitationByTokenHash,
   getUserByEmail,
@@ -70,6 +75,7 @@ import {
   revokeStaffInvitation,
   deleteSiteMedia,
   getUserAddresses,
+  setReviewApproval,
   suspendUser,
   touchUserLastSignedIn,
   unsuspendUser,
@@ -517,6 +523,23 @@ export const appRouter = router({
     // public, since it's meaningless without a saved preference profile to
     // match against (a guest has none).
     recommended: protectedProcedure.query(({ ctx }) => getRecommendedProducts(ctx.user.id)),
+  }),
+  // PREMIUM-FEATURES.md TIER 2: verified-purchase reviews & ratings.
+  reviews: router({
+    list: publicProcedure.input(z.object({ productId: z.number().int().positive() })).query(({ input }) => getProductReviews(input.productId)),
+    // protectedProcedure: a guest has no order history to verify against, so
+    // there's nothing meaningful to check — the ProductDetail page only asks
+    // this for a logged-in shopper.
+    eligibility: protectedProcedure.input(z.object({ productId: z.number().int().positive() })).query(({ ctx, input }) => getReviewEligibility(ctx.user.id, input.productId)),
+    create: protectedProcedure
+      .input(z.object({ productId: z.number().int().positive(), rating: z.number().int().min(1).max(5), comment: nullableText(2_000) }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await createProductReview({ userId: ctx.user.id, productId: input.productId, rating: input.rating, comment: input.comment ?? null });
+        } catch (error) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Сэтгэгдэл бичиж чадсангүй." });
+        }
+      }),
   }),
   content: router({
     latestPosts: publicProcedure.query(() => getPublishedPosts()),
@@ -978,6 +1001,20 @@ export const appRouter = router({
     deleteProduct: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const result = await deleteAdminProduct(input.id);
       await logAdminAction({ actorUserId: ctx.user.id, action: "product.deleted", entityType: "product", entityId: input.id });
+      return result;
+    }),
+    // PREMIUM-FEATURES.md TIER 2: lightweight moderation — a flat list an
+    // admin/staff can filter through, not a pre-publish approval queue
+    // (reviews are already gated by verified purchase before this).
+    reviews: staffProcedure.query(() => getAdminReviews()),
+    updateReviewApproval: staffProcedure.input(z.object({ id: z.number().int().positive(), isApproved: z.boolean() })).mutation(async ({ ctx, input }) => {
+      const result = await setReviewApproval(input.id, input.isApproved);
+      await logAdminAction({ actorUserId: ctx.user.id, action: input.isApproved ? "review.approved" : "review.hidden", entityType: "review", entityId: input.id });
+      return result;
+    }),
+    deleteReview: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const result = await deleteAdminReview(input.id);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "review.deleted", entityType: "review", entityId: input.id });
       return result;
     }),
     // TIER 5: bulk publish/unpublish. Only touches isPublished, so none of

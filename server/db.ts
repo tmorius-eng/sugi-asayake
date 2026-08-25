@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gte, inArray, like, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { adminAuditLogs, cartItems, carts, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, loginAttempts, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, products, siteMedia, staffInvitations, userAddresses, users, wishlistItems } from "../drizzle/schema";
+import { adminAuditLogs, cartItems, carts, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, loginAttempts, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, productReviews, products, siteMedia, staffInvitations, userAddresses, users, wishlistItems } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { getInventoryReservationFailure, shouldRestoreStock } from "./commerce-lifecycle";
 
@@ -374,6 +374,19 @@ export async function verifyEmailWithCode(input: { userId: number; codeHash: str
   return { userId: token.userId };
 }
 
+// PREMIUM-FEATURES.md TIER 2: average rating + review count, shared by the
+// catalog list, a single product page, and the admin product list. A LEFT
+// JOIN + GROUP BY (rather than a per-row correlated subquery) so this stays
+// cheap across the full ~900-product catalog. Only isApproved reviews count
+// toward the public-facing average — a hidden review shouldn't move the
+// star rating shoppers see.
+// mysql2 returns AVG() results as a decimal *string* (e.g. "4.0000"), not a
+// number, to avoid float precision loss — .mapWith coerces it back to a
+// real number (or keeps null when there are no reviews yet) so callers on
+// both the server and client can do plain arithmetic/toFixed on it.
+const avgRatingExpr = sql<number | null>`AVG(CASE WHEN ${productReviews.isApproved} = 1 THEN ${productReviews.rating} END)`.mapWith(value => value === null ? null : Number(value));
+const reviewCountExpr = sql<number>`COUNT(CASE WHEN ${productReviews.isApproved} = 1 THEN 1 END)`;
+
 export async function getPublishedCatalog() {
   const db = await getDb();
   if (!db) return [];
@@ -393,10 +406,14 @@ export async function getPublishedCatalog() {
       skinType: products.skinType,
       skinConcerns: products.skinConcerns,
       interiorStyle: products.interiorStyle,
+      avgRating: avgRatingExpr,
+      reviewCount: reviewCountExpr,
     })
     .from(products)
     .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
+    .leftJoin(productReviews, eq(productReviews.productId, products.id))
     .where(eq(products.isPublished, true))
+    .groupBy(products.id, productCategories.id)
     .orderBy(asc(productCategories.sortOrder), desc(products.createdAt));
 }
 
@@ -475,10 +492,14 @@ export async function getProductBySlug(slug: string) {
       skinType: products.skinType,
       skinConcerns: products.skinConcerns,
       interiorStyle: products.interiorStyle,
+      avgRating: avgRatingExpr,
+      reviewCount: reviewCountExpr,
     })
     .from(products)
     .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
+    .leftJoin(productReviews, eq(productReviews.productId, products.id))
     .where(and(eq(products.slug, slug), eq(products.isPublished, true)))
+    .groupBy(products.id, productCategories.id)
     .limit(1);
 
   return result[0] ?? null;
@@ -693,6 +714,120 @@ export async function getOrdersForUser(userId: number) {
   // order ids rather than scanning the whole order_items table.
   const lineItems = await db.select({ orderId: orderItems.orderId, productId: orderItems.productId, productName: orderItems.productName, sku: orderItems.sku, quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt }).from(orderItems).where(inArray(orderItems.orderId, orderRows.map(order => order.id)));
   return orderRows.map(order => ({ ...order, items: lineItems.filter(item => item.orderId === order.id) }));
+}
+
+/**
+ * PREMIUM-FEATURES.md TIER 2 verified-purchase gate: the shopper must have
+ * at least one non-cancelled order that actually contains this product. Not
+ * restricted to `completed` orders — the spec calls this "ordered" (захиалсан),
+ * not "received", and gating on final delivery would make reviewing
+ * impractical for slower deliveries. Returns the most recent qualifying
+ * order id so the caller can stamp the review with it (the "verified
+ * purchase" badge points at *an* order, not a live re-check).
+ */
+async function findVerifyingOrderId(userId: number, productId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select({ orderId: orders.id })
+    .from(orderItems)
+    .innerJoin(orders, eq(orders.id, orderItems.orderId))
+    .where(and(eq(orders.userId, userId), eq(orderItems.productId, productId), sql`${orders.status} <> 'cancelled'`))
+    .orderBy(desc(orders.createdAt))
+    .limit(1);
+  return rows[0]?.orderId ?? null;
+}
+
+export async function createProductReview(input: { userId: number; productId: number; rating: number; comment: string | null }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+
+  const verifyingOrderId = await findVerifyingOrderId(input.userId, input.productId);
+  if (!verifyingOrderId) throw new Error("Та энэ бүтээгдэхүүнийг захиалсан тохиолдолд л сэтгэгдэл бичих боломжтой.");
+
+  const existing = await db.select({ id: productReviews.id }).from(productReviews).where(and(eq(productReviews.userId, input.userId), eq(productReviews.productId, input.productId))).limit(1);
+  if (existing[0]) throw new Error("Та энэ бүтээгдэхүүнд сэтгэгдэл өмнө нь бичсэн байна.");
+
+  const inserted = await db.insert(productReviews).values({
+    productId: input.productId,
+    userId: input.userId,
+    orderId: verifyingOrderId,
+    rating: input.rating,
+    comment: input.comment,
+  });
+  const created = await db.select().from(productReviews).where(eq(productReviews.id, Number(inserted[0].insertId))).limit(1);
+  return created[0];
+}
+
+/** Public, approved-only reviews for a product page — newest first. */
+export async function getProductReviews(productId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: productReviews.id,
+      rating: productReviews.rating,
+      comment: productReviews.comment,
+      createdAt: productReviews.createdAt,
+      reviewerName: users.name,
+    })
+    .from(productReviews)
+    .innerJoin(users, eq(users.id, productReviews.userId))
+    .where(and(eq(productReviews.productId, productId), eq(productReviews.isApproved, true)))
+    .orderBy(desc(productReviews.createdAt));
+}
+
+/** Whether the current user has already reviewed this product, and whether
+ *  they're even eligible to (verified purchase) — drives the ProductDetail
+ *  review form's three states: write / already-reviewed / not-eligible. */
+export async function getReviewEligibility(userId: number, productId: number) {
+  const db = await getDb();
+  if (!db) return { canReview: false, alreadyReviewed: false };
+  const existing = await db.select({ id: productReviews.id }).from(productReviews).where(and(eq(productReviews.userId, userId), eq(productReviews.productId, productId))).limit(1);
+  if (existing[0]) return { canReview: false, alreadyReviewed: true };
+  const verifyingOrderId = await findVerifyingOrderId(userId, productId);
+  return { canReview: Boolean(verifyingOrderId), alreadyReviewed: false };
+}
+
+/** Admin moderation list (PREMIUM-FEATURES.md TIER 2) — every review
+ *  (approved or hidden), newest first, with enough context (product + author)
+ *  to moderate without a second lookup. Not paginated: review volume is far
+ *  below the scale that would need it, matching the "жижиг moderation хэсэг"
+ *  (small moderation panel, not a full queue system) scope in the plan. */
+export async function getAdminReviews() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: productReviews.id,
+      rating: productReviews.rating,
+      comment: productReviews.comment,
+      isApproved: productReviews.isApproved,
+      createdAt: productReviews.createdAt,
+      productId: productReviews.productId,
+      productName: products.name,
+      productSlug: products.slug,
+      reviewerName: users.name,
+      reviewerEmail: users.email,
+    })
+    .from(productReviews)
+    .innerJoin(products, eq(products.id, productReviews.productId))
+    .innerJoin(users, eq(users.id, productReviews.userId))
+    .orderBy(desc(productReviews.createdAt));
+}
+
+export async function setReviewApproval(id: number, isApproved: boolean) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.update(productReviews).set({ isApproved, updatedAt: new Date() }).where(eq(productReviews.id, id));
+  return { id, isApproved };
+}
+
+export async function deleteAdminReview(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.delete(productReviews).where(eq(productReviews.id, id));
+  return { id };
 }
 
 export async function createQPayPaymentAttempt(input: { orderId: number; providerInvoiceId: string; responseJson: string }) {

@@ -32,11 +32,16 @@
 - `pnpm build` амжилттай
 - Бодит HTTP-ээр (throwaway admin + shopper аккаунт, dev server `pnpm dev` ажиллаж байх үед): бүтээгдэхүүнийг admin-аар tag хийсэн → `catalog.list` public endpoint tag-ыг харуулсан → tag хийхийн өмнө `catalog.recommended` хоосон `[]` буцаасан → `profile.updatePreferences`-ээр тохирох preference хадгалсны дараа яг тэр бүтээгдэхүүнийг (зөв `stockQuantity`/`categoryName`-тай, `QuickViewProduct` төрөлд бүрэн нийцтэй) буцаасныг баталгаажуулсан. Тест дууссаны дараа бүтээгдэхүүн (`Diane shampoo`, id=1)-ийг яг анхны төлөвт нь (`stockQuantity=0`, бүх tag хоосон) сэргээж, throwaway 2 аккаунтыг `admin_audit_logs`-той хамт устгасан.
 
-## TIER 2 — Итгэлийн систем: Reviews & Ratings
-- [ ] `product_reviews` хүснэгт (rating 1-5, сэтгэгдэл, **verified purchase** тэмдэг — зөвхөн тухайн барааг захиалсан хэрэглэгч л сэтгэгдэл бичих боломжтой)
-- [ ] Бүтээгдэхүүний хуудсанд одон үнэлгээ + сэтгэгдлийн жагсаалт харуулах
-- [ ] Shop grid-ийн карт бүрт дундаж одон үнэлгээ товч харуулах
-- [ ] Admin: жижиг moderation хэсэг (зөвшөөрөх/устгах) — бүтэн "Moderation Queue" систем биш, зүгээр л admin-с шүүх боломжтой жагсаалт
+## TIER 2 — Итгэлийн систем: Reviews & Ratings — ✅ ДУУССАН (2026-08-25)
+- [x] `product_reviews` хүснэгт (`drizzle/0022_product_reviews.sql`) — rating 1-5, сэтгэгдэл (заавал биш), **verified purchase**: `server/db.ts`-ийн `createProductReview`-д цуцлагдаагүй, тухайн барааг агуулсан захиалгыг шалгадаг (`findVerifyingOrderId`), `(userId, productId)` unique index-ээр нэг хэрэглэгч нэг бараанд ганцхан удаа сэтгэгдэл бичнэ
+- [x] `server/routers.ts`-ийн `reviews` router (`list` public, `eligibility`/`create` protected) + `admin.reviews`/`admin.updateReviewApproval`/`admin.deleteReview` (staffProcedure — admin-аас гадна staff ч модерац хийж болно)
+- [x] Бүтээгдэхүүний хуудас (`ProductDetail.tsx`): гарчгийн дор одон дундаж + сэтгэгдлийн тоо, доод хэсэгт бүх сэтгэгдлийн жагсаалт ("Баталгаажсан худалдан авалт" тэмдэгтэй), зөвхөн худалдан авсан/нэвтэрсэн хэрэглэгчид харагдах сэтгэгдэл бичих маягт (3 төлөв: бичих боломжтой / аль хэдийн бичсэн / эрхгүй)
+- [x] Shop grid-ийн карт бүрт жижиг одон+тоо badge (`.shop-product-rating`, зөвхөн сэтгэгдэлтэй бол харагдана)
+- [x] Admin "Сэтгэгдэл" (`AdminReviewsPanel.tsx`) — жагсаалт, төлвөөр шүүх (Бүгд/Идэвхтэй/Нуугдсан), Нуух/Сэргээх + Устгах товч тус бүр audit log-той
+
+**Гол техникийн дэлгэрэнгүй:** `catalog.list`/`catalog.bySlug` дээр `AVG(rating)`/`COUNT(*)` LEFT JOIN + GROUP BY (per-row subquery биш, 937 барааны хэмжээнд хямд байлгах зорилготой), зөвхөн `isApproved=1` сэтгэгдэл л дундаж тооцоонд орно. **Бодит bug олж зассан:** MySQL/mysql2 драйвер `AVG()`-ийн үр дүнг string ("4.0000") хэлбэрээр буцаадаг тул TypeScript-ийн `number` төрөл худал байсан — `.mapWith(Number)`-ээр засав, засаагүй бол frontend дээр `.toFixed()` ажиллахгүй байх байсан.
+
+**Шалгасан байдал:** `pnpm check`/`pnpm build` цэвэр, `pnpm test` 90/90 (шинэ 7 тест: 5 RBAC unit test `commerce.router.test.ts`-д, 2 бодит MySQL дээрх E2E integration test `product-reviews.integration.test.ts`-д). Мөн бодит HTTP-ээр (dev server ажиллаж байх үед) бүтэн урсгал гараар шалгасан: худалдан авалтын өмнө сэтгэгдэл бичихийг татгалзах → бодит `checkout.createOrder`-ээр захиалга хийх → сэтгэгдэл бичих → давхар бичихийг татгалзах → `catalog.list`/`catalog.bySlug` дундаж шинэчлэгдэх → admin нуух → дундаж 0 болох → admin сэргээх → admin устгах → дахин бичих боломжтой болох. Бүх throwaway тестийн өгөгдөл цэвэрлэгдсэн.
 
 ## TIER 3 — Итгэл ба контент: Ingredient Transparency + Store Locator
 - [ ] Найрлагын нэр томьёоны (жишээ нь Hyaluronic Acid, Retinol) tooltip glossary component — skincare бүтээгдэхүүний тайлбарт hover/tap хийхэд тайлбар харуулах

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
-import { NOT_ADMIN_ERR_MSG } from "../shared/const";
+import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from "../shared/const";
 
 function createContext(role: "user" | "staff" | "admin" | null): TrpcContext {
   const user = role ? {
@@ -57,6 +57,39 @@ describe("commerce router", () => {
     const caller = appRouter.createCaller(createContext("user"));
     await expect(caller.admin.createProduct({ categoryId: 1, name: "Test product", slug: "test-product", priceMnt: 1000, sku: "TEST-001", stockQuantity: 1, isPublished: false })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
     await expect(caller.admin.uploadProductImage({ fileName: "test.png", contentType: "image/png", dataBase64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB" })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+  });
+
+  // PREMIUM-FEATURES.md TIER 2: reviews & ratings auth gating.
+  it("keeps the public reviews list available to anonymous visitors", async () => {
+    const caller = appRouter.createCaller(createContext(null));
+    const reviews = await caller.reviews.list({ productId: 1 });
+    expect(Array.isArray(reviews)).toBe(true);
+  });
+
+  it("requires login to check review eligibility or submit a review", async () => {
+    const caller = appRouter.createCaller(createContext(null));
+    await expect(caller.reviews.eligibility({ productId: 1 })).rejects.toMatchObject({ message: UNAUTHED_ERR_MSG, code: "UNAUTHORIZED" });
+    await expect(caller.reviews.create({ productId: 1, rating: 5, comment: null })).rejects.toMatchObject({ message: UNAUTHED_ERR_MSG, code: "UNAUTHORIZED" });
+  });
+
+  it("rejects an out-of-range rating before it ever reaches the verified-purchase check", async () => {
+    const caller = appRouter.createCaller(createContext("user"));
+    await expect(caller.reviews.create({ productId: 1, rating: 6, comment: null })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(caller.reviews.create({ productId: 1, rating: 0, comment: null })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("does not expose review moderation to a standard user", async () => {
+    const caller = appRouter.createCaller(createContext("user"));
+    await expect(caller.admin.reviews()).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+    await expect(caller.admin.updateReviewApproval({ id: 1, isApproved: false })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+    await expect(caller.admin.deleteReview({ id: 1 })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+  });
+
+  it("lets staff (not just admin) moderate reviews", async () => {
+    const caller = appRouter.createCaller(createContext("staff"));
+    // No DB in this suite by default (see catalog.list comment above) — this
+    // only asserts staff clears the role gate, not that a row exists.
+    await expect(caller.admin.reviews()).resolves.toBeInstanceOf(Array);
   });
 
   it("does not expose Content & Media administration or uploads to a standard user", async () => {
