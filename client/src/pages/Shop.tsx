@@ -77,7 +77,10 @@ function RecommendedForYou({ products, onRemember, onQuickView }: RecommendedFor
 
 export default function Shop() {
   const qaHistoryMode = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("historyQa") : null;
-  const [search, setSearch] = useState("");
+  // Prefills from the header search's "бүх дэлгүүрээс харах" link
+  // (/shop?q=...) so a search started from any page lands here already
+  // filtered, instead of dropping the shopper's query on the floor.
+  const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get("q") ?? "");
   const [category, setCategory] = useState("all");
   const [skinTypeFilter, setSkinTypeFilter] = useState<SkinType | "all">("all");
   const [inStockOnly, setInStockOnly] = useState(false);

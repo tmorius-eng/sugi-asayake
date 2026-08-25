@@ -24,6 +24,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
+import HeaderSearch from "@/components/HeaderSearch";
 import SeasonalCampaignCarousel from "@/components/SeasonalCampaignCarousel";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { trpc } from "@/lib/trpc";
@@ -97,6 +98,7 @@ export default function Home() {
             <div className="header-socials" aria-label="Сошиал хуудаснууд">
               {socials.map(({ label, href, Icon }) => <a className="social-icon-link" href={href} target="_blank" rel="noreferrer" aria-label={`${label} хуудас нээх`} key={label}><Icon size={15} strokeWidth={1.8} /></a>)}
             </div>
+            <HeaderSearch />
             <Link className="shop-entry" href="/shop"><ShoppingBag size={14} /> Дэлгүүр</Link>
             <a className="phone-link" href="tel:94509911"><Phone size={14} /> 9450-9911</a>
             <button className="menu-toggle" type="button" aria-expanded={menuOpen} aria-label={menuOpen ? "Цэс хаах" : "Цэс нээх"} onClick={() => setMenuOpen((open) => !open)}>

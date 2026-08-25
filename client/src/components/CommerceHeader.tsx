@@ -1,6 +1,7 @@
 import { ArrowLeft, MailWarning, ShoppingBag, User } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
+import HeaderSearch from "@/components/HeaderSearch";
 
 type CommerceHeaderProps = {
   cartCount?: number;
@@ -40,6 +41,7 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
             <span>{backLabel}</span>
           </Link>
           <div className="commerce-header-actions">
+            <HeaderSearch />
             <Link href="/shop" className={location.startsWith("/shop") ? "is-current" : ""}>Дэлгүүр</Link>
             {/* Order history lives inside Профайл -> Захиалга (with a
                 buy-again + status timeline the old standalone "Миний
