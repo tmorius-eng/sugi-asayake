@@ -1,4 +1,4 @@
-import { ArrowDownUp, ArrowUpRight, ChevronLeft, ChevronRight, Eye, Heart, LoaderCircle, MapPin, PackageCheck, Phone, RotateCcw, Search, ShoppingBag, SlidersHorizontal, Sparkles, Star } from "lucide-react";
+import { ArrowDownUp, ArrowUpRight, ChevronLeft, ChevronRight, Eye, Heart, LoaderCircle, MapPin, PackageCheck, Phone, RotateCcw, Search, ShoppingBag, SlidersHorizontal, Sparkles, Star, Truck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import CartDrawer from "@/components/CartDrawer";
@@ -9,6 +9,7 @@ import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCatalogCategories, getCatalogSkinTypes, getSalePercent, LOW_STOCK_THRESHOLD, skinTypeLabels, sortCatalogProducts, type CatalogSortOption, type SkinType } from "@shared/catalog-filter";
 import { rememberRecentlyViewed, resolveRecentlyViewed } from "@shared/recently-viewed";
+import { UB_DELIVERY_FEE_MNT } from "@shared/const";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 
 const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
@@ -90,7 +91,23 @@ export default function Shop() {
   const [recentlyViewedIds, setRecentlyViewedIds] = useState<number[]>([]);
   const { isAuthenticated } = useAuth();
   const utils = trpc.useUtils();
+  // Server-side search (ROADMAP.md TIER 2): a debounced 2+ character query
+  // hits catalog.search (FULLTEXT index) instead of running a JS substring
+  // filter over the whole ~937-row published catalog on every keystroke.
+  // catalog.list keeps fetching unconditionally either way (unchanged from
+  // before) — it's still what backs category/skin-type filter pills and
+  // "Таны сүүлд үзсэн", both of which should stay stable while typing a
+  // search, not narrow along with it. The win here is specifically that
+  // matching text against a query is now a database index lookup instead
+  // of client-side string scanning.
+  const [debouncedSearch, setDebouncedSearch] = useState(search.trim());
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(handle);
+  }, [search]);
+  const isSearching = debouncedSearch.length >= 2;
   const catalog = trpc.catalog.list.useQuery();
+  const searchResults = trpc.catalog.search.useQuery({ query: debouncedSearch }, { enabled: isSearching });
   const wishlist = trpc.profile.wishlist.list.useQuery(undefined, { enabled: isAuthenticated });
   const recommended = trpc.catalog.recommended.useQuery(undefined, { enabled: isAuthenticated });
   const wishlistIds = useMemo(() => new Set(wishlist.data?.map(item => item.productId) ?? []), [wishlist.data]);
@@ -100,14 +117,20 @@ export default function Shop() {
     toggleWishlist.mutate({ productId, saved: !wishlistIds.has(productId) });
   };
   const cart = trpc.cart.current.useQuery();
-  const products = catalog.data ?? [];
+  const fullCatalog = catalog.data ?? [];
+  const products = isSearching ? (searchResults.data ?? []) : fullCatalog;
+  const catalogLoading = isSearching ? searchResults.isLoading : catalog.isLoading;
+  const catalogErrored = isSearching ? searchResults.isError : catalog.isError;
   const cartCount = cart.data?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
-  const categories = useMemo(() => getCatalogCategories(products), [products]);
-  const skinTypes = useMemo(() => getCatalogSkinTypes(products), [products]);
+  const categories = useMemo(() => getCatalogCategories(fullCatalog), [fullCatalog]);
+  const skinTypes = useMemo(() => getCatalogSkinTypes(fullCatalog), [fullCatalog]);
   const filtered = useMemo(() => {
-    const matchingProducts = filterCatalogSkinType(filterCatalogProducts(products, search, category), skinTypeFilter);
+    // When isSearching, `products` already came back search-narrowed from
+    // the server — only apply the (still client-side) category filter here,
+    // not a second, redundant substring re-filter on top of it.
+    const matchingProducts = filterCatalogSkinType(filterCatalogProducts(products, isSearching ? "" : search, category), skinTypeFilter);
     return sortCatalogProducts(filterCatalogStock(matchingProducts, inStockOnly), sort);
-  }, [products, category, search, inStockOnly, sort, skinTypeFilter]);
+  }, [products, category, search, isSearching, inStockOnly, sort, skinTypeFilter]);
   // ~940 real products (PRODUCT-IMPORT.md) made an unpaginated grid an
   // endless scroll — page it like any real catalog. 24 divides evenly into
   // the 4/3/2-column grid breakpoints (see .shop-product-grid in index.css).
@@ -119,8 +142,11 @@ export default function Shop() {
   const pagedProducts = useMemo(() => filtered.slice((page - 1) * SHOP_PAGE_SIZE, page * SHOP_PAGE_SIZE), [filtered, page]);
   const effectiveRecentIds = qaHistoryMode === "unavailable" ? [999_999] : recentlyViewedIds;
   const forceZeroResults = qaHistoryMode === "zero-filter";
-  const recentlyViewed = useMemo(() => resolveRecentlyViewed(products, effectiveRecentIds), [products, effectiveRecentIds]);
-  useScrollReveal(`${catalog.isLoading}-${products.length}-${pagedProducts.length}-${page}-${recentlyViewed.length}-${recommended.data?.length ?? 0}`);
+  // Resolved against fullCatalog, never the search-narrowed `products` —
+  // otherwise "Таны сүүлд үзсэн" would empty out or shuffle every time a
+  // shopper types into the search box.
+  const recentlyViewed = useMemo(() => resolveRecentlyViewed(fullCatalog, effectiveRecentIds), [fullCatalog, effectiveRecentIds]);
+  useScrollReveal(`${catalogLoading}-${products.length}-${pagedProducts.length}-${page}-${recentlyViewed.length}-${recommended.data?.length ?? 0}`);
 
   useEffect(() => {
     try {
@@ -141,7 +167,7 @@ export default function Shop() {
     <CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="SUGI ASAYAKE дэлгүүр" />
     <main className="shop-main">
       <section className="shop-hero" data-reveal>
-        <div className="shop-hero-copy"><p className="shop-kicker"><span /> 02 / SUGI MARKET</p><h1>Өдөр тутмын<br /><em>сонголтууд.</em></h1><p>Японоос албан ёсоор нийлүүлсэн арьс арчилгаа, эрүүл мэнд, гэр бүлийн хэрэгцээний бүтээгдэхүүнээ өөртөө тохируулан олоорой.</p><div className="shop-hero-signature"><Sparkles size={17} /><span>ТАНЫ ӨДӨР БҮРТ / ЯПОН ЧАНАР</span></div></div>
+        <div className="shop-hero-copy"><p className="shop-kicker"><span /> 02 / SUGI MARKET</p><h1>Өдөр тутмын<br /><em>сонголтууд.</em></h1><p>Японоос албан ёсоор нийлүүлсэн арьс арчилгаа, эрүүл мэнд, гэр бүлийн хэрэгцээний бүтээгдэхүүнээ өөртөө тохируулан олоорой.</p><div className="shop-hero-badges"><div className="shop-hero-signature"><Sparkles size={17} /><span>ТАНЫ ӨДӨР БҮРТ / ЯПОН ЧАНАР</span></div><div className="shop-hero-delivery"><Truck size={17} /><span>УБ ХҮРГЭЛТ {formatMnt(UB_DELIVERY_FEE_MNT)} / САЛБАРААС ҮНЭГҮЙ АВАХ</span></div></div></div>
         <div className="shop-search-panel"><div className="shop-search-stamp" aria-hidden="true">CARE<br />IS<br />COLOR</div><label><Search size={19} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Бүтээгдэхүүн, брэндээр хайх" /></label><p><strong>{filtered.length}</strong> үр дүн / <span>{products.length} бүтээгдэхүүн</span></p></div>
       </section>
       <div className="shop-ribbon"><span>CURATED IN JAPAN</span><i /><span>FIND YOUR DAILY CARE</span><i /><span>УЛААНБААТАР / MONGOLIA</span><i /><span>CURATED IN JAPAN</span></div>
@@ -151,7 +177,7 @@ export default function Shop() {
         {skinTypes.length ? <div className="shop-filter-pills shop-skin-filter"><button type="button" onClick={() => setSkinTypeFilter("all")} className={skinTypeFilter === "all" ? "active" : ""}>Арьсны төрөл: Бүгд</button>{skinTypes.map(type => <button type="button" key={type} onClick={() => setSkinTypeFilter(type)} className={skinTypeFilter === type ? "active" : ""}>{skinTypeLabels[type]}</button>)}</div> : null}
         <div className="shop-control-row"><label className="stock-toggle"><input type="checkbox" checked={inStockOnly} onChange={event => setInStockOnly(event.target.checked)} /><span><PackageCheck size={14} /> Бэлэн нөөцтэй</span></label><label className="sort-control"><ArrowDownUp size={14} /><span>Эрэмбэ</span><select value={sort} onChange={event => setSort(event.target.value as CatalogSortOption)}><option value="featured">Онцлох</option><option value="price-low">Үнэ: багаас</option><option value="price-high">Үнэ: ихээс</option><option value="name-asc">Нэр: A–Я</option></select></label></div>
       </section>
-      {catalog.isLoading ? <div className="shop-loading"><LoaderCircle className="animate-spin" size={30} /> Каталогийг бэлдэж байна</div> : catalog.isError ? <section className="shop-status-card error"><h2>Каталогийг ачаалж чадсангүй.</h2><p>Интернэт холболтоо шалгаад дахин оролдоно уу.</p></section> : products.length === 0 && !forceZeroResults ? <section className="shop-discovery" data-reveal>
+      {catalogLoading ? <div className="shop-loading"><LoaderCircle className="animate-spin" size={30} /> {isSearching ? "Хайж байна" : "Каталогийг бэлдэж байна"}</div> : catalogErrored ? <section className="shop-status-card error"><h2>Каталогийг ачаалж чадсангүй.</h2><p>Интернэт холболтоо шалгаад дахин оролдоно уу.</p></section> : !isSearching && products.length === 0 && !forceZeroResults ? <section className="shop-discovery" data-reveal>
         <div className="shop-discovery-heading"><p className="shop-kicker"><span /> SUGI ASAYAKE / DISCOVER</p><h2>Өнөөдрийн хэрэгцээ<br /><em>эндээс эхэлнэ.</em></h2><p>Онлайн каталогийг бид салбарын бодит нөөцтэй нь уялдуулан шинэчилж байна. Харин та өөрт ойр салбараас дараах ангиллаар шууд асууж болно.</p></div>
         <div className="shop-category-deck">{discoveryCategories.map(item => <div className={`shop-category-card ${item.tone}`} key={item.number}><span>{item.number}</span><div><small>SUGI DAILY CARE</small><h3>{item.title}</h3><p>{item.detail}</p></div><ArrowUpRight size={20} /></div>)}</div>
         <div className="shop-discovery-cta" id="shop-contact"><div><MapPin size={20} /><span><strong>3 салбар, нэг өдөр тутмын сонголт.</strong><small>Таны хайж буй бүтээгдэхүүнийг ойр салбараас асуугаарай.</small></span></div><div><Link href="/#stores">Салбар олох <ArrowUpRight size={16} /></Link><a href="tel:94509911">9450-9911 <Phone size={15} /></a></div></div>

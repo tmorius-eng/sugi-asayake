@@ -70,6 +70,7 @@ import {
   getProductStockQuantity,
   getProductWriteConflicts,
   getPublishedCatalog,
+  searchPublishedCatalog,
   getPublishedRoutineBySlug,
   getRecommendedProducts,
   getPublishedPosts,
@@ -119,6 +120,7 @@ import {
 } from "./db";
 import { adminProcedure, moderateRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure } from "./_core/trpc";
 import { storagePing, storagePut } from "./storage";
+import { IMAGE_MAX_DIMENSION, processUploadedImage } from "./_core/imageProcessing";
 import { createQPayInvoice, getQPayAvailability } from "./qpay";
 import { getCategoryWriteViolation, getProductWriteViolation } from "./catalog-validation";
 import { siteMediaSlotKeys } from "../shared/site-media";
@@ -385,6 +387,19 @@ function assertImageSignature(buffer: Buffer, contentType: (typeof imageContentT
   }
 }
 
+// assertImageSignature above only checks the first few magic bytes, which a
+// truncated/otherwise-corrupt upload can still satisfy; sharp's actual
+// decode (inside processUploadedImage) is the real validity check. Wrapping
+// it here turns a raw decoder exception into a clean, translated
+// BAD_REQUEST instead of leaking an internal stack trace to the client.
+async function processUploadedImageOrThrow(buffer: Buffer, contentType: (typeof imageContentTypes)[number], maxDimension: number): Promise<Buffer> {
+  try {
+    return await processUploadedImage(buffer, contentType, maxDimension);
+  } catch {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Зургийг уншиж чадсангүй. Файл гэмтсэн эсвэл дэмжигдээгүй байж магадгүй." });
+  }
+}
+
 async function validateProductWrite(input: { categoryId?: number; slug?: string; sku?: string; id?: number }) {
   const categoryFound = input.categoryId === undefined ? null : await categoryExists(input.categoryId);
   const conflicts = input.slug !== undefined || input.sku !== undefined ? await getProductWriteConflicts({ slug: input.slug, sku: input.sku, excludeId: input.id }) : [];
@@ -593,6 +608,11 @@ export const appRouter = router({
   }),
   catalog: router({
     list: publicProcedure.query(() => getPublishedCatalog()),
+    // Server-side search (ROADMAP.md TIER 2) — a 2+ character query returns
+    // matches from the FULLTEXT index instead of the client filtering the
+    // full catalog.list payload. See searchPublishedCatalog for the exact
+    // matching behavior.
+    search: publicProcedure.input(z.object({ query: z.string().trim().min(2).max(120) })).query(({ input }) => searchPublishedCatalog(input.query)),
     bySlug: publicProcedure.input(z.object({ slug: z.string().min(1).max(200) })).query(({ input }) => getProductBySlug(input.slug)),
     // PREMIUM-FEATURES.md TIER 1: "recommended for you" — protected, not
     // public, since it's meaningless without a saved preference profile to
@@ -754,7 +774,8 @@ export const appRouter = router({
         }
         assertImageSignature(buffer, input.contentType);
         const extension = input.contentType === "image/jpeg" ? "jpg" : input.contentType === "image/png" ? "png" : "webp";
-        const stored = await storagePut(`avatars/${ctx.user.id}/avatar-${Date.now()}.${extension}`, buffer, input.contentType);
+        const processed = await processUploadedImageOrThrow(buffer, input.contentType, IMAGE_MAX_DIMENSION.avatar);
+        const stored = await storagePut(`avatars/${ctx.user.id}/avatar-${Date.now()}.${extension}`, processed, input.contentType);
         const updated = await updateUserAvatar(ctx.user.id, stored.url);
         if (!updated) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Зураг хадгалж чадсангүй." });
         const { passwordHash: _omit, ...safeUser } = updated;
@@ -1275,7 +1296,8 @@ export const appRouter = router({
 
         const extension = input.contentType === "image/jpeg" ? "jpg" : input.contentType === "image/png" ? "png" : "webp";
         const safeStem = input.fileName.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 70) || "product";
-        const stored = await storagePut(`catalog/products/${ctx.user.id}/${safeStem}.${extension}`, buffer, input.contentType);
+        const processed = await processUploadedImageOrThrow(buffer, input.contentType, IMAGE_MAX_DIMENSION.product);
+        const stored = await storagePut(`catalog/products/${ctx.user.id}/${safeStem}.${extension}`, processed, input.contentType);
         return { url: stored.url, key: stored.key };
       }),
     uploadSiteMediaImage: staffProcedure
@@ -1293,7 +1315,8 @@ export const appRouter = router({
         assertImageSignature(buffer, input.contentType);
         const extension = input.contentType === "image/jpeg" ? "jpg" : input.contentType === "image/png" ? "png" : "webp";
         const safeStem = input.fileName.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 70) || "site-media";
-        const stored = await storagePut(`site-media/${ctx.user.id}/${safeStem}-${Date.now()}.${extension}`, buffer, input.contentType);
+        const processed = await processUploadedImageOrThrow(buffer, input.contentType, IMAGE_MAX_DIMENSION.siteMedia);
+        const stored = await storagePut(`site-media/${ctx.user.id}/${safeStem}-${Date.now()}.${extension}`, processed, input.contentType);
         return { url: stored.url, key: stored.key };
       }),
   }),

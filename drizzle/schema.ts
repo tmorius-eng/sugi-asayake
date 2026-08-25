@@ -146,6 +146,14 @@ export const productCategories = mysqlTable("product_categories", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
+/**
+ * `products` also carries a FULLTEXT index over (name, brand,
+ * shortDescription) — `products_search_idx`, added by
+ * drizzle/0027_catalog_fulltext_search.sql — powering server-side catalog
+ * search (server/db.ts searchPublishedCatalog). It's applied via raw SQL,
+ * not declared here: this drizzle-orm version's mysql-core `index()`
+ * builder has no FULLTEXT index type.
+ */
 export const products = mysqlTable("products", {
   id: int("id").autoincrement().primaryKey(),
   // RESTRICT: there is no admin "delete category" endpoint today, but if one

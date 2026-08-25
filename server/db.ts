@@ -419,6 +419,65 @@ export async function getPublishedCatalog() {
     .orderBy(asc(productCategories.sortOrder), desc(products.createdAt));
 }
 
+/**
+ * ROADMAP.md TIER 2: server-side catalog search, replacing a client-side
+ * substring filter over the entire ~937-row published catalog. Uses the
+ * `products_search_idx` FULLTEXT index (drizzle/0027_catalog_fulltext_search.sql)
+ * over (name, brand, shortDescription) in BOOLEAN MODE with a trailing `*`
+ * wildcard on every term, so "крем нью" behaves like a prefix search per
+ * word ("find rows where some indexed word starts with крем AND some
+ * indexed word starts with нью") — the closest FULLTEXT equivalent to the
+ * old client-side "substring anywhere" behavior, though not identical:
+ * MySQL's default InnoDB FULLTEXT parser only indexes whole words of at
+ * least 3 characters (innodb_ft_min_token_size), so a query like "ню" alone
+ * won't match a 4-letter word by prefix the way the old JS .includes() did
+ * for genuinely tiny fragments — real product/brand names are essentially
+ * always long enough for this not to matter in practice.
+ */
+export async function searchPublishedCatalog(query: string) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const terms = query.trim().split(/\s+/).filter(Boolean)
+    // Strip MySQL boolean-mode operator characters so user input can't
+    // change the query's structure (e.g. a leading "-" would exclude
+    // instead of require a term) — this is a search relevance concern, not
+    // a SQL-injection one (drizzle still parameterizes the whole string).
+    .map(term => term.replace(/[+\-<>()~*"@]/g, ""))
+    .filter(Boolean)
+    .map(term => `+${term}*`);
+  if (!terms.length) return [];
+  const booleanQuery = terms.join(" ");
+  const matchExpr = sql`MATCH(${products.name}, ${products.brand}, ${products.shortDescription}) AGAINST(${booleanQuery} IN BOOLEAN MODE)`;
+
+  return db
+    .select({
+      id: products.id,
+      name: products.name,
+      slug: products.slug,
+      brand: products.brand,
+      shortDescription: products.shortDescription,
+      priceMnt: products.priceMnt,
+      compareAtPriceMnt: products.compareAtPriceMnt,
+      imageUrl: products.imageUrl,
+      stockQuantity: products.stockQuantity,
+      categoryName: productCategories.name,
+      categorySlug: productCategories.slug,
+      skinType: products.skinType,
+      skinConcerns: products.skinConcerns,
+      interiorStyle: products.interiorStyle,
+      avgRating: avgRatingExpr,
+      reviewCount: reviewCountExpr,
+    })
+    .from(products)
+    .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
+    .leftJoin(productReviews, eq(productReviews.productId, products.id))
+    .where(and(eq(products.isPublished, true), matchExpr))
+    .groupBy(products.id, productCategories.id)
+    .orderBy(desc(matchExpr))
+    .limit(200);
+}
+
 // PREMIUM-FEATURES.md TIER 1: "recommended for you", scored by how many of
 // the shopper's saved Beauty & Home preferences (server/routers.ts
 // profile.updatePreferences) a product's own tags match. Matching happens

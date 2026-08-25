@@ -47,8 +47,8 @@ Manus-с email+password руу шилжихдээ би дараах чухал �
 
 ## TIER 2 — Э-commerce-ийн үндсэн бүрэн бүтэн байдал
 
-- [ ] **Зурган боловсруулалт байхгүй** — upload хийсэн зураг шууд хадгалагддаг, thumbnail/compress/resize хийдэггүй (`sharp` package нэмэх санал болгож байна). Энэ нь page load хурдад шууд нөлөөлнө
-- [ ] **Хайлт зөвхөн клиент талд** (аль хэдийн ачаалсан жагсаалтыг JS-ээр шүүдэг) — каталог томрох тусам удаашрана. Сервер талын full-text search руу шилжих (жишээ нь MySQL FULLTEXT index, эсвэл каталог 500+ бараа болбол Meilisearch/Algolia гэх мэт)
+- [x] **Зурган боловсруулалт** — ДУУССАН (2026-08-25). `sharp` нэмэгдсэн, upload бүр (бүтээгдэхүүн/site-media/avatar) одоо resize+compress хийгддэг. Дэлгэрэнгүй [CLAUDE.md](CLAUDE.md)-ийн "2026-08-25 (үргэлжлэл)" хэсэгт.
+- [x] **Хайлт сервер талд шилжсэн** — ДУУССАН (2026-08-25). MySQL FULLTEXT index (`products_search_idx`), `catalog.search` procedure. Дэлгэрэнгүй [CLAUDE.md](CLAUDE.md)-ийн "2026-08-25 (үргэлжлэл)" хэсэгт.
 - [ ] Захиалга цуцлах/буцаах (refund) урсгал — админ талд `updateAdminOrder` бий ч, буцаалтын логик (нөөц буцаах, төлбөр буцаах) бүрэн шалгагдаагүй
 - [x] Захиалгын баталгаажуулах имэйл, хүргэлтийн статус мэдэгдэл — ДУУССАН (2026-08-25). `checkout.createOrder` (амжилттай захиалга бүрд, `customerEmail` байгаа тохиолдолд, барааны задаргаатай) болон `admin.updateOrder`/`admin.bulkUpdateOrderStatus` (зөвхөн `status` бодитоор өөрчлөгдсөн үед, зөвхөн `deliveryTrackingRef`/`adminNote`-ийн засвар бол дахин илгээхгүй) — хоёулаа `server/routers.ts`-ийн `sendOrderConfirmationEmail`/`sendOrderStatusUpdateEmail`-ийг ашигладаг, best-effort (имэйл амжилтгүй болсон ч захиалга/статус өөрчлөлт хэзээ ч буцаагдахгүй). Шинэ `server/order-notifications.integration.test.ts` (4 тест, бодит DB+cart+order). **Энэ явцад олдсон, засагдсан stale тест bug**: `checkout.guest.integration.test.ts`-ийн "merges a guest's cart" тест 2026-08-20-ийн OTP шилжилтийн дараа хуучирсан байсан (`auth.register` одоо шууд session олгодоггүй тул cart merge хийгддэггүй байсан — `auth.confirmRegistration`-д л шилжсэн) — тест `confirmRegistration` алхмыг дуудахгүй байсан тул үргэлж бүтэлгүйтдэг байсныг олж, зассан. Бодит HTTP-ээр (dev сервер, Brevo log-fallback) бүрэн урсгал шалгасан: guest checkout (имэйлтэй) → баталгаажуулах имэйл лог-д гарсан (барааны нэр, тоо ширхэг, дүн зөв) → admin status "confirmed" болгосон → шинэчлэлтийн имэйл гарсан → зөвхөн tracking ref засахад **дахин илгээгээгүй**.
 - [x] Зочин (guest) checkout боломж — ДУУССАН (2026-08-20), дэлгэрэнгүй [UX-RESEARCH.md](UX-RESEARCH.md)
@@ -68,7 +68,7 @@ Manus-с email+password руу шилжихдээ би дараах чухал �
 - [ ] Бүх хуудсанд ачаалах/алдааны төлөв нэгдсэн, тогтвортой байдлаар харагдаж байгааг шалгах
 - [ ] Гар утасны дэлгэц дээр бүх урсгалыг (checkout, admin панель) дахин шалгах
 - [ ] Код форматлалт — `prettier` аль хэдийн devDependency-д байгаа тул `pnpm exec prettier --write .` ажиллуулж, JSX-ийн нягт бичлэгийг цэгцлэх
-- [ ] **Хэрэглэгддэггүй код устгах**: `ComponentShowcase.tsx` (1437 мөр!), ашиглагдаагүй `AIChatBox.tsx`, `ManusDialog.tsx`, `AdminPreview.tsx` — routing хийгдээгүй ч repo-г хүндрүүлж байна
+- [x] **Хэрэглэгддэггүй код устгах** — ДУУССАН (2026-08-25). `ComponentShowcase.tsx`/`AIChatBox.tsx`/`ManusDialog.tsx`/`AdminPreview.tsx` (нийт 1868 мөр) устгасан, 9 хуучирсан Manus-эриний баримт бичгийг `archive/`-руу зөөсөн. `pnpm exec prettier --write .` хараахан хийгээгүй (томоохон, эрсдэлтэй diff тул зориудаар алгассан — доор тайлбарласан).
 - [ ] SEO: бүтээгдэхүүн бүрийн meta tag, structured data (Product schema.org), sitemap автоматаар шинэчлэгддэг эсэхийг шалгах
 - [ ] Performance: зураг lazy-load хийгдэж байгаа эсэх, bundle size, Lighthouse score
 
