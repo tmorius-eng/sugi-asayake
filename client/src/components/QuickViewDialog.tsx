@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
+import { getSalePercent } from "@shared/catalog-filter";
 
 export type QuickViewProduct = {
   id: number;
@@ -14,6 +15,7 @@ export type QuickViewProduct = {
   shortDescription?: string | null;
   imageUrl?: string | null;
   priceMnt: number;
+  compareAtPriceMnt?: number | null;
   stockQuantity: number;
 };
 
@@ -53,6 +55,7 @@ export default function QuickViewDialog({ open, product, onOpenChange, onAdded }
   if (!display) return null;
   const available = Math.max(0, display.stockQuantity);
   const description = detail.data?.description ?? display.shortDescription ?? "Японоос албан ёсоор нийлүүлсэн өдөр тутмын арчилгааны сонголт.";
+  const salePercent = getSalePercent(display.priceMnt, display.compareAtPriceMnt);
 
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="quick-view-dialog max-h-[calc(100vh-1.5rem)] overflow-y-auto border-0 bg-[#fffdf9] p-0 shadow-[0_28px_100px_rgba(23,24,27,.32)] sm:max-w-3xl" showCloseButton={false}>
     <div className="quick-view-topline"><span><Eye size={14} /> QUICK VIEW</span><button type="button" onClick={() => onOpenChange(false)} aria-label="Хаах">×</button></div>
@@ -62,7 +65,7 @@ export default function QuickViewDialog({ open, product, onOpenChange, onAdded }
         <DialogTitle className="font-[var(--font-display)] text-4xl font-semibold tracking-[-.075em] text-[#17181b] sm:text-5xl">{display.name}</DialogTitle>
         <DialogDescription className="mt-2 text-[10px] font-extrabold tracking-[.15em] text-[#df1f3d]">{display.brand ?? display.categoryName ?? "SUGI ASAYAKE"}</DialogDescription>
         <p className="quick-view-description">{detail.isLoading ? "Дэлгэрэнгүй мэдээллийг ачаалж байна…" : description}</p>
-        <div className="quick-view-price"><strong>{formatMnt(display.priceMnt)}</strong><span>НӨАТ багтсан</span></div>
+        <div className="quick-view-price"><strong>{formatMnt(display.priceMnt)}</strong>{salePercent ? <><s>{formatMnt(display.compareAtPriceMnt!)}</s><em className="quick-view-sale-badge">-{salePercent}%</em></> : <span>НӨАТ багтсан</span>}</div>
         <div className="quick-view-actions">
           <div className="quick-view-quantity" aria-label="Тоо сонгох"><button type="button" onClick={() => setQuantity(value => Math.max(1, value - 1))} aria-label="Тоо хасах"><Minus size={15} /></button><span>{quantity}</span><button type="button" disabled={quantity >= available} onClick={() => setQuantity(value => Math.min(available, value + 1))} aria-label="Тоо нэмэх"><Plus size={15} /></button></div>
           <button type="button" disabled={available === 0 || addItem.isPending} onClick={addToCart} className="quick-view-add">{addItem.isPending ? <LoaderCircle className="animate-spin" size={17} /> : <ShoppingBag size={17} />} {available === 0 ? "Нөөц дууссан" : "Сагсанд нэмэх"}</button>

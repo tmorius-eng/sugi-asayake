@@ -400,6 +400,7 @@ export async function getPublishedCatalog() {
       brand: products.brand,
       shortDescription: products.shortDescription,
       priceMnt: products.priceMnt,
+      compareAtPriceMnt: products.compareAtPriceMnt,
       imageUrl: products.imageUrl,
       stockQuantity: products.stockQuantity,
       categoryName: productCategories.name,

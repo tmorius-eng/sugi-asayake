@@ -10,6 +10,19 @@ export type CatalogDiscoveryItem = CatalogSearchItem & {
   stockQuantity: number;
 };
 
+// A product is "low stock" once it's this close to selling out entirely —
+// shared by the Shop grid and ProductDetail so the threshold can't drift
+// between the two places it's rendered.
+export const LOW_STOCK_THRESHOLD = 5;
+
+// Sale badge (asahi.mn-style strikethrough price + "-X%"): compareAtPriceMnt
+// is the admin-entered "was" price. Only a real markdown counts — an equal
+// or lower compareAtPriceMnt is just bad data entry, not a sale.
+export function getSalePercent(priceMnt: number, compareAtPriceMnt?: number | null): number | null {
+  if (!compareAtPriceMnt || compareAtPriceMnt <= priceMnt) return null;
+  return Math.round((1 - priceMnt / compareAtPriceMnt) * 100);
+}
+
 export type CatalogSortOption = "featured" | "price-low" | "price-high" | "name-asc";
 
 export function getCatalogCategories<T extends CatalogSearchItem>(products: T[]) {
