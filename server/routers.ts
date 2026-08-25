@@ -29,6 +29,7 @@ import {
   createPasswordResetCode,
   createProductReview,
   getActiveCartForOwner,
+  getApplicableLoyaltyDiscount,
   getApplicableRoutineDiscount,
   getUserLoyaltyStatus,
   createQPayPaymentAttempt,
@@ -691,6 +692,37 @@ export const appRouter = router({
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Хямдралын код шалгаж чадсангүй." });
       }
+    }),
+    // Checkout-preview for the loyalty tier discount — mirrors exactly what
+    // createOrderFromActiveCart will charge (same base: subtotal after the
+    // routine discount, then after the coupon, per the stacking order
+    // there). Added because the client used to re-derive this number itself
+    // from loyalty.myStatus's raw discountPercent (same formula, but a
+    // second, independent implementation of it) instead of asking the
+    // server for the real preview the way routine/coupon already do.
+    // protectedProcedure: loyalty tiers are a signed-in account benefit,
+    // same gate as loyalty.myStatus below.
+    applicableLoyaltyDiscount: protectedProcedure.input(z.object({ couponCode: z.string().trim().max(40).nullable().optional() })).query(async ({ ctx, input }) => {
+      const owner = resolveCartOwnerForRead(ctx);
+      if (!owner) return null;
+      const cart = await getActiveCartForOwner(owner);
+      if (!cart?.items.length) return null;
+      const subtotalMnt = cart.items.reduce((sum, item) => sum + item.priceMnt * item.quantity, 0);
+      const routineDiscount = await getApplicableRoutineDiscount(cart.items);
+      const afterRoutineMnt = subtotalMnt - (routineDiscount?.discountMnt ?? 0);
+      let afterCouponMnt = afterRoutineMnt;
+      if (input.couponCode) {
+        try {
+          const coupon = await validateDiscountCode(input.couponCode, afterRoutineMnt);
+          afterCouponMnt = afterRoutineMnt - coupon.discountMnt;
+        } catch {
+          // An invalid/stale coupon at preview time isn't this endpoint's
+          // problem to report — applicableCouponDiscount already surfaces
+          // that error where the coupon box itself lives. Just preview the
+          // loyalty discount as if the coupon weren't there.
+        }
+      }
+      return getApplicableLoyaltyDiscount(ctx.user.id, afterCouponMnt);
     }),
     addItem: moderateRateLimitedProcedure.input(z.object({ productId: z.number().int().positive(), quantity: z.number().int().min(1).max(100) })).mutation(async ({ ctx, input }) => {
       try {

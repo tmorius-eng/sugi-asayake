@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gte, inArray, isNull, like, lt, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { adminAuditLogs, cartItems, carts, discountCodes, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, loginAttempts, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, productReviews, products, routines, routineSteps, siteMedia, sitePromotions, staffInvitations, userAddresses, users, wishlistItems } from "../drizzle/schema";
+import { UB_DELIVERY_FEE_MNT } from "../shared/const";
 import { ENV } from './_core/env';
 import { getInventoryReservationFailure, shouldRestoreStock } from "./commerce-lifecycle";
 import { getLoyaltyTier, getNextLoyaltyTier } from "../shared/loyalty";
@@ -711,7 +712,7 @@ export async function createOrderFromActiveCart(input: {
   if (availabilityFailure) throw new Error(availabilityFailure);
 
   const subtotalMnt = cart.items.reduce((sum, item) => sum + item.priceMnt * item.quantity, 0);
-  const deliveryFeeMnt = input.deliveryMethod === "ub_delivery" ? 5000 : 0;
+  const deliveryFeeMnt = input.deliveryMethod === "ub_delivery" ? UB_DELIVERY_FEE_MNT : 0;
   // PREMIUM-FEATURES.md TIER 4: computed from the cart's real contents right
   // now, not a client-supplied amount — see getApplicableRoutineDiscount.
   const routineDiscount = await getApplicableRoutineDiscount(cart.items);

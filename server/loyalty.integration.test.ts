@@ -119,6 +119,24 @@ describeWithDatabase("loyalty tier discount integration", () => {
     expect(persisted[0]?.totalMnt).toBe(97_000);
   });
 
+  it("cart.applicableLoyaltyDiscount previews the exact amount checkout.createOrder actually charges", async () => {
+    const caller = shopper();
+    await caller.cart.addItem({ productId, quantity: 1 }); // 100,000₮, still Хүрэл (3%) from the credit above
+
+    const preview = await caller.cart.applicableLoyaltyDiscount({ couponCode: null });
+    expect(preview).toMatchObject({ tierName: "Хүрэл", discountPercent: 3, discountMnt: 3_000 });
+
+    const order = await caller.checkout.createOrder({
+      customerName: "Loyalty Test Shopper",
+      customerPhone: "99112233",
+      deliveryMethod: "store_pickup",
+      pickupBranch: "Орос элчингийн салбар",
+      paymentMethod: "cash_on_delivery",
+    });
+    createdOrderIds.push(order.id);
+    expect(order.loyaltyDiscountMnt).toBe(preview!.discountMnt);
+  });
+
   it("climbs to a higher tier once real paid spend crosses the next threshold", async () => {
     const db = await getDb();
     if (!db) throw new Error("DATABASE_URL is required for loyalty integration tests.");

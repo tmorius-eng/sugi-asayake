@@ -2,27 +2,39 @@ import { useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { filterCatalogProducts } from "@shared/catalog-filter";
 
 // Site-wide search-with-suggestions, reachable from every page (previously
 // the only search box lived inside /shop's hero panel -- a shopper on Home,
 // ProductDetail, or Profile had no way to search without first navigating
-// there). Reuses the same trpc.catalog.list data Shop.tsx already fetches
-// (react-query dedupes the request once both are mounted) and the same
-// filterCatalogProducts matching logic, so results here are never
-// inconsistent with what /shop itself would show for the same term.
+// there). Calls the same catalog.search FULLTEXT procedure /shop itself
+// uses (ROADMAP.md TIER 2), so results here can never disagree with what
+// /shop shows for the same term — this used to run its own client-side
+// filterCatalogProducts substring match over the whole always-fetched
+// catalog.list, which quietly drifted out of sync the moment /shop moved
+// to server-side search: a term this box could substring-match mid-word
+// (e.g. "рем" inside "крем") wouldn't necessarily FULLTEXT-match on /shop,
+// so "view all results" could land a shopper on an empty/different page
+// from what they just saw suggested.
 const fallbackImage = "/product-placeholder.svg";
 const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
+const MIN_QUERY_LENGTH = 2;
 
 export default function HeaderSearch() {
   const [open, setOpen] = useState(false);
   const [term, setTerm] = useState("");
+  const [debouncedTerm, setDebouncedTerm] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const catalog = trpc.catalog.list.useQuery(undefined, { enabled: open });
-  const products = catalog.data ?? [];
   const trimmed = term.trim();
-  const matches = trimmed ? filterCatalogProducts(products, trimmed, "all").slice(0, 6) : [];
+
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedTerm(trimmed), 300);
+    return () => clearTimeout(handle);
+  }, [trimmed]);
+
+  const isSearchable = open && debouncedTerm.length >= MIN_QUERY_LENGTH;
+  const search = trpc.catalog.search.useQuery({ query: debouncedTerm }, { enabled: isSearchable });
+  const matches = (search.data ?? []).slice(0, 6);
 
   useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
 
@@ -45,7 +57,7 @@ export default function HeaderSearch() {
     {open && <div className="header-search-panel">
       <input ref={inputRef} value={term} onChange={event => setTerm(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && trimmed) goToShop(); }} placeholder="Бүтээгдэхүүн, брэндээр хайх" className="header-search-input" />
       {trimmed ? <div className="header-search-results">
-        {catalog.isLoading ? <p className="header-search-empty">Хайж байна…</p> : matches.length ? <>
+        {trimmed.length < MIN_QUERY_LENGTH ? <p className="header-search-empty">Дор хаяж {MIN_QUERY_LENGTH} тэмдэгт оруулна уу.</p> : search.isLoading || debouncedTerm !== trimmed ? <p className="header-search-empty">Хайж байна…</p> : matches.length ? <>
           {matches.map(product => <Link key={product.id} href={`/product/${product.slug}`} onClick={() => setOpen(false)} className="header-search-result">
             <img src={product.imageUrl ?? fallbackImage} alt="" />
             <span><strong>{product.name}</strong><small>{formatMnt(product.priceMnt)}</small></span>
