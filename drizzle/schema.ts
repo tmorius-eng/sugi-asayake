@@ -12,6 +12,35 @@ export const users = mysqlTable("users", {
    */
   id: int("id").autoincrement().primaryKey(),
   name: text("name"),
+  /** Customer profile page (TIER: account). Free-form; also duplicated onto
+   *  each saved address since a delivery contact number can differ from the
+   *  account owner's own number. */
+  phone: varchar("phone", { length: 40 }),
+  /** Public S3/MinIO URL of the uploaded profile photo. Null = no avatar
+   *  (the UI falls back to an initial-letter badge). */
+  avatarUrl: varchar("avatarUrl", { length: 500 }),
+  /**
+   * Beauty & Home preference profile (customer account page). Stored for a
+   * future product-tag-matched recommendation engine — the catalog doesn't
+   * carry matching skin/interior tags yet (see ROADMAP.md TIER 2), so these
+   * are captured now but not yet used to filter or rank anything shown to
+   * the shopper.
+   */
+  skinType: mysqlEnum("skinType", ["dry", "oily", "combination", "sensitive", "normal"]),
+  /** Free-form comma-separated concern keys (e.g. "acne,aging,dullness") —
+   *  a plain list column rather than a join table since concerns are only
+   *  ever read/written as a whole set for one profile, never queried by
+   *  individual concern. */
+  skinConcerns: varchar("skinConcerns", { length: 300 }),
+  interiorStyle: varchar("interiorStyle", { length: 60 }),
+  /** Notification preferences (customer account page, "Мэдэгдэл" tab).
+   *  NOTE: order-confirmation / delivery-status emails don't exist yet
+   *  (ROADMAP.md TIER 2 — "Захиалгын баталгаажуулах имэйл ... дуудалт хийгээгүй"),
+   *  so these flags are captured and enforced only for the notifications
+   *  this app already sends (currently: back-in-stock wishlist alerts) —
+   *  not a blanket promise every future email/SMS respects them yet. */
+  emailOptIn: boolean("emailOptIn").notNull().default(true),
+  smsOptIn: boolean("smsOptIn").notNull().default(true),
   /** Unique login identifier for the app's own email+password auth. */
   email: varchar("email", { length: 320 }).notNull().unique(),
   /** scrypt("<saltHex>:<hashHex>") — see server/_core/password.ts. Never sent to the client. */
@@ -44,6 +73,54 @@ export const users = mysqlTable("users", {
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
+
+/**
+ * Customer profile address book (TIER: account). Lets a returning shopper
+ * save multiple delivery addresses ("Гэр", "Ажил", ...) instead of retyping
+ * one every checkout — the standard "world-class" ecommerce account pattern.
+ * Exactly one row per user has isDefault = true; enforced in server/db.ts
+ * (createUserAddress/updateUserAddress/deleteUserAddress), not the DB, since
+ * MySQL has no partial-unique-index equivalent here.
+ */
+export const userAddresses = mysqlTable("user_addresses", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  label: varchar("label", { length: 60 }).notNull(),
+  recipientName: varchar("recipientName", { length: 160 }).notNull(),
+  phone: varchar("phone", { length: 40 }).notNull(),
+  addressLine: text("addressLine").notNull(),
+  isDefault: boolean("isDefault").notNull().default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  index("user_addresses_user_idx").on(table.userId),
+]);
+
+export type UserAddress = typeof userAddresses.$inferSelect;
+export type InsertUserAddress = typeof userAddresses.$inferInsert;
+
+/**
+ * Customer wishlist / saved items (TIER: account). One row per
+ * user+product ("boards"/named collections are a possible fast-follow —
+ * this is a single flat list per user for now, which is still the core of
+ * what every reference site's "Saved Items" does). `notifyOnRestock` powers
+ * the "Ирэхээр мэдэгдэх" back-in-stock email — see notifyWishlistWatchers
+ * in server/db.ts, triggered from admin.updateProduct when stock goes from
+ * 0 to >0.
+ */
+export const wishlistItems = mysqlTable("wishlist_items", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  productId: int("productId").notNull().references(() => products.id, { onDelete: "cascade" }),
+  notifyOnRestock: boolean("notifyOnRestock").notNull().default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  uniqueIndex("wishlist_items_user_product_idx").on(table.userId, table.productId),
+  index("wishlist_items_product_idx").on(table.productId),
+]);
+
+export type WishlistItem = typeof wishlistItems.$inferSelect;
+export type InsertWishlistItem = typeof wishlistItems.$inferInsert;
 
 export const productCategories = mysqlTable("product_categories", {
   id: int("id").autoincrement().primaryKey(),

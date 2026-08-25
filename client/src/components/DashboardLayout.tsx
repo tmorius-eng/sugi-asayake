@@ -70,22 +70,23 @@ export default function DashboardLayout({
 
   if (!user) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
-          <div className="flex flex-col items-center gap-6">
-            <h1 className="text-2xl font-semibold tracking-tight text-center">
-              Sign in to continue
+      <div className="flex items-center justify-center min-h-screen bg-[#f8f5ef]">
+        <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full text-center">
+          <div className="flex flex-col items-center gap-3">
+            <p className="text-[10px] font-extrabold tracking-[.18em] text-[#df1f3d]">{brand.toUpperCase()}</p>
+            <h1 className="font-[var(--font-display)] text-3xl font-semibold tracking-[-.05em]">
+              Нэвтэрч үргэлжлүүлнэ үү.
             </h1>
-            <p className="text-sm text-muted-foreground text-center max-w-sm">
-              Access to this dashboard requires authentication. Continue to launch the login flow.
+            <p className="text-sm text-[#707176] max-w-sm">
+              Энэ хэсгийг үзэхийн тулд эхлээд нэвтэрсэн байх шаардлагатай.
             </p>
           </div>
           <Button
             onClick={() => startLogin()}
             size="lg"
-            className="w-full shadow-lg hover:shadow-xl transition-all"
+            className="w-full bg-[#df1f3d] text-white hover:bg-[#ba1731] shadow-lg hover:shadow-xl transition-all"
           >
-            Sign in
+            Нэвтрэх
           </Button>
         </div>
       </div>
@@ -190,8 +191,9 @@ function DashboardLayoutContent({
                 <PanelLeft className="h-4 w-4 text-muted-foreground" />
               </button>
               {!isCollapsed ? (
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="font-semibold tracking-tight truncate">
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <span className="text-[9px] font-extrabold tracking-[.18em] text-[#df1f3d]">SUGI CONTROL</span>
+                  <span className="truncate font-[var(--font-display)] text-sm font-bold tracking-[-.02em]">
                     {brand}
                   </span>
                 </div>
@@ -247,7 +249,7 @@ function DashboardLayoutContent({
                   className="cursor-pointer text-destructive focus:text-destructive"
                 >
                   <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
-                  <span>Sign out</span>
+                  <span>Гарах</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   disabled={logoutAllDevicesMutation.isPending}

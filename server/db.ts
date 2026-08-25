@@ -1,6 +1,6 @@
-import { and, asc, desc, eq, gte, like, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, like, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { adminAuditLogs, cartItems, carts, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, loginAttempts, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, products, siteMedia, staffInvitations, users } from "../drizzle/schema";
+import { adminAuditLogs, cartItems, carts, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, loginAttempts, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, products, siteMedia, staffInvitations, userAddresses, users, wishlistItems } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { getInventoryReservationFailure, shouldRestoreStock } from "./commerce-lifecycle";
 
@@ -109,6 +109,190 @@ export async function touchUserLastSignedIn(id: number) {
   const db = await getDb();
   if (!db) return;
   await db.update(users).set({ lastSignedIn: new Date() }).where(eq(users.id, id));
+}
+
+/** Profile page (name/phone) update — email and password have their own
+ *  dedicated flows (registration, forgot-password) and aren't touched here. */
+export async function updateUserProfile(userId: number, input: { name?: string | null; phone?: string | null }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.update(users).set({
+    ...(input.name !== undefined ? { name: input.name } : {}),
+    ...(input.phone !== undefined ? { phone: input.phone } : {}),
+    updatedAt: new Date(),
+  }).where(eq(users.id, userId));
+  return getUserById(userId);
+}
+
+export async function updateUserAvatar(userId: number, avatarUrl: string | null) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.update(users).set({ avatarUrl, updatedAt: new Date() }).where(eq(users.id, userId));
+  return getUserById(userId);
+}
+
+/** Saved delivery addresses for the profile page's address book. Default
+ *  address first, then most-recently-added. */
+export async function getUserAddresses(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(userAddresses).where(eq(userAddresses.userId, userId)).orderBy(desc(userAddresses.isDefault), desc(userAddresses.createdAt));
+}
+
+export async function createUserAddress(userId: number, input: { label: string; recipientName: string; phone: string; addressLine: string; isDefault?: boolean }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const existing = await db.select({ id: userAddresses.id }).from(userAddresses).where(eq(userAddresses.userId, userId));
+  // The very first saved address is always the default — there's no "no
+  // default" state once at least one address exists, so checkout always has
+  // something to prefill from.
+  const makeDefault = input.isDefault === true || existing.length === 0;
+  if (makeDefault) {
+    await db.update(userAddresses).set({ isDefault: false }).where(eq(userAddresses.userId, userId));
+  }
+  const inserted = await db.insert(userAddresses).values({
+    userId,
+    label: input.label,
+    recipientName: input.recipientName,
+    phone: input.phone,
+    addressLine: input.addressLine,
+    isDefault: makeDefault,
+  });
+  const created = await db.select().from(userAddresses).where(eq(userAddresses.id, Number(inserted[0].insertId))).limit(1);
+  return created[0];
+}
+
+export async function updateUserAddress(userId: number, addressId: number, input: { label?: string; recipientName?: string; phone?: string; addressLine?: string; isDefault?: boolean }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const owned = await db.select({ id: userAddresses.id }).from(userAddresses).where(and(eq(userAddresses.id, addressId), eq(userAddresses.userId, userId))).limit(1);
+  if (!owned.length) throw new Error("Address not found.");
+  if (input.isDefault === true) {
+    await db.update(userAddresses).set({ isDefault: false }).where(eq(userAddresses.userId, userId));
+  }
+  await db.update(userAddresses).set({ ...input, updatedAt: new Date() }).where(eq(userAddresses.id, addressId));
+  const updated = await db.select().from(userAddresses).where(eq(userAddresses.id, addressId)).limit(1);
+  return updated[0];
+}
+
+export async function deleteUserAddress(userId: number, addressId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const owned = await db.select({ id: userAddresses.id, isDefault: userAddresses.isDefault }).from(userAddresses).where(and(eq(userAddresses.id, addressId), eq(userAddresses.userId, userId))).limit(1);
+  if (!owned.length) throw new Error("Address not found.");
+  await db.delete(userAddresses).where(eq(userAddresses.id, addressId));
+  // Deleting the default address promotes the next most-recent one so
+  // checkout still has a default to prefill from.
+  if (owned[0].isDefault) {
+    const remaining = await db.select({ id: userAddresses.id }).from(userAddresses).where(eq(userAddresses.userId, userId)).orderBy(desc(userAddresses.createdAt)).limit(1);
+    if (remaining.length) await db.update(userAddresses).set({ isDefault: true }).where(eq(userAddresses.id, remaining[0].id));
+  }
+  return { success: true } as const;
+}
+
+/** Beauty & Home preference profile — see the schema doc comment on
+ *  users.skinType for what these are (and aren't yet) used for. */
+export async function updateUserPreferences(userId: number, input: { skinType?: "dry" | "oily" | "combination" | "sensitive" | "normal" | null; skinConcerns?: string | null; interiorStyle?: string | null }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.update(users).set({ ...input, updatedAt: new Date() }).where(eq(users.id, userId));
+  return getUserById(userId);
+}
+
+export async function updateNotificationPreferences(userId: number, input: { emailOptIn?: boolean; smsOptIn?: boolean }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.update(users).set({ ...input, updatedAt: new Date() }).where(eq(users.id, userId));
+  return getUserById(userId);
+}
+
+/** Profile page "Аюулгүй байдал" tab — change password while staying signed
+ *  in on the current device. Bumps sessionVersion (same as a forced
+ *  password reset) so every OTHER already-issued session/device is logged
+ *  out; the caller (server/routers.ts) re-signs a fresh token for the
+ *  current request so this device isn't logged out of its own change. */
+export async function changeUserPassword(userId: number, passwordHash: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.update(users).set({ passwordHash, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: new Date() }).where(eq(users.id, userId));
+  const updated = await getUserById(userId);
+  if (!updated) throw new Error("Хэрэглэгч олдсонгүй.");
+  return updated;
+}
+
+/** Profile page "Аюулгүй байдал" tab — permanent self-service account
+ *  deletion. Relies entirely on the FK cascade/set-null rules already
+ *  established in drizzle/schema.ts (TIER 1): orders.userId -> SET NULL
+ *  (order history/accounting survives), cart/address/wishlist rows ->
+ *  CASCADE. Any account that has ever authored a post, edited site media,
+ *  performed a logged admin action, or invited staff is guarded by a
+ *  RESTRICT FK and will fail here — server/routers.ts only exposes this to
+ *  plain "user" role accounts for exactly that reason, so in practice this
+ *  should never hit the RESTRICT case, but the try/catch is a safety net
+ *  against a stale/edge-case role. */
+export async function deleteUserAccount(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  try {
+    await db.delete(users).where(eq(users.id, userId));
+  } catch {
+    throw new Error("Энэ акаунт агуулга (пост, лог г.м.) үүсгэсэн байгаа тул автоматаар устгах боломжгүй. Дэлгүүрийн админтай холбогдоно уу.");
+  }
+  return { success: true } as const;
+}
+
+/** Profile page "Хүслийн жагсаалт" tab. One flat wishlist per user (no
+ *  named boards/collections yet — see the schema doc comment). */
+export async function getWishlistForUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    id: wishlistItems.id,
+    productId: wishlistItems.productId,
+    notifyOnRestock: wishlistItems.notifyOnRestock,
+    createdAt: wishlistItems.createdAt,
+    name: products.name,
+    slug: products.slug,
+    priceMnt: products.priceMnt,
+    imageUrl: products.imageUrl,
+    stockQuantity: products.stockQuantity,
+    isPublished: products.isPublished,
+  }).from(wishlistItems).innerJoin(products, eq(products.id, wishlistItems.productId)).where(eq(wishlistItems.userId, userId)).orderBy(desc(wishlistItems.createdAt));
+}
+
+export async function addWishlistItem(userId: number, productId: number, notifyOnRestock: boolean) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const productExists = await db.select({ id: products.id }).from(products).where(eq(products.id, productId)).limit(1);
+  if (!productExists.length) throw new Error("Бүтээгдэхүүн олдсонгүй.");
+  await db.insert(wishlistItems).values({ userId, productId, notifyOnRestock }).onDuplicateKeyUpdate({ set: { notifyOnRestock } });
+  return { success: true } as const;
+}
+
+export async function removeWishlistItem(userId: number, productId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.delete(wishlistItems).where(and(eq(wishlistItems.userId, userId), eq(wishlistItems.productId, productId)));
+  return { success: true } as const;
+}
+
+/** Called from admin.updateProduct (server/routers.ts) when a product's
+ *  stock crosses 0 -> >0. One-shot: watchers are cleared after notifying,
+ *  so re-subscribing (toggling "Ирэхээр мэдэгдэх" again) is an explicit
+ *  choice rather than a standing subscription that fires every restock. */
+export async function getWishlistWatchersForProduct(productId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({ userId: wishlistItems.userId, email: users.email, emailOptIn: users.emailOptIn })
+    .from(wishlistItems)
+    .innerJoin(users, eq(users.id, wishlistItems.userId))
+    .where(and(eq(wishlistItems.productId, productId), eq(wishlistItems.notifyOnRestock, true)));
+}
+
+export async function clearWishlistNotifyFlagsForProduct(productId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(wishlistItems).set({ notifyOnRestock: false }).where(eq(wishlistItems.productId, productId));
 }
 
 /**
@@ -444,7 +628,12 @@ export async function getOrdersForUser(userId: number) {
   const db = await getDb();
   if (!db) return [];
   const orderRows = await db.select().from(orders).where(eq(orders.userId, userId)).orderBy(desc(orders.createdAt));
-  const lineItems = await db.select({ orderId: orderItems.orderId, productName: orderItems.productName, sku: orderItems.sku, quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt }).from(orderItems);
+  if (!orderRows.length) return [];
+  // `productId` (nullable — SET NULL if the product was later deleted) lets
+  // the "Дахин захиалах" (Buy Again) button on the profile Orders tab
+  // re-add these exact products to the cart. Scoped to this user's own
+  // order ids rather than scanning the whole order_items table.
+  const lineItems = await db.select({ orderId: orderItems.orderId, productId: orderItems.productId, productName: orderItems.productName, sku: orderItems.sku, quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt }).from(orderItems).where(inArray(orderItems.orderId, orderRows.map(order => order.id)));
   return orderRows.map(order => ({ ...order, items: lineItems.filter(item => item.orderId === order.id) }));
 }
 
@@ -854,6 +1043,16 @@ export async function createAdminProduct(input: ProductWriteInput) {
 
   const created = await db.select().from(products).where(eq(products.slug, input.slug)).limit(1);
   return created[0];
+}
+
+/** Cheap "what was the stock before this write" lookup — used by
+ *  admin.updateProduct (server/routers.ts) to detect a 0 -> >0 restock and
+ *  fire wishlist back-in-stock notifications. */
+export async function getProductStockQuantity(id: number): Promise<number | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const found = await db.select({ stockQuantity: products.stockQuantity }).from(products).where(eq(products.id, id)).limit(1);
+  return found[0]?.stockQuantity ?? null;
 }
 
 export async function updateAdminProduct(input: { id: number } & Partial<ProductWriteInput>) {

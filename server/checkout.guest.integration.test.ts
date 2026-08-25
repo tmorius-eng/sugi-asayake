@@ -138,41 +138,36 @@ describeWithDatabase("guest checkout integration", () => {
 
     // Register while presenting that guest-cart cookie, exactly like a
     // shopper who decides to create an account right before checking out.
-    // Registration alone doesn't issue a session (or merge the cart)
-    // anymore — see server/routers.ts auth.register — so the merge only
-    // happens once confirmRegistration succeeds, below.
-    const registerCtx: TrpcContext = {
+    // auth.register alone does NOT log the shopper in or merge the cart —
+    // since the OTP registration flow shipped, that only happens once
+    // auth.confirmRegistration checks out the emailed code (see
+    // auth.account-recovery.integration.test.ts for the same two-step
+    // shape). The guest cookie has to be replayed on *that* request too.
+    const cookieHeader = { cookie: `${GUEST_CART_COOKIE_NAME}=${guestToken}` };
+    const makeGuestFlowContext = (): TrpcContext => ({
       user: null,
-      req: {
-        protocol: "https",
-        headers: { cookie: `${GUEST_CART_COOKIE_NAME}=${guestToken}` },
-        ip: "127.0.0.1",
-        socket: { remoteAddress: "127.0.0.1" },
-      } as unknown as TrpcContext["req"],
+      req: { protocol: "https", headers: cookieHeader, ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1" } } as unknown as TrpcContext["req"],
       res: { cookie: () => undefined, clearCookie: () => undefined } as unknown as TrpcContext["res"],
-    };
+    });
     const email = `${marker}-merge@example.invalid`;
-    await appRouter.createCaller(registerCtx).auth.register({
+    // auth.register only returns { pendingVerification, email, codeSent } —
+    // no id yet (the account isn't "real" until confirmRegistration), so the
+    // pending user has to be looked up by email like the real OTP flow does.
+    const registerResult = await appRouter.createCaller(makeGuestFlowContext()).auth.register({
       email,
       password: "GuestMergeTestPassw0rd!",
     });
+    expect(registerResult.pendingVerification).toBe(true);
     const pending = await getUserByEmail(email);
-    if (!pending) throw new Error("Pending registration not found.");
+    if (!pending) throw new Error("Expected a pending user row right after auth.register.");
     createdUserIds.push(pending.id);
 
-    // Seed a known code (invalidates whatever register() auto-generated and
-    // emailed) so this test doesn't depend on reading a real inbox — same
-    // technique as server/auth.account-recovery.integration.test.ts.
-    const code = "918273";
+    const code = "913042";
     await createEmailVerificationCode({ userId: pending.id, codeHash: tokenHash(code), expiresAt: new Date(Date.now() + 60 * 60 * 1000) });
-    const confirmCtx: TrpcContext = {
-      user: null,
-      req: { protocol: "https", headers: { cookie: `${GUEST_CART_COOKIE_NAME}=${guestToken}` }, ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1" } } as unknown as TrpcContext["req"],
-      res: { cookie: () => undefined, clearCookie: () => undefined } as unknown as TrpcContext["res"],
-    };
-    const confirmed = await appRouter.createCaller(confirmCtx).auth.confirmRegistration({ email, code });
+    const confirmed = await appRouter.createCaller(makeGuestFlowContext()).auth.confirmRegistration({ email, code });
+    expect(confirmed.id).toBe(pending.id);
 
-    const userCart = await appRouter.createCaller(makeUserContext(confirmed.id)).cart.current();
+    const userCart = await appRouter.createCaller(makeUserContext(pending.id)).cart.current();
     expect(userCart?.items[0]).toMatchObject({ productId, quantity: 1 });
   });
 });

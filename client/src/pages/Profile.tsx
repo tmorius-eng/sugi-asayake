@@ -1,0 +1,740 @@
+import { useEffect, useState } from "react";
+import { Link, useLocation, useSearch } from "wouter";
+import {
+  Bell, Camera, ChevronDown, ClipboardList, Heart, HelpCircle, Home, LayoutDashboard,
+  Loader2, LoaderCircle, LogIn, LogOut, Mail, MapPin, Pencil, Phone, Plus, RotateCcw,
+  ShieldCheck, ShieldOff, ShoppingBag, Sparkles, Star, Trash2, User as UserIcon,
+} from "lucide-react";
+import { toast } from "sonner";
+import CartDrawer from "@/components/CartDrawer";
+import CommerceHeader from "@/components/CommerceHeader";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { startLogin } from "@/const";
+import { trpc } from "@/lib/trpc";
+import type { RouterOutputs } from "@/lib/trpc";
+import { useScrollReveal } from "@/hooks/useScrollReveal";
+
+const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Гүйцэтгэж чадсангүй. Дахин оролдоно уу.";
+const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
+
+type TabKey = "overview" | "orders" | "preferences" | "wishlist" | "addresses" | "notifications" | "security" | "support";
+const TAB_KEYS: TabKey[] = ["overview", "orders", "preferences", "wishlist", "addresses", "notifications", "security", "support"];
+const NAV_ITEMS: Array<{ key: TabKey; label: string; icon: typeof LayoutDashboard }> = [
+  { key: "overview", label: "Тойм", icon: LayoutDashboard },
+  { key: "orders", label: "Захиалга", icon: ClipboardList },
+  { key: "preferences", label: "Хувийн профайл", icon: Sparkles },
+  { key: "wishlist", label: "Хүслийн жагсаалт", icon: Heart },
+  { key: "addresses", label: "Хүргэлтийн хаяг", icon: MapPin },
+  { key: "notifications", label: "Мэдэгдэл", icon: Bell },
+  { key: "security", label: "Аюулгүй байдал", icon: ShieldCheck },
+  { key: "support", label: "Тусламж", icon: HelpCircle },
+];
+
+const ORDER_STATUS_LABEL: Record<string, string> = { pending: "Хүлээгдэж байна", confirmed: "Баталгаажсан", packed: "Бэлтгэж байна", out_for_delivery: "Хүргэлтэд гарсан", completed: "Дууссан", cancelled: "Цуцлагдсан" };
+const ORDER_STEPS: Array<{ key: string; label: string }> = [
+  { key: "pending", label: "Хүлээгдэж байна" },
+  { key: "confirmed", label: "Баталгаажсан" },
+  { key: "packed", label: "Бэлтгэсэн" },
+  { key: "out_for_delivery", label: "Хүргэлтэд гарсан" },
+  { key: "completed", label: "Хүргэгдсэн" },
+];
+
+const SKIN_TYPES: Array<{ value: "dry" | "oily" | "combination" | "sensitive" | "normal"; label: string }> = [
+  { value: "normal", label: "Энгийн" },
+  { value: "dry", label: "Хуурай" },
+  { value: "oily", label: "Тослог" },
+  { value: "combination", label: "Хосолмол" },
+  { value: "sensitive", label: "Эмзэг" },
+];
+const SKIN_CONCERNS: Array<{ value: string; label: string }> = [
+  { value: "acne", label: "Батга, бацлуур" },
+  { value: "aging", label: "Үрчлээ, хөгшрөлт" },
+  { value: "dullness", label: "Уйтгар өнгө" },
+  { value: "dryness", label: "Хуурайшилт" },
+  { value: "sensitivity", label: "Мэдрэг байдал" },
+  { value: "pigmentation", label: "Толбо, пигмент" },
+];
+const INTERIOR_STYLES: Array<{ value: string; label: string }> = [
+  { value: "minimal", label: "Минимал" },
+  { value: "wabi-sabi", label: "Ваби-саби" },
+  { value: "modern", label: "Модерн" },
+  { value: "scandinavian", label: "Скандинав" },
+  { value: "warm-japandi", label: "Жапанди" },
+];
+
+const FAQ_ITEMS: Array<{ q: string; a: string }> = [
+  { q: "Хүргэлт хэдэн хоног болох вэ?", a: "Улаанбаатар доторх хүргэлт ихэвчлэн 24–48 цагийн дотор хийгдэнэ. Салбараас өөрөө авах бол захиалга баталгаажмагц бэлэн болно." },
+  { q: "Захиалгаа хэрхэн буцаах вэ?", a: "Хүлээн авсан бараанд гэмтэл, зөрүү илэрвэл савлагаа, баримтын хамт 9450-9911 дугаарт мэдэгдэнэ үү. Дэлгэрэнгүй нөхцөл Нүүр хуудасны \"Буцаалт\" хэсэгт бий." },
+  { q: "Төлбөрийн ямар сонголт байдаг вэ?", a: "Бэлэн мөнгө (хүргэлт/салбарт хүлээн авахдаа), мөн QPay (merchant тохиргоо дуусмагц идэвхжинэ)." },
+  { q: "Миний мэдээллийг хэрхэн хамгаалдаг вэ?", a: "Төлбөрийн картын мэдээллийг сайт хадгалдаггүй. Дэлгэрэнгүй Нүүр хуудасны \"Хувийн нууцлал\" хэсэгт бий." },
+];
+
+export default function Profile() {
+  const { user, loading, isAuthenticated, logout } = useAuth();
+  const utils = trpc.useUtils();
+  const [, setLocation] = useLocation();
+  const search = useSearch();
+  const [cartOpen, setCartOpen] = useState(false);
+  const cartQuery = trpc.cart.current.useQuery();
+  const cartCount = cartQuery.data?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+
+  const tab: TabKey = (() => {
+    const requested = new URLSearchParams(search).get("tab");
+    return (TAB_KEYS as string[]).includes(requested ?? "") ? (requested as TabKey) : "overview";
+  })();
+  const goToTab = (next: TabKey) => setLocation(`/profile?tab=${next}`);
+  useScrollReveal(tab);
+
+  const uploadAvatar = trpc.profile.uploadAvatar.useMutation({
+    onSuccess: () => { utils.auth.me.invalidate(); toast.success("Зураг шинэчлэгдлээ."); },
+    onError: error => toast.error(messageFrom(error)),
+  });
+  const removeAvatar = trpc.profile.removeAvatar.useMutation({ onSuccess: () => utils.auth.me.invalidate() });
+
+  const onAvatarSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 4 * 1024 * 1024) {
+      toast.error("JPG, PNG, WEBP форматтай, 4 MB-аас бага зураг сонгоно уу.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => uploadAvatar.mutate({ fileName: file.name, contentType: file.type as "image/jpeg" | "image/png" | "image/webp", dataBase64: String(reader.result) });
+    reader.readAsDataURL(file);
+  };
+
+  const initial = user?.name?.trim()?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? "?";
+
+  if (!loading && !isAuthenticated) {
+    return (
+      <div className="sugi-commerce" style={{ overflow: "visible" }}>
+        <CommerceHeader backLabel="SUGI ASAYAKE профайл" />
+        <main className="profile-main">
+          <section className="orders-gate">
+            <LogIn size={24} style={{ margin: "0 auto" }} />
+            <h2>Профайлаа харахын тулд нэвтэрнэ үү.</h2>
+            <p>Хувийн мэдээлэл, зураг, хүслийн жагсаалт болон хүргэлтийн хаягаа энд хадгалж болно.</p>
+            <button type="button" onClick={startLogin} className="button button-primary" style={{ marginTop: "24px" }}>Нэвтрэх</button>
+          </section>
+        </main>
+      </div>
+    );
+  }
+
+  return (
+    <div className="sugi-commerce" style={{ overflow: "visible" }}>
+      <CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="SUGI ASAYAKE профайл" />
+      <main className="profile-main" style={{ paddingBottom: "0" }}>
+        <div className="profile-head" data-reveal>
+          <div className="profile-avatar">
+            <div className="profile-avatar-circle">
+              {uploadAvatar.isPending ? <LoaderCircle className="animate-spin" size={22} /> : user?.avatarUrl ? <img src={user.avatarUrl} alt="" /> : initial}
+            </div>
+            <label className="profile-avatar-edit" aria-label="Зураг солих">
+              <Camera size={14} />
+              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={onAvatarSelected} disabled={uploadAvatar.isPending} />
+            </label>
+          </div>
+          <div className="profile-head-copy">
+            <h1>{user?.name?.trim() || "Нэргүй хэрэглэгч"}</h1>
+            <p>{user?.email}</p>
+            {user?.avatarUrl && <button type="button" onClick={() => removeAvatar.mutate()} disabled={removeAvatar.isPending} className="profile-avatar-remove">Зураг хасах</button>}
+          </div>
+        </div>
+      </main>
+
+      <div className="account-shell">
+        <nav className="account-sidebar" aria-label="Профайлын цэс">
+          {NAV_ITEMS.map(item => (
+            <button key={item.key} type="button" className={`account-nav-item${tab === item.key ? " active" : ""}`} onClick={() => goToTab(item.key)}>
+              <item.icon size={16} aria-hidden="true" /> {item.label}
+            </button>
+          ))}
+          <div className="account-signout">
+            <button type="button" className="account-nav-item" onClick={logout}><LogOut size={16} aria-hidden="true" /> Гарах</button>
+          </div>
+        </nav>
+
+        <div className="account-main">
+          {tab === "overview" && <OverviewTab onNavigate={goToTab} />}
+          {tab === "orders" && <OrdersTab onCartOpen={() => setCartOpen(true)} />}
+          {tab === "preferences" && <PreferencesTab />}
+          {tab === "wishlist" && <WishlistTab onCartOpen={() => setCartOpen(true)} />}
+          {tab === "addresses" && <AddressesTab />}
+          {tab === "notifications" && <NotificationsTab />}
+          {tab === "security" && <SecurityTab />}
+          {tab === "support" && <SupportTab />}
+        </div>
+      </div>
+
+      <CartDrawer open={cartOpen} onOpenChange={setCartOpen} />
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Overview                                                                */
+/* ---------------------------------------------------------------------- */
+
+function OverviewTab({ onNavigate }: { onNavigate: (tab: TabKey) => void }) {
+  const { user } = useAuth();
+  const orders = trpc.orders.mine.useQuery();
+  const wishlist = trpc.profile.wishlist.list.useQuery();
+  const addresses = trpc.profile.addresses.list.useQuery();
+  const latestOrder = orders.data?.[0];
+  const firstName = user?.name?.trim()?.split(/\s+/)[0] || "Танд";
+
+  return (
+    <div style={{ display: "grid", gap: "20px" }}>
+      <div className="overview-hero" data-reveal>
+        <p>SUGI ASAYAKE / ТАНЫ ӨДӨР БҮР</p>
+        <h2>Сайн байна уу, {firstName}.</h2>
+        <span>Өглөөний туяа шиг гэрэлтээрэй — таны бүх мэдээлэл эндээс нэг дороос харагдана.</span>
+      </div>
+
+      <div className="overview-stats" data-reveal>
+        <button type="button" className="overview-stat" style={{ cursor: "pointer", textAlign: "left" }} onClick={() => onNavigate("orders")}>
+          <strong>{orders.data?.length ?? "—"}</strong>
+          <span>Нийт захиалга</span>
+        </button>
+        <button type="button" className="overview-stat" style={{ cursor: "pointer", textAlign: "left" }} onClick={() => onNavigate("wishlist")}>
+          <strong>{wishlist.data?.length ?? "—"}</strong>
+          <span>Хүслийн жагсаалт</span>
+        </button>
+        <button type="button" className="overview-stat" style={{ cursor: "pointer", textAlign: "left" }} onClick={() => onNavigate("addresses")}>
+          <strong>{addresses.data?.length ?? "—"}</strong>
+          <span>Хадгалсан хаяг</span>
+        </button>
+      </div>
+
+      <section className="profile-section" data-reveal>
+        <div className="profile-section-head"><div><h2>Сүүлийн захиалга</h2></div></div>
+        {orders.isLoading ? (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#77787c", fontSize: "13px" }}><LoaderCircle className="animate-spin" size={16} /> Ачааллаж байна…</div>
+        ) : latestOrder ? (
+          <div className="overview-latest-order">
+            <div>
+              <strong>{latestOrder.orderNumber}</strong>
+              <span>{new Date(latestOrder.createdAt).toLocaleDateString("mn-MN")} · Нийт {formatMnt(latestOrder.totalMnt)}</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <span className={`order-status-pill${latestOrder.status === "cancelled" ? " cancelled" : ""}`}>{ORDER_STATUS_LABEL[latestOrder.status] ?? latestOrder.status}</span>
+              <button type="button" onClick={() => onNavigate("orders")} className="quiet-link">Дэлгэрэнгүй</button>
+            </div>
+          </div>
+        ) : (
+          <div className="address-empty">Захиалга байхгүй байна. <Link href="/shop" style={{ color: "var(--primary)", fontWeight: 800 }}>Дэлгүүр үзэх</Link></div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Orders                                                                  */
+/* ---------------------------------------------------------------------- */
+
+function OrderTimeline({ status }: { status: string }) {
+  if (status === "cancelled") return null;
+  const currentIndex = ORDER_STEPS.findIndex(step => step.key === status);
+  return (
+    <div className="order-timeline">
+      {ORDER_STEPS.map((step, index) => (
+        <div key={step.key} className={`order-timeline-step${currentIndex >= 0 && index <= currentIndex ? " done" : ""}`}>
+          <span className="order-timeline-dot" />
+          <span className="order-timeline-label">{step.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
+  const orders = trpc.orders.mine.useQuery();
+  const utils = trpc.useUtils();
+  const addItem = trpc.cart.addItem.useMutation();
+  const [buyingAgainId, setBuyingAgainId] = useState<number | null>(null);
+
+  const buyAgain = async (order: NonNullable<typeof orders.data>[number]) => {
+    const available = order.items.filter((item): item is typeof item & { productId: number } => item.productId != null);
+    if (!available.length) { toast.error("Энэ захиалгын бүтээгдэхүүн(үүд) одоо каталогт байхгүй байна."); return; }
+    setBuyingAgainId(order.id);
+    let added = 0;
+    for (const item of available) {
+      try {
+        await addItem.mutateAsync({ productId: item.productId, quantity: item.quantity });
+        added += 1;
+      } catch {
+        // Out of stock or otherwise unavailable — skip and keep going with the rest.
+      }
+    }
+    setBuyingAgainId(null);
+    await utils.cart.current.invalidate();
+    if (added) { toast.success(`${added} бараа сагсанд нэмэгдлээ.`); onCartOpen(); }
+    else toast.error("Нэмэгдсэн бараа алга — нөөц дууссан байж магадгүй.");
+  };
+
+  return (
+    <section className="profile-section" data-reveal>
+      <div className="profile-section-head"><div><h2>Захиалгын түүх</h2><p>Захиалгын явц болон дахин захиалах</p></div></div>
+      {orders.isLoading ? (
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#77787c", fontSize: "13px" }}><LoaderCircle className="animate-spin" size={16} /> Ачааллаж байна…</div>
+      ) : orders.data?.length ? (
+        <div className="order-list" style={{ marginTop: "0" }}>
+          {orders.data.map(order => (
+            <article key={order.id} className="order-card">
+              <div className="order-card-head">
+                <div>
+                  <p className="order-number">{order.orderNumber}</p>
+                  <h2 className="order-date">{new Date(order.createdAt).toLocaleDateString("mn-MN")}</h2>
+                </div>
+                <span className={`order-status-pill${order.status === "cancelled" ? " cancelled" : ""}`}>{ORDER_STATUS_LABEL[order.status] ?? order.status}</span>
+              </div>
+              <OrderTimeline status={order.status} />
+              <div className="order-items">
+                {order.items.map(item => (
+                  <div key={`${order.id}-${item.sku}`} className="order-item">
+                    <span>{item.productName} <span>× {item.quantity}</span></span>
+                    <strong>{formatMnt(item.unitPriceMnt * item.quantity)}</strong>
+                  </div>
+                ))}
+              </div>
+              <div className="order-foot">
+                <span>{order.deliveryMethod === "store_pickup" ? `Авах салбар: ${order.pickupBranch ?? "Сонгогдоогүй"}` : "Улаанбаатар хүргэлт"}</span>
+                <strong>Нийт {formatMnt(order.totalMnt)}</strong>
+              </div>
+              {order.deliveryTrackingRef && <p className="order-tracking">Хүргэлтийн дугаар: {order.deliveryTrackingRef}</p>}
+              <button type="button" className="order-buy-again" disabled={buyingAgainId === order.id} onClick={() => buyAgain(order)}>
+                {buyingAgainId === order.id ? <Loader2 className="animate-spin" size={14} /> : <RotateCcw size={14} />} Дахин захиалах
+              </button>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="address-empty">Захиалга байхгүй байна. <Link href="/shop" style={{ color: "var(--primary)", fontWeight: 800 }}>Дэлгүүр үзэх</Link></div>
+      )}
+    </section>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Preferences (contact info + Beauty & Home)                             */
+/* ---------------------------------------------------------------------- */
+
+function PreferencesTab() {
+  const { user } = useAuth();
+  const utils = trpc.useUtils();
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [skinType, setSkinType] = useState<string>("");
+  const [skinConcerns, setSkinConcerns] = useState<string[]>([]);
+  const [interiorStyle, setInteriorStyle] = useState<string>("");
+
+  useEffect(() => {
+    setName(user?.name ?? "");
+    setPhone(user?.phone ?? "");
+    setSkinType(user?.skinType ?? "");
+    setSkinConcerns(user?.skinConcerns ? user.skinConcerns.split(",").filter(Boolean) : []);
+    setInteriorStyle(user?.interiorStyle ?? "");
+  }, [user?.name, user?.phone, user?.skinType, user?.skinConcerns, user?.interiorStyle]);
+
+  const updateProfile = trpc.profile.update.useMutation({
+    onSuccess: () => { utils.auth.me.invalidate(); toast.success("Хувийн мэдээлэл шинэчлэгдлээ."); },
+    onError: error => toast.error(messageFrom(error)),
+  });
+  const updatePreferences = trpc.profile.updatePreferences.useMutation({
+    onSuccess: () => { utils.auth.me.invalidate(); toast.success("Тохиргоо хадгалагдлаа."); },
+    onError: error => toast.error(messageFrom(error)),
+  });
+
+  const toggleConcern = (value: string) => setSkinConcerns(current => current.includes(value) ? current.filter(item => item !== value) : [...current, value]);
+
+  return (
+    <div style={{ display: "grid", gap: "20px" }}>
+      <section className="profile-section" data-reveal>
+        <div className="profile-section-head"><div><h2>Хувийн мэдээлэл</h2><p>Нэр болон хүргэлтэд хэрэглэх утасны дугаар</p></div></div>
+        <form onSubmit={event => { event.preventDefault(); updateProfile.mutate({ name: name.trim() || null, phone: phone.trim() || null }); }} className="profile-form-grid">
+          <label className="auth-field">
+            Нэр
+            <div className="auth-field-shell"><UserIcon size={16} aria-hidden="true" /><input value={name} onChange={event => setName(event.target.value)} placeholder="Таны нэр" maxLength={160} /></div>
+          </label>
+          <label className="auth-field">
+            Утас
+            <div className="auth-field-shell"><Phone size={16} aria-hidden="true" /><input value={phone} onChange={event => setPhone(event.target.value)} placeholder="9911 2233" inputMode="tel" maxLength={40} /></div>
+          </label>
+          <label className="auth-field" style={{ gridColumn: "1 / -1" }}>
+            Имэйл
+            <div className="auth-field-shell" style={{ opacity: .6 }}><Mail size={16} aria-hidden="true" /><input value={user?.email ?? ""} disabled readOnly /></div>
+          </label>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <button type="submit" disabled={updateProfile.isPending} className="button button-primary">{updateProfile.isPending && <LoaderCircle className="animate-spin" size={15} />} Хадгалах</button>
+          </div>
+        </form>
+      </section>
+
+      <section className="profile-section" data-reveal>
+        <div className="profile-section-head"><div><h2>Гоо сайхны &amp; Гэрийн профайл</h2><p>Таны арьс, орон сууцны хэв маягийн санал хүсэлт — ирээдүйд танд тохирсон бүтээгдэхүүн санал болгоход ашиглагдана</p></div></div>
+        <form onSubmit={event => { event.preventDefault(); updatePreferences.mutate({ skinType: (skinType || null) as "dry" | "oily" | "combination" | "sensitive" | "normal" | null, skinConcerns: skinConcerns.length ? skinConcerns.join(",") : null, interiorStyle: interiorStyle || null }); }} style={{ display: "grid", gap: "16px" }}>
+          <div>
+            <p style={{ margin: "0 0 8px", fontSize: "11px", fontWeight: 800 }}>Арьсны төрөл</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+              {SKIN_TYPES.map(option => (
+                <button type="button" key={option.value} onClick={() => setSkinType(current => current === option.value ? "" : option.value)} className="shop-filter-pills-button" style={{ padding: "9px 14px", border: `1px solid ${skinType === option.value ? "#17181b" : "rgba(23,24,27,.14)"}`, background: skinType === option.value ? "#17181b" : "#fff", color: skinType === option.value ? "#fff" : "#55565b", fontSize: "11px", fontWeight: 800, borderRadius: "999px" }}>{option.label}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p style={{ margin: "0 0 8px", fontSize: "11px", fontWeight: 800 }}>Санаа зовдог асуудал (олноор сонгож болно)</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+              {SKIN_CONCERNS.map(option => (
+                <button type="button" key={option.value} onClick={() => toggleConcern(option.value)} style={{ padding: "9px 14px", border: `1px solid ${skinConcerns.includes(option.value) ? "var(--primary)" : "rgba(23,24,27,.14)"}`, background: skinConcerns.includes(option.value) ? "#fff0f2" : "#fff", color: skinConcerns.includes(option.value) ? "var(--primary)" : "#55565b", fontSize: "11px", fontWeight: 800, borderRadius: "999px" }}>{option.label}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p style={{ margin: "0 0 8px", fontSize: "11px", fontWeight: 800 }}>Интерьерийн хэв маяг</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+              {INTERIOR_STYLES.map(option => (
+                <button type="button" key={option.value} onClick={() => setInteriorStyle(current => current === option.value ? "" : option.value)} style={{ padding: "9px 14px", border: `1px solid ${interiorStyle === option.value ? "#17181b" : "rgba(23,24,27,.14)"}`, background: interiorStyle === option.value ? "#17181b" : "#fff", color: interiorStyle === option.value ? "#fff" : "#55565b", fontSize: "11px", fontWeight: 800, borderRadius: "999px" }}>{option.label}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <button type="submit" disabled={updatePreferences.isPending} className="button button-primary">{updatePreferences.isPending && <LoaderCircle className="animate-spin" size={15} />} Тохиргоо хадгалах</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Wishlist                                                                */
+/* ---------------------------------------------------------------------- */
+
+const fallbackImage = "/manus-storage/sugi-professional-assortment_74fa4e31.jpg";
+
+function WishlistTab({ onCartOpen }: { onCartOpen: () => void }) {
+  const utils = trpc.useUtils();
+  const wishlist = trpc.profile.wishlist.list.useQuery();
+  const toggle = trpc.profile.wishlist.toggle.useMutation({ onSuccess: () => utils.profile.wishlist.list.invalidate() });
+  const addItem = trpc.cart.addItem.useMutation({
+    onSuccess: () => { utils.cart.current.invalidate(); onCartOpen(); },
+    onError: error => toast.error(messageFrom(error)),
+  });
+
+  return (
+    <section className="profile-section" data-reveal>
+      <div className="profile-section-head"><div><h2>Хүслийн жагсаалт</h2><p>Таны хадгалсан бүтээгдэхүүнүүд</p></div></div>
+      {wishlist.isLoading ? (
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#77787c", fontSize: "13px" }}><LoaderCircle className="animate-spin" size={16} /> Ачааллаж байна…</div>
+      ) : wishlist.data?.length ? (
+        <div className="wishlist-grid">
+          {wishlist.data.map(item => (
+            <article className="wishlist-card" key={item.id}>
+              <div className="wishlist-card-image">
+                {item.stockQuantity <= 0 && <span className="wishlist-oos-badge">НӨӨЦ ДУУССАН</span>}
+                <button type="button" className="wishlist-remove" aria-label="Хүслийн жагсаалтаас хасах" onClick={() => toggle.mutate({ productId: item.productId, saved: false })}>
+                  <Heart size={15} fill="currentColor" />
+                </button>
+                <Link href={`/product/${item.slug}`}><img src={item.imageUrl ?? fallbackImage} alt={item.name} /></Link>
+              </div>
+              <div className="wishlist-card-body">
+                <p>SUGI ASAYAKE</p>
+                <Link href={`/product/${item.slug}`} style={{ color: "inherit" }}><h3>{item.name}</h3></Link>
+                <strong>{formatMnt(item.priceMnt)}</strong>
+                {item.stockQuantity > 0 ? (
+                  <button type="button" onClick={() => addItem.mutate({ productId: item.productId, quantity: 1 })} className="button button-primary" style={{ marginTop: "10px", width: "100%", minHeight: "38px", fontSize: "10px" }}>
+                    <ShoppingBag size={13} /> Сагслах
+                  </button>
+                ) : (
+                  <label className="wishlist-notify">
+                    <input type="checkbox" checked={item.notifyOnRestock} onChange={event => toggle.mutate({ productId: item.productId, saved: true, notifyOnRestock: event.target.checked })} />
+                    Ирэхээр мэдэгдэх
+                  </label>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="wishlist-empty">
+          <Heart size={26} style={{ margin: "0 auto" }} />
+          <p>Хүслийн жагсаалт хоосон байна. Бүтээгдэхүүний зураг дээрх зүрхэн дүрс дээр дарж нэмээрэй.</p>
+          <Link href="/shop" className="button button-primary" style={{ marginTop: "16px", display: "inline-flex" }}>Дэлгүүр үзэх</Link>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Addresses                                                               */
+/* ---------------------------------------------------------------------- */
+
+const emptyAddressForm = { label: "", recipientName: "", phone: "", addressLine: "", isDefault: false };
+
+function AddressForm({ initial, onCancel, onSubmit, isSubmitting }: {
+  initial: typeof emptyAddressForm;
+  onCancel: () => void;
+  onSubmit: (value: typeof emptyAddressForm) => void;
+  isSubmitting: boolean;
+}) {
+  const [form, setForm] = useState(initial);
+  return (
+    <form
+      className="address-form"
+      onSubmit={event => {
+        event.preventDefault();
+        if (!form.label.trim() || !form.recipientName.trim() || !form.phone.trim() || !form.addressLine.trim()) {
+          toast.error("Бүх талбарыг бөглөнө үү.");
+          return;
+        }
+        onSubmit(form);
+      }}
+    >
+      <div className="profile-form-grid">
+        <label className="auth-field">
+          Хаягийн нэр (жишээ: Гэр, Ажил)
+          <div className="auth-field-shell"><Home size={16} aria-hidden="true" /><input value={form.label} onChange={event => setForm(current => ({ ...current, label: event.target.value }))} placeholder="Гэр" maxLength={60} /></div>
+        </label>
+        <label className="auth-field">
+          Хүлээн авагчийн нэр
+          <div className="auth-field-shell"><UserIcon size={16} aria-hidden="true" /><input value={form.recipientName} onChange={event => setForm(current => ({ ...current, recipientName: event.target.value }))} placeholder="Таны нэр" maxLength={160} /></div>
+        </label>
+        <label className="auth-field">
+          Утас
+          <div className="auth-field-shell"><Phone size={16} aria-hidden="true" /><input value={form.phone} onChange={event => setForm(current => ({ ...current, phone: event.target.value }))} placeholder="9911 2233" inputMode="tel" maxLength={40} /></div>
+        </label>
+        <label className="auth-field" style={{ gridColumn: "1 / -1" }}>
+          Дэлгэрэнгүй хаяг
+          <div className="auth-field-shell"><textarea value={form.addressLine} onChange={event => setForm(current => ({ ...current, addressLine: event.target.value }))} placeholder="Дүүрэг, хороо, байр, орц, тоот" style={{ minHeight: "70px", padding: "10px 0" }} maxLength={2000} /></div>
+        </label>
+      </div>
+      <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", fontWeight: 700 }}>
+        <input type="checkbox" checked={form.isDefault} onChange={event => setForm(current => ({ ...current, isDefault: event.target.checked }))} style={{ accentColor: "var(--primary)" }} />
+        Үндсэн хаяг болгох
+      </label>
+      <div className="address-form-actions">
+        <button type="submit" disabled={isSubmitting} className="button button-primary">{isSubmitting && <LoaderCircle className="animate-spin" size={14} />} Хадгалах</button>
+        <button type="button" onClick={onCancel} className="auth-quiet" style={{ width: "auto" }}>Цуцлах</button>
+      </div>
+    </form>
+  );
+}
+
+function AddressesTab() {
+  const utils = trpc.useUtils();
+  const [addingAddress, setAddingAddress] = useState(false);
+  const [editingAddressId, setEditingAddressId] = useState<number | null>(null);
+  const addresses = trpc.profile.addresses.list.useQuery();
+  const createAddress = trpc.profile.addresses.create.useMutation({
+    onSuccess: () => { utils.profile.addresses.list.invalidate(); setAddingAddress(false); toast.success("Хаяг нэмэгдлээ."); },
+    onError: error => toast.error(messageFrom(error)),
+  });
+  const updateAddress = trpc.profile.addresses.update.useMutation({
+    onSuccess: () => { utils.profile.addresses.list.invalidate(); setEditingAddressId(null); toast.success("Хаяг шинэчлэгдлээ."); },
+    onError: error => toast.error(messageFrom(error)),
+  });
+  const deleteAddress = trpc.profile.addresses.delete.useMutation({
+    onSuccess: () => { utils.profile.addresses.list.invalidate(); toast.success("Хаяг устгагдлаа."); },
+    onError: error => toast.error(messageFrom(error)),
+  });
+
+  type AddressRow = RouterOutputs["profile"]["addresses"]["list"][number];
+
+  return (
+    <section className="profile-section" data-reveal>
+      <div className="profile-section-head">
+        <div><h2>Хүргэлтийн хаяг</h2><p>Захиалга хийхэд үндсэн хаяг автоматаар бөглөгдөнө</p></div>
+        {!addingAddress && <button type="button" onClick={() => { setEditingAddressId(null); setAddingAddress(true); }} className="address-add-button"><Plus size={14} /> Хаяг нэмэх</button>}
+      </div>
+
+      {addresses.isLoading ? (
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#77787c", fontSize: "13px" }}><LoaderCircle className="animate-spin" size={16} /> Ачааллаж байна…</div>
+      ) : (
+        <div className="profile-address-list">
+          {addresses.data?.length ? addresses.data.map((address: AddressRow) => (
+            editingAddressId === address.id ? (
+              <AddressForm
+                key={address.id}
+                initial={{ label: address.label, recipientName: address.recipientName, phone: address.phone, addressLine: address.addressLine, isDefault: address.isDefault }}
+                isSubmitting={updateAddress.isPending}
+                onCancel={() => setEditingAddressId(null)}
+                onSubmit={value => updateAddress.mutate({ id: address.id, ...value })}
+              />
+            ) : (
+              <div key={address.id} className={`address-card${address.isDefault ? " is-default" : ""}`}>
+                <div className="address-card-head">
+                  <MapPin size={15} style={{ color: "var(--primary)" }} />
+                  <strong>{address.label}</strong>
+                  {address.isDefault && <span className="address-default-badge">ҮНДСЭН</span>}
+                </div>
+                <p>{address.recipientName} · {address.phone}<br />{address.addressLine}</p>
+                <div className="address-card-actions">
+                  {!address.isDefault && <button type="button" onClick={() => updateAddress.mutate({ id: address.id, isDefault: true })}><Star size={13} /> Үндсэн болгох</button>}
+                  <button type="button" onClick={() => { setAddingAddress(false); setEditingAddressId(address.id); }}><Pencil size={13} /> Засах</button>
+                  <button type="button" className="danger" onClick={() => { if (window.confirm("Энэ хаягийг устгах уу?")) deleteAddress.mutate({ id: address.id }); }}><Trash2 size={13} /> Устгах</button>
+                </div>
+              </div>
+            )
+          )) : !addingAddress && <div className="address-empty">Хадгалсан хаяг алга байна. Захиалга хийхдээ дахин бичихгүйн тулд эндээс нэмээрэй.</div>}
+
+          {addingAddress && (
+            <AddressForm
+              initial={emptyAddressForm}
+              isSubmitting={createAddress.isPending}
+              onCancel={() => setAddingAddress(false)}
+              onSubmit={value => createAddress.mutate(value)}
+            />
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Notifications                                                          */
+/* ---------------------------------------------------------------------- */
+
+function NotificationsTab() {
+  const { user } = useAuth();
+  const utils = trpc.useUtils();
+  const update = trpc.profile.updateNotifications.useMutation({
+    onSuccess: () => utils.auth.me.invalidate(),
+    onError: error => toast.error(messageFrom(error)),
+  });
+
+  return (
+    <section className="profile-section" data-reveal>
+      <div className="profile-section-head"><div><h2>Мэдэгдэл</h2><p>Ямар мэдээллийг имэйл/SMS-ээр авахаа удирдана</p></div></div>
+      <p style={{ margin: "0 0 4px", padding: "10px 13px", background: "#f1f6fb", color: "#3970a7", fontSize: "11px", lineHeight: 1.6 }}>
+        Одоогоор эдгээр тохиргоо зөвхөн "Ирэхээр мэдэгдэх" (хүслийн жагсаалтын back-in-stock) мэдэгдэлд хамаарна. Захиалгын баталгаажуулах имэйл систем ирээдүйд нэмэгдэхэд мөн адил дагана.
+      </p>
+      <div className="pref-toggle-row">
+        <div><strong>Имэйл мэдэгдэл</strong><span>Ирэхээр мэдэгдэх болон бусад имэйл мэдэгдлүүд</span></div>
+        <label className="switch"><input type="checkbox" checked={user?.emailOptIn ?? true} onChange={event => update.mutate({ emailOptIn: event.target.checked })} /><span className="switch-track" /></label>
+      </div>
+      <div className="pref-toggle-row">
+        <div><strong>SMS мэдэгдэл</strong><span>Захиалга, хүргэлттэй холбоотой богино мессеж</span></div>
+        <label className="switch"><input type="checkbox" checked={user?.smsOptIn ?? true} onChange={event => update.mutate({ smsOptIn: event.target.checked })} /><span className="switch-track" /></label>
+      </div>
+    </section>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Security                                                                */
+/* ---------------------------------------------------------------------- */
+
+function SecurityTab() {
+  const { user, logout } = useAuth();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [deletePassword, setDeletePassword] = useState("");
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  const changePassword = trpc.profile.changePassword.useMutation({
+    onSuccess: () => { toast.success("Нууц үг амжилттай солигдлоо."); setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); },
+    onError: error => toast.error(messageFrom(error)),
+  });
+  const logoutAllDevices = trpc.auth.logoutAllDevices.useMutation({
+    onSuccess: () => { toast.success("Бусад бүх төхөөрөмжийн session хүчингүй боллоо."); window.location.assign("/"); },
+    onError: error => toast.error(messageFrom(error)),
+  });
+  const deleteAccount = trpc.profile.deleteAccount.useMutation({
+    onSuccess: () => { toast.success("Акаунт устгагдлаа."); window.location.assign("/"); },
+    onError: error => toast.error(messageFrom(error)),
+  });
+
+  const submitPasswordChange = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (newPassword.length < 8) { toast.error("Шинэ нууц үг дор хаяж 8 тэмдэгт байх ёстой."); return; }
+    if (newPassword !== confirmPassword) { toast.error("Шинэ нууц үг таарахгүй байна."); return; }
+    changePassword.mutate({ currentPassword, newPassword });
+  };
+
+  return (
+    <div style={{ display: "grid", gap: "20px" }}>
+      <section className="profile-section" data-reveal>
+        <div className="profile-section-head"><div><h2>Нууц үг солих</h2></div></div>
+        <form onSubmit={submitPasswordChange} className="profile-form-grid">
+          <label className="auth-field" style={{ gridColumn: "1 / -1" }}>
+            Одоогийн нууц үг
+            <div className="auth-field-shell"><input type="password" value={currentPassword} onChange={event => setCurrentPassword(event.target.value)} autoComplete="current-password" /></div>
+          </label>
+          <label className="auth-field">
+            Шинэ нууц үг
+            <div className="auth-field-shell"><input type="password" value={newPassword} onChange={event => setNewPassword(event.target.value)} placeholder="8-с дээш тэмдэгт" autoComplete="new-password" /></div>
+          </label>
+          <label className="auth-field">
+            Шинэ нууц үг давтах
+            <div className="auth-field-shell"><input type="password" value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} autoComplete="new-password" /></div>
+          </label>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <button type="submit" disabled={changePassword.isPending} className="button button-primary">{changePassword.isPending && <LoaderCircle className="animate-spin" size={15} />} Нууц үг шинэчлэх</button>
+          </div>
+        </form>
+      </section>
+
+      <section className="profile-section" data-reveal>
+        <div className="profile-section-head"><div><h2>Session удирдлага</h2><p>Бусад төхөөрөмж/хөтчөөс гарах</p></div></div>
+        <button type="button" onClick={() => { if (window.confirm("Энэ таны БҮХ төхөөрөмж дээрх session-г хүчингүй болгоно (энэ хөтчийг оруулаад). Үргэлжлүүлэх үү?")) logoutAllDevices.mutate(); }} disabled={logoutAllDevices.isPending} className="button" style={{ background: "#17181b", color: "#fff" }}>
+          <ShieldOff size={15} /> Бүх төхөөрөмжөөс гарах
+        </button>
+      </section>
+
+      {user?.role === "user" && (
+        <section className="danger-zone" data-reveal>
+          <h3>Акаунт устгах</h3>
+          <p>Энэ үйлдлийг буцаах боломжгүй. Таны хувийн мэдээлэл, хаяг, хүслийн жагсаалт бүрмөсөн устана (захиалгын түүх нягтлан бодох бүртгэлийн зорилгоор хадгалагдана).</p>
+          {!confirmingDelete ? (
+            <button type="button" onClick={() => setConfirmingDelete(true)} className="danger-button">Акаунтаа устгах</button>
+          ) : (
+            <form onSubmit={event => { event.preventDefault(); deleteAccount.mutate({ password: deletePassword }); }} style={{ marginTop: "14px", display: "grid", gap: "10px", maxWidth: "320px" }}>
+              <label className="auth-field">
+                Баталгаажуулахын тулд нууц үгээ оруулна уу
+                <div className="auth-field-shell"><input type="password" value={deletePassword} onChange={event => setDeletePassword(event.target.value)} autoComplete="current-password" /></div>
+              </label>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button type="submit" disabled={deleteAccount.isPending} className="danger-button">{deleteAccount.isPending && <LoaderCircle className="animate-spin" size={14} />} Бүрмөсөн устгах</button>
+                <button type="button" onClick={() => { setConfirmingDelete(false); setDeletePassword(""); }} className="auth-quiet" style={{ width: "auto" }}>Цуцлах</button>
+              </div>
+            </form>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Support / FAQ                                                          */
+/* ---------------------------------------------------------------------- */
+
+function SupportTab() {
+  const [openIndex, setOpenIndex] = useState<number | null>(0);
+  return (
+    <section className="profile-section" data-reveal>
+      <div className="profile-section-head"><div><h2>Тусламж</h2><p>Түгээмэл асуултууд болон холбоо барих</p></div></div>
+      <div>
+        {FAQ_ITEMS.map((item, index) => (
+          <div key={item.q} className={`faq-item${openIndex === index ? " open" : ""}`}>
+            <button type="button" className="faq-question" onClick={() => setOpenIndex(current => current === index ? null : index)}>
+              {item.q} <ChevronDown size={16} aria-hidden="true" />
+            </button>
+            <div className="faq-answer"><p>{item.a}</p></div>
+          </div>
+        ))}
+      </div>
+      <div className="support-contact">
+        <a href="tel:94509911"><Phone size={14} /> 9450-9911</a>
+        <a href="mailto:asayake0307@gmail.com"><Mail size={14} /> asayake0307@gmail.com</a>
+        <Link href="/#stores"><MapPin size={14} /> Салбар олох</Link>
+      </div>
+    </section>
+  );
+}

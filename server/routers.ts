@@ -11,10 +11,13 @@ import { hashPassword, verifyPassword } from "./_core/password";
 import {
   acceptStaffInvitation,
   addCartItem,
+  addWishlistItem,
   adminGlobalSearch,
   bumpUserSessionVersion,
   type CartOwner,
   categoryExists,
+  changeUserPassword,
+  clearWishlistNotifyFlagsForProduct,
   createAdminCategory,
   createAdminPost,
   createAdminProduct,
@@ -24,8 +27,11 @@ import {
   getActiveCartForOwner,
   createQPayPaymentAttempt,
   createStaffInvitation,
+  createUserAddress,
   createUserWithPassword,
   dbPing,
+  deleteUserAccount,
+  deleteUserAddress,
   deleteAdminPost,
   deleteAdminProduct,
   getAdminAuditLogs,
@@ -43,6 +49,7 @@ import {
   getOrderForUser,
   getOrdersForUser,
   getProductBySlug,
+  getProductStockQuantity,
   getProductWriteConflicts,
   getPublishedCatalog,
   getPublishedPosts,
@@ -50,13 +57,18 @@ import {
   getSiteMedia,
   getStaffInvitationByTokenHash,
   getUserByEmail,
+  getUserById,
+  getWishlistForUser,
+  getWishlistWatchersForProduct,
   logAdminAction,
   mergeGuestCartIntoUserCart,
   postSlugExists,
   recordLoginAttempt,
+  removeWishlistItem,
   resetPasswordWithCode,
   revokeStaffInvitation,
   deleteSiteMedia,
+  getUserAddresses,
   suspendUser,
   touchUserLastSignedIn,
   unsuspendUser,
@@ -67,7 +79,12 @@ import {
   updateAdminProduct,
   updateAdminUserRole,
   updateCartItemQuantity,
+  updateNotificationPreferences,
   updatePendingRegistration,
+  updateUserAddress,
+  updateUserAvatar,
+  updateUserPreferences,
+  updateUserProfile,
   verifyEmailWithCode,
 } from "./db";
 import { adminProcedure, moderateRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure } from "./_core/trpc";
@@ -78,6 +95,17 @@ import { siteMediaSlotKeys } from "../shared/site-media";
 
 const slugSchema = z.string().trim().min(2).max(200).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens only.");
 const nullableText = (max: number) => z.string().trim().max(max).nullable().optional();
+// Same shape checkout.createOrder already validates customerPhone with —
+// reused here so profile.update and the address book accept exactly the
+// same phone formats a delivery actually needs.
+const phoneSchema = z.string().trim().min(6).max(40).regex(/^[0-9+()\-\s]{6,40}$/, "Утасны дугаараа зөв оруулна уу.").refine(value => value.replace(/\D/g, "").length >= 8, "Утасны дугаараа зөв оруулна уу.");
+const addressWriteSchema = z.object({
+  label: z.string().trim().min(1).max(60),
+  recipientName: z.string().trim().min(2).max(160),
+  phone: phoneSchema,
+  addressLine: z.string().trim().min(8).max(2_000),
+  isDefault: z.boolean().optional(),
+});
 
 const productWriteSchema = z.object({
   categoryId: z.number().int().positive(),
@@ -544,6 +572,146 @@ export const appRouter = router({
   orders: router({
     mine: protectedProcedure.query(({ ctx }) => getOrdersForUser(ctx.user.id)),
   }),
+  // Customer account page: editable name/phone, an avatar photo, and a
+  // saved-address book (checkout can prefill from the default address so
+  // returning shoppers don't retype it every order).
+  profile: router({
+    update: protectedProcedure
+      .input(z.object({ name: z.string().trim().min(1).max(160).nullable().optional(), phone: phoneSchema.nullable().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const updated = await updateUserProfile(ctx.user.id, input);
+        if (!updated) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Профайл шинэчилж чадсангүй." });
+        const { passwordHash: _omit, ...safeUser } = updated;
+        return safeUser;
+      }),
+    uploadAvatar: protectedProcedure
+      .input(z.object({
+        fileName: z.string().trim().min(1).max(120),
+        contentType: z.enum(imageContentTypes),
+        dataBase64: z.string().min(16).max(7_000_000),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const rawBase64 = input.dataBase64.includes(",") ? input.dataBase64.slice(input.dataBase64.indexOf(",") + 1) : input.dataBase64;
+        const buffer = Buffer.from(rawBase64, "base64");
+        if (buffer.length === 0 || buffer.length > 4 * 1024 * 1024) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Профайл зураг 1 байт - 4 МБ хооронд байх ёстой." });
+        }
+        assertImageSignature(buffer, input.contentType);
+        const extension = input.contentType === "image/jpeg" ? "jpg" : input.contentType === "image/png" ? "png" : "webp";
+        const stored = await storagePut(`avatars/${ctx.user.id}/avatar-${Date.now()}.${extension}`, buffer, input.contentType);
+        const updated = await updateUserAvatar(ctx.user.id, stored.url);
+        if (!updated) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Зураг хадгалж чадсангүй." });
+        const { passwordHash: _omit, ...safeUser } = updated;
+        return safeUser;
+      }),
+    removeAvatar: protectedProcedure.mutation(async ({ ctx }) => {
+      const updated = await updateUserAvatar(ctx.user.id, null);
+      if (!updated) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Зураг хасаж чадсангүй." });
+      const { passwordHash: _omit, ...safeUser } = updated;
+      return safeUser;
+    }),
+    addresses: router({
+      list: protectedProcedure.query(({ ctx }) => getUserAddresses(ctx.user.id)),
+      create: protectedProcedure.input(addressWriteSchema).mutation(({ ctx, input }) => createUserAddress(ctx.user.id, input)),
+      update: protectedProcedure
+        .input(addressWriteSchema.partial().extend({ id: z.number().int().positive() }).refine(
+          value => Object.keys(value).some(key => key !== "id"),
+          { message: "Provide at least one address field to update." },
+        ))
+        .mutation(async ({ ctx, input }) => {
+          const { id, ...rest } = input;
+          try {
+            return await updateUserAddress(ctx.user.id, id, rest);
+          } catch (error) {
+            throw new TRPCError({ code: "NOT_FOUND", message: error instanceof Error ? error.message : "Хаяг олдсонгүй." });
+          }
+        }),
+      delete: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+        try {
+          return await deleteUserAddress(ctx.user.id, input.id);
+        } catch (error) {
+          throw new TRPCError({ code: "NOT_FOUND", message: error instanceof Error ? error.message : "Хаяг олдсонгүй." });
+        }
+      }),
+    }),
+    // "Гоо сайхны профайл" tab. Captured for a future product-tag-matched
+    // recommendation engine (see the schema doc comment) — not wired into
+    // catalog filtering/ranking yet.
+    updatePreferences: protectedProcedure
+      .input(z.object({
+        skinType: z.enum(["dry", "oily", "combination", "sensitive", "normal"]).nullable().optional(),
+        skinConcerns: z.string().trim().max(300).nullable().optional(),
+        interiorStyle: z.string().trim().max(60).nullable().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const updated = await updateUserPreferences(ctx.user.id, input);
+        if (!updated) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Тохиргоо хадгалж чадсангүй." });
+        const { passwordHash: _omit, ...safeUser } = updated;
+        return safeUser;
+      }),
+    updateNotifications: protectedProcedure
+      .input(z.object({ emailOptIn: z.boolean().optional(), smsOptIn: z.boolean().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const updated = await updateNotificationPreferences(ctx.user.id, input);
+        if (!updated) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Тохиргоо хадгалж чадсангүй." });
+        const { passwordHash: _omit, ...safeUser } = updated;
+        return safeUser;
+      }),
+    // "Аюулгүй байдал" tab — change password without losing the current
+    // session (re-signs a fresh token below), while every OTHER
+    // already-issued session/device is invalidated by the sessionVersion
+    // bump inside changeUserPassword, same as the forgot-password flow.
+    changePassword: strictRateLimitedProtectedProcedure
+      .input(z.object({ currentPassword: z.string().min(1).max(200), newPassword: z.string().min(8).max(200) }))
+      .mutation(async ({ ctx, input }) => {
+        const user = await getUserById(ctx.user.id);
+        if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "Хэрэглэгч олдсонгүй." });
+        const valid = await verifyPassword(input.currentPassword, user.passwordHash);
+        if (!valid) throw new TRPCError({ code: "UNAUTHORIZED", message: "Одоогийн нууц үг буруу байна." });
+        const newHash = await hashPassword(input.newPassword);
+        const updated = await changeUserPassword(ctx.user.id, newHash);
+        const token = await signSessionToken(updated.id, updated.sessionVersion);
+        ctx.res.cookie(COOKIE_NAME, token, getSessionCookieOptions(ctx.req));
+        return { success: true } as const;
+      }),
+    // "Аюулгүй байдал" tab — permanent self-service deletion. Restricted to
+    // plain "user" accounts: admin/staff can author content/logs that a
+    // RESTRICT foreign key protects (see deleteUserAccount in server/db.ts),
+    // and losing the store's only admin this way would be a real outage, so
+    // those roles are pointed at an existing admin instead.
+    deleteAccount: strictRateLimitedProtectedProcedure
+      .input(z.object({ password: z.string().min(1).max(200) }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "user") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Админ/ажилтны эрхтэй акаунтыг энэ хэсгээс устгах боломжгүй. Дэлгүүрийн админтай холбогдоно уу." });
+        }
+        const user = await getUserById(ctx.user.id);
+        if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "Хэрэглэгч олдсонгүй." });
+        const valid = await verifyPassword(input.password, user.passwordHash);
+        if (!valid) throw new TRPCError({ code: "UNAUTHORIZED", message: "Нууц үг буруу байна." });
+        await deleteUserAccount(ctx.user.id);
+        ctx.res.clearCookie(COOKIE_NAME, { ...getSessionCookieOptions(ctx.req), maxAge: -1 });
+        return { success: true } as const;
+      }),
+    // "Хүслийн жагсаалт" tab.
+    wishlist: router({
+      list: protectedProcedure.query(({ ctx }) => getWishlistForUser(ctx.user.id)),
+      toggle: protectedProcedure
+        .input(z.object({ productId: z.number().int().positive(), saved: z.boolean(), notifyOnRestock: z.boolean().optional() }))
+        .mutation(async ({ ctx, input }) => {
+          if (input.saved) {
+            try {
+              await addWishlistItem(ctx.user.id, input.productId, input.notifyOnRestock ?? false);
+            } catch (error) {
+              throw new TRPCError({ code: "NOT_FOUND", message: error instanceof Error ? error.message : "Бүтээгдэхүүн олдсонгүй." });
+            }
+          } else {
+            await removeWishlistItem(ctx.user.id, input.productId);
+          }
+          return { success: true } as const;
+        }),
+    }),
+  }),
   payments: router({
     qpayAvailability: publicProcedure.query(() => getQPayAvailability()),
     qpayCreateInvoice: protectedProcedure.input(z.object({ orderId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
@@ -769,8 +937,27 @@ export const appRouter = router({
     }),
     updateProduct: staffProcedure.input(productUpdateSchema).mutation(async ({ ctx, input }) => {
       await validateProductWrite(input);
+      // Snapshot stock before the write so a 0 -> >0 restock can be
+      // detected below and fire wishlist "Ирэхээр мэдэгдэх" alerts.
+      const stockBefore = input.stockQuantity !== undefined ? await getProductStockQuantity(input.id) : null;
       const product = await updateAdminProduct(input);
       await logAdminAction({ actorUserId: ctx.user.id, action: "product.updated", entityType: "product", entityId: product.id, metadata: { slug: product.slug, published: product.isPublished } });
+      if (stockBefore === 0 && product.stockQuantity > 0) {
+        const watchers = await getWishlistWatchersForProduct(product.id);
+        for (const watcher of watchers) {
+          if (!watcher.emailOptIn) continue;
+          // No absolute site URL is configured anywhere in this app yet (see
+          // ENV in server/_core/env.ts) — every other transactional email is
+          // plain text with no link for the same reason, so this follows
+          // suit rather than hard-coding a guessed production domain.
+          await sendAccountEmail({
+            to: watcher.email,
+            subject: `SUGI ASAYAKE — "${product.name}" дахин нөөцөд орлоо`,
+            content: `Таны хүслийн жагсаалтад байгаа "${product.name}" бүтээгдэхүүн дахин нөөцөд орлоо. Дуусахаас өмнө SUGI ASAYAKE дэлгүүрийн "${product.name}" хуудсаас шалгаарай.`,
+          });
+        }
+        if (watchers.length) await clearWishlistNotifyFlagsForProduct(product.id);
+      }
       return product;
     }),
     deleteProduct: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {

@@ -1,15 +1,9 @@
-import { ClipboardList, LoaderCircle, LogIn, PackageCheck } from "lucide-react";
-import { Link } from "wouter";
-import CommerceHeader from "@/components/CommerceHeader";
-import { useAuth } from "@/_core/hooks/useAuth";
-import { startLogin } from "@/const";
-import { trpc } from "@/lib/trpc";
+import { Redirect } from "wouter";
 
-const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
-const statusLabel: Record<string, string> = { pending: "Хүлээгдэж байна", confirmed: "Баталгаажсан", packed: "Бэлтгэж байна", out_for_delivery: "Хүргэлтэд гарсан", completed: "Дууссан", cancelled: "Цуцлагдсан" };
-
+// Order history now lives inside the profile account shell (Захиалга tab —
+// timeline + Buy Again), which replaced this page's standalone content.
+// Kept as a redirect, not deleted outright, so any bookmarked/shared
+// "/orders" link still lands somewhere correct instead of 404ing.
 export default function MyOrders() {
-  const { isAuthenticated } = useAuth();
-  const orders = trpc.orders.mine.useQuery(undefined, { enabled: isAuthenticated });
-  return <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]"><CommerceHeader backLabel="SUGI ASAYAKE захиалга" /><main className="mx-auto max-w-5xl px-4 py-9 sm:px-8 sm:py-12"><p className="text-[10px] font-extrabold tracking-[.18em] text-[#df1f3d]">YOUR SUGI ACCOUNT</p><h1 className="mt-3 font-[var(--font-display)] text-5xl font-semibold tracking-[-.08em]">Миний захиалгууд.</h1>{!isAuthenticated ? <section className="mt-9 rounded-3xl bg-white p-8 text-center shadow-[0_18px_45px_rgba(20,22,24,.06)]"><LogIn className="mx-auto text-[#df1f3d]" /><h2 className="mt-4 text-xl font-bold">Захиалгаа харахын тулд нэвтэрнэ үү.</h2><p className="mt-2 text-sm text-[#73747a]">Зөвхөн таны бүртгэлтэй захиалгын түүх харагдана.</p><button type="button" onClick={startLogin} className="mt-6 rounded-full bg-[#df1f3d] px-5 py-3 text-sm font-bold text-white">Нэвтрэх</button></section> : orders.isLoading ? <div className="grid min-h-72 place-items-center"><LoaderCircle className="animate-spin text-[#df1f3d]" /></div> : orders.data?.length ? <section className="mt-9 space-y-4">{orders.data.map(order => <article key={order.id} className="rounded-3xl bg-white p-6 shadow-[0_14px_36px_rgba(20,22,24,.05)]"><div className="flex flex-wrap items-start justify-between gap-4 border-b border-black/8 pb-4"><div><p className="text-[10px] font-extrabold tracking-[.15em] text-[#df1f3d]">{order.orderNumber}</p><h2 className="mt-1 text-lg font-bold">{new Date(order.createdAt).toLocaleDateString("mn-MN")}</h2></div><span className={`rounded-full px-3 py-2 text-xs font-bold ${order.status === "cancelled" ? "bg-[#fff0f2] text-[#b11b34]" : "bg-[#eef3f1] text-[#286b4c]"}`}>{statusLabel[order.status] ?? order.status}</span></div><div className="mt-4 space-y-2">{order.items.map(item => <div key={`${order.id}-${item.sku}`} className="flex justify-between gap-4 text-sm"><span>{item.productName} <span className="text-[#75767b]">× {item.quantity}</span></span><strong>{formatMnt(item.unitPriceMnt * item.quantity)}</strong></div>)}</div><div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-black/8 pt-4 text-xs text-[#6b6c71]"><span>{order.deliveryMethod === "store_pickup" ? `Авах салбар: ${order.pickupBranch ?? "Сонгогдоогүй"}` : "Улаанбаатар хүргэлт"}</span><strong className="text-base text-[#17181b]">Нийт {formatMnt(order.totalMnt)}</strong></div>{order.deliveryTrackingRef && <p className="mt-3 rounded-xl bg-[#eef3f1] px-3 py-2 text-xs text-[#286b4c]">Хүргэлтийн дугаар: {order.deliveryTrackingRef}</p>}</article>)}</section> : <section className="mt-9 rounded-3xl border border-dashed border-black/15 bg-white p-10 text-center"><ClipboardList className="mx-auto text-[#df1f3d]" size={26} /><h2 className="mt-4 font-[var(--font-display)] text-3xl">Захиалга байхгүй байна.</h2><p className="mt-3 text-sm text-[#707176]">Сонирхсон бүтээгдэхүүнээ сагсанд нэмж захиалгаа эхлүүлээрэй.</p><Link href="/shop" className="mt-6 inline-flex items-center rounded-full bg-[#17181b] px-5 py-3 text-sm font-bold !text-white shadow-sm transition hover:bg-[#33353a]"><PackageCheck className="mr-2 shrink-0" size={16} /><span className="!text-white">Дэлгүүр үзэх</span></Link></section>}</main></div>;
+  return <Redirect to="/profile?tab=orders" />;
 }
