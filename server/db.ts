@@ -1,6 +1,6 @@
-import { and, asc, desc, eq, gte, inArray, like, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, like, lt, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { adminAuditLogs, cartItems, carts, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, loginAttempts, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, productReviews, products, routines, routineSteps, siteMedia, sitePromotions, staffInvitations, userAddresses, users, wishlistItems } from "../drizzle/schema";
+import { adminAuditLogs, cartItems, carts, discountCodes, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, loginAttempts, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, productReviews, products, routines, routineSteps, siteMedia, sitePromotions, staffInvitations, userAddresses, users, wishlistItems } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { getInventoryReservationFailure, shouldRestoreStock } from "./commerce-lifecycle";
 import { getLoyaltyTier, getNextLoyaltyTier } from "../shared/loyalty";
@@ -642,6 +642,7 @@ export async function createOrderFromActiveCart(input: {
   deliveryAddress?: string | null;
   pickupBranch?: string | null;
   paymentMethod: "qpay" | "bank_transfer" | "card" | "cash_on_delivery";
+  couponCode?: string | null;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
@@ -656,10 +657,17 @@ export async function createOrderFromActiveCart(input: {
   // now, not a client-supplied amount — see getApplicableRoutineDiscount.
   const routineDiscount = await getApplicableRoutineDiscount(cart.items);
   const discountMnt = routineDiscount?.discountMnt ?? 0;
-  // PREMIUM-FEATURES.md TIER 5: loyalty applies to the subtotal *after* the
-  // routine discount, not the raw subtotal — sequential stacking, not both
-  // percentages computed off the same base.
-  const loyaltyDiscount = await getApplicableLoyaltyDiscount(input.owner.userId, subtotalMnt - discountMnt);
+  // Coupon (manually entered) applies to the subtotal *after* the routine
+  // discount. Re-validated here (never trusts a client-supplied amount) —
+  // if the code has gone stale between the checkout-preview call and now
+  // (expired, used up, deactivated), the whole order fails with a clear
+  // error rather than silently dropping the discount the shopper was shown.
+  const couponResult = input.couponCode ? await validateDiscountCode(input.couponCode, subtotalMnt - discountMnt) : null;
+  const couponDiscountMnt = couponResult?.discountMnt ?? 0;
+  // PREMIUM-FEATURES.md TIER 5: loyalty applies to the subtotal after both
+  // the routine discount and the coupon — sequential stacking throughout,
+  // never multiple percentages computed off the same base.
+  const loyaltyDiscount = await getApplicableLoyaltyDiscount(input.owner.userId, subtotalMnt - discountMnt - couponDiscountMnt);
   const loyaltyDiscountMnt = loyaltyDiscount?.discountMnt ?? 0;
   const orderNumber = `SA${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
   let orderId = 0;
@@ -671,6 +679,18 @@ export async function createOrderFromActiveCart(input: {
       }).where(and(eq(products.id, item.productId), gte(products.stockQuantity, item.quantity)));
       if (Number(update[0].affectedRows ?? 0) !== 1) {
         throw new Error(`${item.name} is no longer available in the requested quantity. Please refresh your cart.`);
+      }
+    }
+    if (couponResult) {
+      // Same WHERE-guard technique as the stock decrement above: atomic, so
+      // two simultaneous orders can never both redeem the last remaining use
+      // of a maxUses-limited code. Losing this race rolls back the whole
+      // order (stock included) via the thrown error.
+      const redeemed = await tx.update(discountCodes)
+        .set({ usesCount: sql`${discountCodes.usesCount} + 1`, updatedAt: new Date() })
+        .where(and(eq(discountCodes.id, couponResult.id), or(isNull(discountCodes.maxUses), lt(discountCodes.usesCount, discountCodes.maxUses))));
+      if (Number(redeemed[0].affectedRows ?? 0) !== 1) {
+        throw new Error("Энэ хямдралын код яг энэ мөчид дууссан байна. Дахин оролдоно уу.");
       }
     }
     const inserted = await tx.insert(orders).values({
@@ -687,9 +707,11 @@ export async function createOrderFromActiveCart(input: {
       deliveryFeeMnt,
       discountMnt,
       appliedRoutineId: routineDiscount?.routineId ?? null,
+      couponCode: couponResult?.code ?? null,
+      couponDiscountMnt,
       loyaltyDiscountMnt,
       appliedLoyaltyTierName: loyaltyDiscount?.tierName ?? null,
-      totalMnt: subtotalMnt + deliveryFeeMnt - discountMnt - loyaltyDiscountMnt,
+      totalMnt: subtotalMnt + deliveryFeeMnt - discountMnt - couponDiscountMnt - loyaltyDiscountMnt,
     });
     orderId = Number(inserted[0].insertId);
     await tx.insert(orderItems).values(cart.items.map(item => ({
@@ -1675,6 +1697,89 @@ export async function getApplicableLoyaltyDiscount(userId: number | undefined, a
   const discountMnt = Math.round(amountMnt * status.currentTier.discountPercent / 100);
   if (discountMnt <= 0) return null;
   return { tierName: status.currentTier.name, discountPercent: status.currentTier.discountPercent, discountMnt };
+}
+
+/**
+ * Manually-entered checkout discount code ("SALE10") — distinct from the two
+ * automatic discounts above (routine bundle, loyalty tier), which need no
+ * code. Validated against real, current state (active, not expired, under
+ * its use limit, subtotal meets the minimum) — never trusts a
+ * client-supplied discount amount. `amountMnt` is the base it applies to:
+ * subtotal *after* the routine discount (see the stacking order comment in
+ * createOrderFromActiveCart), so a bundle and a coupon are never both
+ * computed off the same money. Shared by the checkout-preview query
+ * (cart.applicableCouponDiscount) and the real redemption at order time, so
+ * the number a shopper sees before confirming is guaranteed to match what's
+ * actually charged.
+ */
+export async function validateDiscountCode(rawCode: string, amountMnt: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const code = rawCode.trim().toUpperCase();
+  if (!code) throw new Error("Хямдралын код оруулна уу.");
+  const rows = await db.select().from(discountCodes).where(eq(discountCodes.code, code)).limit(1);
+  const record = rows[0];
+  if (!record || !record.isActive) throw new Error("Хямдралын код олдсонгүй.");
+  if (record.expiresAt && record.expiresAt < new Date()) throw new Error("Хямдралын кодны хугацаа дууссан байна.");
+  if (record.maxUses !== null && record.usesCount >= record.maxUses) throw new Error("Хямдралын код дууссан байна.");
+  if (amountMnt < record.minSubtotalMnt) throw new Error(`Энэ код ${record.minSubtotalMnt.toLocaleString("mn-MN")}₮-с дээш захиалгад хамаарна.`);
+  const discountMnt = record.type === "percent"
+    ? Math.round(amountMnt * (record.percentValue ?? 0) / 100)
+    : Math.min(record.fixedAmountMnt ?? 0, amountMnt);
+  if (discountMnt <= 0) throw new Error("Энэ код одоогийн сагсанд хямдрал өгөхгүй байна.");
+  return { id: record.id, code: record.code, discountMnt };
+}
+
+export async function discountCodeExists(code: string, excludeId?: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const rows = await db.select({ id: discountCodes.id }).from(discountCodes).where(eq(discountCodes.code, code.trim().toUpperCase())).limit(1);
+  return Boolean(rows[0] && rows[0].id !== excludeId);
+}
+
+export async function getAdminDiscountCodes() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(discountCodes).orderBy(desc(discountCodes.updatedAt));
+}
+
+export type DiscountCodeWriteInput = {
+  code: string;
+  type: "percent" | "fixed";
+  percentValue?: number | null;
+  fixedAmountMnt?: number | null;
+  minSubtotalMnt: number;
+  maxUses?: number | null;
+  isActive: boolean;
+  expiresAt?: Date | null;
+};
+
+export async function createAdminDiscountCode(input: DiscountCodeWriteInput, createdByUserId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const inserted = await db.insert(discountCodes).values({ ...input, code: input.code.trim().toUpperCase(), createdByUserId });
+  const created = await db.select().from(discountCodes).where(eq(discountCodes.id, Number(inserted[0].insertId))).limit(1);
+  return created[0];
+}
+
+export async function updateAdminDiscountCode(input: { id: number } & Partial<DiscountCodeWriteInput>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const { id, ...changes } = input;
+  const existing = await db.select({ id: discountCodes.id }).from(discountCodes).where(eq(discountCodes.id, id)).limit(1);
+  if (!existing[0]) throw new Error("Discount code not found.");
+  const patch: Record<string, unknown> = { ...changes, updatedAt: new Date() };
+  if (changes.code !== undefined) patch.code = changes.code.trim().toUpperCase();
+  await db.update(discountCodes).set(patch).where(eq(discountCodes.id, id));
+  const updated = await db.select().from(discountCodes).where(eq(discountCodes.id, id)).limit(1);
+  return updated[0];
+}
+
+export async function deleteAdminDiscountCode(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.delete(discountCodes).where(eq(discountCodes.id, id));
+  return { id };
 }
 
 export async function suspendUser(input: { userId: number; reason?: string | null }) {

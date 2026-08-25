@@ -21,6 +21,7 @@ import {
   createAdminCategory,
   createAdminPost,
   createAdminProduct,
+  createAdminDiscountCode,
   createAdminRoutine,
   createAdminSitePromotion,
   createEmailVerificationCode,
@@ -35,15 +36,18 @@ import {
   createUserAddress,
   createUserWithPassword,
   dbPing,
+  deleteAdminDiscountCode,
   deleteAdminReview,
   deleteAdminRoutine,
   deleteAdminSitePromotion,
   deleteUserAccount,
   deleteUserAddress,
+  discountCodeExists,
   deleteAdminPost,
   deleteAdminProduct,
   getActiveSitePromotion,
   getAdminAuditLogs,
+  getAdminDiscountCodes,
   getAdminSitePromotions,
   getAdminCategories,
   getAdminDashboardSummary,
@@ -88,6 +92,7 @@ import {
   deleteSiteMedia,
   getUserAddresses,
   routineSlugExists,
+  validateDiscountCode,
   setReviewApproval,
   setRoutineSteps,
   suspendUser,
@@ -98,6 +103,7 @@ import {
   updateAdminOrder,
   updateAdminPost,
   updateAdminProduct,
+  updateAdminDiscountCode,
   updateAdminRoutine,
   updateAdminSitePromotion,
   updateAdminUserRole,
@@ -217,6 +223,25 @@ const promotionUpdateSchema = promotionWriteSchema.partial().extend({ id: z.numb
   value => Object.keys(value).some(key => key !== "id"),
   { message: "Provide at least one promotion field to update." },
 );
+// Manually-entered checkout discount code ("SALE10") -- see discountCodes in drizzle/schema.ts.
+const discountCodeBaseSchema = z.object({
+  code: z.string().trim().min(3).max(40).regex(/^[A-Za-z0-9_-]+$/, "Зөвхөн үсэг, тоо, - _ ашиглана."),
+  type: z.enum(["percent", "fixed"]),
+  percentValue: z.number().int().min(1).max(100).nullable().optional(),
+  fixedAmountMnt: z.number().int().min(1).nullable().optional(),
+  minSubtotalMnt: z.number().int().min(0),
+  maxUses: z.number().int().min(1).nullable().optional(),
+  isActive: z.boolean(),
+  expiresAt: z.coerce.date().nullable().optional(),
+});
+const discountCodeWriteSchema = discountCodeBaseSchema.refine(
+  value => (value.type === "percent" ? Boolean(value.percentValue) : Boolean(value.fixedAmountMnt)),
+  { message: "percent төрөлд хувь, fixed төрөлд дүн заавал шаардлагатай.", path: ["percentValue"] },
+);
+const discountCodeUpdateSchema = discountCodeBaseSchema.partial().extend({ id: z.number().int().positive() }).refine(
+  value => Object.keys(value).some(key => key !== "id"),
+  { message: "Provide at least one discount code field to update." },
+);
 const orderStatusSchema = z.enum(["pending", "confirmed", "packed", "out_for_delivery", "completed", "cancelled"]);
 const orderUpdateSchema = z.object({
   id: z.number().int().positive(),
@@ -322,17 +347,18 @@ const orderStatusMessages: Record<string, string> = {
   cancelled: "Таны захиалгыг цуцаллаа. Асуух зүйл байвал бидэнтэй холбогдоно уу.",
 };
 
-async function sendOrderConfirmationEmail(order: { orderNumber: string; customerEmail: string | null; customerName: string; totalMnt: number; deliveryMethod: string; deliveryAddress: string | null; pickupBranch: string | null; items: { name: string; quantity: number; priceMnt: number }[]; discountMnt?: number; routineName?: string | null; loyaltyDiscountMnt?: number; appliedLoyaltyTierName?: string | null }) {
+async function sendOrderConfirmationEmail(order: { orderNumber: string; customerEmail: string | null; customerName: string; totalMnt: number; deliveryMethod: string; deliveryAddress: string | null; pickupBranch: string | null; items: { name: string; quantity: number; priceMnt: number }[]; discountMnt?: number; routineName?: string | null; couponCode?: string | null; couponDiscountMnt?: number; loyaltyDiscountMnt?: number; appliedLoyaltyTierName?: string | null }) {
   if (!order.customerEmail) return;
   const itemLines = order.items.map(item => `- ${item.name} × ${item.quantity} (${formatMnt(item.priceMnt * item.quantity)})`).join("\n");
   const deliveryLine = order.deliveryMethod === "store_pickup" ? `Хүргэлт: ${order.pickupBranch} салбараас өөрөө авах` : `Хүргэлт: ${order.deliveryAddress ?? "Улаанбаатар хот дотор"}`;
-  // PREMIUM-FEATURES.md TIER 4/5: only mentioned when either actually applied.
+  // PREMIUM-FEATURES.md TIER 4/5 + coupon codes: only mentioned when actually applied.
   const routineDiscountLine = order.discountMnt && order.discountMnt > 0 ? `\n"${order.routineName}" routine хямдрал: -${formatMnt(order.discountMnt)}` : "";
+  const couponDiscountLine = order.couponDiscountMnt && order.couponDiscountMnt > 0 ? `\n"${order.couponCode}" хямдралын код: -${formatMnt(order.couponDiscountMnt)}` : "";
   const loyaltyDiscountLine = order.loyaltyDiscountMnt && order.loyaltyDiscountMnt > 0 ? `\n"${order.appliedLoyaltyTierName}" гишүүнчлэлийн хямдрал: -${formatMnt(order.loyaltyDiscountMnt)}` : "";
   await sendAccountEmail({
     to: order.customerEmail,
     subject: `SUGI ASAYAKE — Захиалга баталгаажлаа (${order.orderNumber})`,
-    content: `Сайн байна уу, ${order.customerName}!\n\nТаны ${order.orderNumber} дугаартай захиалгыг хүлээн авлаа:\n\n${itemLines}${routineDiscountLine}${loyaltyDiscountLine}\n\nНийт дүн: ${formatMnt(order.totalMnt)}\n${deliveryLine}\n\nЗахиалгынхаа явцыг веб сайтаас харах боломжтой. Худалдан авалт хийсэнд баярлалаа!`,
+    content: `Сайн байна уу, ${order.customerName}!\n\nТаны ${order.orderNumber} дугаартай захиалгыг хүлээн авлаа:\n\n${itemLines}${routineDiscountLine}${couponDiscountLine}${loyaltyDiscountLine}\n\nНийт дүн: ${formatMnt(order.totalMnt)}\n${deliveryLine}\n\nЗахиалгынхаа явцыг веб сайтаас харах боломжтой. Худалдан авалт хийсэнд баярлалаа!`,
   });
 }
 
@@ -629,6 +655,23 @@ export const appRouter = router({
       if (!cart?.items.length) return null;
       return getApplicableRoutineDiscount(cart.items);
     }),
+    // Checkout-preview for a manually-entered coupon code -- applies to the
+    // subtotal *after* the routine discount, mirroring exactly what
+    // createOrderFromActiveCart will charge (see the stacking-order comment
+    // there). A publicProcedure like the rest of `cart` (guest checkout).
+    applicableCouponDiscount: publicProcedure.input(z.object({ code: z.string().trim().min(1).max(40) })).query(async ({ ctx, input }) => {
+      const owner = resolveCartOwnerForRead(ctx);
+      if (!owner) throw new TRPCError({ code: "BAD_REQUEST", message: "Сагс хоосон байна." });
+      const cart = await getActiveCartForOwner(owner);
+      if (!cart?.items.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Сагс хоосон байна." });
+      const subtotalMnt = cart.items.reduce((sum, item) => sum + item.priceMnt * item.quantity, 0);
+      const routineDiscount = await getApplicableRoutineDiscount(cart.items);
+      try {
+        return await validateDiscountCode(input.code, subtotalMnt - (routineDiscount?.discountMnt ?? 0));
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Хямдралын код шалгаж чадсангүй." });
+      }
+    }),
     addItem: moderateRateLimitedProcedure.input(z.object({ productId: z.number().int().positive(), quantity: z.number().int().min(1).max(100) })).mutation(async ({ ctx, input }) => {
       try {
         return await addCartItem({ owner: resolveCartOwnerForWrite(ctx), ...input });
@@ -657,6 +700,7 @@ export const appRouter = router({
       deliveryAddress: z.string().trim().min(8).max(2_000).nullable().optional(),
       pickupBranch: z.enum(["Орос элчингийн салбар", "Их наяд плаза салбар", "Яармаг FOOD CITY салбар"]).or(z.literal("")).nullable().optional(),
       paymentMethod: z.enum(["qpay", "bank_transfer", "card", "cash_on_delivery"]),
+      couponCode: z.string().trim().min(1).max(40).nullable().optional(),
     }).superRefine((value, context) => {
       if (value.deliveryMethod === "ub_delivery" && !value.deliveryAddress) {
         context.addIssue({ code: z.ZodIssueCode.custom, message: "A delivery address is required for Ulaanbaatar delivery.", path: ["deliveryAddress"] });
@@ -1146,6 +1190,26 @@ export const appRouter = router({
     deletePromotion: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const result = await deleteAdminSitePromotion(input.id);
       await logAdminAction({ actorUserId: ctx.user.id, action: "promotion.deleted", entityType: "promotion", entityId: input.id });
+      return result;
+    }),
+    // Manually-entered checkout discount codes ("SALE10").
+    discountCodes: staffProcedure.query(() => getAdminDiscountCodes()),
+    createDiscountCode: staffProcedure.input(discountCodeWriteSchema).mutation(async ({ ctx, input }) => {
+      if (await discountCodeExists(input.code)) throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ код өмнө нь ашиглагдсан байна." });
+      const code = await createAdminDiscountCode(input, ctx.user.id);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "discount_code.created", entityType: "discount_code", entityId: code.id, metadata: { code: code.code } });
+      return code;
+    }),
+    updateDiscountCode: staffProcedure.input(discountCodeUpdateSchema).mutation(async ({ ctx, input }) => {
+      const { id, ...changes } = input;
+      if (changes.code && await discountCodeExists(changes.code, id)) throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ код өмнө нь ашиглагдсан байна." });
+      const code = await updateAdminDiscountCode({ id, ...changes });
+      await logAdminAction({ actorUserId: ctx.user.id, action: "discount_code.updated", entityType: "discount_code", entityId: id });
+      return code;
+    }),
+    deleteDiscountCode: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const result = await deleteAdminDiscountCode(input.id);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "discount_code.deleted", entityType: "discount_code", entityId: input.id });
       return result;
     }),
     // TIER 5: bulk publish/unpublish. Only touches isPublished, so none of

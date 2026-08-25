@@ -251,6 +251,15 @@ export const orders = mysqlTable("orders", {
    */
   loyaltyDiscountMnt: int("loyaltyDiscountMnt").notNull().default(0),
   appliedLoyaltyTierName: varchar("appliedLoyaltyTierName", { length: 40 }),
+  /**
+   * Manually-entered coupon ("SALE10"), computed on (subtotal - routine
+   * discount) and itself subtracted before the loyalty tier discount is
+   * computed — see the stacking order comment in createOrderFromActiveCart.
+   * couponCode is a plain text snapshot (not a FK) so a later-deleted or
+   * edited discount_codes row never breaks/changes historical order display.
+   */
+  couponCode: varchar("couponCode", { length: 40 }),
+  couponDiscountMnt: int("couponDiscountMnt").notNull().default(0),
   totalMnt: int("totalMnt").notNull(),
   deliveryTrackingRef: varchar("deliveryTrackingRef", { length: 180 }),
   adminNote: text("adminNote"),
@@ -388,6 +397,35 @@ export const siteMedia = mysqlTable("site_media", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => [
   index("site_media_updated_by_idx").on(table.updatedByUserId),
+]);
+
+/**
+ * Manually-entered checkout discount codes ("SALE10" etc.) — distinct from
+ * the automatic routine-bundle and loyalty-tier discounts (those need no
+ * code, they just apply). One of percentValue/fixedAmountMnt is set
+ * depending on `type`. usesCount is incremented atomically (with a WHERE
+ * guard against maxUses) only when an order actually completes — see
+ * redeemDiscountCode in server/db.ts — never on a checkout preview.
+ */
+export const discountCodes = mysqlTable("discount_codes", {
+  id: int("id").autoincrement().primaryKey(),
+  code: varchar("code", { length: 40 }).notNull().unique(),
+  type: mysqlEnum("type", ["percent", "fixed"]).notNull(),
+  percentValue: int("percentValue"),
+  fixedAmountMnt: int("fixedAmountMnt"),
+  minSubtotalMnt: int("minSubtotalMnt").notNull().default(0),
+  maxUses: int("maxUses"),
+  usesCount: int("usesCount").notNull().default(0),
+  isActive: boolean("isActive").notNull().default(true),
+  expiresAt: timestamp("expiresAt"),
+  // RESTRICT: a discount code is a financial record (orders reference it by
+  // code snapshot) -- the admin who created it shouldn't be deletable while
+  // it still exists.
+  createdByUserId: int("createdByUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  index("discount_codes_active_idx").on(table.isActive),
 ]);
 
 /**
@@ -547,3 +585,5 @@ export type StaffInvitation = typeof staffInvitations.$inferSelect;
 export type InsertStaffInvitation = typeof staffInvitations.$inferInsert;
 export type SitePromotion = typeof sitePromotions.$inferSelect;
 export type InsertSitePromotion = typeof sitePromotions.$inferInsert;
+export type DiscountCode = typeof discountCodes.$inferSelect;
+export type InsertDiscountCode = typeof discountCodes.$inferInsert;
