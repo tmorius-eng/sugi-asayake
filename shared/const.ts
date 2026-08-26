@@ -13,4 +13,4 @@ export const NOT_ADMIN_ERR_MSG = 'You do not have required permission (10002)';
  * #1 reason for cart abandonment (surfacing it only at checkout, as this
  * app did before, is exactly the pattern that causes it).
  */
-export const UB_DELIVERY_FEE_MNT = 5000;
+export const UB_DELIVERY_FEE_MNT = 10000;

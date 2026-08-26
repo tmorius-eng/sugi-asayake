@@ -270,12 +270,26 @@ export const orders = mysqlTable("orders", {
   couponDiscountMnt: int("couponDiscountMnt").notNull().default(0),
   totalMnt: int("totalMnt").notNull(),
   deliveryTrackingRef: varchar("deliveryTrackingRef", { length: 180 }),
+  /**
+   * EBARIMT.md: Mongolian tax-receipt (е-баримт) fields. Fully inert until a
+   * future session wires up real issuance (Path A: SmartSoftware POS
+   * webhook/API, or Path B: direct developer.itc.gov.mn POS API 3.0 — see
+   * EBARIMT.md for which path Tom's vendor conversation lands on). Every
+   * order defaults to "not_issued"/null and stays that way until real
+   * integration code sets these — never populate ebarimtReceiptId by hand;
+   * a manually-typed value here would be a fabricated legal tax record.
+   */
+  ebarimtStatus: mysqlEnum("ebarimtStatus", ["not_issued", "issued", "failed"]).notNull().default("not_issued"),
+  ebarimtReceiptId: varchar("ebarimtReceiptId", { length: 128 }),
+  ebarimtQrData: text("ebarimtQrData"),
+  ebarimtLotteryNumber: varchar("ebarimtLotteryNumber", { length: 40 }),
   adminNote: text("adminNote"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => [
   index("orders_user_idx").on(table.userId),
   index("orders_status_idx").on(table.status),
+  index("orders_ebarimt_status_idx").on(table.ebarimtStatus),
 ]);
 
 export const orderItems = mysqlTable("order_items", {
