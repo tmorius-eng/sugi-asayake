@@ -159,3 +159,24 @@ Tom `/admin` → Content & Media-аас нүүр хуудасны гол (`home-
 **Ажлын лаптоп R2 руу шилжилт (2026-08-26)**: дээрх "Object storage" хэсэгт нэгтгэсэн.
 
 `pnpm dev` одоо стандарт байдлаар ажилладаг (2026-08-20-с хойш) — өмнө нь `package.json`/`pnpm-lock.yaml`-ийн Windows "High Mandatory Level" integrity label-ийг elevated PowerShell-ээс `icacls ... /setintegritylevel Medium`-ээр зассан.
+
+## Admin Analytics — Tier B/C: ашиг/маржин, сагс орхилт, нөөц, суваг, эх сурвалж/төхөөрөмж (2026-08-26, үргэлжлэл 10)
+
+Tom Geckoboard-ийн жишиг dashboard screenshot + стандарт e-commerce KPI-ийн жагсаалт (Conversion Rate, AOV, Cart Abandonment, CAC, New vs Returning, Device, Traffic Source, Best Sellers, Return Rate, Inventory) илгээгээд **"ямар ч тайлбар/хойшлуулалт хэрэггүй, шууд tier-ээр хуваагаад хий"** гэж тодорхой зааварчилсан — тайлбаргүйгээр шууд хэрэгжүүлсэн:
+
+- **Schema** (`drizzle/0033_analytics_expansion.sql`): `products.costMnt` (admin-аас гараар оруулдаг, заавал биш — ашиг/маржин зөвхөн энэ талбарыг бөглөсөн бараагаар л тооцоологдоно, "N/M зарагдсан ширхэгт cost мэдээлэлтэй" гэдгийг үргэлж дагалдуулна, demographics-ийн адил зарчим), `orders.trafficSource`/`orders.deviceType` (захиалга хийх мөчид л бичигдэнэ, хуучин захиалгад хэзээ ч backfill хийгдэхгүй).
+- **`server/analytics.ts`**-д 5 шинэ функц: `getOrdersByChannel` (хүргэлт/төлбөрийн хэлбэрээр), `getCartAbandonment` (бодит `carts`/`cart_items`-аас — `carts.status`-ийн ашиглагдаагүй "abandoned" enum-д биш, харин бараатай+24ц+ идэвхгүй+хэзээ ч захиалга болоогүй сагсаар тооцдог), `getInventorySnapshot` (нөөцийн үнэ цэн/дууссан/бага үлдэгдэлтэй), `getProfitOverview` (доод тал нь ашиг — зөвхөн cost мэдээлэлтэй мөрөөр), `getTrafficBreakdown`. Бүгд `getAnalyticsReport`/Excel/PDF export руу холбогдсон.
+- **Excel export**-д "Суваг" болон "Эх сурвалж, Төхөөрөмж" гэсэн 2 шинэ sheet нэмсэн. **Явцад жинхэнэ exceljs bug олж заслаа**: sheet нэрэнд `/` тэмдэгт байж болохгүй (Excel-ийн өөрийнх нь дүрэм) — "Эх сурвалж/Төхөөрөмж" нэрийг shipped-ын өмнөх интеграцийн тестээр илрүүлж "Эх сурвалж, Төхөөрөмж" болгож зассан.
+- **`shared/deviceType.ts`**: `parseDeviceType(userAgent)` — mobile/tablet/desktop/unknown, тодорхойгүй бол таамаглалгүй "unknown".
+- **`client/src/lib/trafficSource.ts`**: browser session бүрийн эхний хуудас ачаалалт дээр л (`main.tsx`) нэг удаа тэмдэглэгддэг "эх сурвалж" — utm_source/medium байвал тэрийг, эсвэл жинхэнэ external referrer-ийн hostname-ыг, эсвэл "Шууд орсон". Захиалга хийх мөчид (`document.referrer` аль хэдийн өөрийн сайтын өмнөх хуудас болчихсон байдаг тул) биш, зөвхөн эхний хуудсан дээр л барих ёстой гэдгийг тайлбарласан comment-той.
+- `checkout.createOrder` одоо `ctx.req.headers["user-agent"]`-ээс `deviceType`-г серверийн талд өөрөө parse хийж, клиентээс ирсэн `trafficSource`-ыг хүлээж авдаг — хоёул `customerName`/`deliveryDistrict`-тэй адил захиалга дээр л snapshot хийгддэг.
+- `admin.createProduct`/`updateProduct`-д `costMnt` (admin-only, `/admin`-аас гадна хэзээ ч харагдахгүй) талбар нэмсэн, `AdminWorkspace.tsx`-ийн бүтээгдэхүүний форм дээр "Хуучин үнэ"-ийн хажууд шинэ талбар.
+- `AdminAnalyticsPanel.tsx`-д 3 шинэ KPI tile (ашиг/маржин, сагс орхилт, нөөцийн үнэ цэн) + 2 шинэ хэсэг (хүргэлт/төлбөрийн суваг, эх сурвалж/төхөөрөмж).
+
+**Тест**: `server/analytics.integration.test.ts` 4→5 болж өргөжсөн — profit/channel/inventory/cartAbandonment бодит fixture дээр шалгагдсан, мөн шинэ тест `checkout.createOrder`-ийг бодит mobile User-Agent header-тэйгээр дуудаж, DB-д `deviceType="mobile"` бичигдэж байгааг, мөн `getAnalyticsReport`-ийн `traffic` хэсэгт тэр захиалга бодитоор гарч ирж байгааг (зөвхөн функц шууд дуудахгүй, бүтэн router round-trip-ээр) баталгаажуулсан.
+
+**Баталгаажуулалт**: `pnpm check`/`pnpm build` цэвэр. Бүх gate идэвхтэй `pnpm exec vitest run --no-file-parallelism` **154/154 цэвэр**. CI-тэй ижил горим (gate унтраасан): 59 passed/95 skipped, регресс алга. Commit+push хийсэн.
+
+**⚠️ Хажуугаар олдсон, засаагүй (энэ ажилтай холбоогүй, урьд байсан) цоорхой**: `server/integrations.integration.test.ts`-ийн нэг "unit" тест `INTEGRATIONS_ENCRYPTION_KEY` env var-гүй үед шатдаг ба энэ var нь `.github/workflows/ci.yml`-д тохируулагдаагүй — өөрөөр хэлбэл **жинхэнэ GitHub Actions CI дээр энэ тест улаан гарч байж магадгүй**. `git log`-оор шалгахад энэ бол өнөөдрийн ажлаас **өмнө** (49b513e commit, Admin Integrations панел) байсан асуудал. Шийдвэрлээгүй — нууцлалын түлхүүрийн шинж чанартай тул dev fallback нэмэхийн өмнө Tom-той зөвшилцөх нь зөв гэж үзсэн.
+
+**Дараагийн боломжит алхмууд (Tom-той тодруулаагүй)**: CAC (маркетингийн зардал admin-аас гараар оруулах талбар шаардана), Return Rate (шинэ "буцаасан" захиалгын статус эсвэл тусдаа returns tracking шаардана) — эдгээрийг хийхийн тулд шинэ өгөгдлийн эх сурвалж (admin-ийн гараар оруулах мэдээлэл) шаардлагатай тул код зөвхөн бичихээр шийдэгдэхгүй.

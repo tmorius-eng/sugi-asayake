@@ -48,7 +48,9 @@ FLUSH PRIVILEGES;
 $env:RUN_AUTH_INTEGRATION_TESTS="1"; $env:COMMERCE_INTEGRATION_TESTS="1"; $env:RUN_MEDIA_INTEGRATION_TESTS="1"
 pnpm exec vitest run --no-file-parallelism
 ```
-Одоогийн бүрэн тоо: **141/141** ✅ (CI горимд ~57 passed / ~68 skipped, gate-үүд CI дээр идэвхгүй тул хэвийн).
+Одоогийн бүрэн тоо: **154/154** ✅ (CI горимд ~59 passed / ~95 skipped, gate-үүд CI дээр идэвхгүй тул хэвийн).
+
+⚠️ **CI-д мэдэгдэж буй, засаагүй цоорхой** (`server/integrations.integration.test.ts`-ийн "encryption (unit)" тест, засаагүй, миний өнөөдрийн ажилтай холбоогүй): `INTEGRATIONS_ENCRYPTION_KEY` env var-д dev fallback байхгүй тул env var огт байхгүй (жинхэнэ шинэ CI checkout шиг) орчинд энэ нэг тест шатна. `.github/workflows/ci.yml` энэ var-ыг тохируулдаггүй тул **бодит GitHub Actions CI дээр энэ тест улаан гарч байж магадгүй** — шалгах/шийдэх хэрэгтэй (нууцлалын шинж чанартай тул санамсаргүй "insecure dev fallback" нэмэхээс өмнө Tom-той зөвшилцөх нь дээр).
 
 ### Шинэ S3/R2 bucket байгуулах бүрт (production, шинэ орчин) мартаж болохгүй 2 алхам
 Зөвхөн `CreateBucketCommand` хийгээд зогсвол зураг upload "амжилттай" ч browser дээр **403**-аар харагдахгүй:
@@ -57,7 +59,7 @@ pnpm exec vitest run --no-file-parallelism
 
 ## Одоогийн статус — юу шалгагдсан, юу шалгагдаагүй
 
-**Ажиллаж байгаа нь баталгаажсан:** бүртгэл/нэвтрэлт (OTP 2-алхамт, эхний хэрэглэгч auto-admin), role-based хамгаалалт, admin панель (бүтээгдэхүүн/зураг/post/routine/coupon/promo/integrations/variants), каталог+server-side FULLTEXT хайлт (`catalog.search`), guest checkout, loyalty/routine хямдрал, reviews, wishlist, profile (address book, preferences, security), захиалгын имэйл мэдэгдэл (Brevo), Cloudflare R2 storage (хоёр laptop хуваалцдаг), **Product Variants PHASE 1+2 (variant сонголттой худалдан авалт, доор дэлгэрэнгүй)**, **Admin Analytics/CRM dashboard (борлуулалт/дүүрэг/харилцагчийн мэдээлэл + Excel/PDF export, доор дэлгэрэнгүй — бодит өгөгдлөөр screenshot хараахан баталгаажаагүй)**. Дэлгэрэнгүй бүх TIER-ийн баталгаажуулалт: [HISTORY.md](HISTORY.md), [ROADMAP.md](ROADMAP.md), [PREMIUM-FEATURES.md](PREMIUM-FEATURES.md), [ADMIN-PANEL.md](ADMIN-PANEL.md).
+**Ажиллаж байгаа нь баталгаажсан:** бүртгэл/нэвтрэлт (OTP 2-алхамт, эхний хэрэглэгч auto-admin), role-based хамгаалалт, admin панель (бүтээгдэхүүн/зураг/post/routine/coupon/promo/integrations/variants), каталог+server-side FULLTEXT хайлт (`catalog.search`), guest checkout, loyalty/routine хямдрал, reviews, wishlist, profile (address book, preferences, security), захиалгын имэйл мэдэгдэл (Brevo), Cloudflare R2 storage (хоёр laptop хуваалцдаг), **Product Variants PHASE 1+2 (variant сонголттой худалдан авалт, доор дэлгэрэнгүй)**, **Admin Analytics/CRM dashboard (борлуулалт/дүүрэг/харилцагчийн мэдээлэл + ашиг/маржин + сагс орхилт + нөөц + суваг + эх сурвалж/төхөөрөмж + Excel/PDF export, доор дэлгэрэнгүй — бодит өгөгдлөөр screenshot хараахан баталгаажаагүй)**. Дэлгэрэнгүй бүх TIER-ийн баталгаажуулалт: [HISTORY.md](HISTORY.md), [ROADMAP.md](ROADMAP.md), [PREMIUM-FEATURES.md](PREMIUM-FEATURES.md), [ADMIN-PANEL.md](ADMIN-PANEL.md).
 
 **Шалгагдаагүй/хараахан идэвхгүй:**
 - QPay төлбөр (жинхэнэ merchant credential шаардана, localhost дээр бүрэн туршигдахгүй)
@@ -90,7 +92,7 @@ pnpm exec vitest run --no-file-parallelism
 
 ## Дараагийн ажлын санал
 1. **DB backup сэргээх** (дээрх blocker) — үүнгүйгээр дараагийн зүйлсийг бодитоор шалгах боломжгүй
-2. **Admin Analytics dashboard**-ыг бодит 937 барааны/захиалгын өгөгдлөөр нүдэн дээр шалгах (код бэлэн, 153 автомат тест+DB probe-оор баталгаажсан ч гэрийн лаптоп дээр бодит өгөгдөл байхгүй тул screenshot аваагүй) — дэлгэрэнгүй [HISTORY.md](HISTORY.md)
+2. **Admin Analytics dashboard**-ыг бодит 937 барааны/захиалгын өгөгдлөөр нүдэн дээр шалгах (Tier A (борлуулалт/дүүрэг/demographics) болон Tier B/C (ашиг/маржин, сагс орхилт, нөөц, суваг, эх сурвалж/төхөөрөмж) бүгд код бэлэн, 154 автомат тест+DB probe-оор баталгаажсан ч гэрийн лаптоп дээр бодит өгөгдөл байхгүй тул screenshot аваагүй) — дэлгэрэнгүй [HISTORY.md](HISTORY.md)
 3. **Барааны бодит зураг — pilot-ийн үлдсэн хэсэг / цар хүрээ шийдэх** (24-ийн 6 нь дууссан, 18 нь placeholder дээрээ үлдсэн; 937-ийн үлдсэн 913-ыг мөн адил хийх эсэхийг Tom-той тодруулах — дэлгэрэнгүй [HISTORY.md](HISTORY.md)-ийн сүүлийн хэсэгт)
 2. **Mass SMS/Email campaign** (email тал одоо бодитоор ажиллаж байгаа нь баталгаажсан — дээрх Brevo хэсгийг үзнэ үү; SMS-ийг эхлэхийн өмнө Tom-оос кредит/route баталгаажуулах хэрэгтэй)
 3. Product Variants-ийн frontend-ийг бодит олон variant-тай бараагаар Playwright screenshot-оор нүдэн дээр баталгаажуулах (PHASE 1+2 код бэлэн, 149 автомат тест+DB probe-оор баталгаажсан ч бодит browser screenshot хараахан аваагүй)
