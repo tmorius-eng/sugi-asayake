@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq, inArray } from "drizzle-orm";
-import { cartItems, carts, orderItems, orders, productCategories, products, users } from "../drizzle/schema";
+import { cartItems, carts, orderItems, orders, productCategories, productVariants, products, users } from "../drizzle/schema";
 import { createOrderFromActiveCart, getDb, getPublishedCatalog, updateAdminOrder } from "./db";
 
 // This suite mutates an isolated, timestamp-tagged data set and removes it in afterAll.
@@ -13,6 +13,7 @@ describeWithDatabase("commerce database integration", () => {
   let categoryId = 0;
   let publishedProductId = 0;
   let unpublishedProductId = 0;
+  let publishedVariantId = 0;
   let createdOrderId = 0;
 
   beforeAll(async () => {
@@ -45,6 +46,17 @@ describeWithDatabase("commerce database integration", () => {
       isPublished: true,
     });
     publishedProductId = Number(publishedResult[0].insertId);
+    // PHASE 2 of product variants: this test bypasses createAdminProduct (it
+    // inserts straight into `products`), so it has to create its own default
+    // variant too -- that's the row cart/checkout stock actually lives on now.
+    const variantResult = await db.insert(productVariants).values({
+      productId: publishedProductId,
+      sku: `${marker}-PUB`,
+      priceMnt: 1000,
+      stockQuantity: 4,
+      isDefault: true,
+    });
+    publishedVariantId = Number(variantResult[0].insertId);
 
     const unpublishedResult = await db.insert(products).values({
       categoryId,
@@ -84,7 +96,7 @@ describeWithDatabase("commerce database integration", () => {
     if (!db) throw new Error("Database unavailable");
     const cartResult = await db.insert(carts).values({ userId, status: "active" });
     const cartId = Number(cartResult[0].insertId);
-    await db.insert(cartItems).values({ cartId, productId: publishedProductId, quantity: 2 });
+    await db.insert(cartItems).values({ cartId, variantId: publishedVariantId, quantity: 2 });
 
     const order = await createOrderFromActiveCart({
       owner: { userId },
@@ -96,15 +108,18 @@ describeWithDatabase("commerce database integration", () => {
     });
     createdOrderId = order!.id;
 
-    const afterCheckout = await db.select({ stockQuantity: products.stockQuantity }).from(products).where(eq(products.id, publishedProductId)).limit(1);
+    // PHASE 2 of product variants: stock now lives on product_variants, not
+    // products -- see createOrderFromActiveCart / the order-cancel restore
+    // path in updateAdminOrder.
+    const afterCheckout = await db.select({ stockQuantity: productVariants.stockQuantity }).from(productVariants).where(eq(productVariants.id, publishedVariantId)).limit(1);
     expect(afterCheckout[0]?.stockQuantity).toBe(2);
 
     await updateAdminOrder({ id: createdOrderId, status: "cancelled" });
-    const afterCancellation = await db.select({ stockQuantity: products.stockQuantity }).from(products).where(eq(products.id, publishedProductId)).limit(1);
+    const afterCancellation = await db.select({ stockQuantity: productVariants.stockQuantity }).from(productVariants).where(eq(productVariants.id, publishedVariantId)).limit(1);
     expect(afterCancellation[0]?.stockQuantity).toBe(4);
 
     await expect(updateAdminOrder({ id: createdOrderId, status: "cancelled" })).rejects.toThrow("closed order");
-    const afterRepeatedCancellation = await db.select({ stockQuantity: products.stockQuantity }).from(products).where(eq(products.id, publishedProductId)).limit(1);
+    const afterRepeatedCancellation = await db.select({ stockQuantity: productVariants.stockQuantity }).from(productVariants).where(eq(productVariants.id, publishedVariantId)).limit(1);
     expect(afterRepeatedCancellation[0]?.stockQuantity).toBe(4);
   });
 });

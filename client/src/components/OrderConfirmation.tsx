@@ -1,6 +1,7 @@
 import { Check, ClipboardList, MapPin, ShoppingBag, Smartphone } from "lucide-react";
 import { Link } from "wouter";
 import type { RouterOutputs } from "@/lib/trpc";
+import { formatVariantAttributes } from "@shared/catalog-filter";
 
 const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
 
@@ -27,7 +28,7 @@ export default function OrderConfirmation({ order, isAuthenticated }: { order: C
         <div className="order-confirm-summary">
           {order.items.map(item => (
             <div className="order-confirm-summary-row" key={`${item.name}-${item.quantity}`}>
-              <span>{item.name} <span style={{ color: "#9a9ba0" }}>× {item.quantity}</span></span>
+              <span>{item.name}{formatVariantAttributes(item.attributesJson) ? <span style={{ color: "#9a9ba0" }}> ({formatVariantAttributes(item.attributesJson)})</span> : null} <span style={{ color: "#9a9ba0" }}>× {item.quantity}</span></span>
               <strong>{formatMnt(item.priceMnt * item.quantity)}</strong>
             </div>
           ))}

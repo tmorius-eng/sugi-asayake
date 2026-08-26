@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
 import { GUEST_CART_COOKIE_NAME } from "../shared/const";
-import { carts, cartItems, orderItems, orders, productCategories, products, users } from "../drizzle/schema";
+import { carts, cartItems, orderItems, orders, productCategories, productVariants, products, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
 import { createEmailVerificationCode, getDb, getUserByEmail } from "./db";
 import { hashPassword } from "./_core/password";
@@ -73,6 +73,11 @@ describeWithDatabase("guest checkout integration", () => {
       isPublished: true,
     });
     productId = Number(productResult[0].insertId);
+    // PHASE 2 of product variants: cart.addItem({ productId }) resolves to
+    // this product's default variant -- this fixture bypasses
+    // createAdminProduct (which would create one automatically), so it needs
+    // its own, exactly like the 0030 migration backfilled for real products.
+    await db.insert(productVariants).values({ productId, sku: `${marker}-SKU`, priceMnt: 5000, stockQuantity: 10, isDefault: true });
   });
 
   afterAll(async () => {
@@ -83,7 +88,7 @@ describeWithDatabase("guest checkout integration", () => {
       await db.delete(orders).where(inArray(orders.id, createdOrderIds));
     }
     if (productId) {
-      const guestCarts = await db.select({ id: carts.id }).from(carts).innerJoin(cartItems, eq(cartItems.cartId, carts.id)).where(eq(cartItems.productId, productId));
+      const guestCarts = await db.select({ id: carts.id }).from(carts).innerJoin(cartItems, eq(cartItems.cartId, carts.id)).innerJoin(productVariants, eq(cartItems.variantId, productVariants.id)).where(eq(productVariants.productId, productId));
       if (guestCarts.length) {
         await db.delete(cartItems).where(inArray(cartItems.cartId, guestCarts.map(c => c.id)));
         await db.delete(carts).where(inArray(carts.id, guestCarts.map(c => c.id)));

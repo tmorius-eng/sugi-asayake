@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { adminAuditLogs, orderItems, orders, productCategories, products, users } from "../drizzle/schema";
+import { adminAuditLogs, orderItems, orders, productCategories, productVariants, products, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
 import { getDb } from "./db";
 import { hashPassword } from "./_core/password";
@@ -56,6 +56,10 @@ describeWithDatabase("order notification integration", () => {
     categoryId = Number(categoryInsert[0].insertId);
     const productInsert = await db.insert(products).values({ categoryId, name: "Order Notify Test Product", slug: `${marker}-product`, sku: `${marker}-SKU`, priceMnt: 15_000, stockQuantity: 10, isPublished: true });
     productId = Number(productInsert[0].insertId);
+    // PHASE 2 of product variants: cart.addItem({ productId }) resolves to
+    // this product's default variant -- see the same note in
+    // checkout.guest.integration.test.ts.
+    await db.insert(productVariants).values({ productId, sku: `${marker}-SKU`, priceMnt: 15_000, stockQuantity: 10, isDefault: true });
   });
 
   afterAll(async () => {
@@ -83,7 +87,10 @@ describeWithDatabase("order notification integration", () => {
     });
     orderId = order.id;
 
-    expect(order.items).toEqual([{ name: "Order Notify Test Product", quantity: 3, priceMnt: 15_000 }]);
+    // PHASE 2 of product variants: order.items now also carries attributesJson
+    // (null here -- this fixture's variant has none) for the confirmation
+    // email/OrderConfirmation page to show which option was bought.
+    expect(order.items).toEqual([{ name: "Order Notify Test Product", quantity: 3, priceMnt: 15_000, attributesJson: null }]);
 
     const logged = logSpy.mock.calls.map(call => call.join(" ")).join("\n");
     expect(logged).toContain("notify-test-customer@example.invalid");

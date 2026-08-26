@@ -1,4 +1,5 @@
 import { COOKIE_NAME, GUEST_CART_COOKIE_NAME } from "@shared/const";
+import { formatVariantAttributes } from "@shared/catalog-filter";
 import { TRPCError } from "@trpc/server";
 import { parse as parseCookieHeader } from "cookie";
 import { createHash, randomBytes, randomInt } from "node:crypto";
@@ -75,6 +76,7 @@ import {
   getProductStockQuantity,
   getProductWriteConflicts,
   getBestsellingProducts,
+  getPublicProductVariants,
   getPublishedCatalog,
   searchPublishedCatalog,
   getPublishedRoutineBySlug,
@@ -375,9 +377,12 @@ const orderStatusMessages: Record<string, string> = {
   cancelled: "Таны захиалгыг цуцаллаа. Асуух зүйл байвал бидэнтэй холбогдоно уу.",
 };
 
-async function sendOrderConfirmationEmail(order: { orderNumber: string; customerEmail: string | null; customerName: string; totalMnt: number; deliveryMethod: string; deliveryAddress: string | null; pickupBranch: string | null; items: { name: string; quantity: number; priceMnt: number }[]; discountMnt?: number; routineName?: string | null; couponCode?: string | null; couponDiscountMnt?: number; loyaltyDiscountMnt?: number; appliedLoyaltyTierName?: string | null }) {
+async function sendOrderConfirmationEmail(order: { orderNumber: string; customerEmail: string | null; customerName: string; totalMnt: number; deliveryMethod: string; deliveryAddress: string | null; pickupBranch: string | null; items: { name: string; quantity: number; priceMnt: number; attributesJson?: string | null }[]; discountMnt?: number; routineName?: string | null; couponCode?: string | null; couponDiscountMnt?: number; loyaltyDiscountMnt?: number; appliedLoyaltyTierName?: string | null }) {
   if (!order.customerEmail) return;
-  const itemLines = order.items.map(item => `- ${item.name} × ${item.quantity} (${formatMnt(item.priceMnt * item.quantity)})`).join("\n");
+  const itemLines = order.items.map(item => {
+    const attributes = formatVariantAttributes(item.attributesJson);
+    return `- ${item.name}${attributes ? ` (${attributes})` : ""} × ${item.quantity} (${formatMnt(item.priceMnt * item.quantity)})`;
+  }).join("\n");
   const deliveryLine = order.deliveryMethod === "store_pickup" ? `Хүргэлт: ${order.pickupBranch} салбараас өөрөө авах` : `Хүргэлт: ${order.deliveryAddress ?? "Улаанбаатар хот дотор"}`;
   // PREMIUM-FEATURES.md TIER 4/5 + coupon codes: only mentioned when actually applied.
   const routineDiscountLine = order.discountMnt && order.discountMnt > 0 ? `\n"${order.routineName}" routine хямдрал: -${formatMnt(order.discountMnt)}` : "";
@@ -647,6 +652,11 @@ export const appRouter = router({
     // Homepage "Их зарагддаг бараа" rail — real paid-order history, not a
     // manually curated list. See getBestsellingProducts.
     bestsellers: publicProcedure.query(() => getBestsellingProducts(8)),
+    // PHASE 2 of product variants: powers the ProductDetail/QuickView
+    // picker. Only rendered client-side when this returns more than one row
+    // — a single-variant product (the common case) looks exactly as it did
+    // before variants existed.
+    variants: publicProcedure.input(z.object({ productId: z.number().int().positive() })).query(({ input }) => getPublicProductVariants(input.productId)),
   }),
   // PREMIUM-FEATURES.md TIER 5: cumulative-spend loyalty tiers (mirrors
   // Tom's Smart POS in-store membership card — see shared/loyalty.ts).
@@ -752,13 +762,25 @@ export const appRouter = router({
       }
       return getApplicableLoyaltyDiscount(ctx.user.id, afterCouponMnt);
     }),
-    addItem: moderateRateLimitedProcedure.input(z.object({ productId: z.number().int().positive(), quantity: z.number().int().min(1).max(100) })).mutation(async ({ ctx, input }) => {
-      try {
-        return await addCartItem({ owner: resolveCartOwnerForWrite(ctx), ...input });
-      } catch (error) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to add this item to the cart." });
-      }
-    }),
+    // PHASE 2 of product variants: exactly one of productId/variantId.
+    // productId resolves to that product's default variant server-side —
+    // every existing caller (Shop quick-add, routine bulk-add, Profile
+    // reorder, quick-view without a picker) keeps working unchanged.
+    // variantId is what a real picker (ProductDetail/QuickView, only shown
+    // when a product has more than one option) sends to buy a specific one.
+    addItem: moderateRateLimitedProcedure
+      .input(z.object({
+        productId: z.number().int().positive().optional(),
+        variantId: z.number().int().positive().optional(),
+        quantity: z.number().int().min(1).max(100),
+      }).refine(value => (value.productId === undefined) !== (value.variantId === undefined), { message: "Provide exactly one of productId or variantId." }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await addCartItem({ owner: resolveCartOwnerForWrite(ctx), ...input });
+        } catch (error) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to add this item to the cart." });
+        }
+      }),
     updateItemQuantity: moderateRateLimitedProcedure.input(z.object({ itemId: z.number().int().positive(), quantity: z.number().int().min(0).max(100) })).mutation(async ({ ctx, input }) => {
       try {
         return await updateCartItemQuantity({ owner: resolveCartOwnerForWrite(ctx), ...input });

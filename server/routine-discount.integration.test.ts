@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { cartItems, carts, orderItems, orders, productCategories, products, routineSteps, routines, users } from "../drizzle/schema";
+import { cartItems, carts, orderItems, orders, productCategories, productVariants, products, routineSteps, routines, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
 import { getDb } from "./db";
 import { hashPassword } from "./_core/password";
@@ -48,6 +48,14 @@ describeWithDatabase("routine bundle discount integration", () => {
     tonerProductId = Number(tonerInsert[0].insertId);
     const unrelatedInsert = await db.insert(products).values({ categoryId, name: "Routine Test Unrelated Item", slug: `${marker}-unrelated`, priceMnt: 5_000, sku: `${marker}-unrelated-sku`, stockQuantity: 10, isPublished: true });
     unrelatedProductId = Number(unrelatedInsert[0].insertId);
+    // PHASE 2 of product variants: cart.addItem({ productId }) resolves to
+    // each product's default variant -- see the same note in
+    // checkout.guest.integration.test.ts.
+    await db.insert(productVariants).values([
+      { productId: cleanserProductId, sku: `${marker}-cleanser-sku`, priceMnt: 20_000, stockQuantity: 10, isDefault: true },
+      { productId: tonerProductId, sku: `${marker}-toner-sku`, priceMnt: 30_000, stockQuantity: 10, isDefault: true },
+      { productId: unrelatedProductId, sku: `${marker}-unrelated-sku`, priceMnt: 5_000, stockQuantity: 10, isDefault: true },
+    ]);
 
     const routineInsert = await db.insert(routines).values({ name: "Routine Test Basic Routine", slug: `${marker}-routine`, discountPercent: 20, isPublished: true });
     routineId = Number(routineInsert[0].insertId);

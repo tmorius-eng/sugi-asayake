@@ -637,6 +637,16 @@ function cartOwnerCondition(owner: CartOwner) {
   return owner.userId !== undefined ? eq(carts.userId, owner.userId) : eq(carts.guestToken, owner.guestToken);
 }
 
+/**
+ * PHASE 2 of product variants: every cart line is keyed by variantId and
+ * joined through productVariants to reach the parent product. `productId`/
+ * `name`/`slug` below come from that join (there's no productId column on
+ * cart_items any more — see the schema comment on cartItems). `sku` and
+ * `attributesJson` are the variant's own, real ones (this is also what fixed
+ * the old order_items.sku bug -- see createOrderFromActiveCart). `imageUrl`
+ * falls back to the parent product's photo when a variant has none of its
+ * own (most variants won't bother with a separate photo).
+ */
 export async function getActiveCartForOwner(owner: CartOwner) {
   const db = await getDb();
   if (!db) return null;
@@ -653,16 +663,21 @@ export async function getActiveCartForOwner(owner: CartOwner) {
   const items = await db
     .select({
       id: cartItems.id,
-      productId: cartItems.productId,
+      variantId: cartItems.variantId,
+      productId: productVariants.productId,
       quantity: cartItems.quantity,
       name: products.name,
       slug: products.slug,
-      priceMnt: products.priceMnt,
-      imageUrl: products.imageUrl,
-      stockQuantity: products.stockQuantity,
+      sku: productVariants.sku,
+      priceMnt: productVariants.priceMnt,
+      compareAtPriceMnt: productVariants.compareAtPriceMnt,
+      imageUrl: sql<string | null>`coalesce(${productVariants.imageUrl}, ${products.imageUrl})`,
+      stockQuantity: productVariants.stockQuantity,
+      attributesJson: productVariants.attributesJson,
     })
     .from(cartItems)
-    .innerJoin(products, eq(cartItems.productId, products.id))
+    .innerJoin(productVariants, eq(cartItems.variantId, productVariants.id))
+    .innerJoin(products, eq(productVariants.productId, products.id))
     .where(eq(cartItems.cartId, cart[0].id));
 
   return { ...cart[0], items };
@@ -679,30 +694,45 @@ async function getOrCreateActiveCart(owner: CartOwner) {
   return { ...created[0], items: [] };
 }
 
-export async function addCartItem(input: { owner: CartOwner; productId: number; quantity: number }) {
+/**
+ * PHASE 2 of product variants: exactly one of productId/variantId is
+ * expected (enforced by the router's zod schema). productId resolves to
+ * that product's current default variant — this is what keeps every
+ * existing call site (Shop quick-add, routine bulk-add, Profile reorder,
+ * quick-view without a picker) working unchanged with zero client
+ * changes, while a real variant picker (ProductDetail/QuickView, only
+ * rendered when a product actually has more than one variant) passes
+ * variantId directly to buy a specific option.
+ */
+export async function addCartItem(input: { owner: CartOwner; quantity: number; productId?: number; variantId?: number }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  const product = await db.select({ id: products.id, stockQuantity: products.stockQuantity, isPublished: products.isPublished }).from(products).where(eq(products.id, input.productId)).limit(1);
-  if (!product[0]?.isPublished) throw new Error("This product is not currently available for ordering.");
+
+  const variantSelect = { id: productVariants.id, stockQuantity: productVariants.stockQuantity, isPublished: products.isPublished };
+  const variantRow = input.variantId !== undefined
+    ? await db.select(variantSelect).from(productVariants).innerJoin(products, eq(productVariants.productId, products.id)).where(eq(productVariants.id, input.variantId)).limit(1)
+    : await db.select(variantSelect).from(productVariants).innerJoin(products, eq(productVariants.productId, products.id)).where(and(eq(productVariants.productId, input.productId!), eq(productVariants.isDefault, true))).limit(1);
+  if (!variantRow[0]?.isPublished) throw new Error("This product is not currently available for ordering.");
+  const variantId = variantRow[0].id;
 
   const cart = await getOrCreateActiveCart(input.owner);
 
   // Read-modify-write on the existing quantity used to happen outside any
-  // lock: two concurrent "add to cart" calls for the same product (a double
+  // lock: two concurrent "add to cart" calls for the same variant (a double
   // click, two open tabs, guest-cart merge racing a manual add) could both
   // read the same starting quantity and clobber each other's increment. The
   // cart-row lock below serializes every addItem for this cart so that can't
   // happen, while still throwing the same "not enough stock" error as before.
   await db.transaction(async tx => {
     await tx.select({ id: carts.id }).from(carts).where(eq(carts.id, cart.id)).for("update");
-    const existing = await tx.select().from(cartItems).where(and(eq(cartItems.cartId, cart.id), eq(cartItems.productId, input.productId))).limit(1);
+    const existing = await tx.select().from(cartItems).where(and(eq(cartItems.cartId, cart.id), eq(cartItems.variantId, variantId))).limit(1);
     const quantity = (existing[0]?.quantity ?? 0) + input.quantity;
-    if (quantity > product[0].stockQuantity) throw new Error("The requested quantity is not available in stock.");
+    if (quantity > variantRow[0].stockQuantity) throw new Error("The requested quantity is not available in stock.");
 
     if (existing[0]) {
       await tx.update(cartItems).set({ quantity, updatedAt: new Date() }).where(eq(cartItems.id, existing[0].id));
     } else {
-      await tx.insert(cartItems).values({ cartId: cart.id, productId: input.productId, quantity });
+      await tx.insert(cartItems).values({ cartId: cart.id, variantId, quantity });
     }
   });
   return getActiveCartForOwner(input.owner);
@@ -712,10 +742,10 @@ export async function updateCartItemQuantity(input: { owner: CartOwner; itemId: 
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const row = await db
-    .select({ itemId: cartItems.id, cartId: carts.id, productId: products.id, stockQuantity: products.stockQuantity })
+    .select({ itemId: cartItems.id, cartId: carts.id, variantId: productVariants.id, stockQuantity: productVariants.stockQuantity })
     .from(cartItems)
     .innerJoin(carts, eq(cartItems.cartId, carts.id))
-    .innerJoin(products, eq(cartItems.productId, products.id))
+    .innerJoin(productVariants, eq(cartItems.variantId, productVariants.id))
     .where(and(eq(cartItems.id, input.itemId), cartOwnerCondition(input.owner), eq(carts.status, "active")))
     .limit(1);
   if (!row[0]) throw new Error("Cart item not found.");
@@ -743,7 +773,7 @@ export async function mergeGuestCartIntoUserCart(guestToken: string, userId: num
 
   for (const item of guestCart.items) {
     try {
-      await addCartItem({ owner: { userId }, productId: item.productId, quantity: item.quantity });
+      await addCartItem({ owner: { userId }, variantId: item.variantId, quantity: item.quantity });
     } catch {
       // Out of stock, or the product was unpublished since it was added — skip this line.
     }
@@ -791,10 +821,14 @@ export async function createOrderFromActiveCart(input: {
   let orderId = 0;
   await db.transaction(async tx => {
     for (const item of cart.items) {
-      const update = await tx.update(products).set({
-        stockQuantity: sql`${products.stockQuantity} - ${item.quantity}`,
+      // PHASE 2 of product variants: stock lives on the variant row now, not
+      // the product row -- same atomic WHERE-guard technique as before, just
+      // keyed by variantId so two different options of the same product
+      // decrement independently.
+      const update = await tx.update(productVariants).set({
+        stockQuantity: sql`${productVariants.stockQuantity} - ${item.quantity}`,
         updatedAt: new Date(),
-      }).where(and(eq(products.id, item.productId), gte(products.stockQuantity, item.quantity)));
+      }).where(and(eq(productVariants.id, item.variantId), gte(productVariants.stockQuantity, item.quantity)));
       if (Number(update[0].affectedRows ?? 0) !== 1) {
         throw new Error(`${item.name} is no longer available in the requested quantity. Please refresh your cart.`);
       }
@@ -835,8 +869,12 @@ export async function createOrderFromActiveCart(input: {
     await tx.insert(orderItems).values(cart.items.map(item => ({
       orderId,
       productId: item.productId,
+      // PHASE 2 of product variants: fixes a pre-existing bug where this
+      // used to write item.slug (the product's URL slug) here instead of a
+      // real SKU/barcode, because the cart-items query never selected one.
+      variantId: item.variantId,
       productName: item.name,
-      sku: item.slug,
+      sku: item.sku,
       unitPriceMnt: item.priceMnt,
       quantity: item.quantity,
     })));
@@ -848,7 +886,7 @@ export async function createOrderFromActiveCart(input: {
   // decrement) — reuse them here instead of a redundant order_items query,
   // so the caller (checkout.createOrder) can build a confirmation email
   // without a second round trip.
-  return { ...order[0], items: cart.items.map(item => ({ name: item.name, quantity: item.quantity, priceMnt: item.priceMnt })), routineName: routineDiscount?.routineName ?? null };
+  return { ...order[0], items: cart.items.map(item => ({ name: item.name, quantity: item.quantity, priceMnt: item.priceMnt, attributesJson: item.attributesJson })), routineName: routineDiscount?.routineName ?? null };
 }
 
 /**
@@ -1361,10 +1399,14 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
   }
   await db.transaction(async tx => {
     if (shouldRestoreStock(current[0].status as FulfilmentStatus, input.status)) {
-      const lineItems = await tx.select({ productId: orderItems.productId, quantity: orderItems.quantity }).from(orderItems).where(eq(orderItems.orderId, input.id));
+      // PHASE 2 of product variants: restores the specific variant's stock,
+      // not the parent product's — a historical order placed before variants
+      // existed has variantId null (best-effort migration backfill couldn't
+      // find one), in which case there's nothing to safely restore.
+      const lineItems = await tx.select({ variantId: orderItems.variantId, quantity: orderItems.quantity }).from(orderItems).where(eq(orderItems.orderId, input.id));
       for (const item of lineItems) {
-        if (item.productId === null) continue;
-        await tx.update(products).set({ stockQuantity: sql`${products.stockQuantity} + ${item.quantity}`, updatedAt: new Date() }).where(eq(products.id, item.productId));
+        if (item.variantId === null) continue;
+        await tx.update(productVariants).set({ stockQuantity: sql`${productVariants.stockQuantity} + ${item.quantity}`, updatedAt: new Date() }).where(eq(productVariants.id, item.variantId));
       }
     }
     await tx.update(orders).set({
@@ -1559,7 +1601,19 @@ export async function getProductWriteConflicts(input: { slug?: string; sku?: str
   if (!db) throw new Error("Database is not available");
 
   const rows = await db.select({ id: products.id, slug: products.slug, sku: products.sku }).from(products);
-  return rows.filter(row => row.id !== input.excludeId && (row.slug === input.slug || row.sku === input.sku));
+  const conflicts = rows.filter(row => row.id !== input.excludeId && (row.slug === input.slug || row.sku === input.sku));
+  if (conflicts.length || !input.sku) return conflicts;
+
+  // A product's sku shares the same global-uniqueness namespace as variant
+  // skus (real barcodes are physically unique) — see variantSkuExists, which
+  // enforces the same thing from the variant-write side. Only this product's
+  // OWN variant is allowed to already carry this sku (that's just
+  // syncSoleVariantFromProduct mirroring it back), so exclude that one.
+  const variantConflict = await db.select({ productId: productVariants.productId }).from(productVariants).where(eq(productVariants.sku, input.sku)).limit(1);
+  if (variantConflict[0] && variantConflict[0].productId !== input.excludeId) {
+    return [{ id: variantConflict[0].productId, slug: "", sku: input.sku }];
+  }
+  return conflicts;
 }
 
 export async function getCategoryWriteConflicts(input: { slug?: string; excludeId?: number }) {
@@ -1593,26 +1647,44 @@ export async function createAdminProduct(input: ProductWriteInput) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
 
-  await db.insert(products).values({
-    categoryId: input.categoryId,
-    name: input.name,
-    slug: input.slug,
-    brand: input.brand ?? null,
-    shortDescription: input.shortDescription ?? null,
-    description: input.description ?? null,
-    priceMnt: input.priceMnt,
-    compareAtPriceMnt: input.compareAtPriceMnt ?? null,
-    sku: input.sku,
-    imageUrl: input.imageUrl ?? null,
-    galleryJson: input.galleryJson ?? null,
-    stockQuantity: input.stockQuantity,
-    isPublished: input.isPublished,
-    skinType: input.skinType ?? null,
-    skinConcerns: input.skinConcerns ?? null,
-    interiorStyle: input.interiorStyle ?? null,
+  // PHASE 2 of product variants: every product needs at least one variant
+  // for cart/checkout to resolve a default against (see addCartItem) — a
+  // brand-new product gets its own matching "default" variant in the same
+  // transaction, exactly mirroring what the 0030 migration backfilled for
+  // every pre-existing product.
+  const created = await db.transaction(async tx => {
+    await tx.insert(products).values({
+      categoryId: input.categoryId,
+      name: input.name,
+      slug: input.slug,
+      brand: input.brand ?? null,
+      shortDescription: input.shortDescription ?? null,
+      description: input.description ?? null,
+      priceMnt: input.priceMnt,
+      compareAtPriceMnt: input.compareAtPriceMnt ?? null,
+      sku: input.sku,
+      imageUrl: input.imageUrl ?? null,
+      galleryJson: input.galleryJson ?? null,
+      stockQuantity: input.stockQuantity,
+      isPublished: input.isPublished,
+      skinType: input.skinType ?? null,
+      skinConcerns: input.skinConcerns ?? null,
+      interiorStyle: input.interiorStyle ?? null,
+    });
+    const row = await tx.select().from(products).where(eq(products.slug, input.slug)).limit(1);
+    if (row[0]) {
+      await tx.insert(productVariants).values({
+        productId: row[0].id,
+        sku: input.sku,
+        priceMnt: input.priceMnt,
+        compareAtPriceMnt: input.compareAtPriceMnt ?? null,
+        stockQuantity: input.stockQuantity,
+        imageUrl: input.imageUrl ?? null,
+        isDefault: true,
+      });
+    }
+    return row;
   });
-
-  const created = await db.select().from(products).where(eq(products.slug, input.slug)).limit(1);
   return created[0];
 }
 
@@ -1624,6 +1696,31 @@ export async function getProductStockQuantity(id: number): Promise<number | null
   if (!db) return null;
   const found = await db.select({ stockQuantity: products.stockQuantity }).from(products).where(eq(products.id, id)).limit(1);
   return found[0]?.stockQuantity ?? null;
+}
+
+/**
+ * PHASE 2 of product variants: keeps the common single-variant case in sync
+ * so admin.updateProduct's existing price/stock/sku fields stay the one
+ * place to edit a simple product — the moment a product actually has more
+ * than one variant, this deliberately does nothing (ambiguous which variant
+ * a product-level edit should apply to; the admin manages variants directly
+ * at that point via updateAdminProductVariant).
+ */
+async function syncSoleVariantFromProduct(productId: number, changes: { priceMnt?: number; compareAtPriceMnt?: number | null; sku?: string; stockQuantity?: number; imageUrl?: string | null }) {
+  const db = await getDb();
+  if (!db) return;
+  const patch: Record<string, unknown> = {};
+  if (changes.priceMnt !== undefined) patch.priceMnt = changes.priceMnt;
+  if (changes.compareAtPriceMnt !== undefined) patch.compareAtPriceMnt = changes.compareAtPriceMnt;
+  if (changes.sku !== undefined) patch.sku = changes.sku;
+  if (changes.stockQuantity !== undefined) patch.stockQuantity = changes.stockQuantity;
+  if (changes.imageUrl !== undefined) patch.imageUrl = changes.imageUrl;
+  if (Object.keys(patch).length === 0) return;
+
+  const variants = await db.select({ id: productVariants.id }).from(productVariants).where(eq(productVariants.productId, productId));
+  if (variants.length !== 1) return;
+  patch.updatedAt = new Date();
+  await db.update(productVariants).set(patch).where(eq(productVariants.id, variants[0].id));
 }
 
 export async function updateAdminProduct(input: { id: number } & Partial<ProductWriteInput>) {
@@ -1649,6 +1746,7 @@ export async function updateAdminProduct(input: { id: number } & Partial<Product
   if (input.interiorStyle !== undefined) changes.interiorStyle = input.interiorStyle;
 
   await db.update(products).set(changes).where(eq(products.id, input.id));
+  await syncSoleVariantFromProduct(input.id, input);
   const updated = await db.select().from(products).where(eq(products.id, input.id)).limit(1);
   return updated[0];
 }
@@ -2049,15 +2147,44 @@ export async function updateAdminIntegration(input: { provider: IntegrationProvi
 }
 
 /**
- * Product variants — PHASE 1 (see the long comment on productVariants in
- * drizzle/schema.ts). Purely additive: admin can view/create/edit/delete
- * variants here, but nothing in cart/checkout/orders reads this table yet
- * — products.priceMnt/stockQuantity/sku remain what's actually sold.
+ * Product variants (see the long comment on productVariants in
+ * drizzle/schema.ts). PHASE 2: cart/checkout/orders now read this table —
+ * see addCartItem/createOrderFromActiveCart below.
  */
 export async function getAdminProductVariants(productId: number) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(productVariants).where(eq(productVariants.productId, productId)).orderBy(desc(productVariants.isDefault), asc(productVariants.id));
+}
+
+/**
+ * Public (storefront) read of a published product's variants, for the
+ * ProductDetail/QuickView variant picker. Nothing sensitive here — price and
+ * stock are already public via catalog.list/bySlug, this just exposes the
+ * same numbers per-option instead of only for the default one. Returns []
+ * for an unpublished/unknown product rather than throwing, since the caller
+ * (catalog.variants) is a publicProcedure and a picker with no options is a
+ * normal, silent no-op on the client (the product simply has one option).
+ */
+export async function getPublicProductVariants(productId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const product = await db.select({ id: products.id }).from(products).where(and(eq(products.id, productId), eq(products.isPublished, true))).limit(1);
+  if (!product[0]) return [];
+  return db
+    .select({
+      id: productVariants.id,
+      sku: productVariants.sku,
+      attributesJson: productVariants.attributesJson,
+      priceMnt: productVariants.priceMnt,
+      compareAtPriceMnt: productVariants.compareAtPriceMnt,
+      stockQuantity: productVariants.stockQuantity,
+      imageUrl: productVariants.imageUrl,
+      isDefault: productVariants.isDefault,
+    })
+    .from(productVariants)
+    .where(eq(productVariants.productId, productId))
+    .orderBy(desc(productVariants.isDefault), asc(productVariants.id));
 }
 
 /** A variant SKU must be globally unique across the whole catalog (real

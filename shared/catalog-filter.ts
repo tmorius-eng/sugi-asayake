@@ -23,6 +23,22 @@ export function getSalePercent(priceMnt: number, compareAtPriceMnt?: number | nu
   return Math.round((1 - priceMnt / compareAtPriceMnt) * 100);
 }
 
+// PHASE 2 of product variants: "Хэмжээ: 400мл" / "Өнгө: Хар · Хэмжээ: M" for
+// a cart/order line's chosen option — null (renders nothing) rather than a
+// sku fallback, since most lines are still the single-variant common case
+// with no attributesJson at all, and a bare barcode string wouldn't mean
+// anything to a shopper the way it does as a picker's own label.
+export function formatVariantAttributes(attributesJson?: string | null): string | null {
+  if (!attributesJson) return null;
+  try {
+    const attributes = JSON.parse(attributesJson) as Record<string, string>;
+    const parts = Object.entries(attributes).map(([key, value]) => `${key}: ${value}`);
+    return parts.length ? parts.join(" · ") : null;
+  } catch {
+    return null;
+  }
+}
+
 export type CatalogSortOption = "featured" | "price-low" | "price-high" | "name-asc";
 
 export function getCatalogCategories<T extends CatalogSearchItem>(products: T[]) {

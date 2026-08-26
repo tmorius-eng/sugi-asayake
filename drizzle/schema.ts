@@ -197,21 +197,25 @@ export const products = mysqlTable("products", {
  * real cart/order/review/loyalty history is a genuinely risky migration —
  * done deliberately in phases rather than one big-bang cutover:
  *
- * Phase 1 (this table): every existing product gets exactly one
- * auto-created variant (its own sku/price/stock, isDefault=true) via a
- * one-time backfill (see the 0030 migration). `products.priceMnt`/
- * `stockQuantity`/`sku` REMAIN the source of truth for cart/checkout/
- * orders/reviews/loyalty/routines — none of that code changes in this
- * phase. This table exists so an admin can start attaching *additional*
- * variants (e.g. a 400ml option next to an existing 170ml product) and see
- * them, without any risk to what's already live.
+ * Phase 1 (done, see the 0030 migration): every existing product got exactly
+ * one auto-created variant (its own sku/price/stock, isDefault=true) via a
+ * one-time backfill. Admin-only at that point: nothing in cart/checkout/
+ * orders read this table yet.
  *
- * Phase 2 (future, NOT done here): wire cart_items/order_items/
- * wishlist_items/product_reviews to reference a variantId, so a shopper can
- * actually choose and buy a non-default variant. That phase touches
- * checkout/cart/order-history/loyalty-spend/routine logic throughout the
- * app and needs its own careful pass + full regression testing — do not
- * assume it's done just because this table exists.
+ * Phase 2 (done, see the 0031 migration): cart_items/order_items now key off
+ * variantId (see cartItems/orderItems below) — a shopper can choose and buy
+ * a non-default variant, and stock/price/sku for the purchase path always
+ * resolve through this table, for every product, single- or multi-variant
+ * alike. `products.priceMnt`/`stockQuantity`/`sku` stay meaningful too: for
+ * the common case of a product with exactly one variant, `admin.updateProduct`
+ * keeps that sole variant mirrored automatically (see
+ * syncSoleVariantFromProduct in server/db.ts), so editing a simple product is
+ * still just one set of fields. `wishlist_items`/`product_reviews`
+ * deliberately stay product-level (saving/reviewing "the product," not one
+ * SKU — see their own schema comments); low-stock display, CSV bulk export,
+ * and the back-in-stock wishlist hook still read products.stockQuantity,
+ * which is an approximation for genuinely multi-variant products (a known,
+ * documented scope limit, not an oversight).
  */
 export const productVariants = mysqlTable("product_variants", {
   id: int("id").autoincrement().primaryKey(),
@@ -251,17 +255,24 @@ export const carts = mysqlTable("carts", {
   index("carts_status_idx").on(table.status),
 ]);
 
+/**
+ * PHASE 2 of product variants (see the long comment on productVariants
+ * above): a cart line is keyed by variantId, not productId -- that's what
+ * lets two different variants of the same product (e.g. 170ml and 400ml)
+ * sit in the same cart as separate lines. The product itself is reached by
+ * joining through productVariants.productId (see getActiveCartForOwner in
+ * server/db.ts); there's no separate productId column here to keep in sync.
+ */
 export const cartItems = mysqlTable("cart_items", {
   id: int("id").autoincrement().primaryKey(),
   cartId: int("cartId").notNull().references(() => carts.id, { onDelete: "cascade" }),
-  productId: int("productId").notNull().references(() => products.id, { onDelete: "cascade" }),
+  variantId: int("variantId").notNull().references(() => productVariants.id, { onDelete: "cascade" }),
   quantity: int("quantity").notNull().default(1),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => [
   index("cart_items_cart_idx").on(table.cartId),
-  index("cart_items_product_idx").on(table.productId),
-  uniqueIndex("cart_items_cart_product_unique").on(table.cartId, table.productId),
+  uniqueIndex("cart_items_cart_variant_unique").on(table.cartId, table.variantId),
 ]);
 
 export const orders = mysqlTable("orders", {
@@ -344,6 +355,12 @@ export const orderItems = mysqlTable("order_items", {
   // Nullable + SET NULL: the row already denormalizes productName/sku/price,
   // so a later product deletion shouldn't erase order history.
   productId: int("productId").references(() => products.id, { onDelete: "set null" }),
+  // PHASE 2 of product variants: which specific variant was bought, purely
+  // for display/stock-restoration purposes -- productName/sku/unitPriceMnt
+  // below are already the durable financial record, so a later variant
+  // deletion (or a historical order predating variants) just means this is
+  // null, never a broken order.
+  variantId: int("variantId").references(() => productVariants.id, { onDelete: "set null" }),
   productName: varchar("productName", { length: 180 }).notNull(),
   sku: varchar("sku", { length: 80 }).notNull(),
   unitPriceMnt: int("unitPriceMnt").notNull(),
@@ -351,6 +368,7 @@ export const orderItems = mysqlTable("order_items", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, table => [
   index("order_items_order_idx").on(table.orderId),
+  index("order_items_variant_idx").on(table.variantId),
 ]);
 
 /**

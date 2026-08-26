@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { adminAuditLogs, cartItems, carts, discountCodes, orderItems, orders, productCategories, products, users } from "../drizzle/schema";
+import { adminAuditLogs, cartItems, carts, discountCodes, orderItems, orders, productCategories, productVariants, products, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
 import { getDb } from "./db";
 import { hashPassword } from "./_core/password";
@@ -41,6 +41,10 @@ describeWithDatabase("discount code integration", () => {
     if (!categoryRows[0]) throw new Error("No product category exists to attach the coupon test product to.");
     const productInsert = await db.insert(products).values({ categoryId: categoryRows[0].id, name: "Coupon Test Product", slug: `${marker}-product`, priceMnt: 40_000, sku: `${marker}-sku`, stockQuantity: 50, isPublished: true });
     productId = Number(productInsert[0].insertId);
+    // PHASE 2 of product variants: cart.addItem({ productId }) resolves to
+    // this product's default variant -- see the same note in
+    // checkout.guest.integration.test.ts.
+    await db.insert(productVariants).values({ productId, sku: `${marker}-sku`, priceMnt: 40_000, stockQuantity: 50, isDefault: true });
   });
 
   afterEach(async () => {

@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { adminAuditLogs, cartItems, carts, orderItems, orders, productCategories, products, routineSteps, routines, users } from "../drizzle/schema";
+import { adminAuditLogs, cartItems, carts, orderItems, orders, productCategories, productVariants, products, routineSteps, routines, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
 import { getDb } from "./db";
 import { hashPassword } from "./_core/password";
@@ -43,6 +43,10 @@ describeWithDatabase("loyalty tier discount integration", () => {
     if (!categoryRows[0]) throw new Error("No product category exists to attach the loyalty test product to.");
     const productInsert = await db.insert(products).values({ categoryId: categoryRows[0].id, name: "Loyalty Test Product", slug: `${marker}-product`, priceMnt: 100_000, sku: `${marker}-sku`, stockQuantity: 50, isPublished: true });
     productId = Number(productInsert[0].insertId);
+    // PHASE 2 of product variants: cart.addItem({ productId }) resolves to
+    // this product's default variant -- see the same note in
+    // checkout.guest.integration.test.ts.
+    await db.insert(productVariants).values({ productId, sku: `${marker}-sku`, priceMnt: 100_000, stockQuantity: 50, isDefault: true });
   });
 
   afterEach(async () => {
