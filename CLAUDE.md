@@ -66,8 +66,16 @@ pnpm exec vitest run --no-file-parallelism
 - **Product Variants — PHASE 1 болон PHASE 2 хоёулаа дууссан (2026-08-26)** — худалдан авагч ProductDetail/QuickView дээр 2+ variant-тай бараанаас сонголт хийж, тухайн variant-ийн үнэ/нөөц/sku-гоор бодитоор захиалж болно. Ганц variant-тай (одоогийн 936/937) бараанд ямар ч харагдах өөрчлөлт алга. **Бодит Playwright screenshot баталгаажуулалт хараахан хийгдээгүй** (зөвхөн 149 автомат тест + `pnpm build` + throwaway DB probe script-ээр баталгаажсан) — дэлгэрэнгүй [HISTORY.md](HISTORY.md)-ийн "Product Variants PHASE 2" хэсэгт.
 - Хэрэглэгчийн удирдлага (`/admin` → Хэрэглэгч хэсэг)
 
-## ⚠️ Идэвхтэй blocker: Brevo API IP хязгаарлалт (шийдэл хараахан тодорхойгүй)
-`GET /v3/account` 401 "unrecognised IP address" өгдөг байсан (энэ машины IPv4/IPv6 хоёул Brevo dashboard-ийн Authorised IPs-д ороогүй). **Анх Tom dashboard дээрээ "IP хязгаарлалтыг унтраах" сонголт хийхээр шийдсэн гэж тэмдэглэсэн байсан ч, Tom дараа нь тодорхой засварласан: Brevo-ийн dashboard дотор ийм ганц "authorize IP toggle on/off" гэсэн зүйл байдаггүй.** Өөрөөр хэлбэл шийдэл нь энгийн unтраах товч биш байх магадгүй (жишээ нь тодорхой IP-г "зөвшөөрөгдсөн" жагсаалтад нэг бүрчлэн нэмэх флоу байж болзошгүй) — **энэ талаар Brevo dashboard-ыг бодитоор дахин нягталж тодруулах хэрэгтэй хэвээр байна**, надаас (Claude Code) хийх зүйл алга (dashboard-ийн UI-г би харах боломжгүй). Тодорхой болмогц над руу бичээрэй, шууд бодит имэйл илгээж баталгаажуулна. Баталгаажсны дараа л mass SMS/Email campaign feature эхлэх боломжтой.
+## ✅ Brevo API IP хязгаарлалт арилсан, имэйл бодитоор ажиллаж байгааг баталгаажуулсан (2026-08-26)
+Өмнөх blocker (`GET /v3/account` 401 "unrecognised IP address") шийдэгдсэн — Tom өөрийн талаас (яг ямар алхмаар хийснийг тодорхой мэдэгдээгүй, гэхдээ dashboard дээрх ганц "toggle" биш байсныг батлаcан) IP-г зөвшөөрсний дараа шууд бодитоор шалгасан:
+- `GET https://api.brevo.com/v3/account` → **200 OK**, бодит акаунтын мэдээлэл буцсан (free tier, 300 sendLimit credit, "Sugi asayake" байгууллага).
+- `POST /v3/smtp/email` → **201 Created**, бодит имэйл `t.morius@gmail.com` руу амжилттай илгээгдэж, жинхэнэ `messageId` буцсан.
+
+**Имэйл (`sendAccountEmail`) бүрэн ажиллаж байгаа нь баталгаажлаа** — захиалгын баталгаажуулах, staff invitation, back-in-stock мэдэгдэл гэх мэт бүх имэйл feature-үүд одоо localhost дээрээс ч бодитоор гарах боломжтой.
+
+**SMS хараахан шалгаагүй** (`sendAccountSms`) — Brevo-ийн SMS нь имэйлээс тусдаа кредит систем (мөнгө зарцуулдаг тул зөвшөөрөлгүй туршиж үзээгүй). SMS туршихаасаа өмнө Tom-оос: (1) Brevo dashboard дээр SMS кредит худалдаж авсан эсэх, (2) Монгол улс руу route/үнэ дэмжигдсэн эсэхийг (Transactional SMS → Country pricing) баталгаажуулах хэрэгтэй.
+
+Одоо **mass SMS/Email campaign feature (email хэсгийг нь)** эхлэх боломжтой.
 
 ## ⚠️ Admin эрх хэн авдаг вэ — bootstrap логик (`server/db.ts`-ийн `createUserWithPassword`)
 Шинээр бүртгүүлж буй хэрэглэгч **admin** эрхтэй болдог ЗӨВХӨН: (1) `users` хүснэгт хоосон үеийн хамгийн ЭХНИЙ хэрэглэгч, эсвэл (2) имэйл нь `.env`-ийн `OWNER_EMAIL`-тэй яг таарвал. Бусад бүх шинэ бүртгэл энгийн `"user"` эрхтэй. `staff`/`admin` эрхийг зөвхөн одоо байгаа admin гараар л оноож болно.
@@ -75,7 +83,7 @@ pnpm exec vitest run --no-file-parallelism
 ⚠️ **Production/deploy хийхээсээ өмнө заавал шалгах:** `.env`-ийн `OWNER_EMAIL=t.morius@gmail.com` байх ёстой (placeholder-оор биш).
 
 ## Дараагийн ажлын санал
-1. **Brevo IP хязгаарлалтын жинхэнэ шийдлийг тодруулах** (dashboard-д ганц toggle байхгүй нь батлагдсан) → баталгаажсны дараа mass SMS/Email campaign эхлэх
+1. **Mass SMS/Email campaign** (email тал одоо бодитоор ажиллаж байгаа нь баталгаажсан — дээрх Brevo хэсгийг үзнэ үү; SMS-ийг эхлэхийн өмнө Tom-оос кредит/route баталгаажуулах хэрэгтэй)
 2. Product Variants-ийн frontend-ийг бодит олон variant-тай бараагаар Playwright screenshot-оор нүдэн дээр баталгаажуулах (PHASE 1+2 код бэлэн, 149 автомат тест+DB probe-оор баталгаажсан ч бодит browser screenshot хараахан аваагүй)
 3. eBarimt — Tom SmartSoftware POS нийлүүлэгчтэйгээ [EBARIMT.md](EBARIMT.md)-ийн 6 асуултыг тодруулах ёстой (код бичих ажил биш)
 4. PREMIUM-FEATURES.md TIER 5 үлдсэн (referral, abandoned-cart имэйл), ROADMAP TIER 2 үлдсэн (refund урсгал), TIER 5 үлдсэн (Sentry, staging, CDN, uptime monitoring)
