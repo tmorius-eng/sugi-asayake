@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 
@@ -35,8 +35,29 @@ maybeDescribe("managed site-media integration", () => {
   const adminCaller = appRouter.createCaller(createAdminContext());
   const publicCaller = appRouter.createCaller({ ...createAdminContext(), user: null });
 
+  // home-hero is a REAL, admin-editable production slot (Home.tsx's hero
+  // banner) -- not a throwaway test fixture. A previous version of this
+  // test unconditionally cleared it in afterEach, which meant every local
+  // run of the full suite with RUN_MEDIA_INTEGRATION_TESTS=1 silently wiped
+  // out whatever real photo an admin had actually uploaded for the
+  // homepage hero (this is exactly what happened once — see CLAUDE.md/
+  // HISTORY.md's "orphaned R2 upload" incident). Snapshot-and-restore
+  // instead of destroy-and-leave-empty: capture whatever's really there
+  // before the test runs, put it back afterward no matter what the test did.
+  let originalHomeHero: { imageUrl: string; altText: string | null } | undefined;
+
+  beforeEach(async () => {
+    const before = await adminCaller.admin.siteMedia();
+    const existing = before.find(media => media.slotKey === slotKey);
+    originalHomeHero = existing ? { imageUrl: existing.imageUrl, altText: existing.altText } : undefined;
+  });
+
   afterEach(async () => {
-    await adminCaller.admin.clearSiteMedia({ slotKey }).catch(() => undefined);
+    if (originalHomeHero) {
+      await adminCaller.admin.updateSiteMedia({ slotKey, imageUrl: originalHomeHero.imageUrl, altText: originalHomeHero.altText }).catch(() => undefined);
+    } else {
+      await adminCaller.admin.clearSiteMedia({ slotKey }).catch(() => undefined);
+    }
   });
 
   it("uploads a managed image, exposes its persisted public override, and removes it on reset", async () => {
