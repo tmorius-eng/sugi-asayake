@@ -57,7 +57,7 @@ pnpm exec vitest run --no-file-parallelism
 
 ## Одоогийн статус — юу шалгагдсан, юу шалгагдаагүй
 
-**Ажиллаж байгаа нь баталгаажсан:** бүртгэл/нэвтрэлт (OTP 2-алхамт, эхний хэрэглэгч auto-admin), role-based хамгаалалт, admin панель (бүтээгдэхүүн/зураг/post/routine/coupon/promo/integrations/variants), каталог+server-side FULLTEXT хайлт (`catalog.search`), guest checkout, loyalty/routine хямдрал, reviews, wishlist, profile (address book, preferences, security), захиалгын имэйл мэдэгдэл (Brevo), Cloudflare R2 storage (хоёр laptop хуваалцдаг), **Product Variants PHASE 1+2 (variant сонголттой худалдан авалт, доор дэлгэрэнгүй)**. Дэлгэрэнгүй бүх TIER-ийн баталгаажуулалт: [HISTORY.md](HISTORY.md), [ROADMAP.md](ROADMAP.md), [PREMIUM-FEATURES.md](PREMIUM-FEATURES.md), [ADMIN-PANEL.md](ADMIN-PANEL.md).
+**Ажиллаж байгаа нь баталгаажсан:** бүртгэл/нэвтрэлт (OTP 2-алхамт, эхний хэрэглэгч auto-admin), role-based хамгаалалт, admin панель (бүтээгдэхүүн/зураг/post/routine/coupon/promo/integrations/variants), каталог+server-side FULLTEXT хайлт (`catalog.search`), guest checkout, loyalty/routine хямдрал, reviews, wishlist, profile (address book, preferences, security), захиалгын имэйл мэдэгдэл (Brevo), Cloudflare R2 storage (хоёр laptop хуваалцдаг), **Product Variants PHASE 1+2 (variant сонголттой худалдан авалт, доор дэлгэрэнгүй)**, **Admin Analytics/CRM dashboard (борлуулалт/дүүрэг/харилцагчийн мэдээлэл + Excel/PDF export, доор дэлгэрэнгүй — бодит өгөгдлөөр screenshot хараахан баталгаажаагүй)**. Дэлгэрэнгүй бүх TIER-ийн баталгаажуулалт: [HISTORY.md](HISTORY.md), [ROADMAP.md](ROADMAP.md), [PREMIUM-FEATURES.md](PREMIUM-FEATURES.md), [ADMIN-PANEL.md](ADMIN-PANEL.md).
 
 **Шалгагдаагүй/хараахан идэвхгүй:**
 - QPay төлбөр (жинхэнэ merchant credential шаардана, localhost дээр бүрэн туршигдахгүй)
@@ -85,8 +85,13 @@ pnpm exec vitest run --no-file-parallelism
 ## ⚠️ Чухал сануулга: integration test-үүд бодит production slot/контент ашиглахгүй байх
 `site-media.integration.test.ts` өмнө нь бодит `home-hero` slot-ыг шууд ашиглаж, `afterEach`-д болзолгүй устгадаг байсан тул тест ажиллуулах БҮРТ Tom-ий бодит upload-ийг DB-ээс устгаж байсан (2026-08-26, дэлгэрэнгүй HISTORY.md). Одоо snapshot-and-restore болгож заслаа. **Ирээдүйд шинэ integration test бичихдээ**: бодит хэрэглэгчийн харах/удирдах өгөгдөл (site_media slots, бодит admin тохиргоо гэх мэт) дээр тест хийвэл заавал snapshot-and-restore хэлбэрээр бичих, эсвэл тусад нь throwaway өгөгдөл (marker-tagged) ашиглах — хэзээ ч бодит slot/мөрийг болзолгүй устгах/дарж бичихгүй байх.
 
+## ⚠️ Идэвхтэй blocker: гэрийн лаптопын DB хоосон
+Энэ (гэрийн) лаптопын MySQL-д **0 бараа** байна — 937 барааны бодит өгөгдөл (болон бодит захиалга) хэзээ ч энд орж ирээгүй (MySQL машин бүрд тусдаа, зөвхөн R2 (зураг) хуваалцдаг). GitHub-т ч байхгүй (DB backup зориудаар `.gitignore`-д). **Шаардлагатай алхам**: ажлын лаптопоос `C:\Sugi-asayake\backups\`-ийн хамгийн сүүлийн `.zip`-ыг физикээр (USB/cloud) энэ лаптоп руу зөөгөөд `pwsh scripts/db-restore.ps1 -BackupFile <path> -Force` ажиллуулах. Үүнийг хийхээс өмнө: Admin Analytics dashboard, 937 барааны зураг ажил зэрэг бодит өгөгдөл шаардсан юуг ч бодитоор шалгах боломжгүй.
+
 ## Дараагийн ажлын санал
-1. **Барааны бодит зураг — pilot-ийн үлдсэн хэсэг / цар хүрээ шийдэх** (24-ийн 6 нь дууссан, 18 нь placeholder дээрээ үлдсэн; 937-ийн үлдсэн 913-ыг мөн адил хийх эсэхийг Tom-той тодруулах — дэлгэрэнгүй [HISTORY.md](HISTORY.md)-ийн сүүлийн хэсэгт)
+1. **DB backup сэргээх** (дээрх blocker) — үүнгүйгээр дараагийн зүйлсийг бодитоор шалгах боломжгүй
+2. **Admin Analytics dashboard**-ыг бодит 937 барааны/захиалгын өгөгдлөөр нүдэн дээр шалгах (код бэлэн, 153 автомат тест+DB probe-оор баталгаажсан ч гэрийн лаптоп дээр бодит өгөгдөл байхгүй тул screenshot аваагүй) — дэлгэрэнгүй [HISTORY.md](HISTORY.md)
+3. **Барааны бодит зураг — pilot-ийн үлдсэн хэсэг / цар хүрээ шийдэх** (24-ийн 6 нь дууссан, 18 нь placeholder дээрээ үлдсэн; 937-ийн үлдсэн 913-ыг мөн адил хийх эсэхийг Tom-той тодруулах — дэлгэрэнгүй [HISTORY.md](HISTORY.md)-ийн сүүлийн хэсэгт)
 2. **Mass SMS/Email campaign** (email тал одоо бодитоор ажиллаж байгаа нь баталгаажсан — дээрх Brevo хэсгийг үзнэ үү; SMS-ийг эхлэхийн өмнө Tom-оос кредит/route баталгаажуулах хэрэгтэй)
 3. Product Variants-ийн frontend-ийг бодит олон variant-тай бараагаар Playwright screenshot-оор нүдэн дээр баталгаажуулах (PHASE 1+2 код бэлэн, 149 автомат тест+DB probe-оор баталгаажсан ч бодит browser screenshot хараахан аваагүй)
 3. eBarimt — Tom SmartSoftware POS нийлүүлэгчтэйгээ [EBARIMT.md](EBARIMT.md)-ийн 6 асуултыг тодруулах ёстой (код бичих ажил биш)

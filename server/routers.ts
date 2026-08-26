@@ -1,5 +1,6 @@
 import { COOKIE_NAME, GUEST_CART_COOKIE_NAME } from "@shared/const";
 import { formatVariantAttributes } from "@shared/catalog-filter";
+import { ubDistricts } from "@shared/districts";
 import { TRPCError } from "@trpc/server";
 import { parse as parseCookieHeader } from "cookie";
 import { createHash, randomBytes, randomInt } from "node:crypto";
@@ -134,6 +135,7 @@ import { storagePing, storagePut } from "./storage";
 import { IMAGE_MAX_DIMENSION, processUploadedImage } from "./_core/imageProcessing";
 import { createQPayInvoice, getQPayAvailability } from "./qpay";
 import { getCategoryWriteViolation, getProductWriteViolation } from "./catalog-validation";
+import { getAnalyticsReport, exportAnalyticsExcel, exportAnalyticsPdf } from "./analytics";
 import { siteMediaSlotKeys } from "../shared/site-media";
 
 const slugSchema = z.string().trim().min(2).max(200).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens only.");
@@ -149,11 +151,15 @@ const interiorStyleSchema = z.string().trim().max(60).nullable().optional();
 // reused here so profile.update and the address book accept exactly the
 // same phone formats a delivery actually needs.
 const phoneSchema = z.string().trim().min(6).max(40).regex(/^[0-9+()\-\s]{6,40}$/, "Утасны дугаараа зөв оруулна уу.").refine(value => value.replace(/\D/g, "").length >= 8, "Утасны дугаараа зөв оруулна уу.");
+// Optional everywhere it's used (checkout/address book) -- see the schema
+// comment on user_addresses.district in drizzle/schema.ts.
+const districtSchema = z.enum(ubDistricts).nullable().optional();
 const addressWriteSchema = z.object({
   label: z.string().trim().min(1).max(60),
   recipientName: z.string().trim().min(2).max(160),
   phone: phoneSchema,
   addressLine: z.string().trim().min(8).max(2_000),
+  district: districtSchema,
   isDefault: z.boolean().optional(),
 });
 
@@ -800,6 +806,7 @@ export const appRouter = router({
       customerEmail: z.string().trim().email().max(320).nullable().optional(),
       deliveryMethod: z.enum(["ub_delivery", "store_pickup"]),
       deliveryAddress: z.string().trim().min(8).max(2_000).nullable().optional(),
+      district: districtSchema,
       pickupBranch: z.enum(["Орос элчингийн салбар", "Их наяд плаза салбар", "Яармаг FOOD CITY салбар"]).or(z.literal("")).nullable().optional(),
       paymentMethod: z.enum(["qpay", "bank_transfer", "card", "cash_on_delivery"]),
       couponCode: z.string().trim().min(1).max(40).nullable().optional(),
@@ -901,6 +908,11 @@ export const appRouter = router({
         skinType: skinTypeSchema,
         skinConcerns: skinConcernsSchema,
         interiorStyle: interiorStyleSchema,
+        // Both fully optional, never asked at signup -- purely a voluntary
+        // "help us personalize" field the shopper can fill in from their
+        // own profile page. See the schema comment on users.birthYear.
+        birthYear: z.number().int().min(1900).max(new Date().getFullYear()).nullable().optional(),
+        occupation: z.string().trim().max(120).nullable().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const updated = await updateUserPreferences(ctx.user.id, input);
@@ -1098,6 +1110,28 @@ export const appRouter = router({
       const result = await updateAdminIntegration(input, ctx.user.id);
       await logAdminAction({ actorUserId: ctx.user.id, action: "integration.updated", entityType: "integration", metadata: { provider: input.provider, isActive: input.isActive, credentialsChanged: Boolean(input.config && Object.keys(input.config).length > 0) } });
       return result;
+    }),
+    // Sales/customer/district analytics for the people running the
+    // business -- adminProcedure like Security Center/Integrations
+    // (revenue + customer data, not everyday staff-level). Note this is
+    // order-based ("who bought"), not website-traffic-based ("who
+    // browsed") -- the app has no page-view/visit tracking infrastructure
+    // today, see the comment on getDistrictBreakdown in server/analytics.ts.
+    analyticsReport: adminProcedure.input(z.object({
+      dateFrom: z.string().datetime().optional(),
+      dateTo: z.string().datetime().optional(),
+    })).query(({ input }) => getAnalyticsReport({ dateFrom: input.dateFrom ? new Date(input.dateFrom) : undefined, dateTo: input.dateTo ? new Date(input.dateTo) : undefined })),
+    analyticsExport: adminProcedure.input(z.object({
+      dateFrom: z.string().datetime().optional(),
+      dateTo: z.string().datetime().optional(),
+      format: z.enum(["xlsx", "pdf"]),
+    })).mutation(async ({ ctx, input }) => {
+      const range = { dateFrom: input.dateFrom ? new Date(input.dateFrom) : undefined, dateTo: input.dateTo ? new Date(input.dateTo) : undefined };
+      const report = await getAnalyticsReport(range);
+      const buffer = input.format === "xlsx" ? await exportAnalyticsExcel(report, range) : await exportAnalyticsPdf(report, range);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "analytics.exported", entityType: "analytics", metadata: { format: input.format } });
+      const mimeType = input.format === "xlsx" ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "application/pdf";
+      return { filename: `sugi-analytics-${new Date().toISOString().slice(0, 10)}.${input.format}`, mimeType, dataBase64: buffer.toString("base64") };
     }),
     suspendUser: adminProcedure.input(z.object({ userId: z.number().int().positive(), reason: z.string().trim().max(300).optional() })).mutation(async ({ ctx, input }) => {
       if (ctx.user.id === input.userId) throw new TRPCError({ code: "BAD_REQUEST", message: "You cannot suspend your own account." });

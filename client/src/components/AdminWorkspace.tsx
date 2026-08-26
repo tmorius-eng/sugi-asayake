@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
-import { CheckCircle2, ChevronLeft, ChevronRight, Download, Eye, FilePenLine, ImageUp, LayoutDashboard, ListChecks, LoaderCircle, Megaphone, PackagePlus, Pencil, Plug, Search, ShieldAlert, ShieldCheck, Star, Tag, Tags, Trash2, UserPlus, UsersRound } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, ChartColumnIncreasing, Download, Eye, FilePenLine, ImageUp, LayoutDashboard, ListChecks, LoaderCircle, Megaphone, PackagePlus, Pencil, Plug, Search, ShieldAlert, ShieldCheck, Star, Tag, Tags, Trash2, UserPlus, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { downloadCsv } from "@/lib/csv";
 import { trpc } from "@/lib/trpc";
+import AdminAnalyticsPanel from "./AdminAnalyticsPanel";
 import AdminBulkActionBar from "./AdminBulkActionBar";
 import AdminDashboardHome from "./AdminDashboardHome";
 import AdminGlobalSearch from "./AdminGlobalSearch";
@@ -111,7 +112,7 @@ const messageFrom = (error: unknown) => error instanceof Error ? error.message :
 export default function AdminWorkspace({ preview = false }: { preview?: boolean }) {
   const { user: currentUser } = useAuth();
   const isFullAdmin = preview || currentUser?.role === "admin";
-  const [section, setSection] = useState<"dashboard" | "products" | "orders" | "posts" | "reviews" | "routines" | "promotions" | "discountCodes" | "users" | "media" | "security" | "integrations">(() => new URLSearchParams(window.location.search).get("adminSection") === "media" ? "media" : "dashboard");
+  const [section, setSection] = useState<"dashboard" | "analytics" | "products" | "orders" | "posts" | "reviews" | "routines" | "promotions" | "discountCodes" | "users" | "media" | "security" | "integrations">(() => new URLSearchParams(window.location.search).get("adminSection") === "media" ? "media" : "dashboard");
   const [query, setQuery] = useState("");
   const [composer, setComposer] = useState<"product" | "category" | "user" | null>(null);
   const [productForm, setProductForm] = useState<ProductForm>(emptyProduct);
@@ -407,7 +408,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
         <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
           <aside className="rounded-3xl bg-[#17181b] p-3 text-white shadow-[0_16px_34px_rgba(20,22,24,.16)]">
             <div className="border-b border-white/12 px-3 py-4"><p className="text-[10px] font-extrabold tracking-[.15em] text-[#f0b52d]">COMMERCE ADMIN</p><p className="mt-1 text-sm text-white/65">Custom backend ready</p></div>
-            <nav className="mt-3 grid gap-1">{[{ key: "dashboard", label: "Хянах самбар", Icon: LayoutDashboard }, { key: "products", label: "Бүтээгдэхүүн", Icon: PackagePlus }, { key: "orders", label: "Захиалга", Icon: CheckCircle2 }, { key: "posts", label: "Шинэ мэдээ", Icon: FilePenLine }, { key: "reviews", label: "Сэтгэгдэл", Icon: Star }, { key: "routines", label: "Routine", Icon: ListChecks }, { key: "promotions", label: "Урамшуулал", Icon: Megaphone }, { key: "discountCodes", label: "Хямдралын код", Icon: Tag }, { key: "media", label: "Content & Media", Icon: ImageUp }, ...(isFullAdmin ? [{ key: "users", label: "Хэрэглэгч", Icon: UsersRound }, { key: "security", label: "Аюулгүй байдал", Icon: ShieldAlert }, { key: "integrations", label: "Интеграцууд", Icon: Plug }] : [])].map(({ key, label, Icon }) => <button type="button" key={key} onClick={() => { setSection(key as typeof section); setQuery(""); setComposer(null); }} className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-bold transition ${section === key ? "bg-white text-[#17181b]" : "text-white/70 hover:bg-white/10 hover:text-white"}`}><Icon size={17} />{label}</button>)}</nav>
+            <nav className="mt-3 grid gap-1">{[{ key: "dashboard", label: "Хянах самбар", Icon: LayoutDashboard }, { key: "products", label: "Бүтээгдэхүүн", Icon: PackagePlus }, { key: "orders", label: "Захиалга", Icon: CheckCircle2 }, { key: "posts", label: "Шинэ мэдээ", Icon: FilePenLine }, { key: "reviews", label: "Сэтгэгдэл", Icon: Star }, { key: "routines", label: "Routine", Icon: ListChecks }, { key: "promotions", label: "Урамшуулал", Icon: Megaphone }, { key: "discountCodes", label: "Хямдралын код", Icon: Tag }, { key: "media", label: "Content & Media", Icon: ImageUp }, ...(isFullAdmin ? [{ key: "users", label: "Хэрэглэгч", Icon: UsersRound }, { key: "analytics", label: "Аналитик", Icon: ChartColumnIncreasing }, { key: "security", label: "Аюулгүй байдал", Icon: ShieldAlert }, { key: "integrations", label: "Интеграцууд", Icon: Plug }] : [])].map(({ key, label, Icon }) => <button type="button" key={key} onClick={() => { setSection(key as typeof section); setQuery(""); setComposer(null); }} className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-bold transition ${section === key ? "bg-white text-[#17181b]" : "text-white/70 hover:bg-white/10 hover:text-white"}`}><Icon size={17} />{label}</button>)}</nav>
             <div className="mt-7 rounded-2xl bg-white/8 p-4"><span className="text-[10px] font-extrabold tracking-[.14em] text-[#f0b52d]">ACCESS</span><p className="mt-2 text-xs leading-5 text-white/66">Нэвтэрсэн админ л каталог, зураг, хэрэглэгчийн эрхийг өөрчилж чадна.</p></div>
           </aside>
           <section className="min-w-0 rounded-3xl bg-white p-5 shadow-[0_16px_34px_rgba(20,22,24,.05)] sm:p-7">
@@ -428,6 +429,8 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
             {section === "discountCodes" && preview && <div className="rounded-3xl bg-[#f8f5ef] p-8 text-center text-sm text-[#707176]">Preview горимд хямдралын код удирдлага харагдахгүй.</div>}
             {section === "integrations" && !preview && <AdminIntegrationsPanel />}
             {section === "integrations" && preview && <div className="rounded-3xl bg-[#f8f5ef] p-8 text-center text-sm text-[#707176]">Preview горимд интеграцийн тохиргоо харагдахгүй.</div>}
+            {section === "analytics" && !preview && <AdminAnalyticsPanel />}
+            {section === "analytics" && preview && <div className="rounded-3xl bg-[#f8f5ef] p-8 text-center text-sm text-[#707176]">Preview горимд аналитик харагдахгүй.</div>}
             {section === "products" && <>
               {!preview && (productsQuery.isLoading || categoriesQuery.isLoading) && <div className="mb-5 flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={15} />Каталогийн мэдээллийг уншиж байна…</div>}
               {!preview && (productsQuery.error || categoriesQuery.error) && <div className="mb-5 rounded-2xl bg-[#fff0f2] p-4 text-xs text-[#a51630]">{messageFrom(productsQuery.error ?? categoriesQuery.error)}</div>}

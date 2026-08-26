@@ -6,6 +6,7 @@ import {
   ShieldCheck, ShieldOff, ShoppingBag, Sparkles, Star, Trash2, User as UserIcon,
 } from "lucide-react";
 import { LOYALTY_TIERS } from "@shared/loyalty";
+import { ubDistricts, ubDistrictLabels, type UbDistrict } from "@shared/districts";
 import { toast } from "sonner";
 import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
@@ -344,6 +345,11 @@ function PreferencesTab() {
   const [skinType, setSkinType] = useState<string>("");
   const [skinConcerns, setSkinConcerns] = useState<string[]>([]);
   const [interiorStyle, setInteriorStyle] = useState<string>("");
+  // Both fully optional -- never asked at signup, purely a voluntary
+  // "help us personalize" field (see the schema comment on users.birthYear
+  // in drizzle/schema.ts).
+  const [birthYear, setBirthYear] = useState<string>("");
+  const [occupation, setOccupation] = useState<string>("");
 
   useEffect(() => {
     setName(user?.name ?? "");
@@ -351,7 +357,9 @@ function PreferencesTab() {
     setSkinType(user?.skinType ?? "");
     setSkinConcerns(user?.skinConcerns ? user.skinConcerns.split(",").filter(Boolean) : []);
     setInteriorStyle(user?.interiorStyle ?? "");
-  }, [user?.name, user?.phone, user?.skinType, user?.skinConcerns, user?.interiorStyle]);
+    setBirthYear(user?.birthYear ? String(user.birthYear) : "");
+    setOccupation(user?.occupation ?? "");
+  }, [user?.name, user?.phone, user?.skinType, user?.skinConcerns, user?.interiorStyle, user?.birthYear, user?.occupation]);
 
   const updateProfile = trpc.profile.update.useMutation({
     onSuccess: () => { utils.auth.me.invalidate(); toast.success("Хувийн мэдээлэл шинэчлэгдлээ."); },
@@ -389,7 +397,7 @@ function PreferencesTab() {
 
       <section className="profile-section" data-reveal>
         <div className="profile-section-head"><div><h2>Гоо сайхны &amp; Гэрийн профайл</h2><p>Таны арьс, орон сууцны хэв маягийн санал хүсэлт — ирээдүйд танд тохирсон бүтээгдэхүүн санал болгоход ашиглагдана</p></div></div>
-        <form onSubmit={event => { event.preventDefault(); updatePreferences.mutate({ skinType: (skinType || null) as "dry" | "oily" | "combination" | "sensitive" | "normal" | null, skinConcerns: skinConcerns.length ? skinConcerns.join(",") : null, interiorStyle: interiorStyle || null }); }} style={{ display: "grid", gap: "16px" }}>
+        <form onSubmit={event => { event.preventDefault(); const parsedBirthYear = birthYear.trim() ? Number(birthYear) : null; updatePreferences.mutate({ skinType: (skinType || null) as "dry" | "oily" | "combination" | "sensitive" | "normal" | null, skinConcerns: skinConcerns.length ? skinConcerns.join(",") : null, interiorStyle: interiorStyle || null, birthYear: parsedBirthYear, occupation: occupation.trim() || null }); }} style={{ display: "grid", gap: "16px" }}>
           <div>
             <p style={{ margin: "0 0 8px", fontSize: "11px", fontWeight: 800 }}>Арьсны төрөл</p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
@@ -412,6 +420,20 @@ function PreferencesTab() {
               {INTERIOR_STYLES.map(option => (
                 <button type="button" key={option.value} onClick={() => setInteriorStyle(current => current === option.value ? "" : option.value)} style={{ padding: "9px 14px", border: `1px solid ${interiorStyle === option.value ? "#17181b" : "rgba(23,24,27,.14)"}`, background: interiorStyle === option.value ? "#17181b" : "#fff", color: interiorStyle === option.value ? "#fff" : "#55565b", fontSize: "11px", fontWeight: 800, borderRadius: "999px" }}>{option.label}</button>
               ))}
+            </div>
+          </div>
+          <div>
+            <p style={{ margin: "0 0 8px", fontSize: "11px", fontWeight: 800 }}>Нэмэлт мэдээлэл (сонголтоор)</p>
+            <p style={{ margin: "0 0 10px", fontSize: "11px", color: "#77787d" }}>Заавал биш — өгвөл SUGI ASAYAKE-д харилцагчдаа илүү сайн ойлгож, тохирсон бүтээгдэхүүн/урамшуулал санал болгоход тусална.</p>
+            <div className="profile-form-grid">
+              <label className="auth-field">
+                Төрсөн он
+                <div className="auth-field-shell"><input value={birthYear} onChange={event => setBirthYear(event.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="1995" inputMode="numeric" maxLength={4} /></div>
+              </label>
+              <label className="auth-field">
+                Мэргэжил
+                <div className="auth-field-shell"><input value={occupation} onChange={event => setOccupation(event.target.value)} placeholder="жишээ: Багш" maxLength={120} /></div>
+              </label>
             </div>
           </div>
           <div>
@@ -494,7 +516,7 @@ function WishlistTab({ onCartOpen }: { onCartOpen: () => void }) {
 /* Addresses                                                               */
 /* ---------------------------------------------------------------------- */
 
-const emptyAddressForm = { label: "", recipientName: "", phone: "", addressLine: "", isDefault: false };
+const emptyAddressForm = { label: "", recipientName: "", phone: "", addressLine: "", district: "" as UbDistrict | "", isDefault: false };
 
 function AddressForm({ initial, onCancel, onSubmit, isSubmitting }: {
   initial: typeof emptyAddressForm;
@@ -527,6 +549,10 @@ function AddressForm({ initial, onCancel, onSubmit, isSubmitting }: {
         <label className="auth-field">
           Утас
           <div className="auth-field-shell"><Phone size={16} aria-hidden="true" /><input value={form.phone} onChange={event => setForm(current => ({ ...current, phone: event.target.value }))} placeholder="9911 2233" inputMode="tel" maxLength={40} /></div>
+        </label>
+        <label className="auth-field">
+          Дүүрэг (сонголтоор)
+          <div className="auth-field-shell"><MapPin size={16} aria-hidden="true" /><select value={form.district} onChange={event => setForm(current => ({ ...current, district: event.target.value as UbDistrict | "" }))}><option value="">Сонгох</option>{ubDistricts.map(key => <option key={key} value={key}>{ubDistrictLabels[key]}</option>)}</select></div>
         </label>
         <label className="auth-field" style={{ gridColumn: "1 / -1" }}>
           Дэлгэрэнгүй хаяг
@@ -588,10 +614,10 @@ function AddressesTab() {
             editingAddressId === address.id ? (
               <AddressForm
                 key={address.id}
-                initial={{ label: address.label, recipientName: address.recipientName, phone: address.phone, addressLine: address.addressLine, isDefault: address.isDefault }}
+                initial={{ label: address.label, recipientName: address.recipientName, phone: address.phone, addressLine: address.addressLine, district: (address.district as UbDistrict | null) ?? "", isDefault: address.isDefault }}
                 isSubmitting={updateAddress.isPending}
                 onCancel={() => setEditingAddressId(null)}
-                onSubmit={value => updateAddress.mutate({ id: address.id, ...value })}
+                onSubmit={value => updateAddress.mutate({ id: address.id, ...value, district: value.district || null })}
               />
             ) : (
               <div key={address.id} className={`address-card${address.isDefault ? " is-default" : ""}`}>
@@ -615,7 +641,7 @@ function AddressesTab() {
               initial={emptyAddressForm}
               isSubmitting={createAddress.isPending}
               onCancel={() => setAddingAddress(false)}
-              onSubmit={value => createAddress.mutate(value)}
+              onSubmit={value => createAddress.mutate({ ...value, district: value.district || null })}
             />
           )}
         </div>

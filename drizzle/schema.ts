@@ -1,4 +1,5 @@
 import { boolean, index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { ubDistricts } from "../shared/districts";
 
 /**
  * Core user table backing auth flow.
@@ -33,6 +34,18 @@ export const users = mysqlTable("users", {
    *  individual concern. */
   skinConcerns: varchar("skinConcerns", { length: 300 }),
   interiorStyle: varchar("interiorStyle", { length: 60 }),
+  /**
+   * Admin customer-analytics profile (optional, never asked at signup —
+   * conversion cost of a mandatory field isn't worth it). Offered as an
+   * optional "help us personalize your experience" prompt on the profile
+   * page; only ever known from the moment a shopper chooses to fill it in,
+   * so any age/occupation breakdown in the admin analytics panel must
+   * report against "N of M shoppers told us", never pretend to cover
+   * everyone — see getCustomerDemographics in server/analytics.ts.
+   * birthYear (not full DOB) is the least invasive way to bucket by age.
+   */
+  birthYear: int("birthYear"),
+  occupation: varchar("occupation", { length: 120 }),
   /** Notification preferences (customer account page, "Мэдэгдэл" tab).
    *  NOTE: order-confirmation / delivery-status emails don't exist yet
    *  (ROADMAP.md TIER 2 — "Захиалгын баталгаажуулах имэйл ... дуудалт хийгээгүй"),
@@ -101,6 +114,12 @@ export const userAddresses = mysqlTable("user_addresses", {
   recipientName: varchar("recipientName", { length: 160 }).notNull(),
   phone: varchar("phone", { length: 40 }).notNull(),
   addressLine: text("addressLine").notNull(),
+  /** Optional structured Улаанбаатар дүүрэг pick — see shared/districts.ts.
+   *  addressLine stays the free-text field couriers actually read; this is
+   *  purely so admin analytics can report real district breakdowns instead
+   *  of guessing from text. Null for addresses saved before this existed
+   *  or outside UB. */
+  district: mysqlEnum("district", ubDistricts),
   isDefault: boolean("isDefault").notNull().default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -287,6 +306,15 @@ export const orders = mysqlTable("orders", {
   paymentStatus: mysqlEnum("paymentStatus", ["unpaid", "paid", "refunded"]).notNull().default("unpaid"),
   deliveryMethod: mysqlEnum("deliveryMethod", ["ub_delivery", "store_pickup"]).notNull(),
   deliveryAddress: text("deliveryAddress"),
+  /** Snapshotted at order time from the chosen address's district (same
+   *  denormalization discipline as customerName/customerPhone below — a
+   *  later address edit/deletion must never change historical order
+   *  reporting). Null for store_pickup orders and for ub_delivery orders
+   *  placed before this field existed (best-effort backfilled from
+   *  deliveryAddress text via guessDistrictFromAddress where it could be —
+   *  see scripts/backfill-order-districts.ts, run once). See
+   *  shared/districts.ts and server/analytics.ts's district breakdown. */
+  deliveryDistrict: mysqlEnum("deliveryDistrict", ubDistricts),
   pickupBranch: varchar("pickupBranch", { length: 120 }),
   customerName: varchar("customerName", { length: 160 }).notNull(),
   customerPhone: varchar("customerPhone", { length: 40 }).notNull(),

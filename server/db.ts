@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gte, inArray, isNull, like, lt, lte, or, sql } from
 import { drizzle } from "drizzle-orm/mysql2";
 import { adminAuditLogs, cartItems, carts, discountCodes, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, integrationConfigs, loginAttempts, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, productReviews, productVariants, products, routines, routineSteps, siteMedia, sitePromotions, staffInvitations, userAddresses, users, wishlistItems } from "../drizzle/schema";
 import { UB_DELIVERY_FEE_MNT } from "../shared/const";
+import { guessDistrictFromAddress, type UbDistrict } from "../shared/districts";
 import { decryptJson, encryptJson } from "./_core/crypto";
 import { ENV } from './_core/env';
 import { getInventoryReservationFailure, shouldRestoreStock } from "./commerce-lifecycle";
@@ -142,7 +143,7 @@ export async function getUserAddresses(userId: number) {
   return db.select().from(userAddresses).where(eq(userAddresses.userId, userId)).orderBy(desc(userAddresses.isDefault), desc(userAddresses.createdAt));
 }
 
-export async function createUserAddress(userId: number, input: { label: string; recipientName: string; phone: string; addressLine: string; isDefault?: boolean }) {
+export async function createUserAddress(userId: number, input: { label: string; recipientName: string; phone: string; addressLine: string; district?: UbDistrict | null; isDefault?: boolean }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const existing = await db.select({ id: userAddresses.id }).from(userAddresses).where(eq(userAddresses.userId, userId));
@@ -159,13 +160,14 @@ export async function createUserAddress(userId: number, input: { label: string; 
     recipientName: input.recipientName,
     phone: input.phone,
     addressLine: input.addressLine,
+    district: input.district ?? null,
     isDefault: makeDefault,
   });
   const created = await db.select().from(userAddresses).where(eq(userAddresses.id, Number(inserted[0].insertId))).limit(1);
   return created[0];
 }
 
-export async function updateUserAddress(userId: number, addressId: number, input: { label?: string; recipientName?: string; phone?: string; addressLine?: string; isDefault?: boolean }) {
+export async function updateUserAddress(userId: number, addressId: number, input: { label?: string; recipientName?: string; phone?: string; addressLine?: string; district?: UbDistrict | null; isDefault?: boolean }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const owned = await db.select({ id: userAddresses.id }).from(userAddresses).where(and(eq(userAddresses.id, addressId), eq(userAddresses.userId, userId))).limit(1);
@@ -195,7 +197,7 @@ export async function deleteUserAddress(userId: number, addressId: number) {
 
 /** Beauty & Home preference profile — see the schema doc comment on
  *  users.skinType for what these are (and aren't yet) used for. */
-export async function updateUserPreferences(userId: number, input: { skinType?: "dry" | "oily" | "combination" | "sensitive" | "normal" | null; skinConcerns?: string | null; interiorStyle?: string | null }) {
+export async function updateUserPreferences(userId: number, input: { skinType?: "dry" | "oily" | "combination" | "sensitive" | "normal" | null; skinConcerns?: string | null; interiorStyle?: string | null; birthYear?: number | null; occupation?: string | null }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.update(users).set({ ...input, updatedAt: new Date() }).where(eq(users.id, userId));
@@ -789,6 +791,7 @@ export async function createOrderFromActiveCart(input: {
   customerEmail?: string | null;
   deliveryMethod: "ub_delivery" | "store_pickup";
   deliveryAddress?: string | null;
+  district?: UbDistrict | null;
   pickupBranch?: string | null;
   paymentMethod: "qpay" | "bank_transfer" | "card" | "cash_on_delivery";
   couponCode?: string | null;
@@ -818,6 +821,12 @@ export async function createOrderFromActiveCart(input: {
   // never multiple percentages computed off the same base.
   const loyaltyDiscount = await getApplicableLoyaltyDiscount(input.owner.userId, subtotalMnt - discountMnt - couponDiscountMnt);
   const loyaltyDiscountMnt = loyaltyDiscount?.discountMnt ?? 0;
+  // Prefer whatever the checkout form actually sent (a shopper picking
+  // their saved address's district, or the dropdown next to a fresh
+  // address); fall back to a best-effort guess from the free-text address
+  // itself, so a district is captured even when the client doesn't send
+  // one — see shared/districts.ts and scripts/backfill-order-districts.ts.
+  const deliveryDistrict = input.deliveryMethod === "ub_delivery" ? (input.district ?? guessDistrictFromAddress(input.deliveryAddress)) : null;
   const orderNumber = `SA${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
   let orderId = 0;
   await db.transaction(async tx => {
@@ -852,6 +861,7 @@ export async function createOrderFromActiveCart(input: {
       paymentMethod: input.paymentMethod,
       deliveryMethod: input.deliveryMethod,
       deliveryAddress: input.deliveryAddress ?? null,
+      deliveryDistrict,
       pickupBranch: input.pickupBranch ?? null,
       customerName: input.customerName,
       customerPhone: input.customerPhone,
