@@ -13,10 +13,10 @@ import type { TrpcContext } from "./_core/context";
 // against actual rows, not just that the functions compile.
 const describeWithDatabase = process.env.RUN_AUTH_INTEGRATION_TESTS === "1" && process.env.COMMERCE_INTEGRATION_TESTS === "1" ? describe : describe.skip;
 
-function callerFor(user: TrpcContext["user"]): ReturnType<typeof appRouter.createCaller> {
+function callerFor(user: TrpcContext["user"], headers: Record<string, string> = {}, ip = "203.0.115.9"): ReturnType<typeof appRouter.createCaller> {
   const ctx: TrpcContext = {
     user,
-    req: { protocol: "https", headers: {}, ip: "203.0.115.9", socket: { remoteAddress: "203.0.115.9" } } as unknown as TrpcContext["req"],
+    req: { protocol: "https", headers, ip, socket: { remoteAddress: ip } } as unknown as TrpcContext["req"],
     res: { cookie: () => undefined, clearCookie: () => undefined } as unknown as TrpcContext["res"],
   };
   return appRouter.createCaller(ctx);
@@ -45,7 +45,9 @@ describeWithDatabase("admin analytics integration", () => {
     if (!categoryRows[0]) throw new Error("No product category exists to attach the test product to.");
     categoryId = categoryRows[0].id;
 
-    const productInsert = await db.insert(products).values({ categoryId, name: "Analytics Test Toner", slug: `${marker}-toner`, priceMnt: 25_000, sku: `${marker}-sku`, stockQuantity: 20, isPublished: true });
+    // costMnt set on this fixture so the profit/margin section (Tier B) has
+    // something real to compute against, not just the "no cost data" branch.
+    const productInsert = await db.insert(products).values({ categoryId, name: "Analytics Test Toner", slug: `${marker}-toner`, priceMnt: 25_000, costMnt: 15_000, sku: `${marker}-sku`, stockQuantity: 20, isPublished: true });
     productId = Number(productInsert[0].insertId);
     const variantInsert = await db.insert(productVariants).values({ productId, sku: `${marker}-sku`, priceMnt: 25_000, stockQuantity: 20, isDefault: true });
     variantId = Number(variantInsert[0].insertId);
@@ -109,6 +111,17 @@ describeWithDatabase("admin analytics integration", () => {
     // 100%-covered sample when most users haven't filled anything in.
     expect(report.demographics.totalCustomerCount).toBeGreaterThanOrEqual(0);
     expect(report.demographics.ageProvidedCount).toBeLessThanOrEqual(report.demographics.totalCustomerCount);
+
+    // Tier B/C: profit (this fixture's product has a real costMnt, so the
+    // 2 units sold at 25,000 with a 15,000 cost should show up as real
+    // floor profit, not the "no cost data" branch), plus the channel/
+    // inventory/cart-abandonment sections all being real, shaped data.
+    expect(report.profit.itemsWithCostCount).toBeGreaterThanOrEqual(2);
+    expect(report.profit.profitMnt).toBeGreaterThanOrEqual(20_000); // >= 2 * (25,000 - 15,000)
+    const pickupMethodRow = report.ordersByChannel.byDeliveryMethod.find(row => row.key === "ub_delivery");
+    expect(pickupMethodRow?.orderCount).toBeGreaterThanOrEqual(1);
+    expect(report.inventory.publishedProductCount).toBeGreaterThanOrEqual(1);
+    expect(report.cartAbandonment).toMatchObject({ cartsWithItems: expect.any(Number), convertedCount: expect.any(Number), abandonedCount: expect.any(Number), abandonmentRatePercent: expect.any(Number) });
   });
 
   it("exports a non-empty Excel and PDF file for the same report", async () => {
@@ -146,5 +159,42 @@ describeWithDatabase("admin analytics integration", () => {
     orderIds.push(order!.id);
     const [row] = await db.select({ deliveryDistrict: orders.deliveryDistrict }).from(orders).where(eq(orders.id, order!.id));
     expect(row.deliveryDistrict).toBe("khan_uul");
+  });
+
+  it("captures trafficSource (client-sent) and deviceType (parsed from User-Agent) at checkout, and both show up in the report", async () => {
+    const adminUser = { id: adminId, email: `${marker}-admin@example.invalid`, name: "Analytics Test Admin", role: "admin" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
+    const mobileUa = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148";
+    // Randomized IP, same reasoning as the other integration test files that
+    // hit rate-limited procedures -- avoids colliding with another test
+    // file's in-memory rate-limit bucket for a fixed IP.
+    const shopperCaller = callerFor(adminUser, { "user-agent": mobileUa }, `198.51.100.${Math.floor(Math.random() * 250) + 1}`);
+
+    const { addCartItem } = await import("./db");
+    await addCartItem({ owner: { userId: adminId }, productId, quantity: 1 });
+    const order = await shopperCaller.checkout.createOrder({
+      customerName: "Analytics Traffic Test",
+      customerPhone: "88112255",
+      deliveryMethod: "store_pickup",
+      pickupBranch: "Орос элчингийн салбар",
+      paymentMethod: "cash_on_delivery",
+      trafficSource: "instagram / paid",
+    });
+    orderIds.push(order.id);
+
+    const db = await getDb();
+    if (!db) throw new Error("Database unavailable");
+    const [row] = await db.select({ trafficSource: orders.trafficSource, deviceType: orders.deviceType }).from(orders).where(eq(orders.id, order.id));
+    expect(row.trafficSource).toBe("instagram / paid");
+    expect(row.deviceType).toBe("mobile");
+    // Every analytics section (this one included) only ever counts paid
+    // orders -- a cash_on_delivery order starts "unpaid" until fulfillment,
+    // same as every other section here, so mark it paid the same way a real
+    // delivery confirmation would to exercise the report's actual filter.
+    await db.update(orders).set({ paymentStatus: "paid" }).where(eq(orders.id, order.id));
+
+    const adminCaller = callerFor(adminUser);
+    const report = await adminCaller.admin.analyticsReport({});
+    expect(report.traffic.sources.some(r => r.source === "instagram / paid")).toBe(true);
+    expect(report.traffic.deviceTypes.some(r => r.device === "mobile" && r.orderCount >= 1)).toBe(true);
   });
 });

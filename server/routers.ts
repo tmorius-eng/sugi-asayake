@@ -1,6 +1,7 @@
 import { COOKIE_NAME, GUEST_CART_COOKIE_NAME } from "@shared/const";
 import { formatVariantAttributes } from "@shared/catalog-filter";
 import { ubDistricts } from "@shared/districts";
+import { parseDeviceType } from "@shared/deviceType";
 import { TRPCError } from "@trpc/server";
 import { parse as parseCookieHeader } from "cookie";
 import { createHash, randomBytes, randomInt } from "node:crypto";
@@ -172,6 +173,9 @@ const productWriteSchema = z.object({
   description: nullableText(20_000),
   priceMnt: z.number().int().min(0).max(100_000_000),
   compareAtPriceMnt: z.number().int().min(0).max(100_000_000).nullable().optional(),
+  // Admin-only, optional -- see the schema comment on products.costMnt. Never
+  // shown anywhere outside /admin, only ever used to compute profit/margin.
+  costMnt: z.number().int().min(0).max(100_000_000).nullable().optional(),
   sku: z.string().trim().min(2).max(80),
   imageUrl: nullableText(1_000),
   galleryJson: nullableText(20_000),
@@ -810,6 +814,7 @@ export const appRouter = router({
       pickupBranch: z.enum(["Орос элчингийн салбар", "Их наяд плаза салбар", "Яармаг FOOD CITY салбар"]).or(z.literal("")).nullable().optional(),
       paymentMethod: z.enum(["qpay", "bank_transfer", "card", "cash_on_delivery"]),
       couponCode: z.string().trim().min(1).max(40).nullable().optional(),
+      trafficSource: z.string().trim().min(1).max(200).nullable().optional(),
     }).superRefine((value, context) => {
       if (value.deliveryMethod === "ub_delivery" && !value.deliveryAddress) {
         context.addIssue({ code: z.ZodIssueCode.custom, message: "A delivery address is required for Ulaanbaatar delivery.", path: ["deliveryAddress"] });
@@ -820,7 +825,8 @@ export const appRouter = router({
     })).mutation(async ({ ctx, input }) => {
       let order;
       try {
-        order = await createOrderFromActiveCart({ owner: resolveCartOwnerForWrite(ctx), ...input });
+        const deviceType = parseDeviceType(ctx.req.headers["user-agent"]);
+        order = await createOrderFromActiveCart({ owner: resolveCartOwnerForWrite(ctx), ...input, deviceType });
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to place this order." });
       }

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Download, FileSpreadsheet, FileText, LoaderCircle, MapPin, ReceiptText, TrendingUp, UsersRound, Wallet } from "lucide-react";
+import { Download, FileSpreadsheet, FileText, LoaderCircle, MapPin, Package, Percent, ReceiptText, ShoppingCart, Smartphone, TrendingUp, Truck, UsersRound, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { downloadBase64File } from "@/lib/fileDownload";
@@ -91,6 +91,17 @@ export default function AdminAnalyticsPanel() {
         <KpiTile icon={ReceiptText} label="Захиалгын тоо" value={String(report.overview.orderCount)} accent="#3970a7" />
         <KpiTile icon={TrendingUp} label="Дундаж захиалгын дүн" value={formatMnt(report.overview.aovMnt)} accent="#df1f3d" />
         <KpiTile icon={UsersRound} label="Шинэ / Давтан харилцагч" value={range === "all" ? "—" : `${report.overview.newCustomerCount} / ${report.overview.returningCustomerCount}`} accent="#f0b52d" />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <KpiTile icon={Percent} label="Ашиг / маржин"
+          value={report.profit.itemsWithCostCount > 0 ? `${formatMnt(report.profit.profitMnt)} · ${report.profit.marginPercent}%` : "Cost үнэ ороогүй"}
+          caption={report.profit.itemsWithCostCount > 0 ? `${report.profit.itemsWithCostCount} / ${report.profit.totalItemsSold} ширхэгт cost мэдээлэлтэй (доод тал нь)` : "Барааны cost үнийг admin панелаас оруулмагц энд гарна."}
+          accent="#2c7650" />
+        <KpiTile icon={ShoppingCart} label="Сагс орхилтын хувь" value={`${report.cartAbandonment.abandonmentRatePercent}%`}
+          caption={`${report.cartAbandonment.abandonedCount} орхигдсон / ${report.cartAbandonment.cartsWithItems} бараатай сагс`} accent="#df1f3d" />
+        <KpiTile icon={Package} label="Нөөцийн үнэ цэн" value={formatMnt(report.inventory.stockValueMnt)}
+          caption={`${report.inventory.outOfStockCount} дууссан, ${report.inventory.lowStockCount} бага үлдэгдэлтэй / ${report.inventory.publishedProductCount} бараа`} accent="#3970a7" />
       </div>
 
       <section className="rounded-3xl border border-black/7 p-5">
@@ -187,6 +198,20 @@ export default function AdminAnalyticsPanel() {
         </section>
       </div>
 
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="min-w-0 rounded-3xl border border-black/7 p-5">
+          <div className="flex items-center gap-2"><Truck size={16} className="text-[#3970a7]" /><h3 className="font-[var(--font-display)] text-lg font-semibold tracking-[-.04em]">Хүргэлт, төлбөрийн суваг</h3></div>
+          <ChannelList title="Хүргэлтийн хэлбэр" rows={report.ordersByChannel.byDeliveryMethod} />
+          <ChannelList title="Төлбөрийн хэлбэр" rows={report.ordersByChannel.byPaymentMethod} />
+        </section>
+        <section className="min-w-0 rounded-3xl border border-black/7 p-5">
+          <div className="flex items-center gap-2"><Smartphone size={16} className="text-[#f0b52d]" /><h3 className="font-[var(--font-display)] text-lg font-semibold tracking-[-.04em]">Эх сурвалж, төхөөрөмж</h3></div>
+          <p className="mt-1 text-xs text-[#8a8b8f]">Захиалга хийсэн үеийн referrer/UTM болон төхөөрөмж — энэ систем шинээр бичигдэж эхэлсэн тул зөвхөн шинэ захиалгуудад л мэдээлэлтэй.</p>
+          <ChannelList title="Эх сурвалж" rows={report.traffic.sources.map(row => ({ label: row.source, orderCount: row.orderCount }))} />
+          <ChannelList title="Төхөөрөмж" rows={report.traffic.deviceTypes.map(row => ({ label: row.device, orderCount: row.orderCount }))} />
+        </section>
+      </div>
+
       <section className="rounded-3xl border border-black/7 p-5">
         <h3 className="font-[var(--font-display)] text-lg font-semibold tracking-[-.04em]">Гишүүнчлэлийн түвшин</h3>
         <div className="mt-4 grid gap-3 sm:grid-cols-4">
@@ -202,12 +227,32 @@ export default function AdminAnalyticsPanel() {
   );
 }
 
-function KpiTile({ icon: Icon, label, value, accent }: { icon: typeof Wallet; label: string; value: string; accent: string }) {
+function KpiTile({ icon: Icon, label, value, accent, caption }: { icon: typeof Wallet; label: string; value: string; accent: string; caption?: string }) {
   return (
     <div className="rounded-3xl border border-black/7 p-5">
       <span className="grid size-9 place-items-center rounded-2xl" style={{ backgroundColor: `${accent}1a`, color: accent }}><Icon size={17} /></span>
       <p className="mt-4 text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]">{label.toUpperCase()}</p>
       <p className="mt-1 font-[var(--font-display)] text-2xl font-semibold tracking-[-.05em]">{value}</p>
+      {caption ? <p className="mt-1.5 text-[11px] leading-snug text-[#8a8b8f]">{caption}</p> : null}
+    </div>
+  );
+}
+
+function ChannelList({ title, rows }: { title: string; rows: { label: string; orderCount: number }[] }) {
+  return (
+    <div className="mt-4">
+      <p className="text-[10px] font-extrabold tracking-[.12em] text-[#8a8b8f]">{title.toUpperCase()}</p>
+      {rows.length === 0 ? (
+        <p className="mt-2 text-sm text-[#77787d]">Мэдээлэл алга.</p>
+      ) : (
+        <ul className="mt-2 grid gap-1.5">
+          {rows.map(row => (
+            <li key={row.label} className="flex items-center justify-between border-b border-black/6 pb-1.5 text-sm">
+              <span className="truncate pr-2">{row.label}</span><strong className="shrink-0 text-[#17181b]">{row.orderCount}</strong>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

@@ -795,6 +795,8 @@ export async function createOrderFromActiveCart(input: {
   pickupBranch?: string | null;
   paymentMethod: "qpay" | "bank_transfer" | "card" | "cash_on_delivery";
   couponCode?: string | null;
+  trafficSource?: string | null;
+  deviceType?: "mobile" | "tablet" | "desktop" | "unknown";
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
@@ -866,6 +868,11 @@ export async function createOrderFromActiveCart(input: {
       customerName: input.customerName,
       customerPhone: input.customerPhone,
       customerEmail: input.customerEmail ?? null,
+      // Both captured once, at order time, same as everything else above —
+      // never backfilled for historical orders (see the schema comment on
+      // orders.trafficSource/deviceType).
+      trafficSource: input.trafficSource ?? null,
+      deviceType: input.deviceType ?? "unknown",
       subtotalMnt,
       deliveryFeeMnt,
       discountMnt,
@@ -1299,6 +1306,7 @@ export async function getAdminProducts() {
       sku: products.sku,
       priceMnt: products.priceMnt,
       compareAtPriceMnt: products.compareAtPriceMnt,
+      costMnt: products.costMnt,
       imageUrl: products.imageUrl,
       galleryJson: products.galleryJson,
       stockQuantity: products.stockQuantity,
@@ -1644,6 +1652,7 @@ export type ProductWriteInput = {
   description?: string | null;
   priceMnt: number;
   compareAtPriceMnt?: number | null;
+  costMnt?: number | null;
   sku: string;
   imageUrl?: string | null;
   galleryJson?: string | null;
@@ -1673,6 +1682,7 @@ export async function createAdminProduct(input: ProductWriteInput) {
       description: input.description ?? null,
       priceMnt: input.priceMnt,
       compareAtPriceMnt: input.compareAtPriceMnt ?? null,
+      costMnt: input.costMnt ?? null,
       sku: input.sku,
       imageUrl: input.imageUrl ?? null,
       galleryJson: input.galleryJson ?? null,
@@ -1747,6 +1757,7 @@ export async function updateAdminProduct(input: { id: number } & Partial<Product
   if (input.description !== undefined) changes.description = input.description;
   if (input.priceMnt !== undefined) changes.priceMnt = input.priceMnt;
   if (input.compareAtPriceMnt !== undefined) changes.compareAtPriceMnt = input.compareAtPriceMnt;
+  if (input.costMnt !== undefined) changes.costMnt = input.costMnt;
   if (input.sku !== undefined) changes.sku = input.sku;
   if (input.imageUrl !== undefined) changes.imageUrl = input.imageUrl;
   if (input.galleryJson !== undefined) changes.galleryJson = input.galleryJson;

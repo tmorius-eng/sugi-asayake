@@ -9,7 +9,7 @@ import path from "node:path";
 import { and, desc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
-import { orderItems, orders, productCategories, products, users } from "../drizzle/schema";
+import { carts, cartItems, orderItems, orders, productCategories, products, users } from "../drizzle/schema";
 import { getDb } from "./db";
 import { ubDistrictLabels, type UbDistrict } from "../shared/districts";
 import { LOYALTY_TIERS, getLoyaltyTier } from "../shared/loyalty";
@@ -248,12 +248,154 @@ export async function getLoyaltyTierBreakdown() {
   return LOYALTY_TIERS.map(tier => ({ tierName: tier.name, customerCount: tierCounts.get(tier.name) ?? 0 }));
 }
 
+const CHANNEL_LABELS: Record<string, string> = { ub_delivery: "УБ хүргэлт", store_pickup: "Салбараас авах", qpay: "QPay", bank_transfer: "Банкны шилжүүлэг", card: "Карт", cash_on_delivery: "Бэлэн мөнгө" };
+
+/** "Orders by channel" adapted to what this business actually has, rather
+ *  than a generic marketplace/shop/store split that doesn't apply here:
+ *  how the order was fulfilled (delivery vs. pickup) and how it was paid
+ *  for. Both are real columns on every order already. */
+export async function getOrdersByChannel(input: DateRangeInput = {}) {
+  const db = await getDb();
+  if (!db) return { byDeliveryMethod: [], byPaymentMethod: [] };
+  const conditions = [eq(orders.paymentStatus, "paid"), ...dateRangeConditions(input)];
+
+  const [byDelivery, byPayment] = await Promise.all([
+    db.select({ key: orders.deliveryMethod, orderCount: sql<number>`count(*)` }).from(orders).where(and(...conditions)).groupBy(orders.deliveryMethod),
+    db.select({ key: orders.paymentMethod, orderCount: sql<number>`count(*)` }).from(orders).where(and(...conditions)).groupBy(orders.paymentMethod),
+  ]);
+  return {
+    byDeliveryMethod: byDelivery.map(row => ({ key: row.key, label: CHANNEL_LABELS[row.key] ?? row.key, orderCount: Number(row.orderCount) })),
+    byPaymentMethod: byPayment.map(row => ({ key: row.key, label: CHANNEL_LABELS[row.key] ?? row.key, orderCount: Number(row.orderCount) })),
+  };
+}
+
+/**
+ * Cart abandonment, computed from real cart data rather than a status flag
+ * nothing in the app actually sets (carts.status has an "abandoned" enum
+ * value, but no code path writes it — see cartOwnerCondition/
+ * createOrderFromActiveCart in server/db.ts, which only ever write "active"
+ * or "converted"). A cart counts as abandoned here if it has at least one
+ * item, was created inside the window, was never converted to an order,
+ * and hasn't been touched in the last 24h (still mid-session otherwise —
+ * counting a cart someone is actively shopping in right now as "abandoned"
+ * would be misleading).
+ */
+export async function getCartAbandonment(input: DateRangeInput = {}) {
+  const db = await getDb();
+  if (!db) return { cartsWithItems: 0, convertedCount: 0, abandonedCount: 0, abandonmentRatePercent: 0 };
+  const staleCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const conditions = [];
+  if (input.dateFrom) conditions.push(gte(carts.createdAt, input.dateFrom));
+  if (input.dateTo) conditions.push(lte(carts.createdAt, input.dateTo));
+
+  const cartRows = await db
+    .selectDistinct({ id: carts.id, status: carts.status, updatedAt: carts.updatedAt })
+    .from(carts)
+    .innerJoin(cartItems, eq(cartItems.cartId, carts.id))
+    .where(conditions.length ? and(...conditions) : undefined);
+
+  const convertedCount = cartRows.filter(row => row.status === "converted").length;
+  const abandonedCount = cartRows.filter(row => row.status !== "converted" && new Date(row.updatedAt) < staleCutoff).length;
+  const cartsWithItems = cartRows.length;
+  const decidedCount = convertedCount + abandonedCount; // excludes still-in-progress carts from the rate, same reasoning as new-vs-returning above
+  return { cartsWithItems, convertedCount, abandonedCount, abandonmentRatePercent: decidedCount > 0 ? Math.round((abandonedCount / decidedCount) * 100) : 0 };
+}
+
+/** Real-time stock snapshot (not date-ranged — this is "right now", not a
+ *  historical figure) — total stock value at current selling price, plus
+ *  how many products are out of stock vs. running low, mirroring the
+ *  low-stock widget already on the main dashboard (AdminDashboardHome)
+ *  but as one summary tile here instead of a live product list. */
+export async function getInventorySnapshot() {
+  const db = await getDb();
+  if (!db) return { publishedProductCount: 0, outOfStockCount: 0, lowStockCount: 0, stockValueMnt: 0 };
+  const [row] = await db
+    .select({
+      publishedProductCount: sql<number>`count(*)`,
+      outOfStockCount: sql<number>`sum(case when ${products.stockQuantity} = 0 then 1 else 0 end)`,
+      lowStockCount: sql<number>`sum(case when ${products.stockQuantity} > 0 and ${products.stockQuantity} <= 5 then 1 else 0 end)`,
+      stockValueMnt: sql<number>`coalesce(sum(${products.priceMnt} * ${products.stockQuantity}), 0)`,
+    })
+    .from(products)
+    .where(eq(products.isPublished, true));
+  return {
+    publishedProductCount: Number(row?.publishedProductCount ?? 0),
+    outOfStockCount: Number(row?.outOfStockCount ?? 0),
+    lowStockCount: Number(row?.lowStockCount ?? 0),
+    stockValueMnt: Number(row?.stockValueMnt ?? 0),
+  };
+}
+
+/**
+ * Real gross profit -- ONLY for order lines whose product has a costMnt an
+ * admin actually entered (see the schema comment on products.costMnt).
+ * itemsWithCostCount/totalItemsSold are always returned alongside so the
+ * UI can say "N/M зарагдсан барааны cost мэдээлэлтэй" and never present a
+ * partial-coverage profit figure as the true total. profitMnt itself is
+ * therefore a floor (real profit is >= this number, never less), which is
+ * the honest way to show a partial figure rather than silently omitting it.
+ */
+export async function getProfitOverview(input: DateRangeInput = {}) {
+  const db = await getDb();
+  if (!db) return { revenueWithCostDataMnt: 0, costMnt: 0, profitMnt: 0, marginPercent: 0, itemsWithCostCount: 0, totalItemsSold: 0 };
+  const conditions = [eq(orders.paymentStatus, "paid"), ...dateRangeConditions(input)];
+
+  const [totalsRow] = await db
+    .select({ totalItemsSold: sql<number>`coalesce(sum(${orderItems.quantity}), 0)` })
+    .from(orderItems)
+    .innerJoin(orders, eq(orderItems.orderId, orders.id))
+    .where(and(...conditions));
+
+  const [costRow] = await db
+    .select({
+      revenueWithCostDataMnt: sql<number>`coalesce(sum(${orderItems.unitPriceMnt} * ${orderItems.quantity}), 0)`,
+      costMnt: sql<number>`coalesce(sum(${products.costMnt} * ${orderItems.quantity}), 0)`,
+      itemsWithCostCount: sql<number>`coalesce(sum(${orderItems.quantity}), 0)`,
+    })
+    .from(orderItems)
+    .innerJoin(orders, eq(orderItems.orderId, orders.id))
+    .innerJoin(products, eq(orderItems.productId, products.id))
+    .where(and(...conditions, isNotNull(products.costMnt)));
+
+  const revenueWithCostDataMnt = Number(costRow?.revenueWithCostDataMnt ?? 0);
+  const costMnt = Number(costRow?.costMnt ?? 0);
+  const profitMnt = revenueWithCostDataMnt - costMnt;
+  return {
+    revenueWithCostDataMnt,
+    costMnt,
+    profitMnt,
+    marginPercent: revenueWithCostDataMnt > 0 ? Math.round((profitMnt / revenueWithCostDataMnt) * 100) : 0,
+    itemsWithCostCount: Number(costRow?.itemsWithCostCount ?? 0),
+    totalItemsSold: Number(totalsRow?.totalItemsSold ?? 0),
+  };
+}
+
+/** Traffic source / device -- see the schema comment on orders.trafficSource
+ *  and orders.deviceType. Both are null for every order placed before this
+ *  shipped, and stay null for any order this specific capture step doesn't
+ *  recognize -- reported as an explicit "тодорхойгүй" bucket, not silently
+ *  dropped, so the totals always still add up to orderCount. */
+export async function getTrafficBreakdown(input: DateRangeInput = {}) {
+  const db = await getDb();
+  if (!db) return { sources: [], deviceTypes: [] };
+  const conditions = [eq(orders.paymentStatus, "paid"), ...dateRangeConditions(input)];
+
+  const [sourceRows, deviceRows] = await Promise.all([
+    db.select({ source: orders.trafficSource, orderCount: sql<number>`count(*)` }).from(orders).where(and(...conditions)).groupBy(orders.trafficSource).orderBy(desc(sql`count(*)`)).limit(10),
+    db.select({ device: orders.deviceType, orderCount: sql<number>`count(*)` }).from(orders).where(and(...conditions)).groupBy(orders.deviceType),
+  ]);
+  return {
+    sources: sourceRows.map(row => ({ source: row.source ?? "Тодорхойгүй", orderCount: Number(row.orderCount) })),
+    deviceTypes: deviceRows.map(row => ({ device: row.device ?? "unknown", orderCount: Number(row.orderCount) })),
+  };
+}
+
 /** Bundles every section above into one payload — the admin analytics panel
  *  fetches this once per date-range change instead of firing 6 separate
  *  round trips, and the two export functions below render from the exact
  *  same object so the downloaded file always matches what's on screen. */
 export async function getAnalyticsReport(input: DateRangeInput = {}) {
-  const [overview, revenueTimeseries, topProducts, topCategories, districtBreakdown, demographics, loyaltyTiers] = await Promise.all([
+  const [overview, revenueTimeseries, topProducts, topCategories, districtBreakdown, demographics, loyaltyTiers, ordersByChannel, cartAbandonment, inventory, profit, traffic] = await Promise.all([
     getSalesOverview(input),
     getRevenueTimeseries(input),
     getTopProducts({ ...input, limit: 15 }),
@@ -261,8 +403,13 @@ export async function getAnalyticsReport(input: DateRangeInput = {}) {
     getDistrictBreakdown(input),
     getCustomerDemographics(),
     getLoyaltyTierBreakdown(),
+    getOrdersByChannel(input),
+    getCartAbandonment(input),
+    getInventorySnapshot(),
+    getProfitOverview(input),
+    getTrafficBreakdown(input),
   ]);
-  return { overview, revenueTimeseries, topProducts, topCategories, districtBreakdown, demographics, loyaltyTiers };
+  return { overview, revenueTimeseries, topProducts, topCategories, districtBreakdown, demographics, loyaltyTiers, ordersByChannel, cartAbandonment, inventory, profit, traffic };
 }
 
 type AnalyticsReport = Awaited<ReturnType<typeof getAnalyticsReport>>;
@@ -290,7 +437,16 @@ export async function exportAnalyticsExcel(report: AnalyticsReport, input: DateR
   overviewSheet.addRow(["Дундаж захиалгын дүн (₮)", report.overview.aovMnt]);
   overviewSheet.addRow(["Шинэ харилцагч", report.overview.newCustomerCount]);
   overviewSheet.addRow(["Давтан харилцагч", report.overview.returningCustomerCount]);
-  overviewSheet.getColumn(1).width = 32;
+  overviewSheet.addRow([]);
+  overviewSheet.addRow([`Цэвэр ашиг (cost мэдээлэлтэй ${report.profit.itemsWithCostCount}/${report.profit.totalItemsSold} зарагдсан ширхэгээр)`]);
+  overviewSheet.addRow(["Ашиг (₮, доод тал нь)", report.profit.profitMnt]);
+  overviewSheet.addRow(["Ашгийн хувь (%)", report.profit.marginPercent]);
+  overviewSheet.addRow([]);
+  overviewSheet.addRow(["Сагс орхилтын хувь (%)", report.cartAbandonment.abandonmentRatePercent]);
+  overviewSheet.addRow(["Нөөцийн үнэ цэн (₮)", report.inventory.stockValueMnt]);
+  overviewSheet.addRow(["Дууссан бараа", report.inventory.outOfStockCount]);
+  overviewSheet.addRow(["Бага үлдэгдэлтэй бараа", report.inventory.lowStockCount]);
+  overviewSheet.getColumn(1).width = 40;
 
   const revenueSheet = workbook.addWorksheet("Өдөр тутмын орлого");
   revenueSheet.addRow(["Огноо", "Орлого (₮)", "Захиалгын тоо"]);
@@ -328,6 +484,22 @@ export async function exportAnalyticsExcel(report: AnalyticsReport, input: DateR
   loyaltySheet.addRow(["Түвшин", "Харилцагчийн тоо"]);
   for (const row of report.loyaltyTiers) loyaltySheet.addRow([row.tierName, row.customerCount]);
   loyaltySheet.columns.forEach(column => { column.width = 22; });
+
+  const channelSheet = workbook.addWorksheet("Суваг");
+  channelSheet.addRow(["Хүргэлтийн хэлбэр", "Захиалгын тоо"]);
+  for (const row of report.ordersByChannel.byDeliveryMethod) channelSheet.addRow([row.label, row.orderCount]);
+  channelSheet.addRow([]);
+  channelSheet.addRow(["Төлбөрийн хэлбэр", "Захиалгын тоо"]);
+  for (const row of report.ordersByChannel.byPaymentMethod) channelSheet.addRow([row.label, row.orderCount]);
+  channelSheet.columns.forEach(column => { column.width = 26; });
+
+  const trafficSheet = workbook.addWorksheet("Эх сурвалж, Төхөөрөмж");
+  trafficSheet.addRow(["Эх сурвалж (referrer/UTM)", "Захиалгын тоо"]);
+  for (const row of report.traffic.sources) trafficSheet.addRow([row.source, row.orderCount]);
+  trafficSheet.addRow([]);
+  trafficSheet.addRow(["Төхөөрөмж", "Захиалгын тоо"]);
+  for (const row of report.traffic.deviceTypes) trafficSheet.addRow([row.device, row.orderCount]);
+  trafficSheet.columns.forEach(column => { column.width = 30; });
 
   const buffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(buffer);
@@ -378,6 +550,47 @@ export async function exportAnalyticsPdf(report: AnalyticsReport, input: DateRan
     doc.font("Heading").fontSize(13).fillColor("#17181b").text("Гишүүнчлэлийн түвшин");
     doc.font("Body").fontSize(10).fillColor("#3a3b3f");
     for (const row of report.loyaltyTiers) doc.text(`${row.tierName} — ${row.customerCount} харилцагч`);
+    doc.moveDown(1);
+
+    doc.font("Heading").fontSize(13).fillColor("#17181b").text("Ашиг / маржин");
+    doc.font("Body").fontSize(10).fillColor("#3a3b3f");
+    if (report.profit.itemsWithCostCount > 0) {
+      doc.text(`Ашиг: ${formatMnt(report.profit.profitMnt)} (${report.profit.marginPercent}% маржин)`);
+      doc.text(`Өртөг мэдэгдэж буй бараа: ${report.profit.itemsWithCostCount} / ${report.profit.totalItemsSold} зарагдсан ширхэг`);
+    } else {
+      doc.text("Ямар ч бараанд өртгийн үнэ (costMnt) оруулаагүй тул ашиг тооцоолох боломжгүй.");
+    }
+    doc.moveDown(1);
+
+    doc.font("Heading").fontSize(13).fillColor("#17181b").text("Сагс, хаягдал");
+    doc.font("Body").fontSize(10).fillColor("#3a3b3f");
+    doc.text(`Идэвхтэй/хуучин сагс (бараатай): ${report.cartAbandonment.cartsWithItems}`);
+    doc.text(`Захиалга болсон: ${report.cartAbandonment.convertedCount}`);
+    doc.text(`Хаягдсан (24ц+ идэвхгүй): ${report.cartAbandonment.abandonedCount} (${report.cartAbandonment.abandonmentRatePercent}%)`);
+    doc.moveDown(1);
+
+    doc.font("Heading").fontSize(13).fillColor("#17181b").text("Нөөц");
+    doc.font("Body").fontSize(10).fillColor("#3a3b3f");
+    doc.text(`Нийтлэгдсэн бараа: ${report.inventory.publishedProductCount}`);
+    doc.text(`Дууссан нөөц: ${report.inventory.outOfStockCount}`);
+    doc.text(`Бага нөөц (≤5): ${report.inventory.lowStockCount}`);
+    doc.text(`Нөөцийн үнэлгээ: ${formatMnt(report.inventory.stockValueMnt)}`);
+    doc.moveDown(1);
+
+    doc.font("Heading").fontSize(13).fillColor("#17181b").text("Хүргэлт, төлбөрийн суваг");
+    doc.font("Body").fontSize(10).fillColor("#3a3b3f");
+    for (const row of report.ordersByChannel.byDeliveryMethod) doc.text(`${row.label} — ${row.orderCount} захиалга`);
+    for (const row of report.ordersByChannel.byPaymentMethod) doc.text(`${row.label} — ${row.orderCount} захиалга`);
+    doc.moveDown(1);
+
+    doc.font("Heading").fontSize(13).fillColor("#17181b").text("Эх сурвалж, төхөөрөмж");
+    doc.font("Body").fontSize(10).fillColor("#3a3b3f");
+    if (report.traffic.sources.length === 0) {
+      doc.text("Одоогоор бүртгэгдсэн эх сурвалжийн мэдээлэл алга.");
+    } else {
+      for (const row of report.traffic.sources.slice(0, 10)) doc.text(`${row.source} — ${row.orderCount} захиалга`);
+    }
+    for (const row of report.traffic.deviceTypes) doc.text(`${row.device} — ${row.orderCount} захиалга`);
 
     doc.end();
   });

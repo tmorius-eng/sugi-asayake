@@ -8,6 +8,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
 import type { RouterOutputs } from "@/lib/trpc";
+import { getStoredTrafficSource } from "@/lib/trafficSource";
 import { formatVariantAttributes } from "@shared/catalog-filter";
 import { UB_DELIVERY_FEE_MNT } from "@shared/const";
 import { ubDistricts, ubDistrictLabels, type UbDistrict } from "@shared/districts";
@@ -113,7 +114,7 @@ export default function Checkout() {
     if (!customerName.trim() || !customerPhone.trim() || (delivery === "delivery" && !deliveryAddress.trim()) || (delivery === "pickup" && !pickupBranch)) { toast.error("Нэр, утас, хүргэлт эсвэл авах салбарын мэдээллээ бүрэн оруулна уу."); return; }
     if (payment === "qpay" && !qpayReady) { toast.message("QPay merchant setup pending", { description: "QPay merchant credentials ороогүй тул бодит төлбөр одоогоор идэвхгүй." }); return; }
     try {
-      const order = await createOrder.mutateAsync({ customerName: customerName.trim(), customerPhone: customerPhone.trim(), customerEmail: customerEmail.trim() || null, deliveryMethod: delivery === "delivery" ? "ub_delivery" : "store_pickup", deliveryAddress: delivery === "delivery" ? deliveryAddress.trim() : null, district: delivery === "delivery" && district ? district : null, pickupBranch: delivery === "pickup" ? pickupBranch : null, paymentMethod: payment === "qpay" ? "qpay" : "cash_on_delivery", couponCode: appliedCoupon || null });
+      const order = await createOrder.mutateAsync({ customerName: customerName.trim(), customerPhone: customerPhone.trim(), customerEmail: customerEmail.trim() || null, deliveryMethod: delivery === "delivery" ? "ub_delivery" : "store_pickup", deliveryAddress: delivery === "delivery" ? deliveryAddress.trim() : null, district: delivery === "delivery" && district ? district : null, pickupBranch: delivery === "pickup" ? pickupBranch : null, paymentMethod: payment === "qpay" ? "qpay" : "cash_on_delivery", couponCode: appliedCoupon || null, trafficSource: getStoredTrafficSource() ?? null });
       await utils.cart.current.invalidate();
       await utils.cart.applicableRoutineDiscount.invalidate();
       await utils.loyalty.myStatus.invalidate();

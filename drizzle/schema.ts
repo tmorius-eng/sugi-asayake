@@ -185,6 +185,14 @@ export const products = mysqlTable("products", {
   description: text("description"),
   priceMnt: int("priceMnt").notNull(),
   compareAtPriceMnt: int("compareAtPriceMnt"),
+  /** Cost price (admin-entered, optional) — the one new input that makes
+   *  real profit/margin reporting possible (see getProfitOverview in
+   *  server/analytics.ts). Null until an admin fills it in; profit
+   *  reporting only ever covers products that have one, and always says
+   *  so ("N/M барааны cost мэдээлэлтэй") rather than presenting a partial
+   *  sample as the whole picture — same discipline as the demographics
+   *  section of the analytics dashboard. */
+  costMnt: int("costMnt"),
   sku: varchar("sku", { length: 80 }).notNull().unique(),
   imageUrl: text("imageUrl"),
   galleryJson: text("galleryJson"),
@@ -355,6 +363,19 @@ export const orders = mysqlTable("orders", {
   couponDiscountMnt: int("couponDiscountMnt").notNull().default(0),
   totalMnt: int("totalMnt").notNull(),
   deliveryTrackingRef: varchar("deliveryTrackingRef", { length: 180 }),
+  /**
+   * Marketing-analytics snapshot, captured automatically at checkout (see
+   * checkout.createOrder in server/routers.ts) — never asked of the
+   * shopper, never backfilled for historical orders (both stay null for
+   * every order placed before this shipped, which the analytics panel
+   * reports honestly rather than guessing). trafficSource is the raw
+   * ?utm_source/ref query param or document.referrer's hostname the
+   * shopper's session started from; deviceType is parsed from the
+   * request's User-Agent at order time. Both are "best guess from one
+   * HTTP request", not a real multi-touch attribution system.
+   */
+  trafficSource: varchar("trafficSource", { length: 200 }),
+  deviceType: mysqlEnum("deviceType", ["mobile", "tablet", "desktop", "unknown"]),
   /**
    * EBARIMT.md: Mongolian tax-receipt (е-баримт) fields. Fully inert until a
    * future session wires up real issuance (Path A: SmartSoftware POS
