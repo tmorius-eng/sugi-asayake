@@ -10,7 +10,7 @@ import { LineSkeleton, Skeleton } from "@/components/Skeleton";
 import VariantPicker from "@/components/VariantPicker";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { getSalePercent, LOW_STOCK_THRESHOLD } from "@shared/catalog-filter";
+import { getCategoryPlaceholderImage, getSalePercent, LOW_STOCK_THRESHOLD } from "@shared/catalog-filter";
 import { UB_DELIVERY_FEE_MNT } from "@shared/const";
 
 // A product with no uploaded photos at all falls back to just this one
@@ -131,10 +131,14 @@ export default function ProductDetail() {
   // "Rendered more hooks than during the previous render" crash.
   const gallery = useMemo(() => {
     if (!product) return previewGallery;
+    // A category-appropriate placeholder (shampoo bottle, lipstick, etc.)
+    // reads as far less "broken" than one generic bottle icon on every
+    // product that still lacks a real photo (see PRODUCT-IMPORT.md).
+    const categoryFallback = [getCategoryPlaceholderImage(product.categorySlug)];
     try {
       const saved = product.galleryJson ? JSON.parse(product.galleryJson) : [];
-      return Array.from(new Set([product.imageUrl, ...(Array.isArray(saved) ? saved : [])].filter((image): image is string => typeof image === "string" && image.length > 0))).slice(0, 6).concat(product.imageUrl ? [] : previewGallery.slice(0, 1));
-    } catch { return product.imageUrl ? [product.imageUrl] : previewGallery; }
+      return Array.from(new Set([product.imageUrl, ...(Array.isArray(saved) ? saved : [])].filter((image): image is string => typeof image === "string" && image.length > 0))).slice(0, 6).concat(product.imageUrl ? [] : categoryFallback);
+    } catch { return product.imageUrl ? [product.imageUrl] : categoryFallback; }
   }, [product]);
 
   if (productQuery.isLoading) {

@@ -83,8 +83,9 @@ pnpm exec vitest run --no-file-parallelism
 ⚠️ **Production/deploy хийхээсээ өмнө заавал шалгах:** `.env`-ийн `OWNER_EMAIL=t.morius@gmail.com` байх ёстой (placeholder-оор биш).
 
 ## Дараагийн ажлын санал
-1. **Mass SMS/Email campaign** (email тал одоо бодитоор ажиллаж байгаа нь баталгаажсан — дээрх Brevo хэсгийг үзнэ үү; SMS-ийг эхлэхийн өмнө Tom-оос кредит/route баталгаажуулах хэрэгтэй)
-2. Product Variants-ийн frontend-ийг бодит олон variant-тай бараагаар Playwright screenshot-оор нүдэн дээр баталгаажуулах (PHASE 1+2 код бэлэн, 149 автомат тест+DB probe-оор баталгаажсан ч бодит browser screenshot хараахан аваагүй)
+1. **Барааны бодит зураг — pilot-ийн үлдсэн хэсэг / цар хүрээ шийдэх** (24-ийн 6 нь дууссан, 18 нь placeholder дээрээ үлдсэн; 937-ийн үлдсэн 913-ыг мөн адил хийх эсэхийг Tom-той тодруулах — дэлгэрэнгүй [HISTORY.md](HISTORY.md)-ийн сүүлийн хэсэгт)
+2. **Mass SMS/Email campaign** (email тал одоо бодитоор ажиллаж байгаа нь баталгаажсан — дээрх Brevo хэсгийг үзнэ үү; SMS-ийг эхлэхийн өмнө Tom-оос кредит/route баталгаажуулах хэрэгтэй)
+3. Product Variants-ийн frontend-ийг бодит олон variant-тай бараагаар Playwright screenshot-оор нүдэн дээр баталгаажуулах (PHASE 1+2 код бэлэн, 149 автомат тест+DB probe-оор баталгаажсан ч бодит browser screenshot хараахан аваагүй)
 3. eBarimt — Tom SmartSoftware POS нийлүүлэгчтэйгээ [EBARIMT.md](EBARIMT.md)-ийн 6 асуултыг тодруулах ёстой (код бичих ажил биш)
 4. PREMIUM-FEATURES.md TIER 5 үлдсэн (referral, abandoned-cart имэйл), ROADMAP TIER 2 үлдсэн (refund урсгал), TIER 5 үлдсэн (Sentry, staging, CDN, uptime monitoring)
 5. Tom-ий тодруулаагүй асуулт: "heseg hesegeer worldclass premium feeling uguhgui" — сайтыг бүхэлд нь дахин үзэж, unstyled/basic харагдах бусад хэсгүүд байгаа эсэхийг шалгах

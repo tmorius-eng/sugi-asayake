@@ -1,0 +1,9 @@
+<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Эрүүл мэндийн зураг удахгүй нэмэгдэнэ">
+  <rect width="400" height="400" fill="#eef0ee"/>
+  <circle cx="200" cy="168" r="76" fill="#fce7eb"/>
+  <rect x="170" y="150" width="60" height="80" rx="10" fill="none" stroke="#df1f3d" stroke-width="6"/>
+  <rect x="188" y="130" width="24" height="20" rx="3" fill="none" stroke="#df1f3d" stroke-width="6"/>
+  <line x1="200" y1="176" x2="200" y2="204" stroke="#df1f3d" stroke-width="6" stroke-linecap="round"/>
+  <line x1="186" y1="190" x2="214" y2="190" stroke="#df1f3d" stroke-width="6" stroke-linecap="round"/>
+  <text x="200" y="335" font-family="'DM Sans', 'Noto Sans Mongolian', sans-serif" font-size="15" font-weight="700" letter-spacing="3" fill="#a3a4a9" text-anchor="middle">SUGI ASAYAKE</text>
+</svg>

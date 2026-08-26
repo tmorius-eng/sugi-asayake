@@ -565,6 +565,7 @@ export async function getRecommendedProducts(userId: number, limit = 8) {
     imageUrl: products.imageUrl,
     stockQuantity: products.stockQuantity,
     categoryName: productCategories.name,
+    categorySlug: productCategories.slug,
     skinType: products.skinType,
     skinConcerns: products.skinConcerns,
     interiorStyle: products.interiorStyle,

@@ -100,6 +100,22 @@ Tom "Brevo IP-г dashboard-аас unтраа" гэсэн зааврыг өгсн
 
 **Дараагийн алхам**: Brevo IP хязгаарлалтын жинхэнэ механизмыг тодруулах (доорх blocker), дараа нь mass SMS/Email campaign эсвэл Product Variants-ийн frontend-ийг бодит олон variant-тай бараагаар screenshot-оор баталгаажуулах.
 
+## Бодит барааны зураг — ангилал бүрийн placeholder + pilot batch (2026-08-26, үргэлжлэл 6)
+Brevo баталгаажсны дараа Tom 937 барааны бодит зураг (1080p-тэй ойролцоо чанартай) websearch хийж олоод R2 рүү oруулахыг хүссэн. **Чухал тодруулга өгсөн**: энэ орчинд зураг **generate хийх AI загвар/tool байхгүй** — зөвхөн websearch+татаж авах боломжтой, олдохгүй бол зөвхөн code-ээр зурсан SVG icon л хийж чадна (фото зураг зохиомлоор "generate" хийх боломжгүй). Мөн 937 барааг нэг зэрэг, нэг бүрийг баталгаажуулалгүй хийх нь өндөр эрсдэлтэй (буруу бараанд буруу зураг наалдах) гэдгийг тайлбарлаад, Tom-той 2 асуулт тодруулсан: (1) pilot (24 бараа, 4/ангилал)-аас эхэлье, (2) олдохгүй бол ангилалд тохирсон generic icon.
+
+**1. Ангиллаас тохирсон placeholder (бүх 937 бараанд шууд нөлөөлнө):** Өмнө нь **ганц** ерөнхий улаан лонхны SVG (`product-placeholder.svg`) бүх 925 зурагтугй бараанд адилхан харагддаг байсан. Одоо 6 бодит ангилал тус бүрдээ өөрийн SVG icon-той: Арьс арчилгаа (дусаалуурт лонх — хуучин ерөнхий icon-той адил), Гоо сайхан (уруулын будаг), Эрүүл мэнд (эмийн лонх+загалмай), Эрүүл ахуй (соап помп лонх), Үс ба бие (шампунь лонх), Ээж ба хүүхэд (хүүхдийн сүүний лонх). `shared/catalog-filter.ts`-ийн `getCategoryPlaceholderImage(categorySlug)` функц, `Shop.tsx`/`ProductDetail.tsx`/`QuickViewDialog.tsx`-д (хамгийн их ашиглагддаг 3 газарт) холбогдсон. `getRecommendedProducts` (db.ts) query-д дутуу байсан `categorySlug` сонголтыг нэмсэн.
+
+**2. Pilot batch — 24 бараанаас 6-г нь бодитоор бүрэн дуусгасан (ангилал бүрээс үнэ өндөртэй эхний 4-ийг нь window function-оор сонгосон):**
+- Cell Cure 4T PLUSPLUS/4T PLUS (BELEGA, албан ёсны belega-cellcure.com сайтаас, transparent PNG, өндөр чанартай)
+- Prieclat Radiant Power Serum (Скалда Sugi Drug Store (Япон, санамсаргүй ижил нэртэй) private-label брэндийн албан ёсны cdn зураг, 1946x1946, маш өндөр чанартай)
+- AMOMA Milk Up/Through Blend, Maternity Oil (cosme.net-ээс, зөв бараа мөн ч зөвхөн 180x180 бага нягтралтай — цаашид илүү сайн эх сурвалж олдвол сольж болно)
+
+Урсгал бүрийг: WebSearch (барааны нэр+баркод) → WebFetch (жинхэнэ зурган URL олох) → curl татах → **Read tool-оор нүдээр шалгаж баталгаажуулах (зөв бараа мөн эсэх)** → `processUploadedImage` (admin upload-той ЯГ ижил pipeline: rotate+resize 1600px max+re-compress) → `storagePut` R2 рүү → `products.imageUrl` DB шинэчлэлт. Зам: `catalog/products/<productId>/<slug>.<ext>` (одоо байгаа `admin.uploadProductImage`-ийн uploader-id-based замаас ялгаатай, гэхдээ ижил `catalog/products/` эх namespace дор — барааны ID-аар эрэмбэлэгдсэн тул R2 console-оос харахад илүү ойлгомжтой). Throwaway script-ээр (устгасан) хийсэн. Playwright+Edge screenshot-оор ProductDetail (жинхэнэ зураг, бага нягтралтайг хамт), Shop grid (placeholder-той хольцолдсон), ангилал placeholder зөв ялгаатай (Ээж ба хүүхэд-ийн лонх vs Арьс арчилгааны дусаалуур) харуулж баталгаажуулсан.
+
+**Явц ба цаашдын шийдвэр:** 24-ийн 6 нь бүрэн дууссан, 18 нь **websearch-оор олдоогүй эсвэл зураг чанар хангалтгүй байсан тул одоохондоо алгассан** (тэдгээр нь ангиллын placeholder-оо хэвээр авна). 937-ийн үлдсэн 913-ыг ижил түвшний нарийвчлалтайгаар (нэг бүрийг websearch+нүдээр шалгах) хийхэд маш их цаг/tool call шаардана — Tom-той цаашид үргэлжлүүлэх хурд/цар хүрээг (жишээ нь: илүү олон бараагаар үргэлжлүүлэх, эсвэл нийлүүлэгчийн бодит зургаар солих, эсвэл placeholder-ыг л хангалттай гэж үзэх) тодруулах хэрэгтэй.
+
+`pnpm check`/`pnpm build` цэвэр.
+
 ## Лаптоп хооронд шилжилт (2026-08-20, 2026-08-26)
 **Гэрийн лаптоп анх удаа асуулгасан (2026-08-20)**: GitHub-аас clone, Node/pnpm/MySQL/MinIO шинээр суулгасан. `pnpm-workspace.yaml`-д `onlyBuiltDependencies: [@tailwindcss/oxide, esbuild]` зөөх шаардлагатай байсан (шинэ pnpm package.json-ий `"pnpm"` field уншихаа больсон). Migration 0009-ийн `DROP INDEX openId` бодит индексийн нэр (`users_openId_unique`) буруу байсан тул гараар зассан.
 

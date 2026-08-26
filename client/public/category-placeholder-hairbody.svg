@@ -1,0 +1,9 @@
+<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Үс ба биеийн зураг удахгүй нэмэгдэнэ">
+  <rect width="400" height="400" fill="#eef0ee"/>
+  <circle cx="200" cy="168" r="76" fill="#fce7eb"/>
+  <path d="M172 158h56a8 8 0 0 1 8 8v88a12 12 0 0 1-12 12h-48a12 12 0 0 1-12-12v-88a8 8 0 0 1 8-8z" fill="none" stroke="#df1f3d" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M186 158v-16a6 6 0 0 1 6-6h16a6 6 0 0 1 6 6v16" fill="none" stroke="#df1f3d" stroke-width="6"/>
+  <path d="M186 142h28" stroke="#df1f3d" stroke-width="6"/>
+  <line x1="176" y1="196" x2="224" y2="196" stroke="#df1f3d" stroke-width="4" opacity=".5"/>
+  <text x="200" y="335" font-family="'DM Sans', 'Noto Sans Mongolian', sans-serif" font-size="15" font-weight="700" letter-spacing="3" fill="#a3a4a9" text-anchor="middle">SUGI ASAYAKE</text>
+</svg>

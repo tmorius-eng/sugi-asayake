@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import VariantPicker from "@/components/VariantPicker";
 import { trpc } from "@/lib/trpc";
-import { getSalePercent } from "@shared/catalog-filter";
+import { getCategoryPlaceholderImage, getSalePercent } from "@shared/catalog-filter";
 
 export type QuickViewProduct = {
   id: number;
@@ -13,6 +13,7 @@ export type QuickViewProduct = {
   name: string;
   brand?: string | null;
   categoryName?: string | null;
+  categorySlug?: string | null;
   shortDescription?: string | null;
   imageUrl?: string | null;
   priceMnt: number;
@@ -27,7 +28,6 @@ type QuickViewDialogProps = {
   onAdded: () => void;
 };
 
-const fallbackImage = "/product-placeholder.svg";
 const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Сагсанд нэмж чадсангүй.";
 
@@ -80,7 +80,7 @@ export default function QuickViewDialog({ open, product, onOpenChange, onAdded }
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="quick-view-dialog max-h-[calc(100vh-1.5rem)] overflow-y-auto border-0 bg-[#fffdf9] p-0 shadow-[0_28px_100px_rgba(23,24,27,.32)] sm:max-w-3xl" showCloseButton={false}>
     <div className="quick-view-topline"><span><Eye size={14} /> QUICK VIEW</span><button type="button" onClick={() => onOpenChange(false)} aria-label="Хаах">×</button></div>
     <div className="quick-view-layout">
-      <div className="quick-view-image"><img src={display.imageUrl ?? fallbackImage} alt={display.name} /><span>{available > 0 ? `${available} ширхэг үлдсэн` : "Нөөц дууссан"}</span></div>
+      <div className="quick-view-image"><img src={display.imageUrl ?? getCategoryPlaceholderImage(display.categorySlug)} alt={display.name} /><span>{available > 0 ? `${available} ширхэг үлдсэн` : "Нөөц дууссан"}</span></div>
       <div className="quick-view-copy">
         <DialogTitle className="font-[var(--font-display)] text-4xl font-semibold tracking-[-.075em] text-[#17181b] sm:text-5xl">{display.name}</DialogTitle>
         <DialogDescription className="mt-2 text-[10px] font-extrabold tracking-[.15em] text-[#df1f3d]">{display.brand ?? display.categoryName ?? "SUGI ASAYAKE"}</DialogDescription>

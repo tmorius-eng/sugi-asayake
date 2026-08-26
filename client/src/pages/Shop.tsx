@@ -8,13 +8,12 @@ import { ProductCardSkeleton } from "@/components/Skeleton";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCatalogCategories, getCatalogSkinTypes, getSalePercent, LOW_STOCK_THRESHOLD, skinTypeLabels, sortCatalogProducts, type CatalogSortOption, type SkinType } from "@shared/catalog-filter";
+import { filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCatalogCategories, getCatalogSkinTypes, getCategoryPlaceholderImage, getSalePercent, LOW_STOCK_THRESHOLD, skinTypeLabels, sortCatalogProducts, type CatalogSortOption, type SkinType } from "@shared/catalog-filter";
 import { rememberRecentlyViewed, resolveRecentlyViewed } from "@shared/recently-viewed";
 import { UB_DELIVERY_FEE_MNT } from "@shared/const";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 
 const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
-const fallbackImage = "/product-placeholder.svg";
 const RECENTLY_VIEWED_KEY = "sugi-asayake-recently-viewed-v1";
 
 const discoveryCategories = [
@@ -43,7 +42,7 @@ function RecentlyViewed({ products, rememberedCount, onRemember, onQuickView }: 
     </div>
     {products.length ? <><div className="recently-viewed-grid">{products.map(product => <article className="recently-viewed-card" key={product.id}>
       <Link href={`/product/${product.slug}`} onClick={() => onRemember(product.id)}>
-        <img src={product.imageUrl ?? fallbackImage} alt={product.name} />
+        <img src={product.imageUrl ?? getCategoryPlaceholderImage(product.categorySlug)} alt={product.name} />
         <div><p>{product.brand ?? product.categoryName ?? "SUGI ASAYAKE"}</p><h3>{product.name}</h3><strong>{formatMnt(product.priceMnt)}</strong></div>
       </Link>
       <button type="button" onClick={() => onQuickView(product)} aria-label={`${product.name} шуурхай харах`}>Шуурхай харах <Eye size={14} /></button>
@@ -69,7 +68,7 @@ function RecommendedForYou({ products, onRemember, onQuickView }: RecommendedFor
     </div>
     <div className="recently-viewed-grid">{products.map(product => <article className="recently-viewed-card" key={product.id}>
       <Link href={`/product/${product.slug}`} onClick={() => onRemember(product.id)}>
-        <img src={product.imageUrl ?? fallbackImage} alt={product.name} />
+        <img src={product.imageUrl ?? getCategoryPlaceholderImage(product.categorySlug)} alt={product.name} />
         <div><p>{product.brand ?? product.categoryName ?? "SUGI ASAYAKE"}</p><h3>{product.name}</h3><strong>{formatMnt(product.priceMnt)}</strong></div>
       </Link>
       <button type="button" onClick={() => onQuickView(product)} aria-label={`${product.name} шуурхай харах`}>Шуурхай харах <Eye size={14} /></button>
@@ -187,7 +186,7 @@ export default function Shop() {
         const lowStock = product.stockQuantity > 0 && product.stockQuantity <= LOW_STOCK_THRESHOLD;
         return <article key={product.id} className="shop-product-card" data-reveal style={{ transitionDelay: `${Math.min(index * 55, 300)}ms` }}>
         <button type="button" className={`shop-wishlist-toggle${wishlistIds.has(product.id) ? " active" : ""}`} onClick={() => onToggleWishlist(product.id)} aria-label={wishlistIds.has(product.id) ? `${product.name}-г хүслийн жагсаалтаас хасах` : `${product.name}-г хүслийн жагсаалтад нэмэх`}><Heart size={15} /></button>
-        <Link href={`/product/${product.slug}`} onClick={() => rememberProduct(product.id)} className="shop-product-link"><div className="shop-product-image">{salePercent ? <span className="shop-sale-badge">-{salePercent}%</span> : null}<img src={product.imageUrl ?? fallbackImage} alt={product.name} /><span className={lowStock ? "is-low-stock" : undefined}>{product.stockQuantity > 0 ? `${product.stockQuantity} ширхэг үлдсэн` : "Нөөц дууссан"}</span><i aria-hidden="true">VIEW</i></div><div className="shop-product-copy"><p>{product.brand ?? product.categoryName ?? "SUGI ASAYAKE"}</p><h2>{product.name}</h2>{product.reviewCount > 0 ? <span className="shop-product-rating"><Star size={12} fill="#f0b52d" stroke="#f0b52d" /> {product.avgRating?.toFixed(1)} <em>({product.reviewCount})</em></span> : null}<small>{product.shortDescription ?? "Японоос баталгаат бүтээгдэхүүн"}</small><div><div className="shop-product-price-group"><strong>{formatMnt(product.priceMnt)}</strong>{salePercent ? <s>{formatMnt(product.compareAtPriceMnt!)}</s> : null}</div><span><ShoppingBag size={15} /></span></div></div></Link>
+        <Link href={`/product/${product.slug}`} onClick={() => rememberProduct(product.id)} className="shop-product-link"><div className="shop-product-image">{salePercent ? <span className="shop-sale-badge">-{salePercent}%</span> : null}<img src={product.imageUrl ?? getCategoryPlaceholderImage(product.categorySlug)} alt={product.name} /><span className={lowStock ? "is-low-stock" : undefined}>{product.stockQuantity > 0 ? `${product.stockQuantity} ширхэг үлдсэн` : "Нөөц дууссан"}</span><i aria-hidden="true">VIEW</i></div><div className="shop-product-copy"><p>{product.brand ?? product.categoryName ?? "SUGI ASAYAKE"}</p><h2>{product.name}</h2>{product.reviewCount > 0 ? <span className="shop-product-rating"><Star size={12} fill="#f0b52d" stroke="#f0b52d" /> {product.avgRating?.toFixed(1)} <em>({product.reviewCount})</em></span> : null}<small>{product.shortDescription ?? "Японоос баталгаат бүтээгдэхүүн"}</small><div><div className="shop-product-price-group"><strong>{formatMnt(product.priceMnt)}</strong>{salePercent ? <s>{formatMnt(product.compareAtPriceMnt!)}</s> : null}</div><span><ShoppingBag size={15} /></span></div></div></Link>
         <button type="button" className="quick-view-trigger" onClick={() => openQuickView(product)} aria-label={`${product.name} шуурхай харах`}><Eye size={15} /> Шуурхай харах</button>
       </article>;
       })}</section>{totalPages > 1 ? <nav className="shop-pagination" aria-label="Хуудаслалт">

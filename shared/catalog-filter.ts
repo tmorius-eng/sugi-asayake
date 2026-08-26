@@ -39,6 +39,25 @@ export function formatVariantAttributes(attributesJson?: string | null): string 
   }
 }
 
+// Real photos are still missing for most of the 937-product POS import (see
+// PRODUCT-IMPORT.md) — rather than one generic bottle icon for every
+// category, each of the 6 real categories gets its own on-brand line-art
+// placeholder (client/public/category-placeholder-*.svg), so a shampoo at
+// least looks like a shampoo instead of a random skincare dropper bottle.
+// Unrecognized/missing category slugs fall back to the original generic one.
+const categoryPlaceholders: Record<string, string> = {
+  "arhis-archilgaa": "/category-placeholder-skincare.svg", // Арьс арчилгаа
+  "goo-saikhan": "/category-placeholder-beauty.svg", // Гоо сайхан
+  "eruul-mend": "/category-placeholder-health.svg", // Эрүүл мэнд
+  "eruul-akhui": "/category-placeholder-hygiene.svg", // Эрүүл ахуй
+  "us-ba-bie": "/category-placeholder-hairbody.svg", // Үс ба бие
+  "eej-ba-khuukhed": "/category-placeholder-motherchild.svg", // Ээж ба хүүхэд
+};
+
+export function getCategoryPlaceholderImage(categorySlug?: string | null): string {
+  return (categorySlug && categoryPlaceholders[categorySlug]) || "/product-placeholder.svg";
+}
+
 export type CatalogSortOption = "featured" | "price-low" | "price-high" | "name-asc";
 
 export function getCatalogCategories<T extends CatalogSearchItem>(products: T[]) {

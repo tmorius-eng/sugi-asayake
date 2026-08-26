@@ -1,0 +1,10 @@
+<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Эрүүл ахуйн зураг удахгүй нэмэгдэнэ">
+  <rect width="400" height="400" fill="#eef0ee"/>
+  <circle cx="200" cy="168" r="76" fill="#fce7eb"/>
+  <rect x="178" y="160" width="44" height="76" rx="8" fill="none" stroke="#df1f3d" stroke-width="6"/>
+  <rect x="190" y="140" width="20" height="20" rx="3" fill="none" stroke="#df1f3d" stroke-width="6"/>
+  <path d="M210 146h16" stroke="#df1f3d" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="232" cy="132" r="6" fill="none" stroke="#df1f3d" stroke-width="4" opacity=".6"/>
+  <line x1="190" y1="196" x2="210" y2="196" stroke="#df1f3d" stroke-width="4" opacity=".5"/>
+  <text x="200" y="335" font-family="'DM Sans', 'Noto Sans Mongolian', sans-serif" font-size="15" font-weight="700" letter-spacing="3" fill="#a3a4a9" text-anchor="middle">SUGI ASAYAKE</text>
+</svg>
