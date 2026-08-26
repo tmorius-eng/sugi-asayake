@@ -8,7 +8,11 @@ import { trpc } from "@/lib/trpc";
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Хүсэлт амжилтгүй боллоо. Дахин оролдоно уу.";
 
 export default function Login() {
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const search = useSearch();
+  // Lets an outside link (e.g. the homepage membership strip) land the
+  // shopper directly on the registration step instead of login — same
+  // read-once-at-mount pattern as redirectTarget below.
+  const [mode, setMode] = useState<"login" | "register">(() => new URLSearchParams(search).get("mode") === "register" ? "register" : "login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -18,7 +22,6 @@ export default function Login() {
   // of the register form, until auth.confirmRegistration succeeds.
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const [, setLocation] = useLocation();
-  const search = useSearch();
   const utils = trpc.useUtils();
 
   const redirectTarget = (() => {

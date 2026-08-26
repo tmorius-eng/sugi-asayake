@@ -189,9 +189,16 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .collection-card strong { font-family: var(--font-display); font-size: 23px; letter-spacing: -.05em; line-height: 1.04; }
 .collection-card a { display: inline-flex; align-items: center; gap: 7px; margin-top: 6px; color: var(--primary); font-size: 11px; font-weight: 800; }
 .category-list { display: grid; grid-template-columns: repeat(2, 1fr); align-content: start; border-top: 1px solid var(--border); }
-.category-item { display: grid; grid-template-columns: 33px 1fr 17px; align-items: center; gap: 15px; min-height: 140px; padding: 18px 12px 18px 4px; border-bottom: 1px solid var(--border); transition: transform .2s var(--ease-out), background .2s var(--ease-out), color .2s var(--ease-out), box-shadow .2s var(--ease-out); }
+.category-item { display: grid; grid-template-columns: 38px 24px 1fr 17px; align-items: center; gap: 12px; min-height: 140px; padding: 18px 12px 18px 4px; border-bottom: 1px solid var(--border); transition: transform .2s var(--ease-out), background .2s var(--ease-out), color .2s var(--ease-out), box-shadow .2s var(--ease-out); }
 .category-item:nth-child(odd) { border-right: 1px solid var(--border); }
 .category-item:hover { transform: translateY(-3px); color: var(--primary); background: rgba(255,253,249,.32); box-shadow: inset 3px 0 var(--primary); }
+/* matsukiyococokara-online.com's photo-tile category grid, adapted with an
+   icon badge instead of stock photography -- there is no real photo for
+   these 6 static homepage categories (unlike products, which fall back to
+   product-placeholder.svg), so a guaranteed-not-broken icon reads as
+   "designed" instead of risking another missing-image incident. */
+.category-icon-badge { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 50%; background: #fff2f4; color: var(--primary); transition: background .2s var(--ease-out), color .2s var(--ease-out); }
+.category-item:hover .category-icon-badge { background: var(--primary); color: #fff; }
 .category-number { color: var(--primary); font-family: var(--font-display); font-size: 12px; font-weight: 800; }
 .category-item div { display: grid; gap: 4px; }
 .category-item strong { font-family: var(--font-display); font-size: 18px; letter-spacing: -.04em; }
@@ -604,6 +611,8 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .order-tracking { margin-top: 12px; padding: 9px 12px; background: #eef3f1; color: #286b4c; font-size: 12px; }
 
 /* Profile icon in the commerce header, next to "Дэлгүүр". */
+.commerce-header-actions .wishlist-link { display: inline-flex; align-items: center; gap: 7px; padding-bottom: 3px; color: #4e4f53; font-size: 12px; font-weight: 800; }
+.commerce-header-actions .wishlist-link:hover { color: var(--primary); }
 .commerce-header-actions .profile-link { display: inline-flex; align-items: center; gap: 7px; padding-bottom: 3px; color: #4e4f53; font-size: 12px; font-weight: 800; }
 .commerce-header-actions .profile-link:hover { color: #17181b; }
 .commerce-header-actions .profile-link.is-current { color: var(--primary); }
@@ -851,4 +860,69 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .skeleton-card { pointer-events: none; }
 .skeleton-card::after { content: none; }
 @keyframes skeleton-shimmer { 100% { transform: translateX(100%); } }
+
+/* Homepage additions inspired by matsukiyococokara-online.com's structural
+   patterns (points/coupon/register strip, bestseller ranking, useful-info
+   rail) -- restyled in SUGI's own ink/vermilion/gold palette rather than
+   the reference site's yellow/pink, per Tom's "not a 1:1 copy" brief
+   (2026-08-26). See CLAUDE.md's matching dated section for the full audit. */
+.membership-strip { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.membership-panel { display: flex; align-items: center; gap: 14px; padding: 26px clamp(20px, 4vw, 40px); border-right: 1px solid var(--border); color: inherit; }
+.membership-panel:last-child { border-right: 0; }
+.membership-panel svg { flex: 0 0 auto; color: var(--primary); }
+.membership-panel strong { display: block; font-family: var(--font-display); font-size: 14px; font-weight: 700; letter-spacing: -.02em; }
+.membership-panel span { display: block; margin-top: 4px; color: #77787c; font-size: 11px; line-height: 1.5; }
+.membership-cta { justify-content: space-between; background: #17181b; color: #fff; transition: background .2s var(--ease-out); }
+.membership-cta svg:first-child { color: #f0b52d; }
+.membership-cta span { color: rgba(255,255,255,.62); }
+.membership-cta:hover { background: var(--primary); }
+.membership-cta:hover span { color: rgba(255,255,255,.82); }
+@media (max-width: 760px) { .membership-strip { grid-template-columns: 1fr; } .membership-panel { border-right: 0; border-bottom: 1px solid var(--border); } .membership-panel:last-child { border-bottom: 0; } }
+
+/* Bestseller rail — same bold gold band /shop's recently-viewed-section
+   uses, so the two "real data, ranked" rails on the site read as one
+   family even though they're on different pages. */
+.bestseller-section { padding: clamp(64px, 8vw, 112px) max(34px, 7vw); background: #f0b52d; }
+.bestseller-heading { display: grid; grid-template-columns: minmax(0, .95fr) minmax(220px, .45fr); gap: 26px; align-items: end; margin-bottom: 34px; }
+.bestseller-heading h2 { margin: 8px 0 0; color: #17181b; font-family: var(--font-display); font-size: clamp(35px, 4vw, 58px); font-weight: 650; letter-spacing: -.08em; line-height: .9; }
+.bestseller-heading h2 em { color: var(--primary); font-style: normal; }
+.bestseller-heading > p { max-width: 280px; margin: 0 0 3px auto; color: rgba(23,24,27,.66); font-size: 11px; line-height: 1.55; }
+.bestseller-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; }
+.bestseller-card { position: relative; display: flex; flex-direction: column; overflow: hidden; background: #fffdf9; color: #17181b; box-shadow: 7px 8px 0 rgba(23,24,27,.14); transition: transform .22s var(--ease-out), box-shadow .22s var(--ease-out); }
+.bestseller-card:hover { box-shadow: 10px 12px 0 rgba(223,31,61,.22); transform: translateY(-5px); }
+.bestseller-rank { position: absolute; top: 9px; left: 9px; z-index: 1; display: grid; width: 26px; height: 26px; place-items: center; border-radius: 50%; background: #17181b; color: #f0b52d; font-family: var(--font-display); font-size: 12px; font-weight: 700; }
+.bestseller-card img { width: 100%; aspect-ratio: 1; object-fit: cover; }
+.bestseller-card > div { padding: 13px 14px 15px; }
+.bestseller-card p { margin: 0; color: var(--primary); font-size: 8px; font-weight: 900; letter-spacing: .1em; }
+.bestseller-card h3 { display: -webkit-box; overflow: hidden; margin: 6px 0; font-family: var(--font-display); font-size: 14px; font-weight: 650; letter-spacing: -.03em; line-height: 1.15; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.bestseller-rating { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; font-size: 10px; font-weight: 800; }
+.bestseller-rating em { color: #77787c; font-style: normal; }
+.bestseller-card strong { font-size: 12px; }
+.bestseller-all-link { display: inline-flex; align-items: center; gap: 8px; margin-top: 30px; color: #17181b; font-size: 11px; font-weight: 900; letter-spacing: .06em; transition: gap .18s var(--ease-out); }
+.bestseller-all-link:hover { gap: 12px; color: var(--primary); }
+@media (max-width: 980px) { .bestseller-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 620px) { .bestseller-section { padding: 48px 18px; } .bestseller-heading { grid-template-columns: 1fr; gap: 12px; } .bestseller-heading > p { margin: 0; } .bestseller-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }
+
+/* Journal/news rail — a deliberate dark "editorial break" band for contrast
+   against the surrounding pastel sections (mirrors the reference site's
+   loud section-to-section color changes without borrowing its palette). */
+.home-news-section { padding: clamp(64px, 8vw, 112px) max(34px, 7vw); background: #17181b; color: #fff; }
+.section-heading-light { border-bottom-color: rgba(255,255,255,.18); color: rgba(255,255,255,.5); }
+.section-heading-light span:first-child { color: #f0b52d; }
+.section-heading-light span:last-child { display: inline-flex; align-items: center; gap: 6px; }
+.home-news-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin: 22px 0 40px; }
+.home-news-heading h2 { margin: 0; font-family: var(--font-display); font-size: clamp(34px, 4vw, 54px); font-weight: 650; letter-spacing: -.08em; line-height: .92; }
+.home-news-heading h2 em { color: #f0b52d; font-style: normal; }
+.home-news-all { color: rgba(255,255,255,.68); }
+.home-news-all:hover { color: #f0b52d; }
+.home-news-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
+.home-news-card { display: flex; flex-direction: column; overflow: hidden; background: #1f2024; color: #fff; transition: transform .2s var(--ease-out), background .2s var(--ease-out); }
+.home-news-card:hover { background: #26272c; transform: translateY(-4px); }
+.home-news-card img { width: 100%; aspect-ratio: 16/10; object-fit: cover; }
+.home-news-card > div { padding: 20px 22px 24px; }
+.home-news-card span { color: #f0b52d; font-size: 10px; font-weight: 800; letter-spacing: .1em; }
+.home-news-card h3 { display: -webkit-box; overflow: hidden; margin: 10px 0; font-family: var(--font-display); font-size: 19px; font-weight: 650; letter-spacing: -.03em; line-height: 1.2; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.home-news-card p { display: -webkit-box; overflow: hidden; margin: 0 0 14px; color: rgba(255,255,255,.55); font-size: 12px; line-height: 1.6; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.home-news-card em { display: inline-flex; align-items: center; gap: 6px; color: #fff; font-size: 10px; font-weight: 800; font-style: normal; letter-spacing: .06em; }
+@media (max-width: 900px) { .home-news-grid { grid-template-columns: 1fr; } .home-news-heading { flex-direction: column; align-items: flex-start; gap: 10px; } }
 @media (prefers-reduced-motion: reduce) { .skeleton::after { animation: none; opacity: .5; } }

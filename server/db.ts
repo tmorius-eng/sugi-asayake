@@ -421,6 +421,63 @@ export async function getPublishedCatalog() {
 }
 
 /**
+ * Homepage "Их зарагддаг бараа" rail (inspired by matsukiyococokara-online.com's
+ * 売れ筋ランキング section, 2026-08-26) — real order history, not a manually
+ * curated list. Only counts order_items belonging to a paid order (same
+ * "actually happened" bar as loyalty spend in getUserLoyaltyStatus) so a
+ * cancelled or still-unpaid cash-on-delivery order can't inflate a product's
+ * rank.
+ *
+ * Two plain queries instead of one big join: order_items already fans out
+ * 1:many against product_reviews once both are joined onto products in a
+ * single query (the same trap getPublishedCatalog avoids), which would
+ * double- or triple-count sold quantity. Summing sold quantity in its own
+ * query first, then fetching the winning products' catalog rows separately,
+ * sidesteps that without a SQL subquery.
+ */
+export async function getBestsellingProducts(limit = 8) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const soldQtyExpr = sql<number>`SUM(${orderItems.quantity})`;
+  const soldRows = await db
+    .select({ productId: orderItems.productId, soldQuantity: soldQtyExpr })
+    .from(orderItems)
+    .innerJoin(orders, eq(orderItems.orderId, orders.id))
+    .where(eq(orders.paymentStatus, "paid"))
+    .groupBy(orderItems.productId)
+    .orderBy(desc(soldQtyExpr))
+    .limit(limit * 3); // headroom: some winners may since have gone unpublished
+
+  const productIds = soldRows.map(row => row.productId).filter((id): id is number => id != null);
+  if (!productIds.length) return [];
+  const soldQuantityByProduct = new Map(soldRows.map(row => [row.productId, Number(row.soldQuantity)]));
+
+  const catalogRows = await db
+    .select({
+      id: products.id,
+      name: products.name,
+      slug: products.slug,
+      brand: products.brand,
+      priceMnt: products.priceMnt,
+      compareAtPriceMnt: products.compareAtPriceMnt,
+      imageUrl: products.imageUrl,
+      stockQuantity: products.stockQuantity,
+      avgRating: avgRatingExpr,
+      reviewCount: reviewCountExpr,
+    })
+    .from(products)
+    .leftJoin(productReviews, eq(productReviews.productId, products.id))
+    .where(and(inArray(products.id, productIds), eq(products.isPublished, true)))
+    .groupBy(products.id);
+
+  return catalogRows
+    .map(row => ({ ...row, soldQuantity: soldQuantityByProduct.get(row.id) ?? 0 }))
+    .sort((a, b) => b.soldQuantity - a.soldQuantity)
+    .slice(0, limit);
+}
+
+/**
  * ROADMAP.md TIER 2: server-side catalog search, replacing a client-side
  * substring filter over the entire ~937-row published catalog. Uses the
  * `products_search_idx` FULLTEXT index (drizzle/0027_catalog_fulltext_search.sql)

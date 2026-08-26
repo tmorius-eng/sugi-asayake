@@ -14,14 +14,20 @@ import {
   Clock3,
   Facebook,
   Flower2,
+  Gift,
   Instagram,
   MapPin,
   Menu,
   Navigation,
+  Newspaper,
+  Percent,
   Phone,
   ShieldCheck,
   ShoppingBag,
   Sparkles,
+  Star,
+  TrendingUp,
+  UserPlus,
   X,
 } from "lucide-react";
 import HeaderSearch from "@/components/HeaderSearch";
@@ -66,18 +72,31 @@ const locations = [
 ];
 
 const categories = [
-  { number: "01", title: "Арьс арчилгаа", detail: "Өдөр тутмын цэвэр, зөөлөн арчилгаа" },
-  { number: "02", title: "Гоо сайхан", detail: "Японы сонгомол хэрэгцээт бүтээгдэхүүн" },
-  { number: "03", title: "Эрүүл мэнд", detail: "Өдөр тутмын сайн сайхны найдвартай сонголт" },
-  { number: "04", title: "Эрүүл ахуй", detail: "Гэр бүлд хэрэгтэй цэвэр, аюулгүй хэрэглээ" },
-  { number: "05", title: "Үс ба бие", detail: "Өдөр бүрийн арчилгааг илүү хялбар болгоно" },
-  { number: "06", title: "Ээж ба хүүхэд", detail: "Зөөлөн, хэрэгцээт сонголтууд" },
+  { number: "01", title: "Арьс арчилгаа", detail: "Өдөр тутмын цэвэр, зөөлөн арчилгаа", Icon: Flower2 },
+  { number: "02", title: "Гоо сайхан", detail: "Японы сонгомол хэрэгцээт бүтээгдэхүүн", Icon: Sparkles },
+  { number: "03", title: "Эрүүл мэнд", detail: "Өдөр тутмын сайн сайхны найдвартай сонголт", Icon: ShieldCheck },
+  { number: "04", title: "Эрүүл ахуй", detail: "Гэр бүлд хэрэгтэй цэвэр, аюулгүй хэрэглээ", Icon: BadgeCheck },
+  { number: "05", title: "Үс ба бие", detail: "Өдөр бүрийн арчилгааг илүү хялбар болгоно", Icon: CircleCheck },
+  { number: "06", title: "Ээж ба хүүхэд", detail: "Зөөлөн, хэрэгцээт сонголтууд", Icon: Gift },
 ];
+
+const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
+const bestsellerFallbackImage = "/product-placeholder.svg";
 
 export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const siteMediaQuery = trpc.content.siteMedia.useQuery();
+  // matsukiyococokara-online.com's 売れ筋ランキング (bestseller ranking) —
+  // adapted as a real-data section, not a curated list. See
+  // getBestsellingProducts in server/db.ts.
+  const bestsellersQuery = trpc.catalog.bestsellers.useQuery();
+  const bestsellers = bestsellersQuery.data ?? [];
+  // Same reference site's お役立ち情報 (useful info) homepage rail — the
+  // content/post system has existed since the PostDetail page was built,
+  // but nothing ever surfaced it on the homepage itself.
+  const latestPostsQuery = trpc.content.latestPosts.useQuery();
+  const latestPosts = (latestPostsQuery.data ?? []).slice(0, 3);
   const mediaBySlot = useMemo(() => new Map((siteMediaQuery.data ?? []).map(media => [media.slotKey, media.imageUrl])), [siteMediaQuery.data]);
   const imageFor = (slotKey: string, fallbackUrl: string | null) => mediaBySlot.get(slotKey) || fallbackUrl;
   // Only sets an inline background-image when there's an actual URL --
@@ -169,6 +188,16 @@ export default function Home() {
           <div aria-hidden="true"><span>JAPANESE DAILY CARE</span><i /><span>УЛААНБААТАР / MONGOLIA</span><i /><span>ГЭР БҮЛИЙН ГИШҮҮН БҮРТ</span><i /></div>
         </div>
 
+        {/* matsukiyococokara-online.com's points/coupon/register 3-panel promo
+            strip, reframed around systems SUGI ASAYAKE already enforces at
+            checkout (PREMIUM-FEATURES.md TIER 5 loyalty tiers + discount
+            codes) instead of a points program we don't have. */}
+        <section className="membership-strip" data-reveal aria-label="Гишүүнчлэлийн давуу тал">
+          <div className="membership-panel"><Gift size={20} /><div><strong>Гишүүнчлэлийн хөнгөлөлт</strong><span>Нийт худалдан авалтын дүнгээр 3–10% хямдрал автоматаар нэмэгддэг.</span></div></div>
+          <div className="membership-panel"><Percent size={20} /><div><strong>Урамшуулалын код</strong><span>Захиалга бүрд урамшуулалын код ашиглаж нэмж хямдруулаарай.</span></div></div>
+          <Link href="/login?mode=register" className="membership-panel membership-cta"><UserPlus size={20} /><div><strong>Гишүүнээр бүртгүүлэх</strong><span>Хямдрал, урамшуулал шууд идэвхжинэ.</span></div><ArrowUpRight size={17} /></Link>
+        </section>
+
         <section className="story-section page-section" id="story" data-reveal>
           <div className="section-heading"><span>01</span><span>THE SUGI DIFFERENCE</span></div>
           <div className="story-grid">
@@ -191,11 +220,40 @@ export default function Home() {
               <div className="collection-card"><span>OUR SELECTION</span><strong>Нэг өдөрт<br />хэрэгтэй бүх зүйл.</strong><a href="#stores">Ойр салбараа олох <ArrowUpRight size={15} /></a></div>
             </div>
             <div className="category-list">
-              {categories.map((category) => <Link href="/shop" className="category-item" key={category.number}><span className="category-number">{category.number}</span><div><strong>{category.title}</strong><span>{category.detail}</span></div><ArrowUpRight size={17} /></Link>)}
+              {categories.map((category) => <Link href="/shop" className="category-item" key={category.number}><span className="category-icon-badge"><category.Icon size={16} /></span><span className="category-number">{category.number}</span><div><strong>{category.title}</strong><span>{category.detail}</span></div><ArrowUpRight size={17} /></Link>)}
               <div className="category-note"><img src={symbolImage} alt="" /><span>Бидний тавиур дээрх бүтээгдэхүүн бүр<br />өдөр тутмын хэрэгцээнээс эхэлнэ.</span></div>
             </div>
           </div>
         </section>
+
+        {/* matsukiyococokara-online.com's 売れ筋ランキング (bestseller ranking)
+            section, adapted: real paid-order history via getBestsellingProducts,
+            not a manually curated "featured" list. Hidden entirely (not shown
+            with an empty state) until real orders exist — same "don't show a
+            placeholder" rule as RecentlyViewed/RecommendedForYou on /shop. */}
+        {bestsellers.length > 0 && (
+          <section className="bestseller-section" data-reveal>
+            <div className="bestseller-heading">
+              <div><p className="shop-kicker"><TrendingUp size={12} /> ОНЦЛОХ СОНГОЛТ</p><h2>Их зарагддаг<br /><em>бараанууд.</em></h2></div>
+              <p>Манай захиалгын бодит түүхээр эрэмбэлсэн, хамгийн их итгэл олсон сонголтууд.</p>
+            </div>
+            <div className="bestseller-grid">
+              {bestsellers.slice(0, 6).map((product, index) => (
+                <Link href={`/product/${product.slug}`} className="bestseller-card" key={product.id}>
+                  <span className="bestseller-rank">{index + 1}</span>
+                  <img src={product.imageUrl ?? bestsellerFallbackImage} alt={product.name} />
+                  <div>
+                    <p>{product.brand ?? "SUGI ASAYAKE"}</p>
+                    <h3>{product.name}</h3>
+                    {product.reviewCount > 0 && <span className="bestseller-rating"><Star size={11} fill="#17181b" stroke="#17181b" /> {product.avgRating?.toFixed(1)} <em>({product.reviewCount})</em></span>}
+                    <strong>{formatMnt(product.priceMnt)}</strong>
+                  </div>
+                </Link>
+              ))}
+            </div>
+            <Link href="/shop" className="bestseller-all-link">Бүх бүтээгдэхүүн үзэх <ArrowUpRight size={16} /></Link>
+          </section>
+        )}
 
         <SeasonalCampaignCarousel imageOverrides={{ "summer-slide-1": imageFor("summer-slide-1", heroImage) ?? undefined, "summer-slide-2": imageFor("summer-slide-2", assortmentImage) ?? undefined, "summer-slide-3": imageFor("summer-slide-3", familyImage) ?? undefined }} />
 
@@ -203,6 +261,32 @@ export default function Home() {
           <div className="care-image" style={bgStyle("home-family", familyImage)}><span>03 / FAMILY CARE</span></div>
           <div className="care-copy-panel"><div className="care-sun-stamp" aria-hidden="true"><span>FAMILY<br />CARE</span></div><p className="eyebrow">ГЭР БҮЛИЙН ӨДӨР БҮРТ</p><h2>Багахан <em>итгэл.</em><br />Их халамж.</h2><p>Бидний сонголт зөвхөн бүтээгдэхүүн биш. Таны гэр бүлийн өдөр тутмын амар тайван байдал, итгэл, халамж юм.</p><div className="care-points"><div><CircleCheck size={17} /> Баталгаат Япон бүтээгдэхүүн</div><div><CircleCheck size={17} /> Гэр бүл бүрт зориулсан сонголт</div><div><CircleCheck size={17} /> Storepay-ээр төлөх боломжтой</div></div><div className="storepay-note"><strong>Storepay</strong><span>Хэрэгтэй зүйлээ өнөөдөр сонгоод,<br />төлбөрөө өөрт тохиромжтой хуваарил.</span></div></div>
         </section>
+
+        {/* matsukiyococokara-online.com's お役立ち情報 (useful info) rail —
+            the content/post system already exists (admin can write + publish
+            a post, PostDetail.tsx renders it at /:slug); nothing ever
+            surfaced it on the homepage until now. Hidden entirely, same
+            empty-state discipline as the bestseller rail above, until an
+            admin has actually published something. */}
+        {latestPosts.length > 0 && (
+          <section className="home-news-section page-section" data-reveal>
+            <div className="section-heading section-heading-light"><span>05</span><span><Newspaper size={13} /> SUGI JOURNAL</span></div>
+            <div className="home-news-heading"><h2>Зөвлөгөө ба <em>мэдээ.</em></h2><Link href="/shop" className="quiet-link home-news-all">Бүх нийтлэл <ChevronRight size={16} /></Link></div>
+            <div className="home-news-grid">
+              {latestPosts.map(post => (
+                <Link href={`/${post.slug}`} className="home-news-card" key={post.id}>
+                  {post.coverImageUrl && <img src={post.coverImageUrl} alt="" />}
+                  <div>
+                    <span>{post.publishedAt ? new Date(post.publishedAt).toLocaleDateString("mn-MN") : ""}</span>
+                    <h3>{post.title}</h3>
+                    {post.excerpt && <p>{post.excerpt}</p>}
+                    <em>Дэлгэрэнгүй унших <ArrowUpRight size={14} /></em>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section className="locations-section page-section" id="stores" data-reveal>
           <div className="locations-copy"><div className="section-heading"><span>04</span><span>FIND YOUR ASAYAKE</span></div><p className="eyebrow"><Navigation size={14} /> 3 БАЙРШИЛ</p><h2>Танд ойрхон<br /><em>салбар дээр.</em></h2><p className="locations-lede">Улаанбаатарын өөр өөр цэгүүдэд япон чанарыг танд ойртуулж байна.</p><a className="button button-primary" href="tel:94509911">9450-9911 руу залгах <Phone size={15} /></a></div>

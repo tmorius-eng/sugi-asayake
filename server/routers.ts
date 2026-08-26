@@ -70,6 +70,7 @@ import {
   getProductReviews,
   getProductStockQuantity,
   getProductWriteConflicts,
+  getBestsellingProducts,
   getPublishedCatalog,
   searchPublishedCatalog,
   getPublishedRoutineBySlug,
@@ -619,6 +620,9 @@ export const appRouter = router({
     // public, since it's meaningless without a saved preference profile to
     // match against (a guest has none).
     recommended: protectedProcedure.query(({ ctx }) => getRecommendedProducts(ctx.user.id)),
+    // Homepage "Их зарагддаг бараа" rail — real paid-order history, not a
+    // manually curated list. See getBestsellingProducts.
+    bestsellers: publicProcedure.query(() => getBestsellingProducts(8)),
   }),
   // PREMIUM-FEATURES.md TIER 5: cumulative-spend loyalty tiers (mirrors
   // Tom's Smart POS in-store membership card — see shared/loyalty.ts).

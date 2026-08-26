@@ -1,7 +1,8 @@
-import { ArrowLeft, MailWarning, ShoppingBag, User } from "lucide-react";
+import { ArrowLeft, Heart, MailWarning, ShoppingBag, User } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import HeaderSearch from "@/components/HeaderSearch";
+import { trpc } from "@/lib/trpc";
 
 type CommerceHeaderProps = {
   cartCount?: number;
@@ -29,6 +30,13 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
   const { user } = useAuth();
   const [location] = useLocation();
   const initial = user?.name?.trim()?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? null;
+  // matsukiyococokara-online.com's header utility row (recently viewed /
+  // store locator / favorites / cart, each with a visible count) —
+  // wishlist is the one of those four SUGI ASAYAKE has that wasn't
+  // reachable from outside /profile at all before this. Query only runs
+  // when signed in: a guest has no wishlist to count.
+  const wishlistQuery = trpc.profile.wishlist.list.useQuery(undefined, { enabled: Boolean(user) });
+  const wishlistCount = wishlistQuery.data?.length ?? 0;
 
   return (
     <>
@@ -43,6 +51,12 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
           <div className="commerce-header-actions">
             <HeaderSearch />
             <Link href="/shop" className={location.startsWith("/shop") ? "is-current" : ""}>Дэлгүүр</Link>
+            {user && (
+              <Link href="/profile?tab=wishlist" className="wishlist-link" aria-label={wishlistCount > 0 ? `Хүслийн жагсаалт, ${wishlistCount} бараатай` : "Хүслийн жагсаалт"}>
+                <Heart size={15} aria-hidden="true" /> Хүслийн жагсаалт
+                {wishlistCount > 0 && <span className="grid size-5 place-items-center rounded-full bg-[#f0b52d] text-[10px] text-[#17181b]">{wishlistCount}</span>}
+              </Link>
+            )}
             {/* Order history lives inside Профайл -> Захиалга (with a
                 buy-again + status timeline the old standalone "Миний
                 захиалга" link didn't have) — one nav entry into the account
