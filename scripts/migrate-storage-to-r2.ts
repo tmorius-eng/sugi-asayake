@@ -31,6 +31,13 @@ const SOURCE_ENDPOINT = process.env.SOURCE_S3_ENDPOINT || "http://127.0.0.1:9000
 const SOURCE_BUCKET = process.env.SOURCE_S3_BUCKET || "sugi-asayake";
 const SOURCE_ACCESS_KEY_ID = process.env.SOURCE_S3_ACCESS_KEY_ID || "minioadmin";
 const SOURCE_SECRET_ACCESS_KEY = process.env.SOURCE_S3_SECRET_ACCESS_KEY || "minioadmin";
+// CLAUDE.md's 2026-08-20 note: some local MinIO buckets on this project were
+// created back when the region was mistakenly set to "Mongolia" instead of
+// the standard "us-east-1" -- ListObjectsV2 rejects a signature signed for
+// the wrong region with AuthorizationHeaderMalformed. Override here if this
+// machine's bucket is one of those (the error message itself names the
+// region it expects).
+const SOURCE_REGION = process.env.SOURCE_S3_REGION || "us-east-1";
 
 async function main() {
   if (!ENV.s3Bucket || !ENV.s3AccessKeyId || !ENV.s3SecretAccessKey) {
@@ -45,7 +52,7 @@ async function main() {
   }
 
   const source = new S3Client({
-    region: "us-east-1",
+    region: SOURCE_REGION,
     endpoint: SOURCE_ENDPOINT,
     credentials: { accessKeyId: SOURCE_ACCESS_KEY_ID, secretAccessKey: SOURCE_SECRET_ACCESS_KEY },
   });

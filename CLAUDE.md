@@ -344,3 +344,17 @@ Tom "гэрийн болон ажлын laptop хоёрын MinIO-ийн дат�
 4. Үүний дараа хоёр laptop **нэг ижил R2 bucket**-ыг ашиглах болно — цаашид аль нэг компьютер дээр зураг upload хийвэл нөгөө компьютер дээрээс шууд харагдана, ямар ч sync/зөөлт шаардлагагүй.
 
 **Аюулгүй байдлын тэмдэглэл**: `.env` хэвээрээ `.gitignore`-д (git-ээр дамжаагүй), R2 API token-ийг зөвхөн `sugi-asayake` bucket-д Object Read & Write эрхээр хязгаарласан (бусад Cloudflare эрх байхгүй).
+
+### Ажлын laptop талын гүйцэтгэл (2026-08-26, энэ session)
+Дээрх TODO-г Tom чатаар шууд бодит R2 credential-уудыг (Access Key ID/Secret Access Key) илгээж гүйцэтгүүлсэн:
+1. `git pull` (энэ commit-уудыг татсан, `scripts/migrate-storage-to-r2.ts` авсан).
+2. `.env`-ийн S3_* мөрүүдийг яг CLAUDE.md-д бичигдсэн R2 утгуудаар сольсон.
+3. **⚠️ Шинэ bug олж заслаа**: `scripts/migrate-storage-to-r2.ts`-ийн source client `region: "us-east-1"` гэж хатуу бичигдсэн байсан ч, энэ (ажлын) laptop-ийн локал MinIO bucket 2026-08-20-ний өмнөх "Mongolia" region bug-тай хэвээр байсан тул `AuthorizationHeaderMalformed` алдаа өгсөн. Script-д `SOURCE_S3_REGION` env override нэмж (`SOURCE_S3_ENDPOINT`/`SOURCE_S3_BUCKET`-тай ижил зарчмаар) засав — ирээдүйд өөр компьютер дээр ижил "Mongolia" region bug гарвал `SOURCE_S3_REGION=Mongolia pnpm exec tsx scripts/migrate-storage-to-r2.ts`-аар ажиллуулж болно.
+4. `pnpm install` (шинэ dependency-уудыг, тухайлбал `sharp`, татаж авсан) + `drizzle/0027_catalog_fulltext_search.sql` migration-ыг гараар ажиллуулсан (drizzle-kit push автоматаар ажилладаггүй тул).
+5. Migration script ажиллуулж **88/88 объект R2 рүү 0 алдаагүй хуулагдсаныг** баталгаажуулсан (энэ laptop дээрх локал MinIO bucket, өмнө нь энэ session дотор өөрөө шалгасан "зөвхөн 82 объект, бодит 937 барааны зураг байхгүй" гэсэн тэмдэглэлтэй нийцнэ — өөрөөр хэлбэл энэ machine ч бас бодит 937 барааны зургийг агуулаагүй байсан, гэхдээ MinIO-той ажиллаж байсан бол логотой, symbol-той, avatar-той л байсан бөгөөд тэдгээрийг R2 рүү хуулав).
+6. Бодит dev server-ээр `/manus-storage/...` → R2 public URL → 200 (лого болон жинхэнэ бүтээгдэхүүний зураг хоёуланг нь) end-to-end баталгаажуулсан, Playwright screenshot-оор ProductDetail хуудсан дээр R2-оос ирсэн жинхэнэ зураг харагдаж байгааг харсан.
+7. Бүх integration gate идэвхтэй `pnpm exec vitest run --no-file-parallelism` R2-той **128/128 цэвэр** давхар баталгаажуулсан (гэрийн laptop-той яг ижил тоо).
+8. `pnpm build` цэвэр.
+9. Локал MinIO болон dev server процессуудыг зогсоосон (Tom-ийн заасанчлан "локал MinIO-г ажлын laptop-т сервер асаах шаардлагагүй" — гэхдээ `C:\minio\data`-г устгаагүй, зөвхөн процессыг зогсоосон).
+
+Одоо хоёр laptop **нэг ижил R2 bucket**-ыг ашиглаж байна.
