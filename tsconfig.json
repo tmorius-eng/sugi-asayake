@@ -14,6 +14,18 @@
     "allowImportingTsExtensions": true,
     "moduleResolution": "bundler",
     "baseUrl": ".",
+    // TypeScript flags `baseUrl` as deprecated ahead of its removal in a
+    // future major version -- this repo still relies on it for the @/ and
+    // @shared/ path aliases below, matching Vite's own resolve.alias in
+    // vite.config.ts, so silencing the warning now rather than migrating
+    // off it (a real migration is its own task, not a one-line fix). "5.0"
+    // is the value this project's actual installed TypeScript (5.9.3)
+    // accepts -- VS Code's editor panel may suggest "6.0" instead if its
+    // bundled/global TS version differs from the workspace's; if the
+    // Problems panel still shows the notice after this, switch VS Code to
+    // "Use Workspace Version" for TypeScript (Ctrl+Shift+P -> "TypeScript:
+    // Select TypeScript Version") rather than bumping this value.
+    "ignoreDeprecations": "5.0",
     "types": ["node", "vite/client"],
     "paths": {
       "@/*": ["./client/src/*"],
