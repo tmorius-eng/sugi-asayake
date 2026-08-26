@@ -21,6 +21,7 @@ import {
   createAdminCategory,
   createAdminPost,
   createAdminProduct,
+  createAdminProductVariant,
   createAdminDiscountCode,
   createAdminRoutine,
   createAdminSitePromotion,
@@ -46,6 +47,7 @@ import {
   discountCodeExists,
   deleteAdminPost,
   deleteAdminProduct,
+  deleteAdminProductVariant,
   getActiveSitePromotion,
   getAdminAuditLogs,
   getAdminDiscountCodes,
@@ -56,6 +58,7 @@ import {
   getAdminOrders,
   getAdminPosts,
   getAdminProducts,
+  getAdminProductVariants,
   getAdminReviews,
   getAdminRoutineDetail,
   getAdminRoutines,
@@ -97,6 +100,7 @@ import {
   getUserAddresses,
   routineSlugExists,
   validateDiscountCode,
+  variantSkuExists,
   setReviewApproval,
   setRoutineSteps,
   suspendUser,
@@ -107,6 +111,7 @@ import {
   updateAdminOrder,
   updateAdminPost,
   updateAdminProduct,
+  updateAdminProductVariant,
   updateAdminDiscountCode,
   updateAdminRoutine,
   updateAdminSitePromotion,
@@ -168,6 +173,23 @@ const productWriteSchema = z.object({
   skinConcerns: skinConcernsSchema,
   interiorStyle: interiorStyleSchema,
 });
+
+// Product variants -- PHASE 1, additive only (see drizzle/schema.ts).
+const productVariantBaseSchema = z.object({
+  productId: z.number().int().positive(),
+  sku: z.string().trim().min(2).max(80),
+  attributes: z.record(z.string().max(40), z.string().max(120)).nullable().optional(),
+  priceMnt: z.number().int().min(0).max(100_000_000),
+  compareAtPriceMnt: z.number().int().min(0).max(100_000_000).nullable().optional(),
+  stockQuantity: z.number().int().min(0).max(1_000_000),
+  imageUrl: nullableText(1_000),
+  isDefault: z.boolean().optional(),
+});
+const productVariantWriteSchema = productVariantBaseSchema;
+const productVariantUpdateSchema = productVariantBaseSchema.partial().extend({ id: z.number().int().positive() }).refine(
+  value => Object.keys(value).some(key => key !== "id"),
+  { message: "Provide at least one variant field to update." },
+);
 
 const categoryWriteSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -1202,6 +1224,32 @@ export const appRouter = router({
       const result = await deleteAdminProduct(input.id);
       await logAdminAction({ actorUserId: ctx.user.id, action: "product.deleted", entityType: "product", entityId: input.id });
       return result;
+    }),
+    // Product variants -- PHASE 1 (additive only, see the long comment on
+    // productVariants in drizzle/schema.ts). Nothing in cart/checkout/orders
+    // reads this table yet.
+    productVariants: staffProcedure.input(z.object({ productId: z.number().int().positive() })).query(({ input }) => getAdminProductVariants(input.productId)),
+    createProductVariant: staffProcedure.input(productVariantWriteSchema).mutation(async ({ ctx, input }) => {
+      if (await variantSkuExists(input.sku)) throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ SKU/баркод өмнө нь ашиглагдсан байна." });
+      const variants = await createAdminProductVariant(input);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "product_variant.created", entityType: "product", entityId: input.productId, metadata: { sku: input.sku } });
+      return variants;
+    }),
+    updateProductVariant: staffProcedure.input(productVariantUpdateSchema).mutation(async ({ ctx, input }) => {
+      const { id, ...changes } = input;
+      if (changes.sku && await variantSkuExists(changes.sku, id)) throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ SKU/баркод өмнө нь ашиглагдсан байна." });
+      const variants = await updateAdminProductVariant({ id, ...changes });
+      await logAdminAction({ actorUserId: ctx.user.id, action: "product_variant.updated", entityType: "product", entityId: id });
+      return variants;
+    }),
+    deleteProductVariant: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      try {
+        const result = await deleteAdminProductVariant(input.id);
+        await logAdminAction({ actorUserId: ctx.user.id, action: "product_variant.deleted", entityType: "product", entityId: input.id });
+        return result;
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Variant устгаж чадсангүй." });
+      }
     }),
     // PREMIUM-FEATURES.md TIER 2: lightweight moderation — a flat list an
     // admin/staff can filter through, not a pre-publish approval queue

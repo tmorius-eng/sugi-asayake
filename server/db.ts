@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gte, inArray, isNull, like, lt, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { adminAuditLogs, cartItems, carts, discountCodes, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, integrationConfigs, loginAttempts, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, productReviews, products, routines, routineSteps, siteMedia, sitePromotions, staffInvitations, userAddresses, users, wishlistItems } from "../drizzle/schema";
+import { adminAuditLogs, cartItems, carts, discountCodes, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, integrationConfigs, loginAttempts, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, productReviews, productVariants, products, routines, routineSteps, siteMedia, sitePromotions, staffInvitations, userAddresses, users, wishlistItems } from "../drizzle/schema";
 import { UB_DELIVERY_FEE_MNT } from "../shared/const";
 import { decryptJson, encryptJson } from "./_core/crypto";
 import { ENV } from './_core/env';
@@ -2046,4 +2046,96 @@ export async function updateAdminIntegration(input: { provider: IntegrationProvi
   }
   const [result] = await getAdminIntegrations().then(rows => rows.filter(row => row.provider === input.provider));
   return result;
+}
+
+/**
+ * Product variants — PHASE 1 (see the long comment on productVariants in
+ * drizzle/schema.ts). Purely additive: admin can view/create/edit/delete
+ * variants here, but nothing in cart/checkout/orders reads this table yet
+ * — products.priceMnt/stockQuantity/sku remain what's actually sold.
+ */
+export async function getAdminProductVariants(productId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(productVariants).where(eq(productVariants.productId, productId)).orderBy(desc(productVariants.isDefault), asc(productVariants.id));
+}
+
+/** A variant SKU must be globally unique across the whole catalog (real
+ *  barcodes are physically unique) — checked against both this table and
+ *  products.sku, not just sibling variants. */
+export async function variantSkuExists(sku: string, excludeVariantId?: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const productConflict = await db.select({ id: products.id }).from(products).where(eq(products.sku, sku)).limit(1);
+  if (productConflict[0]) return true;
+  const variantConflict = await db.select({ id: productVariants.id }).from(productVariants).where(eq(productVariants.sku, sku)).limit(1);
+  return Boolean(variantConflict[0] && variantConflict[0].id !== excludeVariantId);
+}
+
+export type ProductVariantWriteInput = {
+  productId: number;
+  sku: string;
+  attributes?: Record<string, string> | null;
+  priceMnt: number;
+  compareAtPriceMnt?: number | null;
+  stockQuantity: number;
+  imageUrl?: string | null;
+  isDefault?: boolean;
+};
+
+export async function createAdminProductVariant(input: ProductVariantWriteInput) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.transaction(async tx => {
+    if (input.isDefault) await tx.update(productVariants).set({ isDefault: false }).where(eq(productVariants.productId, input.productId));
+    await tx.insert(productVariants).values({
+      productId: input.productId,
+      sku: input.sku,
+      attributesJson: input.attributes ? JSON.stringify(input.attributes) : null,
+      priceMnt: input.priceMnt,
+      compareAtPriceMnt: input.compareAtPriceMnt ?? null,
+      stockQuantity: input.stockQuantity,
+      imageUrl: input.imageUrl ?? null,
+      isDefault: input.isDefault ?? false,
+    });
+  });
+  return getAdminProductVariants(input.productId);
+}
+
+export async function updateAdminProductVariant(input: { id: number } & Partial<ProductVariantWriteInput>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const existing = await db.select().from(productVariants).where(eq(productVariants.id, input.id)).limit(1);
+  if (!existing[0]) throw new Error("Variant not found.");
+  const productId = input.productId ?? existing[0].productId;
+  await db.transaction(async tx => {
+    if (input.isDefault) await tx.update(productVariants).set({ isDefault: false }).where(and(eq(productVariants.productId, productId), sql`${productVariants.id} != ${input.id}`));
+    const patch: Record<string, unknown> = { updatedAt: new Date() };
+    if (input.sku !== undefined) patch.sku = input.sku;
+    if (input.attributes !== undefined) patch.attributesJson = input.attributes ? JSON.stringify(input.attributes) : null;
+    if (input.priceMnt !== undefined) patch.priceMnt = input.priceMnt;
+    if (input.compareAtPriceMnt !== undefined) patch.compareAtPriceMnt = input.compareAtPriceMnt;
+    if (input.stockQuantity !== undefined) patch.stockQuantity = input.stockQuantity;
+    if (input.imageUrl !== undefined) patch.imageUrl = input.imageUrl;
+    if (input.isDefault !== undefined) patch.isDefault = input.isDefault;
+    await tx.update(productVariants).set(patch).where(eq(productVariants.id, input.id));
+  });
+  return getAdminProductVariants(productId);
+}
+
+/** Refuses to delete a product's last remaining variant — every product
+ *  must keep at least one (Phase 2 will need a default to fall back to). */
+export async function deleteAdminProductVariant(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const existing = await db.select().from(productVariants).where(eq(productVariants.id, id)).limit(1);
+  if (!existing[0]) throw new Error("Variant not found.");
+  const siblings = await db.select({ id: productVariants.id }).from(productVariants).where(eq(productVariants.productId, existing[0].productId));
+  if (siblings.length <= 1) throw new Error("Барааны сүүлийн variant-ыг устгах боломжгүй — бараа наад зах нь нэг variant-тай байх ёстой.");
+  await db.delete(productVariants).where(eq(productVariants.id, id));
+  if (existing[0].isDefault) {
+    const [nextDefault] = await db.select({ id: productVariants.id }).from(productVariants).where(eq(productVariants.productId, existing[0].productId)).orderBy(asc(productVariants.id)).limit(1);
+    if (nextDefault) await db.update(productVariants).set({ isDefault: true }).where(eq(productVariants.id, nextDefault.id));
+  }
+  return { id };
 }

@@ -189,6 +189,52 @@ export const products = mysqlTable("products", {
   index("products_published_idx").on(table.isPublished),
 ]);
 
+/**
+ * Product variants (PHASE 1 — additive, zero behavior change to the live
+ * storefront). Tom's real POS-imported catalog already models size/color
+ * options as fully separate `products` rows (their own barcode/SKU), so
+ * introducing a *relational* variant layer on top of 937 live products with
+ * real cart/order/review/loyalty history is a genuinely risky migration —
+ * done deliberately in phases rather than one big-bang cutover:
+ *
+ * Phase 1 (this table): every existing product gets exactly one
+ * auto-created variant (its own sku/price/stock, isDefault=true) via a
+ * one-time backfill (see the 0030 migration). `products.priceMnt`/
+ * `stockQuantity`/`sku` REMAIN the source of truth for cart/checkout/
+ * orders/reviews/loyalty/routines — none of that code changes in this
+ * phase. This table exists so an admin can start attaching *additional*
+ * variants (e.g. a 400ml option next to an existing 170ml product) and see
+ * them, without any risk to what's already live.
+ *
+ * Phase 2 (future, NOT done here): wire cart_items/order_items/
+ * wishlist_items/product_reviews to reference a variantId, so a shopper can
+ * actually choose and buy a non-default variant. That phase touches
+ * checkout/cart/order-history/loyalty-spend/routine logic throughout the
+ * app and needs its own careful pass + full regression testing — do not
+ * assume it's done just because this table exists.
+ */
+export const productVariants = mysqlTable("product_variants", {
+  id: int("id").autoincrement().primaryKey(),
+  productId: int("productId").notNull().references(() => products.id, { onDelete: "cascade" }),
+  sku: varchar("sku", { length: 80 }).notNull().unique(),
+  // Free-form key-value pairs (e.g. {"Хэмжээ": "400мл"} or {"Өнгө": "Хар",
+  // "Хэмжээ": "M"}) rather than fixed color/size columns — different
+  // product families (skincare vs. interior goods) use different
+  // attribute vocabularies, and a fixed column set would fit neither well.
+  attributesJson: text("attributesJson"),
+  priceMnt: int("priceMnt").notNull(),
+  compareAtPriceMnt: int("compareAtPriceMnt"),
+  stockQuantity: int("stockQuantity").notNull().default(0),
+  imageUrl: text("imageUrl"),
+  isDefault: boolean("isDefault").notNull().default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  index("product_variants_product_idx").on(table.productId),
+]);
+export type ProductVariant = typeof productVariants.$inferSelect;
+export type InsertProductVariant = typeof productVariants.$inferInsert;
+
 export const carts = mysqlTable("carts", {
   id: int("id").autoincrement().primaryKey(),
   // Exactly one of userId / guestToken is set. Nullable (guest checkout):
