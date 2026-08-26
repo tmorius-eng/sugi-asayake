@@ -51,4 +51,10 @@ export const ENV = {
   brevoSmsSender: process.env.BREVO_SMS_SENDER ?? "SUGI",
 
   isProduction: process.env.NODE_ENV === "production",
+
+  // Encrypts admin-entered third-party provider credentials at rest (see
+  // integration_configs table / server/_core/crypto.ts) — a 64-character hex
+  // string (32 bytes) for AES-256-GCM. Generate one with:
+  //   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+  integrationsEncryptionKey: process.env.INTEGRATIONS_ENCRYPTION_KEY ?? "",
 };

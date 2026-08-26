@@ -1,7 +1,8 @@
 import { and, asc, desc, eq, gte, inArray, isNull, like, lt, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { adminAuditLogs, cartItems, carts, discountCodes, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, loginAttempts, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, productReviews, products, routines, routineSteps, siteMedia, sitePromotions, staffInvitations, userAddresses, users, wishlistItems } from "../drizzle/schema";
+import { adminAuditLogs, cartItems, carts, discountCodes, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, integrationConfigs, loginAttempts, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, productReviews, products, routines, routineSteps, siteMedia, sitePromotions, staffInvitations, userAddresses, users, wishlistItems } from "../drizzle/schema";
 import { UB_DELIVERY_FEE_MNT } from "../shared/const";
+import { decryptJson, encryptJson } from "./_core/crypto";
 import { ENV } from './_core/env';
 import { getInventoryReservationFailure, shouldRestoreStock } from "./commerce-lifecycle";
 import { getLoyaltyTier, getNextLoyaltyTier } from "../shared/loyalty";
@@ -1991,4 +1992,58 @@ export async function updateAdminUserRole(input: { userId: number; role: "user" 
   if (!user[0]) throw new Error("User not found.");
   await db.update(users).set({ role: input.role, updatedAt: new Date() }).where(eq(users.id, input.userId));
   return { ...user[0], role: input.role };
+}
+
+/**
+ * Admin-manageable third-party provider config (eBarimt/StorePay/Golomt
+ * card/eBuuhia courier — see integrationConfigs in drizzle/schema.ts).
+ * QPay is deliberately not part of this: it already works end-to-end from
+ * process.env (server/qpay.ts) and isn't retrofitted here.
+ */
+const INTEGRATION_PROVIDERS = ["ebarimt", "storepay", "card_golomt", "courier_ebuuhia"] as const;
+export type IntegrationProvider = (typeof INTEGRATION_PROVIDERS)[number];
+
+/** Never returns decrypted credential values to the caller — only which
+ *  keys are set (`configuredKeys`), so the admin UI can show "3 талбар
+ *  тохируулагдсан" without ever re-exposing a saved secret. Credential
+ *  edits are write-only, the same principle as a password field. */
+export async function getAdminIntegrations() {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(integrationConfigs);
+  const byProvider = new Map(rows.map(row => [row.provider, row]));
+  return INTEGRATION_PROVIDERS.map(provider => {
+    const row = byProvider.get(provider);
+    let configuredKeys: string[] = [];
+    if (row?.encryptedConfig) {
+      try { configuredKeys = Object.keys(decryptJson(row.encryptedConfig)); } catch { configuredKeys = ["(тайлж чадсангүй)"]; }
+    }
+    return {
+      provider,
+      isActive: row?.isActive ?? false,
+      hasCredentials: Boolean(row?.encryptedConfig),
+      configuredKeys,
+      updatedAt: row?.updatedAt ?? null,
+    };
+  });
+}
+
+export async function updateAdminIntegration(input: { provider: IntegrationProvider; isActive?: boolean; config?: Record<string, string> }, updatedByUserId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const existing = await db.select({ id: integrationConfigs.id }).from(integrationConfigs).where(eq(integrationConfigs.provider, input.provider)).limit(1);
+  // Empty object from the client means "no new credentials typed this time"
+  // — leave whatever's already encrypted-and-stored untouched rather than
+  // wiping it, so toggling isActive alone never accidentally erases saved keys.
+  const encryptedConfig = input.config && Object.keys(input.config).length > 0 ? encryptJson(input.config) : undefined;
+  if (existing[0]) {
+    const patch: { isActive?: boolean; encryptedConfig?: string; updatedByUserId: number; updatedAt: Date } = { updatedByUserId, updatedAt: new Date() };
+    if (input.isActive !== undefined) patch.isActive = input.isActive;
+    if (encryptedConfig !== undefined) patch.encryptedConfig = encryptedConfig;
+    await db.update(integrationConfigs).set(patch).where(eq(integrationConfigs.id, existing[0].id));
+  } else {
+    await db.insert(integrationConfigs).values({ provider: input.provider, isActive: input.isActive ?? false, encryptedConfig: encryptedConfig ?? null, updatedByUserId });
+  }
+  const [result] = await getAdminIntegrations().then(rows => rows.filter(row => row.provider === input.provider));
+  return result;
 }

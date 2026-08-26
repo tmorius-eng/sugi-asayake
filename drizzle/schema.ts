@@ -609,3 +609,31 @@ export type SitePromotion = typeof sitePromotions.$inferSelect;
 export type InsertSitePromotion = typeof sitePromotions.$inferInsert;
 export type DiscountCode = typeof discountCodes.$inferSelect;
 export type InsertDiscountCode = typeof discountCodes.$inferInsert;
+
+/**
+ * Admin-manageable third-party provider config (eBarimt/StorePay/Golomt
+ * card/eBuuhia courier) — moves credentials out of .env into the DB so an
+ * admin can toggle a provider and paste in its API keys without a code
+ * deploy. Deliberately does NOT include "qpay": that integration already
+ * works end-to-end reading straight from process.env (see server/qpay.ts)
+ * and is left alone here rather than risking the one real, working payment
+ * path for a refactor with no functional upside yet — the admin panel shows
+ * QPay's status alongside these four, just sourced from its existing
+ * env-based availability check instead of this table.
+ * `encryptedConfig` is opaque ciphertext (see server/_core/crypto.ts) — the
+ * app never decrypts it back out to a client; admin credential edits are
+ * write-only, the same principle as a password field.
+ */
+export const integrationConfigs = mysqlTable("integration_configs", {
+  id: int("id").autoincrement().primaryKey(),
+  provider: mysqlEnum("provider", ["ebarimt", "storepay", "card_golomt", "courier_ebuuhia"]).notNull().unique(),
+  isActive: boolean("isActive").notNull().default(false),
+  encryptedConfig: text("encryptedConfig"),
+  // Nullable + SET NULL: this is an operational/audit trail field, not
+  // something that should block deleting the admin who last touched it.
+  updatedByUserId: int("updatedByUserId").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type IntegrationConfig = typeof integrationConfigs.$inferSelect;
+export type InsertIntegrationConfig = typeof integrationConfigs.$inferInsert;

@@ -49,6 +49,7 @@ import {
   getActiveSitePromotion,
   getAdminAuditLogs,
   getAdminDiscountCodes,
+  getAdminIntegrations,
   getAdminSitePromotions,
   getAdminCategories,
   getAdminDashboardSummary,
@@ -110,6 +111,7 @@ import {
   updateAdminRoutine,
   updateAdminSitePromotion,
   updateAdminUserRole,
+  updateAdminIntegration,
   updateUserLoyaltyAdjustment,
   updateCartItemQuantity,
   updateNotificationPreferences,
@@ -1038,6 +1040,20 @@ export const appRouter = router({
       if (!detail) throw new TRPCError({ code: "NOT_FOUND", message: "User not found." });
       await logAdminAction({ actorUserId: ctx.user.id, action: "user.loyalty_adjustment_updated", entityType: "user", entityId: input.userId, metadata: { adjustmentMnt: input.adjustmentMnt } });
       return detail;
+    }),
+    // Admin-manageable third-party provider config (eBarimt/StorePay/Golomt
+    // card/eBuuhia courier) -- adminProcedure, not staffProcedure, since
+    // these are financial/security-sensitive credentials. QPay isn't part
+    // of this (still env-based, see server/qpay.ts).
+    integrations: adminProcedure.query(() => getAdminIntegrations()),
+    updateIntegration: adminProcedure.input(z.object({
+      provider: z.enum(["ebarimt", "storepay", "card_golomt", "courier_ebuuhia"]),
+      isActive: z.boolean().optional(),
+      config: z.record(z.string().max(80), z.string().max(2_000)).optional(),
+    })).mutation(async ({ ctx, input }) => {
+      const result = await updateAdminIntegration(input, ctx.user.id);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "integration.updated", entityType: "integration", metadata: { provider: input.provider, isActive: input.isActive, credentialsChanged: Boolean(input.config && Object.keys(input.config).length > 0) } });
+      return result;
     }),
     suspendUser: adminProcedure.input(z.object({ userId: z.number().int().positive(), reason: z.string().trim().max(300).optional() })).mutation(async ({ ctx, input }) => {
       if (ctx.user.id === input.userId) throw new TRPCError({ code: "BAD_REQUEST", message: "You cannot suspend your own account." });

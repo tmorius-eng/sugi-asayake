@@ -375,3 +375,20 @@ Tom-ий хүсэлтээр: (1) Улаанбаатар хүргэлтийн ү�
 **Баталгаажуулалт**: `pnpm check`/`pnpm build` цэвэр, `pnpm exec vitest run --no-file-parallelism` (бүх integration gate идэвхтэй) **128/128 цэвэр**. Бодит dev server-ээр `/shop`-ийн хүргэлтийн badge 10,000₮ харуулж байгааг, admin панелийн захиалгын картанд "И-баримт: —" зөв харагдаж байгааг Playwright screenshot-оор баталгаажуулсан.
 
 **Дараагийн бодит алхам (код бичих ажил биш, Tom-ий хийх ёстой):** SmartSoftware POS нийлүүлэгчтэйгээ дээрх 6 асуултыг тодруулах яриа хийх → хариунаас нь Зам A/B шийдэх → дараа нь `server/ebarimt.ts`-ийг `server/qpay.ts`-ийн загвараар бичнэ. StorePay/карт/эльч хүргэлт тус бүрд Tom-ий тухайн компанитай биечлэн холбогдох шаардлагатай хэвээр.
+
+## 2026-08-26 (үргэлжлэл 3): Admin "Интеграцууд" панель — QPay-ээс бусад provider-уудын тохиргоог `.env`-ээс DB руу шилжүүлэв
+
+Tom нэг удаагийн cloud e-commerce архитектурын жишээ prompt (karkaron.com гэдэг зохиомол нэртэй, өөр төслийн загвар) илгээж, түүнээс SUGI ASAYAKE-д тохирох санааг ялгаж авахыг хүссэн. Харьцуулалт хийхэд prompt-д дурдсан зүйлсийн ихэнх нь (users, orders+state machine, marketing campaigns) SUGI дээр аль хэдийн байгааг олж, зөвхөн **3 жинхэнэ шинэ цоорхой** байгааг тодорхойлов: (1) admin-аас удирдах "Integrations Config" панель, (2) mass SMS/Email marketing campaign, (3) product variants (өнгө/хэмжээ). Tom эхлээд (1)-ээс эхлэхийг сонгов.
+
+**Хийсэн зүйлс:**
+- Шинэ `integration_configs` хүснэгт (`drizzle/0029_integration_configs.sql`) — provider (`ebarimt`/`storepay`/`card_golomt`/`courier_ebuuhia`, 4 ширхэг), `isActive`, `encryptedConfig`. **QPay зориудаар энд ороогүй** — тэр аль хэдийн `.env`-ээс бодитоор ажилладаг (`server/qpay.ts`) тул эрсдэлд оруулахгүйн тулд хөндөөгүй, зөвхөн unified admin дэлгэц дээр статусыг нь (тохируулагдсан эсэх) харуулна.
+- Шинэ `server/_core/crypto.ts` — AES-256-GCM (Node built-in, гадны dependency нэмээгүй, `password.ts`-ийн scrypt-той ижил зарчим). Түлхүүр `.env`-ийн `INTEGRATIONS_ENCRYPTION_KEY` (64 hex тэмдэгт) — DB болон .env хоёулаа алдвал л credential алдагдана (defense in depth).
+- **Нууц утгыг сервер хэзээ ч клиент рүү задалж буцаадаггүй** — зөвхөн ямар түлхүүрүүд (жишээ нь "apiKey", "posNumber") тохируулагдсаныг харуулна, утгыг нь биш (нууц үг талбартай адил зарчим). Admin шинэ утга бичихдээ хуучныг харахгүй, зөвхөн шинээр бичсэнээ хадгална.
+- `admin.integrations`/`admin.updateIntegration` — **`adminProcedure`** (staff биш, санхүү/аюулгүй байдлын мэдээлэл тул).
+- `AdminIntegrationsPanel.tsx` — QPay-ийн статик статус карт + 4 provider-ийн идэвхжүүлэх/унтраах товч + credential засах динамик key-value жагсаалт (AdminRoutinesPanel-ийн алхам editor-той ижил UX загвар).
+
+**⚠️ Тест хийх явцад бодит Tom-ийн `/admin`-аас панелийг өөрөө нээж туршиж байгааг олж харав** (audit log-оор баталгаажсан: user id=1, миний өөрийн screenshot script-оос ӨМНӨ eBarimt-д зүйл бичсэн байсан) — миний дараагийн automated screenshot script түүний оруулсан утгыг санамсаргүйгээр дарж бичсэн байв. Илрүүлмэгц `integration_configs` хүснэгтийг **бүрэн цэвэр (0 мөр) төлөвт нь буцааж**, зөвхөн миний өөрийн test debris-ийг (throwaway admin, audit log) устгасан — Tom-ийн бодит audit log мөрийг хөндөөгүй.
+
+**Баталгаажуулалт**: `pnpm check`/`pnpm build` цэвэр, шинэ `server/integrations.integration.test.ts` (6 тест — encryption round-trip, tamper-detection, staff хориглогдох, credential хэзээ ч задрахгүй, toggle нь credential устгахгүй) орсноор `pnpm exec vitest run --no-file-parallelism` **134/134 цэвэр**. Бодит HTTP+Playwright-ээр бүтэн урсгал (нэвтрэх→panel нээх→credential бичих→хадгалах→идэвхжүүлэх) шалгасан.
+
+**Дараагийн санал**: (2) mass SMS/Email marketing campaign, эсвэл (3) product variants — Tom-той дараагийн ярилцлагаар аль нэгийг сонгоно.
