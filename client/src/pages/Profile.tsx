@@ -35,7 +35,7 @@ const NAV_ITEMS: Array<{ key: TabKey; label: string; icon: typeof LayoutDashboar
   { key: "loyalty", label: "Гишүүнчлэлийн карт", icon: CreditCard },
 ];
 
-const ORDER_STATUS_LABEL: Record<string, string> = { pending: "Хүлээгдэж байна", confirmed: "Баталгаажсан", packed: "Бэлтгэж байна", out_for_delivery: "Хүргэлтэд гарсан", completed: "Дууссан", cancelled: "Цуцлагдсан" };
+const ORDER_STATUS_LABEL: Record<string, string> = { pending: "Хүлээгдэж байна", confirmed: "Баталгаажсан", packed: "Бэлтгэж байна", out_for_delivery: "Хүргэлтэд гарсан", completed: "Дууссан", cancelled: "Цуцлагдсан", returned: "Буцаагдсан" };
 const ORDER_STEPS: Array<{ key: string; label: string }> = [
   { key: "pending", label: "Хүлээгдэж байна" },
   { key: "confirmed", label: "Баталгаажсан" },

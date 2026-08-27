@@ -69,3 +69,11 @@ export const strictRateLimitedProtectedProcedure = protectedProcedure.use(strict
 // the strict tier gives.
 const moderateRateLimit = rateLimitMiddleware("moderate", 30, 15 * 60 * 1000);
 export const moderateRateLimitedProcedure = publicProcedure.use(moderateRateLimit);
+
+// Lenient tier (600 attempts/15min/IP): best-effort pageview telemetry
+// (Tier E analytics), fired on every route change. Deliberately its own
+// generous bucket, separate from the blanket 300/15min limitApiTraffic
+// budget every tRPC call already shares — this must never be the thing
+// that throttles a real shopper's cart/checkout calls from the same IP.
+const lenientRateLimit = rateLimitMiddleware("lenient", 600, 15 * 60 * 1000);
+export const lenientRateLimitedProcedure = publicProcedure.use(lenientRateLimit);

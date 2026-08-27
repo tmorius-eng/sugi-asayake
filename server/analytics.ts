@@ -9,8 +9,8 @@ import path from "node:path";
 import { and, desc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
-import { carts, cartItems, orderItems, orders, productCategories, products, users } from "../drizzle/schema";
-import { getDb } from "./db";
+import { carts, cartItems, orderItems, orders, productCategories, products, users, visitorSessions } from "../drizzle/schema";
+import { getDb, getMarketingSpendRows } from "./db";
 import { ubDistrictLabels, type UbDistrict } from "../shared/districts";
 import { LOYALTY_TIERS, getLoyaltyTier } from "../shared/loyalty";
 
@@ -502,12 +502,161 @@ export async function getPnlOverview(input: DateRangeInput = {}): Promise<PnlOve
   };
 }
 
+/** "YYYY-MM" for every calendar month between dateFrom and dateTo
+ *  inclusive -- e.g. a range spanning Aug 20 - Sep 5 returns ["2026-08",
+ *  "2026-09"], since marketing spend is only ever entered per whole month. */
+function enumerateMonthKeys(dateFrom: Date, dateTo: Date): string[] {
+  const keys: string[] = [];
+  const cursor = new Date(dateFrom.getFullYear(), dateFrom.getMonth(), 1);
+  const end = new Date(dateTo.getFullYear(), dateTo.getMonth(), 1);
+  while (cursor <= end) {
+    keys.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`);
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+  return keys;
+}
+
+/**
+ * CAC = total marketing spend for the period / new customers acquired in
+ * that same period (Tier F) -- the standard formula (Shopify/CFI/Yotpo all
+ * agree). "New" reuses getSalesOverview's own new-customer count (first-
+ * ever paid order falls inside the range) rather than re-deriving it.
+ * cacMnt is only ever set when EVERY calendar month touched by the range
+ * has an admin-entered marketing_spend row -- a missing month is reported
+ * as unavailable, never silently treated as ₮0 spend (the same "N of M"
+ * honesty discipline as getProfitOverview, adapted from item-coverage to
+ * month-coverage). "All time" has no bounded month list, so it's
+ * unavailable too -- same rule getPeriodComparison already uses.
+ */
+export type CacOverview = {
+  totalSpendMnt: number;
+  monthsWithSpendCount: number;
+  monthsInRangeCount: number;
+  newCustomerCount: number;
+  cacMnt: number | null;
+  unavailableReason: "all_time_not_supported" | "no_spend_entered" | "partial_months" | "no_new_customers" | null;
+};
+
+export async function getCacOverview(input: DateRangeInput = {}): Promise<CacOverview> {
+  const unavailable = (reason: NonNullable<CacOverview["unavailableReason"]>, extra: Partial<CacOverview> = {}): CacOverview => ({ totalSpendMnt: 0, monthsWithSpendCount: 0, monthsInRangeCount: 0, newCustomerCount: 0, cacMnt: null, unavailableReason: reason, ...extra });
+  if (!input.dateFrom) return unavailable("all_time_not_supported");
+  const db = await getDb();
+  if (!db) return unavailable("no_spend_entered");
+
+  const dateTo = input.dateTo ?? new Date();
+  const monthKeys = enumerateMonthKeys(input.dateFrom, dateTo);
+  const [spendRows, overview] = await Promise.all([getMarketingSpendRows(monthKeys), getSalesOverview(input)]);
+  const totalSpendMnt = spendRows.reduce((sum, row) => sum + row.spendMnt, 0);
+  const newCustomerCount = overview.newCustomerCount;
+
+  if (spendRows.length === 0) return unavailable("no_spend_entered", { monthsInRangeCount: monthKeys.length, newCustomerCount });
+  if (spendRows.length < monthKeys.length) return unavailable("partial_months", { totalSpendMnt, monthsWithSpendCount: spendRows.length, monthsInRangeCount: monthKeys.length, newCustomerCount });
+  if (newCustomerCount === 0) return unavailable("no_new_customers", { totalSpendMnt, monthsWithSpendCount: spendRows.length, monthsInRangeCount: monthKeys.length });
+
+  return { totalSpendMnt, monthsWithSpendCount: spendRows.length, monthsInRangeCount: monthKeys.length, newCustomerCount, cacMnt: Math.round(totalSpendMnt / newCustomerCount), unavailableReason: null };
+}
+
+/**
+ * Conversion Rate (Tier E) = orders ÷ sessions, the standard formula
+ * (Shopify's own published definition explicitly uses sessions, not unique
+ * visitors -- it reads lower on purpose). A session "converts" if it
+ * produced at least one paid order (server/routers.ts's checkout.createOrder
+ * resolves and stores the link at order time). Every order placed before
+ * this shipped has visitorSessionId=null forever -- trackingStartedAt lets
+ * the UI say "tracking started on X" for a range that predates the
+ * feature, rather than implying a real (near-zero) rate for it.
+ * conversionRatePercent is null whenever sessionsCount is 0 -- never a
+ * fabricated 0%.
+ */
+export type ConversionOverview = {
+  sessionsCount: number;
+  convertedSessionsCount: number;
+  conversionRatePercent: number | null;
+  trackingStartedAt: string | null;
+};
+
+export async function getConversionOverview(input: DateRangeInput = {}): Promise<ConversionOverview> {
+  const db = await getDb();
+  const empty: ConversionOverview = { sessionsCount: 0, convertedSessionsCount: 0, conversionRatePercent: null, trackingStartedAt: null };
+  if (!db) return empty;
+
+  const sessionConditions = [];
+  if (input.dateFrom) sessionConditions.push(gte(visitorSessions.createdAt, input.dateFrom));
+  if (input.dateTo) sessionConditions.push(lte(visitorSessions.createdAt, input.dateTo));
+
+  const [[sessionsRow], [convertedRow], [earliestRow]] = await Promise.all([
+    db.select({ count: sql<number>`count(*)` }).from(visitorSessions).where(sessionConditions.length ? and(...sessionConditions) : undefined),
+    db.select({ count: sql<number>`count(distinct ${orders.visitorSessionId})` })
+      .from(orders)
+      .innerJoin(visitorSessions, eq(orders.visitorSessionId, visitorSessions.id))
+      .where(and(eq(orders.paymentStatus, "paid"), ...sessionConditions)),
+    db.select({ earliest: sql<string | null>`min(${visitorSessions.createdAt})` }).from(visitorSessions),
+  ]);
+
+  const sessionsCount = Number(sessionsRow?.count ?? 0);
+  const convertedSessionsCount = Number(convertedRow?.count ?? 0);
+  return {
+    sessionsCount,
+    convertedSessionsCount,
+    conversionRatePercent: sessionsCount > 0 ? Math.round((convertedSessionsCount / sessionsCount) * 100) : null,
+    trackingStartedAt: earliestRow?.earliest ? new Date(earliestRow.earliest).toISOString() : null,
+  };
+}
+
+/**
+ * Return Rate (Tier G). By-order (not by-item -- this app has no per-line
+ * return granularity, and building that would be a much bigger lift than
+ * asked for), windowed by order-placement date (orders.createdAt) for BOTH
+ * the numerator and denominator -- same field every sibling function in
+ * this file uses, so the ratio stays coherent. Mixing in orders.returnedAt
+ * for only one half would let the "rate" exceed 100% or read near-zero
+ * purely because recent orders haven't had time to be returned yet.
+ * returnsProcessedInRangeCount is a deliberately separate, honestly-
+ * different figure ("how many returns did we process this period",
+ * windowed by returnedAt instead) -- never folded into the same ratio.
+ */
+export type ReturnRateOverview = {
+  returnRatePercent: number;
+  returnedOrderCount: number;
+  completedOrReturnedOrderCount: number;
+  returnsProcessedInRangeCount: number;
+};
+
+export async function getReturnRateOverview(input: DateRangeInput = {}): Promise<ReturnRateOverview> {
+  const db = await getDb();
+  const empty: ReturnRateOverview = { returnRatePercent: 0, returnedOrderCount: 0, completedOrReturnedOrderCount: 0, returnsProcessedInRangeCount: 0 };
+  if (!db) return empty;
+
+  const conditions = [eq(orders.paymentStatus, "paid"), ...dateRangeConditions(input)];
+  const [row] = await db
+    .select({
+      completedOrReturnedOrderCount: sql<number>`coalesce(sum(case when ${orders.status} in ('completed','returned') then 1 else 0 end), 0)`,
+      returnedOrderCount: sql<number>`coalesce(sum(case when ${orders.status} = 'returned' then 1 else 0 end), 0)`,
+    })
+    .from(orders)
+    .where(and(...conditions));
+
+  const returnedAtConditions = [isNotNull(orders.returnedAt)];
+  if (input.dateFrom) returnedAtConditions.push(gte(orders.returnedAt, input.dateFrom));
+  if (input.dateTo) returnedAtConditions.push(lte(orders.returnedAt, input.dateTo));
+  const [processedRow] = await db.select({ count: sql<number>`count(*)` }).from(orders).where(and(...returnedAtConditions));
+
+  const completedOrReturnedOrderCount = Number(row?.completedOrReturnedOrderCount ?? 0);
+  const returnedOrderCount = Number(row?.returnedOrderCount ?? 0);
+  return {
+    returnRatePercent: completedOrReturnedOrderCount > 0 ? Math.round((returnedOrderCount / completedOrReturnedOrderCount) * 100) : 0,
+    returnedOrderCount,
+    completedOrReturnedOrderCount,
+    returnsProcessedInRangeCount: Number(processedRow?.count ?? 0),
+  };
+}
+
 /** Bundles every section above into one payload — the admin analytics panel
  *  fetches this once per date-range change instead of firing 6 separate
  *  round trips, and the two export functions below render from the exact
  *  same object so the downloaded file always matches what's on screen. */
 export async function getAnalyticsReport(input: DateRangeInput = {}) {
-  const [overview, revenueTimeseries, topProducts, topCategories, districtBreakdown, demographics, loyaltyTiers, ordersByChannel, cartAbandonment, inventory, profit, traffic, periodComparison, pnl] = await Promise.all([
+  const [overview, revenueTimeseries, topProducts, topCategories, districtBreakdown, demographics, loyaltyTiers, ordersByChannel, cartAbandonment, inventory, profit, traffic, periodComparison, pnl, returnRate, cac, conversion] = await Promise.all([
     getSalesOverview(input),
     getRevenueTimeseries(input),
     getTopProducts({ ...input, limit: 15 }),
@@ -522,8 +671,11 @@ export async function getAnalyticsReport(input: DateRangeInput = {}) {
     getTrafficBreakdown(input),
     getPeriodComparison(input),
     getPnlOverview(input),
+    getReturnRateOverview(input),
+    getCacOverview(input),
+    getConversionOverview(input),
   ]);
-  return { overview, revenueTimeseries, topProducts, topCategories, districtBreakdown, demographics, loyaltyTiers, ordersByChannel, cartAbandonment, inventory, profit, traffic, periodComparison, pnl };
+  return { overview, revenueTimeseries, topProducts, topCategories, districtBreakdown, demographics, loyaltyTiers, ordersByChannel, cartAbandonment, inventory, profit, traffic, periodComparison, pnl, returnRate, cac, conversion };
 }
 
 type AnalyticsReport = Awaited<ReturnType<typeof getAnalyticsReport>>;
@@ -532,6 +684,16 @@ const rangeLabel = (input: DateRangeInput) => {
   const from = input.dateFrom ? input.dateFrom.toISOString().slice(0, 10) : "эхнээс нь";
   const to = input.dateTo ? input.dateTo.toISOString().slice(0, 10) : "өнөөдөр хүртэл";
   return `${from} — ${to}`;
+};
+
+const cacUnavailableLabel = (reason: CacOverview["unavailableReason"]) => {
+  switch (reason) {
+    case "all_time_not_supported": return "\"Бүх цаг үе\" сонголтод тодорхой хугацааны цонх байхгүй";
+    case "no_spend_entered": return "энэ хугацаанд зар сурталчилгааны зардал оруулаагүй";
+    case "partial_months": return "зарим сар(ууд)-д зардал оруулаагүй";
+    case "no_new_customers": return "энэ хугацаанд шинэ харилцагч алга";
+    default: return "мэдээлэл дутуу";
+  }
 };
 
 /** Multi-sheet workbook: одоо буцах өгөгдлийн бүх хэсэг тус тусдаа sheet
@@ -560,6 +722,25 @@ export async function exportAnalyticsExcel(report: AnalyticsReport, input: DateR
   overviewSheet.addRow(["Нөөцийн үнэ цэн (₮)", report.inventory.stockValueMnt]);
   overviewSheet.addRow(["Дууссан бараа", report.inventory.outOfStockCount]);
   overviewSheet.addRow(["Бага үлдэгдэлтэй бараа", report.inventory.lowStockCount]);
+  overviewSheet.addRow([]);
+  if (report.conversion.sessionsCount > 0) {
+    overviewSheet.addRow(["Хөрвүүлэлтийн хувь (%)", report.conversion.conversionRatePercent]);
+    overviewSheet.addRow(["Захиалга болсон / нийт сесс", `${report.conversion.convertedSessionsCount} / ${report.conversion.sessionsCount}`]);
+  } else {
+    overviewSheet.addRow([report.conversion.trackingStartedAt ? `Хөрвүүлэлтийн хувь: энэ хугацаанд сесс бүртгэгдээгүй (${report.conversion.trackingStartedAt.slice(0, 10)}-с хойш хэмжигдэж эхэлсэн)` : "Хөрвүүлэлтийн хувь: хараахан хэмжиж эхлээгүй байна"]);
+  }
+  overviewSheet.addRow([]);
+  overviewSheet.addRow(["Буцаалтын хувь (%)", report.returnRate.returnRatePercent]);
+  overviewSheet.addRow(["Буцаагдсан / дууссан+буцаагдсан захиалга", `${report.returnRate.returnedOrderCount} / ${report.returnRate.completedOrReturnedOrderCount}`]);
+  overviewSheet.addRow(["Энэ хугацаанд боловсруулсан буцаалт", report.returnRate.returnsProcessedInRangeCount]);
+  overviewSheet.addRow([]);
+  if (report.cac.cacMnt !== null) {
+    overviewSheet.addRow(["Нэг харилцагч татах зардал (CAC, ₮)", report.cac.cacMnt]);
+    overviewSheet.addRow(["Зар сурталчилгааны нийт зардал (₮)", report.cac.totalSpendMnt]);
+    overviewSheet.addRow(["Шинэ харилцагч (CAC-д ашигласан)", report.cac.newCustomerCount]);
+  } else {
+    overviewSheet.addRow([`CAC тооцоолох боломжгүй (${cacUnavailableLabel(report.cac.unavailableReason)})`]);
+  }
   overviewSheet.getColumn(1).width = 40;
 
   const revenueSheet = workbook.addWorksheet("Өдөр тутмын орлого");
@@ -689,6 +870,33 @@ export async function exportAnalyticsPdf(report: AnalyticsReport, input: DateRan
     doc.text(`Дууссан нөөц: ${report.inventory.outOfStockCount}`);
     doc.text(`Бага нөөц (≤5): ${report.inventory.lowStockCount}`);
     doc.text(`Нөөцийн үнэлгээ: ${formatMnt(report.inventory.stockValueMnt)}`);
+    doc.moveDown(1);
+
+    doc.font("Heading").fontSize(13).fillColor("#17181b").text("Хөрвүүлэлтийн хувь");
+    doc.font("Body").fontSize(10).fillColor("#3a3b3f");
+    if (report.conversion.sessionsCount > 0) {
+      doc.text(`Хөрвүүлэлтийн хувь: ${report.conversion.conversionRatePercent}% (${report.conversion.convertedSessionsCount} / ${report.conversion.sessionsCount} сесс)`);
+    } else if (report.conversion.trackingStartedAt) {
+      doc.text(`Энэ хугацаанд сесс бүртгэгдээгүй (${report.conversion.trackingStartedAt.slice(0, 10)}-с хойш хэмжигдэж эхэлсэн).`);
+    } else {
+      doc.text("Тодорхойгүй — хараахан хэмжиж эхлээгүй байна.");
+    }
+    doc.moveDown(1);
+
+    doc.font("Heading").fontSize(13).fillColor("#17181b").text("Буцаалт");
+    doc.font("Body").fontSize(10).fillColor("#3a3b3f");
+    doc.text(`Буцаалтын хувь: ${report.returnRate.returnRatePercent}% (${report.returnRate.returnedOrderCount} / ${report.returnRate.completedOrReturnedOrderCount} дууссан захиалга)`);
+    doc.text(`Энэ хугацаанд боловсруулсан буцаалт: ${report.returnRate.returnsProcessedInRangeCount}`);
+    doc.moveDown(1);
+
+    doc.font("Heading").fontSize(13).fillColor("#17181b").text("CAC (Нэг харилцагч татах зардал)");
+    doc.font("Body").fontSize(10).fillColor("#3a3b3f");
+    if (report.cac.cacMnt !== null) {
+      doc.text(`CAC: ${formatMnt(report.cac.cacMnt)} / шинэ харилцагч`);
+      doc.text(`Нийт зар сурталчилгааны зардал: ${formatMnt(report.cac.totalSpendMnt)} — Шинэ харилцагч: ${report.cac.newCustomerCount}`);
+    } else {
+      doc.text(`CAC тооцоолох боломжгүй: ${cacUnavailableLabel(report.cac.unavailableReason)}.`);
+    }
     doc.moveDown(1);
 
     doc.font("Heading").fontSize(13).fillColor("#17181b").text("Хүргэлт, төлбөрийн суваг");

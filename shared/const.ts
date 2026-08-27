@@ -1,6 +1,12 @@
 export const COOKIE_NAME = "app_session_id";
 /** Identifies an anonymous shopping cart (guest checkout) — see server/db.ts CartOwner. */
 export const GUEST_CART_COOKIE_NAME = "guest_cart_token";
+/** Tier E analytics: identifies an anonymous browsing session for Conversion
+ *  Rate tracking — see drizzle/schema.ts's visitorSessions and
+ *  server/routers.ts's telemetry.pageview. Deliberately a separate cookie
+ *  from both the auth session and the guest-cart token above (own concern,
+ *  own lifetime). */
+export const VISITOR_SESSION_COOKIE_NAME = "sugi_visitor_session";
 export const ONE_YEAR_MS = 1000 * 60 * 60 * 24 * 365;
 export const NINETY_DAYS_MS = 1000 * 60 * 60 * 24 * 90;
 export const AXIOS_TIMEOUT_MS = 30_000;

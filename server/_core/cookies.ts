@@ -37,3 +37,23 @@ export function getGuestCartCookieOptions(req: Request) {
     maxAge: NINETY_DAYS_MS,
   };
 }
+
+/**
+ * Cookie options for the anonymous visitor-session identifier (Tier E
+ * analytics — see shared/const.ts VISITOR_SESSION_COOKIE_NAME). A long,
+ * fixed lifetime on purpose: the real "session" boundary (30 minutes of
+ * inactivity) lives entirely in the DB-side lastSeenAt check in
+ * server/db.ts's resolvePageviewSession, not in cookie expiry — a cookie
+ * that itself expired mid-visit would otherwise incorrectly fragment one
+ * long continuous browsing session into several.
+ */
+export function getVisitorSessionCookieOptions(req: Request) {
+  const isHttps = req.protocol === "https";
+  return {
+    httpOnly: true,
+    secure: isHttps,
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: NINETY_DAYS_MS,
+  };
+}

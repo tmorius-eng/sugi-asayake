@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
-import { adminAuditLogs, orderItems, orders, productCategories, productVariants, products, users } from "../drizzle/schema";
+import { adminAuditLogs, marketingSpend, orderItems, orders, productCategories, productVariants, products, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
 import { getDb } from "./db";
 import { hashPassword } from "./_core/password";
@@ -74,6 +74,8 @@ describeWithDatabase("admin analytics integration", () => {
     await db.insert(orderItems).values({ orderId, productId, variantId, productName: "Analytics Test Toner", sku: `${marker}-sku`, unitPriceMnt: 25_000, quantity: 2 });
   });
 
+  let cacUserId = 0;
+
   afterAll(async () => {
     const db = await getDb();
     if (!db) return;
@@ -81,10 +83,12 @@ describeWithDatabase("admin analytics integration", () => {
       await db.delete(orderItems).where(inArray(orderItems.orderId, orderIds));
       await db.delete(orders).where(inArray(orders.id, orderIds));
     }
+    await db.delete(marketingSpend).where(eq(marketingSpend.monthKey, "2019-06"));
     if (productId) await db.delete(products).where(eq(products.id, productId)); // cascades the variant
     if (adminId) await db.delete(adminAuditLogs).where(eq(adminAuditLogs.actorUserId, adminId));
     if (adminId) await db.delete(users).where(eq(users.id, adminId));
     if (staffId) await db.delete(users).where(eq(users.id, staffId));
+    if (cacUserId) await db.delete(users).where(eq(users.id, cacUserId));
   });
 
   it("rejects staff (not just anonymous) from the analytics report and export", async () => {
@@ -196,5 +200,112 @@ describeWithDatabase("admin analytics integration", () => {
     const report = await adminCaller.admin.analyticsReport({});
     expect(report.traffic.sources.some(r => r.source === "instagram / paid")).toBe(true);
     expect(report.traffic.deviceTypes.some(r => r.device === "mobile" && r.orderCount >= 1)).toBe(true);
+  });
+
+  it("computes a real period-over-period comparison (Tier D), and reports unavailable for all-time", async () => {
+    const adminUser = { id: adminId, email: `${marker}-admin@example.invalid`, name: "Analytics Test Admin", role: "admin" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
+    const adminCaller = callerFor(adminUser);
+
+    // "All time" has no equal-length prior window -- same rule getSalesOverview
+    // already uses for new-vs-returning.
+    const allTimeReport = await adminCaller.admin.analyticsReport({});
+    expect(allTimeReport.periodComparison.available).toBe(false);
+    expect(allTimeReport.periodComparison.deltaPercent.revenueMnt).toBeNull();
+
+    const db = await getDb();
+    if (!db) throw new Error("Database unavailable");
+    const now = Date.now();
+    const currentFrom = new Date(now - 2 * 60 * 60 * 1000);
+    const currentTo = new Date(now);
+    const previousOrderAt = new Date(now - 3 * 60 * 60 * 1000); // inside the previous [now-4h, now-2h) window
+
+    const previousOrderInsert = await db.insert(orders).values({
+      orderNumber: `${marker.toUpperCase()}PREV`, status: "completed", paymentMethod: "cash_on_delivery", paymentStatus: "paid",
+      deliveryMethod: "store_pickup", pickupBranch: "Орос элчингийн салбар", customerName: "Period Test Previous", customerPhone: "88119944",
+      subtotalMnt: 40_000, totalMnt: 40_000, createdAt: previousOrderAt, updatedAt: previousOrderAt,
+    });
+    orderIds.push(Number(previousOrderInsert[0].insertId));
+
+    const report = await adminCaller.admin.analyticsReport({ dateFrom: currentFrom.toISOString(), dateTo: currentTo.toISOString() });
+    expect(report.periodComparison.available).toBe(true);
+    expect(report.periodComparison.previous!.revenueMnt).toBeGreaterThanOrEqual(40_000);
+    // Only null when previous is exactly 0 -- just proved it's >0 above.
+    expect(report.periodComparison.deltaPercent.revenueMnt).not.toBeNull();
+  });
+
+  it("computes a real CAC once spend is entered for every touched month, and reports unavailable when it's missing (Tier F)", async () => {
+    const adminUser = { id: adminId, email: `${marker}-admin@example.invalid`, name: "Analytics Test Admin", role: "admin" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
+    const adminCaller = callerFor(adminUser);
+
+    // A month far enough in the past that nothing else in a shared dev DB
+    // could plausibly already have an entry for it.
+    const testMonthFrom = new Date(2019, 5, 1);
+    const testMonthTo = new Date(2019, 5, 30, 23, 59, 59);
+
+    const noSpendReport = await adminCaller.admin.analyticsReport({ dateFrom: testMonthFrom.toISOString(), dateTo: testMonthTo.toISOString() });
+    expect(noSpendReport.cac.cacMnt).toBeNull();
+    expect(noSpendReport.cac.unavailableReason).toBe("no_spend_entered");
+
+    const db = await getDb();
+    if (!db) throw new Error("Database unavailable");
+    // A fresh customer whose one-and-only paid order falls inside the test
+    // month -- unambiguously "new" within this exact window.
+    const cacCustomerInsert = await db.insert(users).values({ email: `${marker}-cac-customer@example.invalid`, passwordHash: await hashPassword("CacTestCustomer1!"), name: "CAC Test Customer", role: "user", emailVerifiedAt: new Date() });
+    cacUserId = Number(cacCustomerInsert[0].insertId);
+    const cacOrderAt = new Date(2019, 5, 15);
+    const cacOrderInsert = await db.insert(orders).values({
+      userId: cacUserId, orderNumber: `${marker.toUpperCase()}CAC`, status: "completed", paymentMethod: "cash_on_delivery", paymentStatus: "paid",
+      deliveryMethod: "store_pickup", pickupBranch: "Орос элчингийн салбар", customerName: "CAC Test Customer", customerPhone: "88119900",
+      subtotalMnt: 30_000, totalMnt: 30_000, createdAt: cacOrderAt, updatedAt: cacOrderAt,
+    });
+    orderIds.push(Number(cacOrderInsert[0].insertId));
+
+    await adminCaller.admin.updateMarketingSpend({ monthKey: "2019-06", spendMnt: 90_000 });
+
+    const report = await adminCaller.admin.analyticsReport({ dateFrom: testMonthFrom.toISOString(), dateTo: testMonthTo.toISOString() });
+    expect(report.cac.unavailableReason).toBeNull();
+    expect(report.cac.newCustomerCount).toBeGreaterThanOrEqual(1);
+    expect(report.cac.totalSpendMnt).toBe(90_000);
+    expect(report.cac.cacMnt).toBe(Math.round(90_000 / report.cac.newCustomerCount));
+  });
+
+  it("marks a non-QPay order paid the moment it's completed (Tier I fix), and computes return rate (Tier G)", async () => {
+    const adminUser = { id: adminId, email: `${marker}-admin@example.invalid`, name: "Analytics Test Admin", role: "admin" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
+    const adminCaller = callerFor(adminUser);
+    const db = await getDb();
+    if (!db) throw new Error("Database unavailable");
+
+    // Tier I: cash_on_delivery never became paymentStatus="paid" anywhere in
+    // the codebase before this fix (only the QPay webhook ever wrote "paid").
+    const codOrderInsert = await db.insert(orders).values({
+      orderNumber: `${marker.toUpperCase()}COD`, status: "confirmed", paymentMethod: "cash_on_delivery", paymentStatus: "unpaid",
+      deliveryMethod: "store_pickup", pickupBranch: "Орос элчингийн салбар", customerName: "COD Test Customer", customerPhone: "88119933",
+      subtotalMnt: 12_000, totalMnt: 12_000,
+    });
+    const codOrderId = Number(codOrderInsert[0].insertId);
+    orderIds.push(codOrderId);
+    const completedCod = await adminCaller.admin.updateOrder({ id: codOrderId, status: "completed" });
+    expect(completedCod.paymentStatus).toBe("paid");
+
+    // Tier G: a return can only happen from "completed" -- a pending order
+    // jumping straight to "returned" must be rejected.
+    const pendingOrderInsert = await db.insert(orders).values({
+      orderNumber: `${marker.toUpperCase()}PEND`, status: "pending", paymentMethod: "cash_on_delivery", paymentStatus: "unpaid",
+      deliveryMethod: "store_pickup", pickupBranch: "Орос элчингийн салбар", customerName: "Pending Test Customer", customerPhone: "88119922",
+      subtotalMnt: 15_000, totalMnt: 15_000,
+    });
+    const pendingOrderId = Number(pendingOrderInsert[0].insertId);
+    orderIds.push(pendingOrderId);
+    await expect(adminCaller.admin.updateOrder({ id: pendingOrderId, status: "returned" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    // The completed COD order above CAN legally become "returned".
+    const returned = await adminCaller.admin.updateOrder({ id: codOrderId, status: "returned" });
+    expect(returned.status).toBe("returned");
+    expect(returned.returnedAt).toBeTruthy();
+
+    const report = await adminCaller.admin.analyticsReport({});
+    expect(report.returnRate.returnedOrderCount).toBeGreaterThanOrEqual(1);
+    expect(report.returnRate.completedOrReturnedOrderCount).toBeGreaterThanOrEqual(report.returnRate.returnedOrderCount);
+    expect(report.returnRate.returnsProcessedInRangeCount).toBeGreaterThanOrEqual(1);
   });
 });

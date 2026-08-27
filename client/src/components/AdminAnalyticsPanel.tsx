@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ArrowDown, ArrowUp, Download, FileSpreadsheet, FileText, LoaderCircle, MapPin, Package, Percent, ReceiptText, Share2, ShoppingCart, Smartphone, Truck, UsersRound, Wallet } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, Download, FileSpreadsheet, FileText, LoaderCircle, MapPin, Package, Percent, ReceiptText, Share2, ShoppingCart, Smartphone, Truck, Undo2, UsersRound, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { downloadBase64File } from "@/lib/fileDownload";
@@ -10,6 +10,16 @@ import type { RouterOutputs } from "@/lib/trpc";
 const formatMnt = (amount: number) => `${new Intl.NumberFormat("mn-MN").format(amount)}₮`;
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Тайлан ачаалж чадсангүй.";
 type AnalyticsReport = RouterOutputs["admin"]["analyticsReport"];
+
+const cacUnavailableCaption = (reason: AnalyticsReport["cac"]["unavailableReason"]) => {
+  switch (reason) {
+    case "all_time_not_supported": return "\"Бүх цаг үе\" сонголтод тодорхой хугацааны цонх байхгүй тул тооцоолох боломжгүй.";
+    case "no_spend_entered": return "Энэ хугацаанд зар сурталчилгааны зардал оруулаагүй байна — доор оруулна уу.";
+    case "partial_months": return "Зарим сар(ууд)-д зардал оруулаагүй тул бүрэн тооцоолж чадсангүй.";
+    case "no_new_customers": return "Энэ хугацаанд шинэ харилцагч алга.";
+    default: return "Мэдээлэл дутуу байна.";
+  }
+};
 
 type RangeKey = "7d" | "30d" | "90d" | "thisMonth" | "all";
 
@@ -191,12 +201,23 @@ export default function AdminAnalyticsPanel() {
             ]} />
         </div>
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <DarkStatTile icon={Activity} label="Хөрвүүлэлтийн хувь" value={report.conversion.sessionsCount > 0 ? `${report.conversion.conversionRatePercent}%` : "—"}
+            caption={report.conversion.sessionsCount > 0
+              ? `${report.conversion.convertedSessionsCount} / ${report.conversion.sessionsCount} сесс`
+              : report.conversion.trackingStartedAt ? `${report.conversion.trackingStartedAt.slice(0, 10)}-с хойш хэмжигдэж эхэлсэн` : "Хараахан хэмжиж эхлээгүй."}
+            accent="#3970a7" />
           <DarkStatTile icon={UsersRound} label="Шинэ / Давтан харилцагч" value={range === "all" ? "—" : `${report.overview.newCustomerCount} / ${report.overview.returningCustomerCount}`} accent="#f0b52d" />
           <DarkStatTile icon={ShoppingCart} label="Сагс орхилтын хувь" value={`${report.cartAbandonment.abandonmentRatePercent}%`}
             caption={`${report.cartAbandonment.abandonedCount} орхигдсон / ${report.cartAbandonment.cartsWithItems} бараатай сагс`} accent="#df1f3d" />
           <DarkStatTile icon={Package} label="Нөөцийн үнэ цэн" value={formatMnt(report.inventory.stockValueMnt)}
             caption={`${report.inventory.outOfStockCount} дууссан, ${report.inventory.lowStockCount} бага үлдэгдэлтэй / ${report.inventory.publishedProductCount} бараа`} accent="#3970a7" />
+          <DarkStatTile icon={Undo2} label="Буцаалтын хувь" value={report.returnRate.completedOrReturnedOrderCount > 0 ? `${report.returnRate.returnRatePercent}%` : "—"}
+            caption={report.returnRate.completedOrReturnedOrderCount > 0 ? `${report.returnRate.returnedOrderCount} буцаагдсан / ${report.returnRate.completedOrReturnedOrderCount} дууссан захиалга` : "Одоогоор дууссан захиалга алга."} accent="#f0b52d" />
+        </div>
+
+        <div className="mt-4">
+          <CacCard cac={report.cac} />
         </div>
       </section>
 
@@ -486,6 +507,49 @@ function ChannelBarsCard({ title, icon: Icon, groups }: { title: string; icon: t
           <ChannelBarList rows={group.rows} />
         </div>
       ))}
+    </div>
+  );
+}
+
+/** Tier F: CAC's one real input (marketing spend has no other source in
+ *  this app) lives right next to the figure it drives, rather than a
+ *  separate settings page -- see the schema comment on marketingSpend. */
+function CacCard({ cac }: { cac: AnalyticsReport["cac"] }) {
+  const utils = trpc.useUtils();
+  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [spend, setSpend] = useState("");
+  const updateSpend = trpc.admin.updateMarketingSpend.useMutation({
+    onSuccess: () => { toast.success("Зар сурталчилгааны зардал хадгалагдлаа."); utils.admin.analyticsReport.invalidate(); setSpend(""); },
+    onError: error => toast.error(messageFrom(error)),
+  });
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    const spendMnt = Number(spend);
+    if (!month || !/^\d{4}-\d{2}$/.test(month) || Number.isNaN(spendMnt) || spendMnt < 0) { toast.error("Сар, зардлын дүнг зөв оруулна уу."); return; }
+    updateSpend.mutate({ monthKey: month, spendMnt });
+  };
+
+  return (
+    <div className="min-w-0 rounded-2xl bg-[#1f2126] p-5 sm:flex sm:items-center sm:justify-between sm:gap-6">
+      <div className="min-w-0">
+        <p className="text-[10px] font-extrabold uppercase tracking-[.13em] text-white/45">CAC (Нэг харилцагч татах зардал)</p>
+        <p className="mt-1 font-[var(--font-display)] text-2xl font-semibold text-white">{cac.cacMnt !== null ? formatMnt(cac.cacMnt) : "Тодорхойгүй"}</p>
+        <p className="mt-1 max-w-md text-[11px] leading-snug text-white/40">
+          {cac.cacMnt !== null ? `${formatMnt(cac.totalSpendMnt)} зар зардал / ${cac.newCustomerCount} шинэ харилцагч` : cacUnavailableCaption(cac.unavailableReason)}
+        </p>
+      </div>
+      <form onSubmit={submit} className="mt-4 flex flex-wrap items-end gap-2 sm:mt-0 sm:shrink-0">
+        <label className="grid gap-1 text-[10px] font-bold text-white/50">Сар
+          <input type="month" value={month} onChange={event => setMonth(event.target.value)} className="h-9 rounded-lg border border-white/15 bg-[#17181b] px-2 text-xs text-white outline-none focus:border-[#df1f3d]" />
+        </label>
+        <label className="grid gap-1 text-[10px] font-bold text-white/50">Зардал (₮)
+          <input type="number" min="0" value={spend} onChange={event => setSpend(event.target.value)} placeholder="0" className="h-9 w-28 rounded-lg border border-white/15 bg-[#17181b] px-2 text-xs text-white outline-none focus:border-[#df1f3d]" />
+        </label>
+        <button type="submit" disabled={updateSpend.isPending} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#df1f3d] px-3 text-xs font-bold text-white disabled:opacity-50">
+          {updateSpend.isPending ? <LoaderCircle className="animate-spin" size={13} /> : "Хадгалах"}
+        </button>
+      </form>
     </div>
   );
 }

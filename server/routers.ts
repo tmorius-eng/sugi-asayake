@@ -1,12 +1,12 @@
-import { COOKIE_NAME, GUEST_CART_COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME, GUEST_CART_COOKIE_NAME, VISITOR_SESSION_COOKIE_NAME } from "@shared/const";
 import { formatVariantAttributes } from "@shared/catalog-filter";
 import { ubDistricts } from "@shared/districts";
-import { parseDeviceType } from "@shared/deviceType";
+import { parseDeviceType, isLikelyBot } from "@shared/deviceType";
 import { TRPCError } from "@trpc/server";
 import { parse as parseCookieHeader } from "cookie";
 import { createHash, randomBytes, randomInt } from "node:crypto";
 import { z } from "zod";
-import { getGuestCartCookieOptions, getSessionCookieOptions } from "./_core/cookies";
+import { getGuestCartCookieOptions, getSessionCookieOptions, getVisitorSessionCookieOptions } from "./_core/cookies";
 import { notifyOwner, sendAccountEmail } from "./_core/notification";
 import { systemRouter } from "./_core/systemRouter";
 import { signSessionToken, type TrpcContext } from "./_core/context";
@@ -85,13 +85,16 @@ import {
   getRecommendedProducts,
   getPublishedPosts,
   getPublishedPostBySlug,
+  getMarketingSpendRows,
   getReviewEligibility,
   getRoutineForProduct,
   getSiteMedia,
   getStaffInvitationByTokenHash,
   getUserByEmail,
   getUserById,
+  getVisitorSessionIdByToken,
   getWishlistForUser,
+  resolvePageviewSession,
   getWishlistWatchersForProduct,
   logAdminAction,
   mergeGuestCartIntoUserCart,
@@ -111,6 +114,7 @@ import {
   touchUserLastSignedIn,
   unsuspendUser,
   upsertSiteMedia,
+  upsertMarketingSpend,
   updateAdminCategory,
   updateAdminOrder,
   updateAdminPost,
@@ -131,7 +135,7 @@ import {
   updateUserProfile,
   verifyEmailWithCode,
 } from "./db";
-import { adminProcedure, moderateRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure } from "./_core/trpc";
+import { adminProcedure, lenientRateLimitedProcedure, moderateRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure } from "./_core/trpc";
 import { storagePing, storagePut } from "./storage";
 import { IMAGE_MAX_DIMENSION, processUploadedImage } from "./_core/imageProcessing";
 import { createQPayInvoice, getQPayAvailability } from "./qpay";
@@ -282,7 +286,7 @@ const discountCodeUpdateSchema = discountCodeBaseSchema.partial().extend({ id: z
   value => Object.keys(value).some(key => key !== "id"),
   { message: "Provide at least one discount code field to update." },
 );
-const orderStatusSchema = z.enum(["pending", "confirmed", "packed", "out_for_delivery", "completed", "cancelled"]);
+const orderStatusSchema = z.enum(["pending", "confirmed", "packed", "out_for_delivery", "completed", "cancelled", "returned"]);
 const orderUpdateSchema = z.object({
   id: z.number().int().positive(),
   status: orderStatusSchema.optional(),
@@ -385,6 +389,7 @@ const orderStatusMessages: Record<string, string> = {
   out_for_delivery: "Таны захиалга хүргэлтэд гарлаа.",
   completed: "Таны захиалга амжилттай хүргэгдлээ. Худалдан авалт хийсэнд баярлалаа!",
   cancelled: "Таны захиалгыг цуцаллаа. Асуух зүйл байвал бидэнтэй холбогдоно уу.",
+  returned: "Таны захиалгыг буцаагдсан гэж тэмдэглэлээ. Асуух зүйл байвал бидэнтэй холбогдоно уу.",
 };
 
 async function sendOrderConfirmationEmail(order: { orderNumber: string; customerEmail: string | null; customerName: string; totalMnt: number; deliveryMethod: string; deliveryAddress: string | null; pickupBranch: string | null; items: { name: string; quantity: number; priceMnt: number; attributesJson?: string | null }[]; discountMnt?: number; routineName?: string | null; couponCode?: string | null; couponDiscountMnt?: number; loyaltyDiscountMnt?: number; appliedLoyaltyTierName?: string | null }) {
@@ -826,7 +831,13 @@ export const appRouter = router({
       let order;
       try {
         const deviceType = parseDeviceType(ctx.req.headers["user-agent"]);
-        order = await createOrderFromActiveCart({ owner: resolveCartOwnerForWrite(ctx), ...input, deviceType });
+        // Tier E: the session cookie is httpOnly and already on the
+        // request, so unlike trafficSource this needs no client change --
+        // resolved entirely server-side, same "captured once at checkout"
+        // discipline as everything else here.
+        const visitorToken = parseCookieHeader(ctx.req.headers.cookie ?? "")[VISITOR_SESSION_COOKIE_NAME];
+        const visitorSessionId = visitorToken ? await getVisitorSessionIdByToken(visitorToken) : null;
+        order = await createOrderFromActiveCart({ owner: resolveCartOwnerForWrite(ctx), ...input, deviceType, visitorSessionId });
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to place this order." });
       }
@@ -838,6 +849,25 @@ export const appRouter = router({
         console.error("[checkout.createOrder] Failed to send order confirmation email", error);
       }
       return order;
+    }),
+  }),
+  // Tier E analytics: best-effort, first-party pageview telemetry so
+  // Conversion Rate can be a real number (orders ÷ sessions) instead of a
+  // metric skipped for lack of any visitor tracking. Public/anonymous by
+  // design -- fired by every visitor, not just signed-in shoppers.
+  telemetry: router({
+    pageview: lenientRateLimitedProcedure.input(z.object({
+      path: z.string().trim().min(1).max(300),
+      trafficSource: z.string().trim().max(200).nullable().optional(),
+    })).mutation(async ({ ctx, input }) => {
+      // Silent no-op for a likely bot -- no row, no cookie. Never an error;
+      // the client never awaits or checks this call's result.
+      if (isLikelyBot(ctx.req.headers["user-agent"])) return { ok: true } as const;
+      const existingToken = parseCookieHeader(ctx.req.headers.cookie ?? "")[VISITOR_SESSION_COOKIE_NAME];
+      const deviceType = parseDeviceType(ctx.req.headers["user-agent"]);
+      const { sessionToken, isNewToken } = await resolvePageviewSession({ existingToken, path: input.path, trafficSource: input.trafficSource, deviceType });
+      if (isNewToken) ctx.res.cookie(VISITOR_SESSION_COOKIE_NAME, sessionToken, getVisitorSessionCookieOptions(ctx.req));
+      return { ok: true } as const;
     }),
   }),
   orders: router({
@@ -1138,6 +1168,19 @@ export const appRouter = router({
       await logAdminAction({ actorUserId: ctx.user.id, action: "analytics.exported", entityType: "analytics", metadata: { format: input.format } });
       const mimeType = input.format === "xlsx" ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "application/pdf";
       return { filename: `sugi-analytics-${new Date().toISOString().slice(0, 10)}.${input.format}`, mimeType, dataBase64: buffer.toString("base64") };
+    }),
+    // Tier F: CAC's one input, entered per calendar month. A financial
+    // figure -- adminProcedure, same tier as analyticsReport.
+    marketingSpend: adminProcedure.input(z.object({
+      monthKeys: z.array(z.string().regex(/^\d{4}-\d{2}$/)).min(1).max(24),
+    })).query(({ input }) => getMarketingSpendRows(input.monthKeys)),
+    updateMarketingSpend: adminProcedure.input(z.object({
+      monthKey: z.string().regex(/^\d{4}-\d{2}$/),
+      spendMnt: z.number().int().min(0).max(1_000_000_000),
+    })).mutation(async ({ ctx, input }) => {
+      const result = await upsertMarketingSpend({ ...input, updatedByUserId: ctx.user.id });
+      await logAdminAction({ actorUserId: ctx.user.id, action: "marketing_spend.updated", entityType: "marketing_spend", metadata: { monthKey: input.monthKey, spendMnt: input.spendMnt } });
+      return result;
     }),
     suspendUser: adminProcedure.input(z.object({ userId: z.number().int().positive(), reason: z.string().trim().max(300).optional() })).mutation(async ({ ctx, input }) => {
       if (ctx.user.id === input.userId) throw new TRPCError({ code: "BAD_REQUEST", message: "You cannot suspend your own account." });

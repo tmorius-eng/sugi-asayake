@@ -1,6 +1,7 @@
+import { randomBytes } from "node:crypto";
 import { and, asc, desc, eq, gte, inArray, isNull, like, lt, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { adminAuditLogs, cartItems, carts, discountCodes, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, integrationConfigs, loginAttempts, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, productReviews, productVariants, products, routines, routineSteps, siteMedia, sitePromotions, staffInvitations, userAddresses, users, wishlistItems } from "../drizzle/schema";
+import { adminAuditLogs, cartItems, carts, discountCodes, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, integrationConfigs, loginAttempts, marketingSpend, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, productReviews, productVariants, products, routines, routineSteps, siteMedia, sitePromotions, staffInvitations, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
 import { UB_DELIVERY_FEE_MNT } from "../shared/const";
 import { guessDistrictFromAddress, type UbDistrict } from "../shared/districts";
 import { decryptJson, encryptJson } from "./_core/crypto";
@@ -797,6 +798,7 @@ export async function createOrderFromActiveCart(input: {
   couponCode?: string | null;
   trafficSource?: string | null;
   deviceType?: "mobile" | "tablet" | "desktop" | "unknown";
+  visitorSessionId?: number | null;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
@@ -873,6 +875,7 @@ export async function createOrderFromActiveCart(input: {
       // orders.trafficSource/deviceType).
       trafficSource: input.trafficSource ?? null,
       deviceType: input.deviceType ?? "unknown",
+      visitorSessionId: input.visitorSessionId ?? null,
       subtotalMnt,
       deliveryFeeMnt,
       discountMnt,
@@ -1402,7 +1405,7 @@ export async function adminGlobalSearch(queryText: string) {
 }
 
 const orderStatusRank = { pending: 0, confirmed: 1, packed: 2, out_for_delivery: 3, completed: 4 } as const;
-export type FulfilmentStatus = keyof typeof orderStatusRank | "cancelled";
+export type FulfilmentStatus = keyof typeof orderStatusRank | "cancelled" | "returned";
 
 export async function updateAdminOrder(input: { id: number; status?: FulfilmentStatus; deliveryTrackingRef?: string | null; adminNote?: string | null }) {
   const db = await getDb();
@@ -1411,8 +1414,14 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
   if (!current[0]) throw new Error("Order not found.");
   if (input.status) {
     const currentStatus = current[0].status;
-    if (currentStatus === "cancelled" || currentStatus === "completed") throw new Error("This closed order cannot be changed.");
-    if (input.status !== "cancelled" && orderStatusRank[input.status] < orderStatusRank[currentStatus as keyof typeof orderStatusRank]) {
+    // "returned" only ever moves out of "completed" -- everything else that
+    // already left the forward-progress track ("cancelled"/"returned"
+    // itself) is closed for good. A completed order can ONLY become
+    // "returned" from here on, never re-enter the forward progression.
+    if (currentStatus === "cancelled" || currentStatus === "returned") throw new Error("This closed order cannot be changed.");
+    if (currentStatus === "completed" && input.status !== "returned") throw new Error("This closed order cannot be changed.");
+    if (input.status === "returned" && currentStatus !== "completed") throw new Error("Only a completed order can be marked as returned.");
+    if (input.status !== "cancelled" && input.status !== "returned" && orderStatusRank[input.status] < orderStatusRank[currentStatus as keyof typeof orderStatusRank]) {
       throw new Error("Order fulfilment cannot move backward.");
     }
   }
@@ -1430,6 +1439,17 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
     }
     await tx.update(orders).set({
       ...(input.status ? { status: input.status } : {}),
+      ...(input.status === "returned" ? { returnedAt: new Date() } : {}),
+      // Fixes a real pre-existing gap: paymentStatus was only ever written
+      // by the QPay webhook (markQPayPaymentAttemptPaid) -- a cash_on_
+      // delivery/bank_transfer/card order never became "paid" anywhere in
+      // the codebase, which would otherwise silently zero out every
+      // paymentStatus="paid"-gated analytics figure for this store's actual
+      // primary payment method. "Completed" is the real-world moment the
+      // courier/bank/card charge is confirmed collected, so that's where
+      // this fires -- QPay orders are unaffected (already paid earlier, by
+      // the webhook, independent of fulfilment status).
+      ...(input.status === "completed" && current[0].paymentMethod !== "qpay" ? { paymentStatus: "paid" as const } : {}),
       ...(input.deliveryTrackingRef !== undefined ? { deliveryTrackingRef: input.deliveryTrackingRef } : {}),
       ...(input.adminNote !== undefined ? { adminNote: input.adminNote } : {}),
       updatedAt: new Date(),
@@ -1523,6 +1543,74 @@ export async function deleteSiteMedia(slotKey: string) {
   if (!db) throw new Error("Database is not available");
   await db.delete(siteMedia).where(eq(siteMedia.slotKey, slotKey));
   return { slotKey };
+}
+
+/** Tier F: CAC's one input. Same upsert-by-unique-key shape as
+ *  upsertSiteMedia above. */
+export async function getMarketingSpendRows(monthKeys: string[]) {
+  const db = await getDb();
+  if (!db || monthKeys.length === 0) return [];
+  return db.select({ monthKey: marketingSpend.monthKey, spendMnt: marketingSpend.spendMnt }).from(marketingSpend).where(inArray(marketingSpend.monthKey, monthKeys));
+}
+
+export async function upsertMarketingSpend(input: { monthKey: string; spendMnt: number; updatedByUserId: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.insert(marketingSpend).values({
+    monthKey: input.monthKey,
+    spendMnt: input.spendMnt,
+    updatedByUserId: input.updatedByUserId,
+  }).onDuplicateKeyUpdate({
+    set: { spendMnt: input.spendMnt, updatedByUserId: input.updatedByUserId, updatedAt: new Date() },
+  });
+  const updated = await db.select().from(marketingSpend).where(eq(marketingSpend.monthKey, input.monthKey)).limit(1);
+  return updated[0];
+}
+
+// Tier E: the industry-standard GA/Shopify-style "session" boundary -- a
+// gap this long since the last pageview starts a new session, even if the
+// cookie itself is still valid (the cookie's own lifetime is much longer;
+// see the schema comment on visitorSessions and getVisitorSessionCookieOptions).
+const VISITOR_SESSION_TIMEOUT_MS = 30 * 60 * 1000;
+
+/**
+ * Resolves (or creates) the visitor_sessions row for one pageview beacon
+ * call. Bumps lastSeenAt/pageViewCount on an existing, still-live session;
+ * mints a fresh token and inserts a new row otherwise (no existing token,
+ * an unrecognized token, or one that's gone stale past the 30-minute
+ * window). Always returns a token — the router only writes the cookie back
+ * when isNewToken is true, so an existing valid session's cookie is never
+ * needlessly rewritten.
+ */
+export async function resolvePageviewSession(input: {
+  existingToken?: string;
+  path: string;
+  trafficSource?: string | null;
+  deviceType: "mobile" | "tablet" | "desktop" | "unknown";
+}): Promise<{ sessionToken: string; isNewToken: boolean }> {
+  const db = await getDb();
+  if (!db) return { sessionToken: randomBytes(24).toString("base64url"), isNewToken: true };
+  if (input.existingToken) {
+    const existing = await db.select().from(visitorSessions).where(eq(visitorSessions.sessionToken, input.existingToken)).limit(1);
+    if (existing[0] && existing[0].lastSeenAt.getTime() >= Date.now() - VISITOR_SESSION_TIMEOUT_MS) {
+      await db.update(visitorSessions).set({ lastSeenAt: new Date(), pageViewCount: sql`${visitorSessions.pageViewCount} + 1` }).where(eq(visitorSessions.id, existing[0].id));
+      return { sessionToken: input.existingToken, isNewToken: false };
+    }
+  }
+  const sessionToken = randomBytes(24).toString("base64url");
+  await db.insert(visitorSessions).values({ sessionToken, landingPath: input.path, trafficSource: input.trafficSource ?? null, deviceType: input.deviceType });
+  return { sessionToken, isNewToken: true };
+}
+
+/** Looks up the visitor_sessions.id for a session cookie value read at
+ *  checkout — null for a missing/unrecognized/expired token (an order can
+ *  always be placed with no session link; conversion tracking just won't
+ *  count it, exactly like any order placed before Tier E shipped). */
+export async function getVisitorSessionIdByToken(sessionToken: string): Promise<number | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select({ id: visitorSessions.id }).from(visitorSessions).where(eq(visitorSessions.sessionToken, sessionToken)).limit(1);
+  return rows[0]?.id ?? null;
 }
 
 export async function logAdminAction(input: { actorUserId: number; action: string; entityType: string; entityId?: number | null; metadata?: Record<string, unknown> }) {

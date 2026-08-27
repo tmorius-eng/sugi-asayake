@@ -309,7 +309,13 @@ export const orders = mysqlTable("orders", {
   // userId is already null).
   userId: int("userId").references(() => users.id, { onDelete: "set null" }),
   orderNumber: varchar("orderNumber", { length: 32 }).notNull().unique(),
-  status: mysqlEnum("status", ["pending", "confirmed", "packed", "out_for_delivery", "completed", "cancelled"]).notNull().default("pending"),
+  // "returned" is only ever reachable from "completed" (see updateAdminOrder
+  // in server/db.ts's transition guard) -- an order that was delivered and
+  // later came back. Never restores stock automatically (the returned
+  // item's resellable condition is unknown) and never touches paymentStatus
+  // (a refund/credit flow is separate, unscoped work) -- see the schema
+  // comment on returnedAt and getReturnRateOverview in server/analytics.ts.
+  status: mysqlEnum("status", ["pending", "confirmed", "packed", "out_for_delivery", "completed", "cancelled", "returned"]).notNull().default("pending"),
   paymentMethod: mysqlEnum("paymentMethod", ["qpay", "bank_transfer", "card", "cash_on_delivery"]).notNull(),
   paymentStatus: mysqlEnum("paymentStatus", ["unpaid", "paid", "refunded"]).notNull().default("unpaid"),
   deliveryMethod: mysqlEnum("deliveryMethod", ["ub_delivery", "store_pickup"]).notNull(),
@@ -363,6 +369,16 @@ export const orders = mysqlTable("orders", {
   couponDiscountMnt: int("couponDiscountMnt").notNull().default(0),
   totalMnt: int("totalMnt").notNull(),
   deliveryTrackingRef: varchar("deliveryTrackingRef", { length: 180 }),
+  // Set exactly once, the moment an admin marks a completed order
+  // "returned" (server/db.ts's updateAdminOrder) -- never touched any other
+  // way. getReturnRateOverview windows its two different figures by two
+  // different fields on purpose: the rate itself by createdAt (same field
+  // every sibling analytics function uses, so numerator/denominator stay
+  // comparable), and the separate "returns processed this period" count by
+  // this column -- mixing the two into one ratio would be incoherent (it
+  // could exceed 100%, or read near-zero purely because recent orders
+  // haven't had time to be returned yet).
+  returnedAt: timestamp("returnedAt"),
   /**
    * Marketing-analytics snapshot, captured automatically at checkout (see
    * checkout.createOrder in server/routers.ts) — never asked of the
@@ -376,6 +392,16 @@ export const orders = mysqlTable("orders", {
    */
   trafficSource: varchar("trafficSource", { length: 200 }),
   deviceType: mysqlEnum("deviceType", ["mobile", "tablet", "desktop", "unknown"]),
+  // Tier E: links this order back to the anonymous browsing session that
+  // placed it (see visitorSessions below), resolved server-side from the
+  // session cookie at checkout — captured once, never backfilled for
+  // historical orders (null forever for anything placed before this
+  // shipped). The one thing that makes a real Conversion Rate possible:
+  // getConversionOverview counts a session "converted" iff it has ≥1 order
+  // here. Nullable + SET NULL: a visitor_sessions row is disposable
+  // browsing-analytics data, not a business record — deleting old sessions
+  // later must never touch the (permanent) order it produced.
+  visitorSessionId: int("visitorSessionId").references(() => visitorSessions.id, { onDelete: "set null" }),
   /**
    * EBARIMT.md: Mongolian tax-receipt (е-баримт) fields. Fully inert until a
    * future session wires up real issuance (Path A: SmartSoftware POS
@@ -532,6 +558,65 @@ export const siteMedia = mysqlTable("site_media", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => [
   index("site_media_updated_by_idx").on(table.updatedByUserId),
+]);
+
+/**
+ * Tier F of the admin analytics dashboard: CAC (Customer Acquisition Cost)
+ * needs one input nothing else in this app captures -- how much was spent
+ * on marketing in a given month. One row per calendar month
+ * (monthKey "YYYY-MM"), upserted by an admin exactly like site_media's
+ * per-slot upsert above. getCacOverview (server/analytics.ts) only ever
+ * computes a real CAC figure when every month touched by the report's date
+ * range has a row here -- a month with no entry means "unavailable", never
+ * a silently-assumed ₮0 spend.
+ */
+/**
+ * Tier E of the admin analytics dashboard: the minimal first-party
+ * visitor/session tracking needed to compute a real Conversion Rate
+ * (orders ÷ sessions — the standard formula, per Shopify's own definition).
+ * Deliberately just ONE table, not a session+pageview pair like Umami/
+ * Plausible/GoatCounter's fuller schemas — nothing this app needs requires
+ * per-pageview granularity (no landing-page/bounce-rate report), so
+ * `pageViewCount` on the session row itself is enough to know a session
+ * wasn't a single-hit bounce. A page_views table can be added additively
+ * later if that ever changes.
+ *
+ * One row per anonymous browsing session (see shared/const.ts's
+ * VISITOR_SESSION_COOKIE_NAME and the client beacon in
+ * client/src/lib/pageviewTracking.ts). "Session" boundary is a 30-minute
+ * inactivity gap (server/db.ts's resolvePageviewSession), matching the
+ * industry-standard GA/Shopify-style session window — NOT the cookie's own
+ * (much longer, fixed) expiry, so one long continuous visit never
+ * fragments into multiple sessions just because the cookie happens to be
+ * old.
+ */
+export const visitorSessions = mysqlTable("visitor_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionToken: varchar("sessionToken", { length: 64 }).notNull().unique(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  lastSeenAt: timestamp("lastSeenAt").defaultNow().notNull(),
+  landingPath: varchar("landingPath", { length: 300 }).notNull(),
+  // First-touch only, reusing the exact value client/src/lib/trafficSource.ts
+  // already captures for orders.trafficSource — never overwritten after the
+  // session's first pageview, same "captured once" discipline throughout
+  // this file.
+  trafficSource: varchar("trafficSource", { length: 200 }),
+  deviceType: mysqlEnum("deviceType", ["mobile", "tablet", "desktop", "unknown"]),
+  pageViewCount: int("pageViewCount").notNull().default(1),
+}, table => [
+  index("visitor_sessions_last_seen_idx").on(table.lastSeenAt),
+  index("visitor_sessions_created_idx").on(table.createdAt),
+]);
+
+export const marketingSpend = mysqlTable("marketing_spend", {
+  id: int("id").autoincrement().primaryKey(),
+  monthKey: varchar("monthKey", { length: 7 }).notNull().unique(),
+  spendMnt: int("spendMnt").notNull(),
+  updatedByUserId: int("updatedByUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  index("marketing_spend_updated_by_idx").on(table.updatedByUserId),
 ]);
 
 /**

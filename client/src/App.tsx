@@ -7,6 +7,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import SitePromo from "./components/SitePromo";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
+import { PageviewTracker } from "./lib/pageviewTracking";
 
 const AcceptInvitation = lazy(() => import("./pages/AcceptInvitation"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
@@ -75,6 +76,7 @@ function App() {
       <TooltipProvider>
         <Toaster />
         <ResumeStaffInvitation />
+        <PageviewTracker />
         <SitePromo />
         <Router />
       </TooltipProvider>
