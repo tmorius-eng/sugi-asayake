@@ -381,12 +381,124 @@ export async function getTrafficBreakdown(input: DateRangeInput = {}) {
   const conditions = [eq(orders.paymentStatus, "paid"), ...dateRangeConditions(input)];
 
   const [sourceRows, deviceRows] = await Promise.all([
-    db.select({ source: orders.trafficSource, orderCount: sql<number>`count(*)` }).from(orders).where(and(...conditions)).groupBy(orders.trafficSource).orderBy(desc(sql`count(*)`)).limit(10),
+    // revenueMnt added here (Tier D) so "Sales by referer" can be a real
+    // ranked-$ list, matching the district breakdown's shape above.
+    db.select({ source: orders.trafficSource, orderCount: sql<number>`count(*)`, revenueMnt: sql<number>`coalesce(sum(${orders.totalMnt}), 0)` }).from(orders).where(and(...conditions)).groupBy(orders.trafficSource).orderBy(desc(sql`count(*)`)).limit(10),
     db.select({ device: orders.deviceType, orderCount: sql<number>`count(*)` }).from(orders).where(and(...conditions)).groupBy(orders.deviceType),
   ]);
   return {
-    sources: sourceRows.map(row => ({ source: row.source ?? "Тодорхойгүй", orderCount: Number(row.orderCount) })),
+    sources: sourceRows.map(row => ({ source: row.source ?? "Тодорхойгүй", orderCount: Number(row.orderCount), revenueMnt: Number(row.revenueMnt) })),
     deviceTypes: deviceRows.map(row => ({ device: row.device ?? "unknown", orderCount: Number(row.orderCount) })),
+  };
+}
+
+/**
+ * Period-over-period comparison for the KPI band's sparklines/deltas
+ * (Tier D). Only meaningful when a concrete dateFrom is given -- "all time"
+ * has no equal-length prior window to compare against (same reasoning
+ * getSalesOverview already uses for new-vs-returning), so `available` is
+ * false and every other field is a harmless zero/empty rather than a
+ * fabricated comparison. The previous window is the same duration,
+ * immediately preceding dateFrom.
+ */
+export type PeriodComparisonMetrics = { revenueMnt: number; orderCount: number; aovMnt: number; profitMnt: number };
+export type PeriodComparison = {
+  available: boolean;
+  current: PeriodComparisonMetrics;
+  previous: PeriodComparisonMetrics | null;
+  deltaPercent: { revenueMnt: number | null; orderCount: number | null; aovMnt: number | null; profitMnt: number | null };
+  previousRevenueTimeseries: { date: string; revenueMnt: number; orderCount: number }[];
+};
+
+export async function getPeriodComparison(input: DateRangeInput = {}): Promise<PeriodComparison> {
+  const unavailable: PeriodComparison = {
+    available: false,
+    current: { revenueMnt: 0, orderCount: 0, aovMnt: 0, profitMnt: 0 },
+    previous: null,
+    deltaPercent: { revenueMnt: null, orderCount: null, aovMnt: null, profitMnt: null },
+    previousRevenueTimeseries: [],
+  };
+  if (!input.dateFrom) return unavailable;
+  const dateTo = input.dateTo ?? new Date();
+  const durationMs = dateTo.getTime() - input.dateFrom.getTime();
+  if (durationMs <= 0) return unavailable;
+
+  const previousDateTo = new Date(input.dateFrom.getTime() - 1);
+  const previousInput: DateRangeInput = { dateFrom: new Date(previousDateTo.getTime() - durationMs), dateTo: previousDateTo };
+
+  const [currentOverview, currentProfit, previousOverview, previousProfit, previousRevenueTimeseries] = await Promise.all([
+    getSalesOverview(input),
+    getProfitOverview(input),
+    getSalesOverview(previousInput),
+    getProfitOverview(previousInput),
+    getRevenueTimeseries(previousInput),
+  ]);
+
+  const current: PeriodComparisonMetrics = { revenueMnt: currentOverview.revenueMnt, orderCount: currentOverview.orderCount, aovMnt: currentOverview.aovMnt, profitMnt: currentProfit.profitMnt };
+  const previous: PeriodComparisonMetrics = { revenueMnt: previousOverview.revenueMnt, orderCount: previousOverview.orderCount, aovMnt: previousOverview.aovMnt, profitMnt: previousProfit.profitMnt };
+  const deltaOf = (curr: number, prev: number) => prev === 0 ? null : Math.round(((curr - prev) / prev) * 100);
+
+  return {
+    available: true,
+    current,
+    previous,
+    deltaPercent: {
+      revenueMnt: deltaOf(current.revenueMnt, previous.revenueMnt),
+      orderCount: deltaOf(current.orderCount, previous.orderCount),
+      aovMnt: deltaOf(current.aovMnt, previous.aovMnt),
+      profitMnt: deltaOf(current.profitMnt, previous.profitMnt),
+    },
+    previousRevenueTimeseries,
+  };
+}
+
+/**
+ * The "P&L statement" card's data -- real fields only, no invented line
+ * items (the Geckoboard reference this was modeled on shows things like
+ * "Referer cut"/"Paypal transactions" that have no equivalent in this
+ * business). deliveryFeesCollectedMnt/discountsGivenMnt are informational
+ * context rows ONLY -- both are already netted into netRevenueMnt
+ * (orders.totalMnt), so the card's one real subtraction is
+ * netRevenueMnt - costOfGoodsMnt. Never subtract them a second time.
+ */
+export type PnlOverview = {
+  subtotalMnt: number;
+  deliveryFeesCollectedMnt: number;
+  discountsGivenMnt: number;
+  netRevenueMnt: number;
+  costOfGoodsMnt: number;
+  itemsWithCostCount: number;
+  totalItemsSold: number;
+  netProfitMnt: number;
+};
+
+export async function getPnlOverview(input: DateRangeInput = {}): Promise<PnlOverview> {
+  const db = await getDb();
+  const empty: PnlOverview = { subtotalMnt: 0, deliveryFeesCollectedMnt: 0, discountsGivenMnt: 0, netRevenueMnt: 0, costOfGoodsMnt: 0, itemsWithCostCount: 0, totalItemsSold: 0, netProfitMnt: 0 };
+  if (!db) return empty;
+  const conditions = [eq(orders.paymentStatus, "paid"), ...dateRangeConditions(input)];
+
+  const [row] = await db
+    .select({
+      subtotalMnt: sql<number>`coalesce(sum(${orders.subtotalMnt}), 0)`,
+      deliveryFeesCollectedMnt: sql<number>`coalesce(sum(${orders.deliveryFeeMnt}), 0)`,
+      discountsGivenMnt: sql<number>`coalesce(sum(${orders.discountMnt} + ${orders.couponDiscountMnt} + ${orders.loyaltyDiscountMnt}), 0)`,
+      netRevenueMnt: sql<number>`coalesce(sum(${orders.totalMnt}), 0)`,
+    })
+    .from(orders)
+    .where(and(...conditions));
+
+  const profit = await getProfitOverview(input);
+  const netRevenueMnt = Number(row?.netRevenueMnt ?? 0);
+  return {
+    subtotalMnt: Number(row?.subtotalMnt ?? 0),
+    deliveryFeesCollectedMnt: Number(row?.deliveryFeesCollectedMnt ?? 0),
+    discountsGivenMnt: Number(row?.discountsGivenMnt ?? 0),
+    netRevenueMnt,
+    costOfGoodsMnt: profit.costMnt,
+    itemsWithCostCount: profit.itemsWithCostCount,
+    totalItemsSold: profit.totalItemsSold,
+    netProfitMnt: netRevenueMnt - profit.costMnt,
   };
 }
 
@@ -395,7 +507,7 @@ export async function getTrafficBreakdown(input: DateRangeInput = {}) {
  *  round trips, and the two export functions below render from the exact
  *  same object so the downloaded file always matches what's on screen. */
 export async function getAnalyticsReport(input: DateRangeInput = {}) {
-  const [overview, revenueTimeseries, topProducts, topCategories, districtBreakdown, demographics, loyaltyTiers, ordersByChannel, cartAbandonment, inventory, profit, traffic] = await Promise.all([
+  const [overview, revenueTimeseries, topProducts, topCategories, districtBreakdown, demographics, loyaltyTiers, ordersByChannel, cartAbandonment, inventory, profit, traffic, periodComparison, pnl] = await Promise.all([
     getSalesOverview(input),
     getRevenueTimeseries(input),
     getTopProducts({ ...input, limit: 15 }),
@@ -408,8 +520,10 @@ export async function getAnalyticsReport(input: DateRangeInput = {}) {
     getInventorySnapshot(),
     getProfitOverview(input),
     getTrafficBreakdown(input),
+    getPeriodComparison(input),
+    getPnlOverview(input),
   ]);
-  return { overview, revenueTimeseries, topProducts, topCategories, districtBreakdown, demographics, loyaltyTiers, ordersByChannel, cartAbandonment, inventory, profit, traffic };
+  return { overview, revenueTimeseries, topProducts, topCategories, districtBreakdown, demographics, loyaltyTiers, ordersByChannel, cartAbandonment, inventory, profit, traffic, periodComparison, pnl };
 }
 
 type AnalyticsReport = Awaited<ReturnType<typeof getAnalyticsReport>>;
