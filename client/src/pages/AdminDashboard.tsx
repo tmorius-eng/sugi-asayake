@@ -6,7 +6,7 @@ import AdminWorkspace from "@/components/AdminWorkspace";
 const menuItems: DashboardMenuItem[] = [
   { icon: Home, label: "Нүүр хуудас", path: "/" },
   { icon: LayoutDashboard, label: "Удирдлага", path: "/admin" },
-  { icon: PackagePlus, label: "Бүтээгдэхүүн", path: "/admin?section=products" },
+  { icon: PackagePlus, label: "Бүтээгдэхүүн", path: "/admin?adminSection=products" },
   { icon: UsersRound, label: "Хэрэглэгч", path: "/admin?adminSection=users" },
 ];
 

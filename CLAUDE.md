@@ -28,7 +28,7 @@ pnpm dev
 Гар `$env:` тохиргоо зөвхөн `.env`-ийн утгыг түр override хийх шаардлагатай үед л хэрэгтэй.
 
 ### Shared database and catalog navigation
-Aiven MySQL is the shared source of truth for both laptops; Cloudflare R2 stores image bytes. Keep the Aiven `DATABASE_URL` only in the ignored `.env`. Shop search/category/pagination state is kept in the URL, product breadcrumbs return to the shop, and the admin sidebar has a direct homepage link. The admin `Хэрэглэгч` route now maps its query parameter to the users panel, security/audit logs show 25 records per page, and staff invitation forms collapse cleanly on small screens.
+Aiven MySQL is the shared source of truth for both laptops; Cloudflare R2 stores image bytes. Keep the Aiven `DATABASE_URL` only in the ignored `.env`. Shop search/category/pagination state is kept in the URL, product breadcrumbs return to the shop, and the admin sidebar has a direct homepage link. Admin navigation uses the canonical `adminSection` query parameter for every panel; legacy `section=staff` is still accepted and maps to users. The admin `Хэрэглэгч` and `Бүтээгдэхүүн` routes now open their panels correctly, security/audit logs show 25 records per page, and staff invitation forms collapse cleanly on small screens.
 
 ### MySQL-тэй холбоотой чухал зүйл
 Windows дээрх MySQL 8 root хэрэглэгч `caching_sha2_password`-оор тохиргоологдвол Node.js-ийн `mysql2` драйвертай зөрчилдөнө (`mysql.exe` CLI ажилладаг тул андуурч болно). Засвар:
