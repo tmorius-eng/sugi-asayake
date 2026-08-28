@@ -1,9 +1,10 @@
-import { LayoutDashboard, PackagePlus, UsersRound } from "lucide-react";
+import { Home, LayoutDashboard, PackagePlus, UsersRound } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import DashboardLayout, { type DashboardMenuItem } from "@/components/DashboardLayout";
 import AdminWorkspace from "@/components/AdminWorkspace";
 
 const menuItems: DashboardMenuItem[] = [
+  { icon: Home, label: "Нүүр хуудас", path: "/" },
   { icon: LayoutDashboard, label: "Удирдлага", path: "/admin" },
   { icon: PackagePlus, label: "Бүтээгдэхүүн", path: "/admin?section=products" },
   { icon: UsersRound, label: "Хэрэглэгч", path: "/admin?section=staff" },

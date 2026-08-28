@@ -4,6 +4,13 @@
 
 ---
 
+## Navigation state fix (2026-08-28)
+- Applied the catalog URL-state fix to the main working copy: page number and category/search state survive product navigation and refresh.
+- Prevented the initial loading state from clamping a restored page back to page 1 before the catalog query finishes.
+- Added working product breadcrumbs and an Admin sidebar homepage link.
+
+---
+
 ## Манус-ээс салгах явц, эхний bug-ууд (2026-08-20-аас өмнөх)
 
 ### 1. Manus-ээс бүрэн салгасан
