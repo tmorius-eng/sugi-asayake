@@ -28,7 +28,9 @@ pnpm dev
 Гар `$env:` тохиргоо зөвхөн `.env`-ийн утгыг түр override хийх шаардлагатай үед л хэрэгтэй.
 
 ### Shared database (Aiven)
-Хоёр laptop-ийн metadata, products, orders-ийг ижил байлгахын тулд Aiven MySQL shared database ашиглана. `DATABASE_URL` нь Aiven-ийн `defaultdb` connection string байна; password-ийг `.env`-д л хадгалж, GitHub-д хэзээ ч commit хийхгүй. Aiven service-ийн built-in daily backup-ийг идэвхжүүлж, нэмэлт локал backup шаардлагатай бол `pwsh scripts/db-backup-daily.ps1` ажиллуулна. Үүнийг Windows Task Scheduler-аар өдөр бүр ажиллуулж болно. Aiven URI-д `?ssl-mode=REQUIRED` байвал backup/restore script-үүд TLS flag-ийг автоматаар дамжуулна.
+Хоёр laptop-ийн metadata, products, orders-ийг ижил байлгахын тулд Aiven MySQL shared database ашиглана. `DATABASE_URL` нь Aiven-ийн `defaultdb` connection string байна; password-ийг `.env`-д л хадгалж, GitHub-д хэзээ ч commit хийхгүй. Aiven service-ийн built-in daily backup-ийг идэвхжүүлж, нэмэлт локал backup нь өдөр бүр **19:00** цагт ажиллана (`SUGI ASAYAKE Daily DB Backup` Windows Task Scheduler task, 14 backup хадгална). Aiven URI-д `?ssl-mode=REQUIRED` байвал backup/restore script-үүд TLS flag-ийг автоматаар дамжуулна.
+
+**Aiven trial дуусахаас өмнө хийх ажил:** trial-ийн сүүлийн долоо хоногт Aiven-ээс хамгийн сүүлийн бүрэн `.zip` backup-ийг татаж аваад, өөр төхөөрөмж/cloud drive дээр хадгална. Дараа нь хүсвэл backup-ийг managed MySQL эсвэл локал MySQL рүү `scripts/db-restore.ps1 -DatabaseUrl "<target>" -BackupFile "<zip>" -Force`-оор сэргээнэ. Backup файл, password, CA certificate-ийг GitHub-д commit хийхгүй. Trial дуусах яг өдрийг Aiven Console-ийн Billing/Service мэдээллээс шалгана.
 
 ### MySQL-тэй холбоотой чухал зүйл
 Windows дээрх MySQL 8 root хэрэглэгч `caching_sha2_password`-оор тохиргоологдвол Node.js-ийн `mysql2` драйвертай зөрчилдөнө (`mysql.exe` CLI ажилладаг тул андуурч болно). Засвар:

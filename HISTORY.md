@@ -9,6 +9,8 @@
 - Aiven connectivity was verified over TLS with the MySQL client and the imported database contains the existing 937 products.
 - `scripts/db-backup.ps1` and `scripts/db-restore.ps1` now accept Aiven URIs with `?ssl-mode=REQUIRED` and pass `--ssl-mode=REQUIRED` to the MySQL tools.
 - Credentials remain local-only in `.env`; no password or certificate was added to the repository.
+- Windows Task Scheduler-ийн `SUGI ASAYAKE Daily DB Backup` task-ийг 23:30-аас **19:00** болгож шинэчилсэн (өдөр бүр, 14 backup хадгална).
+- Aiven-ийн 30 хоногийн trial дуусахаас өмнө хамгийн сүүлийн бүрэн `.zip` backup-ийг татаж авч, тусдаа төхөөрөмж/cloud drive дээр хадгалах болон `db-restore.ps1`-ээр буцаан сэргээх төлөвлөгөөг баримтжуулсан.
 
 ---
 
