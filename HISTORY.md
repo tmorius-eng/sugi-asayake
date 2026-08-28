@@ -4,6 +4,14 @@
 
 ---
 
+## Shared Aiven MySQL migration (2026-08-28)
+- Local MySQL data was imported into the empty Aiven MySQL `defaultdb` service so both laptops can share the same `site_media`, products, and order metadata while Cloudflare R2 continues to store image bytes.
+- Aiven connectivity was verified over TLS with the MySQL client and the imported database contains the existing 937 products.
+- `scripts/db-backup.ps1` and `scripts/db-restore.ps1` now accept Aiven URIs with `?ssl-mode=REQUIRED` and pass `--ssl-mode=REQUIRED` to the MySQL tools.
+- Credentials remain local-only in `.env`; no password or certificate was added to the repository.
+
+---
+
 ## Манус-ээс салгах явц, эхний bug-ууд (2026-08-20-аас өмнөх)
 
 ### 1. Manus-ээс бүрэн салгасан

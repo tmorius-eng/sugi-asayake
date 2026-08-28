@@ -51,7 +51,7 @@ if (-not (Test-Path $BackupFile)) {
   throw "Backup file not found: $BackupFile"
 }
 
-$match = [regex]::Match($DatabaseUrl, '^mysql://(?<user>[^:@]+):(?<pass>[^@]*)@(?<host>[^:/]+)(:(?<port>\d+))?/(?<db>[^?]+)$')
+$match = [regex]::Match($DatabaseUrl, '^mysql://(?<user>[^:@]+):(?<pass>[^@]*)@(?<host>[^:/]+)(:(?<port>\d+))?/(?<db>[^?]+)(\?.*)?$')
 if (-not $match.Success) {
   throw "Could not parse DATABASE_URL. Expected format: mysql://user:password@host:port/dbname"
 }
@@ -86,12 +86,14 @@ if ($BackupFile -like "*.zip") {
 $previousPwd = $env:MYSQL_PWD
 $env:MYSQL_PWD = $dbPass
 try {
+  $mysqlArgs = @("--host=$dbHost", "--port=$dbPort", "--user=$dbUser")
+  if ($DatabaseUrl -match '(?i)([?&])ssl-mode=required(&|$)') { $mysqlArgs += "--ssl-mode=REQUIRED" }
   Write-Host "Ensuring database '$restoreDb' exists ..."
-  & $mysqlPath --host=$dbHost --port=$dbPort --user=$dbUser -e "CREATE DATABASE IF NOT EXISTS ``$restoreDb``;"
+  & $mysqlPath @mysqlArgs -e "CREATE DATABASE IF NOT EXISTS ``$restoreDb``;"
   if ($LASTEXITCODE -ne 0) { throw "Failed to create/verify database '$restoreDb' (exit $LASTEXITCODE)" }
 
   Write-Host "Restoring $sqlFile into '$restoreDb' ..."
-  Get-Content $sqlFile -Raw | & $mysqlPath --host=$dbHost --port=$dbPort --user=$dbUser $restoreDb
+  Get-Content $sqlFile -Raw | & $mysqlPath @mysqlArgs $restoreDb
   if ($LASTEXITCODE -ne 0) { throw "mysql restore exited with code $LASTEXITCODE" }
 } finally {
   if ($null -eq $previousPwd) { Remove-Item Env:\MYSQL_PWD -ErrorAction SilentlyContinue } else { $env:MYSQL_PWD = $previousPwd }

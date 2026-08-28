@@ -45,7 +45,7 @@ if (-not $DatabaseUrl) {
   throw "DATABASE_URL is not set. Pass -DatabaseUrl, or set `$env:DATABASE_URL first (see CLAUDE.md for the local dev value)."
 }
 
-$match = [regex]::Match($DatabaseUrl, '^mysql://(?<user>[^:@]+):(?<pass>[^@]*)@(?<host>[^:/]+)(:(?<port>\d+))?/(?<db>[^?]+)$')
+$match = [regex]::Match($DatabaseUrl, '^mysql://(?<user>[^:@]+):(?<pass>[^@]*)@(?<host>[^:/]+)(:(?<port>\d+))?/(?<db>[^?]+)(\?.*)?$')
 if (-not $match.Success) {
   throw "Could not parse DATABASE_URL. Expected format: mysql://user:password@host:port/dbname"
 }
@@ -75,7 +75,10 @@ Write-Host "Dumping '$dbName' from $dbHost`:$dbPort ..."
 $previousPwd = $env:MYSQL_PWD
 $env:MYSQL_PWD = $dbPass
 try {
-  & $MySqlDumpPath --host=$dbHost --port=$dbPort --user=$dbUser --single-transaction --routines --triggers --result-file="$sqlFile" $dbName
+  $dumpArgs = @("--host=$dbHost", "--port=$dbPort", "--user=$dbUser")
+  if ($DatabaseUrl -match '(?i)([?&])ssl-mode=required(&|$)') { $dumpArgs += "--ssl-mode=REQUIRED" }
+  $dumpArgs += @("--single-transaction", "--routines", "--triggers", "--result-file=$sqlFile")
+  & $MySqlDumpPath @dumpArgs $dbName
   if ($LASTEXITCODE -ne 0) { throw "mysqldump exited with code $LASTEXITCODE" }
 } finally {
   if ($null -eq $previousPwd) { Remove-Item Env:\MYSQL_PWD -ErrorAction SilentlyContinue } else { $env:MYSQL_PWD = $previousPwd }

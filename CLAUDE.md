@@ -27,6 +27,9 @@ pnpm dev
 ```
 Гар `$env:` тохиргоо зөвхөн `.env`-ийн утгыг түр override хийх шаардлагатай үед л хэрэгтэй.
 
+### Shared database (Aiven)
+Хоёр laptop-ийн metadata, products, orders-ийг ижил байлгахын тулд Aiven MySQL shared database ашиглана. `DATABASE_URL` нь Aiven-ийн `defaultdb` connection string байна; password-ийг `.env`-д л хадгалж, GitHub-д хэзээ ч commit хийхгүй. Aiven service-ийн built-in daily backup-ийг идэвхжүүлж, нэмэлт локал backup шаардлагатай бол `pwsh scripts/db-backup-daily.ps1` ажиллуулна. Үүнийг Windows Task Scheduler-аар өдөр бүр ажиллуулж болно. Aiven URI-д `?ssl-mode=REQUIRED` байвал backup/restore script-үүд TLS flag-ийг автоматаар дамжуулна.
+
 ### MySQL-тэй холбоотой чухал зүйл
 Windows дээрх MySQL 8 root хэрэглэгч `caching_sha2_password`-оор тохиргоологдвол Node.js-ийн `mysql2` драйвертай зөрчилдөнө (`mysql.exe` CLI ажилладаг тул андуурч болно). Засвар:
 ```sql
