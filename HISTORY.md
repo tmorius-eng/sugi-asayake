@@ -14,6 +14,13 @@
 
 ---
 
+## Navigation state and return paths (2026-08-28)
+- Shop pagination and search/category state are reflected in the `/shop` URL, so refresh or returning from a product page preserves the selected catalog page/filter instead of silently resetting to page 1.
+- Product-detail breadcrumbs now use real links: `ДЭЛГҮҮР` returns to `/shop`, and the category name opens the matching filtered shop view.
+- Admin navigation now includes a visible `Нүүр хуудас` link to `/`, so staff do not need to type the homepage URL manually.
+
+---
+
 ## Манус-ээс салгах явц, эхний bug-ууд (2026-08-20-аас өмнөх)
 
 ### 1. Manus-ээс бүрэн салгасан

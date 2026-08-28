@@ -1,5 +1,5 @@
 import { ArrowDownUp, ArrowUpRight, ChevronLeft, ChevronRight, Eye, Heart, MapPin, PackageCheck, Phone, RotateCcw, Search, ShoppingBag, SlidersHorizontal, Sparkles, Star, Truck } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
@@ -78,11 +78,12 @@ function RecommendedForYou({ products, onRemember, onQuickView }: RecommendedFor
 
 export default function Shop() {
   const qaHistoryMode = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("historyQa") : null;
+  const initialParams = new URLSearchParams(window.location.search);
   // Prefills from the header search's "бүх дэлгүүрээс харах" link
   // (/shop?q=...) so a search started from any page lands here already
   // filtered, instead of dropping the shopper's query on the floor.
   const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get("q") ?? "");
-  const [category, setCategory] = useState("all");
+  const [category, setCategory] = useState(() => initialParams.get("category") ?? "all");
   const [skinTypeFilter, setSkinTypeFilter] = useState<SkinType | "all">("all");
   const [inStockOnly, setInStockOnly] = useState(false);
   const [sort, setSort] = useState<CatalogSortOption>("featured");
@@ -135,10 +136,24 @@ export default function Shop() {
   // endless scroll — page it like any real catalog. 24 divides evenly into
   // the 4/3/2-column grid breakpoints (see .shop-product-grid in index.css).
   const SHOP_PAGE_SIZE = 24;
-  const [page, setPage] = useState(1);
-  useEffect(() => setPage(1), [search, category, skinTypeFilter, inStockOnly, sort]);
+  const [page, setPage] = useState(() => Math.max(1, Number(initialParams.get("page")) || 1));
+  const controlsMounted = useRef(false);
+  useEffect(() => {
+    if (controlsMounted.current) setPage(1);
+    controlsMounted.current = true;
+    const params = new URLSearchParams(window.location.search);
+    params.delete("page");
+    if (search.trim()) params.set("q", search.trim()); else params.delete("q");
+    if (category !== "all") params.set("category", category); else params.delete("category");
+    window.history.replaceState(null, "", `${window.location.pathname}${params.toString() ? `?${params}` : ""}`);
+  }, [search, category, skinTypeFilter, inStockOnly, sort]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / SHOP_PAGE_SIZE));
   useEffect(() => { if (page > totalPages) setPage(totalPages); }, [totalPages, page]);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (page > 1) params.set("page", String(page)); else params.delete("page");
+    window.history.replaceState(null, "", `${window.location.pathname}${params.toString() ? `?${params}` : ""}`);
+  }, [page]);
   const pagedProducts = useMemo(() => filtered.slice((page - 1) * SHOP_PAGE_SIZE, page * SHOP_PAGE_SIZE), [filtered, page]);
   const effectiveRecentIds = qaHistoryMode === "unavailable" ? [999_999] : recentlyViewedIds;
   const forceZeroResults = qaHistoryMode === "zero-filter";
