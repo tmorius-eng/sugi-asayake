@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { CheckCircle2, ChevronLeft, ChevronRight, ChartColumnIncreasing, Download, Eye, FilePenLine, ImageUp, LayoutDashboard, ListChecks, LoaderCircle, Megaphone, PackagePlus, Pencil, Plug, Search, ShieldAlert, ShieldCheck, Star, Tag, Tags, Trash2, UserPlus, UsersRound } from "lucide-react";
 import { toast } from "sonner";
-import { useLocation, useSearch } from "wouter";
+import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { downloadCsv } from "@/lib/csv";
 import { trpc } from "@/lib/trpc";
@@ -124,7 +124,6 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
   const { user: currentUser } = useAuth();
   const isFullAdmin = preview || currentUser?.role === "admin";
   const [location, setLocation] = useLocation();
-  const search = useSearch();
   const [section, setSection] = useState<AdminSection>(() => adminSectionFromUrl(window.location.href));
   const [query, setQuery] = useState("");
   const [composer, setComposer] = useState<"product" | "category" | "user" | null>(null);
@@ -145,9 +144,9 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
   const invitationsQuery = trpc.admin.staffInvitations.useQuery(undefined, { enabled: !preview });
 
   useEffect(() => {
-    const requestedSection = adminSectionFromUrl(`${location}${search}`);
+    const requestedSection = adminSectionFromUrl(location);
     setSection(current => current === requestedSection ? current : requestedSection);
-  }, [location, search]);
+  }, [location]);
 
   const refreshCatalog = async () => {
     await Promise.all([utils.admin.products.invalidate(), utils.admin.categories.invalidate(), utils.catalog.list.invalidate()]);
