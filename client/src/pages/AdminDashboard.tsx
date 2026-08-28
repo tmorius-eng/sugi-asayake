@@ -7,7 +7,7 @@ const menuItems: DashboardMenuItem[] = [
   { icon: Home, label: "Нүүр хуудас", path: "/" },
   { icon: LayoutDashboard, label: "Удирдлага", path: "/admin" },
   { icon: PackagePlus, label: "Бүтээгдэхүүн", path: "/admin?section=products" },
-  { icon: UsersRound, label: "Хэрэглэгч", path: "/admin?adminSection=users" },
+  { icon: UsersRound, label: "Хэрэглэгч", path: "/admin?section=staff" },
 ];
 
 export default function AdminDashboard() {

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CheckCircle2, ChevronLeft, ChevronRight, ListFilter, LoaderCircle, LogIn, ShieldQuestion, XCircle } from "lucide-react";
+import { CheckCircle2, ListFilter, LoaderCircle, LogIn, ShieldQuestion, XCircle } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
 const actionLabels: Record<string, string> = {
@@ -45,27 +45,11 @@ export default function AdminSecurityCenter() {
   );
 }
 
-function LogPagination({ page, total, pageSize, onPageChange }: { page: number; total: number; pageSize: number; onPageChange: (page: number) => void }) {
-  const pageCount = Math.max(1, Math.ceil(total / pageSize));
-  if (pageCount <= 1) return null;
-  return (
-    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-[#77787d]">
-      <span>{page} / {pageCount} хуудас ({total} бичлэг)</span>
-      <div className="flex items-center gap-2">
-        <button type="button" disabled={page === 1} onClick={() => onPageChange(page - 1)} className="inline-flex items-center gap-1 rounded-full border border-black/10 px-3 py-2 font-bold disabled:opacity-40"><ChevronLeft size={14} />Өмнөх</button>
-        <button type="button" disabled={page === pageCount} onClick={() => onPageChange(page + 1)} className="inline-flex items-center gap-1 rounded-full border border-black/10 px-3 py-2 font-bold disabled:opacity-40">Дараах<ChevronRight size={14} /></button>
-      </div>
-    </div>
-  );
-}
-
 function AuditLogTab() {
   const [action, setAction] = useState("");
   const [actorEmail, setActorEmail] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [page, setPage] = useState(1);
-  const pageSize = 25;
 
   const query = trpc.admin.auditLogs.useQuery({
     action: action || undefined,
@@ -73,28 +57,27 @@ function AuditLogTab() {
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
   });
-  const allLogs = query.data ?? [];
-  const logs = allLogs.slice((page - 1) * pageSize, page * pageSize);
+  const logs = query.data ?? [];
 
   return (
     <div>
       <div className="flex flex-wrap items-end gap-3 rounded-2xl bg-[#f8f5ef] p-4">
         <label className="grid gap-1.5 text-xs font-bold">Үйлдлийн төрөл
-          <select value={action} onChange={event => { setAction(event.target.value); setPage(1); }} className="h-10 rounded-lg border border-black/10 bg-white px-2 text-xs font-normal outline-none focus:border-[#df1f3d]">
+          <select value={action} onChange={event => setAction(event.target.value)} className="h-10 rounded-lg border border-black/10 bg-white px-2 text-xs font-normal outline-none focus:border-[#df1f3d]">
             <option value="">Бүгд</option>
             {Object.entries(actionLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </label>
         <label className="grid gap-1.5 text-xs font-bold">Admin имэйл
-          <input value={actorEmail} onChange={event => { setActorEmail(event.target.value); setPage(1); }} placeholder="жишээ: owner@" className="h-10 rounded-lg border border-black/10 bg-white px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" />
+          <input value={actorEmail} onChange={event => setActorEmail(event.target.value)} placeholder="жишээ: owner@" className="h-10 rounded-lg border border-black/10 bg-white px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" />
         </label>
         <label className="grid gap-1.5 text-xs font-bold">Эхлэх огноо
-          <input type="date" value={dateFrom} onChange={event => { setDateFrom(event.target.value); setPage(1); }} className="h-10 rounded-lg border border-black/10 bg-white px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" />
+          <input type="date" value={dateFrom} onChange={event => setDateFrom(event.target.value)} className="h-10 rounded-lg border border-black/10 bg-white px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" />
         </label>
         <label className="grid gap-1.5 text-xs font-bold">Дуусах огноо
-          <input type="date" value={dateTo} onChange={event => { setDateTo(event.target.value); setPage(1); }} className="h-10 rounded-lg border border-black/10 bg-white px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" />
+          <input type="date" value={dateTo} onChange={event => setDateTo(event.target.value)} className="h-10 rounded-lg border border-black/10 bg-white px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" />
         </label>
-        {(action || actorEmail || dateFrom || dateTo) && <button type="button" onClick={() => { setAction(""); setActorEmail(""); setDateFrom(""); setDateTo(""); setPage(1); }} className="h-10 text-xs font-bold text-[#a51630]">Шүүлтүүр цэвэрлэх</button>}
+        {(action || actorEmail || dateFrom || dateTo) && <button type="button" onClick={() => { setAction(""); setActorEmail(""); setDateFrom(""); setDateTo(""); }} className="h-10 text-xs font-bold text-[#a51630]">Шүүлтүүр цэвэрлэх</button>}
       </div>
 
       {query.isLoading && <p className="mt-5 flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>}
@@ -123,7 +106,6 @@ function AuditLogTab() {
               {logs.length === 0 && <tr><td colSpan={4} className="py-10 text-center text-sm text-[#77787d]"><ListFilter className="mx-auto mb-2 text-[#a9a49a]" size={22} />Тохирох лог олдсонгүй.</td></tr>}
             </tbody>
           </table>
-          <LogPagination page={page} total={allLogs.length} pageSize={pageSize} onPageChange={setPage} />
         </div>
       )}
     </div>
@@ -133,21 +115,18 @@ function AuditLogTab() {
 function LoginHistoryTab() {
   const [email, setEmail] = useState("");
   const [outcome, setOutcome] = useState<"all" | "success" | "failed">("all");
-  const [page, setPage] = useState(1);
-  const pageSize = 25;
 
   const query = trpc.admin.loginHistory.useQuery({ email: email.trim() || undefined, outcome });
-  const allAttempts = query.data ?? [];
-  const attempts = allAttempts.slice((page - 1) * pageSize, page * pageSize);
+  const attempts = query.data ?? [];
 
   return (
     <div>
       <div className="flex flex-wrap items-end gap-3 rounded-2xl bg-[#f8f5ef] p-4">
         <label className="grid gap-1.5 text-xs font-bold">Имэйл
-          <input value={email} onChange={event => { setEmail(event.target.value); setPage(1); }} placeholder="хайх имэйл" className="h-10 rounded-lg border border-black/10 bg-white px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" />
+          <input value={email} onChange={event => setEmail(event.target.value)} placeholder="хайх имэйл" className="h-10 rounded-lg border border-black/10 bg-white px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" />
         </label>
         <label className="grid gap-1.5 text-xs font-bold">Төлөв
-          <select value={outcome} onChange={event => { setOutcome(event.target.value as typeof outcome); setPage(1); }} className="h-10 rounded-lg border border-black/10 bg-white px-2 text-xs font-normal outline-none focus:border-[#df1f3d]">
+          <select value={outcome} onChange={event => setOutcome(event.target.value as typeof outcome)} className="h-10 rounded-lg border border-black/10 bg-white px-2 text-xs font-normal outline-none focus:border-[#df1f3d]">
             <option value="all">Бүгд</option>
             <option value="success">Амжилттай</option>
             <option value="failed">Амжилтгүй</option>
@@ -185,7 +164,6 @@ function LoginHistoryTab() {
               {attempts.length === 0 && <tr><td colSpan={4} className="py-10 text-center text-sm text-[#77787d]"><LogIn className="mx-auto mb-2 text-[#a9a49a]" size={22} />Нэвтрэлтийн түүх алга.</td></tr>}
             </tbody>
           </table>
-          <LogPagination page={page} total={allAttempts.length} pageSize={pageSize} onPageChange={setPage} />
         </div>
       )}
       <p className="mt-4 flex items-center gap-1.5 text-[11px] text-[#a9a49a]"><ShieldQuestion size={13} aria-hidden="true" />Хамгийн сүүлийн 200 бичлэг харагдана.</p>
