@@ -11,42 +11,44 @@ import {
   BadgeCheck,
   ChevronRight,
   CircleCheck,
-  Clock3,
   Facebook,
   Flower2,
   Gift,
   Instagram,
-  MapPin,
   Menu,
-  Navigation,
-  Newspaper,
-  Percent,
   Phone,
   ShieldCheck,
   ShoppingBag,
   Sparkles,
   Star,
   TrendingUp,
-  UserPlus,
   X,
 } from "lucide-react";
 import HeaderSearch from "@/components/HeaderSearch";
 import SeasonalCampaignCarousel from "@/components/SeasonalCampaignCarousel";
+import HeroSection from "@/components/home/HeroSection";
+import TrustStrip from "@/components/home/TrustStrip";
+import CategoryMasonry from "@/components/home/CategoryMasonry";
+import WhyChooseUs from "@/components/home/WhyChooseUs";
+import JournalSection from "@/components/home/JournalSection";
+import StoreLocatorSection from "@/components/home/StoreLocatorSection";
+import QuickStatsSection from "@/components/home/QuickStatsSection";
+import { locations } from "@/components/home/locations-data";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { trpc } from "@/lib/trpc";
 
 const logoUrl = "/manus-storage/sugi-logo-transparent-clean_fee66cad.png";
-// These four have no bundled fallback photo (unlike product shots, there's
-// no generic stand-in for real store/lifestyle photography) -- null here
+// These have no bundled fallback photo (unlike product shots, there's no
+// generic stand-in for real store/lifestyle photography) -- null here
 // means "nothing to show until an admin uploads one for this slot", which
-// lets the .hero-image/.collection-image/etc CSS gradient show through
+// lets the .hero-image/.cat-mosaic-anchor CSS gradient show through
 // instead of a broken <img>. Upload real photos via /admin -> Content &
 // Media for slots: home-hero, home-categories, summer-slide-1/2/3,
-// home-family, home-stores.
+// home-family. (home-stores no longer applies -- the store locator's map
+// is now a static illustration, not a photo slot, see StoreLocatorSection.)
 const heroImage = null;
 const assortmentImage = "/product-placeholder.svg";
 const familyImage = null;
-const storeImage = null;
 const symbolImage = "/manus-storage/sugi-symbol_0a534a76.png";
 
 const navItems = [
@@ -60,24 +62,17 @@ const socials = [
   { label: "Instagram", href: "https://www.instagram.com/asayake_japan_cosmetics/", Icon: Instagram },
 ];
 
-// PREMIUM-FEATURES.md TIER 3 Store Locator: hours/phone are the same across
-// all 3 branches (confirmed with Tom, 2026-08-25) — daily 11:00-20:00, one
-// shared central line (already the "залгах" button just above this list).
-const BRANCH_HOURS = "Өдөр бүр 11:00–20:00";
-const BRANCH_PHONE = "9450-9911";
-const locations = [
-  { number: "01", name: "Орос элчингийн салбар", detail: "Chin Van Handdorj St, SBD - 4 khoroo, Ulaanbaatar 13120", mapUrl: "https://www.google.com/maps/search/?api=1&query=Chin+Van+Handdorj+St%2C+SBD+-+4+khoroo%2C+Ulaanbaatar+13120" },
-  { number: "02", name: "Их наяд плаза", detail: "Ikh Mongol State Street 4, HUD - 15 khoroo, Ulaanbaatar 17009", mapUrl: "https://www.google.com/maps/search/?api=1&query=Ikh+Mongol+State+Street+4%2C+HUD+-+15+khoroo%2C+Ulaanbaatar+17009" },
-  { number: "03", name: "Яармаг FOOD CITY", detail: "Naadamchid Rd, HUD - 24 khoroo, Ulaanbaatar 17080", mapUrl: "https://www.google.com/maps/search/?api=1&query=Naadamchid+Rd%2C+HUD+-+24+khoroo%2C+Ulaanbaatar+17080" },
-];
-
+// slug matches the real product_categories.slug values (confirmed against
+// backups/sugi-catalog-export-2026-08-27.sql) -- used by CategoryMasonry's
+// image-led cards to resolve the real per-category placeholder art via
+// shared/catalog-filter.ts's getCategoryPlaceholderImage.
 const categories = [
-  { number: "01", title: "Арьс арчилгаа", detail: "Өдөр тутмын цэвэр, зөөлөн арчилгаа", Icon: Flower2 },
-  { number: "02", title: "Гоо сайхан", detail: "Японы сонгомол хэрэгцээт бүтээгдэхүүн", Icon: Sparkles },
-  { number: "03", title: "Эрүүл мэнд", detail: "Өдөр тутмын сайн сайхны найдвартай сонголт", Icon: ShieldCheck },
-  { number: "04", title: "Эрүүл ахуй", detail: "Гэр бүлд хэрэгтэй цэвэр, аюулгүй хэрэглээ", Icon: BadgeCheck },
-  { number: "05", title: "Үс ба бие", detail: "Өдөр бүрийн арчилгааг илүү хялбар болгоно", Icon: CircleCheck },
-  { number: "06", title: "Ээж ба хүүхэд", detail: "Зөөлөн, хэрэгцээт сонголтууд", Icon: Gift },
+  { number: "01", title: "Арьс арчилгаа", detail: "Өдөр тутмын цэвэр, зөөлөн арчилгаа", slug: "arhis-archilgaa", Icon: Flower2 },
+  { number: "02", title: "Гоо сайхан", detail: "Японы сонгомол хэрэгцээт бүтээгдэхүүн", slug: "goo-saikhan", Icon: Sparkles },
+  { number: "03", title: "Эрүүл мэнд", detail: "Өдөр тутмын сайн сайхны найдвартай сонголт", slug: "eruul-mend", Icon: ShieldCheck },
+  { number: "04", title: "Эрүүл ахуй", detail: "Гэр бүлд хэрэгтэй цэвэр, аюулгүй хэрэглээ", slug: "eruul-akhui", Icon: BadgeCheck },
+  { number: "05", title: "Үс ба бие", detail: "Өдөр бүрийн арчилгааг илүү хялбар болгоно", slug: "us-ba-bie", Icon: CircleCheck },
+  { number: "06", title: "Ээж ба хүүхэд", detail: "Зөөлөн, хэрэгцээт сонголтууд", slug: "eej-ba-khuukhed", Icon: Gift },
 ];
 
 const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
@@ -151,52 +146,20 @@ export default function Home() {
       </header>
 
       <main>
-        <section className="hero-section hero-sunrise" aria-labelledby="hero-title">
-          <div className="hero-color-orbit orbit-one" aria-hidden="true" />
-          <div className="hero-color-orbit orbit-two" aria-hidden="true" />
-          <div className="hero-copy">
-            <div className="hero-topline"><p className="eyebrow"><span /> SUGI ASAYAKE / MONGOLIA</p><span className="hero-time">ASAYAKE / 06:07</span></div>
-            <h1 id="hero-title">ГЭР БҮЛИЙН<br /><span>ГИШҮҮН БҮРТ</span><br /><strong>ЯПОН ЧАНАР</strong></h1>
-            <p className="hero-description">Японоос баталгаат бүтээгдэхүүнүүдийг албан ёсны эрхтэйгээр танд хүргэж байна.</p>
-            <div className="hero-actions">
-              <Link className="button button-primary" href="/shop">Бүтээгдэхүүн үзэх <ArrowUpRight size={16} /></Link>
-              <a className="quiet-link" href="#stores">Салбар олох <ChevronRight size={16} /></a>
-            </div>
-            <div className="hero-trust">
-              <BadgeCheck size={20} />
-              <div><strong>100% албан ёсны эрхтэй</strong><span>SUGI Drug Store Japan-ийн охин компани</span></div>
-            </div>
-            <div className="hero-signature" aria-label="SUGI ASAYAKE daily care signature"><Flower2 size={17} /><span>Өглөөнөөс орой хүртэл<br />таны өдөр тутмын сонголт.</span></div>
-          </div>
-          <div className="hero-image" style={bgStyle("home-hero", heroImage)} aria-label="SUGI ASAYAKE everyday-care products" role="img">
-            <div className="hero-image-shade" />
-            <div className="hero-image-sun" aria-hidden="true"><span>800+</span><small>DAILY<br />CHOICES</small></div>
-            <div className="hero-image-marker" aria-hidden="true"><Sparkles size={15} /><span>THE MORNING<br />OF CARE</span></div>
-            <div className="hero-image-label"><span>JAPAN QUALITY</span><strong>01</strong></div>
-            <div className="hero-image-caption">Өдөр бүрийн арчилгаа, илүү ойрхон</div>
-          </div>
-        </section>
+        <HeroSection heroImageStyle={bgStyle("home-hero", heroImage)} />
 
-        <div className="hero-facts" aria-label="SUGI ASAYAKE facts">
-          <div><strong>800<span>+</span></strong><span>төрлийн бүтээгдэхүүн</span></div>
-          <div><strong>03</strong><span>УБ дахь салбар</span></div>
-          <div><strong>01</strong><span>Японы албан ёсны эрх</span></div>
-        </div>
+        <TrustStrip branchCount={locations.length} />
 
         <div className="sunrise-ribbon" aria-label="SUGI ASAYAKE brand promise">
           <div><span>JAPANESE DAILY CARE</span><i /><span>УЛААНБААТАР / MONGOLIA</span><i /><span>ГЭР БҮЛИЙН ГИШҮҮН БҮРТ</span><i /></div>
           <div aria-hidden="true"><span>JAPANESE DAILY CARE</span><i /><span>УЛААНБААТАР / MONGOLIA</span><i /><span>ГЭР БҮЛИЙН ГИШҮҮН БҮРТ</span><i /></div>
         </div>
 
-        {/* matsukiyococokara-online.com's points/coupon/register 3-panel promo
-            strip, reframed around systems SUGI ASAYAKE already enforces at
-            checkout (PREMIUM-FEATURES.md TIER 5 loyalty tiers + discount
-            codes) instead of a points program we don't have. */}
-        <section className="membership-strip" data-reveal aria-label="Гишүүнчлэлийн давуу тал">
-          <div className="membership-panel"><Gift size={20} /><div><strong>Гишүүнчлэлийн хөнгөлөлт</strong><span>Нийт худалдан авалтын дүнгээр 3–10% хямдрал автоматаар нэмэгддэг.</span></div></div>
-          <div className="membership-panel"><Percent size={20} /><div><strong>Урамшуулалын код</strong><span>Захиалга бүрд урамшуулалын код ашиглаж нэмж хямдруулаарай.</span></div></div>
-          <Link href="/login?mode=register" className="membership-panel membership-cta"><UserPlus size={20} /><div><strong>Гишүүнээр бүртгүүлэх</strong><span>Хямдрал, урамшуулал шууд идэвхжинэ.</span></div><ArrowUpRight size={17} /></Link>
-        </section>
+        {/* Home redesign Tier 7 -- replaces the old membership-strip promo
+            panel (generic "3-10%" prose, no real data) with a real,
+            server-authoritative membership summary. See
+            client/src/components/home/QuickStatsSection.tsx. */}
+        <QuickStatsSection />
 
         <section className="story-section page-section" id="story" data-reveal>
           <div className="section-heading"><span>01</span><span>THE SUGI DIFFERENCE</span></div>
@@ -204,27 +167,15 @@ export default function Home() {
             <h2>Японы чанарыг<br /><em>ойртуулна.</em></h2>
             <div className="story-copy"><p>SUGI ASAYAKE нь Японы SUGI Drug Store-ийн албан ёсны охин компани. Өдөр тутмын эрүүл мэнд, гоо сайхан, арчилгааг Монголын гэр бүл бүрт илүү ойртуулна.</p><a className="inline-link" href="#collection">Бидний ялгаа <ArrowUpRight size={16} /></a></div>
           </div>
-          <div className="trust-grid">
-            <div><ShoppingBag size={20} /><strong>Сонголт</strong><span>Арчилгаа, гоо сайхан, эрүүл ахуйн 800+ төрөл</span></div>
-            <div><ShieldCheck size={20} /><strong>Баталгаа</strong><span>Японоос баталгаат, албан ёсны бүтээгдэхүүн</span></div>
-            <div><MapPin size={20} /><strong>Ойрхон</strong><span>Улаанбаатарын 3 байршилд таныг хүлээнэ</span></div>
-          </div>
         </section>
 
-        <section className="collection-section page-section" id="collection" data-reveal>
-          <div className="section-heading"><span>02</span><span>EVERYDAY JAPAN</span></div>
-          <div className="collection-heading"><div><h2>Японы бүтээгдэхүүний<br /><em>үндсэн ангилал.</em></h2><div className="collection-color-key" aria-hidden="true"><i /><i /><i /><span>COLOR AS CARE</span></div></div><p>Арьс арчилгаа, гоо сайхан, эрүүл ахуй, гэр бүлийн өдөр тутмын хэрэгцээг 800+ сонголтоос нэг дороос.</p></div>
-          <div className="collection-grid">
-            <div className="collection-image" style={bgStyle("home-categories", assortmentImage)}>
-              <div className="collection-image-shade" />
-              <div className="collection-card"><span>OUR SELECTION</span><strong>Нэг өдөрт<br />хэрэгтэй бүх зүйл.</strong><a href="#stores">Ойр салбараа олох <ArrowUpRight size={15} /></a></div>
-            </div>
-            <div className="category-list">
-              {categories.map((category) => <Link href="/shop" className="category-item" key={category.number}><span className="category-icon-badge"><category.Icon size={16} /></span><span className="category-number">{category.number}</span><div><strong>{category.title}</strong><span>{category.detail}</span></div><ArrowUpRight size={17} /></Link>)}
-              <div className="category-note"><img src={symbolImage} alt="" /><span>Бидний тавиур дээрх бүтээгдэхүүн бүр<br />өдөр тутмын хэрэгцээнээс эхэлнэ.</span></div>
-            </div>
-          </div>
-        </section>
+        <WhyChooseUs branchCount={locations.length} />
+
+        <CategoryMasonry
+          categories={categories}
+          anchorImageStyle={bgStyle("home-categories", assortmentImage)}
+          symbolImage={symbolImage}
+        />
 
         {/* matsukiyococokara-online.com's 売れ筋ランキング (bestseller ranking)
             section, adapted: real paid-order history via getBestsellingProducts,
@@ -268,30 +219,9 @@ export default function Home() {
             surfaced it on the homepage until now. Hidden entirely, same
             empty-state discipline as the bestseller rail above, until an
             admin has actually published something. */}
-        {latestPosts.length > 0 && (
-          <section className="home-news-section page-section" data-reveal>
-            <div className="section-heading section-heading-light"><span>05</span><span><Newspaper size={13} /> SUGI JOURNAL</span></div>
-            <div className="home-news-heading"><h2>Зөвлөгөө ба <em>мэдээ.</em></h2><Link href="/shop" className="quiet-link home-news-all">Бүх нийтлэл <ChevronRight size={16} /></Link></div>
-            <div className="home-news-grid">
-              {latestPosts.map(post => (
-                <Link href={`/${post.slug}`} className="home-news-card" key={post.id}>
-                  {post.coverImageUrl && <img src={post.coverImageUrl} alt="" />}
-                  <div>
-                    <span>{post.publishedAt ? new Date(post.publishedAt).toLocaleDateString("mn-MN") : ""}</span>
-                    <h3>{post.title}</h3>
-                    {post.excerpt && <p>{post.excerpt}</p>}
-                    <em>Дэлгэрэнгүй унших <ArrowUpRight size={14} /></em>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
+        <JournalSection posts={latestPosts} />
 
-        <section className="locations-section page-section" id="stores" data-reveal>
-          <div className="locations-copy"><div className="section-heading"><span>04</span><span>FIND YOUR ASAYAKE</span></div><p className="eyebrow"><Navigation size={14} /> 3 БАЙРШИЛ</p><h2>Танд ойрхон<br /><em>салбар дээр.</em></h2><p className="locations-lede">Улаанбаатарын өөр өөр цэгүүдэд япон чанарыг танд ойртуулж байна.</p><a className="button button-primary" href="tel:94509911">9450-9911 руу залгах <Phone size={15} /></a></div>
-          <div className="location-side"><div className="location-image" style={bgStyle("home-stores", storeImage)}><span>UB / MONGOLIA</span></div><div className="location-list">{locations.map((location) => <a className="location-row" href={location.mapUrl} target="_blank" rel="noreferrer" aria-label={`${location.name} Google Maps дээр нээх`} key={location.number}><span>{location.number}</span><div><strong>{location.name}</strong><small>{location.detail}</small><small className="location-meta"><Clock3 size={11} /> {BRANCH_HOURS}<span className="location-meta-divider" aria-hidden="true">•</span><Phone size={11} /> {BRANCH_PHONE}</small></div><ArrowUpRight size={17} /></a>)}<p className="location-note"><MapPin size={14} /> Салбарын байршлыг Google Maps дээр нээх</p></div></div>
-        </section>
+        <StoreLocatorSection />
 
         <section className="final-cta" data-reveal><div className="final-cta-sun" aria-hidden="true">SUGI<br />CARE</div><div><p className="eyebrow">NEED A LITTLE HELP?</p><h2>Сайн сонголт <em>ойрхон байна.</em></h2></div><a className="button button-light" href="tel:94509911">9450-9911 <Phone size={15} /></a></section>
       </main>

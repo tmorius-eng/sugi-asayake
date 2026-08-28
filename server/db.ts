@@ -1997,11 +1997,25 @@ export async function getUserLoyaltyStatus(userId: number) {
   const onlineSpendMnt = Number(spendRow?.total ?? 0);
   const totalSpendMnt = onlineSpendMnt + user.loyaltyManualAdjustmentMnt;
   const nextTier = getNextLoyaltyTier(totalSpendMnt);
+  // Home redesign Quick Stats section: lifetime money actually saved via the
+  // loyalty tier discount, kept mathematically separate from totalSpendMnt
+  // (spend) and currentTier.discountPercent (rate). Same "same bar as
+  // loyalty spend" filter as onlineSpendMnt just above -- paymentStatus
+  // ="paid" only, not order `status` -- so a shopper's tier/discount% and
+  // their savings total can never silently disagree about which orders
+  // count (mirrors the reasoning already documented on
+  // getBestsellingProducts for the same paymentStatus-vs-status choice).
+  // orders.loyaltyDiscountMnt is a column entirely separate from
+  // orders.discountMnt (routine) and orders.couponDiscountMnt (coupon), so
+  // summing it alone can't leak either of those into "loyalty savings".
+  const [savingsRow] = await db.select({ total: sql<number>`coalesce(sum(${orders.loyaltyDiscountMnt}), 0)` }).from(orders).where(and(eq(orders.userId, userId), eq(orders.paymentStatus, "paid")));
+  const totalLoyaltySavingsMnt = Number(savingsRow?.total ?? 0);
   return {
     cardNumber: user.phone,
     onlineSpendMnt,
     manualAdjustmentMnt: user.loyaltyManualAdjustmentMnt,
     totalSpendMnt,
+    totalLoyaltySavingsMnt,
     currentTier: getLoyaltyTier(totalSpendMnt),
     nextTier,
     amountToNextTierMnt: nextTier ? nextTier.minSpendMnt - totalSpendMnt : null,

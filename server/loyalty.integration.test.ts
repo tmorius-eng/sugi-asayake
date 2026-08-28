@@ -190,3 +190,87 @@ describeWithDatabase("loyalty tier discount integration", () => {
     }
   });
 });
+
+// Home redesign Quick Stats section: getUserLoyaltyStatus's new
+// totalLoyaltySavingsMnt field (server/db.ts) -- lifetime money actually
+// saved via the loyalty discount, kept separate from spend/tier/discount%.
+// A dedicated describe block with its own shopper (rather than appending
+// onto the sequential-state shopper above) so each scenario below asserts
+// an exact, independently-reasoned total instead of a running cumulative
+// value threaded through the tests above.
+describeWithDatabase("loyalty total savings (Quick Stats totalLoyaltySavingsMnt)", () => {
+  const marker = `loyalty-savings-test-${Date.now()}`;
+  const shopperEmail = `${marker}-shopper@example.invalid`;
+  let shopperId = 0;
+  const createdOrderIds: number[] = [];
+
+  beforeAll(async () => {
+    const db = await getDb();
+    if (!db) throw new Error("DATABASE_URL is required for loyalty integration tests.");
+    const shopperInsert = await db.insert(users).values({ email: shopperEmail, passwordHash: await hashPassword("ShopperPassw0rd!"), name: "Loyalty Savings Test Shopper", phone: "99334455", role: "user", emailVerifiedAt: new Date() });
+    shopperId = Number(shopperInsert[0].insertId);
+  });
+
+  afterAll(async () => {
+    const db = await getDb();
+    if (!db) return;
+    for (const orderId of createdOrderIds) await db.delete(orders).where(eq(orders.id, orderId));
+    await db.delete(users).where(eq(users.id, shopperId));
+  });
+
+  function shopper() {
+    return callerFor({ id: shopperId, email: shopperEmail, name: "Loyalty Savings Test Shopper", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+  }
+
+  // Direct inserts (same technique the "climbs to a higher tier" test above
+  // uses) rather than a real checkout flow -- lets each scenario set an
+  // exact paymentStatus/loyaltyDiscountMnt/couponDiscountMnt combination
+  // without needing a real coupon code or cart round-trip.
+  async function insertOrder(overrides: Partial<typeof orders.$inferInsert>) {
+    const db = await getDb();
+    if (!db) throw new Error("DATABASE_URL is required for loyalty integration tests.");
+    const insert = await db.insert(orders).values({
+      userId: shopperId,
+      orderNumber: `LOYSAVE${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random() * 10_000)}`,
+      status: "completed",
+      paymentStatus: "paid",
+      paymentMethod: "cash_on_delivery",
+      deliveryMethod: "store_pickup",
+      pickupBranch: "Орос элчингийн салбар",
+      customerName: "Loyalty Savings Test Shopper",
+      customerPhone: "99334455",
+      subtotalMnt: 100_000,
+      totalMnt: 100_000,
+      loyaltyDiscountMnt: 0,
+      couponDiscountMnt: 0,
+      ...overrides,
+    });
+    const orderId = Number(insert[0].insertId);
+    createdOrderIds.push(orderId);
+    return orderId;
+  }
+
+  it("is 0, not an error, for a shopper with zero orders", async () => {
+    const status = await shopper().loyalty.myStatus();
+    expect(status).toMatchObject({ totalLoyaltySavingsMnt: 0 });
+  });
+
+  it("counts only the loyalty portion, excluding a coupon discount on the same order", async () => {
+    await insertOrder({ loyaltyDiscountMnt: 5_000, couponDiscountMnt: 2_000, totalMnt: 93_000 });
+    const status = await shopper().loyalty.myStatus();
+    expect(status?.totalLoyaltySavingsMnt).toBe(5_000);
+  });
+
+  it("excludes an unpaid order's loyalty discount", async () => {
+    await insertOrder({ paymentStatus: "unpaid", loyaltyDiscountMnt: 9_000, totalMnt: 91_000 });
+    const status = await shopper().loyalty.myStatus();
+    expect(status?.totalLoyaltySavingsMnt).toBe(5_000); // unchanged -- the unpaid order above is excluded
+  });
+
+  it("accumulates across multiple paid orders", async () => {
+    await insertOrder({ loyaltyDiscountMnt: 1_000, totalMnt: 99_000 });
+    await insertOrder({ loyaltyDiscountMnt: 2_000, totalMnt: 98_000 });
+    const status = await shopper().loyalty.myStatus();
+    expect(status?.totalLoyaltySavingsMnt).toBe(5_000 + 1_000 + 2_000); // 8,000
+  });
+});

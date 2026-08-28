@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { downloadBase64File } from "@/lib/fileDownload";
 import { downloadCsv } from "@/lib/csv";
+import { arcPath, polarPoint } from "@/lib/svg-arc";
 import type { RouterOutputs } from "@/lib/trpc";
 
 const formatMnt = (amount: number) => `${new Intl.NumberFormat("mn-MN").format(amount)}₮`;
@@ -61,24 +62,6 @@ function roundUpToNiceNumber(value: number): number {
   const normalized = value / magnitude;
   const nice = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
   return nice * magnitude;
-}
-
-function polarPoint(cx: number, cy: number, r: number, angleDeg: number) {
-  const rad = (angleDeg * Math.PI) / 180;
-  return { x: cx + r * Math.cos(rad), y: cy - r * Math.sin(rad) };
-}
-
-/** SVG arc path from startAngle to endAngle (degrees, 0=right/3-o'clock,
- *  90=top, 180=left/9-o'clock) -- the standard semicircle-gauge recipe,
- *  hand-rolled rather than routed through recharts' RadialBarChart: exact
- *  pixel control over the needle's pivot/rotation is far more reliable than
- *  reverse-engineering recharts' internal cx/cy from inside a
- *  ResponsiveContainer that resizes. */
-function arcPath(cx: number, cy: number, r: number, startAngle: number, endAngle: number) {
-  const start = polarPoint(cx, cy, r, startAngle);
-  const end = polarPoint(cx, cy, r, endAngle);
-  const largeArc = startAngle - endAngle > 180 ? 1 : 0;
-  return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y}`;
 }
 
 /**

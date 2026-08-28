@@ -4,6 +4,18 @@
 
 ---
 
+## Нүүр хуудасны premium reference-driven редизайн (2026-08-28)
+
+Бүх Home.tsx-ийг (302 мөрийн монолит) `client/src/components/home/*.tsx` section-компонент болгож задалсан: `HeroSection`, `TrustStrip`, `QuickStatsSection`+`InfinityGraph` (шинэ, гишүүнчлэлийн infinity graph, зочин/нэвтэрсэн 2 төлөвтэй), `CategoryMasonry`, `WhyChooseUs` (шинэ, харанхуй 3 карт), `JournalSection` (staggered restyle, 1/2/3-post тохиолдол тус бүрт), `StoreLocatorSection` (3-бүсийн зохион байгуулалт, static SVG газрын зураг — Google Maps API key байхгүй тул `Map.tsx`-ийг холбоогүй). Backend: `server/db.ts`-ийн `getUserLoyaltyStatus`-д шинэ `totalLoyaltySavingsMnt` талбар (зөвхөн `paymentStatus="paid"` захиалгын `loyaltyDiscountMnt` нэгтгэдэг), 4 шинэ тест `server/loyalty.integration.test.ts`-д. `AdminAnalyticsPanel.tsx`-ийн `polarPoint`/`arcPath` SVG arc math-ыг `client/src/lib/svg-arc.ts`-руу зөөж хуваалцав.
+
+**Баталгаажуулалт** (Playwright түр суулгаад дараа нь бүрэн хассан): 1440–320px бүх breakpoint дээр хэвтээ overflow 0; жинхэнэ throwaway хэрэглэгч+захиалгаар authenticated Quick Stats infinity graph screenshot аваад тоо мат зөв болохыг баталгаажуулж (Мөнгөн 5%, ₮1,076,000 зарцуулалт, ₮24,000 хэмнэлт, Алтан хүртэл ₮8,924,000 дутуу), дараа нь бүх throwaway өгөгдлийг DB-ээс устгасан. Нэг CSS bug засав (mobile category card текст сум icon-той давхцаж байсан).
+
+**⚠️ Чухал нээлт**: энэ (гэрийн) лаптопын `.env` аль хэдийн Aiven shared DB руу заасан байсан (937 бараа, бодит захиалга баталгаажлаа) — өмнөх "гэрийн лаптоп дээр 0 бараа" тэмдэглэл хуучирсан байв.
+
+**Дараа нь Tom Categories хэсгийг reference зурагтай нарийн харьцуулаад татгалзсан** (grid-мэт харагдаж байгаа, overlap/staggered/photo-led card байхгүй гэж). Дэлгэрэнгүй audit + v3 fix spec: `C:\Users\Inspiron\.claude\plans\the-attached-image-is-virtual-kite.md`. `CategoryMasonry.tsx` бүтэн дахин бичигдэж (`.cat-mosaic-top` 2-багана мөр heading+anchor, `.cat-mosaic-grid` 6 картын 3x2 grid доор нь, 2 карт image-led+overlap, 2 карт staggered offset) — **гэхдээ session tokens дуусаж, `pnpm check`/`pnpm build`/screenshot баталгаажуулалт хийгдээгүй орхигдсон.** Дараагийн session эхэлмэгц эхлээд үүнийг шалгах хэрэгтэй.
+
+---
+
 ## Navigation state fix (2026-08-28)
 - Applied the catalog URL-state fix to the main working copy: page number and category/search state survive product navigation and refresh.
 - Prevented the initial loading state from clamping a restored page back to page 1 before the catalog query finishes.
