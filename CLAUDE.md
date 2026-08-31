@@ -71,6 +71,24 @@ pnpm exec vitest run --no-file-parallelism
 - **Product Variants — PHASE 1 болон PHASE 2 хоёулаа дууссан (2026-08-26)** — худалдан авагч ProductDetail/QuickView дээр 2+ variant-тай бараанаас сонголт хийж, тухайн variant-ийн үнэ/нөөц/sku-гоор бодитоор захиалж болно. Ганц variant-тай (одоогийн 936/937) бараанд ямар ч харагдах өөрчлөлт алга. **Бодит Playwright screenshot баталгаажуулалт хараахан хийгдээгүй** (зөвхөн 149 автомат тест + `pnpm build` + throwaway DB probe script-ээр баталгаажсан) — дэлгэрэнгүй [HISTORY.md](HISTORY.md)-ийн "Product Variants PHASE 2" хэсэгт.
 - Хэрэглэгчийн удирдлага (`/admin` → Хэрэглэгч хэсэг)
 
+## ✅ (2026-08-31) CategoryMasonry v7 — anchor scrim зөөллөв, 6 ангиллын зураг admin-аар засварлагдах боллоо
+
+Tom v6-ийн дараа 2 зүйл заав: (1) жижиг 6 картын scrim-ийг v6-д арилгасан ч **anchor (том зураг) тайлын өөрийн харанхуй scrim хэвээр хэт хүчтэй, хажуугийн текстийг халхалж** байсан (би v6-д зөвхөн жижиг картуудыг л засаж, anchor-ийг огт хөндөөгүй байсныг олов), (2) одоо ашиглаж буй бүх зургийг `/admin` → Контент & Медиа-гаар солих боломжтой болгох.
+
+**Root cause (anchor scrim)**: `.cat-mosaic-anchor-shade` градиент 80%-д бүрэн опак `#17181b`-д хүрдэг байсан (`rgba(23,24,27,0)→rgba(23,24,27,1)`), v6-ийн жижиг карт scrim-тэй ижил түвшний хүчтэй харанхуй байсан ч энэ tile дээр CTA текст (`OUR SELECTION` / `Нэг өдөрт хэрэгтэй бүх зүйл` / `Ойр салбараа олох`) шууд дээр нь давхцаж байдаг тул илүү мэдэгдэхүүнтэй асуудал болж байв.
+
+Засвар (`client/src/index.css`, `.cat-mosaic-anchor-shade`): градиентийг зөөлрүүлж, дээд тал бүрэн тунгалаг хэвээр, доод талд **опак 1.0 биш, дээд тал нь 0.74**-д зогсоо (`rgba(23,24,27,0) 0%→30%, rgba(23,24,27,.5) 62%, rgba(23,24,27,.74) 100%`) — текст унших боломжтой хэвээр, зураг ил харагдана.
+
+**Admin-editable зургууд**: `shared/site-media.ts`-д 6 шинэ slot нэмэв (`home-category-arhis-archilgaa`, `-goo-saikhan`, `-eruul-mend`, `-eruul-akhui`, `-us-ba-bie`, `-eej-ba-khuukhed`), тус бүрийн `fallbackUrl` нь `Home.tsx`-д одоо hardcode-логдсон бодит бүтээгдэхүүний зурагтай яг ижил (шинэ зураг зохиогоогүй, зөвхөн одоо байгааг admin-аар солих боломжтой болгов). `drizzle/schema.ts`-ийн `site_media.slotKey` нь `varchar(80)` (enum биш) тул миграци шаардлагагүй. `ContentMediaPanel.tsx`-ийн admin UI **generic `siteMediaSlots.map()`** loop ашигладаг тул шинэ 6 slot автоматаар upload/alt-text/reset controls-той гарч ирнэ — нэмэлт admin UI код бичих шаардлагагүй байв (энэ pattern аль хэдийн `home-hero`/`home-categories`/`home-family`/`home-stores`/`summer-slide-*`-д ашиглагдаж байсан).
+
+`Home.tsx`-ийн `<CategoryMasonry categories={...}>`: `imageUrl` талбарыг `imageFor(\`home-category-\${category.slug}\`, category.imageUrl ?? null) ?? undefined` болгож, admin upload байвал түүнийг, байхгүй бол одоо байгаа бодит бүтээгдэхүүний зургийг ашиглана (сайтын бусад бүх site-media slot-той яг ижил pattern).
+
+**Нэмэлт нээлт**: `home-categories` slot-ийн одоогийн `fallbackUrl` (`/manus-storage/sugi-professional-assortment_74fa4e31.jpg`) нь Manus AI үеийн хуучин, **404 dead link** болохыг `curl`-ээр баталгаажуулав (анкор tile яагаад цайвар placeholder+icon-оор л харагддаг байсны шалтгаан) — засаагүй, зөвхөн тэмдэглэв (Tom бодит зураг upload хийхэд шийдэгдэнэ, admin panel-аар боломжтой болсон).
+
+**Баталгаажуулалт**: `pnpm check`/`pnpm build` цэвэр. Playwright-ээр (түр суулгаад дараа нь бүрэн хассан) screenshot: anchor scrim нүдээр харахад мэдэгдэхүйц зөөлөрсөн (бүрэн харанхуй block алга, текст тод унших боломжтой), бүх 6 карт бодит зургаа хэвээр харуулж байгаа, хэвтээ overflow=0, console алдаагүй.
+
+**⚠️ Хараахан хийгдээгүй, Tom тодорхой хүссэн 3 дахь зүйл**: "хажуудаа related холбоотой хамааралтай **текст**-ийг ч бас admin-аар засварлаж болдог болгох" — энэ хэсэгт ажил хараахан эхлээгүй. `site_media` систем нь зөвхөн ЗУРАГ-т зориулагдсан (slotKey → image URL/alt), текстэд зориулсан ижил төстэй pattern одоогоор байхгүй. Нүүр хуудсанд л гэхэд headings/subtitle/detail text маш олон газар байгаа (QuickStats, CategoryMasonry-ийн 6 картын гарчиг/тайлбар, WhyChooseUs, Journal, StoreLocator гэх мэт) — үүнийг бүрэн CMS болгох нь шинэ хүснэгт (`site_text` эсвэл ижил төстэй, slotKey→text/locale), шинэ admin UI хэсэг, бүх компонентод "backend утга байвал ашиг, үгүй бол hardcode fallback" logic оруулах шаардлагатай **том, тусдаа scope-той ажил** — энэ session-д эхлээгүй, тусад нь төлөвлөж эхлэх шаардлагатай.
+
 ## ✅ (2026-08-31) CategoryMasonry v6 — харанхуй scrim бүрэн арилав (бүтэц буруу байсныг олов)
 
 Tom тодорхой screenshot (crop) илгээж "dark black shadow" арилгахыг шаардав, `.cat-mosaic-item-title`-ийг заав. Root cause: миний card бүтэц **зурган дээр текстийг давхарлаж** (background-image + харанхуй gradient scrim + цагаан текст) байрлуулж байсан бол reference-д зураг **дээд хэсэгт цэвэрхэн**, текст нь **доод цайвар (var(--card)) хэсэгт тусад нь**, харанхуй scrim огт байхгүй байв.
@@ -198,5 +216,6 @@ Tom Geckoboard дашбордын screenshot илгээж, яг тэр диза�
 7. eBarimt — Tom SmartSoftware POS нийлүүлэгчтэйгээ [EBARIMT.md](EBARIMT.md)-ийн 6 асуултыг тодруулах ёстой (код бичих ажил биш)
 8. PREMIUM-FEATURES.md TIER 5 үлдсэн (referral, abandoned-cart имэйл), ROADMAP TIER 2 үлдсэн (refund урсгал), TIER 5 үлдсэн (Sentry, staging, CDN, uptime monitoring)
 9. ⚠️ CI дээр магадгүй улаан гарч буй `INTEGRATIONS_ENCRYPTION_KEY` тестийн цоорхой (дээр дурдсан) — шийдэхийн өмнө Tom-той зөвшилцөх
+10. **Нүүр хуудасны текст (heading/subtitle/detail) admin-аар засварлах CMS** — Tom CategoryMasonry v7-ийн үед тодорхой хүссэн (дээрх v7 тэмдэглэлийг үзнэ үү), гэхдээ эхлээгүй том, тусдаа scope-той ажил: одоогийн `site_media` систем зөвхөн ЗУРАГ-т зориулагдсан, текстэд зориулсан ижил pattern (жишээ нь шинэ `site_text` хүснэгт slotKey→text, admin UI, компонент бүрт backend-утга-эсвэл-hardcode-fallback logic) байхгүй — эхлэхийн өмнө хамрах хүрээг (зөвхөн Home.tsx уу, эсвэл бүх сайт уу) Tom-той тодруулах хэрэгтэй
 
 Дэлгэрэнгүй бүх session-ий бүрэн түүх, шалтгаан, screenshot-ын баталгаажуулалт: **[HISTORY.md](HISTORY.md)**.

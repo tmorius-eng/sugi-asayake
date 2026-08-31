@@ -178,7 +178,15 @@ export default function Home() {
         <WhyChooseUs branchCount={locations.length} />
 
         <CategoryMasonry
-          categories={categories}
+          categories={categories.map(category => ({
+            ...category,
+            // Admin-uploaded photo (via /admin -> Content & Media, slot
+            // "home-category-<slug>") wins if one exists; otherwise falls
+            // back to the real catalog product photo already on the
+            // category object. Same imageFor() pattern as every other
+            // homepage image slot -- see shared/site-media.ts.
+            imageUrl: imageFor(`home-category-${category.slug}`, category.imageUrl ?? null) ?? undefined,
+          }))}
           anchorImageStyle={bgStyle("home-categories", assortmentImage)}
           symbolImage={symbolImage}
         />

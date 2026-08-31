@@ -1031,7 +1031,14 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    card, background-size:cover can end up showing at close to its full
    84%-down source position -- is always covered regardless of how much
    of the source a given card's aspect ratio actually crops. */
-.cat-mosaic-anchor-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(23, 24, 27, 0) 0%, rgba(23, 24, 27, 0) 58%, #17181b 80%, #17181b 100%); }
+/* v7 (2026-08-31): Tom flagged this as too dark/heavy, blocking the
+   tile -- softened considerably: never reaches solid opaque black
+   (capped at .74, was #17181b/1.0), and ramps up gradually across a
+   wider band instead of staying fully transparent until 58% then
+   jumping dark by 80%. Still dark enough by the bottom for the
+   overlaid "Нэг өдөрт хэрэгтэй бүх зүйл" text/link to stay readable
+   (verified via screenshot), just not a harsh flat black block. */
+.cat-mosaic-anchor-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(23, 24, 27, 0) 0%, rgba(23, 24, 27, 0) 30%, rgba(23, 24, 27, .5) 62%, rgba(23, 24, 27, .74) 100%); }
 /* bottom:64px (not 24px) -- clears the overlap cards' max 32px reach into
    the anchor's bottom edge (verified via getBoundingClientRect) so the
    "Ойр салбараа олох" link stays fully readable/clickable, not partially

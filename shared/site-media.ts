@@ -18,6 +18,42 @@ export const siteMediaSlots = [
     fallbackUrl: "/manus-storage/sugi-professional-family_07753755.jpg",
   },
   {
+    key: "home-category-arhis-archilgaa",
+    label: "Ангиллын зураг: Арьс арчилгаа",
+    description: "Нүүр хуудасны Categories хэсгийн \"Арьс арчилгаа\" картын зураг.",
+    fallbackUrl: "/manus-storage/catalog/products/69/organic-sugar-squalane_4d846540.jpg",
+  },
+  {
+    key: "home-category-goo-saikhan",
+    label: "Ангиллын зураг: Гоо сайхан",
+    description: "Нүүр хуудасны Categories хэсгийн \"Гоо сайхан\" картын зураг.",
+    fallbackUrl: "/manus-storage/catalog/products/550/sokamocka-makeup-remover-oil_cbd97a5a.jpg",
+  },
+  {
+    key: "home-category-eruul-mend",
+    label: "Ангиллын зураг: Эрүүл мэнд",
+    description: "Нүүр хуудасны Categories хэсгийн \"Эрүүл мэнд\" картын зураг.",
+    fallbackUrl: "/manus-storage/catalog/products/163/morimori-coffee_f163ce05.jpg",
+  },
+  {
+    key: "home-category-eruul-akhui",
+    label: "Ангиллын зураг: Эрүүл ахуй",
+    description: "Нүүр хуудасны Categories хэсгийн \"Эрүүл ахуй\" картын зураг.",
+    fallbackUrl: "/manus-storage/catalog/products/168/dental-beauty-care_d580f8bc.jpg",
+  },
+  {
+    key: "home-category-us-ba-bie",
+    label: "Ангиллын зураг: Үс ба бие",
+    description: "Нүүр хуудасны Categories хэсгийн \"Үс ба бие\" картын зураг.",
+    fallbackUrl: "/manus-storage/catalog/products/150/bayu_b7aca8ad.jpg",
+  },
+  {
+    key: "home-category-eej-ba-khuukhed",
+    label: "Ангиллын зураг: Ээж ба хүүхэд",
+    description: "Нүүр хуудасны Categories хэсгийн \"Ээж ба хүүхэд\" картын зураг.",
+    fallbackUrl: "/manus-storage/catalog/products/275/milk-save-blend_d14e5ce4.jpg",
+  },
+  {
     key: "home-stores",
     label: "Салбарын хэсгийн зураг",
     description: "Салбар, байршлын editorial зураг.",
