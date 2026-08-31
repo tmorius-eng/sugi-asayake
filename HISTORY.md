@@ -12,7 +12,16 @@
 
 **⚠️ Чухал нээлт**: энэ (гэрийн) лаптопын `.env` аль хэдийн Aiven shared DB руу заасан байсан (937 бараа, бодит захиалга баталгаажлаа) — өмнөх "гэрийн лаптоп дээр 0 бараа" тэмдэглэл хуучирсан байв.
 
-**Дараа нь Tom Categories хэсгийг reference зурагтай нарийн харьцуулаад татгалзсан** (grid-мэт харагдаж байгаа, overlap/staggered/photo-led card байхгүй гэж). Дэлгэрэнгүй audit + v3 fix spec: `C:\Users\Inspiron\.claude\plans\the-attached-image-is-virtual-kite.md`. `CategoryMasonry.tsx` бүтэн дахин бичигдэж (`.cat-mosaic-top` 2-багана мөр heading+anchor, `.cat-mosaic-grid` 6 картын 3x2 grid доор нь, 2 карт image-led+overlap, 2 карт staggered offset) — **гэхдээ session tokens дуусаж, `pnpm check`/`pnpm build`/screenshot баталгаажуулалт хийгдээгүй орхигдсон.** Дараагийн session эхэлмэгц эхлээд үүнийг шалгах хэрэгтэй.
+**Дараа нь Tom Categories хэсгийг reference зурагтай нарийн харьцуулаад татгалзсан** (grid-мэт харагдаж байгаа, overlap/staggered/photo-led card байхгүй гэж). Дэлгэрэнгүй audit + v3 fix spec: `C:\Users\Inspiron\.claude\plans\the-attached-image-is-virtual-kite.md`. `CategoryMasonry.tsx` бүтэн дахин бичигдэж (`.cat-mosaic-top` 2-багана мөр heading+anchor, `.cat-mosaic-grid` 6 картын 3x2 grid доор нь, 2 карт image-led+overlap, 2 карт staggered offset) — session tokens дуусаж, баталгаажуулалт хийгдээгүй commit+push хийгдсэн.
+
+### CategoryMasonry v2 баталгаажуулалт дуусав (гэрийн лаптоп, дараагийн session)
+Playwright-аар screenshot + `getBoundingClientRect()` pixel-хэмжилт хийж 3 бодит bug олж засав:
+1. **Overlap card бодитоор давхцаагүй байсан** (0px/-8px, шаардсан 24-40px биш) — `margin-top`/`translateY` тооцоо буруу байсныг pixel хэмжилтээр олж зассан → баталгаажсан **32px/26px** бодит overlap.
+2. **Anchor-ийн "Ойр салбараа олох" линк overlap card-д халхлагдаж байсан** — `bottom: 24px→64px` болгож зассан.
+3. **Category placeholder SVG-үүдэд (`category-placeholder-*.svg`, `product-placeholder.svg`) far "SUGI ASAYAKE" watermark текст шингэсэн байсныг** (`grep`-ээр SVG эх файлаас олов, y=335/400≈84%) `background-size:cover`-ээр card дүүргэхэд ил гарч байгааг олж, scrim gradient тохируулж (icon бүрэн харагдаж, зөвхөн watermark нуугдахаар) шийдэв — эхний хувилбарт scrim хэт хүчтэй болж icon-ийг бүхэлд нь нуучихсан алдааг мөн олж дунд зэргийн тэнцвэрт хувилбар олов.
+4. **Mobile 2-багана дээр "Эрүүл мэнд" картын гарчиг icon-той давхцаж байсныг** min-height нэмэгдүүлж, гарчгийг 1-мөрөнд clamp хийж зассан.
+
+Бүх засвар `pnpm check`/`pnpm build` цэвэр, 1440/1024/768/430/375px screenshot + pixel-хэмжилтээр баталгаажсан.
 
 ---
 

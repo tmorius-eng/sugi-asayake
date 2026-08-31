@@ -1006,10 +1006,26 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .cat-mosaic-heading-block > p { max-width: 380px; margin: 18px 0 20px; color: #6f7076; font-size: 15px; line-height: 1.7; }
 .cat-mosaic-heading-block .quiet-link { align-self: flex-start; }
 
-.cat-mosaic-anchor { position: relative; z-index: 1; display: block; min-height: 320px; overflow: hidden; border-radius: 18px; background: linear-gradient(135deg, #f8f5ef 0%, #e9f0f2 100%); background-position: center; background-size: cover; box-shadow: var(--shadow-lg); transition: box-shadow .22s var(--ease-out); }
+.cat-mosaic-anchor { position: relative; z-index: 1; display: block; min-height: 320px; overflow: hidden; border-radius: 18px; background: linear-gradient(135deg, #f8f5ef 0%, #e9f0f2 100%); background-position: center top; background-size: cover; box-shadow: var(--shadow-lg); transition: box-shadow .22s var(--ease-out); }
 .cat-mosaic-anchor:hover { box-shadow: 0 26px 60px rgba(34, 37, 38, .22); }
-.cat-mosaic-anchor-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(23, 24, 27, 0) 42%, rgba(23, 24, 27, .74) 100%); }
-.cat-mosaic-anchor-card { position: absolute; right: 24px; bottom: 24px; left: 24px; z-index: 1; color: var(--foreground-inverse); }
+/* Same "hide the placeholder SVG's SUGI ASAYAKE watermark outright"
+   reasoning as .cat-mosaic-item--image's shade above (product-placeholder.svg
+   carries the same watermark) -- darker/earlier than a plain legibility
+   scrim, not relying on the cover-crop alone. */
+/* Balances two things measured directly against the actual placeholder
+   SVGs (400x400 viewBox: icon+circle occupy y 92-244 = 23%-61%,
+   watermark text sits at y=335 = 84%): stay fully transparent through 58%
+   of the container so the icon/circle art isn't washed out, then reach
+   full opacity by 80% so the watermark -- which, on a narrow/tall mobile
+   card, background-size:cover can end up showing at close to its full
+   84%-down source position -- is always covered regardless of how much
+   of the source a given card's aspect ratio actually crops. */
+.cat-mosaic-anchor-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(23, 24, 27, 0) 0%, rgba(23, 24, 27, 0) 58%, #17181b 80%, #17181b 100%); }
+/* bottom:64px (not 24px) -- clears the overlap cards' max 32px reach into
+   the anchor's bottom edge (verified via getBoundingClientRect) so the
+   "Ойр салбараа олох" link stays fully readable/clickable, not partially
+   covered by the overlapping cards. */
+.cat-mosaic-anchor-card { position: absolute; right: 24px; bottom: 64px; left: 24px; z-index: 1; color: var(--foreground-inverse); }
 .cat-mosaic-anchor-card > span { display: block; margin-bottom: 8px; color: rgba(255, 255, 255, .72); font-size: 10px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
 .cat-mosaic-anchor-card strong { display: block; font-family: var(--font-display); font-size: clamp(22px, 2.4vw, 30px); font-weight: 600; letter-spacing: -.03em; line-height: 1.14; }
 .cat-mosaic-anchor-card em { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px; color: #fff; font-size: 12px; font-style: normal; font-weight: 700; }
@@ -1017,7 +1033,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 /* Grid of 6 real category cards, tight gap, sitting close enough under
    .cat-mosaic-top that the --overlap cards' negative translateY visibly
    laps onto the anchor photo's bottom edge (see --overlap-1/2 below). */
-.cat-mosaic-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 34px; }
+.cat-mosaic-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; }
 
 .cat-mosaic-item { position: relative; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; padding: 18px; border: 1px solid var(--border); border-radius: 16px; background: var(--card); box-shadow: var(--shadow-sm); transition: box-shadow .22s var(--ease-out); }
 .cat-mosaic-item:hover { box-shadow: var(--shadow-md); }
@@ -1035,8 +1051,21 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    R2-fallback bgStyle pattern the anchor itself uses, text overlaid on a
    dark scrim for contrast (no fake gradient decoration, just a legibility
    scrim). */
-.cat-mosaic-item--image { min-height: 200px; padding: 0; color: #fff; background-position: center; background-size: cover; }
-.cat-mosaic-item--image .cat-mosaic-item-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(23, 24, 27, 0) 40%, rgba(23, 24, 27, .8) 100%); }
+/* background-position: center top -- the category placeholder SVGs
+   (client/public/category-placeholder-*.svg) have a small "SUGI ASAYAKE"
+   watermark near the bottom of their 400x400 viewBox (y=335, ~84% down);
+   anchoring the cover-crop to the top pushes that watermark out of the
+   visible card area instead of scaling it up into the text zone. The
+   shade gradient also starts earlier/darker (25% instead of 40%) as a
+   second safeguard in case the crop math doesn't fully clear it at every
+   card aspect ratio. */
+.cat-mosaic-item--image { min-height: 200px; padding: 0; color: #fff; background-position: center top; background-size: cover; }
+/* Darker/earlier than a typical legibility scrim, and deliberately NOT
+   tuned to one exact crop position -- verified at 375px (2-col mobile,
+   taller/narrower card aspect) the cover-crop alone doesn't reliably push
+   the watermark out of frame, so the scrim has to hide it outright at
+   every breakpoint instead of relying on cropping it away. */
+.cat-mosaic-item--image .cat-mosaic-item-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(23, 24, 27, 0) 0%, rgba(23, 24, 27, 0) 58%, #17181b 80%, #17181b 100%); }
 .cat-mosaic-item--image .cat-mosaic-item-top { position: relative; z-index: 1; padding: 14px 16px 0; }
 .cat-mosaic-item--image .cat-mosaic-item-icon { display: none; }
 .cat-mosaic-item--image .cat-mosaic-item-number { color: rgba(255, 255, 255, .75); }
@@ -1048,8 +1077,12 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 /* Overlap: pulls the card up over the anchor's bottom edge (Tom: "~24-40px,
    via transform, not fixed absolute coordinates", higher z-index, own
    shadow so the overlap reads as intentional depth). */
-.cat-mosaic-item--overlap-1 { z-index: 3; transform: translateY(-34px); box-shadow: var(--shadow-lg); }
-.cat-mosaic-item--overlap-2 { z-index: 3; transform: translateY(-26px); box-shadow: var(--shadow-lg); }
+/* With .cat-mosaic-grid's 16px margin-top, translateY(-48px)/(-42px) here
+   land the card's top edge 32px/26px ABOVE the anchor's bottom edge --
+   i.e. genuinely overlapping it (verified via getBoundingClientRect, not
+   just eyeballed), inside Tom's specified 24-40px range. */
+.cat-mosaic-item--overlap-1 { z-index: 3; transform: translateY(-48px); box-shadow: var(--shadow-lg); }
+.cat-mosaic-item--overlap-2 { z-index: 3; transform: translateY(-42px); box-shadow: var(--shadow-lg); }
 .cat-mosaic-item--overlap-1:hover, .cat-mosaic-item--overlap-2:hover { box-shadow: 0 26px 60px rgba(34, 37, 38, .24); }
 
 /* Stagger: a different pair of cards gets a resting-state downward offset
@@ -1072,6 +1105,16 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
      clips at narrow widths, per Tom's explicit mobile requirement. */
   .cat-mosaic-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 20px; }
   .cat-mosaic-item--overlap-1, .cat-mosaic-item--overlap-2, .cat-mosaic-item--offset-1, .cat-mosaic-item--offset-2 { transform: translateY(0); z-index: auto; box-shadow: var(--shadow-sm); }
+  /* At 2 columns a card is narrower than tall, so background-size:cover
+     shows the placeholder SVG's FULL height (verified via
+     getBoundingClientRect: a 157x200 card's cover-scale is height-driven,
+     not width-driven) -- the icon+circle then sits centered around the
+     card's vertical middle with no fixed height reserved for it, so the
+     title/description (pushed to the bottom via margin-top:auto) can
+     visually collide with it. Taller cards give both zones room; a
+     single-line title further reduces how much text needs to fit below. */
+  .cat-mosaic-item--image { min-height: 260px; }
+  .cat-mosaic-item--image .cat-mosaic-item-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
 }
 
 /* --- Tier 4: WhyChooseUs -------------------------------------------------
