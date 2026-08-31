@@ -71,6 +71,21 @@ pnpm exec vitest run --no-file-parallelism
 - **Product Variants — PHASE 1 болон PHASE 2 хоёулаа дууссан (2026-08-26)** — худалдан авагч ProductDetail/QuickView дээр 2+ variant-тай бараанаас сонголт хийж, тухайн variant-ийн үнэ/нөөц/sku-гоор бодитоор захиалж болно. Ганц variant-тай (одоогийн 936/937) бараанд ямар ч харагдах өөрчлөлт алга. **Бодит Playwright screenshot баталгаажуулалт хараахан хийгдээгүй** (зөвхөн 149 автомат тест + `pnpm build` + throwaway DB probe script-ээр баталгаажсан) — дэлгэрэнгүй [HISTORY.md](HISTORY.md)-ийн "Product Variants PHASE 2" хэсэгт.
 - Хэрэглэгчийн удирдлага (`/admin` → Хэрэглэгч хэсэг)
 
+## ✅ (2026-08-31) Quick Stats infinity graph — зочны төлөвт огт харагдаагүй bug засав + reference-тэй тааруулав
+
+Tom reference зурагтай харьцуулаад "too basic" гэж татгалзсан. Root cause: **зочны (нэвтрээгүй) төлөвт infinity graph огт харагдаагүй** — зөвхөн 4 талбарын box харагдаж байсан (`QuickStatsSection.tsx`-ийн хуучин `.qs-guest-tiers` fallback). Тому reference-ийг зочноор харж байсныг баталгаажуулсан тул энэ бол гол шалтгаан байв. Дэлгэрэнгүй reasoning audit: `C:\Users\hero_\.claude\plans\aiven-msql-yg-connect-stateless-mitten.md`.
+
+Засварууд (`InfinityGraph.tsx`, `QuickStatsSection.tsx`, `client/src/index.css`-ийн `.ig-*`/`.qs-*`):
+- **Зочны төлөвт мөн адил infinity graph харагдана** — `shared/loyalty.ts`-ийн бодит `getLoyaltyTier`/`getNextLoyaltyTier`-ээс тооцоолсон жишээ утгаар (₮600,000 зарцуулалт → Хүрэл 3%), дэлгэц дээр тод **"ЖИШЭЭ ХАРУУЛАЛТ"** гэсэн шошготой — хэзээ ч хэрэглэгчийн бодит өгөгдөл гэж андуурагдахгүй.
+- **Гарчиг "Quick Stats" болов** (өмнө нь зөвхөн жижиг eyebrow tag-д байсан, гол гарчиг нь өөр монгол хэллэг байсан) — master-prompt §16.5-ийн тодорхой заавраар reference-ийн visual-ыг хадгалж, монгол тайлбарыг доор нь нэмсэн.
+- **Gradient stroke нэмэгдсэн** (`<linearGradient>` SVG defs) — өмнө нь flat өнгө байсан.
+- **Шинэ muted өнгөний token** (`--graph-copper`, `--graph-copper-light`, `--graph-charcoal`, `--graph-gold-muted`) — master prompt тодорхой зааж байсан ("muted terracotta, not bright red") учир брэндийн тод vermilion/gold-ыг ашиглахгүй, зөвхөн энэ graph-д зориулсан шинэ token.
+- **Geometry pinch засав**: 2 тойргийн зай 140px→166px (R=88 хэвээр) — өмнө нь 36px давхцдаг байсан бол одоо ~10px, жинхэнэ ∞ crossing шиг харагдана.
+- **Том дүнгийн compact формат нэмэв** (`formatMntCompact`, жишээ нь "1.1M₮") — master prompt §16.7-ийн зөвлөсөн "₮1.2M" загварыг мөрдөж, infinity graph дотор урт тоо халхлагдахаас сэргийлэв.
+- **Explore хийх явцад олдсон, холбоогүй bug**: `.eyebrow` class (сайт даяар ашиглагддаг) `display:inline-flex` тул зочны төлөвт дараагийн `.qs-cta` линктэй нэг мөрөнд наалддаг байсныг 768px screenshot-оор олж, `.qs-copy > .eyebrow { display: flex; }` гэсэн **scoped** (зөвхөн Quick Stats-д хамаарах, глобал биш) засвар хийсэн.
+
+**Баталгаажуулалт**: `pnpm check`/`pnpm build` цэвэр, 1440/768/375px дээр screenshot (guest), throwaway хэрэглэгч+захиалгаар authenticated screenshot (Мөнгөн 5%, 1.1M₮, 24,000₮ хэмнэлт, Алтан хүртэл 8,924,000₮ — бүгд зөв), дараа нь бүх throwaway өгөгдлийг DB-ээс устгаж баталгаажуулсан. Playwright түр суулгаад бүрэн хассан.
+
 ## ✅ Brevo API IP хязгаарлалт арилсан, имэйл бодитоор ажиллаж байгааг баталгаажуулсан (2026-08-26)
 Өмнөх blocker (`GET /v3/account` 401 "unrecognised IP address") шийдэгдсэн — Tom өөрийн талаас (яг ямар алхмаар хийснийг тодорхой мэдэгдээгүй, гэхдээ dashboard дээрх ганц "toggle" биш байсныг батлаcан) IP-г зөвшөөрсний дараа шууд бодитоор шалгасан:
 - `GET https://api.brevo.com/v3/account` → **200 OK**, бодит акаунтын мэдээлэл буцсан (free tier, 300 sendLimit credit, "Sugi asayake" байгууллага).

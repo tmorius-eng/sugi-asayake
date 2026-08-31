@@ -4,6 +4,22 @@
 
 ---
 
+## Quick Stats infinity graph — зочны төлөвт огт харагдаагүй bug, reference fidelity засвар (2026-08-31)
+
+Tom нүүр хуудасны Quick Stats хэсгийг reference зурагтай харьцуулаад "too basic" гэж татгалзсан, "Claude AI Pro олон удаа буруу хийсэн" гэж мэдэгдсэн. Plan mode-т орж, зөвхөн код унших замаар (dev server ажиллуулахгүйгээр) `InfinityGraph.tsx`/`QuickStatsSection.tsx`-ийг master-prompt баримт бичгийн §16-тай нэг мөр нэгээр харьцуулж, 6 тодорхой mismatch (Finding A-F) олов. Хамгийн том нь: **Finding F — зочны төлөвт infinity graph огт харагдаагүй**, зөвхөн 4 талбарын box харагддаг байсан. Tom баталгаажуулав: тэрбээр яг зочны төлөвөөр харьцуулж байсан тул энэ нь гол шалтгаан байв.
+
+Хийсэн засвар:
+1. Зочны төлөвт `shared/loyalty.ts`-ийн бодит функцээс тооцоолсон жишээ утгаар (₮600,000 → Хүрэл 3%) мөн адил InfinityGraph харуулж, дэлгэц дээр тод "ЖИШЭЭ ХАРУУЛАЛТ" шошго нэмэв.
+2. Гарчиг "Илүү их худалдан авалт..." (монгол хэллэг)-ээс "Quick Stats" (reference-ийн яг өөрийнх нь текст) болгож, монгол тайлбарыг доор нь subtitle болгож нэмэв — master prompt §16.5-ийн тодорхой заавар.
+3. `InfinityGraph.tsx`-д SVG `<linearGradient>` нэмж flat өнгийг gradient болгов; шинэ `--graph-copper`/`--graph-copper-light`/`--graph-charcoal`/`--graph-gold-muted` token нэмж, брэндийн тод vermilion/gold-ыг ашиглахгүй болов (master prompt: "muted terracotta, not bright red").
+4. Geometry: 2 тойргийн зайг 140px→166px болгож (R=88 хэвээр), 36px давхцлыг ~10px pinch болгов — жинхэнэ ∞ crossing шиг.
+5. `formatMntCompact` нэмж ("1.1M₮" загвар, master prompt §16.7) infinity graph доторх урт тоог товчлов.
+6. Screenshot хийх явцад олдсон, холбоогүй bug: `.eyebrow` class (`display:inline-flex`, сайт даяар ашиглагддаг) зочны төлөвт `.qs-cta`-той нэг мөрөнд наалдаж байсныг `.qs-copy > .eyebrow { display: flex; }` (scoped, глобал биш) засвараар шийдэв.
+
+**Баталгаажуулалт**: `pnpm check`/`pnpm build` цэвэр, Playwright түр суулгаад 1440/768/375px дээр зочны screenshot, throwaway хэрэглэгч+захиалгаар authenticated screenshot (Мөнгөн 5%, 1.1M₮ зарцуулалт, 24,000₮ хэмнэлт, Алтан хүртэл 8,924,000₮ дутуу — бүгд зөв), дараа нь бүх throwaway өгөгдлийг устгаж баталгаажуулав. Playwright бүрэн хасав.
+
+---
+
 ## Нүүр хуудасны premium reference-driven редизайн (2026-08-28)
 
 Бүх Home.tsx-ийг (302 мөрийн монолит) `client/src/components/home/*.tsx` section-компонент болгож задалсан: `HeroSection`, `TrustStrip`, `QuickStatsSection`+`InfinityGraph` (шинэ, гишүүнчлэлийн infinity graph, зочин/нэвтэрсэн 2 төлөвтэй), `CategoryMasonry`, `WhyChooseUs` (шинэ, харанхуй 3 карт), `JournalSection` (staggered restyle, 1/2/3-post тохиолдол тус бүрт), `StoreLocatorSection` (3-бүсийн зохион байгуулалт, static SVG газрын зураг — Google Maps API key байхгүй тул `Map.tsx`-ийг холбоогүй). Backend: `server/db.ts`-ийн `getUserLoyaltyStatus`-д шинэ `totalLoyaltySavingsMnt` талбар (зөвхөн `paymentStatus="paid"` захиалгын `loyaltyDiscountMnt` нэгтгэдэг), 4 шинэ тест `server/loyalty.integration.test.ts`-д. `AdminAnalyticsPanel.tsx`-ийн `polarPoint`/`arcPath` SVG arc math-ыг `client/src/lib/svg-arc.ts`-руу зөөж хуваалцав.

@@ -1,13 +1,43 @@
 import { Link } from "wouter";
 import { ArrowUpRight } from "lucide-react";
-import { LOYALTY_TIERS } from "@shared/loyalty";
+import { LOYALTY_TIERS, getLoyaltyTier, getNextLoyaltyTier } from "@shared/loyalty";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import SectionHeading from "./SectionHeading";
 import InfinityGraph from "./InfinityGraph";
 
 const formatMnt = (amount: number) => `${new Intl.NumberFormat("mn-MN").format(amount)}₮`;
+// Master-prompt section 16.7 explicitly suggests a compact form for the
+// infinity graph's loop-center value ("actual eligible lifetime spend, for
+// example: '₮1.2M'") -- the full formatMnt() precision is kept everywhere
+// else (qs-savings, meta rows, the sr-only summary), just not inside the
+// ~130px-wide loop-center label where a full 7-digit number was crowding
+// the ring.
+const formatMntCompact = (amount: number) => {
+  if (Math.abs(amount) >= 1_000_000) {
+    const millions = amount / 1_000_000;
+    return `${millions.toFixed(millions % 1 === 0 ? 0 : 1)}M₮`;
+  }
+  if (Math.abs(amount) >= 1_000) {
+    const thousands = amount / 1_000;
+    return `${thousands.toFixed(thousands % 1 === 0 ? 0 : 1)}K₮`;
+  }
+  return formatMnt(amount);
+};
 const MAX_DISCOUNT_PERCENT = Math.max(...LOYALTY_TIERS.map((tier) => tier.discountPercent));
+
+// Guests see the same infinity graph rather than a plain tier grid (that
+// mismatch was why the live page looked nothing like the reference when
+// logged out). The example is *computed from the real tier table* via
+// shared/loyalty.ts's own functions rather than hand-typed, and is labelled
+// "ЖИШЭЭ ХАРУУЛАЛТ" on screen, so it is never mistaken for the visitor's
+// own data -- the master prompt allows numbers that are "clearly labeled as
+// example/public data".
+const EXAMPLE_SPEND_MNT = 600_000;
+const EXAMPLE_TIER = getLoyaltyTier(EXAMPLE_SPEND_MNT);
+const EXAMPLE_NEXT_TIER = getNextLoyaltyTier(EXAMPLE_SPEND_MNT);
+const EXAMPLE_LEFT_RATIO = EXAMPLE_NEXT_TIER ? EXAMPLE_SPEND_MNT / EXAMPLE_NEXT_TIER.minSpendMnt : 1;
+const EXAMPLE_RIGHT_RATIO = MAX_DISCOUNT_PERCENT > 0 ? EXAMPLE_TIER.discountPercent / MAX_DISCOUNT_PERCENT : 0;
 
 /**
  * Tier 7 of the home redesign, and the section the master prompt is
@@ -35,12 +65,18 @@ export default function QuickStatsSection() {
     <section className="qs-section" data-reveal aria-label="Гишүүнчлэлийн хураангуй">
       <div className="qs-grid">
         <div className="qs-copy">
-          <p className="eyebrow"><span /> ГИШҮҮНЧЛЭЛ · QUICK STATS</p>
-          <SectionHeading>Илүү их худалдан авалт,<br /><em>илүү их хэмнэлт.</em></SectionHeading>
+          <p className="eyebrow"><span /> ГИШҮҮНЧЛЭЛ</p>
+          {/* "Quick Stats" stays the actual heading, matching the reference
+              image's own two-line display heading -- the master prompt
+              (section 16.5) asks to preserve that visual and add Mongolian
+              alongside it, not to replace it with a Mongolian phrase. The
+              Mongolian explanatory line sits directly beneath. */}
+          <SectionHeading>Quick<br /><em>Stats</em></SectionHeading>
+          <p className="qs-subtitle">Илүү их худалдан авалт, илүү их хэмнэлт.</p>
           <p className="qs-desc">Таны нийт худалдан авалтын дүн өсөх тусам гишүүнчлэлийн хямдрал нэмэгдэж, дараагийн захиалга бүрд илүү их хэмнэлт үүснэ.</p>
 
           {!user && !authLoading && (
-            <p className="eyebrow">Нэвтэрснээр өөрийн хэмнэлтийг харах боломжтой</p>
+            <p className="eyebrow">Нэвтэрснээр өөрийн бодит хэмнэлтийг харах боломжтой</p>
           )}
 
           {user && statusQuery.data && (
@@ -85,7 +121,7 @@ export default function QuickStatsSection() {
               <>
                 <InfinityGraph
                   leftRatio={leftRatio}
-                  leftValue={formatMnt(status.totalSpendMnt)}
+                  leftValue={formatMntCompact(status.totalSpendMnt)}
                   leftLabel="Нийт худалдан авалт"
                   rightRatio={rightRatio}
                   rightValue={`${status.currentTier.discountPercent}%`}
@@ -103,14 +139,30 @@ export default function QuickStatsSection() {
           })()}
 
           {!user && !authLoading && (
-            <div className="qs-guest-tiers">
-              {LOYALTY_TIERS.map((tier) => (
-                <div className="qs-guest-tier" key={tier.name}>
-                  <strong>{tier.discountPercent}%</strong>
-                  <span>{tier.name}</span>
-                </div>
-              ))}
-            </div>
+            <>
+              <p className="qs-example-tag">ЖИШЭЭ ХАРУУЛАЛТ</p>
+              <InfinityGraph
+                leftRatio={EXAMPLE_LEFT_RATIO}
+                leftValue={formatMntCompact(EXAMPLE_SPEND_MNT)}
+                leftLabel="Жишээ: нийт худалдан авалт"
+                rightRatio={EXAMPLE_RIGHT_RATIO}
+                rightValue={`${EXAMPLE_TIER.discountPercent}%`}
+                rightLabel="Жишээ: хөнгөлөлт"
+              />
+              <p className="qs-example-note">
+                {EXAMPLE_NEXT_TIER
+                  ? `Жишээ нь: ${formatMnt(EXAMPLE_SPEND_MNT)} худалдан авалттай гишүүн "${EXAMPLE_TIER.name}" зэрэглэлд ${EXAMPLE_TIER.discountPercent}% хөнгөлөлт эдэлж, "${EXAMPLE_NEXT_TIER.name}" зэрэглэл хүртэл ${formatMnt(EXAMPLE_NEXT_TIER.minSpendMnt - EXAMPLE_SPEND_MNT)} дутуу байна.`
+                  : `Жишээ нь: ${formatMnt(EXAMPLE_SPEND_MNT)} худалдан авалттай гишүүн "${EXAMPLE_TIER.name}" зэрэглэлд ${EXAMPLE_TIER.discountPercent}% хөнгөлөлт эдэлнэ.`}
+              </p>
+              <div className="qs-guest-tiers">
+                {LOYALTY_TIERS.map((tier) => (
+                  <div className="qs-guest-tier" key={tier.name}>
+                    <strong>{tier.discountPercent}%</strong>
+                    <span>{tier.name}</span>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </div>
