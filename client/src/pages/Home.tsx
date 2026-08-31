@@ -66,13 +66,19 @@ const socials = [
 // backups/sugi-catalog-export-2026-08-27.sql) -- used by CategoryMasonry's
 // image-led cards to resolve the real per-category placeholder art via
 // shared/catalog-filter.ts's getCategoryPlaceholderImage.
+// imageUrl: one real, currently-published product photo per category
+// (queried directly from the DB -- not invented/stock imagery), used by
+// CategoryMasonry's photo-led cards instead of the generic line-art
+// placeholder icons. Falls back to shared/catalog-filter.ts's
+// getCategoryPlaceholderImage(slug) if a category's chosen product photo
+// is ever unpublished/removed (see CategoryMasonry.tsx).
 const categories = [
-  { number: "01", title: "Арьс арчилгаа", detail: "Өдөр тутмын цэвэр, зөөлөн арчилгаа", slug: "arhis-archilgaa", Icon: Flower2 },
-  { number: "02", title: "Гоо сайхан", detail: "Японы сонгомол хэрэгцээт бүтээгдэхүүн", slug: "goo-saikhan", Icon: Sparkles },
-  { number: "03", title: "Эрүүл мэнд", detail: "Өдөр тутмын сайн сайхны найдвартай сонголт", slug: "eruul-mend", Icon: ShieldCheck },
-  { number: "04", title: "Эрүүл ахуй", detail: "Гэр бүлд хэрэгтэй цэвэр, аюулгүй хэрэглээ", slug: "eruul-akhui", Icon: BadgeCheck },
-  { number: "05", title: "Үс ба бие", detail: "Өдөр бүрийн арчилгааг илүү хялбар болгоно", slug: "us-ba-bie", Icon: CircleCheck },
-  { number: "06", title: "Ээж ба хүүхэд", detail: "Зөөлөн, хэрэгцээт сонголтууд", slug: "eej-ba-khuukhed", Icon: Gift },
+  { number: "01", title: "Арьс арчилгаа", detail: "Өдөр тутмын цэвэр, зөөлөн арчилгаа", slug: "arhis-archilgaa", Icon: Flower2, imageUrl: "/manus-storage/catalog/products/69/organic-sugar-squalane_4d846540.jpg" },
+  { number: "02", title: "Гоо сайхан", detail: "Японы сонгомол хэрэгцээт бүтээгдэхүүн", slug: "goo-saikhan", Icon: Sparkles, imageUrl: "/manus-storage/catalog/products/550/sokamocka-makeup-remover-oil_cbd97a5a.jpg" },
+  { number: "03", title: "Эрүүл мэнд", detail: "Өдөр тутмын сайн сайхны найдвартай сонголт", slug: "eruul-mend", Icon: ShieldCheck, imageUrl: "/manus-storage/catalog/products/163/morimori-coffee_f163ce05.jpg" },
+  { number: "04", title: "Эрүүл ахуй", detail: "Гэр бүлд хэрэгтэй цэвэр, аюулгүй хэрэглээ", slug: "eruul-akhui", Icon: BadgeCheck, imageUrl: "/manus-storage/catalog/products/168/dental-beauty-care_d580f8bc.jpg" },
+  { number: "05", title: "Үс ба бие", detail: "Өдөр бүрийн арчилгааг илүү хялбар болгоно", slug: "us-ba-bie", Icon: CircleCheck, imageUrl: "/manus-storage/catalog/products/150/bayu_b7aca8ad.jpg" },
+  { number: "06", title: "Ээж ба хүүхэд", detail: "Зөөлөн, хэрэгцээт сонголтууд", slug: "eej-ba-khuukhed", Icon: Gift, imageUrl: "/manus-storage/catalog/products/275/milk-save-blend_d14e5ce4.jpg" },
 ];
 
 const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";

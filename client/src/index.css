@@ -1050,7 +1050,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .cat-mosaic-item:hover { box-shadow: var(--shadow-md); }
 .cat-mosaic-item-top { display: flex; align-items: flex-start; justify-content: space-between; }
 .cat-mosaic-item-icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: var(--muted); color: var(--primary); }
-.cat-mosaic-item-number { color: #c7c4bb; font-family: var(--font-display); font-size: 12px; font-weight: 800; }
+.cat-mosaic-item-number { margin-left: auto; color: #c7c4bb; font-family: var(--font-display); font-size: 12px; font-weight: 800; }
 .cat-mosaic-item-body { margin-top: 14px; }
 .cat-mosaic-item-title { display: block; padding-right: 22px; font-family: var(--font-display); font-size: 15px; font-weight: 600; }
 .cat-mosaic-item-detail { display: block; margin-top: 4px; padding-right: 22px; color: #74757a; font-size: 11px; line-height: 1.5; }
@@ -1080,7 +1080,14 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .cat-mosaic-item--image .cat-mosaic-item-top { position: relative; z-index: 1; padding: 14px 16px 0; }
 .cat-mosaic-item--image .cat-mosaic-item-icon { display: none; }
 .cat-mosaic-item--image .cat-mosaic-item-number { color: rgba(255, 255, 255, .75); }
-.cat-mosaic-item--image .cat-mosaic-item-body { position: relative; z-index: 1; margin-top: auto; padding: 0 16px 16px; }
+/* Dedicated scrim behind the text itself (not just relying on the
+   whole-card gradient's exact vertical position) -- a light-colored
+   product photo (e.g. a white pump bottle) could otherwise sit under a
+   still-mostly-transparent part of .cat-mosaic-item-shade and make
+   white title text blend into a light background and become unreadable
+   (found on the "Гоо сайхан" card). This guarantees contrast regardless of
+   the underlying photo's own coloring or the card's exact height. */
+.cat-mosaic-item--image .cat-mosaic-item-body { position: relative; z-index: 1; margin-top: auto; padding: 24px 16px 16px; background: linear-gradient(180deg, rgba(23, 24, 27, 0) 0%, rgba(23, 24, 27, .55) 35%, rgba(23, 24, 27, .88) 100%); }
 .cat-mosaic-item--image .cat-mosaic-item-title { color: #fff; }
 .cat-mosaic-item--image .cat-mosaic-item-detail { color: rgba(255, 255, 255, .78); }
 .cat-mosaic-item--image .cat-mosaic-item-arrow { color: #fff; }
@@ -1124,8 +1131,13 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
      title/description (pushed to the bottom via margin-top:auto) can
      visually collide with it. Taller cards give both zones room; a
      single-line title further reduces how much text needs to fit below. */
+  /* line-clamp raised 1->2 now that ALL 6 cards are photo-led (not just
+     2) -- 1-line titles were truncating every card's name on mobile
+     ("Арьс...", "Эрүүл..." twice, ambiguous). Real cover-cropped photos don't
+     have a fixed icon shape to collide with the way the old placeholder
+     SVGs did, so 2 lines is safe here. */
   .cat-mosaic-item--image { min-height: 260px; }
-  .cat-mosaic-item--image .cat-mosaic-item-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
+  .cat-mosaic-item--image .cat-mosaic-item-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 }
 
 /* --- Tier 4: WhyChooseUs -------------------------------------------------

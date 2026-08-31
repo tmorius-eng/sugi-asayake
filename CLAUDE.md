@@ -71,6 +71,17 @@ pnpm exec vitest run --no-file-parallelism
 - **Product Variants — PHASE 1 болон PHASE 2 хоёулаа дууссан (2026-08-26)** — худалдан авагч ProductDetail/QuickView дээр 2+ variant-тай бараанаас сонголт хийж, тухайн variant-ийн үнэ/нөөц/sku-гоор бодитоор захиалж болно. Ганц variant-тай (одоогийн 936/937) бараанд ямар ч харагдах өөрчлөлт алга. **Бодит Playwright screenshot баталгаажуулалт хараахан хийгдээгүй** (зөвхөн 149 автомат тест + `pnpm build` + throwaway DB probe script-ээр баталгаажсан) — дэлгэрэнгүй [HISTORY.md](HISTORY.md)-ийн "Product Variants PHASE 2" хэсэгт.
 - Хэрэглэгчийн удирдлага (`/admin` → Хэрэглэгч хэсэг)
 
+## ✅ (2026-08-31) CategoryMasonry v3 — бүх 6 карт бодит бүтээгдэхүүний фототой болов
+
+Tom v2 (icon+text давхар зурагтай) хувилбарыг мөн "professional биш" гэж татгалзаад reference зурагтай (854×892 crop) дахин нягт харьцуулав. Гол ялгаа: reference-ийн small card бүр **бодит гэрэл зурагтай бүтээгдэхүүн** харуулдаг, миний хийсэн icon (шугаман зурсан lipstick/эмийн лонх icon) огт өөр. DB-ээс шалгахад **бүх 6 категори бодит, currently-published product фототой байсан** (`SELECT ... FROM products WHERE categoryId=? AND isPublished=1 AND imageUrl NOT LIKE '%placeholder%'`) — тул зохиомол/stock зураг биш, **жинхэнэ каталогийн бодит бүтээгдэхүүний фото** ашиглав.
+
+Засвар:
+- `Home.tsx`-ийн `categories` array-д `imageUrl` талбар нэмж, категори бүрт нэг бодит product photo оноов (жишээ нь Арьс арчилгаа → organic-sugar-squalane, Гоо сайхан → SokaMocka makeup remover, гэх мэт).
+- `CategoryMasonry.tsx`: бүх 6 карт (өмнөх 2-оос) `.cat-mosaic-item--image` болов, `category.imageUrl`-г ашиглаж, зөвхөн байхгүй тохиолдолд `getCategoryPlaceholderImage` fallback хэвээр.
+- Screenshot хийх явцад олдсон 2 CSS bug: (1) icon хассанаас `.cat-mosaic-item-number` badge зүүн тал руу шилжиж гарчигтай давхцаж байсныг `margin-left:auto` нэмж засав; (2) цайвар (жишээ нь цагаан лонх) бүтээгдэхүүний зураг дээр цагаан гарчиг текст харагдахгүй болж байсныг (scrim хангалтгүй) `.cat-mosaic-item-body`-д тусдаа найдвартай gradient scrim нэмж засав; (3) mobile 6 карт бүгд image болсноор `-webkit-line-clamp:1` бүх гарчгийг таслаж байсныг `2` болгож засав.
+
+**Баталгаажуулалт**: `pnpm check`/`pnpm build` цэвэр, 1440/768/375px screenshot, overflow 0. Dev server-ийг Tom-ийн хүсэлтээр асаалттай үлдээв (screenshot QA-д зориулж Playwright-ыг л түр суулгаад бүрэн хассан).
+
 ## ✅ (2026-08-31) Quick Stats infinity graph — зочны төлөвт огт харагдаагүй bug засав + reference-тэй тааруулав
 
 Tom reference зурагтай харьцуулаад "too basic" гэж татгалзсан. Root cause: **зочны (нэвтрээгүй) төлөвт infinity graph огт харагдаагүй** — зөвхөн 4 талбарын box харагдаж байсан (`QuickStatsSection.tsx`-ийн хуучин `.qs-guest-tiers` fallback). Тому reference-ийг зочноор харж байсныг баталгаажуулсан тул энэ бол гол шалтгаан байв. Дэлгэрэнгүй reasoning audit: `C:\Users\hero_\.claude\plans\aiven-msql-yg-connect-stateless-mitten.md`.
