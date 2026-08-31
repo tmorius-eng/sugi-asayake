@@ -71,6 +71,20 @@ pnpm exec vitest run --no-file-parallelism
 - **Product Variants — PHASE 1 болон PHASE 2 хоёулаа дууссан (2026-08-26)** — худалдан авагч ProductDetail/QuickView дээр 2+ variant-тай бараанаас сонголт хийж, тухайн variant-ийн үнэ/нөөц/sku-гоор бодитоор захиалж болно. Ганц variant-тай (одоогийн 936/937) бараанд ямар ч харагдах өөрчлөлт алга. **Бодит Playwright screenshot баталгаажуулалт хараахан хийгдээгүй** (зөвхөн 149 автомат тест + `pnpm build` + throwaway DB probe script-ээр баталгаажсан) — дэлгэрэнгүй [HISTORY.md](HISTORY.md)-ийн "Product Variants PHASE 2" хэсэгт.
 - Хэрэглэгчийн удирдлага (`/admin` → Хэрэглэгч хэсэг)
 
+## ✅ (2026-08-31) CategoryMasonry v4 — жинхэнэ masonry (ууртан ялгаатай өргөн/өндөр)
+
+Tom v3-ыг (бүх карт бодит зурагтай ч 3 тэгш баганад) "alignment/geometry бүгд сонин" гэж дахин татгалзав. Deep reasoning: v3 нь **зөвхөн 3 тэгш баганатай grid дээр 2 картыг transform-оор бага зэрэг зөөсөн** байсан — жинхэнэ masonry (өргөн/өндөр бүрд ялгаатай) БИШ байв. Reference-д картуудын өндөр мэдэгдэхүйц ялгаатай (нэг карт мэдэгдэхүйц урт), stagger тод харагддаг, зай маш нягт.
+
+Засвар (`client/src/index.css`, зөвхөн CSS):
+- `.cat-mosaic-grid`: `repeat(3,1fr)` (тэгш) → `1.15fr 0.95fr 0.9fr` (тэгш бус баганын өргөн), `gap: 10px→6px` (нягт)
+- 6 картад тус тусдаа `nth-child` дүрмээр **зориудаар өөр өөр өндөр** (230/300/250/210/260/230px) — өмнө нь бүгд ижил `min-height:200px`
+- Overlap: `-48px/-42px → -56px/-46px`, Stagger: `24px/20px → 46px/34px` (өмнөх нь ~200-260px картын хэмжээтэй харьцуулахад бараг үл анзаарагдах байсан)
+- Mobile (≤820px): бүх nth-child өндрийг дахин 260px нэгдмэл болгож reset хийсэн (desktop-ийн irregular өндрүүд mobile 2-баганад дамжихаас сэргийлэв)
+
+**Тодруулга**: Anchor зураг (баруун дээд, том lifestyle зураг) энэ орчинд одоо ч placeholder gradient хэвээр байгаа — учир нь "home-categories" R2 slot-д бодит зураг upload хийгээгүй байна. Энэ бол admin панелаас Tom өөрөө зураг upload хийх шаардлагатай **өгөгдлийн дутагдал**, код/geometry-ийн асуудал биш.
+
+**Баталгаажуулалт**: `pnpm check`/`pnpm build` цэвэр, 1440/768/375px screenshot, overflow 0.
+
 ## ✅ (2026-08-31) CategoryMasonry v3 — бүх 6 карт бодит бүтээгдэхүүний фототой болов
 
 Tom v2 (icon+text давхар зурагтай) хувилбарыг мөн "professional биш" гэж татгалзаад reference зурагтай (854×892 crop) дахин нягт харьцуулав. Гол ялгаа: reference-ийн small card бүр **бодит гэрэл зурагтай бүтээгдэхүүн** харуулдаг, миний хийсэн icon (шугаман зурсан lipstick/эмийн лонх icon) огт өөр. DB-ээс шалгахад **бүх 6 категори бодит, currently-published product фототой байсан** (`SELECT ... FROM products WHERE categoryId=? AND isPublished=1 AND imageUrl NOT LIKE '%placeholder%'`) — тул зохиомол/stock зураг биш, **жинхэнэ каталогийн бодит бүтээгдэхүүний фото** ашиглав.

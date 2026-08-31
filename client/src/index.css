@@ -1044,7 +1044,12 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 /* Grid of 6 real category cards, tight gap, sitting close enough under
    .cat-mosaic-top that the --overlap cards' negative translateY visibly
    laps onto the anchor photo's bottom edge (see --overlap-1/2 below). */
-.cat-mosaic-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; }
+/* Uneven column widths (not repeat(3,1fr)) + a tight gap + explicit
+   per-card min-heights below -- the previous uniform-3-column grid
+   with only 2 cards nudged by transform still read as "a grid with
+   minor tweaks", not genuine masonry. The reference's cards visibly
+   differ in both width AND height, packed tightly. */
+.cat-mosaic-grid { display: grid; grid-template-columns: 1.15fr 0.95fr 0.9fr; gap: 6px; margin-top: 16px; align-items: start; }
 
 .cat-mosaic-item { position: relative; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; padding: 18px; border: 1px solid var(--border); border-radius: 16px; background: var(--card); box-shadow: var(--shadow-sm); transition: box-shadow .22s var(--ease-out); }
 .cat-mosaic-item:hover { box-shadow: var(--shadow-md); }
@@ -1071,6 +1076,16 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    second safeguard in case the crop math doesn't fully clear it at every
    card aspect ratio. */
 .cat-mosaic-item--image { min-height: 200px; padding: 0; color: #fff; background-position: center top; background-size: cover; }
+/* Deliberately irregular per-card heights (not a shared min-height) --
+   see the .cat-mosaic-grid comment above. Card 2 ("Гоо сайхан") is the
+   tallest, echoing the reference's prominent taller card in that
+   position. */
+.cat-mosaic-grid > a:nth-child(1) { min-height: 230px; }
+.cat-mosaic-grid > a:nth-child(2) { min-height: 300px; }
+.cat-mosaic-grid > a:nth-child(3) { min-height: 250px; }
+.cat-mosaic-grid > a:nth-child(4) { min-height: 210px; }
+.cat-mosaic-grid > a:nth-child(5) { min-height: 260px; }
+.cat-mosaic-grid > a:nth-child(6) { min-height: 230px; }
 /* Darker/earlier than a typical legibility scrim, and deliberately NOT
    tuned to one exact crop position -- verified at 375px (2-col mobile,
    taller/narrower card aspect) the cover-crop alone doesn't reliably push
@@ -1099,15 +1114,15 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    land the card's top edge 32px/26px ABOVE the anchor's bottom edge --
    i.e. genuinely overlapping it (verified via getBoundingClientRect, not
    just eyeballed), inside Tom's specified 24-40px range. */
-.cat-mosaic-item--overlap-1 { z-index: 3; transform: translateY(-48px); box-shadow: var(--shadow-lg); }
-.cat-mosaic-item--overlap-2 { z-index: 3; transform: translateY(-42px); box-shadow: var(--shadow-lg); }
+.cat-mosaic-item--overlap-1 { z-index: 3; transform: translateY(-56px); box-shadow: var(--shadow-lg); }
+.cat-mosaic-item--overlap-2 { z-index: 3; transform: translateY(-46px); box-shadow: var(--shadow-lg); }
 .cat-mosaic-item--overlap-1:hover, .cat-mosaic-item--overlap-2:hover { box-shadow: 0 26px 60px rgba(34, 37, 38, .24); }
 
 /* Stagger: a different pair of cards gets a resting-state downward offset
    (Tom: "~20-28px, default not hover-only") so the bottom row isn't
    perfectly level either. */
-.cat-mosaic-item--offset-1 { transform: translateY(24px); }
-.cat-mosaic-item--offset-2 { transform: translateY(20px); }
+.cat-mosaic-item--offset-1 { transform: translateY(46px); }
+.cat-mosaic-item--offset-2 { transform: translateY(34px); }
 
 .cat-mosaic-note { display: flex; align-items: center; gap: 14px; margin-top: 56px; color: #74757a; font-size: 12px; line-height: 1.6; }
 .cat-mosaic-note img { width: 34px; height: 34px; }
@@ -1138,6 +1153,12 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
      SVGs did, so 2 lines is safe here. */
   .cat-mosaic-item--image { min-height: 260px; }
   .cat-mosaic-item--image .cat-mosaic-item-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  /* The desktop-only irregular per-card heights (.cat-mosaic-grid >
+     a:nth-child(N), higher specificity than .cat-mosaic-item--image
+     alone) would otherwise leak into this 2-column mobile layout and
+     override the 260px above inconsistently -- reset all 6 back to one
+     uniform mobile height. */
+  .cat-mosaic-grid > a:nth-child(1), .cat-mosaic-grid > a:nth-child(2), .cat-mosaic-grid > a:nth-child(3), .cat-mosaic-grid > a:nth-child(4), .cat-mosaic-grid > a:nth-child(5), .cat-mosaic-grid > a:nth-child(6) { min-height: 260px; }
 }
 
 /* --- Tier 4: WhyChooseUs -------------------------------------------------
