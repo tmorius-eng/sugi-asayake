@@ -71,6 +71,18 @@ pnpm exec vitest run --no-file-parallelism
 - **Product Variants — PHASE 1 болон PHASE 2 хоёулаа дууссан (2026-08-26)** — худалдан авагч ProductDetail/QuickView дээр 2+ variant-тай бараанаас сонголт хийж, тухайн variant-ийн үнэ/нөөц/sku-гоор бодитоор захиалж болно. Ганц variant-тай (одоогийн 936/937) бараанд ямар ч харагдах өөрчлөлт алга. **Бодит Playwright screenshot баталгаажуулалт хараахан хийгдээгүй** (зөвхөн 149 автомат тест + `pnpm build` + throwaway DB probe script-ээр баталгаажсан) — дэлгэрэнгүй [HISTORY.md](HISTORY.md)-ийн "Product Variants PHASE 2" хэсэгт.
 - Хэрэглэгчийн удирдлага (`/admin` → Хэрэглэгч хэсэг)
 
+## ✅ (2026-08-31) CategoryMasonry v6 — харанхуй scrim бүрэн арилав (бүтэц буруу байсныг олов)
+
+Tom тодорхой screenshot (crop) илгээж "dark black shadow" арилгахыг шаардав, `.cat-mosaic-item-title`-ийг заав. Root cause: миний card бүтэц **зурган дээр текстийг давхарлаж** (background-image + харанхуй gradient scrim + цагаан текст) байрлуулж байсан бол reference-д зураг **дээд хэсэгт цэвэрхэн**, текст нь **доод цайвар (var(--card)) хэсэгт тусад нь**, харанхуй scrim огт байхгүй байв.
+
+Засвар:
+- `CategoryMasonry.tsx`: card-ийн JSX бүтцийг өөрчилж, `<span className="cat-mosaic-item-photo">` (зөвхөн зураг, дээр юу ч биш) + `<span className="cat-mosaic-item-body">` (var(--card) цайвар дэвсгэр, бодит текст) гэсэн 2 тусдаа блок болгов
+- `index.css`: `.cat-mosaic-item-shade` (харанхуй gradient scrim) бүрэн устгав — текст одоо цайвар дэвсгэр дээр харанхуй текстээр байрладаг тул scrim огт хэрэггүй болов
+- Photo зон `height:150px` (desktop), `130px` (mobile) тогтмол өндөртэй — бүх 6 карт яг ижил хэвээр
+- Mobile line-clamp 2 хэвээр хадгалав
+
+**Баталгаажуулалт**: `pnpm check`/`pnpm build` цэвэр, 1440/768/375px screenshot — харанхуй сүүдэр/scrim ХААНАЧ алга, бүх карт ижил хэмжээтэй, real product photo цэвэрхэн харагдаж, текст цайвар дэвсгэр дээр тод унших боломжтой.
+
 ## ✅ (2026-08-31) CategoryMasonry v5 — uniform хэмжээтэй, харанхуй сүүдэргүй, зайгүй
 
 Tom v4-ийг ("positions all over the place", "dark shadow", "zawaan baina") дахин татгалзаад **бүх картыг ижил хэмжээтэй болгохыг тодорхой шаардав** — v4-ийн "irregular masonry" чиглэл буруу байсныг хүлээн зөвшөөрөв.

@@ -1055,53 +1055,31 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    inconsistency, no reserved-but-empty space. */
 .cat-mosaic-grid { position: relative; z-index: 2; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: -28px; }
 
-.cat-mosaic-item { position: relative; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; padding: 18px; border: 1px solid var(--border); border-radius: 16px; background: var(--card); box-shadow: var(--shadow-sm); transition: box-shadow .22s var(--ease-out); }
+.cat-mosaic-item { position: relative; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: var(--card); box-shadow: var(--shadow-sm); transition: box-shadow .22s var(--ease-out); }
 .cat-mosaic-item:hover { box-shadow: var(--shadow-md); }
-.cat-mosaic-item-top { display: flex; align-items: flex-start; justify-content: space-between; }
-.cat-mosaic-item-icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: var(--muted); color: var(--primary); }
-.cat-mosaic-item-number { margin-left: auto; color: #c7c4bb; font-family: var(--font-display); font-size: 12px; font-weight: 800; }
-.cat-mosaic-item-body { margin-top: 14px; }
-.cat-mosaic-item-title { display: block; padding-right: 22px; font-family: var(--font-display); font-size: 15px; font-weight: 600; }
-.cat-mosaic-item-detail { display: block; margin-top: 4px; padding-right: 22px; color: #74757a; font-size: 11px; line-height: 1.5; }
+
+/* v6 (2026-08-31): Tom flagged the dark gradient scrim behind the card
+   title as an unwanted "dark shadow" -- on inspection the reference
+   doesn't overlay text on the photo at all: the photo is its own zone up
+   top, and the caption sits in a plain light card body below it, dark
+   text, no scrim. Restructured to match (see CategoryMasonry.tsx): the
+   photo is a separate .cat-mosaic-item-photo span (background-image
+   only, nothing rendered on top of it), and .cat-mosaic-item-body is a
+   plain var(--card) surface with dark text -- no gradient/scrim needed
+   anywhere, contrast is guaranteed regardless of the photo's own colors.
+   background-position: center top still applies (unrelated reason: it
+   keeps the category placeholder SVGs' "SUGI ASAYAKE" watermark, near
+   the bottom of their viewBox, cropped out of frame -- see
+   shared/catalog-filter.ts's getCategoryPlaceholderImage). */
+.cat-mosaic-item-photo { display: block; height: 150px; background-position: center top; background-size: cover; }
+
+.cat-mosaic-item-body { position: relative; padding: 16px 40px 18px 18px; }
+.cat-mosaic-item-top { display: flex; align-items: flex-start; justify-content: flex-end; margin-bottom: 10px; }
+.cat-mosaic-item-number { color: #c7c4bb; font-family: var(--font-display); font-size: 12px; font-weight: 800; }
+.cat-mosaic-item-title { display: block; font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--foreground); }
+.cat-mosaic-item-detail { display: block; margin-top: 4px; color: #74757a; font-size: 11px; line-height: 1.5; }
 .cat-mosaic-item-arrow { position: absolute; right: 16px; bottom: 16px; color: #b7b4ab; transition: color .18s var(--ease-out), transform .18s var(--ease-out); }
 .cat-mosaic-item:hover .cat-mosaic-item-arrow { color: var(--primary); transform: translate(2px, -2px); }
-
-/* Image-led variant (2 of the 6 cards, per Tom's "convert 2 cards nearest
-   the anchor" spec) -- real category photo fills the card, same
-   R2-fallback bgStyle pattern the anchor itself uses, text overlaid on a
-   dark scrim for contrast (no fake gradient decoration, just a legibility
-   scrim). */
-/* background-position: center top -- the category placeholder SVGs
-   (client/public/category-placeholder-*.svg) have a small "SUGI ASAYAKE"
-   watermark near the bottom of their 400x400 viewBox (y=335, ~84% down);
-   anchoring the cover-crop to the top pushes that watermark out of the
-   visible card area instead of scaling it up into the text zone. The
-   shade gradient also starts earlier/darker (25% instead of 40%) as a
-   second safeguard in case the crop math doesn't fully clear it at every
-   card aspect ratio. */
-/* One shared height for all 6 cards -- see the .cat-mosaic-grid comment
-   above (v5: uniform, not per-card). */
-.cat-mosaic-item--image { min-height: 250px; padding: 0; color: #fff; background-position: center top; background-size: cover; }
-/* Darker/earlier than a typical legibility scrim, and deliberately NOT
-   tuned to one exact crop position -- verified at 375px (2-col mobile,
-   taller/narrower card aspect) the cover-crop alone doesn't reliably push
-   the watermark out of frame, so the scrim has to hide it outright at
-   every breakpoint instead of relying on cropping it away. */
-.cat-mosaic-item--image .cat-mosaic-item-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(23, 24, 27, 0) 0%, rgba(23, 24, 27, 0) 58%, #17181b 80%, #17181b 100%); }
-.cat-mosaic-item--image .cat-mosaic-item-top { position: relative; z-index: 1; padding: 14px 16px 0; }
-.cat-mosaic-item--image .cat-mosaic-item-icon { display: none; }
-.cat-mosaic-item--image .cat-mosaic-item-number { color: rgba(255, 255, 255, .75); }
-/* Dedicated scrim behind the text itself (not just relying on the
-   whole-card gradient's exact vertical position) -- a light-colored
-   product photo (e.g. a white pump bottle) could otherwise sit under a
-   still-mostly-transparent part of .cat-mosaic-item-shade and make
-   white title text blend into a light background and become unreadable
-   (found on the "Гоо сайхан" card). This guarantees contrast regardless of
-   the underlying photo's own coloring or the card's exact height. */
-.cat-mosaic-item--image .cat-mosaic-item-body { position: relative; z-index: 1; margin-top: auto; padding: 24px 16px 16px; background: linear-gradient(180deg, rgba(23, 24, 27, 0) 0%, rgba(23, 24, 27, .55) 35%, rgba(23, 24, 27, .88) 100%); }
-.cat-mosaic-item--image .cat-mosaic-item-title { color: #fff; }
-.cat-mosaic-item--image .cat-mosaic-item-detail { color: rgba(255, 255, 255, .78); }
-.cat-mosaic-item--image .cat-mosaic-item-arrow { color: #fff; }
 
 .cat-mosaic-note { display: flex; align-items: center; gap: 14px; margin-top: 56px; color: #74757a; font-size: 12px; line-height: 1.6; }
 .cat-mosaic-note img { width: 34px; height: 34px; }
@@ -1118,13 +1096,13 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
      there's nothing left to reset here, just the column count/gap and a
      uniform card height, same as desktop's own uniform-height approach. */
   .cat-mosaic-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 20px; }
-  /* At 2 columns a card is narrower than tall, so background-size:cover
-     shows more of the source photo's height than at wider breakpoints --
-     a taller min-height keeps the title/description block from crowding
-     the image, and a 2-line clamp (not 1) avoids truncating longer
-     category names ("Арьс...", "Эрүүл..." was ambiguous). */
-  .cat-mosaic-item--image { min-height: 260px; }
-  .cat-mosaic-item--image .cat-mosaic-item-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  /* v6: the photo is now a fixed-height zone (client/src/index.css's
+     .cat-mosaic-item-photo, not the whole card), so there's no aspect-ratio
+     crowding to compensate for here anymore -- just a slightly shorter
+     photo to suit the narrower 2-column card, and a 2-line title clamp
+     (longer category names like "Эрүүл ахуй" need the second line). */
+  .cat-mosaic-item-photo { height: 130px; }
+  .cat-mosaic-item-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 }
 
 /* --- Tier 4: WhyChooseUs -------------------------------------------------

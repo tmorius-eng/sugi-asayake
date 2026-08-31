@@ -89,18 +89,28 @@ export default function CategoryMasonry({
             <Link
               href={`/shop?category=${encodeURIComponent(category.title)}`}
               className="cat-mosaic-item cat-mosaic-item--image"
-              style={imageStyle}
               key={category.number}
             >
-              <span className="cat-mosaic-item-shade" aria-hidden="true" />
-              <span className="cat-mosaic-item-top">
-                <span className="cat-mosaic-item-number">{category.number}</span>
-              </span>
+              {/* v6 (2026-08-31): the photo is now its own top zone (this
+                  span, not the whole card's background) and the text sits
+                  in a plain solid-card zone below it -- matching the
+                  reference's actual pattern (photo up top, a light caption
+                  strip below, dark text, no overlay) instead of the earlier
+                  "photo fills the whole card + dark scrim + white text on
+                  top of it" approach Tom flagged as an unwanted dark
+                  overlay. No scrim needed at all now: the photo has no
+                  text over it, and the text sits on a plain card
+                  background, so contrast is guaranteed regardless of the
+                  photo's own colors. */}
+              <span className="cat-mosaic-item-photo" style={imageStyle} />
               <span className="cat-mosaic-item-body">
+                <span className="cat-mosaic-item-top">
+                  <span className="cat-mosaic-item-number">{category.number}</span>
+                </span>
                 <span className="cat-mosaic-item-title">{category.title}</span>
                 <span className="cat-mosaic-item-detail">{category.detail}</span>
+                <ArrowUpRight size={16} className="cat-mosaic-item-arrow" />
               </span>
-              <ArrowUpRight size={16} className="cat-mosaic-item-arrow" />
             </Link>
           );
         })}
