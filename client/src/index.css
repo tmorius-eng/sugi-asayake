@@ -1041,15 +1041,19 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .cat-mosaic-anchor-card strong { display: block; font-family: var(--font-display); font-size: clamp(22px, 2.4vw, 30px); font-weight: 600; letter-spacing: -.03em; line-height: 1.14; }
 .cat-mosaic-anchor-card em { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px; color: #fff; font-size: 12px; font-style: normal; font-weight: 700; }
 
-/* Grid of 6 real category cards, tight gap, sitting close enough under
-   .cat-mosaic-top that the --overlap cards' negative translateY visibly
-   laps onto the anchor photo's bottom edge (see --overlap-1/2 below). */
-/* Uneven column widths (not repeat(3,1fr)) + a tight gap + explicit
-   per-card min-heights below -- the previous uniform-3-column grid
-   with only 2 cards nudged by transform still read as "a grid with
-   minor tweaks", not genuine masonry. The reference's cards visibly
-   differ in both width AND height, packed tightly. */
-.cat-mosaic-grid { display: grid; grid-template-columns: 1.15fr 0.95fr 0.9fr; gap: 6px; margin-top: 16px; align-items: start; }
+/* v5 (2026-08-31): back to a genuinely uniform grid -- v4's per-card
+   width/height variation and per-card translateY overlap/offset read as
+   "positions all over the place" (Tom's words) rather than intentional,
+   and the translateY approach left dead space in the grid track (a
+   transformed element's ORIGINAL box still reserves its layout space,
+   so pulling one card up by 56px doesn't shrink the row -- it just left
+   a gap). Fixed both problems at once: every card is the same width
+   (repeat(3,1fr)) and the same height (one shared min-height below, no
+   nth-child overrides), and the *entire grid* (not individual cards) is
+   shifted up by a single, uniform margin-top so all of row 1 overlaps
+   the anchor's bottom edge by the same modest amount -- no per-card
+   inconsistency, no reserved-but-empty space. */
+.cat-mosaic-grid { position: relative; z-index: 2; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: -28px; }
 
 .cat-mosaic-item { position: relative; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; padding: 18px; border: 1px solid var(--border); border-radius: 16px; background: var(--card); box-shadow: var(--shadow-sm); transition: box-shadow .22s var(--ease-out); }
 .cat-mosaic-item:hover { box-shadow: var(--shadow-md); }
@@ -1075,17 +1079,9 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    shade gradient also starts earlier/darker (25% instead of 40%) as a
    second safeguard in case the crop math doesn't fully clear it at every
    card aspect ratio. */
-.cat-mosaic-item--image { min-height: 200px; padding: 0; color: #fff; background-position: center top; background-size: cover; }
-/* Deliberately irregular per-card heights (not a shared min-height) --
-   see the .cat-mosaic-grid comment above. Card 2 ("Гоо сайхан") is the
-   tallest, echoing the reference's prominent taller card in that
-   position. */
-.cat-mosaic-grid > a:nth-child(1) { min-height: 230px; }
-.cat-mosaic-grid > a:nth-child(2) { min-height: 300px; }
-.cat-mosaic-grid > a:nth-child(3) { min-height: 250px; }
-.cat-mosaic-grid > a:nth-child(4) { min-height: 210px; }
-.cat-mosaic-grid > a:nth-child(5) { min-height: 260px; }
-.cat-mosaic-grid > a:nth-child(6) { min-height: 230px; }
+/* One shared height for all 6 cards -- see the .cat-mosaic-grid comment
+   above (v5: uniform, not per-card). */
+.cat-mosaic-item--image { min-height: 250px; padding: 0; color: #fff; background-position: center top; background-size: cover; }
 /* Darker/earlier than a typical legibility scrim, and deliberately NOT
    tuned to one exact crop position -- verified at 375px (2-col mobile,
    taller/narrower card aspect) the cover-crop alone doesn't reliably push
@@ -1107,23 +1103,6 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .cat-mosaic-item--image .cat-mosaic-item-detail { color: rgba(255, 255, 255, .78); }
 .cat-mosaic-item--image .cat-mosaic-item-arrow { color: #fff; }
 
-/* Overlap: pulls the card up over the anchor's bottom edge (Tom: "~24-40px,
-   via transform, not fixed absolute coordinates", higher z-index, own
-   shadow so the overlap reads as intentional depth). */
-/* With .cat-mosaic-grid's 16px margin-top, translateY(-48px)/(-42px) here
-   land the card's top edge 32px/26px ABOVE the anchor's bottom edge --
-   i.e. genuinely overlapping it (verified via getBoundingClientRect, not
-   just eyeballed), inside Tom's specified 24-40px range. */
-.cat-mosaic-item--overlap-1 { z-index: 3; transform: translateY(-56px); box-shadow: var(--shadow-lg); }
-.cat-mosaic-item--overlap-2 { z-index: 3; transform: translateY(-46px); box-shadow: var(--shadow-lg); }
-.cat-mosaic-item--overlap-1:hover, .cat-mosaic-item--overlap-2:hover { box-shadow: 0 26px 60px rgba(34, 37, 38, .24); }
-
-/* Stagger: a different pair of cards gets a resting-state downward offset
-   (Tom: "~20-28px, default not hover-only") so the bottom row isn't
-   perfectly level either. */
-.cat-mosaic-item--offset-1 { transform: translateY(46px); }
-.cat-mosaic-item--offset-2 { transform: translateY(34px); }
-
 .cat-mosaic-note { display: flex; align-items: center; gap: 14px; margin-top: 56px; color: #74757a; font-size: 12px; line-height: 1.6; }
 .cat-mosaic-note img { width: 34px; height: 34px; }
 
@@ -1133,32 +1112,19 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 @media (max-width: 820px) {
   .cat-mosaic-top { grid-template-columns: 1fr; }
   .cat-mosaic-anchor { min-height: 280px; }
-  /* Clean 2-column editorial grid on mobile (not a 1-column stack) -- and
-     every overlap/offset transform resets to 0 so nothing collides or
-     clips at narrow widths, per Tom's explicit mobile requirement. */
+  /* Clean 2-column editorial grid on mobile (not a 1-column stack), no
+     overlap into the anchor at this width -- v5 dropped the per-card
+     overlap/offset classes (see the .cat-mosaic-grid comment above), so
+     there's nothing left to reset here, just the column count/gap and a
+     uniform card height, same as desktop's own uniform-height approach. */
   .cat-mosaic-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 20px; }
-  .cat-mosaic-item--overlap-1, .cat-mosaic-item--overlap-2, .cat-mosaic-item--offset-1, .cat-mosaic-item--offset-2 { transform: translateY(0); z-index: auto; box-shadow: var(--shadow-sm); }
   /* At 2 columns a card is narrower than tall, so background-size:cover
-     shows the placeholder SVG's FULL height (verified via
-     getBoundingClientRect: a 157x200 card's cover-scale is height-driven,
-     not width-driven) -- the icon+circle then sits centered around the
-     card's vertical middle with no fixed height reserved for it, so the
-     title/description (pushed to the bottom via margin-top:auto) can
-     visually collide with it. Taller cards give both zones room; a
-     single-line title further reduces how much text needs to fit below. */
-  /* line-clamp raised 1->2 now that ALL 6 cards are photo-led (not just
-     2) -- 1-line titles were truncating every card's name on mobile
-     ("Арьс...", "Эрүүл..." twice, ambiguous). Real cover-cropped photos don't
-     have a fixed icon shape to collide with the way the old placeholder
-     SVGs did, so 2 lines is safe here. */
+     shows more of the source photo's height than at wider breakpoints --
+     a taller min-height keeps the title/description block from crowding
+     the image, and a 2-line clamp (not 1) avoids truncating longer
+     category names ("Арьс...", "Эрүүл..." was ambiguous). */
   .cat-mosaic-item--image { min-height: 260px; }
   .cat-mosaic-item--image .cat-mosaic-item-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-  /* The desktop-only irregular per-card heights (.cat-mosaic-grid >
-     a:nth-child(N), higher specificity than .cat-mosaic-item--image
-     alone) would otherwise leak into this 2-column mobile layout and
-     override the 260px above inconsistently -- reset all 6 back to one
-     uniform mobile height. */
-  .cat-mosaic-grid > a:nth-child(1), .cat-mosaic-grid > a:nth-child(2), .cat-mosaic-grid > a:nth-child(3), .cat-mosaic-grid > a:nth-child(4), .cat-mosaic-grid > a:nth-child(5), .cat-mosaic-grid > a:nth-child(6) { min-height: 260px; }
 }
 
 /* --- Tier 4: WhyChooseUs -------------------------------------------------

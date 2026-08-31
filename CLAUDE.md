@@ -71,6 +71,20 @@ pnpm exec vitest run --no-file-parallelism
 - **Product Variants — PHASE 1 болон PHASE 2 хоёулаа дууссан (2026-08-26)** — худалдан авагч ProductDetail/QuickView дээр 2+ variant-тай бараанаас сонголт хийж, тухайн variant-ийн үнэ/нөөц/sku-гоор бодитоор захиалж болно. Ганц variant-тай (одоогийн 936/937) бараанд ямар ч харагдах өөрчлөлт алга. **Бодит Playwright screenshot баталгаажуулалт хараахан хийгдээгүй** (зөвхөн 149 автомат тест + `pnpm build` + throwaway DB probe script-ээр баталгаажсан) — дэлгэрэнгүй [HISTORY.md](HISTORY.md)-ийн "Product Variants PHASE 2" хэсэгт.
 - Хэрэглэгчийн удирдлага (`/admin` → Хэрэглэгч хэсэг)
 
+## ✅ (2026-08-31) CategoryMasonry v5 — uniform хэмжээтэй, харанхуй сүүдэргүй, зайгүй
+
+Tom v4-ийг ("positions all over the place", "dark shadow", "zawaan baina") дахин татгалзаад **бүх картыг ижил хэмжээтэй болгохыг тодорхой шаардав** — v4-ийн "irregular masonry" чиглэл буруу байсныг хүлээн зөвшөөрөв.
+
+Root cause (v4): `translateY`-ээр карт тус бүрийг зөөх нь **grid track-ийн layout зайг агшаадаггүй** (transform зөвхөн visual, layout биш) — тул мөр хоорондоо хоосон зай ("zawaa") үлддэг байсан. Мөн `--shadow-lg` (хүнд харанхуй сүүдэр) 2 картад тусгайлан байсан.
+
+Засвар (`client/src/index.css`, `CategoryMasonry.tsx`):
+- `.cat-mosaic-grid`: `1.15fr 0.95fr 0.9fr` (тэгш бус) → `repeat(3,1fr)` (**бүрэн тэгш**), nth-child өндрийн ялгаа бүгд арилсан → **нэг ижил `min-height:250px`** бүх 6 картад
+- Per-card `translateY` overlap/offset transform (4 тусдаа class) бүгд арилаад, **бүх grid-ийг нэгэн зэрэг** (`margin-top:-28px`) дээш зөөж, anchor-той **бүх мөр 1-ийн 3 карт адилхан хэмжээгээр** давхцдаг болгов — grid track зөв тооцоологддог тул хоосон зай алга
+- `--shadow-lg` (харанхуй сүүдэр) бүрэн хасаж, бүх карт ижил зөөлөн `--shadow-sm` авдаг болов
+- `CategoryMasonry.tsx`-аас `CARD_TREATMENT` logic бүрэн арилгав (component код бас цэвэрлэгдэв)
+
+**Баталгаажуулалт**: `pnpm check`/`pnpm build` цэвэр, 1440/768/375px screenshot — бүх 6 карт нүдээр харахад яг ижил хэмжээтэй, харанхуй сүүдэргүй, мөр хоорондын хоосон зай алга.
+
 ## ✅ (2026-08-31) CategoryMasonry v4 — жинхэнэ masonry (ууртан ялгаатай өргөн/өндөр)
 
 Tom v3-ыг (бүх карт бодит зурагтай ч 3 тэгш баганад) "alignment/geometry бүгд сонин" гэж дахин татгалзав. Deep reasoning: v3 нь **зөвхөн 3 тэгш баганатай grid дээр 2 картыг transform-оор бага зэрэг зөөсөн** байсан — жинхэнэ masonry (өргөн/өндөр бүрд ялгаатай) БИШ байв. Reference-д картуудын өндөр мэдэгдэхүйц ялгаатай (нэг карт мэдэгдэхүйц урт), stagger тод харагддаг, зай маш нягт.

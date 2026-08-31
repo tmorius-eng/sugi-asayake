@@ -14,30 +14,27 @@ export type HomeCategory = {
   imageUrl?: string;
 };
 
-// Per-index positional treatment for the 6-card grid below the anchor row.
-// Indices 1/2 (top row, under the anchor photo) are pulled up to overlap
-// the anchor's bottom edge; indices 3/4 get a resting downward stagger.
-// Hand-mapped for a fixed count of 6 real categories, same approach as
-// the rest of this section's geometry -- see the plan's v3 fix spec.
-const CARD_TREATMENT: Record<number, "overlap-1" | "overlap-2" | "offset-1" | "offset-2" | undefined> = {
-  1: "overlap-1",
-  2: "overlap-2",
-  3: "offset-1",
-  4: "offset-2",
-};
-
 /**
  * Tier 3 of the home redesign, corrected against the reference image's
  * actual "02 Categories" crop (see docs/REFERENCE-DRIVEN-PREMIUM-REDESIGN-MASTER-PROMPT.md
  * and the approved plan's v3 fix spec). Structure: a 2-column top row
  * (heading block left, large lifestyle anchor photo right), then a 3x2
- * grid of the 6 real category cards below it -- 2 of the 6 also overlap
- * the anchor's bottom edge, 2 more get a resting vertical offset, so the
- * section reads as a layered composition rather than an evenly-gapped
- * grid.
+ * grid of the 6 real category cards below it.
+ *
+ * v5 (2026-08-31): every card is now the same width/height (uniform
+ * repeat(3,1fr) grid, one shared min-height in the CSS) and the whole
+ * grid -- not individual cards -- is shifted up by a single margin-top so
+ * all of row 1 overlaps the anchor's bottom edge by the same modest
+ * amount. Earlier versions gave individual cards different widths,
+ * heights, and per-card translateY overlap/offset amounts; Tom rejected
+ * that as "positions all over the place" -- and the per-card transform
+ * approach also left dead space in the grid track, since a transformed
+ * element's original box still reserves its layout space. See the
+ * .cat-mosaic-grid comment in client/src/index.css for the full
+ * reasoning.
  *
  * v2 (2026-08-31): the reference shows every small card as a real
- * photographed product, not a line-art icon -- so all 6 cards are now
+ * photographed product, not a line-art icon -- so all 6 cards are
  * photo-led, using `category.imageUrl` (one real, currently-published
  * product photo per category, queried from the DB and set in Home.tsx's
  * `categories` array -- not invented/stock imagery). Falls back to
@@ -83,8 +80,7 @@ export default function CategoryMasonry({
       </div>
 
       <div className="cat-mosaic-grid">
-        {categories.map((category, index) => {
-          const treatment = CARD_TREATMENT[index];
+        {categories.map((category) => {
           const imageStyle: CSSProperties = {
             backgroundImage: `url(${category.imageUrl || getCategoryPlaceholderImage(category.slug)})`,
           };
@@ -92,7 +88,7 @@ export default function CategoryMasonry({
           return (
             <Link
               href={`/shop?category=${encodeURIComponent(category.title)}`}
-              className={`cat-mosaic-item cat-mosaic-item--image${treatment ? ` cat-mosaic-item--${treatment}` : ""}`}
+              className="cat-mosaic-item cat-mosaic-item--image"
               style={imageStyle}
               key={category.number}
             >
