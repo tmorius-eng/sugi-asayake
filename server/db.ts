@@ -659,11 +659,24 @@ export async function getRecommendedProducts(userId: number | null, limit = 8) {
   const diversified = applyDiversityCap(scored, { maxPerBrand: 3, maxPerCategory: 3 }).slice(0, limit);
   if (diversified.length >= Math.min(4, limit)) return diversified.map(entry => entry.product);
 
-  // Thin result (very likely today, given real tagging coverage) — backfill
-  // remaining slots with bestsellers rather than showing a near-empty rail.
+  // Thin result — backfill remaining slots with bestsellers rather than
+  // showing a near-empty rail.
   const alreadyIncluded = new Set(diversified.map(entry => entry.product.id));
   const fillers = (await bestsellers()).filter(product => !alreadyIncluded.has(product.id));
-  return [...diversified.map(entry => entry.product), ...fillers].slice(0, limit);
+  fillers.forEach(product => alreadyIncluded.add(product.id));
+  const combined = [...diversified.map(entry => entry.product), ...fillers];
+  if (combined.length >= limit) return combined.slice(0, limit);
+
+  // Real edge case found via post-apply QA (2026-09-01): a shopper whose
+  // ONLY stated preference is a specific enum value most real products
+  // aren't tagged with (e.g. hairType exactly "dry" -- most untagged hair
+  // products default to "normal", see scripts/auto-tag-products.ts's tier
+  // 2) can score 0 candidates, and this catalog currently has 0 paid
+  // orders so bestsellers() is ALSO empty -- both fallback tiers thin at
+  // once. Rather than a genuinely empty rail, fill remaining slots with
+  // any other in-stock published candidates (no scoring claim attached).
+  const anyFillers = candidates.filter(product => !alreadyIncluded.has(product.id)).slice(0, limit - combined.length);
+  return [...combined, ...anyFillers].slice(0, limit);
 }
 
 // Preference Profile v2 (2026-09-01): ProductDetail's related-products rail
