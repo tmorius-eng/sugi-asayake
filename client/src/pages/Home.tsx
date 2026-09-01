@@ -4,7 +4,7 @@
  * trust / shop / visit actions. This page intentionally avoids heavy overlays,
  * novelty effects, and oversized template-like compositions.
  */
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import {
   ArrowUpRight,
@@ -117,6 +117,22 @@ export default function Home() {
   const [bestsellerHeadingLine1, bestsellerHeadingLine2] = textFor("home-text-bestseller-heading", "Их зарагддаг\nбараанууд.").split("\n");
   const [careHeadingLine1, careHeadingLine2] = textFor("home-text-care-heading", "Багахан итгэл.\nИх халамж.").split("\n");
   const [finalCtaHeadingLine1, finalCtaHeadingLine2] = textFor("home-text-finalcta-heading", "Сайн сонголт\nойрхон байна.").split("\n");
+  // The 3 phrases in the infinite sunrise-ribbon marquee below the hero.
+  // Resolved once here and rendered via ribbonRow() into BOTH the visible
+  // and the aria-hidden duplicate row, so an admin edit can never make the
+  // two rows drift out of sync with each other.
+  const ribbonPhrases = [
+    textFor("home-text-ribbon-phrase1", "JAPANESE DAILY CARE"),
+    textFor("home-text-ribbon-phrase2", "УЛААНБААТАР / MONGOLIA"),
+    textFor("home-text-ribbon-phrase3", "ГЭР БҮЛИЙН ГИШҮҮН БҮРТ"),
+  ];
+  const ribbonRow = (keyPrefix: string) => (
+    <>
+      {ribbonPhrases.map((phrase, index) => (
+        <Fragment key={`${keyPrefix}-${index}`}><span>{phrase}</span><i /></Fragment>
+      ))}
+    </>
+  );
   useScrollReveal();
 
   useEffect(() => {
@@ -164,8 +180,8 @@ export default function Home() {
         <HeroSection heroImageStyle={bgStyle("home-hero", heroImage)} />
 
         <div className="sunrise-ribbon" aria-label="SUGI ASAYAKE brand promise">
-          <div><span>JAPANESE DAILY CARE</span><i /><span>УЛААНБААТАР / MONGOLIA</span><i /><span>ГЭР БҮЛИЙН ГИШҮҮН БҮРТ</span><i /></div>
-          <div aria-hidden="true"><span>JAPANESE DAILY CARE</span><i /><span>УЛААНБААТАР / MONGOLIA</span><i /><span>ГЭР БҮЛИЙН ГИШҮҮН БҮРТ</span><i /></div>
+          <div>{ribbonRow("ribbon-a")}</div>
+          <div aria-hidden="true">{ribbonRow("ribbon-b")}</div>
         </div>
 
         {/* Home redesign Tier 7 -- replaces the old membership-strip promo

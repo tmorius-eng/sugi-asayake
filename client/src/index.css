@@ -470,7 +470,14 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .sunrise-ribbon > div { display: flex; flex: 0 0 auto; align-items: center; gap: 22px; padding-right: 22px; animation: sunrise-track 24s linear infinite; }
 .sunrise-ribbon span { color: #f7d17a; font-size: 9px; font-weight: 800; letter-spacing: .16em; }
 .sunrise-ribbon i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--primary); }
-@keyframes sunrise-track { to { transform: translateX(-100%); } }
+/* Runs from translateX(-100%) to translateX(0) -- not the reverse -- so the
+   content visibly flows rightward (enters at the left edge, exits at the
+   right) instead of leftward. This only works because .sunrise-ribbon
+   renders 2 identical duplicate rows side by side (see Home.tsx's
+   ribbonRow()): the mid-loop jump from 0% back to -100% swaps to the
+   visually identical second row, so it reads as continuous, never-ending
+   motion with no visible seam or pause. */
+@keyframes sunrise-track { from { transform: translateX(-100%); } to { transform: translateX(0); } }
 
 .story-section { position: relative; overflow: hidden; background: #eaf2f1; }
 .story-section::after { content: ""; position: absolute; top: 98px; right: -116px; width: 360px; height: 360px; border: 1px solid rgba(57,112,167,.2); border-radius: 50%; box-shadow: 0 0 0 36px rgba(57,112,167,.05), 0 0 0 72px rgba(57,112,167,.035); pointer-events: none; }

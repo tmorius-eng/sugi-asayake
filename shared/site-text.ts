@@ -105,6 +105,29 @@ export const siteTextSlots = [
     fallbackValue: "SUGI Drug Store Japan-ийн охин компани",
   },
 
+  // ---- Sunrise ribbon (Hero-ийн доорх, баруун тийш урсдаг текстэн зурвас) ---
+  {
+    key: "home-text-ribbon-phrase1",
+    group: "Урсдаг зурвас (Hero доор)",
+    label: "1-р хэллэг",
+    description: "Hero-ийн доорх тасралтгүй баруун тийш урсдаг зурвасын эхний хэллэг.",
+    fallbackValue: "JAPANESE DAILY CARE",
+  },
+  {
+    key: "home-text-ribbon-phrase2",
+    group: "Урсдаг зурвас (Hero доор)",
+    label: "2-р хэллэг",
+    description: "",
+    fallbackValue: "УЛААНБААТАР / MONGOLIA",
+  },
+  {
+    key: "home-text-ribbon-phrase3",
+    group: "Урсдаг зурвас (Hero доор)",
+    label: "3-р хэллэг",
+    description: "",
+    fallbackValue: "ГЭР БҮЛИЙН ГИШҮҮН БҮРТ",
+  },
+
   // ---- Story section ("01 THE SUGI DIFFERENCE") --------------------------
   {
     key: "home-text-story-eyebrow-label",
