@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from "react";
-import { Download, LoaderCircle, PackageCheck, PencilLine, Send } from "lucide-react";
+import { useState, type ChangeEvent, type FormEvent } from "react";
+import { Download, ImageUp, LoaderCircle, PackageCheck, PencilLine, Send, X } from "lucide-react";
 import { toast } from "sonner";
 import { downloadCsv } from "@/lib/csv";
 import { trpc } from "@/lib/trpc";
@@ -19,8 +19,15 @@ export default function AdminOperationsPanel({ section, preview = false, query =
   const updateOrder = trpc.admin.updateOrder.useMutation({ onSuccess: () => utils.admin.orders.invalidate(), onError: error => toast.error(messageFrom(error)) });
   const bulkUpdateOrderStatus = trpc.admin.bulkUpdateOrderStatus.useMutation({ onSuccess: () => utils.admin.orders.invalidate(), onError: error => toast.error(messageFrom(error)) });
   const createPost = trpc.admin.createPost.useMutation({ onSuccess: () => utils.admin.posts.invalidate() });
+  const updatePost = trpc.admin.updatePost.useMutation({ onSuccess: () => utils.admin.posts.invalidate() });
   const deletePost = trpc.admin.deletePost.useMutation({ onSuccess: () => utils.admin.posts.invalidate() });
-  const [post, setPost] = useState({ title: "", slug: "", excerpt: "", content: "", isPublished: false });
+  const uploadCoverImage = trpc.admin.uploadPostCoverImage.useMutation();
+  const [post, setPost] = useState({ title: "", slug: "", excerpt: "", content: "", isPublished: false, coverImageUrl: null as string | null });
+  // Non-null while editing an existing post (set by the "Засах" button
+  // below) -- the same composer form doubles as the edit form instead of a
+  // second one, so savePost branches on this to call updatePost vs
+  // createPost.
+  const [editingPostId, setEditingPostId] = useState<number | null>(null);
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<number>>(new Set());
   const [bulkStatus, setBulkStatus] = useState<OrderStatus>("confirmed");
   const [showExport, setShowExport] = useState(false);
@@ -28,14 +35,64 @@ export default function AdminOperationsPanel({ section, preview = false, query =
   const [exportDateFrom, setExportDateFrom] = useState("");
   const [exportDateTo, setExportDateTo] = useState("");
 
+  const emptyPost = { title: "", slug: "", excerpt: "", content: "", isPublished: false, coverImageUrl: null as string | null };
+
   const savePost = async (event: FormEvent) => {
     event.preventDefault();
     if (preview) return toast.message("Preview горим", { description: "Бодит нийтлэл зөвхөн хамгаалагдсан admin хэсэгт хадгалагдана." });
     try {
-      await createPost.mutateAsync({ ...post, excerpt: post.excerpt || null, coverImageUrl: null });
-      setPost({ title: "", slug: "", excerpt: "", content: "", isPublished: false });
-      toast.success("Нийтлэлийг хадгаллаа.");
+      if (editingPostId) {
+        await updatePost.mutateAsync({ id: editingPostId, ...post, excerpt: post.excerpt || null });
+        toast.success("Нийтлэлийг шинэчиллээ.");
+      } else {
+        await createPost.mutateAsync({ ...post, excerpt: post.excerpt || null });
+        toast.success("Нийтлэлийг хадгаллаа.");
+      }
+      setPost(emptyPost);
+      setEditingPostId(null);
     } catch (error) { toast.error(error instanceof Error ? error.message : "Нийтлэлийг хадгалж чадсангүй."); }
+  };
+
+  // Loads an existing post's fields (cover image included) into the same
+  // composer form above, in edit mode -- no second form, minimal diff.
+  const startEditPost = (item: { id: number; title: string; slug: string; excerpt: string | null; content: string; isPublished: boolean; coverImageUrl: string | null }) => {
+    setEditingPostId(item.id);
+    setPost({ title: item.title, slug: item.slug, excerpt: item.excerpt ?? "", content: item.content, isPublished: item.isPublished, coverImageUrl: item.coverImageUrl });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const cancelEditPost = () => {
+    setEditingPostId(null);
+    setPost(emptyPost);
+  };
+
+  // Same FileReader -> base64 -> upload-mutation -> store-the-returned-URL
+  // pattern as ContentMediaPanel.tsx's uploadForSlot -- only the target
+  // field (post.coverImageUrl, local state, not yet saved) differs.
+  const handleCoverFile = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (preview) {
+      toast.message("Preview горим", { description: "Зураг байршуулахын тулд хамгаалагдсан /admin хэсэгт нэвтэрнэ үү." });
+      return;
+    }
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 8 * 1024 * 1024) {
+      toast.error("JPG, PNG, WEBP форматтай, 8 MB-аас бага зураг сонгоно уу.");
+      event.target.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const stored = await uploadCoverImage.mutateAsync({ fileName: file.name, contentType: file.type as "image/jpeg" | "image/png" | "image/webp", dataBase64: String(reader.result) });
+        setPost(value => ({ ...value, coverImageUrl: stored.url }));
+        toast.success("Зураг байршууллаа.");
+      } catch (error) {
+        toast.error(messageFrom(error));
+      } finally {
+        event.target.value = "";
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   if (section === "orders") {
@@ -96,5 +153,47 @@ export default function AdminOperationsPanel({ section, preview = false, query =
   }
 
   const posts = preview ? [] : (postsQuery.data ?? []);
-  return <div className="grid gap-5 lg:grid-cols-[.9fr_1.1fr]"><form onSubmit={savePost} className="rounded-3xl bg-[#f8f5ef] p-5"><p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">LIVE POST COMPOSER</p><label className="mt-4 grid gap-1.5 text-xs font-bold">Гарчиг<input required value={post.title} onChange={event => setPost(value => ({ ...value, title: event.target.value, slug: value.slug || slugify(event.target.value) }))} className="h-10 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="mt-3 grid gap-1.5 text-xs font-bold">URL slug<input required value={post.slug} onChange={event => setPost(value => ({ ...value, slug: event.target.value }))} className="h-10 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="mt-3 grid gap-1.5 text-xs font-bold">Товч тайлбар<textarea value={post.excerpt} onChange={event => setPost(value => ({ ...value, excerpt: event.target.value }))} className="min-h-16 rounded-xl border border-black/10 bg-white p-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="mt-3 grid gap-1.5 text-xs font-bold">Нийтлэл<textarea required value={post.content} onChange={event => setPost(value => ({ ...value, content: event.target.value }))} className="min-h-28 rounded-xl border border-black/10 bg-white p-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="mt-3 flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={post.isPublished} onChange={event => setPost(value => ({ ...value, isPublished: event.target.checked }))} />Шууд нийтлэх</label><button disabled={createPost.isPending} className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#17181b] px-5 py-3 text-xs font-bold text-white"><Send size={14} />{createPost.isPending ? "Хадгалж байна…" : "Хадгалах"}</button></form><section className="grid gap-3">{postsQuery.isLoading && <p className="flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={15} />Нийтлэлүүдийг уншиж байна…</p>}{posts.length === 0 && !postsQuery.isLoading ? <div className="rounded-3xl bg-[#eef3f1] p-7 text-center text-sm text-[#707176]"><PencilLine className="mx-auto mb-3 text-[#3970a7]" size={27} />Одоогоор нийтлэл алга.</div> : posts.map(item => <div key={item.id} className="rounded-2xl border border-black/7 p-4"><div className="flex justify-between gap-3"><div><strong className="block text-sm">{item.title}</strong><span className="mt-1 block text-[11px] text-[#77787d]">/{item.slug} · {item.isPublished ? "Нийтлэгдсэн" : "Ноорог"}</span></div><button type="button" onClick={() => { if (window.confirm(`“${item.title}” нийтлэлийг устгах уу?`)) deletePost.mutate({ id: item.id }); }} className="text-xs font-bold text-[#a51630]">Устгах</button></div></div>)}</section></div>;
+  const savingPost = createPost.isPending || updatePost.isPending;
+  return <div className="grid gap-5 lg:grid-cols-[.9fr_1.1fr]">
+    <form onSubmit={savePost} className="rounded-3xl bg-[#f8f5ef] p-5">
+      <p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">{editingPostId ? "НИЙТЛЭЛ ЗАСАХ" : "LIVE POST COMPOSER"}</p>
+      <label className="mt-4 grid gap-1.5 text-xs font-bold">Ковэр зураг
+        {post.coverImageUrl
+          ? <div className="relative mt-1 overflow-hidden rounded-xl border border-black/10"><img src={post.coverImageUrl} alt="" className="h-36 w-full object-cover" /><button type="button" onClick={() => setPost(value => ({ ...value, coverImageUrl: null }))} aria-label="Ковэр зураг хасах" className="absolute right-2 top-2 inline-flex size-7 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-[#df1f3d]"><X size={14} /></button></div>
+          : <label className="mt-1 flex h-36 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-black/15 bg-white text-xs font-normal text-[#8b8c90] transition hover:border-[#df1f3d] hover:text-[#df1f3d]">
+              {uploadCoverImage.isPending ? <LoaderCircle className="animate-spin" size={20} /> : <ImageUp size={20} />}
+              {uploadCoverImage.isPending ? "Байршуулж байна…" : "Зураг сонгох (JPG/PNG/WEBP, 8MB хүртэл)"}
+              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleCoverFile} disabled={uploadCoverImage.isPending} className="hidden" />
+            </label>}
+      </label>
+      <label className="mt-3 grid gap-1.5 text-xs font-bold">Гарчиг<input required value={post.title} onChange={event => setPost(value => ({ ...value, title: event.target.value, slug: value.slug || slugify(event.target.value) }))} className="h-10 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+      <label className="mt-3 grid gap-1.5 text-xs font-bold">URL slug<input required value={post.slug} onChange={event => setPost(value => ({ ...value, slug: event.target.value }))} className="h-10 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+      <label className="mt-3 grid gap-1.5 text-xs font-bold">Товч тайлбар<textarea value={post.excerpt} onChange={event => setPost(value => ({ ...value, excerpt: event.target.value }))} className="min-h-16 rounded-xl border border-black/10 bg-white p-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+      <label className="mt-3 grid gap-1.5 text-xs font-bold">Нийтлэл<textarea required value={post.content} onChange={event => setPost(value => ({ ...value, content: event.target.value }))} className="min-h-28 rounded-xl border border-black/10 bg-white p-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+      <label className="mt-3 flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={post.isPublished} onChange={event => setPost(value => ({ ...value, isPublished: event.target.checked }))} />Шууд нийтлэх</label>
+      <div className="mt-4 flex items-center gap-3">
+        {/* Disabled while an upload is still in flight, not just while
+            saving -- otherwise clicking save right after picking a cover
+            image (before uploadCoverImage.mutateAsync has resolved and
+            set post.coverImageUrl) silently creates/updates the post with
+            no cover at all. Found via QA: a fast click-through hit this
+            exact race. */}
+        <button disabled={savingPost || uploadCoverImage.isPending} className="inline-flex items-center gap-2 rounded-full bg-[#17181b] px-5 py-3 text-xs font-bold text-white disabled:opacity-60"><Send size={14} />{uploadCoverImage.isPending ? "Зураг байршуулж байна…" : savingPost ? "Хадгалж байна…" : editingPostId ? "Шинэчлэх" : "Хадгалах"}</button>
+        {editingPostId && <button type="button" onClick={cancelEditPost} className="text-xs font-bold text-[#77787d] hover:text-[#df1f3d]">Цуцлах</button>}
+      </div>
+    </form>
+    <section className="grid gap-3">
+      {postsQuery.isLoading && <p className="flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={15} />Нийтлэлүүдийг уншиж байна…</p>}
+      {posts.length === 0 && !postsQuery.isLoading ? <div className="rounded-3xl bg-[#eef3f1] p-7 text-center text-sm text-[#707176]"><PencilLine className="mx-auto mb-3 text-[#3970a7]" size={27} />Одоогоор нийтлэл алга.</div> : posts.map(item => <div key={item.id} className="flex gap-3 rounded-2xl border border-black/7 p-4">
+        {item.coverImageUrl && <img src={item.coverImageUrl} alt="" className="size-16 shrink-0 rounded-lg object-cover" />}
+        <div className="flex flex-1 justify-between gap-3">
+          <div><strong className="block text-sm">{item.title}</strong><span className="mt-1 block text-[11px] text-[#77787d]">/{item.slug} · {item.isPublished ? "Нийтлэгдсэн" : "Ноорог"}</span></div>
+          <div className="flex shrink-0 items-start gap-3">
+            <button type="button" onClick={() => startEditPost(item)} className="text-xs font-bold text-[#3970a7] hover:text-[#df1f3d]">Засах</button>
+            <button type="button" onClick={() => { if (window.confirm(`"${item.title}" нийтлэлийг устгах уу?`)) deletePost.mutate({ id: item.id }); }} className="text-xs font-bold text-[#a51630]">Устгах</button>
+          </div>
+        </div>
+      </div>)}
+    </section>
+  </div>;
 }

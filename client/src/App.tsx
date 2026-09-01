@@ -13,6 +13,7 @@ const AcceptInvitation = lazy(() => import("./pages/AcceptInvitation"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const Checkout = lazy(() => import("./pages/Checkout"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const Journal = lazy(() => import("./pages/Journal"));
 const Legal = lazy(() => import("./pages/Legal"));
 const Login = lazy(() => import("./pages/Login"));
 const MyOrders = lazy(() => import("./pages/MyOrders"));
@@ -51,6 +52,10 @@ function Router() {
     <Route path={"/terms"} component={Legal} />
     <Route path={"/returns"} component={Legal} />
     <Route path={"/404"} component={NotFound} />
+    {/* Must come before the /:slug catch-all below, or "/journal" would be
+        read as a post-slug lookup (and 404, since no post has that slug)
+        instead of reaching this page. */}
+    <Route path={"/journal"} component={Journal} />
     <Route path={"/:slug"} component={PostDetail} />
     <Route component={NotFound} />
   </Switch></Suspense>;

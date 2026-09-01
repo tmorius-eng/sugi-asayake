@@ -39,7 +39,7 @@ export default function JournalSection({ posts }: { posts: HomePost[] }) {
       <SectionEyebrow number="05" label={<><Newspaper size={13} /> {textFor("home-text-jn-eyebrow-label", "SUGI JOURNAL")}</>} tone="onDark" />
       <div className="jn-heading">
         <SectionHeading tone="onDark">{headingLine1} <em>{headingLine2}</em></SectionHeading>
-        <Link href="/shop" className="quiet-link jn-all-link">{textFor("home-text-jn-all-link", "Бүх нийтлэл")} <ChevronRight size={16} /></Link>
+        <Link href="/journal" className="quiet-link jn-all-link">{textFor("home-text-jn-all-link", "Бүх нийтлэл")} <ChevronRight size={16} /></Link>
       </div>
       <div className="jn-grid" data-count={posts.length}>
         {posts.map((post, index) => (
