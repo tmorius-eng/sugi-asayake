@@ -591,6 +591,7 @@ export async function getRecommendedProducts(userId: number | null, limit = 8) {
       hairType: users.hairType,
       hairConcerns: users.hairConcerns,
       fragrancePreference: users.fragrancePreference,
+      wellnessInterests: users.wellnessInterests,
       interiorStyle: users.interiorStyle,
       hasYoungChildren: users.hasYoungChildren,
     }).from(users).where(eq(users.id, userId)).limit(1);
@@ -613,9 +614,22 @@ export async function getRecommendedProducts(userId: number | null, limit = 8) {
     wishlistCategoryIds = new Set(wishlistRows.map(row => row.categoryId).filter((id): id is number => id != null));
   }
 
-  const hasAnyPreference = Boolean(preferences.skinType || preferences.skinConcerns || preferences.hairType || preferences.hairConcerns || preferences.fragrancePreference || preferences.interiorStyle || preferences.hasYoungChildren);
+  const hasAnyPreference = Boolean(preferences.skinType || preferences.skinConcerns || preferences.hairType || preferences.hairConcerns || preferences.fragrancePreference || preferences.wellnessInterests || preferences.interiorStyle || preferences.hasYoungChildren);
   const hasAnyHistory = categoryAffinity.size > 0 || wishlistCategoryIds.size > 0;
-  if (!hasAnyPreference && !hasAnyHistory) return bestsellers();
+  if (!hasAnyPreference && !hasAnyHistory) {
+    // Cold start: a guest, or a shopper who has stated nothing and bought
+    // nothing. Bestsellers are the right answer WHEN THERE ARE ANY -- but
+    // this catalog currently has ~0 paid orders, so bestsellers() came back
+    // empty and RecommendedForYou (which renders null on an empty list)
+    // made the whole rail vanish for every guest on the homepage. Falling
+    // through instead reaches the same final "any in-stock published
+    // product" tier the scored path below already uses, so the rail always
+    // has content -- which is what this component's contract already
+    // claimed. With no preferences every score is 0, so the scoring work
+    // below is skipped naturally and only that last tier fills the list.
+    const top = await bestsellers();
+    if (top.length) return top;
+  }
 
   const candidates = await db.select({
     id: products.id,
@@ -635,6 +649,7 @@ export async function getRecommendedProducts(userId: number | null, limit = 8) {
     hairType: products.hairType,
     hairConcerns: products.hairConcerns,
     fragrancePreference: products.fragrancePreference,
+    wellnessInterests: products.wellnessInterests,
     interiorStyle: products.interiorStyle,
   }).from(products)
     .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
@@ -697,6 +712,7 @@ export async function getRelatedProducts(productId: number, limit = 6) {
     hairType: products.hairType,
     hairConcerns: products.hairConcerns,
     fragrancePreference: products.fragrancePreference,
+    wellnessInterests: products.wellnessInterests,
     interiorStyle: products.interiorStyle,
   }).from(products).where(eq(products.id, productId)).limit(1);
   const viewed = viewedRows[0];
@@ -720,6 +736,7 @@ export async function getRelatedProducts(productId: number, limit = 6) {
     hairType: products.hairType,
     hairConcerns: products.hairConcerns,
     fragrancePreference: products.fragrancePreference,
+    wellnessInterests: products.wellnessInterests,
     interiorStyle: products.interiorStyle,
   }).from(products)
     .leftJoin(productCategories, eq(products.categoryId, productCategories.id))

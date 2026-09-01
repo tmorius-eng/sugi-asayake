@@ -239,6 +239,8 @@ export type PreferenceProfile = {
   hairType?: string | null;
   hairConcerns?: string | null;
   fragrancePreference?: string | null;
+  /** Comma-separated multi-select, same shape as skinConcerns. */
+  wellnessInterests?: string | null;
   interiorStyle?: string | null;
   hasYoungChildren?: boolean | null;
 };
@@ -253,6 +255,7 @@ export type ScorableProduct = {
   hairType?: string | null;
   hairConcerns?: string | null;
   fragrancePreference?: string | null;
+  wellnessInterests?: string | null;
   interiorStyle?: string | null;
 };
 
@@ -284,6 +287,12 @@ export function scorePreferenceMatch(product: ScorableProduct, preferences: Pref
   if (preferences.hairType && product.hairType === preferences.hairType) score += 3;
   score += scoreTokenListMatch(product.hairConcerns, preferences.hairConcerns);
   if (preferences.fragrancePreference && product.fragrancePreference === preferences.fragrancePreference) score += 1;
+  // The quiz's step 5 ("Эрүүл мэнд & амьдрал") collects this and the admin
+  // product form mirrors it onto products, but until 2026-09-01 nothing
+  // ever scored it -- a shopper's wellness answers moved their
+  // recommendations by exactly zero. Same priority-decayed list match as
+  // skinConcerns/hairConcerns, since it is the same comma-separated shape.
+  score += scoreTokenListMatch(product.wellnessInterests, preferences.wellnessInterests);
   if (preferences.interiorStyle && product.interiorStyle && product.interiorStyle === preferences.interiorStyle) score += 2;
   // Deliberately a SOFT signal (same weight as fragrancePreference), not a
   // strong one -- a real QA run found +3 here let this one coarse

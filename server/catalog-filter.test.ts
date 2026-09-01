@@ -81,6 +81,18 @@ describe("scorePreferenceMatch", () => {
     expect(scorePreferenceMatch({ id: 1, categorySlug: "eej-ba-khuukhed" }, { hasYoungChildren: true })).toBe(1);
     expect(scorePreferenceMatch({ id: 1, categorySlug: "arhis-archilgaa" }, { hasYoungChildren: true })).toBe(0);
   });
+
+  // Regression for a real gap found 2026-09-01: the quiz collected
+  // wellnessInterests and 37 products carried the tag, but the scorer had
+  // no branch for it at all, so the whole "Эрүүл мэнд & амьдрал" step
+  // moved recommendations by exactly zero.
+  it("scores wellnessInterests with the same priority decay as the other multi-selects", () => {
+    const matchesFirst = scorePreferenceMatch({ id: 1, wellnessInterests: "energy" }, { wellnessInterests: "energy,sleep" });
+    const matchesSecond = scorePreferenceMatch({ id: 2, wellnessInterests: "sleep" }, { wellnessInterests: "energy,sleep" });
+    expect(matchesFirst).toBe(1.5);
+    expect(matchesSecond).toBe(1.2);
+    expect(scorePreferenceMatch({ id: 3, wellnessInterests: "immunity" }, { wellnessInterests: "energy" })).toBe(0);
+  });
 });
 
 describe("scorePriceBandAffinity", () => {
