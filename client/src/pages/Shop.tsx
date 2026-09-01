@@ -1,5 +1,5 @@
 import { ArrowDownUp, ArrowUpRight, ChevronLeft, ChevronRight, Eye, Heart, MapPin, PackageCheck, Phone, RotateCcw, Search, ShoppingBag, SlidersHorizontal, Sparkles, Star, Truck } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
@@ -12,6 +12,7 @@ import { filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCa
 import { rememberRecentlyViewed, resolveRecentlyViewed } from "@shared/recently-viewed";
 import { UB_DELIVERY_FEE_MNT } from "@shared/const";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
+import { useSiteText } from "@/hooks/useSiteText";
 
 const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
 const RECENTLY_VIEWED_KEY = "sugi-asayake-recently-viewed-v1";
@@ -79,6 +80,24 @@ function RecommendedForYou({ products, onRemember, onQuickView }: RecommendedFor
 export default function Shop() {
   const qaHistoryMode = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("historyQa") : null;
   const initialParams = new URLSearchParams(window.location.search);
+  const textFor = useSiteText();
+  // Variable-count phrase list (one per line), unlike Home.tsx's sunrise
+  // ribbon which has exactly 3 fixed home-text-ribbon-phraseN slots -- Tom
+  // asked to be able to add/remove however many phrases he wants here, so
+  // this is one textarea-editable slot split on "\n" instead. .filter(Boolean)
+  // drops blank lines (e.g. a trailing newline) rather than rendering an
+  // empty marquee segment. Rendered into BOTH the visible and the
+  // aria-hidden duplicate row via shopRibbonRow() so an edit can never
+  // make the two rows drift out of sync -- same technique as Home.tsx's
+  // ribbonRow().
+  const shopRibbonPhrases = textFor("home-shop-ribbon-phrases", "CURATED IN JAPAN\nFIND YOUR DAILY CARE\nУЛААНБААТАР / MONGOLIA").split("\n").map(line => line.trim()).filter(Boolean);
+  const shopRibbonRow = (keyPrefix: string) => (
+    <>
+      {shopRibbonPhrases.map((phrase, index) => (
+        <Fragment key={`${keyPrefix}-${index}`}><span>{phrase}</span><i /></Fragment>
+      ))}
+    </>
+  );
   // Prefills from the header search's "бүх дэлгүүрээс харах" link
   // (/shop?q=...) so a search started from any page lands here already
   // filtered, instead of dropping the shopper's query on the floor.
@@ -185,7 +204,10 @@ export default function Shop() {
         <div className="shop-hero-copy"><p className="shop-kicker"><span /> 02 / SUGI MARKET</p><h1>Өдөр тутмын<br /><em>сонголтууд.</em></h1><p>Японоос албан ёсоор нийлүүлсэн арьс арчилгаа, эрүүл мэнд, гэр бүлийн хэрэгцээний бүтээгдэхүүнээ өөртөө тохируулан олоорой.</p><div className="shop-hero-badges"><div className="shop-hero-signature"><Sparkles size={17} /><span>ТАНЫ ӨДӨР БҮРТ / ЯПОН ЧАНАР</span></div><div className="shop-hero-delivery"><Truck size={17} /><span>УБ ХҮРГЭЛТ {formatMnt(UB_DELIVERY_FEE_MNT)} / САЛБАРААС ҮНЭГҮЙ АВАХ</span></div></div></div>
         <div className="shop-search-panel"><div className="shop-search-stamp" aria-hidden="true">CARE<br />IS<br />COLOR</div><label><Search size={19} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Бүтээгдэхүүн, брэндээр хайх" /></label><p><strong>{filtered.length}</strong> үр дүн / <span>{products.length} бүтээгдэхүүн</span></p></div>
       </section>
-      <div className="shop-ribbon"><span>CURATED IN JAPAN</span><i /><span>FIND YOUR DAILY CARE</span><i /><span>УЛААНБААТАР / MONGOLIA</span><i /><span>CURATED IN JAPAN</span></div>
+      <div className="shop-ribbon" aria-label="SUGI ASAYAKE брэндийн мессеж">
+        <div>{shopRibbonRow("shop-ribbon-a")}</div>
+        <div aria-hidden="true">{shopRibbonRow("shop-ribbon-b")}</div>
+      </div>
       <section className="shop-filter" data-reveal>
         <div><p><SlidersHorizontal size={15} /> АНГИЛЛААР ШҮҮХ</p><span>Таны өдөр тутмын хэрэгцээний хэмнэлээр</span></div>
         <div className="shop-filter-pills"><button type="button" onClick={() => setCategory("all")} className={category === "all" ? "active" : ""}>Бүгд</button>{categories.map(item => <button type="button" key={item} onClick={() => setCategory(item)} className={category === item ? "active" : ""}>{item}</button>)}</div>

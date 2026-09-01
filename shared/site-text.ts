@@ -128,6 +128,23 @@ export const siteTextSlots = [
     fallbackValue: "ГЭР БҮЛИЙН ГИШҮҮН БҮРТ",
   },
 
+  // ---- Shop ribbon (/shop хуудасны дээд талын тасралтгүй урсдаг зурвас) ---
+  // Unlike the 3 fixed home-text-ribbon-phraseN slots above, this is ONE
+  // slot holding a variable number of phrases (one per line) -- Tom
+  // explicitly asked to be able to add/remove however many phrases he
+  // wants, not a fixed count. Reuses the same "one textarea, split on \n"
+  // convention already used for multi-line headings elsewhere in this
+  // file, just for an open-ended list instead of exactly 2-3 lines.
+  // Shop.tsx splits on "\n", filters blank lines, and renders however many
+  // phrases result.
+  {
+    key: "home-shop-ribbon-phrases",
+    group: "Shop дэлгүүрийн зурвас",
+    label: "Урсдаг зурвасын хэллэгүүд",
+    description: "Дэлгүүр хуудасны дээд талд тасралтгүй урсдаг зурвас. Мөр бүрд ЯГ НЭГ хэллэг бичнэ -- хэдэн ч мөр (хэллэг) нэмж эсвэл хасаж болно.",
+    fallbackValue: "CURATED IN JAPAN\nFIND YOUR DAILY CARE\nУЛААНБААТАР / MONGOLIA",
+  },
+
   // ---- Story section ("01 THE SUGI DIFFERENCE") --------------------------
   {
     key: "home-text-story-eyebrow-label",
