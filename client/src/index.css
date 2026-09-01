@@ -1019,40 +1019,31 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .cat-mosaic-section { padding: clamp(64px, 8vw, 96px) max(34px, 7vw); }
 
 .cat-mosaic-top { display: grid; grid-template-columns: minmax(0, .4fr) minmax(0, .58fr); align-items: stretch; gap: var(--space-6); margin-top: 40px; }
-.cat-mosaic-heading-block { display: flex; flex-direction: column; justify-content: center; }
-/* v8 (2026-09-01) fix for Tom's "the heading text goes behind something and
-   disappears" report. Root cause: .cat-mosaic-grid below is z-index:2 and
-   pulled up (margin-top:-28px) to lap onto the anchor photo's bottom edge.
-   .cat-mosaic-heading-block had no position/z-index, so per CSS2.1 painting
-   order it sits at the in-flow, non-positioned step (E.2 step 3) -- strictly
-   BELOW any positioned descendant with a positive stack level (step 7).
-   The grid therefore always paints over it wherever they overlap; it just
-   normally doesn't matter because align-items:stretch makes the heading
-   block as tall as the anchor while justify-content:center keeps the text
-   in the middle, so the -28px band lands in empty transparent space. At
-   viewport widths where the two-line 82px heading + paragraph + link get
-   close to the anchor's height, that band starts covering real text.
-
-   Fix is scoped to a content-sized inner wrapper, NOT this stretched outer
-   box: painting an opaque panel on the stretched box itself would make the
-   normally-invisible empty band a visible slab notching into the first
-   card row at nearly every desktop width (tried that first -- it looked
-   exactly as bad as the bug it replaced).
-   Stacking check: neither .cat-mosaic-top (display:grid alone doesn't do
-   it), .cat-mosaic-heading-block, nor .cat-mosaic-section establishes a
-   stacking context, so this positioned+z-indexed wrapper compares directly
-   against .cat-mosaic-grid's z-index:2 in the same governing context --
-   z-index:3 reliably wins regardless of DOM nesting depth. The opaque
-   background (matching .sugi-site/body's var(--background); the section
-   sets no background of its own) is the belt-and-suspenders half: even in
-   the edge case, the text's own box paints over the card, so the worst
-   outcome is a card losing a sliver, never text vanishing. */
-.cat-mosaic-heading-content { position: relative; z-index: 3; background: var(--background); }
-.cat-mosaic-heading-content > p { max-width: 380px; margin: 18px 0 20px; color: #6f7076; font-size: 15px; line-height: 1.7; }
-/* .quiet-link's base rule (index.css ~line 191) is already display:inline-flex,
-   so inside this plain-block wrapper it naturally sits on its own line
-   without stretching -- no align-self override needed anymore (that was
-   only ever necessary because the old wrapper was itself a flex container). */
+/* v9 (2026-09-01): fixes a real bug found on inspection -- the v8 comment
+   below describes a z-index:3 fix for Tom's "the heading text goes behind
+   something and disappears" report, but it was written against a
+   `.cat-mosaic-heading-content` class that CategoryMasonry.tsx never
+   actually renders (only `.cat-mosaic-heading-block` exists in the JSX),
+   so the fix was dead CSS and the underlying bug was still live. Applied
+   directly to the class the component actually uses instead.
+   Root cause (unchanged from the v8 analysis): .cat-mosaic-grid below is
+   z-index:2 and pulled up (margin-top:-28px) to lap onto the anchor
+   photo's bottom edge. Without its own position/z-index, this block sits
+   at the in-flow, non-positioned paint step -- strictly below any
+   positioned descendant with a positive stack level -- so the grid always
+   paints over it wherever they overlap. Normally invisible because
+   align-items:stretch/justify-content:center keeps the text centered
+   inside the -28px band's empty space, but at viewport widths where the
+   heading+paragraph+link content grows tall enough, the band starts
+   covering real text.
+   position:relative + z-index:3 beats the grid's z-index:2 in the same
+   stacking context (neither .cat-mosaic-top, this block, nor
+   .cat-mosaic-section establishes its own stacking context, so they
+   compare directly). The opaque background (matching body's
+   var(--background)) is belt-and-suspenders: even in an edge case, the
+   text's own box paints over the card rather than the reverse. */
+.cat-mosaic-heading-block { position: relative; z-index: 3; display: flex; flex-direction: column; justify-content: center; background: var(--background); }
+.cat-mosaic-heading-block > p { max-width: 380px; margin: 18px 0 20px; color: #6f7076; font-size: 15px; line-height: 1.7; }
 
 .cat-mosaic-anchor { position: relative; z-index: 1; display: block; min-height: 320px; overflow: hidden; border-radius: 18px; background: linear-gradient(135deg, #f8f5ef 0%, #e9f0f2 100%); background-position: center top; background-size: cover; box-shadow: var(--shadow-lg); transition: box-shadow .22s var(--ease-out); }
 .cat-mosaic-anchor:hover { box-shadow: 0 26px 60px rgba(34, 37, 38, .22); }
@@ -1097,7 +1088,21 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    shifted up by a single, uniform margin-top so all of row 1 overlaps
    the anchor's bottom edge by the same modest amount -- no per-card
    inconsistency, no reserved-but-empty space. */
-.cat-mosaic-grid { position: relative; z-index: 2; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: -28px; }
+/* v9 (2026-09-01): gap 10px -> 24px, per Tom's explicit request (referencing
+   Aesop.com and a mockup spec calling for 24-32px card gaps) -- the tight
+   10px gutter was part of what read as "zawaan ugly" (cramped) rather than
+   an editorial, breathing layout. */
+/* v10 (2026-09-01): dropped the -28px negative margin-top entirely. That
+   trick (grid pulled up to lap onto the anchor's bottom edge) is what
+   caused two separate bugs in a row: first it hid the heading block's
+   link behind the grid (the v8/v9 z-index saga above), and even after
+   fixing THAT painting-order bug, the link still sat cramped/touching the
+   card row below it -- because the -28px pull affects the WHOLE row
+   (heading block included), not just the anchor it was meant to overlap.
+   Tom asked directly for this to just be pushed down instead of patched
+   again. Simple, robust positive gap now -- no more overlap trick to
+   re-break. */
+.cat-mosaic-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 40px; }
 
 .cat-mosaic-item { position: relative; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: var(--card); box-shadow: var(--shadow-sm); transition: box-shadow .22s var(--ease-out); }
 .cat-mosaic-item:hover { box-shadow: var(--shadow-md); }
@@ -1135,7 +1140,31 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    shows the whole source image regardless of position, so top-biasing no
    longer serves any purpose and would just push contained products
    toward the top of their panel instead of centering them. */
-.cat-mosaic-item-photo { display: block; height: 168px; padding: 16px; background-color: var(--muted); background-repeat: no-repeat; background-position: center; background-size: contain; background-origin: content-box; background-clip: content-box; }
+/* v9 (2026-09-01): switched from a background-image span to a real nested
+   <img> (see CategoryMasonry.tsx's v9 comment) so mix-blend-mode can
+   actually blend the photo against this panel's own background-color --
+   a background-image and background-color on the SAME element composite
+   as flat layers of that one element, never blend-mode against each
+   other; mix-blend-mode only does anything between an element and
+   whatever is painted behind it, hence needing a distinct child element.
+   Height/padding bumped (168->190px, 16->22px) for more breathing room
+   around the now cleanly-blended product, per Tom's "24-32px gaps, more
+   generous whitespace" reference spec. */
+.cat-mosaic-item-photo { display: flex; align-items: center; justify-content: center; height: 190px; padding: 22px; background-color: var(--muted); }
+/* The actual Aesop.com-style treatment Tom asked for: object-fit:contain
+   shows the whole product (never crops it, whatever its source aspect
+   ratio), mix-blend-mode:multiply melts the photo's own white/light
+   background into this panel's var(--muted) cream so the product looks
+   like it's resting on a shelf rather than floating in a pasted-on white
+   rectangle. Multiply is a real blend against --muted specifically (not a
+   new color) -- unchanged brand palette, per Tom's "don't change the
+   colors" instruction. Trade-off, intentional: multiply can slightly
+   darken/mute non-white areas of a photo (anything multiplied by a
+   near-white but not pure-white base stays close to true, but darker
+   source pixels darken further) -- the same accepted look premium sites
+   using this technique (Aesop.com included) trade for a cohesive,
+   gallery-like product wall instead of each photo's own raw white bg. */
+.cat-mosaic-item-photo img { display: block; width: 100%; height: 100%; object-fit: contain; object-position: center; mix-blend-mode: multiply; }
 
 .cat-mosaic-item-body { position: relative; padding: 16px 40px 18px 18px; }
 .cat-mosaic-item-top { display: flex; align-items: flex-start; justify-content: flex-end; margin-bottom: 10px; }
@@ -1159,15 +1188,15 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
      overlap/offset classes (see the .cat-mosaic-grid comment above), so
      there's nothing left to reset here, just the column count/gap and a
      uniform card height, same as desktop's own uniform-height approach. */
-  .cat-mosaic-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 20px; }
+  .cat-mosaic-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 20px; }
   /* v6: the photo is now a fixed-height zone (client/src/index.css's
      .cat-mosaic-item-photo, not the whole card), so there's no aspect-ratio
      crowding to compensate for here anymore -- just a slightly shorter
      photo to suit the narrower 2-column card, and a 2-line title clamp
-     (longer category names like "Эрүүл ахуй" need the second line). v8:
-     slightly less padding too (12px vs desktop's 16px) so a contained
-     product still reads at a reasonable size in the narrower card. */
-  .cat-mosaic-item-photo { height: 140px; padding: 12px; }
+     (longer category names like "Эрүүл ахуй" need the second line). v9:
+     scaled down from desktop's bumped 190px/22px in the same proportion
+     the old 168px/16px -> 140px/12px step used. */
+  .cat-mosaic-item-photo { height: 160px; padding: 16px; }
   .cat-mosaic-item-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 }
 

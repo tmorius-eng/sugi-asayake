@@ -85,9 +85,7 @@ export default function CategoryMasonry({
 
       <div className="cat-mosaic-grid">
         {categories.map((category) => {
-          const imageStyle: CSSProperties = {
-            backgroundImage: `url(${category.imageUrl || getCategoryPlaceholderImage(category.slug)})`,
-          };
+          const imageSrc = category.imageUrl || getCategoryPlaceholderImage(category.slug);
           // Category TITLE is never a text slot -- it's also the exact-match
           // /shop?category= filter value (see shared/catalog-filter.ts), so
           // free-text editing it here could silently break that link. Only
@@ -100,18 +98,25 @@ export default function CategoryMasonry({
               className="cat-mosaic-item"
               key={category.number}
             >
-              {/* v6 (2026-08-31): the photo is now its own top zone (this
-                  span, not the whole card's background) and the text sits
-                  in a plain solid-card zone below it -- matching the
-                  reference's actual pattern (photo up top, a light caption
-                  strip below, dark text, no overlay) instead of the earlier
-                  "photo fills the whole card + dark scrim + white text on
-                  top of it" approach Tom flagged as an unwanted dark
-                  overlay. No scrim needed at all now: the photo has no
-                  text over it, and the text sits on a plain card
-                  background, so contrast is guaranteed regardless of the
-                  photo's own colors. */}
-              <span className="cat-mosaic-item-photo" style={imageStyle} />
+              {/* v9 (2026-09-01): a real <img> (not a background-image span)
+                  inside a neutral "shelf" panel (.cat-mosaic-item-photo,
+                  background: var(--muted)), with the image itself set to
+                  object-fit:contain + mix-blend-mode:multiply -- Tom's
+                  explicit request (Aesop.com-style product photography
+                  treatment). mix-blend-mode blends an element against
+                  whatever is painted BEHIND it in the same stacking
+                  context, which a background-image can never do against
+                  its own element's background-color -- hence the switch to
+                  a real nested <img>. Multiply lets the photo's own
+                  white/light background melt into the panel's --muted
+                  cream instead of sitting on it as a visible rectangle,
+                  while never touching the actual brand colors (still
+                  var(--muted), nothing new introduced). Real <img> also
+                  means a real alt text instead of a decorative
+                  background-image with no accessible name. */}
+              <span className="cat-mosaic-item-photo">
+                <img src={imageSrc} alt={category.title} loading="lazy" />
+              </span>
               <span className="cat-mosaic-item-body">
                 <span className="cat-mosaic-item-top">
                   <span className="cat-mosaic-item-number">{category.number}</span>
