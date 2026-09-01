@@ -36,6 +36,19 @@ jobs:
 
       - name: Unit tests
         run: pnpm test
+        env:
+          # server/integrations.integration.test.ts's "integration config
+          # encryption (unit)" tests call encryptJson/decryptJson
+          # unconditionally (not gated behind the RUN_*_INTEGRATION_TESTS
+          # flags the rest of that file uses), and server/_core/crypto.ts's
+          # getKey() throws immediately if this isn't a 64-char hex string --
+          # so CI needs it even though this workflow never touches a real
+          # database. Add INTEGRATIONS_ENCRYPTION_KEY as a repo secret
+          # (Settings -> Secrets and variables -> Actions -> New repository
+          # secret) with a real generated key -- never commit the key
+          # itself. Generate one locally with:
+          #   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+          INTEGRATIONS_ENCRYPTION_KEY: ${{ secrets.INTEGRATIONS_ENCRYPTION_KEY }}
 
       - name: Build
         run: pnpm build

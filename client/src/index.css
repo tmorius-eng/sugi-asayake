@@ -1020,8 +1020,39 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 
 .cat-mosaic-top { display: grid; grid-template-columns: minmax(0, .4fr) minmax(0, .58fr); align-items: stretch; gap: var(--space-6); margin-top: 40px; }
 .cat-mosaic-heading-block { display: flex; flex-direction: column; justify-content: center; }
-.cat-mosaic-heading-block > p { max-width: 380px; margin: 18px 0 20px; color: #6f7076; font-size: 15px; line-height: 1.7; }
-.cat-mosaic-heading-block .quiet-link { align-self: flex-start; }
+/* v8 (2026-09-01) fix for Tom's "the heading text goes behind something and
+   disappears" report. Root cause: .cat-mosaic-grid below is z-index:2 and
+   pulled up (margin-top:-28px) to lap onto the anchor photo's bottom edge.
+   .cat-mosaic-heading-block had no position/z-index, so per CSS2.1 painting
+   order it sits at the in-flow, non-positioned step (E.2 step 3) -- strictly
+   BELOW any positioned descendant with a positive stack level (step 7).
+   The grid therefore always paints over it wherever they overlap; it just
+   normally doesn't matter because align-items:stretch makes the heading
+   block as tall as the anchor while justify-content:center keeps the text
+   in the middle, so the -28px band lands in empty transparent space. At
+   viewport widths where the two-line 82px heading + paragraph + link get
+   close to the anchor's height, that band starts covering real text.
+
+   Fix is scoped to a content-sized inner wrapper, NOT this stretched outer
+   box: painting an opaque panel on the stretched box itself would make the
+   normally-invisible empty band a visible slab notching into the first
+   card row at nearly every desktop width (tried that first -- it looked
+   exactly as bad as the bug it replaced).
+   Stacking check: neither .cat-mosaic-top (display:grid alone doesn't do
+   it), .cat-mosaic-heading-block, nor .cat-mosaic-section establishes a
+   stacking context, so this positioned+z-indexed wrapper compares directly
+   against .cat-mosaic-grid's z-index:2 in the same governing context --
+   z-index:3 reliably wins regardless of DOM nesting depth. The opaque
+   background (matching .sugi-site/body's var(--background); the section
+   sets no background of its own) is the belt-and-suspenders half: even in
+   the edge case, the text's own box paints over the card, so the worst
+   outcome is a card losing a sliver, never text vanishing. */
+.cat-mosaic-heading-content { position: relative; z-index: 3; background: var(--background); }
+.cat-mosaic-heading-content > p { max-width: 380px; margin: 18px 0 20px; color: #6f7076; font-size: 15px; line-height: 1.7; }
+/* .quiet-link's base rule (index.css ~line 191) is already display:inline-flex,
+   so inside this plain-block wrapper it naturally sits on its own line
+   without stretching -- no align-self override needed anymore (that was
+   only ever necessary because the old wrapper was itself a flex container). */
 
 .cat-mosaic-anchor { position: relative; z-index: 1; display: block; min-height: 320px; overflow: hidden; border-radius: 18px; background: linear-gradient(135deg, #f8f5ef 0%, #e9f0f2 100%); background-position: center top; background-size: cover; box-shadow: var(--shadow-lg); transition: box-shadow .22s var(--ease-out); }
 .cat-mosaic-anchor:hover { box-shadow: 0 26px 60px rgba(34, 37, 38, .22); }
@@ -1080,11 +1111,31 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    only, nothing rendered on top of it), and .cat-mosaic-item-body is a
    plain var(--card) surface with dark text -- no gradient/scrim needed
    anywhere, contrast is guaranteed regardless of the photo's own colors.
-   background-position: center top still applies (unrelated reason: it
-   keeps the category placeholder SVGs' "SUGI ASAYAKE" watermark, near
-   the bottom of their viewBox, cropped out of frame -- see
-   shared/catalog-filter.ts's getCategoryPlaceholderImage). */
-.cat-mosaic-item-photo { display: block; height: 150px; background-position: center top; background-size: cover; }
+   v8 (2026-09-01): these 6 images are ordinary single-product catalog
+   photos (e.g. a coffee product shot, a skincare bottle shot) of
+   arbitrary aspect ratio and arbitrary surrounding white space -- product
+   photo uploads are never cropped/aspect-normalized (see
+   server/_core/imageProcessing.ts, fit:"inside"). background-size:cover
+   on a short fixed-height band cropped these unpredictably (a tall bottle
+   shot loses most of its height, a photo with generous padding shows
+   mostly empty background with the product pushed to one edge) -- the
+   literal "small product floating in cropped white space" look Tom
+   flagged. Switched to contain + a neutral panel background (var(--muted),
+   distinct from both the card body's var(--card) and the page's
+   var(--background)) so the WHOLE product is always visible, resting on
+   a deliberate "shelf" surface -- the same "modest still-life on a light
+   neutral surface" treatment premium sites (e.g. Aesop.com) use instead
+   of edge-to-edge cropping. background-origin/clip:content-box + padding
+   gives the contained image breathing room within its panel instead of
+   touching the card's rounded corners. Height bumped 150->168px (130->140
+   mobile) since contain needs a bit more room than cover did to read
+   clearly rather than shrinking to a tiny centered thumbnail. Dropped
+   "center top" -> plain "center": that was only ever there to crop the
+   placeholder SVGs' watermark out of a cover-cropped frame -- contain
+   shows the whole source image regardless of position, so top-biasing no
+   longer serves any purpose and would just push contained products
+   toward the top of their panel instead of centering them. */
+.cat-mosaic-item-photo { display: block; height: 168px; padding: 16px; background-color: var(--muted); background-repeat: no-repeat; background-position: center; background-size: contain; background-origin: content-box; background-clip: content-box; }
 
 .cat-mosaic-item-body { position: relative; padding: 16px 40px 18px 18px; }
 .cat-mosaic-item-top { display: flex; align-items: flex-start; justify-content: flex-end; margin-bottom: 10px; }
@@ -1113,8 +1164,10 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
      .cat-mosaic-item-photo, not the whole card), so there's no aspect-ratio
      crowding to compensate for here anymore -- just a slightly shorter
      photo to suit the narrower 2-column card, and a 2-line title clamp
-     (longer category names like "Эрүүл ахуй" need the second line). */
-  .cat-mosaic-item-photo { height: 130px; }
+     (longer category names like "Эрүүл ахуй" need the second line). v8:
+     slightly less padding too (12px vs desktop's 16px) so a contained
+     product still reads at a reasonable size in the narrower card. */
+  .cat-mosaic-item-photo { height: 140px; padding: 12px; }
   .cat-mosaic-item-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 }
 

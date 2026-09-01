@@ -97,7 +97,7 @@ export default function CategoryMasonry({
           return (
             <Link
               href={`/shop?category=${encodeURIComponent(category.title)}`}
-              className="cat-mosaic-item cat-mosaic-item--image"
+              className="cat-mosaic-item"
               key={category.number}
             >
               {/* v6 (2026-08-31): the photo is now its own top zone (this
