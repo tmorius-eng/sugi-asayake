@@ -146,6 +146,43 @@ describeWithDatabase("customer profile integration", () => {
     expect(updated.interiorStyle).toBe("minimal");
   });
 
+  it("saves the Preference Profile v2 quiz-wizard fields (gender/district/hair/fragrance/wellness/family), and null clears a previously-set field", async () => {
+    const caller = makeCaller(sessionUser);
+    const filled = await caller.profile.updatePreferences({
+      gender: "female",
+      primaryDistrict: "khan_uul",
+      skinRoutineComplexity: "extensive",
+      hairType: "damaged",
+      hairConcerns: "hairloss,dandruff",
+      fragrancePreference: "unscented",
+      wellnessInterests: "energy,sleep",
+      hasYoungChildren: true,
+    });
+    expect(filled.gender).toBe("female");
+    expect(filled.primaryDistrict).toBe("khan_uul");
+    expect(filled.skinRoutineComplexity).toBe("extensive");
+    expect(filled.hairType).toBe("damaged");
+    expect(filled.hairConcerns).toBe("hairloss,dandruff");
+    expect(filled.fragrancePreference).toBe("unscented");
+    expect(filled.wellnessInterests).toBe("energy,sleep");
+    expect(filled.hasYoungChildren).toBe(true);
+
+    const cleared = await caller.profile.updatePreferences({ gender: null, hairType: null, hasYoungChildren: null });
+    expect(cleared.gender).toBeNull();
+    expect(cleared.hairType).toBeNull();
+    expect(cleared.hasYoungChildren).toBeNull();
+    // Untouched fields from the previous call keep their value.
+    expect(cleared.primaryDistrict).toBe("khan_uul");
+    expect(cleared.fragrancePreference).toBe("unscented");
+  });
+
+  it("rejects an invalid enum value for the new preference fields", async () => {
+    const caller = makeCaller(sessionUser);
+    await expect(caller.profile.updatePreferences({ gender: "invalid" as never })).rejects.toThrow();
+    await expect(caller.profile.updatePreferences({ hairType: "invalid" as never })).rejects.toThrow();
+    await expect(caller.profile.updatePreferences({ primaryDistrict: "invalid" as never })).rejects.toThrow();
+  });
+
   it("toggles notification preferences independently", async () => {
     const caller = makeCaller(sessionUser);
     const emailOff = await caller.profile.updateNotifications({ emailOptIn: false });

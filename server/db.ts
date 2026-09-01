@@ -8,6 +8,7 @@ import { decryptJson, encryptJson } from "./_core/crypto";
 import { ENV } from './_core/env';
 import { getInventoryReservationFailure, shouldRestoreStock } from "./commerce-lifecycle";
 import { getLoyaltyTier, getNextLoyaltyTier } from "../shared/loyalty";
+import { applyDiversityCap, computeCategoryAffinity, scorePreferenceMatch, scorePriceBandAffinity, type PreferenceProfile } from "../shared/catalog-filter";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -198,7 +199,22 @@ export async function deleteUserAddress(userId: number, addressId: number) {
 
 /** Beauty & Home preference profile — see the schema doc comment on
  *  users.skinType for what these are (and aren't yet) used for. */
-export async function updateUserPreferences(userId: number, input: { skinType?: "dry" | "oily" | "combination" | "sensitive" | "normal" | null; skinConcerns?: string | null; interiorStyle?: string | null; birthYear?: number | null; occupation?: string | null }) {
+export async function updateUserPreferences(userId: number, input: {
+  skinType?: "dry" | "oily" | "combination" | "sensitive" | "normal" | null;
+  skinConcerns?: string | null;
+  interiorStyle?: string | null;
+  birthYear?: number | null;
+  occupation?: string | null;
+  // Preference Profile v2 (2026-09-01) — quiz wizard fields, all optional.
+  gender?: "male" | "female" | "other" | null;
+  primaryDistrict?: UbDistrict | null;
+  skinRoutineComplexity?: "minimal" | "moderate" | "extensive" | null;
+  hairType?: "dry" | "oily" | "normal" | "damaged" | "color_treated" | null;
+  hairConcerns?: string | null;
+  fragrancePreference?: "unscented" | "light" | "floral" | "citrus" | null;
+  wellnessInterests?: string | null;
+  hasYoungChildren?: boolean | null;
+}) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.update(users).set({ ...input, updatedAt: new Date() }).where(eq(users.id, userId));
@@ -540,25 +556,70 @@ export async function searchPublishedCatalog(query: string) {
     .limit(200);
 }
 
-// PREMIUM-FEATURES.md TIER 1: "recommended for you", scored by how many of
-// the shopper's saved Beauty & Home preferences (server/routers.ts
-// profile.updatePreferences) a product's own tags match. Matching happens
-// in JS rather than SQL — the catalog is small enough that this is simpler
-// and more obviously correct than a fragile FIND_IN_SET/LIKE query over the
-// free-form skinConcerns string. Returns [] (not an error) for a shopper who
-// hasn't set any preferences yet — there's nothing to match against.
-export async function getRecommendedProducts(userId: number, limit = 8) {
+// Preference Profile v2 (2026-09-01): "recommended for you" v2. A real read
+// of the live catalog found only 4/937 products carry any personalization
+// tag, so a pure tag-intersection recommender (the v1 version this
+// replaced) would render near-empty for almost everyone. This version:
+// (1) scores preference-tag matches via shared/catalog-filter.ts's
+//     scorePreferenceMatch (pure, unit-tested there) — the permanent
+//     backbone, matching industry practice for a catalog this size;
+// (2) adds free behavioral signals that need zero manual tagging — category
+//     affinity from the shopper's own paid order history, price-band
+//     affinity, wishlist-adjacency;
+// (3) applies a diversity cap so one generically-named brand can't fill the
+//     whole list;
+// (4) backfills with bestsellers whenever the scored result is thin —
+//     including the true cold-start case (guest, or a shopper with no
+//     preferences/history yet) — so the section never renders empty.
+// Public-facing (routers.ts's catalog.recommended is now a publicProcedure):
+// userId is null for a guest, who still gets a bestseller-backed list.
+export async function getRecommendedProducts(userId: number | null, limit = 8) {
   const db = await getDb();
   if (!db) return [];
 
-  const userRows = await db.select({ skinType: users.skinType, skinConcerns: users.skinConcerns, interiorStyle: users.interiorStyle }).from(users).where(eq(users.id, userId)).limit(1);
-  const preferences = userRows[0];
-  if (!preferences || (!preferences.skinType && !preferences.skinConcerns && !preferences.interiorStyle)) return [];
+  const bestsellers = () => getBestsellingProducts(limit);
 
-  const userConcerns = new Set((preferences.skinConcerns ?? "").split(",").map(value => value.trim()).filter(Boolean));
+  let preferences: PreferenceProfile = {};
+  let categoryAffinity = new Map<number, number>();
+  let avgHistoricalUnitPriceMnt: number | null = null;
+  let wishlistCategoryIds = new Set<number>();
+
+  if (userId != null) {
+    const userRows = await db.select({
+      skinType: users.skinType,
+      skinConcerns: users.skinConcerns,
+      hairType: users.hairType,
+      hairConcerns: users.hairConcerns,
+      fragrancePreference: users.fragrancePreference,
+      interiorStyle: users.interiorStyle,
+      hasYoungChildren: users.hasYoungChildren,
+    }).from(users).where(eq(users.id, userId)).limit(1);
+    preferences = userRows[0] ?? {};
+
+    const paidOrderItemRows = await db.select({ categoryId: products.categoryId, quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt })
+      .from(orderItems)
+      .innerJoin(orders, eq(orderItems.orderId, orders.id))
+      .leftJoin(products, eq(orderItems.productId, products.id))
+      .where(and(eq(orders.userId, userId), eq(orders.paymentStatus, "paid")));
+    categoryAffinity = computeCategoryAffinity(paidOrderItemRows.map(row => ({ categoryId: row.categoryId, quantity: row.quantity })));
+    if (paidOrderItemRows.length) {
+      avgHistoricalUnitPriceMnt = paidOrderItemRows.reduce((sum, row) => sum + row.unitPriceMnt, 0) / paidOrderItemRows.length;
+    }
+
+    const wishlistRows = await db.select({ categoryId: products.categoryId })
+      .from(wishlistItems)
+      .innerJoin(products, eq(wishlistItems.productId, products.id))
+      .where(eq(wishlistItems.userId, userId));
+    wishlistCategoryIds = new Set(wishlistRows.map(row => row.categoryId).filter((id): id is number => id != null));
+  }
+
+  const hasAnyPreference = Boolean(preferences.skinType || preferences.skinConcerns || preferences.hairType || preferences.hairConcerns || preferences.fragrancePreference || preferences.interiorStyle || preferences.hasYoungChildren);
+  const hasAnyHistory = categoryAffinity.size > 0 || wishlistCategoryIds.size > 0;
+  if (!hasAnyPreference && !hasAnyHistory) return bestsellers();
 
   const candidates = await db.select({
     id: products.id,
+    categoryId: products.categoryId,
     name: products.name,
     slug: products.slug,
     brand: products.brand,
@@ -571,6 +632,9 @@ export async function getRecommendedProducts(userId: number, limit = 8) {
     categorySlug: productCategories.slug,
     skinType: products.skinType,
     skinConcerns: products.skinConcerns,
+    hairType: products.hairType,
+    hairConcerns: products.hairConcerns,
+    fragrancePreference: products.fragrancePreference,
     interiorStyle: products.interiorStyle,
   }).from(products)
     .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
@@ -578,19 +642,103 @@ export async function getRecommendedProducts(userId: number, limit = 8) {
 
   const scored = candidates
     .map(product => {
-      let score = 0;
-      if (preferences.skinType && product.skinType === preferences.skinType) score += 2;
-      if (preferences.interiorStyle && product.interiorStyle && product.interiorStyle === preferences.interiorStyle) score += 2;
-      if (product.skinConcerns) {
-        const productConcerns = product.skinConcerns.split(",").map(value => value.trim()).filter(Boolean);
-        score += productConcerns.filter(concern => userConcerns.has(concern)).length;
-      }
+      let score = scorePreferenceMatch(product, preferences);
+      const affinity = categoryAffinity.get(product.categoryId);
+      if (affinity) score += affinity * 2;
+      score += scorePriceBandAffinity(product.priceMnt, avgHistoricalUnitPriceMnt);
+      if (wishlistCategoryIds.has(product.categoryId)) score += 0.5;
       return { product, score };
     })
     .filter(entry => entry.score > 0)
     .sort((a, b) => b.score - a.score);
 
-  return scored.slice(0, limit).map(entry => entry.product);
+  // maxPerCategory tightened 4->3 after a real QA run: with tag coverage
+  // still thin catalog-wide, a single coarse signal (e.g. hasYoungChildren)
+  // could otherwise fill most of the list from one category (see the
+  // hasYoungChildren weight comment in scorePreferenceMatch).
+  const diversified = applyDiversityCap(scored, { maxPerBrand: 3, maxPerCategory: 3 }).slice(0, limit);
+  if (diversified.length >= Math.min(4, limit)) return diversified.map(entry => entry.product);
+
+  // Thin result (very likely today, given real tagging coverage) — backfill
+  // remaining slots with bestsellers rather than showing a near-empty rail.
+  const alreadyIncluded = new Set(diversified.map(entry => entry.product.id));
+  const fillers = (await bestsellers()).filter(product => !alreadyIncluded.has(product.id));
+  return [...diversified.map(entry => entry.product), ...fillers].slice(0, limit);
+}
+
+// Preference Profile v2 (2026-09-01): ProductDetail's related-products rail
+// -- deliberately a separate, smaller feature from getRecommendedProducts
+// above (no concept of "the current user", works for an anonymous
+// visitor). Reuses the same pure scorePreferenceMatch by treating the
+// VIEWED product's own tags as if they were a "preference profile" to
+// match other products against -- same scoring math, no separate logic to
+// maintain. Public (no auth needed).
+export async function getRelatedProducts(productId: number, limit = 6) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const viewedRows = await db.select({
+    categoryId: products.categoryId,
+    skinType: products.skinType,
+    skinConcerns: products.skinConcerns,
+    hairType: products.hairType,
+    hairConcerns: products.hairConcerns,
+    fragrancePreference: products.fragrancePreference,
+    interiorStyle: products.interiorStyle,
+  }).from(products).where(eq(products.id, productId)).limit(1);
+  const viewed = viewedRows[0];
+  if (!viewed) return [];
+  const viewedAsPreference: PreferenceProfile = viewed;
+
+  const candidates = await db.select({
+    id: products.id,
+    categoryId: products.categoryId,
+    name: products.name,
+    slug: products.slug,
+    brand: products.brand,
+    priceMnt: products.priceMnt,
+    compareAtPriceMnt: products.compareAtPriceMnt,
+    imageUrl: products.imageUrl,
+    stockQuantity: products.stockQuantity,
+    categoryName: productCategories.name,
+    categorySlug: productCategories.slug,
+    skinType: products.skinType,
+    skinConcerns: products.skinConcerns,
+    hairType: products.hairType,
+    hairConcerns: products.hairConcerns,
+    fragrancePreference: products.fragrancePreference,
+    interiorStyle: products.interiorStyle,
+  }).from(products)
+    .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
+    .where(and(eq(products.isPublished, true), gte(products.stockQuantity, 1)));
+
+  // Same paid-order sold-quantity signal getBestsellingProducts uses, as a
+  // tiebreaker only (ranked "by overlap then bestseller count" per plan).
+  const soldQtyExpr = sql<number>`SUM(${orderItems.quantity})`;
+  const soldRows = await db.select({ productId: orderItems.productId, soldQuantity: soldQtyExpr })
+    .from(orderItems).innerJoin(orders, eq(orderItems.orderId, orders.id))
+    .where(eq(orders.paymentStatus, "paid")).groupBy(orderItems.productId);
+  const soldByProduct = new Map(soldRows.map(row => [row.productId, Number(row.soldQuantity)]));
+
+  const scored = candidates
+    .filter(candidate => candidate.id !== productId)
+    .map(candidate => {
+      let score = scorePreferenceMatch(candidate, viewedAsPreference);
+      if (candidate.categoryId === viewed.categoryId) score += 1;
+      return { product: candidate, score, sold: soldByProduct.get(candidate.id) ?? 0 };
+    })
+    .filter(entry => entry.score > 0)
+    .sort((a, b) => b.score - a.score || b.sold - a.sold);
+
+  if (scored.length >= Math.min(3, limit)) return scored.slice(0, limit).map(entry => entry.product);
+
+  // Thin match (very likely today, given real tagging coverage) -- backfill
+  // with other same-category products rather than showing a near-empty rail.
+  const alreadyIncluded = new Set(scored.map(entry => entry.product.id));
+  const sameCategoryFillers = candidates
+    .filter(candidate => candidate.id !== productId && candidate.categoryId === viewed.categoryId && !alreadyIncluded.has(candidate.id))
+    .slice(0, limit - scored.length);
+  return [...scored.map(entry => entry.product), ...sameCategoryFillers].slice(0, limit);
 }
 
 export async function getProductBySlug(slug: string) {
@@ -1319,6 +1467,10 @@ export async function getAdminProducts() {
       skinType: products.skinType,
       skinConcerns: products.skinConcerns,
       interiorStyle: products.interiorStyle,
+      hairType: products.hairType,
+      hairConcerns: products.hairConcerns,
+      fragrancePreference: products.fragrancePreference,
+      wellnessInterests: products.wellnessInterests,
     })
     .from(products)
     .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
@@ -1781,6 +1933,10 @@ export type ProductWriteInput = {
   skinType?: "dry" | "oily" | "combination" | "sensitive" | "normal" | null;
   skinConcerns?: string | null;
   interiorStyle?: string | null;
+  hairType?: "dry" | "oily" | "normal" | "damaged" | "color_treated" | null;
+  hairConcerns?: string | null;
+  fragrancePreference?: "unscented" | "light" | "floral" | "citrus" | null;
+  wellnessInterests?: string | null;
 };
 
 export async function createAdminProduct(input: ProductWriteInput) {
@@ -1811,6 +1967,10 @@ export async function createAdminProduct(input: ProductWriteInput) {
       skinType: input.skinType ?? null,
       skinConcerns: input.skinConcerns ?? null,
       interiorStyle: input.interiorStyle ?? null,
+      hairType: input.hairType ?? null,
+      hairConcerns: input.hairConcerns ?? null,
+      fragrancePreference: input.fragrancePreference ?? null,
+      wellnessInterests: input.wellnessInterests ?? null,
     });
     const row = await tx.select().from(products).where(eq(products.slug, input.slug)).limit(1);
     if (row[0]) {
@@ -1886,6 +2046,10 @@ export async function updateAdminProduct(input: { id: number } & Partial<Product
   if (input.skinType !== undefined) changes.skinType = input.skinType;
   if (input.skinConcerns !== undefined) changes.skinConcerns = input.skinConcerns;
   if (input.interiorStyle !== undefined) changes.interiorStyle = input.interiorStyle;
+  if (input.hairType !== undefined) changes.hairType = input.hairType;
+  if (input.hairConcerns !== undefined) changes.hairConcerns = input.hairConcerns;
+  if (input.fragrancePreference !== undefined) changes.fragrancePreference = input.fragrancePreference;
+  if (input.wellnessInterests !== undefined) changes.wellnessInterests = input.wellnessInterests;
 
   await db.update(products).set(changes).where(eq(products.id, input.id));
   await syncSoleVariantFromProduct(input.id, input);

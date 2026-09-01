@@ -83,6 +83,7 @@ import {
   searchPublishedCatalog,
   getPublishedRoutineBySlug,
   getRecommendedProducts,
+  getRelatedProducts,
   getPublishedPosts,
   getPublishedPostBySlug,
   getMarketingSpendRows,
@@ -156,6 +157,17 @@ const nullableText = (max: number) => z.string().trim().max(max).nullable().opti
 const skinTypeSchema = z.enum(["dry", "oily", "combination", "sensitive", "normal"]).nullable().optional();
 const skinConcernsSchema = z.string().trim().max(300).nullable().optional();
 const interiorStyleSchema = z.string().trim().max(60).nullable().optional();
+// Preference Profile v2 (2026-09-01) — same "shared between the customer
+// quiz wizard and the admin product-tag form" convention as the schemas
+// above; hairType/hairConcerns/fragrancePreference/wellnessInterests are
+// used both ways, gender/primaryDistrict/skinRoutineComplexity/
+// hasYoungChildren are shopper-only (no product mirror).
+const genderSchema = z.enum(["male", "female", "other"]).nullable().optional();
+const skinRoutineComplexitySchema = z.enum(["minimal", "moderate", "extensive"]).nullable().optional();
+const hairTypeSchema = z.enum(["dry", "oily", "normal", "damaged", "color_treated"]).nullable().optional();
+const hairConcernsSchema = z.string().trim().max(300).nullable().optional();
+const fragrancePreferenceSchema = z.enum(["unscented", "light", "floral", "citrus"]).nullable().optional();
+const wellnessInterestsSchema = z.string().trim().max(300).nullable().optional();
 // Same shape checkout.createOrder already validates customerPhone with —
 // reused here so profile.update and the address book accept exactly the
 // same phone formats a delivery actually needs.
@@ -192,6 +204,12 @@ const productWriteSchema = z.object({
   skinType: skinTypeSchema,
   skinConcerns: skinConcernsSchema,
   interiorStyle: interiorStyleSchema,
+  // Preference Profile v2 (2026-09-01) -- mirrors the matching fields on
+  // users (see the schema.ts doc-comment on products.hairType).
+  hairType: hairTypeSchema,
+  hairConcerns: hairConcernsSchema,
+  fragrancePreference: fragrancePreferenceSchema,
+  wellnessInterests: wellnessInterestsSchema,
 });
 
 // Product variants -- PHASE 1, additive only (see drizzle/schema.ts).
@@ -665,10 +683,17 @@ export const appRouter = router({
     // matching behavior.
     search: publicProcedure.input(z.object({ query: z.string().trim().min(2).max(120) })).query(({ input }) => searchPublishedCatalog(input.query)),
     bySlug: publicProcedure.input(z.object({ slug: z.string().min(1).max(200) })).query(({ input }) => getProductBySlug(input.slug)),
-    // PREMIUM-FEATURES.md TIER 1: "recommended for you" — protected, not
-    // public, since it's meaningless without a saved preference profile to
-    // match against (a guest has none).
-    recommended: protectedProcedure.query(({ ctx }) => getRecommendedProducts(ctx.user.id)),
+    // Preference Profile v2 (2026-09-01): "recommended for you" is now
+    // public, not protected — getRecommendedProducts always returns a
+    // bestseller-backed fallback for a guest (ctx.user is undefined here)
+    // or a shopper with no preferences/history yet, so the section is
+    // never silently hidden the way it was under TIER 1's original
+    // protected-only, empty-array-if-no-preferences version.
+    recommended: publicProcedure.query(({ ctx }) => getRecommendedProducts(ctx.user?.id ?? null)),
+    // Preference Profile v2 (2026-09-01): ProductDetail's related-products
+    // rail -- product-to-product tag overlap, no user/auth concept at all
+    // (see getRelatedProducts), so this is always public.
+    related: publicProcedure.input(z.object({ productId: z.number().int().positive() })).query(({ input }) => getRelatedProducts(input.productId)),
     // Homepage "Их зарагддаг бараа" rail — real paid-order history, not a
     // manually curated list. See getBestsellingProducts.
     bestsellers: publicProcedure.query(() => getBestsellingProducts(8)),
@@ -961,6 +986,16 @@ export const appRouter = router({
         // own profile page. See the schema comment on users.birthYear.
         birthYear: z.number().int().min(1900).max(new Date().getFullYear()).nullable().optional(),
         occupation: z.string().trim().max(120).nullable().optional(),
+        // Preference Profile v2 (2026-09-01) quiz wizard fields -- all
+        // optional, same "never asked at signup" discipline as above.
+        gender: genderSchema,
+        primaryDistrict: districtSchema,
+        skinRoutineComplexity: skinRoutineComplexitySchema,
+        hairType: hairTypeSchema,
+        hairConcerns: hairConcernsSchema,
+        fragrancePreference: fragrancePreferenceSchema,
+        wellnessInterests: wellnessInterestsSchema,
+        hasYoungChildren: z.boolean().nullable().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const updated = await updateUserPreferences(ctx.user.id, input);

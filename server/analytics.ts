@@ -221,6 +221,103 @@ export async function getCustomerDemographics() {
   };
 }
 
+/**
+ * Preference Profile v2 (2026-09-01): customers-by-preference-segment view.
+ * Same "N of M told us" discipline as getCustomerDemographics above --
+ * every bucket is reported against how many customers actually answered
+ * that specific question, never against the whole user base. This is the
+ * one admin-analytics view genuinely unique to this project (nothing like
+ * it exists off-the-shelf) since it depends on the quiz-wizard data the
+ * rest of this feature collects.
+ */
+export async function getPreferenceSegmentBreakdown() {
+  const db = await getDb();
+  const empty = { totalCustomerCount: 0, genderProvidedCount: 0, genderBreakdown: [], skinTypeProvidedCount: 0, skinTypeBreakdown: [], topSkinConcerns: [], hairTypeProvidedCount: 0, hairTypeBreakdown: [], districtProvidedCount: 0, districtBreakdown: [], hasYoungChildrenCount: 0 } as {
+    totalCustomerCount: number; genderProvidedCount: number; genderBreakdown: Array<{ value: string; count: number }>;
+    skinTypeProvidedCount: number; skinTypeBreakdown: Array<{ value: string; count: number }>;
+    topSkinConcerns: Array<{ value: string; count: number }>;
+    hairTypeProvidedCount: number; hairTypeBreakdown: Array<{ value: string; count: number }>;
+    districtProvidedCount: number; districtBreakdown: Array<{ district: UbDistrict; label: string; count: number }>;
+    hasYoungChildrenCount: number;
+  };
+  if (!db) return empty;
+
+  const rows = await db.select({
+    gender: users.gender, skinType: users.skinType, skinConcerns: users.skinConcerns,
+    hairType: users.hairType, primaryDistrict: users.primaryDistrict, hasYoungChildren: users.hasYoungChildren,
+  }).from(users).where(eq(users.role, "user"));
+
+  const genderCounts = new Map<string, number>();
+  const skinTypeCounts = new Map<string, number>();
+  const concernCounts = new Map<string, number>();
+  const hairTypeCounts = new Map<string, number>();
+  const districtCounts = new Map<UbDistrict, number>();
+  let hasYoungChildrenCount = 0;
+
+  for (const row of rows) {
+    if (row.gender) genderCounts.set(row.gender, (genderCounts.get(row.gender) ?? 0) + 1);
+    if (row.skinType) skinTypeCounts.set(row.skinType, (skinTypeCounts.get(row.skinType) ?? 0) + 1);
+    if (row.skinConcerns) row.skinConcerns.split(",").map(v => v.trim()).filter(Boolean).forEach(concern => concernCounts.set(concern, (concernCounts.get(concern) ?? 0) + 1));
+    if (row.hairType) hairTypeCounts.set(row.hairType, (hairTypeCounts.get(row.hairType) ?? 0) + 1);
+    if (row.primaryDistrict) districtCounts.set(row.primaryDistrict, (districtCounts.get(row.primaryDistrict) ?? 0) + 1);
+    if (row.hasYoungChildren === true) hasYoungChildrenCount++;
+  }
+
+  const toRows = (map: Map<string, number>) => Array.from(map.entries()).map(([value, count]) => ({ value, count })).sort((a, b) => b.count - a.count);
+
+  return {
+    totalCustomerCount: rows.length,
+    genderProvidedCount: Array.from(genderCounts.values()).reduce((sum, n) => sum + n, 0),
+    genderBreakdown: toRows(genderCounts),
+    skinTypeProvidedCount: Array.from(skinTypeCounts.values()).reduce((sum, n) => sum + n, 0),
+    skinTypeBreakdown: toRows(skinTypeCounts),
+    topSkinConcerns: toRows(concernCounts).slice(0, 10),
+    hairTypeProvidedCount: Array.from(hairTypeCounts.values()).reduce((sum, n) => sum + n, 0),
+    hairTypeBreakdown: toRows(hairTypeCounts),
+    districtProvidedCount: Array.from(districtCounts.values()).reduce((sum, n) => sum + n, 0),
+    districtBreakdown: Array.from(districtCounts.entries()).map(([district, count]) => ({ district, label: ubDistrictLabels[district], count })).sort((a, b) => b.count - a.count),
+    hasYoungChildrenCount,
+  };
+}
+
+/**
+ * Preference Profile v2 (2026-09-01): answers the exact gap a live read of
+ * the catalog found (4/937 products tagged) directly in the dashboard --
+ * how much of the published catalog actually has SOME personalization tag,
+ * overall and by category, so this doesn't stay an invisible data-quality
+ * problem. "Tagged" = any of the 6 preference columns is non-null (matches
+ * scripts/auto-tag-products.ts's own isTagged definition).
+ */
+export async function getRecommendationCoverage() {
+  const db = await getDb();
+  if (!db) return { totalPublishedProductCount: 0, taggedProductCount: 0, taggedPercent: 0, byCategory: [] as Array<{ categoryName: string; total: number; tagged: number }> };
+
+  const rows = await db.select({
+    categoryName: productCategories.name,
+    skinType: products.skinType, skinConcerns: products.skinConcerns, interiorStyle: products.interiorStyle,
+    hairType: products.hairType, hairConcerns: products.hairConcerns, fragrancePreference: products.fragrancePreference, wellnessInterests: products.wellnessInterests,
+  }).from(products).leftJoin(productCategories, eq(products.categoryId, productCategories.id)).where(eq(products.isPublished, true));
+
+  const byCategory = new Map<string, { total: number; tagged: number }>();
+  let taggedProductCount = 0;
+  for (const row of rows) {
+    const isTagged = Boolean(row.skinType || row.skinConcerns || row.interiorStyle || row.hairType || row.hairConcerns || row.fragrancePreference || row.wellnessInterests);
+    if (isTagged) taggedProductCount++;
+    const key = row.categoryName ?? "(ангилалгүй)";
+    const tally = byCategory.get(key) ?? { total: 0, tagged: 0 };
+    tally.total++;
+    if (isTagged) tally.tagged++;
+    byCategory.set(key, tally);
+  }
+
+  return {
+    totalPublishedProductCount: rows.length,
+    taggedProductCount,
+    taggedPercent: rows.length ? Math.round((taggedProductCount / rows.length) * 100) : 0,
+    byCategory: Array.from(byCategory.entries()).map(([categoryName, tally]) => ({ categoryName, ...tally })).sort((a, b) => b.total - a.total),
+  };
+}
+
 /** How many real customers sit in each loyalty tier right now (cumulative
  *  paid spend + any admin-credited in-store history — same formula as
  *  getUserLoyaltyStatus in server/db.ts, just aggregated across everyone
@@ -656,7 +753,7 @@ export async function getReturnRateOverview(input: DateRangeInput = {}): Promise
  *  round trips, and the two export functions below render from the exact
  *  same object so the downloaded file always matches what's on screen. */
 export async function getAnalyticsReport(input: DateRangeInput = {}) {
-  const [overview, revenueTimeseries, topProducts, topCategories, districtBreakdown, demographics, loyaltyTiers, ordersByChannel, cartAbandonment, inventory, profit, traffic, periodComparison, pnl, returnRate, cac, conversion] = await Promise.all([
+  const [overview, revenueTimeseries, topProducts, topCategories, districtBreakdown, demographics, loyaltyTiers, ordersByChannel, cartAbandonment, inventory, profit, traffic, periodComparison, pnl, returnRate, cac, conversion, preferenceSegments, recommendationCoverage] = await Promise.all([
     getSalesOverview(input),
     getRevenueTimeseries(input),
     getTopProducts({ ...input, limit: 15 }),
@@ -674,8 +771,10 @@ export async function getAnalyticsReport(input: DateRangeInput = {}) {
     getReturnRateOverview(input),
     getCacOverview(input),
     getConversionOverview(input),
+    getPreferenceSegmentBreakdown(),
+    getRecommendationCoverage(),
   ]);
-  return { overview, revenueTimeseries, topProducts, topCategories, districtBreakdown, demographics, loyaltyTiers, ordersByChannel, cartAbandonment, inventory, profit, traffic, periodComparison, pnl, returnRate, cac, conversion };
+  return { overview, revenueTimeseries, topProducts, topCategories, districtBreakdown, demographics, loyaltyTiers, ordersByChannel, cartAbandonment, inventory, profit, traffic, periodComparison, pnl, returnRate, cac, conversion, preferenceSegments, recommendationCoverage };
 }
 
 type AnalyticsReport = Awaited<ReturnType<typeof getAnalyticsReport>>;

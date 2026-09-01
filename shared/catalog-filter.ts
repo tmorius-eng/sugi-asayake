@@ -110,3 +110,241 @@ export function getCatalogSkinTypes<T extends CatalogSkinTypeItem>(products: T[]
 export function filterCatalogSkinType<T extends CatalogSkinTypeItem>(products: T[], skinType: SkinType | "all") {
   return skinType === "all" ? products : products.filter(product => product.skinType === skinType);
 }
+
+// ---------------------------------------------------------------------
+// Preference Profile v2 (2026-09-01) — recommendation engine v2 vocabulary
+// and pure scoring. Label maps here are the single source of truth for the
+// NEW fields (the older skinType/skinConcerns/interiorStyle vocabularies
+// stay defined where they already were, in client/src/pages/Profile.tsx
+// and client/src/components/AdminWorkspace.tsx — a known small drift risk
+// documented there, not introduced here) so the profile quiz wizard and
+// the admin "PERSONALIZATION TAGS" panel render the exact same labels.
+// ---------------------------------------------------------------------
+
+export type HairType = "dry" | "oily" | "normal" | "damaged" | "color_treated";
+export const hairTypeLabels: Record<HairType, string> = {
+  dry: "Хуурай",
+  oily: "Тослог",
+  normal: "Хэвийн",
+  damaged: "Гэмтсэн",
+  color_treated: "Будаг/хими хийсэн",
+};
+
+export type FragrancePreference = "unscented" | "light" | "floral" | "citrus";
+export const fragrancePreferenceLabels: Record<FragrancePreference, string> = {
+  unscented: "Үнэргүй",
+  light: "Хөнгөн үнэртэй",
+  floral: "Цэцгийн үнэртэй",
+  citrus: "Цитрус/шинэлэг үнэртэй",
+};
+
+export type SkinRoutineComplexity = "minimal" | "moderate" | "extensive";
+export const skinRoutineComplexityLabels: Record<SkinRoutineComplexity, string> = {
+  minimal: "Энгийн (цэвэрлэгч+тос)",
+  moderate: "Дунд зэрэг (+тонер/серум)",
+  extensive: "Иж бүрэн (5+ алхам)",
+};
+
+export type Gender = "male" | "female" | "other";
+export const genderLabels: Record<Gender, string> = {
+  male: "Эрэгтэй",
+  female: "Эмэгтэй",
+  other: "Бусад",
+};
+
+// New skin-concern option added on top of Profile.tsx's existing 6 (acne/
+// aging/dullness/dryness/sensitivity/pigmentation) — kept here so the
+// scoring vocabulary and the auto-tag script agree on the key.
+export const NEW_SKIN_CONCERN = { value: "sun_damage", label: "Наранаас хамгаалах / UV" } as const;
+
+// Canonical option lists for the pill-select fields — single source of
+// truth for both client/src/pages/Profile.tsx (contact card + quiz wizard)
+// and client/src/components/AdminWorkspace.tsx's tag-suggestion labels, so
+// the two never drift out of sync the way skinTypeLabels above already has
+// with AdminWorkspace's own separate copy (a known, pre-existing, small
+// drift left as-is — see PREMIUM-FEATURES.md history).
+export const skinTypeOptions: Array<{ value: SkinType; label: string }> = [
+  { value: "normal", label: "Энгийн" },
+  { value: "dry", label: "Хуурай" },
+  { value: "oily", label: "Тослог" },
+  { value: "combination", label: "Хосолмол" },
+  { value: "sensitive", label: "Эмзэг" },
+];
+
+export const skinConcernOptions: Array<{ value: string; label: string }> = [
+  { value: "acne", label: "Батга, бацлуур" },
+  { value: "aging", label: "Үрчлээ, хөгшрөлт" },
+  { value: "dullness", label: "Уйтгар өнгө" },
+  { value: "dryness", label: "Хуурайшилт" },
+  { value: "sensitivity", label: "Мэдрэг байдал" },
+  { value: "pigmentation", label: "Толбо, пигмент" },
+  NEW_SKIN_CONCERN,
+];
+
+export const interiorStyleOptions: Array<{ value: string; label: string }> = [
+  { value: "minimal", label: "Минимал" },
+  { value: "wabi-sabi", label: "Ваби-саби" },
+  { value: "modern", label: "Модерн" },
+  { value: "scandinavian", label: "Скандинав" },
+  { value: "warm-japandi", label: "Жапанди" },
+];
+
+export const genderOptions: Array<{ value: Gender; label: string }> = [
+  { value: "female", label: genderLabels.female },
+  { value: "male", label: genderLabels.male },
+  { value: "other", label: genderLabels.other },
+];
+
+export const hairTypeOptions: Array<{ value: HairType; label: string }> = [
+  { value: "normal", label: hairTypeLabels.normal },
+  { value: "dry", label: hairTypeLabels.dry },
+  { value: "oily", label: hairTypeLabels.oily },
+  { value: "damaged", label: hairTypeLabels.damaged },
+  { value: "color_treated", label: hairTypeLabels.color_treated },
+];
+
+export const fragrancePreferenceOptions: Array<{ value: FragrancePreference; label: string }> = [
+  { value: "unscented", label: fragrancePreferenceLabels.unscented },
+  { value: "light", label: fragrancePreferenceLabels.light },
+  { value: "floral", label: fragrancePreferenceLabels.floral },
+  { value: "citrus", label: fragrancePreferenceLabels.citrus },
+];
+
+export const skinRoutineComplexityOptions: Array<{ value: SkinRoutineComplexity; label: string }> = [
+  { value: "minimal", label: skinRoutineComplexityLabels.minimal },
+  { value: "moderate", label: skinRoutineComplexityLabels.moderate },
+  { value: "extensive", label: skinRoutineComplexityLabels.extensive },
+];
+
+export const hairConcernOptions: Array<{ value: string; label: string }> = [
+  { value: "hairloss", label: "Үс унах" },
+  { value: "dandruff", label: "Хусам" },
+  { value: "frizz", label: "Ширхэгжилт" },
+  { value: "scalp_sensitivity", label: "Толгойн арьс мэдрэмтгий" },
+];
+
+export const wellnessInterestOptions: Array<{ value: string; label: string }> = [
+  { value: "energy", label: "Эрч хүч" },
+  { value: "digestion", label: "Хоол боловсруулалт" },
+  { value: "sleep", label: "Нойр" },
+  { value: "immune", label: "Дархлаа" },
+  { value: "weight", label: "Жин хянах" },
+];
+
+/** Shopper-saved preference profile (users.*) — the subset the scorer needs. */
+export type PreferenceProfile = {
+  skinType?: string | null;
+  /** Comma-separated, order = priority (the order the shopper clicked them). */
+  skinConcerns?: string | null;
+  hairType?: string | null;
+  hairConcerns?: string | null;
+  fragrancePreference?: string | null;
+  interiorStyle?: string | null;
+  hasYoungChildren?: boolean | null;
+};
+
+/** Product row shape the scorer needs — a subset of the catalog select. */
+export type ScorableProduct = {
+  id: number;
+  brand?: string | null;
+  categorySlug?: string | null;
+  skinType?: string | null;
+  skinConcerns?: string | null;
+  hairType?: string | null;
+  hairConcerns?: string | null;
+  fragrancePreference?: string | null;
+  interiorStyle?: string | null;
+};
+
+// Priority-decayed token-overlap score: the 1st concern a shopper picked
+// (list position, not a separate rank field — no schema change needed)
+// counts more than the 2nd, which counts more than the rest.
+function scoreTokenListMatch(productList: string | null | undefined, userListInPriorityOrder: string | null | undefined): number {
+  if (!productList || !userListInPriorityOrder) return 0;
+  const productTokens = new Set(productList.split(",").map(value => value.trim()).filter(Boolean));
+  const userTokens = userListInPriorityOrder.split(",").map(value => value.trim()).filter(Boolean);
+  const weightByPosition = [1.5, 1.2, 1.0];
+  let score = 0;
+  userTokens.forEach((token, index) => {
+    if (productTokens.has(token)) score += weightByPosition[Math.min(index, weightByPosition.length - 1)];
+  });
+  return score;
+}
+
+/**
+ * Recommendation engine v2's pure preference-match score (server/db.ts's
+ * getRecommendedProducts adds behavioral signals — category affinity,
+ * price-band affinity, wishlist-adjacency — on top of this, since those
+ * need DB-fetched context this function deliberately doesn't take).
+ */
+export function scorePreferenceMatch(product: ScorableProduct, preferences: PreferenceProfile): number {
+  let score = 0;
+  if (preferences.skinType && product.skinType === preferences.skinType) score += 3;
+  score += scoreTokenListMatch(product.skinConcerns, preferences.skinConcerns);
+  if (preferences.hairType && product.hairType === preferences.hairType) score += 3;
+  score += scoreTokenListMatch(product.hairConcerns, preferences.hairConcerns);
+  if (preferences.fragrancePreference && product.fragrancePreference === preferences.fragrancePreference) score += 1;
+  if (preferences.interiorStyle && product.interiorStyle && product.interiorStyle === preferences.interiorStyle) score += 2;
+  // Deliberately a SOFT signal (same weight as fragrancePreference), not a
+  // strong one -- a real QA run found +3 here let this one coarse
+  // category-level checkbox dominate a shopper's entire recommendation
+  // list (5/5 baby products for a shopper who also picked skinType/
+  // hairType/concerns) whenever tag coverage elsewhere was thin, which it
+  // still mostly is. This should nudge, not override, everything else.
+  if (preferences.hasYoungChildren && product.categorySlug === "eej-ba-khuukhed") score += 1;
+  return score;
+}
+
+// A candidate within +/-30% of the shopper's average historical unit price
+// counts as "in their usual price band" — a soft nudge, not a hard filter.
+export function scorePriceBandAffinity(candidatePriceMnt: number, avgHistoricalUnitPriceMnt: number | null | undefined): number {
+  if (!avgHistoricalUnitPriceMnt || avgHistoricalUnitPriceMnt <= 0) return 0;
+  const ratio = candidatePriceMnt / avgHistoricalUnitPriceMnt;
+  return ratio >= 0.7 && ratio <= 1.3 ? 1 : 0;
+}
+
+// Caps how many results from the same brand/category can appear together,
+// applied AFTER sorting by score (so it thins out an already-ranked list
+// rather than re-ranking it) — avoids a top-8 that's 8 near-duplicate SKUs
+// from one generic-description brand (see PRODUCT-IMPORT.md's "S-Select"
+// naming pattern).
+export function applyDiversityCap<T extends { product: { brand?: string | null; categorySlug?: string | null } }>(
+  scoredEntries: T[],
+  options: { maxPerBrand?: number; maxPerCategory?: number } = {},
+): T[] {
+  const maxPerBrand = options.maxPerBrand ?? 3;
+  const maxPerCategory = options.maxPerCategory ?? 4;
+  const brandCounts = new Map<string, number>();
+  const categoryCounts = new Map<string, number>();
+  const kept: T[] = [];
+  for (const entry of scoredEntries) {
+    const brandKey = entry.product.brand ?? "__no-brand__";
+    const categoryKey = entry.product.categorySlug ?? "__no-category__";
+    const brandCount = brandCounts.get(brandKey) ?? 0;
+    const categoryCount = categoryCounts.get(categoryKey) ?? 0;
+    if (brandCount >= maxPerBrand || categoryCount >= maxPerCategory) continue;
+    brandCounts.set(brandKey, brandCount + 1);
+    categoryCounts.set(categoryKey, categoryCount + 1);
+    kept.push(entry);
+  }
+  return kept;
+}
+
+/** Share of a shopper's past paid order_items quantity that went to each
+ *  product category — e.g. { 3: 0.6, 7: 0.4 } means 60% of what they've
+ *  bought (by quantity) was category 3. Pure aggregation; server/db.ts
+ *  fetches the rows via the same paid-orders join getBestsellingProducts
+ *  already uses. */
+export function computeCategoryAffinity(orderItemRows: Array<{ categoryId: number | null; quantity: number }>): Map<number, number> {
+  const totalsByCategory = new Map<number, number>();
+  let grandTotal = 0;
+  for (const row of orderItemRows) {
+    if (row.categoryId == null) continue;
+    totalsByCategory.set(row.categoryId, (totalsByCategory.get(row.categoryId) ?? 0) + row.quantity);
+    grandTotal += row.quantity;
+  }
+  if (grandTotal === 0) return new Map();
+  const shareByCategory = new Map<number, number>();
+  totalsByCategory.forEach((quantity, categoryId) => shareByCategory.set(categoryId, quantity / grandTotal));
+  return shareByCategory;
+}

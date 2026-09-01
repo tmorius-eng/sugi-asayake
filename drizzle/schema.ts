@@ -35,6 +35,27 @@ export const users = mysqlTable("users", {
   skinConcerns: varchar("skinConcerns", { length: 300 }),
   interiorStyle: varchar("interiorStyle", { length: 60 }),
   /**
+   * Preference Profile v2 (2026-09-01): same "optional, never asked at
+   * signup, N of M reporting only" discipline as birthYear/occupation below
+   * — collected via the profile-page quiz wizard, never mandatory.
+   * hairType/hairConcerns/fragrancePreference/wellnessInterests mirror the
+   * matching columns on `products` (see the doc-comment there) so
+   * getRecommendedProducts stays a plain intersection, no new tagging
+   * vocabulary to keep in sync. skinRoutineComplexity has NO product
+   * mirror — it's informational only (shown back to the shopper, not fed
+   * into recommendation scoring). hasYoungChildren also has no product
+   * mirror — it's matched directly against the "Ээж ба хүүхэд" category at
+   * query time instead of tagging 35 individual products.
+   */
+  gender: mysqlEnum("gender", ["male", "female", "other"]),
+  primaryDistrict: mysqlEnum("primaryDistrict", ubDistricts),
+  skinRoutineComplexity: mysqlEnum("skinRoutineComplexity", ["minimal", "moderate", "extensive"]),
+  hairType: mysqlEnum("hairType", ["dry", "oily", "normal", "damaged", "color_treated"]),
+  hairConcerns: varchar("hairConcerns", { length: 300 }),
+  fragrancePreference: mysqlEnum("fragrancePreference", ["unscented", "light", "floral", "citrus"]),
+  wellnessInterests: varchar("wellnessInterests", { length: 300 }),
+  hasYoungChildren: boolean("hasYoungChildren"),
+  /**
    * Admin customer-analytics profile (optional, never asked at signup —
    * conversion cost of a mandatory field isn't worth it). Offered as an
    * optional "help us personalize your experience" prompt on the profile
@@ -209,6 +230,20 @@ export const products = mysqlTable("products", {
   skinType: mysqlEnum("skinType", ["dry", "oily", "combination", "sensitive", "normal"]),
   skinConcerns: varchar("skinConcerns", { length: 300 }),
   interiorStyle: varchar("interiorStyle", { length: 60 }),
+  /**
+   * Preference Profile v2 (2026-09-01): mirrors the matching new columns on
+   * `users` (see the doc-comment there) — hairType/hairConcerns cover the
+   * "Үс ба бие" category, fragrancePreference is a cross-cutting soft
+   * signal, wellnessInterests covers "Эрүүл мэнд". All nullable, populated
+   * either by an admin (AdminWorkspace.tsx "PERSONALIZATION TAGS") or by
+   * the one-off scripts/auto-tag-products.ts keyword pass — see that
+   * script for why product `name` is the primary matching signal (most of
+   * the real catalog's shortDescription text is too generic to use).
+   */
+  hairType: mysqlEnum("hairType", ["dry", "oily", "normal", "damaged", "color_treated"]),
+  hairConcerns: varchar("hairConcerns", { length: 300 }),
+  fragrancePreference: mysqlEnum("fragrancePreference", ["unscented", "light", "floral", "citrus"]),
+  wellnessInterests: varchar("wellnessInterests", { length: 300 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => [

@@ -93,6 +93,14 @@ export default function Home() {
   // getBestsellingProducts in server/db.ts.
   const bestsellersQuery = trpc.catalog.bestsellers.useQuery();
   const bestsellers = bestsellersQuery.data ?? [];
+  // Preference Profile v2 (2026-09-01): same public, always-populated (guest
+  // and never-tagged shoppers get a bestseller-backed fallback server-side,
+  // see getRecommendedProducts) endpoint /shop's RecommendedForYou uses --
+  // reuses the bestseller rail's own card markup rather than /shop's
+  // Recently-Viewed-style interactive card (no quick-view/remember affordance
+  // exists on this page), so it reads as one consistent product-rail family.
+  const recommendedQuery = trpc.catalog.recommended.useQuery();
+  const recommended = recommendedQuery.data ?? [];
   // Same reference site's お役立ち情報 (useful info) homepage rail — the
   // content/post system has existed since the PostDetail page was built,
   // but nothing ever surfaced it on the homepage itself.
@@ -240,6 +248,36 @@ export default function Home() {
               ))}
             </div>
             <Link href="/shop" className="bestseller-all-link">{textFor("home-text-bestseller-all-link", "Бүх бүтээгдэхүүн үзэх")} <ArrowUpRight size={16} /></Link>
+          </section>
+        )}
+
+        {/* Preference Profile v2 (2026-09-01): reuses catalog.recommended,
+            the same endpoint /shop's "ТАНД ЗОРИУЛАН" rail uses -- now public
+            and always backed by a bestseller fallback server-side, so this
+            only hides on a genuinely failed/loading request, not "no
+            preferences yet". Same card markup as the bestseller rail above
+            (no quick-view affordance exists on this page). */}
+        {recommended.length > 0 && (
+          <section className="bestseller-section" data-reveal>
+            {(() => {
+              const [line1, line2] = textFor("home-text-recommended-heading", "Танд санал\nболгож байна.").split("\n");
+              return <div className="bestseller-heading">
+                <div><p className="shop-kicker"><Sparkles size={12} /> {textFor("home-text-recommended-kicker", "ТАНД ЗОРИУЛАН")}</p><h2>{line1}<br /><em>{line2}</em></h2></div>
+                <p>{textFor("home-text-recommended-description", "Таны профайл дээр хадгалсан тохиргоо, эсвэл манай хамгийн эрэлттэй сонголтуудад тулгуурласан жагсаалт.")}</p>
+              </div>;
+            })()}
+            <div className="bestseller-grid">
+              {recommended.slice(0, 6).map(product => (
+                <Link href={`/product/${product.slug}`} className="bestseller-card" key={product.id}>
+                  <img src={product.imageUrl ?? bestsellerFallbackImage} alt={product.name} />
+                  <div>
+                    <p>{product.brand ?? "SUGI ASAYAKE"}</p>
+                    <h3>{product.name}</h3>
+                    <strong>{formatMnt(product.priceMnt)}</strong>
+                  </div>
+                </Link>
+              ))}
+            </div>
           </section>
         )}
 

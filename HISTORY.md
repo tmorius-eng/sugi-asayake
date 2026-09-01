@@ -4,6 +4,34 @@
 
 ---
 
+## Preference Profile v2 + Recommendation Engine v2 + Admin Analytics segment view (2026-09-01)
+
+Tom Profile хуудасны "Хувийн профайл" таб хэт basic, "Гоо сайхны & Гэрийн профайл" хэсэг хэт богино гэж мэдэгдэж, дараах бүгдийг нэг зэрэг шаардав: (1) бүрэн хувийн мэдээлэл (хаяг/дүүрэг/ажил/нас/хүйс), (2) олон сегмент-тэй өргөтгөсөн "Гоо сайхны & Гэрийн профайл", (3) 937 барааны каталогоос бодитоор тохирсон бараа санал болгох систем ("судалгаа гаргасан дизайн болон шинэ дата систем"), (4) `/admin` Analytics-ийг ("хэт oldschool") нэгэн зэрэг шинжлэх. Тодорхой websearch/судалгаа хийхийг шаардсан.
+
+**Судалгаа/төлөвлөлт**: 3 Explore agent зэрэг ажиллуулав (1: одоогийн Profile preferences + recommendation engine кодын байдал, 2: одоогийн admin Analytics-ийн бүрэн inventory, 3: websearch — Curology/Typology/The Ordinary/Ulta/Function of Beauty/Glossier-ийн quiz UX pattern, home-goods personalization, recommendation engine best-practice, 2026 admin analytics trend). Дараа нь Plan agent (**бодит Aiven DB-ээс шууд query асуусан**: 937 барааны зөвхөн 4 нь tag-тай, 0 interior бараа байгаа, 767/937 (82%) generic shortDescription-той гэдгийг олж, эдгээр бодит тоо дээр үндэслэсэн боловсронгуй төлөвлөгөө гаргав). AskUserQuestion-оор 3 чухал шийдвэрийг Tom-оос тодорхой асуув: (a) UI хэлбэр — **quiz wizard** (segmented card биш) сонгов, (b) `catalog.recommended` **public** (guest-д ч bestseller fallback) болгохыг сонгов, (c) bulk auto-tag script-ийг **эхлээд dry-run тайлан үзүүлж, "za" гэсний дараа** бодит Aiven дээр ажиллуулахыг сонгов.
+
+**Хэрэгжүүлэлт** (дэлгэрэнгүй файл жагсаалт CLAUDE.md-д):
+- Migration 0038: 8 шинэ `users` талбар, 4 шинэ `products` талбар (mirror).
+- `shared/catalog-filter.ts`-д recommendation engine v2-ийн цэвэр scoring функцууд (`scorePreferenceMatch`/`scorePriceBandAffinity`/`applyDiversityCap`/`computeCategoryAffinity`) + бүх шинэ vocabulary/label/option — Profile.tsx-ийн хуучин локал массивуудыг эндээс дахин ашигладаг болгосон (label drift багасгасан).
+- `shared/product-tagging.ts` (шинэ): rule-based keyword `suggestTagsForProduct` — таамаглахгүй, зөвхөн бодит signal олдвол л tag санал болгоно.
+- `server/db.ts`-ийн `getRecommendedProducts` бүрэн v2 (preference match backbone + захиалгын түүхийн category affinity + үнийн зурвас + wishlist-adjacency + diversity cap + cold-start/thin-result bestseller fallback), шинэ `getRelatedProducts`+`catalog.related` (ProductDetail-ийн шинэ related-products хэсэг).
+- `client/src/components/ProfileQuizWizard.tsx` (шинэ, 6 алхам+review), `RecommendedForYou.tsx` (Shop.tsx-аас extract, Home.tsx-д мөн ашигласан).
+- `AdminWorkspace.tsx`-ийн PERSONALIZATION TAGS блок 4 шинэ талбар + admin-д зориулсан dismissible санал chip.
+- `server/analytics.ts`-ийн `getPreferenceSegmentBreakdown`/`getRecommendationCoverage` + `AdminAnalyticsPanel.tsx`-ийн шинэ "Тохиргооны сегмент"/"Санал болгох хамрах хүрээ" секц.
+- `scripts/auto-tag-products.ts` (шинэ, 2-tier: keyword match + category-level default) — dry-run горимд л ажилласан, бодит `--apply` хараахан хийгдээгүй.
+
+**🔴 Playwright QA-ийн үеэр Tom өөрөө localhost:3000 дээр амьдаар ажиглаж байхдаа олсон bug**: "юу сонгосон ч дандаа хүүхдийн бараа гарч байна" гэж шууд мэдэгдэв. Шалтгаан: `hasYoungChildren` scoring жин (+3) нь skinType/hairType exact match-тай (+3) яг ижил байсан бол, production дээрх tagging coverage 4/937 л байсан тул бусад бүх signal хоосон гарч, энэ ганц signal л жагсаалтыг бүхэлд нь дарж авчихсан байв. Жинг +3→+1 (fragrancePreference-тэй ижил "зөөлөн" signal), diversity cap-ыг maxPerCategory 4→3 болгож засаад, Tom-ийн бодит хадгалсан тохиргоогоор шууд дахин шалгаж (3 арьс арчилгаа + 3 Ээж/хүүхэд) баталгаажуулав.
+
+Мөн энэ явцад **Tom "937/937 tagged болго" гэж тодорхой шаардаж**, анхны Tier-1-single 113/937 хангалтгүй гэж татгалзсан — `auto-tag-products.ts`-д Tier 2 (category-level default, зөвхөн admin chip-д харагдахгүй, зөвхөн bulk script-д) нэмж 937/937 dry-run гаргав.
+
+Явцад бас **өөрөө олж заасан 2 дахь bug** (Tom харахаас өмнө): auto-tag-ийн keyword matcher "чийгшүүлэх" төрлийн boilerplate-аас болж 441/445 (99%) skincare барааг "dryness" гэж дүрмээр tag хийж байсныг dry-run гарцыг өөрөө нягталж олж, зөвхөн тодорхой ингредиент/хэллэгээр солив.
+
+**Баталгаажуулалт**: `pnpm check`/`pnpm build` олон checkpoint дээр цэвэр. Шинэ unit тестүүд: `catalog-filter.test.ts` (+17, scoring функцууд), `product-tagging.test.ts` (6, dryness-bug-ийн regression тест орсон) — бүгд ✅. `profile.integration.test.ts`-д +2 шинэ тест (v2 талбарууд, invalid enum rejection) — 14/14 ✅. Playwright-ээр (throwaway staff→admin эрхтэй хэрэглэгчээр, дараа нь DB-ээс бүрэн устгасан): wizard бүрэн 6 алхам+review дуусгаж, reload хийсний дараа ч хадгалагдсан хэвээр байгааг баталгаажуулсан; Shop/Home "Танд санал болгож байна", ProductDetail related-products бүгд render хийж байгааг баталгаажуулсан; admin Analytics шинэ секц, catalog product edit-ийн шинэ талбарууд бүгд ажиллаж байгааг баталгаажуулсан; console алдаагүй.
+
+**⚠️ ХАРААХАН ДУУСААГҮЙ**: `scripts/auto-tag-products.ts --apply` бодит Aiven дээр хараахан ажиллуулаагүй (dry-run л хийгдсэн). Tom энэ commit/push + CLAUDE.md/HISTORY.md + [self-review.md](self-review.md) (шинэ, Tom-ийн тусгайлан шаардсан алдаа/сургамжийн тунгаан бодлого) дуусахыг **apply-аас өмнө** гэж тодорхой заасан — дараагийн session эхлээд backup аваад (`scripts/db-backup.ps1`), дараа нь `--apply` ажиллуулах ёстой.
+
+---
+
 ## Quick Stats infinity graph — зочны төлөвт огт харагдаагүй bug, reference fidelity засвар (2026-08-31)
 
 Tom нүүр хуудасны Quick Stats хэсгийг reference зурагтай харьцуулаад "too basic" гэж татгалзсан, "Claude AI Pro олон удаа буруу хийсэн" гэж мэдэгдсэн. Plan mode-т орж, зөвхөн код унших замаар (dev server ажиллуулахгүйгээр) `InfinityGraph.tsx`/`QuickStatsSection.tsx`-ийг master-prompt баримт бичгийн §16-тай нэг мөр нэгээр харьцуулж, 6 тодорхой mismatch (Finding A-F) олов. Хамгийн том нь: **Finding F — зочны төлөвт infinity graph огт харагдаагүй**, зөвхөн 4 талбарын box харагддаг байсан. Tom баталгаажуулав: тэрбээр яг зочны төлөвөөр харьцуулж байсан тул энэ нь гол шалтгаан байв.

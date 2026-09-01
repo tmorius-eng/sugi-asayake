@@ -377,6 +377,29 @@ export const siteTextSlots = [
     fallbackValue: "Бүх бүтээгдэхүүн үзэх",
   },
 
+  // ---- "Танд санал болгож байна" rail (Preference Profile v2, 2026-09-01) --
+  {
+    key: "home-text-recommended-kicker",
+    group: "Танд санал болгож байна",
+    label: "Дээд жижиг тэмдэглэгээ",
+    description: "",
+    fallbackValue: "ТАНД ЗОРИУЛАН",
+  },
+  {
+    key: "home-text-recommended-heading",
+    group: "Танд санал болгож байна",
+    label: "Гарчиг (2 мөр)",
+    description: "",
+    fallbackValue: "Танд санал\nболгож байна.",
+  },
+  {
+    key: "home-text-recommended-description",
+    group: "Танд санал болгож байна",
+    label: "Тайлбар өгүүлбэр",
+    description: "",
+    fallbackValue: "Таны профайл дээр хадгалсан тохиргоо, эсвэл манай хамгийн эрэлттэй сонголтуудад тулгуурласан жагсаалт.",
+  },
+
   // ---- Family / care section ------------------------------------------------
   {
     key: "home-text-care-tag",

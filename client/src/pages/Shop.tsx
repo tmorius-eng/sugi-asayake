@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
 import QuickViewDialog, { type QuickViewProduct } from "@/components/QuickViewDialog";
+import RecommendedForYou from "@/components/RecommendedForYou";
 import { ProductCardSkeleton } from "@/components/Skeleton";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
@@ -48,32 +49,6 @@ function RecentlyViewed({ products, rememberedCount, onRemember, onQuickView }: 
       </Link>
       <button type="button" onClick={() => onQuickView(product)} aria-label={`${product.name} шуурхай харах`}>Шуурхай харах <Eye size={14} /></button>
     </article>)}</div>{unavailableCount ? <p className="recently-viewed-notice">Таны өмнө үзсэн {unavailableCount} бүтээгдэхүүн одоогоор онлайн каталогоос хасагдсан байна.</p> : null}</> : <div className="recently-viewed-empty"><Eye size={19} /><p>{rememberedCount ? `Таны өмнө үзсэн ${rememberedCount} бүтээгдэхүүн одоогоор онлайн каталогоос хасагдсан байна. Шинэ сонголт нэмэгдэхэд энд дахин гарна.` : "Таны үзсэн бүтээгдэхүүн энд гарна. Бодит каталог нийтлэгдсэний дараа бүтээгдэхүүний картнаас “Шуурхай харах” эсвэл дэлгэрэнгүй хуудас нээгээрэй."}</p></div>}
-  </section>;
-}
-
-type RecommendedForYouProps = {
-  products: QuickViewProduct[];
-  onRemember: (id: number) => void;
-  onQuickView: (product: QuickViewProduct) => void;
-};
-
-function RecommendedForYou({ products, onRemember, onQuickView }: RecommendedForYouProps) {
-  if (!products.length) return null;
-  return <section className="recently-viewed-section" data-reveal>
-    <div className="recently-viewed-heading">
-      <div>
-        <p className="shop-kicker"><span /> ТАНД ЗОРИУЛАН</p>
-        <h2>Танд <em>санал болгож байна.</em></h2>
-      </div>
-      <p>Таны профайл дээр хадгалсан арьсны төрөл, арчилгааны сонирхол, интерьер загварт тохирсон бүтээгдэхүүнүүд.</p>
-    </div>
-    <div className="recently-viewed-grid">{products.map(product => <article className="recently-viewed-card" key={product.id}>
-      <Link href={`/product/${product.slug}`} onClick={() => onRemember(product.id)}>
-        <img src={product.imageUrl ?? getCategoryPlaceholderImage(product.categorySlug)} alt={product.name} />
-        <div><p>{product.brand ?? product.categoryName ?? "SUGI ASAYAKE"}</p><h3>{product.name}</h3><strong>{formatMnt(product.priceMnt)}</strong></div>
-      </Link>
-      <button type="button" onClick={() => onQuickView(product)} aria-label={`${product.name} шуурхай харах`}>Шуурхай харах <Eye size={14} /></button>
-    </article>)}</div>
   </section>;
 }
 
@@ -129,7 +104,11 @@ export default function Shop() {
   const catalog = trpc.catalog.list.useQuery();
   const searchResults = trpc.catalog.search.useQuery({ query: debouncedSearch }, { enabled: isSearching });
   const wishlist = trpc.profile.wishlist.list.useQuery(undefined, { enabled: isAuthenticated });
-  const recommended = trpc.catalog.recommended.useQuery(undefined, { enabled: isAuthenticated });
+  // Preference Profile v2 (2026-09-01): catalog.recommended is now public --
+  // always fetches, no isAuthenticated gate. A guest or never-tagged
+  // shopper still gets a bestseller-backed list server-side (see
+  // getRecommendedProducts), so this section is never silently hidden.
+  const recommended = trpc.catalog.recommended.useQuery();
   const wishlistIds = useMemo(() => new Set(wishlist.data?.map(item => item.productId) ?? []), [wishlist.data]);
   const toggleWishlist = trpc.profile.wishlist.toggle.useMutation({ onSuccess: () => utils.profile.wishlist.list.invalidate() });
   const onToggleWishlist = (productId: number) => {
@@ -231,7 +210,7 @@ export default function Shop() {
         <span>{page} / {totalPages} хуудас <em>({filtered.length} бүтээгдэхүүн)</em></span>
         <button type="button" onClick={() => { setPage(current => Math.min(totalPages, current + 1)); document.getElementById("shop-product-grid")?.scrollIntoView({ block: "start", behavior: "smooth" }); }} disabled={page === totalPages}>Дараах <ChevronRight size={16} /></button>
       </nav> : null}</> : <section className="shop-status-card" data-reveal><Search size={26} /><h2>Энэ удаа тохирох бүтээгдэхүүн олдсонгүй.</h2><p>Өөр хайлтын үг хэрэглэж үзэх эсвэл бүх ангиллыг дахин хараарай.</p><button type="button" onClick={resetControls}><RotateCcw size={14} /> Шүүлтүүр арилгах</button></section>}
-      {isAuthenticated && recommended.data?.length ? <RecommendedForYou products={recommended.data} onRemember={rememberProduct} onQuickView={openQuickView} /> : null}
+      {recommended.data?.length ? <RecommendedForYou products={recommended.data} onRemember={rememberProduct} onQuickView={openQuickView} /> : null}
       {/* A premium site doesn't show a "recently viewed" module with nothing
           in it — that reads as an empty placeholder, not a feature. Only
           render this once the shopper has actually looked at something. */}

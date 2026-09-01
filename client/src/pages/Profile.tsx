@@ -7,9 +7,15 @@ import {
 } from "lucide-react";
 import { LOYALTY_TIERS } from "@shared/loyalty";
 import { ubDistricts, ubDistrictLabels, type UbDistrict } from "@shared/districts";
+import {
+  skinTypeOptions, skinConcernOptions, interiorStyleOptions, genderOptions, hairTypeOptions,
+  hairConcernOptions, fragrancePreferenceOptions, skinRoutineComplexityOptions, wellnessInterestOptions,
+  genderLabels, hairTypeLabels, fragrancePreferenceLabels, skinRoutineComplexityLabels,
+} from "@shared/catalog-filter";
 import { toast } from "sonner";
 import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
+import ProfileQuizWizard from "@/components/ProfileQuizWizard";
 import { LineSkeleton, Skeleton } from "@/components/Skeleton";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
@@ -44,28 +50,15 @@ const ORDER_STEPS: Array<{ key: string; label: string }> = [
   { key: "completed", label: "Хүргэгдсэн" },
 ];
 
-const SKIN_TYPES: Array<{ value: "dry" | "oily" | "combination" | "sensitive" | "normal"; label: string }> = [
-  { value: "normal", label: "Энгийн" },
-  { value: "dry", label: "Хуурай" },
-  { value: "oily", label: "Тослог" },
-  { value: "combination", label: "Хосолмол" },
-  { value: "sensitive", label: "Эмзэг" },
-];
-const SKIN_CONCERNS: Array<{ value: string; label: string }> = [
-  { value: "acne", label: "Батга, бацлуур" },
-  { value: "aging", label: "Үрчлээ, хөгшрөлт" },
-  { value: "dullness", label: "Уйтгар өнгө" },
-  { value: "dryness", label: "Хуурайшилт" },
-  { value: "sensitivity", label: "Мэдрэг байдал" },
-  { value: "pigmentation", label: "Толбо, пигмент" },
-];
-const INTERIOR_STYLES: Array<{ value: string; label: string }> = [
-  { value: "minimal", label: "Минимал" },
-  { value: "wabi-sabi", label: "Ваби-саби" },
-  { value: "modern", label: "Модерн" },
-  { value: "scandinavian", label: "Скандинав" },
-  { value: "warm-japandi", label: "Жапанди" },
-];
+// Preference Profile v2 (2026-09-01): these three option lists moved to
+// shared/catalog-filter.ts (skinTypeOptions/skinConcernOptions/
+// interiorStyleOptions) so ProfileQuizWizard.tsx and this file render the
+// exact same labels — re-exported here under their old local names so the
+// rest of this file (and the small existing preference summary below)
+// didn't need touching.
+const SKIN_TYPES = skinTypeOptions;
+const SKIN_CONCERNS = skinConcernOptions;
+const INTERIOR_STYLES = interiorStyleOptions;
 
 const FAQ_ITEMS: Array<{ q: string; a: string }> = [
   { q: "Хүргэлт хэдэн хоног болох вэ?", a: "Улаанбаатар доторх хүргэлт ихэвчлэн 24–48 цагийн дотор хийгдэнэ. Салбараас өөрөө авах бол захиалга баталгаажмагц бэлэн болно." },
@@ -342,35 +335,71 @@ function PreferencesTab() {
   const utils = trpc.useUtils();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [skinType, setSkinType] = useState<string>("");
-  const [skinConcerns, setSkinConcerns] = useState<string[]>([]);
-  const [interiorStyle, setInteriorStyle] = useState<string>("");
-  // Both fully optional -- never asked at signup, purely a voluntary
-  // "help us personalize" field (see the schema comment on users.birthYear
-  // in drizzle/schema.ts).
-  const [birthYear, setBirthYear] = useState<string>("");
-  const [occupation, setOccupation] = useState<string>("");
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   useEffect(() => {
     setName(user?.name ?? "");
     setPhone(user?.phone ?? "");
-    setSkinType(user?.skinType ?? "");
-    setSkinConcerns(user?.skinConcerns ? user.skinConcerns.split(",").filter(Boolean) : []);
-    setInteriorStyle(user?.interiorStyle ?? "");
-    setBirthYear(user?.birthYear ? String(user.birthYear) : "");
-    setOccupation(user?.occupation ?? "");
-  }, [user?.name, user?.phone, user?.skinType, user?.skinConcerns, user?.interiorStyle, user?.birthYear, user?.occupation]);
+  }, [user?.name, user?.phone]);
 
   const updateProfile = trpc.profile.update.useMutation({
     onSuccess: () => { utils.auth.me.invalidate(); toast.success("Хувийн мэдээлэл шинэчлэгдлээ."); },
     onError: error => toast.error(messageFrom(error)),
   });
-  const updatePreferences = trpc.profile.updatePreferences.useMutation({
-    onSuccess: () => { utils.auth.me.invalidate(); toast.success("Тохиргоо хадгалагдлаа."); },
-    onError: error => toast.error(messageFrom(error)),
-  });
 
-  const toggleConcern = (value: string) => setSkinConcerns(current => current.includes(value) ? current.filter(item => item !== value) : [...current, value]);
+  // Preference Profile v2 (2026-09-01): everything that used to be a static
+  // form here (skin/interior pills + birthYear/occupation inputs) moved into
+  // ProfileQuizWizard, a multi-step quiz reachable from the "Профайл засах"
+  // button below — per Tom's explicit choice of a wizard over an expanded
+  // single-page form (matches Curology/Typology/The Ordinary's UX pattern).
+  // This card is now a read-only summary of whatever the wizard collected.
+  const hasAnyPreference = Boolean(
+    user?.skinType || user?.skinConcerns || user?.interiorStyle || user?.hairType || user?.hairConcerns ||
+    user?.fragrancePreference || user?.wellnessInterests || user?.gender || user?.primaryDistrict ||
+    user?.birthYear || user?.occupation || user?.skinRoutineComplexity || user?.hasYoungChildren != null,
+  );
+  const age = user?.birthYear ? new Date().getFullYear() - user.birthYear : null;
+  const summaryGroups: Array<{ title: string; chips: string[] }> = [
+    {
+      title: "Хувийн мэдээлэл",
+      chips: [
+        user?.gender ? genderLabels[user.gender as keyof typeof genderLabels] : null,
+        user?.primaryDistrict ? ubDistrictLabels[user.primaryDistrict as UbDistrict] : null,
+        age ? `${age} настай` : null,
+        user?.occupation ?? null,
+      ].filter((chip): chip is string => Boolean(chip)),
+    },
+    {
+      title: "Арьсны профайл",
+      chips: [
+        user?.skinType ? SKIN_TYPES.find(option => option.value === user.skinType)?.label : null,
+        ...(user?.skinConcerns ? user.skinConcerns.split(",").map(value => SKIN_CONCERNS.find(option => option.value === value)?.label).filter(Boolean) as string[] : []),
+        user?.skinRoutineComplexity ? skinRoutineComplexityLabels[user.skinRoutineComplexity as keyof typeof skinRoutineComplexityLabels] : null,
+      ].filter((chip): chip is string => Boolean(chip)),
+    },
+    {
+      title: "Үсний профайл",
+      chips: [
+        user?.hairType ? hairTypeLabels[user.hairType as keyof typeof hairTypeLabels] : null,
+        ...(user?.hairConcerns ? user.hairConcerns.split(",").map(value => hairConcernOptions.find(option => option.value === value)?.label).filter(Boolean) as string[] : []),
+      ].filter((chip): chip is string => Boolean(chip)),
+    },
+    {
+      title: "Үнэр & хэрэглээ",
+      chips: [user?.fragrancePreference ? fragrancePreferenceLabels[user.fragrancePreference as keyof typeof fragrancePreferenceLabels] : null].filter((chip): chip is string => Boolean(chip)),
+    },
+    {
+      title: "Эрүүл мэнд & амьдрал",
+      chips: [
+        ...(user?.wellnessInterests ? user.wellnessInterests.split(",").map(value => wellnessInterestOptions.find(option => option.value === value)?.label).filter(Boolean) as string[] : []),
+        user?.hasYoungChildren === true ? "Бага насны хүүхэдтэй" : null,
+      ].filter((chip): chip is string => Boolean(chip)),
+    },
+    {
+      title: "Интерьер",
+      chips: [user?.interiorStyle ? INTERIOR_STYLES.find(option => option.value === user.interiorStyle)?.label : null].filter((chip): chip is string => Boolean(chip)),
+    },
+  ].filter(group => group.chips.length > 0);
 
   return (
     <div style={{ display: "grid", gap: "20px" }}>
@@ -396,51 +425,34 @@ function PreferencesTab() {
       </section>
 
       <section className="profile-section" data-reveal>
-        <div className="profile-section-head"><div><h2>Гоо сайхны &amp; Гэрийн профайл</h2><p>Таны арьс, орон сууцны хэв маягийн санал хүсэлт — ирээдүйд танд тохирсон бүтээгдэхүүн санал болгоход ашиглагдана</p></div></div>
-        <form onSubmit={event => { event.preventDefault(); const parsedBirthYear = birthYear.trim() ? Number(birthYear) : null; updatePreferences.mutate({ skinType: (skinType || null) as "dry" | "oily" | "combination" | "sensitive" | "normal" | null, skinConcerns: skinConcerns.length ? skinConcerns.join(",") : null, interiorStyle: interiorStyle || null, birthYear: parsedBirthYear, occupation: occupation.trim() || null }); }} style={{ display: "grid", gap: "16px" }}>
-          <div>
-            <p style={{ margin: "0 0 8px", fontSize: "11px", fontWeight: 800 }}>Арьсны төрөл</p>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-              {SKIN_TYPES.map(option => (
-                <button type="button" key={option.value} onClick={() => setSkinType(current => current === option.value ? "" : option.value)} className="shop-filter-pills-button" style={{ padding: "9px 14px", border: `1px solid ${skinType === option.value ? "#17181b" : "rgba(23,24,27,.14)"}`, background: skinType === option.value ? "#17181b" : "#fff", color: skinType === option.value ? "#fff" : "#55565b", fontSize: "11px", fontWeight: 800, borderRadius: "999px" }}>{option.label}</button>
-              ))}
+        <div className="profile-section-head">
+          <div><h2>Таны тохиргоо</h2><p>Хувийн болон гоо сайхны/гэрийн профайл — танд тохирсон бүтээгдэхүүн санал болгоход ашиглагдана</p></div>
+        </div>
+        {hasAnyPreference ? (
+          <div style={{ display: "grid", gap: "16px" }}>
+            {summaryGroups.map(group => (
+              <div key={group.title}>
+                <p style={{ margin: "0 0 8px", fontSize: "11px", fontWeight: 800, color: "#77787d" }}>{group.title}</p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  {group.chips.map(chip => (
+                    <span key={chip} style={{ padding: "9px 14px", border: "1px solid rgba(23,24,27,.14)", background: "#fff", color: "#55565b", fontSize: "11px", fontWeight: 800, borderRadius: "999px" }}>{chip}</span>
+                  ))}
+                </div>
+              </div>
+            ))}
+            <div>
+              <button type="button" onClick={() => setWizardOpen(true)} className="button button-primary"><Pencil size={15} /> Профайл засах</button>
             </div>
           </div>
-          <div>
-            <p style={{ margin: "0 0 8px", fontSize: "11px", fontWeight: 800 }}>Санаа зовдог асуудал (олноор сонгож болно)</p>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-              {SKIN_CONCERNS.map(option => (
-                <button type="button" key={option.value} onClick={() => toggleConcern(option.value)} style={{ padding: "9px 14px", border: `1px solid ${skinConcerns.includes(option.value) ? "var(--primary)" : "rgba(23,24,27,.14)"}`, background: skinConcerns.includes(option.value) ? "#fff0f2" : "#fff", color: skinConcerns.includes(option.value) ? "var(--primary)" : "#55565b", fontSize: "11px", fontWeight: 800, borderRadius: "999px" }}>{option.label}</button>
-              ))}
-            </div>
+        ) : (
+          <div style={{ display: "grid", gap: "12px", textAlign: "center", padding: "24px 12px" }}>
+            <p style={{ margin: 0, fontSize: "13px", color: "#55565b" }}>6 асуулт, ~2 минут — танд тохирсон бүтээгдэхүүн санал болгоход тусална. Бүх асуулт заавал биш.</p>
+            <div><button type="button" onClick={() => setWizardOpen(true)} className="button button-primary"><Sparkles size={15} /> Профайл бөглөх</button></div>
           </div>
-          <div>
-            <p style={{ margin: "0 0 8px", fontSize: "11px", fontWeight: 800 }}>Интерьерийн хэв маяг</p>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-              {INTERIOR_STYLES.map(option => (
-                <button type="button" key={option.value} onClick={() => setInteriorStyle(current => current === option.value ? "" : option.value)} style={{ padding: "9px 14px", border: `1px solid ${interiorStyle === option.value ? "#17181b" : "rgba(23,24,27,.14)"}`, background: interiorStyle === option.value ? "#17181b" : "#fff", color: interiorStyle === option.value ? "#fff" : "#55565b", fontSize: "11px", fontWeight: 800, borderRadius: "999px" }}>{option.label}</button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <p style={{ margin: "0 0 8px", fontSize: "11px", fontWeight: 800 }}>Нэмэлт мэдээлэл (сонголтоор)</p>
-            <p style={{ margin: "0 0 10px", fontSize: "11px", color: "#77787d" }}>Заавал биш — өгвөл SUGI ASAYAKE-д харилцагчдаа илүү сайн ойлгож, тохирсон бүтээгдэхүүн/урамшуулал санал болгоход тусална.</p>
-            <div className="profile-form-grid">
-              <label className="auth-field">
-                Төрсөн он
-                <div className="auth-field-shell"><input value={birthYear} onChange={event => setBirthYear(event.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="1995" inputMode="numeric" maxLength={4} /></div>
-              </label>
-              <label className="auth-field">
-                Мэргэжил
-                <div className="auth-field-shell"><input value={occupation} onChange={event => setOccupation(event.target.value)} placeholder="жишээ: Багш" maxLength={120} /></div>
-              </label>
-            </div>
-          </div>
-          <div>
-            <button type="submit" disabled={updatePreferences.isPending} className="button button-primary">{updatePreferences.isPending && <LoaderCircle className="animate-spin" size={15} />} Тохиргоо хадгалах</button>
-          </div>
-        </form>
+        )}
       </section>
+
+      <ProfileQuizWizard open={wizardOpen} onOpenChange={setWizardOpen} />
     </div>
   );
 }
