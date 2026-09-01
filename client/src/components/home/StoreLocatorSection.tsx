@@ -2,9 +2,9 @@ import { ArrowUpRight, Clock3, MapPin, Navigation, Phone } from "lucide-react";
 import { useSiteText } from "@/hooks/useSiteText";
 import SectionEyebrow from "./SectionEyebrow";
 import SectionHeading from "./SectionHeading";
-import { locations, BRANCH_HOURS, BRANCH_PHONE } from "./locations-data";
+import { locations, BRANCH_HOURS } from "./locations-data";
 
-// Rough, deliberately non-geographic placement for the 3 pins on the
+// Rough, deliberately non-geographic placement for each pin on the
 // abstract map illustration -- this is an editorial graphic, not a real
 // map, so there's no real coordinate to plot against (see the "no Google
 // Maps key configured" note in index.css above .locator-section).
@@ -12,16 +12,20 @@ const PIN_POSITIONS: Record<string, { x: number; y: number }> = {
   "01": { x: 110, y: 90 },
   "02": { x: 230, y: 150 },
   "03": { x: 300, y: 70 },
+  "04": { x: 150, y: 220 },
 };
 
 /**
  * Tier 6 of the home redesign: a 3-zone composition (editorial copy /
  * static map illustration / numbered branch list) replacing the old
- * 2-column .locations-section. All 3 branch records are real (confirmed
- * with Tom 2026-08-25) and unchanged; the Google Maps links are the same
- * real search URLs as before -- only the layout and the map's visual
- * treatment change. See index.css's .locator-section comment for why this
- * doesn't wire the orphaned Map.tsx (no API key exists in this repo).
+ * 2-column .locations-section. Branch records are real (confirmed with
+ * Tom 2026-08-25; 4th branch added 2026-09-01) -- each has its own
+ * Google Maps search URL and phone number now (locations-data.ts's
+ * `phone` field), since branch 04's line differs from the first 3
+ * branches' shared one. Only the layout and the map's visual treatment
+ * changed here, not the underlying data. See index.css's .locator-section
+ * comment for why this doesn't wire the orphaned Map.tsx (no API key
+ * exists in this repo).
  */
 export default function StoreLocatorSection() {
   const textFor = useSiteText();
@@ -39,7 +43,7 @@ export default function StoreLocatorSection() {
           <a className="button button-primary" href="tel:94509911">9450-9911 руу залгах <Phone size={15} /></a>
         </div>
 
-        <div className="locator-map" role="img" aria-label="SUGI ASAYAKE-ийн 3 салбарын байршлыг харуулсан зурган дүрслэл">
+        <div className="locator-map" role="img" aria-label={`SUGI ASAYAKE-ийн ${locations.length} салбарын байршлыг харуулсан зурган дүрслэл`}>
           <svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
             <rect width="400" height="300" fill="none" />
             <g stroke="#c9d6cf" strokeWidth="1.5" opacity=".7">
@@ -84,7 +88,7 @@ export default function StoreLocatorSection() {
                   <small className="location-meta">
                     <Clock3 size={11} /> {BRANCH_HOURS}
                     <span className="location-meta-divider" aria-hidden="true">•</span>
-                    <Phone size={11} /> {BRANCH_PHONE}
+                    <Phone size={11} /> {location.phone}
                   </small>
                 </div>
                 <ArrowUpRight size={17} />

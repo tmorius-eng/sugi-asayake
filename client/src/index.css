@@ -1303,8 +1303,9 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .locator-list { display: flex; flex-direction: column; }
 
 /* Two-way hover/focus sync between a pin and its matching branch row --
-   3 fixed rules for 3 fixed branches (same "hand-authored for a known
-   count" approach as the category masonry grid areas), no JS state. */
+   4 fixed rules for 4 fixed branches (same "hand-authored for a known
+   count" approach as the category masonry grid areas), no JS state.
+   2026-09-01: added the "04" set for the new 4th branch. */
 .locator-grid:has(.locator-pin[data-branch="01"]:hover) .location-row[data-branch="01"],
 .locator-grid:has(.locator-pin[data-branch="01"]:focus-visible) .location-row[data-branch="01"],
 .locator-grid:has(.location-row[data-branch="01"]:hover) .location-row[data-branch="01"] { background: #fff; border-color: var(--primary); }
@@ -1314,9 +1315,13 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .locator-grid:has(.locator-pin[data-branch="03"]:hover) .location-row[data-branch="03"],
 .locator-grid:has(.locator-pin[data-branch="03"]:focus-visible) .location-row[data-branch="03"],
 .locator-grid:has(.location-row[data-branch="03"]:hover) .location-row[data-branch="03"] { background: #fff; border-color: var(--primary); }
+.locator-grid:has(.locator-pin[data-branch="04"]:hover) .location-row[data-branch="04"],
+.locator-grid:has(.locator-pin[data-branch="04"]:focus-visible) .location-row[data-branch="04"],
+.locator-grid:has(.location-row[data-branch="04"]:hover) .location-row[data-branch="04"] { background: #fff; border-color: var(--primary); }
 .locator-grid:has(.location-row[data-branch="01"]:hover) .locator-pin[data-branch="01"] circle.locator-pin-dot,
 .locator-grid:has(.location-row[data-branch="02"]:hover) .locator-pin[data-branch="02"] circle.locator-pin-dot,
-.locator-grid:has(.location-row[data-branch="03"]:hover) .locator-pin[data-branch="03"] circle.locator-pin-dot { fill: var(--primary); }
+.locator-grid:has(.location-row[data-branch="03"]:hover) .locator-pin[data-branch="03"] circle.locator-pin-dot,
+.locator-grid:has(.location-row[data-branch="04"]:hover) .locator-pin[data-branch="04"] circle.locator-pin-dot { fill: var(--primary); }
 
 @media (max-width: 1024px) {
   .locator-grid { grid-template-columns: 1fr 1fr; }
