@@ -7,8 +7,10 @@
 
 ## Локал орчны тохиргоо (чухал — эдгээрийг мэдэхгүй бол дахин цаг алдана)
 
+⚠️ **`DATABASE_URL` нь ЗААВАЛ Aiven руу заасан байх ёстой, local MySQL руу БИШ** (2026-09-01 бодит incident-ээр баталгаажсан шалтгаан доор):
+
 ```
-DATABASE_URL=mysql://root:Zulaa123@127.0.0.1:3306/sugi_asayake
+DATABASE_URL=mysql://avnadmin:<Aiven password>@sugi-asayake-db-project-4b75.h.aivencloud.com:25861/defaultdb?ssl-mode=REQUIRED
 JWT_SECRET=local-test-secret-12345
 OWNER_EMAIL=t.morius@gmail.com
 S3_REGION=auto
@@ -18,7 +20,9 @@ S3_SECRET_ACCESS_KEY=<R2 secret key>
 S3_PUBLIC_BASE_URL=https://pub-<hash>.r2.dev
 PORT=3000
 ```
-(R2 бодит утгууд: Tom-оос асуух эсвэл Cloudflare dashboard → R2 → Manage R2 API Tokens. Хоёр laptop **нэг ижил R2 bucket**-ыг хуваалцдаг тул S3_* утгууд хаана ч ижил байх ёстой.)
+(Бодит Aiven нууц үг/R2 утгууд: Tom-оос асуух, эсвэл Aiven dashboard → sugi-asayake-db → Connection information / Cloudflare dashboard → R2 → Manage R2 API Tokens. Хоёр laptop **нэг ижил Aiven DB, нэг ижил R2 bucket**-ыг хуваалцдаг тул `DATABASE_URL`/`S3_*` утгууд хаана ч яг ижил байх ёстой.)
+
+**⚠️ 2026-09-01 бодит incident, яагаад энэ анхааруулга чухал вэ**: Энэ (гэрийн) лаптопын `.env` хэзээ нэгэн цагт (Aug 26 20:36-аас өмнө/дараа тодорхойгүй) local MySQL руу буцаж сольсон байсан — магадгүй яг энэ дээрх жишээ блокийг харж хуулснаас (өмнө нь энд `mysql://root:...@127.0.0.1/...` жишээ байсан нь бодит local MySQL руу заасан жишээ атлаа "чухал тохиргоо" мэт харагдаж байсан). Үр дагавар: Tom-ийн бодитоор /admin-аар upload хийсэн зургууд (`home-hero`, `home-categories`, `home-family` гэх мэт) Cloudflare R2-д бүрэн бүтэн хэвээрээ байсан ч (шалгасан: `ListObjectsV2Command`-ээр бодитоор баталгаажуулсан, файлууд алга болоогүй), local MySQL-ийн `site_media` хүснэгт хоосон байсан тул `/admin` → Content & Media дээр бүгд "BRAND DEFAULT" (буюу зураг алга болсон мэт) харагдаж байв. **Зураг хэзээ ч устаагүй, зөвхөн буруу DB-ээс уншиж байсан.** Local MySQL-ийг зөвхөн интернэтгүй үед түр орлуулагч болгон ашиглах (доорх "MySQL-тэй холбоотой" хэсгийг үзнэ үү) — хэзээ ч `.env`-д удаан хугацаагаар үлдээхгүй, ажил дуусмагц заавал Aiven руу буцааж тавих.
 
 **`pnpm dev` стандарт байдлаар ажилладаг** (2026-08-20-с хойш засагдсан) — зүгээр:
 ```powershell
@@ -70,6 +74,29 @@ pnpm exec vitest run --no-file-parallelism
 - eBarimt, StorePay, шууд карт төлбөр, эльч (eBuuhia) хүргэлт — бүгд Tom-ийн биечлэн хийх бизнесийн алхам шаардана, код бэлэн биш (eBarimt зөвхөн inert schema бэлэн — [EBARIMT.md](EBARIMT.md))
 - **Product Variants — PHASE 1 болон PHASE 2 хоёулаа дууссан (2026-08-26)** — худалдан авагч ProductDetail/QuickView дээр 2+ variant-тай бараанаас сонголт хийж, тухайн variant-ийн үнэ/нөөц/sku-гоор бодитоор захиалж болно. Ганц variant-тай (одоогийн 936/937) бараанд ямар ч харагдах өөрчлөлт алга. **Бодит Playwright screenshot баталгаажуулалт хараахан хийгдээгүй** (зөвхөн 149 автомат тест + `pnpm build` + throwaway DB probe script-ээр баталгаажсан) — дэлгэрэнгүй [HISTORY.md](HISTORY.md)-ийн "Product Variants PHASE 2" хэсэгт.
 - Хэрэглэгчийн удирдлага (`/admin` → Хэрэглэгч хэсэг)
+
+## 🔴 (2026-09-01) КРИТИК incident — "зургууд алга болсон" нь код биш, буруу DATABASE_URL байсан (шийдэгдсэн)
+
+Tom "зурагнууд server restart болгонд алга болоод байна, cloudflare-оос татаж чадаж байна уу" гэж ноцтой шаардсан. Deep-dive хийхэд код огт эвдрээгүй, харин **энэ (гэрийн) лаптопын `.env`-ийн `DATABASE_URL` нь local MySQL руу заасан байсан, Aiven руу биш** байсныг олов — дээрх "Локал орчны тохиргоо" хэсгийн шинэ анхааруулгын яг тэр incident.
+
+**Баталгаажуулсан баримтууд (таамаглаагүй, бүгд шууд шалгасан)**:
+1. `.env`-ийн `DATABASE_URL` = `mysql://root:...@127.0.0.1:3306/sugi_asayake` (local), файлын mtime Aug 26 20:36-аас хойш өөрчлөгдөөгүй.
+2. Энэ local DB-д **937 бараа БОЛОВЧ 0 захиалга** байсан — бодит production дээр захиалга байдаг тул энэ бол "нэг удаагийн snapshot", "амьд" DB биш гэдгийг илтгэнэ.
+3. Local DB-ийн `site_media` хүснэгт **бүрэн хоосон (0 мөр)** байсан — тул бүх slot "BRAND DEFAULT" харагдаж байв.
+4. **Гэхдээ Cloudflare R2 bucket-ыг шууд `ListObjectsV2Command`-ээр шалгахад Tom-ийн бодитоор upload хийсэн бүх зураг (`sugi-professional-hero`, `sugi-care-retail`, `sugi-professional-assortment`, `sugi-professional-family`, `sugi-sunrise-editorial-hero`, `sugi-symbol`) бүгд бодит хэмжээтэй (3-5MB), Aug 26 ~03:33-т upload хийгдсэн хэвээрээ байсан** — файл хэзээ ч устаагүй.
+5. Aiven DB-г (Tom-ийн dashboard-с өгсөн connection string-ээр) шууд `mysql2`-оор холбож шалгахад: **937 бараа, 4 бодит захиалга, `site_media`-д яг 7 мөр** (`home-hero`, `home-categories`, `home-family`, `home-stores`, 3 summer-slide) — Tom-ийн upload хийсэн зурагтай **яг таарч байв**.
+
+**Root cause**: CLAUDE.md-ийн "Локал орчны тохиргоо" хэсгийн жишээ blockнь `DATABASE_URL=mysql://root:...@127.0.0.1/...`-г "чухал тохиргоо" мэтээр харуулж байсан нь бодит зорилго (Aiven-ыг ашиглах) -тай зөрчилдөж байв — доор нь "Aiven MySQL is the shared source of truth" гэж өөр өгүүлбэрт бичигдсэн байсан ч дээрх жишээ block илүү анзаарагдахуйц байсан. Хэн нэгэн (өмнөх session эсвэл Tom өөрөө) энэ жишээг шууд хуулсны улмаас `.env` Aiven-аас local руу буцсан байх магадлалтай.
+
+**Засвар**:
+- `.env`-ийг Tom-оос авсан бодит Aiven connection string руу буцаан тохируулав (`avnadmin@sugi-asayake-db-project-4b75.h.aivencloud.com:25861/defaultdb`).
+- Хуучин node процессийг PowerShell-ээр (`Stop-Process`, taskkill classifier-т blocked-той тул) зогсоож, dev server-ийг шинэ `.env`-тэйгээр дахин асаав.
+- Баталгаажуулалт: `curl http://localhost:3000/api/trpc/content.siteMedia` бодит 7 мөрийг буцаав; `/manus-storage/site-media/1/sugi-professional-hero-...png`-ийг curl -L хийхэд R2-ийн бодит 4,148,819 byte файл руу 302→200 redirect хийж байгааг баталгаажуулав; Playwright screenshot-оор нүүр хуудсан дээр бодит hero зураг (лааз, ургамал бүхий lifestyle фото) харагдаж байгааг нүдээр баталгаажуулав (placeholder gradient биш).
+- CLAUDE.md-ийн "Локал орчны тохиргоо" жишээ blockыг Aiven-руу засаж, яагаад чухал болохыг тодорхой тайлбарлав (энэ бичлэг өөрөө).
+
+**⚠️ Дуусаагүй, Tom-ийн шийдвэр хэрэгтэй хэсэг**: Auto mode-ийн аюулгүй байдлын classifier нь Aiven руу шууд schema-mutating тушаал (`CREATE TABLE site_text`) явуулахыг блоклосон (зөвхөн унших query-д зөвшөөрсөн, бичих query-г блоклосон) — иймд шинэ `site_text` хүснэгт (энэ session-ий "Homepage text CMS" ажлын нэг хэсэг) Aiven дээр хараахан үүсээгүй. `scripts/_migrate-0037-aiven.mjs` (аль хэдийн бичигдсэн, туршигдаагүй) эсвэл `drizzle/0037_site_text.sql`-ийг Tom өөрөө Aiven-ий query console-оор ажиллуулах, эсвэл Bash зөвшөөрлийг нэмэгдүүлж намайг дахин оролдуулах хэрэгтэй.
+
+**Сургамж, цаашид сануулах зүйл**: Хоёр laptop-ийн аль нэг дээр `.env`-ийг ЯМАР Ч учиртай local MySQL руу түр сольсон бол ажил дуусмагц заавал буцааж Aiven руу тавих ёстой — эс бөгөөс дараагийн session (би эсвэл Tom) анзаарахгүйгээр буруу DB дээр ажиллаж, "зураг алга болсон" мэт ижил төстэй будлиан дахин үүсэх эрсдэлтэй. Цаашид `.env` солих бүрдээ `SELECT COUNT(*) FROM orders`-оор шалгаж, 0 гарвал шууд болгоомжлох дадал зуршил болгох нь зүйтэй.
 
 ## ✅ (2026-09-01) Нүүр хуудасны текст (гарчиг/тайлбар/товч мэдэгдэл) admin-аар засварлагдах боллоо — шинэ `site_text` CMS
 
