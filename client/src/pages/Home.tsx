@@ -35,6 +35,7 @@ import StoreLocatorSection from "@/components/home/StoreLocatorSection";
 import QuickStatsSection from "@/components/home/QuickStatsSection";
 import { locations } from "@/components/home/locations-data";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
+import { useSiteText } from "@/hooks/useSiteText";
 import { trpc } from "@/lib/trpc";
 
 const logoUrl = "/manus-storage/sugi-logo-transparent-clean_fee66cad.png";
@@ -108,6 +109,15 @@ export default function Home() {
     const url = imageFor(slotKey, fallbackUrl);
     return url ? { backgroundImage: `url(${url})` } : undefined;
   };
+  const textFor = useSiteText();
+  // Precomputed here (rather than inline per-section) since Home.tsx itself
+  // owns 4 sections with a 2-line heading -- story, bestseller, care,
+  // final CTA -- the same "\n"-joined single-slot pattern as every other
+  // home/*.tsx section component, see shared/site-text.ts.
+  const [storyHeadingLine1, storyHeadingLine2] = textFor("home-text-story-heading", "Японы чанарыг\nойртуулна.").split("\n");
+  const [bestsellerHeadingLine1, bestsellerHeadingLine2] = textFor("home-text-bestseller-heading", "Их зарагддаг\nбараанууд.").split("\n");
+  const [careHeadingLine1, careHeadingLine2] = textFor("home-text-care-heading", "Багахан итгэл.\nИх халамж.").split("\n");
+  const [finalCtaHeadingLine1, finalCtaHeadingLine2] = textFor("home-text-finalcta-heading", "Сайн сонголт\nойрхон байна.").split("\n");
   useScrollReveal();
 
   useEffect(() => {
@@ -168,10 +178,10 @@ export default function Home() {
         <QuickStatsSection />
 
         <section className="story-section page-section" id="story" data-reveal>
-          <div className="section-heading"><span>01</span><span>THE SUGI DIFFERENCE</span></div>
+          <div className="section-heading"><span>01</span><span>{textFor("home-text-story-eyebrow-label", "THE SUGI DIFFERENCE")}</span></div>
           <div className="story-grid">
-            <h2>Японы чанарыг<br /><em>ойртуулна.</em></h2>
-            <div className="story-copy"><p>SUGI ASAYAKE нь Японы SUGI Drug Store-ийн албан ёсны охин компани. Өдөр тутмын эрүүл мэнд, гоо сайхан, арчилгааг Монголын гэр бүл бүрт илүү ойртуулна.</p><a className="inline-link" href="#collection">Бидний ялгаа <ArrowUpRight size={16} /></a></div>
+            <h2>{storyHeadingLine1}<br /><em>{storyHeadingLine2}</em></h2>
+            <div className="story-copy"><p>{textFor("home-text-story-description", "SUGI ASAYAKE нь Японы SUGI Drug Store-ийн албан ёсны охин компани. Өдөр тутмын эрүүл мэнд, гоо сайхан, арчилгааг Монголын гэр бүл бүрт илүү ойртуулна.")}</p><a className="inline-link" href="#collection">{textFor("home-text-story-link-label", "Бидний ялгаа")} <ArrowUpRight size={16} /></a></div>
           </div>
         </section>
 
@@ -199,8 +209,8 @@ export default function Home() {
         {bestsellers.length > 0 && (
           <section className="bestseller-section" data-reveal>
             <div className="bestseller-heading">
-              <div><p className="shop-kicker"><TrendingUp size={12} /> ОНЦЛОХ СОНГОЛТ</p><h2>Их зарагддаг<br /><em>бараанууд.</em></h2></div>
-              <p>Манай захиалгын бодит түүхээр эрэмбэлсэн, хамгийн их итгэл олсон сонголтууд.</p>
+              <div><p className="shop-kicker"><TrendingUp size={12} /> {textFor("home-text-bestseller-kicker", "ОНЦЛОХ СОНГОЛТ")}</p><h2>{bestsellerHeadingLine1}<br /><em>{bestsellerHeadingLine2}</em></h2></div>
+              <p>{textFor("home-text-bestseller-description", "Манай захиалгын бодит түүхээр эрэмбэлсэн, хамгийн их итгэл олсон сонголтууд.")}</p>
             </div>
             <div className="bestseller-grid">
               {bestsellers.slice(0, 6).map((product, index) => (
@@ -216,15 +226,15 @@ export default function Home() {
                 </Link>
               ))}
             </div>
-            <Link href="/shop" className="bestseller-all-link">Бүх бүтээгдэхүүн үзэх <ArrowUpRight size={16} /></Link>
+            <Link href="/shop" className="bestseller-all-link">{textFor("home-text-bestseller-all-link", "Бүх бүтээгдэхүүн үзэх")} <ArrowUpRight size={16} /></Link>
           </section>
         )}
 
         <SeasonalCampaignCarousel imageOverrides={{ "summer-slide-1": imageFor("summer-slide-1", heroImage) ?? undefined, "summer-slide-2": imageFor("summer-slide-2", assortmentImage) ?? undefined, "summer-slide-3": imageFor("summer-slide-3", familyImage) ?? undefined }} />
 
         <section className="care-section" data-reveal>
-          <div className="care-image" style={bgStyle("home-family", familyImage)}><span>03 / FAMILY CARE</span></div>
-          <div className="care-copy-panel"><div className="care-sun-stamp" aria-hidden="true"><span>FAMILY<br />CARE</span></div><p className="eyebrow">ГЭР БҮЛИЙН ӨДӨР БҮРТ</p><h2>Багахан <em>итгэл.</em><br />Их халамж.</h2><p>Бидний сонголт зөвхөн бүтээгдэхүүн биш. Таны гэр бүлийн өдөр тутмын амар тайван байдал, итгэл, халамж юм.</p><div className="care-points"><div><CircleCheck size={17} /> Баталгаат Япон бүтээгдэхүүн</div><div><CircleCheck size={17} /> Гэр бүл бүрт зориулсан сонголт</div><div><CircleCheck size={17} /> Storepay-ээр төлөх боломжтой</div></div><div className="storepay-note"><strong>Storepay</strong><span>Хэрэгтэй зүйлээ өнөөдөр сонгоод,<br />төлбөрөө өөрт тохиромжтой хуваарил.</span></div></div>
+          <div className="care-image" style={bgStyle("home-family", familyImage)}><span>{textFor("home-text-care-tag", "03 / FAMILY CARE")}</span></div>
+          <div className="care-copy-panel"><div className="care-sun-stamp" aria-hidden="true"><span>{textFor("home-text-care-stamp", "FAMILY CARE")}</span></div><p className="eyebrow">{textFor("home-text-care-eyebrow", "ГЭР БҮЛИЙН ӨДӨР БҮРТ")}</p><h2>{careHeadingLine1}<br />{careHeadingLine2}</h2><p>{textFor("home-text-care-description", "Бидний сонголт зөвхөн бүтээгдэхүүн биш. Таны гэр бүлийн өдөр тутмын амар тайван байдал, итгэл, халамж юм.")}</p><div className="care-points"><div><CircleCheck size={17} /> {textFor("home-text-care-point1", "Баталгаат Япон бүтээгдэхүүн")}</div><div><CircleCheck size={17} /> {textFor("home-text-care-point2", "Гэр бүл бүрт зориулсан сонголт")}</div><div><CircleCheck size={17} /> {textFor("home-text-care-point3", "Storepay-ээр төлөх боломжтой")}</div></div><div className="storepay-note"><strong>Storepay</strong><span>{textFor("home-text-care-storepay-note", "Хэрэгтэй зүйлээ өнөөдөр сонгоод, төлбөрөө өөрт тохиромжтой хуваарил.")}</span></div></div>
         </section>
 
         {/* matsukiyococokara-online.com's お役立ち情報 (useful info) rail —
@@ -237,7 +247,7 @@ export default function Home() {
 
         <StoreLocatorSection />
 
-        <section className="final-cta" data-reveal><div className="final-cta-sun" aria-hidden="true">SUGI<br />CARE</div><div><p className="eyebrow">NEED A LITTLE HELP?</p><h2>Сайн сонголт <em>ойрхон байна.</em></h2></div><a className="button button-light" href="tel:94509911">9450-9911 <Phone size={15} /></a></section>
+        <section className="final-cta" data-reveal><div className="final-cta-sun" aria-hidden="true">SUGI<br />CARE</div><div><p className="eyebrow">{textFor("home-text-finalcta-eyebrow", "NEED A LITTLE HELP?")}</p><h2>{finalCtaHeadingLine1} <em>{finalCtaHeadingLine2}</em></h2></div><a className="button button-light" href="tel:94509911">9450-9911 <Phone size={15} /></a></section>
       </main>
 
       <footer className="site-footer"><div className="footer-grid"><div><img src={logoUrl} alt="SUGI ASAYAKE Mongolia" className="footer-logo" /><p>Япон чанарыг гэр бүл бүрт.</p><div className="footer-socials" aria-label="SUGI ASAYAKE сошиал хуудаснууд">{socials.map(({ label, href, Icon }) => <a className="footer-social-link" href={href} target="_blank" rel="noreferrer" aria-label={`${label} хуудас нээх`} key={label}><Icon size={17} strokeWidth={1.8} /><span>{label}</span></a>)}</div></div><div className="footer-column"><span>Шуурхай холбоос</span><a href="#story">Бидний тухай</a><a href="#collection">Бүтээгдэхүүн</a><a href="#stores">Салбарууд</a></div><div className="footer-column"><span>Нөхцөл ба бодлого</span><Link href="/privacy">Хувийн нууцлал</Link><Link href="/terms">Үйлчилгээний нөхцөл</Link><Link href="/returns">Буцаалт, солилцоо</Link></div><div className="footer-column"><span>Холбоо барих</span><a href="tel:94509911">9450-9911</a><a href="mailto:asayake0307@gmail.com">asayake0307@gmail.com</a><small>Storepay боломжтой</small></div></div><div className="footer-bottom"><span>© 2026 SUGI ASAYAKE Mongolia</span><span>Official SUGI Drug Store Japan subsidiary</span></div></footer>

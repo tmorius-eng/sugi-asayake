@@ -2,6 +2,7 @@ import type { CSSProperties, ComponentType } from "react";
 import { Link } from "wouter";
 import { ArrowUpRight } from "lucide-react";
 import { getCategoryPlaceholderImage } from "@shared/catalog-filter";
+import { useSiteText } from "@/hooks/useSiteText";
 import SectionEyebrow from "./SectionEyebrow";
 import SectionHeading from "./SectionHeading";
 
@@ -59,22 +60,25 @@ export default function CategoryMasonry({
   anchorHref?: string;
   symbolImage: string;
 }) {
+  const textFor = useSiteText();
+  const [headingLine1, headingLine2] = textFor("home-text-cat-heading", "Японы бүтээгдэхүүний\nүндсэн ангилал.").split("\n");
+  const [anchorLine1, anchorLine2] = textFor("home-text-cat-anchor-heading", "Нэг өдөрт\nхэрэгтэй бүх зүйл.").split("\n");
   return (
     <section className="cat-mosaic-section page-section" id="collection" data-reveal>
-      <SectionEyebrow number="02" label="EVERYDAY JAPAN" />
+      <SectionEyebrow number="02" label={textFor("home-text-cat-eyebrow-label", "EVERYDAY JAPAN")} />
 
       <div className="cat-mosaic-top">
         <div className="cat-mosaic-heading-block">
-          <SectionHeading>Японы бүтээгдэхүүний<br /><em>үндсэн ангилал.</em></SectionHeading>
-          <p>Арьс арчилгаа, гоо сайхан, эрүүл ахуй, гэр бүлийн өдөр тутмын хэрэгцээг 800+ сонголтоос нэг дороос.</p>
-          <a className="quiet-link" href="#stores">Дэлгэрэнгүй үзэх <ArrowUpRight size={16} /></a>
+          <SectionHeading>{headingLine1}<br /><em>{headingLine2}</em></SectionHeading>
+          <p>{textFor("home-text-cat-description", "Арьс арчилгаа, гоо сайхан, эрүүл ахуй, гэр бүлийн өдөр тутмын хэрэгцээг 800+ сонголтоос нэг дороос.")}</p>
+          <a className="quiet-link" href="#stores">{textFor("home-text-cat-link-label", "Дэлгэрэнгүй үзэх")} <ArrowUpRight size={16} /></a>
         </div>
         <a className="cat-mosaic-anchor" href={anchorHref} style={anchorImageStyle} aria-label="Ойр салбараа олох">
           <div className="cat-mosaic-anchor-shade" aria-hidden="true" />
           <div className="cat-mosaic-anchor-card">
-            <span>OUR SELECTION</span>
-            <strong>Нэг өдөрт<br />хэрэгтэй бүх зүйл.</strong>
-            <em>Ойр салбараа олох <ArrowUpRight size={15} /></em>
+            <span>{textFor("home-text-cat-anchor-eyebrow", "OUR SELECTION")}</span>
+            <strong>{anchorLine1}<br />{anchorLine2}</strong>
+            <em>{textFor("home-text-cat-anchor-cta", "Ойр салбараа олох")} <ArrowUpRight size={15} /></em>
           </div>
         </a>
       </div>
@@ -84,6 +88,11 @@ export default function CategoryMasonry({
           const imageStyle: CSSProperties = {
             backgroundImage: `url(${category.imageUrl || getCategoryPlaceholderImage(category.slug)})`,
           };
+          // Category TITLE is never a text slot -- it's also the exact-match
+          // /shop?category= filter value (see shared/catalog-filter.ts), so
+          // free-text editing it here could silently break that link. Only
+          // the descriptive `detail` line is admin-editable.
+          const detail = textFor(`home-text-cat-detail-${category.slug}`, category.detail);
 
           return (
             <Link
@@ -108,7 +117,7 @@ export default function CategoryMasonry({
                   <span className="cat-mosaic-item-number">{category.number}</span>
                 </span>
                 <span className="cat-mosaic-item-title">{category.title}</span>
-                <span className="cat-mosaic-item-detail">{category.detail}</span>
+                <span className="cat-mosaic-item-detail">{detail}</span>
                 <ArrowUpRight size={16} className="cat-mosaic-item-arrow" />
               </span>
             </Link>
@@ -118,7 +127,7 @@ export default function CategoryMasonry({
 
       <div className="cat-mosaic-note">
         <img src={symbolImage} alt="" />
-        <span>Бидний тавиур дээрх бүтээгдэхүүн бүр<br />өдөр тутмын хэрэгцээнээс эхэлнэ.</span>
+        <span>{textFor("home-text-cat-note", "Бидний тавиур дээрх бүтээгдэхүүн бүр өдөр тутмын хэрэгцээнээс эхэлнэ.")}</span>
       </div>
     </section>
   );

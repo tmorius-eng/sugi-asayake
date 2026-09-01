@@ -3,6 +3,7 @@ import { ArrowUpRight } from "lucide-react";
 import { LOYALTY_TIERS, getLoyaltyTier, getNextLoyaltyTier } from "@shared/loyalty";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
+import { useSiteText } from "@/hooks/useSiteText";
 import SectionHeading from "./SectionHeading";
 import InfinityGraph from "./InfinityGraph";
 
@@ -60,23 +61,27 @@ const EXAMPLE_RIGHT_RATIO = MAX_DISCOUNT_PERCENT > 0 ? EXAMPLE_TIER.discountPerc
 export default function QuickStatsSection() {
   const { user, loading: authLoading } = useAuth();
   const statusQuery = trpc.loyalty.myStatus.useQuery(undefined, { enabled: Boolean(user) });
+  const textFor = useSiteText();
+  const [headingLine1, headingLine2] = textFor("home-text-qs-heading", "Quick\nStats").split("\n");
 
   return (
     <section className="qs-section" data-reveal aria-label="Гишүүнчлэлийн хураангуй">
       <div className="qs-grid">
         <div className="qs-copy">
-          <p className="eyebrow"><span /> ГИШҮҮНЧЛЭЛ</p>
+          <p className="eyebrow"><span /> {textFor("home-text-qs-eyebrow-label", "ГИШҮҮНЧЛЭЛ")}</p>
           {/* "Quick Stats" stays the actual heading, matching the reference
               image's own two-line display heading -- the master prompt
               (section 16.5) asks to preserve that visual and add Mongolian
               alongside it, not to replace it with a Mongolian phrase. The
-              Mongolian explanatory line sits directly beneath. */}
-          <SectionHeading>Quick<br /><em>Stats</em></SectionHeading>
-          <p className="qs-subtitle">Илүү их худалдан авалт, илүү их хэмнэлт.</p>
-          <p className="qs-desc">Таны нийт худалдан авалтын дүн өсөх тусам гишүүнчлэлийн хямдрал нэмэгдэж, дараагийн захиалга бүрд илүү их хэмнэлт үүснэ.</p>
+              Mongolian explanatory line sits directly beneath. Both lines
+              are admin-editable (shared/site-text.ts), still defaulting to
+              exactly this English/Mongolian pairing. */}
+          <SectionHeading>{headingLine1}<br /><em>{headingLine2}</em></SectionHeading>
+          <p className="qs-subtitle">{textFor("home-text-qs-subtitle", "Илүү их худалдан авалт, илүү их хэмнэлт.")}</p>
+          <p className="qs-desc">{textFor("home-text-qs-description", "Таны нийт худалдан авалтын дүн өсөх тусам гишүүнчлэлийн хямдрал нэмэгдэж, дараагийн захиалга бүрд илүү их хэмнэлт үүснэ.")}</p>
 
           {!user && !authLoading && (
-            <p className="eyebrow">Нэвтэрснээр өөрийн бодит хэмнэлтийг харах боломжтой</p>
+            <p className="eyebrow">{textFor("home-text-qs-guest-hint", "Нэвтэрснээр өөрийн бодит хэмнэлтийг харах боломжтой")}</p>
           )}
 
           {user && statusQuery.data && (
@@ -97,9 +102,9 @@ export default function QuickStatsSection() {
           )}
 
           {user ? (
-            <Link href="/profile?tab=loyalty" className="qs-cta">Профайл руу орох <ArrowUpRight size={15} /></Link>
+            <Link href="/profile?tab=loyalty" className="qs-cta">{textFor("home-text-qs-cta-loggedin", "Профайл руу орох")} <ArrowUpRight size={15} /></Link>
           ) : (
-            <Link href="/login?mode=register" className="qs-cta">Гишүүнээр бүртгүүлэх <ArrowUpRight size={15} /></Link>
+            <Link href="/login?mode=register" className="qs-cta">{textFor("home-text-qs-cta-guest", "Гишүүнээр бүртгүүлэх")} <ArrowUpRight size={15} /></Link>
           )}
         </div>
 

@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 import { ArrowUpRight, ChevronRight, Newspaper } from "lucide-react";
+import { useSiteText } from "@/hooks/useSiteText";
 import SectionEyebrow from "./SectionEyebrow";
 import SectionHeading from "./SectionHeading";
 
@@ -27,14 +28,18 @@ const TONE_CLASS = ["jn-card--tone-0", "jn-card--tone-1", "jn-card--tone-2"];
  * because of the upstream slice) rather than assuming there are always 3.
  */
 export default function JournalSection({ posts }: { posts: HomePost[] }) {
+  const textFor = useSiteText();
   if (posts.length === 0) return null;
+
+  const [headingLine1, headingLine2] = textFor("home-text-jn-heading", "Зөвлөгөө ба\nмэдээ.").split("\n");
+  const readMoreLabel = textFor("home-text-jn-read-more", "Дэлгэрэнгүй унших");
 
   return (
     <section className="jn-section page-section" data-reveal>
-      <SectionEyebrow number="05" label={<><Newspaper size={13} /> SUGI JOURNAL</>} tone="onDark" />
+      <SectionEyebrow number="05" label={<><Newspaper size={13} /> {textFor("home-text-jn-eyebrow-label", "SUGI JOURNAL")}</>} tone="onDark" />
       <div className="jn-heading">
-        <SectionHeading tone="onDark">Зөвлөгөө ба <em>мэдээ.</em></SectionHeading>
-        <Link href="/shop" className="quiet-link jn-all-link">Бүх нийтлэл <ChevronRight size={16} /></Link>
+        <SectionHeading tone="onDark">{headingLine1} <em>{headingLine2}</em></SectionHeading>
+        <Link href="/shop" className="quiet-link jn-all-link">{textFor("home-text-jn-all-link", "Бүх нийтлэл")} <ChevronRight size={16} /></Link>
       </div>
       <div className="jn-grid" data-count={posts.length}>
         {posts.map((post, index) => (
@@ -44,7 +49,7 @@ export default function JournalSection({ posts }: { posts: HomePost[] }) {
               <span className="jn-card-date">{post.publishedAt ? new Date(post.publishedAt).toLocaleDateString("mn-MN") : ""}</span>
               <h3>{post.title}</h3>
               {post.excerpt && <p>{post.excerpt}</p>}
-              <em>Дэлгэрэнгүй унших <ArrowUpRight size={14} /></em>
+              <em>{readMoreLabel} <ArrowUpRight size={14} /></em>
             </div>
           </Link>
         ))}

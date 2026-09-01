@@ -89,6 +89,7 @@ import {
   getReviewEligibility,
   getRoutineForProduct,
   getSiteMedia,
+  getSiteText,
   getStaffInvitationByTokenHash,
   getUserByEmail,
   getUserById,
@@ -104,6 +105,7 @@ import {
   resetPasswordWithCode,
   revokeStaffInvitation,
   deleteSiteMedia,
+  deleteSiteText,
   getUserAddresses,
   routineSlugExists,
   validateDiscountCode,
@@ -114,6 +116,7 @@ import {
   touchUserLastSignedIn,
   unsuspendUser,
   upsertSiteMedia,
+  upsertSiteText,
   upsertMarketingSpend,
   updateAdminCategory,
   updateAdminOrder,
@@ -142,6 +145,7 @@ import { createQPayInvoice, getQPayAvailability } from "./qpay";
 import { getCategoryWriteViolation, getProductWriteViolation } from "./catalog-validation";
 import { getAnalyticsReport, exportAnalyticsExcel, exportAnalyticsPdf } from "./analytics";
 import { siteMediaSlotKeys } from "../shared/site-media";
+import { siteTextSlotKeys } from "../shared/site-text";
 
 const slugSchema = z.string().trim().min(2).max(200).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens only.");
 const nullableText = (max: number) => z.string().trim().max(max).nullable().optional();
@@ -300,6 +304,7 @@ const orderUpdateSchema = z.object({
 const imageContentTypes = ["image/jpeg", "image/png", "image/webp"] as const;
 const staffRoleSchema = z.enum(["user", "staff", "admin"]);
 const siteMediaSlotSchema = z.enum(siteMediaSlotKeys);
+const siteTextSlotSchema = z.enum(siteTextSlotKeys);
 const invitationTokenSchema = z.string().trim().min(32).max(256);
 const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
 // 6-digit OTP codes (email verification + password reset) — validity window
@@ -709,6 +714,7 @@ export const appRouter = router({
     latestPosts: publicProcedure.query(() => getPublishedPosts()),
     bySlug: publicProcedure.input(z.object({ slug: z.string().min(1).max(240) })).query(({ input }) => getPublishedPostBySlug(input.slug)),
     siteMedia: publicProcedure.query(() => getSiteMedia()),
+    siteText: publicProcedure.query(() => getSiteText()),
   }),
   cart: router({
     // publicProcedure, not protectedProcedure: UX-RESEARCH.md priority #1 is
@@ -1093,6 +1099,7 @@ export const appRouter = router({
     orders: staffProcedure.query(() => getAdminOrders()),
     posts: staffProcedure.query(() => getAdminPosts()),
     siteMedia: staffProcedure.query(() => getSiteMedia()),
+    siteText: staffProcedure.query(() => getSiteText()),
     users: adminProcedure.query(() => getAdminUsers()),
     staffInvitations: adminProcedure.query(() => getAdminStaffInvitations()),
     inviteStaff: adminProcedure.input(z.object({ email: z.string().trim().email().max(320), role: staffRoleSchema.default("user"), origin: z.string().url().max(500) })).mutation(async ({ ctx, input }) => {
@@ -1483,6 +1490,19 @@ export const appRouter = router({
     clearSiteMedia: staffProcedure.input(z.object({ slotKey: siteMediaSlotSchema })).mutation(async ({ ctx, input }) => {
       await deleteSiteMedia(input.slotKey);
       await logAdminAction({ actorUserId: ctx.user.id, action: "site_media.cleared", entityType: "site_media", metadata: { slotKey: input.slotKey } });
+      return { slotKey: input.slotKey };
+    }),
+    updateSiteText: staffProcedure.input(z.object({
+      slotKey: siteTextSlotSchema,
+      textValue: z.string().trim().min(1).max(4_000),
+    })).mutation(async ({ ctx, input }) => {
+      const text = await upsertSiteText({ ...input, updatedByUserId: ctx.user.id });
+      await logAdminAction({ actorUserId: ctx.user.id, action: "site_text.updated", entityType: "site_text", entityId: text.id, metadata: { slotKey: input.slotKey } });
+      return text;
+    }),
+    clearSiteText: staffProcedure.input(z.object({ slotKey: siteTextSlotSchema })).mutation(async ({ ctx, input }) => {
+      await deleteSiteText(input.slotKey);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "site_text.cleared", entityType: "site_text", metadata: { slotKey: input.slotKey } });
       return { slotKey: input.slotKey };
     }),
     uploadProductImage: staffProcedure

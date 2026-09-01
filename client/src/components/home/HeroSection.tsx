@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { Link } from "wouter";
 import { ArrowUpRight, BadgeCheck, ChevronRight, Flower2, Sparkles } from "lucide-react";
+import { useSiteText } from "@/hooks/useSiteText";
 
 /**
  * Homepage hero -- extracted verbatim from the old inline
@@ -17,36 +18,42 @@ import { ArrowUpRight, BadgeCheck, ChevronRight, Flower2, Sparkles } from "lucid
  * given, same as the old inline markup did.
  */
 export default function HeroSection({ heroImageStyle }: { heroImageStyle: CSSProperties | undefined }) {
+  const textFor = useSiteText();
+  const [headingLine1, headingLine2, headingLine3] = textFor("home-text-hero-heading", "ГЭР БҮЛИЙН\nГИШҮҮН БҮРТ\nЯПОН ЧАНАР").split("\n");
   return (
     <section className="hero-section hero-sunrise" aria-labelledby="hero-title">
       <div className="hero-color-orbit orbit-one" aria-hidden="true" />
       <div className="hero-color-orbit orbit-two" aria-hidden="true" />
       <div className="hero-copy">
         <div className="hero-topline">
-          <p className="eyebrow"><span /> SUGI ASAYAKE / MONGOLIA</p>
+          <p className="eyebrow"><span /> {textFor("home-text-hero-eyebrow", "SUGI ASAYAKE / MONGOLIA")}</p>
           <span className="hero-time">ASAYAKE / 06:07</span>
         </div>
-        <h1 id="hero-title">ГЭР БҮЛИЙН<br /><span>ГИШҮҮН БҮРТ</span><br /><strong>ЯПОН ЧАНАР</strong></h1>
-        <p className="hero-description">Японоос баталгаат бүтээгдэхүүнүүдийг албан ёсны эрхтэйгээр танд хүргэж байна.</p>
+        <h1 id="hero-title">{headingLine1}<br /><span>{headingLine2}</span><br /><strong>{headingLine3}</strong></h1>
+        <p className="hero-description">{textFor("home-text-hero-description", "Японоос баталгаат бүтээгдэхүүнүүдийг албан ёсны эрхтэйгээр танд хүргэж байна.")}</p>
         <div className="hero-actions">
           <Link className="button button-primary" href="/shop">Бүтээгдэхүүн үзэх <ArrowUpRight size={16} /></Link>
           <a className="quiet-link" href="#stores">Салбар олох <ChevronRight size={16} /></a>
         </div>
         <div className="hero-trust">
           <BadgeCheck size={20} />
-          <div><strong>100% албан ёсны эрхтэй</strong><span>SUGI Drug Store Japan-ийн охин компани</span></div>
+          <div><strong>{textFor("home-text-hero-trust-title", "100% албан ёсны эрхтэй")}</strong><span>{textFor("home-text-hero-trust-subtitle", "SUGI Drug Store Japan-ийн охин компани")}</span></div>
         </div>
         <div className="hero-signature" aria-label="SUGI ASAYAKE daily care signature">
           <Flower2 size={17} />
-          <span>Өглөөнөөс орой хүртэл<br />таны өдөр тутмын сонголт.</span>
+          <span>{textFor("home-text-hero-signature", "Өглөөнөөс орой хүртэл таны өдөр тутмын сонголт.")}</span>
         </div>
       </div>
       <div className="hero-image" style={heroImageStyle} aria-label="SUGI ASAYAKE everyday-care products" role="img">
         <div className="hero-image-shade" />
-        <div className="hero-image-sun" aria-hidden="true"><span>800+</span><small>DAILY<br />CHOICES</small></div>
-        <div className="hero-image-marker" aria-hidden="true"><Sparkles size={15} /><span>THE MORNING<br />OF CARE</span></div>
+        {/* "800+" itself stays code, not a text slot (same real product-count
+            fact repeated in TrustStrip/CategoryMasonry/WhyChooseUs -- see
+            shared/site-text.ts's header comment on why each repetition is
+            independently editable text instead of one shared token). */}
+        <div className="hero-image-sun" aria-hidden="true"><span>800+</span><small>{textFor("home-text-hero-badge-label", "DAILY CHOICES")}</small></div>
+        <div className="hero-image-marker" aria-hidden="true"><Sparkles size={15} /><span>{textFor("home-text-hero-marker-label", "THE MORNING OF CARE")}</span></div>
         <div className="hero-image-label"><span>JAPAN QUALITY</span><strong>01</strong></div>
-        <div className="hero-image-caption">Өдөр бүрийн арчилгаа, илүү ойрхон</div>
+        <div className="hero-image-caption">{textFor("home-text-hero-image-caption", "Өдөр бүрийн арчилгаа, илүү ойрхон")}</div>
       </div>
     </section>
   );

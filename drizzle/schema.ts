@@ -561,6 +561,23 @@ export const siteMedia = mysqlTable("site_media", {
 ]);
 
 /**
+ * Text-equivalent of site_media above: admin-editable homepage copy (see
+ * shared/site-text.ts for the full slot registry and the reasoning for
+ * what is / isn't covered). Same upsert-by-unique-slotKey shape,
+ * deliberately no altText column since there's nothing to caption.
+ */
+export const siteText = mysqlTable("site_text", {
+  id: int("id").autoincrement().primaryKey(),
+  slotKey: varchar("slotKey", { length: 80 }).notNull().unique(),
+  textValue: text("textValue").notNull(),
+  updatedByUserId: int("updatedByUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  index("site_text_updated_by_idx").on(table.updatedByUserId),
+]);
+
+/**
  * Tier F of the admin analytics dashboard: CAC (Customer Acquisition Cost)
  * needs one input nothing else in this app captures -- how much was spent
  * on marketing in a given month. One row per calendar month
@@ -799,6 +816,8 @@ export type Post = typeof posts.$inferSelect;
 export type InsertPost = typeof posts.$inferInsert;
 export type SiteMedia = typeof siteMedia.$inferSelect;
 export type InsertSiteMedia = typeof siteMedia.$inferInsert;
+export type SiteText = typeof siteText.$inferSelect;
+export type InsertSiteText = typeof siteText.$inferInsert;
 export type AdminAuditLog = typeof adminAuditLogs.$inferSelect;
 export type InsertAdminAuditLog = typeof adminAuditLogs.$inferInsert;
 export type StaffInvitation = typeof staffInvitations.$inferSelect;

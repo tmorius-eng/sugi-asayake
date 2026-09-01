@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { and, asc, desc, eq, gte, inArray, isNull, like, lt, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { adminAuditLogs, cartItems, carts, discountCodes, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, integrationConfigs, loginAttempts, marketingSpend, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, productReviews, productVariants, products, routines, routineSteps, siteMedia, sitePromotions, staffInvitations, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
+import { adminAuditLogs, cartItems, carts, discountCodes, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, integrationConfigs, loginAttempts, marketingSpend, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, productReviews, productVariants, products, routines, routineSteps, siteMedia, siteText, sitePromotions, staffInvitations, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
 import { UB_DELIVERY_FEE_MNT } from "../shared/const";
 import { guessDistrictFromAddress, type UbDistrict } from "../shared/districts";
 import { decryptJson, encryptJson } from "./_core/crypto";
@@ -1542,6 +1542,38 @@ export async function deleteSiteMedia(slotKey: string) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.delete(siteMedia).where(eq(siteMedia.slotKey, slotKey));
+  return { slotKey };
+}
+
+/** Text-equivalent of the 3 functions above -- see drizzle/schema.ts's
+ *  siteText table and shared/site-text.ts's slot registry. */
+export async function getSiteText() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({ slotKey: siteText.slotKey, textValue: siteText.textValue, updatedAt: siteText.updatedAt })
+    .from(siteText)
+    .orderBy(asc(siteText.slotKey));
+}
+
+export async function upsertSiteText(input: { slotKey: string; textValue: string; updatedByUserId: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.insert(siteText).values({
+    slotKey: input.slotKey,
+    textValue: input.textValue,
+    updatedByUserId: input.updatedByUserId,
+  }).onDuplicateKeyUpdate({
+    set: { textValue: input.textValue, updatedByUserId: input.updatedByUserId, updatedAt: new Date() },
+  });
+  const updated = await db.select().from(siteText).where(eq(siteText.slotKey, input.slotKey)).limit(1);
+  return updated[0];
+}
+
+export async function deleteSiteText(slotKey: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.delete(siteText).where(eq(siteText.slotKey, slotKey));
   return { slotKey };
 }
 

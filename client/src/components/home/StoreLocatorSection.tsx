@@ -1,4 +1,5 @@
 import { ArrowUpRight, Clock3, MapPin, Navigation, Phone } from "lucide-react";
+import { useSiteText } from "@/hooks/useSiteText";
 import SectionEyebrow from "./SectionEyebrow";
 import SectionHeading from "./SectionHeading";
 import { locations, BRANCH_HOURS, BRANCH_PHONE } from "./locations-data";
@@ -23,14 +24,18 @@ const PIN_POSITIONS: Record<string, { x: number; y: number }> = {
  * doesn't wire the orphaned Map.tsx (no API key exists in this repo).
  */
 export default function StoreLocatorSection() {
+  const textFor = useSiteText();
+  const [headingLine1, headingLine2] = textFor("home-text-locator-heading", "Танд ойрхон\nсалбар дээр.").split("\n");
   return (
     <section className="locator-section page-section" id="stores" data-reveal>
       <div className="locator-grid">
         <div className="locator-copy">
-          <SectionEyebrow number="04" label="FIND YOUR ASAYAKE" />
-          <p className="eyebrow"><Navigation size={14} /> {locations.length} БАЙРШИЛ</p>
-          <SectionHeading>Танд ойрхон<br /><em>салбар дээр.</em></SectionHeading>
-          <p className="locator-lede">Улаанбаатарын өөр өөр цэгүүдэд япон чанарыг танд ойртуулж байна.</p>
+          <SectionEyebrow number="04" label={textFor("home-text-locator-eyebrow-label", "FIND YOUR ASAYAKE")} />
+          {/* locations.length is real data (see the file-level comment
+              above) -- stays code, followed by an editable text slot. */}
+          <p className="eyebrow"><Navigation size={14} /> {locations.length} {textFor("home-text-locator-count-suffix", "БАЙРШИЛ")}</p>
+          <SectionHeading>{headingLine1}<br /><em>{headingLine2}</em></SectionHeading>
+          <p className="locator-lede">{textFor("home-text-locator-description", "Улаанбаатарын өөр өөр цэгүүдэд япон чанарыг танд ойртуулж байна.")}</p>
           <a className="button button-primary" href="tel:94509911">9450-9911 руу залгах <Phone size={15} /></a>
         </div>
 
@@ -85,7 +90,7 @@ export default function StoreLocatorSection() {
                 <ArrowUpRight size={17} />
               </a>
             ))}
-            <p className="location-note"><MapPin size={14} /> Салбарын байршлыг Google Maps дээр нээх</p>
+            <p className="location-note"><MapPin size={14} /> {textFor("home-text-locator-note", "Салбарын байршлыг Google Maps дээр нээх")}</p>
           </div>
         </div>
       </div>

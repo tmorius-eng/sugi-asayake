@@ -11,14 +11,22 @@
  *    from the same `locations` data the store locator renders) instead of
  *    being a second hand-typed "3" -- if a branch is ever added or removed
  *    this number can't silently drift from the actual locator list.
+ *
+ * The 3 labels beside each number are admin-editable via useSiteText (see
+ * shared/site-text.ts) -- the numbers themselves stay code.
  */
+import { useSiteText } from "@/hooks/useSiteText";
 export default function TrustStrip({ branchCount }: { branchCount: number }) {
+  const textFor = useSiteText();
   const branchLabel = String(branchCount).padStart(2, "0");
   return (
     <div className="hero-facts" aria-label="SUGI ASAYAKE facts">
-      <div><strong>800<span>+</span></strong><span>төрлийн бүтээгдэхүүн</span></div>
-      <div><strong>{branchLabel}</strong><span>УБ дахь салбар</span></div>
-      <div><strong>01</strong><span>Японы албан ёсны эрх</span></div>
+      {/* "800+" itself stays code (real product-count fact repeated in
+          several homepage sections -- see shared/site-text.ts's header
+          comment); only the labels beside each number are text slots. */}
+      <div><strong>800<span>+</span></strong><span>{textFor("home-text-trust-stat1-label", "төрлийн бүтээгдэхүүн")}</span></div>
+      <div><strong>{branchLabel}</strong><span>{textFor("home-text-trust-stat2-label", "УБ дахь салбар")}</span></div>
+      <div><strong>{textFor("home-text-trust-stat3-value", "01")}</strong><span>{textFor("home-text-trust-stat3-label", "Японы албан ёсны эрх")}</span></div>
     </div>
   );
 }
