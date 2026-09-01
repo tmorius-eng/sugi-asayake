@@ -75,6 +75,16 @@ pnpm exec vitest run --no-file-parallelism
 - **Product Variants — PHASE 1 болон PHASE 2 хоёулаа дууссан (2026-08-26)** — худалдан авагч ProductDetail/QuickView дээр 2+ variant-тай бараанаас сонголт хийж, тухайн variant-ийн үнэ/нөөц/sku-гоор бодитоор захиалж болно. Ганц variant-тай (одоогийн 936/937) бараанд ямар ч харагдах өөрчлөлт алга. **Бодит Playwright screenshot баталгаажуулалт хараахан хийгдээгүй** (зөвхөн 149 автомат тест + `pnpm build` + throwaway DB probe script-ээр баталгаажсан) — дэлгэрэнгүй [HISTORY.md](HISTORY.md)-ийн "Product Variants PHASE 2" хэсэгт.
 - Хэрэглэгчийн удирдлага (`/admin` → Хэрэглэгч хэсэг)
 
+## ✅ (2026-09-01) TrustStrip ("800+ / 03 / 01" тоон баримтын зурвас) бүрмөсөн устгав
+
+Tom тодорхой заав: "delete these 3 permantly!!!! idont think these are good looking div with current design!!" — Hero доорх `.hero-facts` зурвас (800+ бүтээгдэхүүн / 03 УБ дахь салбар / 01 Японы албан ёсны эрх) одоогийн дизайнтай зохицохгүй байгааг шийдвэрлэж, зөвхөн нуух биш **бүрэн устгав**:
+- `client/src/components/home/TrustStrip.tsx` файлыг бүхэлд нь устгав.
+- `Home.tsx`-аас импорт болон `<TrustStrip branchCount={locations.length} />` дуудлагыг хассан.
+- `client/src/index.css`-ээс `.hero-facts` бүх CSS дүрмийг (desktop, mobile responsive, dark-tint overrides — нийт 3 тусдаа блок) устгав.
+- `shared/site-text.ts`-ээс энэ section-д зориулагдсан "Тоон баримт (Trust Strip)" 4 slot-ыг (2026-09-01-д өөрөө нэмсэн байсан) хассан — Aiven дээрх `site_text` хүснэгт хоосон байсан тул (0 мөр) орфон admin override цэвэрлэх шаардлагагүй байв.
+
+**Баталгаажуулалт**: `pnpm check`/`pnpm build` цэвэр. Playwright-ээр (түр суулгаад дараа нь бүрэн хассан) 1440px/390px screenshot — `.hero-facts` DOM-д алга, hero зураг шууд хар "sunrise ribbon" texture рүү цэвэрхэн шилждэг, хоосон зай/artifact алга, хэвтээ overflow 0, console алдаагүй.
+
 ## 🔴 (2026-09-01) КРИТИК incident — "зургууд алга болсон" нь код биш, буруу DATABASE_URL байсан (шийдэгдсэн)
 
 Tom "зурагнууд server restart болгонд алга болоод байна, cloudflare-оос татаж чадаж байна уу" гэж ноцтой шаардсан. Deep-dive хийхэд код огт эвдрээгүй, харин **энэ (гэрийн) лаптопын `.env`-ийн `DATABASE_URL` нь local MySQL руу заасан байсан, Aiven руу биш** байсныг олов — дээрх "Локал орчны тохиргоо" хэсгийн шинэ анхааруулгын яг тэр incident.

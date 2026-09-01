@@ -105,36 +105,6 @@ export const siteTextSlots = [
     fallbackValue: "SUGI Drug Store Japan-ийн охин компани",
   },
 
-  // ---- Trust strip (800+ / branch count / official rights) --------------
-  {
-    key: "home-text-trust-stat1-label",
-    group: "Тоон баримт (Trust Strip)",
-    label: "\"800+\"-ийн доорх тайлбар",
-    description: "Hero доорх 3 тоон баримтын эхнийх (800+) -той хамт харагдах тайлбар.",
-    fallbackValue: "төрлийн бүтээгдэхүүн",
-  },
-  {
-    key: "home-text-trust-stat2-label",
-    group: "Тоон баримт (Trust Strip)",
-    label: "Салбарын тооны тайлбар",
-    description: "Бодит салбарын тоо (кодоос автоматаар тооцоологдоно, энд өөрчлөгдөхгүй) -той хамт харагдах тайлбар.",
-    fallbackValue: "УБ дахь салбар",
-  },
-  {
-    key: "home-text-trust-stat3-value",
-    group: "Тоон баримт (Trust Strip)",
-    label: "3 дахь тоон утга",
-    description: "Гурав дахь баримтын тоон утга (жишээ: 01).",
-    fallbackValue: "01",
-  },
-  {
-    key: "home-text-trust-stat3-label",
-    group: "Тоон баримт (Trust Strip)",
-    label: "3 дахь тайлбар",
-    description: "Гурав дахь баримтын тайлбар.",
-    fallbackValue: "Японы албан ёсны эрх",
-  },
-
   // ---- Story section ("01 THE SUGI DIFFERENCE") --------------------------
   {
     key: "home-text-story-eyebrow-label",

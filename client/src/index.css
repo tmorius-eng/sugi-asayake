@@ -89,8 +89,9 @@
   /* --- Home redesign tokens (2026-08-28) --------------------------------
      Additive only -- nothing above this block is renamed or removed.
      --sky names the 4th brand color that --ring already carries and that
-     several sections (hero-facts, seasonal "sky" tone, locations stripe)
-     already hardcode as #3970a7 ad hoc. --surface-dark* and
+     several sections (the hero's "THE MORNING OF CARE" marker, seasonal
+     "sky" tone, locations stripe) already hardcode as #3970a7 ad hoc.
+     --surface-dark* and
      --surface-journal-muted name the dark-canvas hex values already
      hardcoded in .site-footer/.home-news-section (#17181b, #1f2024,
      #26272c) plus one new muted-green tone for the Journal section's
@@ -202,12 +203,6 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .hero-image-label { position: absolute; top: 26px; left: 27px; right: 27px; display: flex; align-items: center; justify-content: space-between; color: rgba(255, 255, 255, .84); font-size: 10px; font-weight: 800; letter-spacing: .16em; }
 .hero-image-label strong { display: grid; width: 35px; height: 35px; place-items: center; border: 1px solid rgba(255,255,255,.65); border-radius: 50%; font-family: var(--font-display); letter-spacing: 0; }
 .hero-image-caption { position: absolute; right: 28px; bottom: 26px; color: rgba(255,255,255,.88); font-size: 11px; font-weight: 700; }
-.hero-facts { display: grid; grid-template-columns: repeat(3, 1fr); width: min(1380px, calc(100% - 68px)); margin: 0 auto; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-.hero-facts > div { display: flex; align-items: baseline; justify-content: center; gap: 10px; min-height: 98px; border-right: 1px solid var(--border); }
-.hero-facts > div:last-child { border-right: 0; }
-.hero-facts strong { font-family: var(--font-display); font-size: 34px; letter-spacing: -.08em; }
-.hero-facts strong span { color: var(--primary); font-size: .6em; }
-.hero-facts > div > span { color: #77787c; font-size: 11px; font-weight: 700; }
 
 .page-section { width: min(1380px, calc(100% - 68px)); margin: 0 auto; }
 .story-section { width: 100%; padding: 132px max(34px, 7vw) 124px; background: var(--secondary); }
@@ -356,10 +351,6 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
   .hero-trust { margin-top: 42px; }
   .hero-image { min-height: 500px; border-radius: 14px; }
   .hero-image-caption { right: 20px; bottom: 19px; font-size: 10px; }
-  .hero-facts { width: calc(100% - 36px); }
-  .hero-facts > div { display: grid; gap: 2px; justify-content: center; padding: 14px 6px; text-align: center; }
-  .hero-facts strong { font-size: 25px; }
-  .hero-facts > div > span { font-size: 9px; line-height: 1.25; }
   .page-section { width: calc(100% - 36px); }
   .story-section, .collection-section, .locations-section { padding-top: 86px; padding-bottom: 86px; }
   .story-grid, .collection-heading, .collection-grid, .care-section, .locations-section { grid-template-columns: 1fr; }
@@ -475,10 +466,6 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .hero-image-marker { position: absolute; z-index: 2; top: 50%; left: -1px; display: flex; align-items: center; gap: 8px; padding: 10px 13px; background: #3970a7; color: #fff; font-size: 8px; font-weight: 800; letter-spacing: .1em; line-height: 1.25; }
 .hero-image-label { z-index: 2; }
 .hero-image-caption { z-index: 2; }
-.hero-facts { position: relative; z-index: 3; margin-top: -1px; background: rgba(255,255,255,.62); backdrop-filter: blur(10px); }
-.hero-facts > div:nth-child(1) { background: rgba(240,181,45,.14); }
-.hero-facts > div:nth-child(2) { background: rgba(57,112,167,.08); }
-.hero-facts > div:nth-child(3) { background: rgba(223,31,61,.07); }
 .sunrise-ribbon { display: flex; overflow: hidden; padding: 14px 0; background: #17181b; color: #fff; white-space: nowrap; }
 .sunrise-ribbon > div { display: flex; flex: 0 0 auto; align-items: center; gap: 22px; padding-right: 22px; animation: sunrise-track 24s linear infinite; }
 .sunrise-ribbon span { color: #f7d17a; font-size: 9px; font-weight: 800; letter-spacing: .16em; }

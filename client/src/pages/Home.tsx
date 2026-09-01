@@ -27,7 +27,6 @@ import {
 import HeaderSearch from "@/components/HeaderSearch";
 import SeasonalCampaignCarousel from "@/components/SeasonalCampaignCarousel";
 import HeroSection from "@/components/home/HeroSection";
-import TrustStrip from "@/components/home/TrustStrip";
 import CategoryMasonry from "@/components/home/CategoryMasonry";
 import WhyChooseUs from "@/components/home/WhyChooseUs";
 import JournalSection from "@/components/home/JournalSection";
@@ -163,8 +162,6 @@ export default function Home() {
 
       <main>
         <HeroSection heroImageStyle={bgStyle("home-hero", heroImage)} />
-
-        <TrustStrip branchCount={locations.length} />
 
         <div className="sunrise-ribbon" aria-label="SUGI ASAYAKE brand promise">
           <div><span>JAPANESE DAILY CARE</span><i /><span>УЛААНБААТАР / MONGOLIA</span><i /><span>ГЭР БҮЛИЙН ГИШҮҮН БҮРТ</span><i /></div>
