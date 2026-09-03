@@ -21,6 +21,30 @@ export function ProductCardSkeleton() {
   );
 }
 
+/**
+ * Mimics .bestseller-card's shape (square image + brand line + 2-line
+ * title + price). Design consistency audit (2026-09-02): Home.tsx's
+ * bestseller/recommended rails used to render nothing at all while their
+ * query was still loading -- `{data.length > 0 && ...}` looks identical to
+ * "this content doesn't exist" during a fresh load, even though Shop.tsx/
+ * ProductDetail.tsx/Profile.tsx already used this Skeleton.tsx pattern for
+ * exactly this. Deliberately separate from ProductCardSkeleton, since
+ * .bestseller-card's proportions (rank badge, denser padding) aren't the
+ * same as .shop-product-card's.
+ */
+export function BestsellerCardSkeleton() {
+  return (
+    <div className="bestseller-card skeleton-card">
+      <Skeleton style={{ aspectRatio: "1", borderRadius: 0 }} />
+      <div>
+        <Skeleton className="skeleton-line" style={{ width: "35%", height: "8px" }} />
+        <Skeleton className="skeleton-line" style={{ width: "85%", height: "14px", marginTop: "8px" }} />
+        <Skeleton className="skeleton-line" style={{ width: "40%", height: "12px", marginTop: "8px" }} />
+      </div>
+    </div>
+  );
+}
+
 /** A single text line placeholder, width customizable via style. */
 export function LineSkeleton({ width = "100%", height = "13px", style }: { width?: string; height?: string; style?: React.CSSProperties }) {
   return <Skeleton className="skeleton-line" style={{ width, height, ...style }} />;

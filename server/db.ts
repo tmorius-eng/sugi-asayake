@@ -8,7 +8,7 @@ import { decryptJson, encryptJson } from "./_core/crypto";
 import { ENV } from './_core/env';
 import { getInventoryReservationFailure, shouldRestoreStock } from "./commerce-lifecycle";
 import { getLoyaltyTier, getNextLoyaltyTier } from "../shared/loyalty";
-import { applyDiversityCap, computeCategoryAffinity, scorePreferenceMatch, scorePriceBandAffinity, type PreferenceProfile } from "../shared/catalog-filter";
+import { applyDiversityCap, computeCategoryAffinity, filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCatalogCategories, getCatalogSkinTypes, scorePreferenceMatch, scorePriceBandAffinity, sortCatalogProducts, type CatalogSortOption, type PreferenceProfile, type SkinType } from "../shared/catalog-filter";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -16,7 +16,25 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      // Backend audit (2026-09-02): drizzle(connectionString) used to pass
+      // a bare string, which lets mysql2 apply its own defaults for
+      // everything (connectionLimit: 10, queueLimit: 0/unbounded, no
+      // connectTimeout, no keepAlive). CLAUDE.md documents real, repeated
+      // Aiven network-latency spikes serious enough that vitest's own test
+      // timeout had to be raised from 5s to 30s; production code had zero
+      // handling for the same kind of blip -- a slow Aiven response just
+      // hung whatever request was in flight indefinitely instead of
+      // failing cleanly. connectTimeout bounds how long a NEW connection
+      // attempt can hang (it does not bound an already-established
+      // connection's query time -- mysql2 has no simple per-query timeout
+      // independent of the connection itself), so this is a targeted,
+      // proportionate fix for the specific documented failure mode, not a
+      // general retry/circuit-breaker layer. Passed via drizzle's own
+      // { connection: {...} } config form (rather than constructing a
+      // mysql2 Pool by hand) so drizzle creates the pool with its own
+      // resolved copy of mysql2 -- avoids a cross-package Pool type clash
+      // when pnpm hoists a different mysql2 version at the workspace root.
+      _db = drizzle({ connection: { uri: process.env.DATABASE_URL, connectTimeout: 10_000, enableKeepAlive: true } });
       // drizzle-orm's mysql `timestamp` column hard-assumes the DB session
       // is UTC: it reads a raw wire value and appends "+0000" (see
       // node_modules/drizzle-orm/mysql-core/columns/timestamp.js), and
@@ -409,35 +427,147 @@ export async function verifyEmailWithCode(input: { userId: number; codeHash: str
 const avgRatingExpr = sql<number | null>`AVG(CASE WHEN ${productReviews.isApproved} = 1 THEN ${productReviews.rating} END)`.mapWith(value => value === null ? null : Number(value));
 const reviewCountExpr = sql<number>`COUNT(CASE WHEN ${productReviews.isApproved} = 1 THEN 1 END)`;
 
+// Shared column shape for the two catalog readers below (getPublishedCatalog
+// and getPublishedProductsByIds) so the row shape can't drift between them.
+const catalogRowColumns = {
+  id: products.id,
+  name: products.name,
+  slug: products.slug,
+  brand: products.brand,
+  shortDescription: products.shortDescription,
+  priceMnt: products.priceMnt,
+  compareAtPriceMnt: products.compareAtPriceMnt,
+  imageUrl: products.imageUrl,
+  stockQuantity: products.stockQuantity,
+  categoryName: productCategories.name,
+  categorySlug: productCategories.slug,
+  skinType: products.skinType,
+  skinConcerns: products.skinConcerns,
+  interiorStyle: products.interiorStyle,
+  avgRating: avgRatingExpr,
+  reviewCount: reviewCountExpr,
+};
+
 export async function getPublishedCatalog() {
   const db = await getDb();
   if (!db) return [];
 
   return db
-    .select({
-      id: products.id,
-      name: products.name,
-      slug: products.slug,
-      brand: products.brand,
-      shortDescription: products.shortDescription,
-      priceMnt: products.priceMnt,
-      compareAtPriceMnt: products.compareAtPriceMnt,
-      imageUrl: products.imageUrl,
-      stockQuantity: products.stockQuantity,
-      categoryName: productCategories.name,
-      categorySlug: productCategories.slug,
-      skinType: products.skinType,
-      skinConcerns: products.skinConcerns,
-      interiorStyle: products.interiorStyle,
-      avgRating: avgRatingExpr,
-      reviewCount: reviewCountExpr,
-    })
+    .select(catalogRowColumns)
     .from(products)
     .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
     .leftJoin(productReviews, eq(productReviews.productId, products.id))
     .where(eq(products.isPublished, true))
     .groupBy(products.id, productCategories.id)
     .orderBy(asc(productCategories.sortOrder), desc(products.createdAt));
+}
+
+export type CatalogPageParams = {
+  search?: string;
+  category?: string;
+  skinType?: SkinType | "all";
+  inStockOnly?: boolean;
+  sort?: CatalogSortOption;
+  page?: number;
+  pageSize?: number;
+};
+
+// Short in-memory memoization of getPublishedCatalog(), used ONLY by
+// getPublishedCatalogPage below -- NOT applied to getPublishedCatalog()
+// itself, so every other caller (admin writes, commerce.database.
+// integration.test.ts's immediate-read-after-write check) keeps seeing
+// fully fresh data with zero behavior change.
+//
+// Why this exists: getPublishedCatalogPage now runs once per /shop filter/
+// page/sort change (previously the browser fetched the full catalog once
+// per VISIT and did all filtering/pagination client-side) -- each of those
+// still needs the full catalog to filter/sort/paginate against server-side.
+// Aiven has documented, real network-latency spikes (CLAUDE.md; vitest's
+// integration-test timeout was raised from 5s to 30s specifically because
+// of this), so re-querying it on every click would trade "one large
+// payload over a slow client connection" for "one Aiven round trip per
+// click" -- a real regression on this specific database, not a
+// hypothetical one. This is deliberately NOT a general caching layer or
+// Redis (this project isn't building one at current near-zero traffic --
+// see ROADMAP.md); it's a short-lived memoization of one already-cheap
+// query, local to this one function. A product/category edit becomes
+// visible on /shop within CATALOG_PAGE_CACHE_TTL_MS instead of instantly --
+// an acceptable trade at this traffic level.
+const CATALOG_PAGE_CACHE_TTL_MS = 10_000;
+let catalogPageCache: { expiresAt: number; rows: Awaited<ReturnType<typeof getPublishedCatalog>> } | null = null;
+
+async function getPublishedCatalogCached() {
+  if (catalogPageCache && catalogPageCache.expiresAt > Date.now()) return catalogPageCache.rows;
+  const rows = await getPublishedCatalog();
+  catalogPageCache = { expiresAt: Date.now() + CATALOG_PAGE_CACHE_TTL_MS, rows };
+  return rows;
+}
+
+/**
+ * Frontend performance audit (2026-09-02): /shop used to call the no-arg
+ * getPublishedCatalog() unconditionally and do ALL filtering, sorting, and
+ * pagination in the BROWSER over the full ~937-row payload -- shipping
+ * every product's full metadata (including tag columns nothing on /shop
+ * renders) across the actual public network hop on every visit, regardless
+ * of what page/filter the shopper wanted. Mongolia's median mobile
+ * connection (17 Mbps, 92ms latency -- well below the 33.9 Mbps global
+ * median) makes that payload weight a real cost, not a cosmetic one.
+ *
+ * Fix: keep the full-catalog fetch (cheap, and short-TTL-cached -- see
+ * getPublishedCatalogCached above), but filter/sort/paginate HERE, reusing
+ * the exact same shared/catalog-filter.ts functions Shop.tsx used to run
+ * client-side -- single source of truth, zero behavior drift -- and ship
+ * only the requested page's rows across the slow hop. Facets (categories/
+ * skinTypes) are computed from the FULL catalog, unfiltered by the
+ * shopper's other active selections, matching Shop.tsx's original
+ * behavior: the filter pills always list every possible value, not just
+ * ones matching whatever else is currently selected.
+ */
+export async function getPublishedCatalogPage(params: CatalogPageParams) {
+  const fullCatalog = await getPublishedCatalogCached();
+
+  const categories = getCatalogCategories(fullCatalog);
+  const skinTypes = getCatalogSkinTypes(fullCatalog);
+
+  const matching = sortCatalogProducts(
+    filterCatalogStock(
+      filterCatalogSkinType(
+        filterCatalogProducts(fullCatalog, params.search ?? "", params.category ?? "all"),
+        params.skinType ?? "all",
+      ),
+      params.inStockOnly ?? false,
+    ),
+    params.sort ?? "featured",
+  );
+
+  const pageSize = params.pageSize ?? 24;
+  const page = Math.max(1, params.page ?? 1);
+  const items = matching.slice((page - 1) * pageSize, page * pageSize);
+
+  return { items, totalCount: matching.length, totalPublishedCount: fullCatalog.length, categories, skinTypes };
+}
+
+/**
+ * Resolves specific product ids against the published catalog -- backs
+ * Shop.tsx's "Таны сүүлд үзсэн" (recently viewed) rail, which needs to look
+ * up a handful of arbitrary product ids (read from localStorage) regardless
+ * of the shopper's current category/skinType/page selection, now that
+ * catalog.list no longer ships the full catalog for the client to resolve
+ * IDs against locally. Bounded by the caller's own cap (see
+ * shared/recently-viewed.ts's rememberRecentlyViewed, limit 6), so this can
+ * never become an unbounded fetch itself.
+ */
+export async function getPublishedProductsByIds(ids: number[]) {
+  const db = await getDb();
+  if (!db || !ids.length) return [];
+
+  return db
+    .select(catalogRowColumns)
+    .from(products)
+    .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
+    .leftJoin(productReviews, eq(productReviews.productId, products.id))
+    .where(and(eq(products.isPublished, true), inArray(products.id, ids)))
+    .groupBy(products.id, productCategories.id);
 }
 
 /**
@@ -1507,11 +1637,24 @@ export async function getAdminProducts() {
     .orderBy(desc(products.updatedAt));
 }
 
-export async function getAdminOrders() {
+// Backend audit (2026-09-02): both queries here used to be genuinely
+// unbounded -- `.from(orders)` with no LIMIT, and `.from(orderItems)` with
+// no WHERE clause at all, fetching every order-item row that has ever
+// existed regardless of how many orders were even shown, then filtering in
+// JS. Harmless today at a handful of real orders; a real "fix before
+// go-live" item once order volume is real (per ROADMAP.md's own framing).
+// `limit` defaults to the most recent 200 orders -- generous enough that
+// the admin-only order list panel behaves exactly as before at any
+// realistic near-term volume, while the query itself is no longer
+// architecturally unbounded. lineItems is now scoped to only the fetched
+// orders' own ids instead of the whole table.
+export async function getAdminOrders(limit = 200) {
   const db = await getDb();
   if (!db) return [];
-  const orderRows = await db.select().from(orders).orderBy(desc(orders.createdAt));
-  const lineItems = await db.select({ orderId: orderItems.orderId, productName: orderItems.productName, sku: orderItems.sku, quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt }).from(orderItems);
+  const orderRows = await db.select().from(orders).orderBy(desc(orders.createdAt)).limit(limit);
+  if (!orderRows.length) return [];
+  const orderIds = orderRows.map(order => order.id);
+  const lineItems = await db.select({ orderId: orderItems.orderId, productName: orderItems.productName, sku: orderItems.sku, quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt }).from(orderItems).where(inArray(orderItems.orderId, orderIds));
   return orderRows.map(order => ({ ...order, items: lineItems.filter(item => item.orderId === order.id) }));
 }
 

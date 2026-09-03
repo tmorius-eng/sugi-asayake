@@ -12,6 +12,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { getCategoryPlaceholderImage, getSalePercent, LOW_STOCK_THRESHOLD } from "@shared/catalog-filter";
 import { UB_DELIVERY_FEE_MNT } from "@shared/const";
+import { imageSrcSet } from "@shared/image-variants";
 
 // A product with no uploaded photos at all falls back to just this one
 // placeholder tile -- not a 3-item fake "gallery" of stock photography.
@@ -48,7 +49,7 @@ function RoutineCrossSell({ productId }: { productId: number }) {
     <p className="mt-2 text-xs leading-5 text-[#75767b]">Энэ бүтээгдэхүүн <Link href={`/routine/${routine.slug}`} className="font-bold text-[#df1f3d] hover:underline">"{routine.name}"</Link> арчилгааны дараалалд багтдаг.{routine.discountPercent > 0 ? ` Бүгдийг хамт авбал -${routine.discountPercent}% хямдралтай.` : ""}</p>
     <div className="mt-5 grid gap-3 sm:grid-cols-2">
       {otherSteps.map(step => <div key={step.id} className="flex items-center gap-3 rounded-xl bg-white p-3">
-        <Link href={`/product/${step.slug}`} className="flex min-w-0 flex-1 items-center gap-3"><img src={step.imageUrl ?? previewGallery[0]} alt={step.name} className="size-12 shrink-0 rounded-lg object-cover" /><span className="min-w-0"><span className="block text-[10px] font-bold text-[#df1f3d]">{step.stepLabel}</span><strong className="block truncate text-xs">{step.name}</strong><span className="text-[11px] text-[#75767b]">{formatMnt(step.priceMnt)}</span></span></Link>
+        <Link href={`/product/${step.slug}`} className="flex min-w-0 flex-1 items-center gap-3"><img src={step.imageUrl ?? previewGallery[0]} alt={step.name} loading="lazy" className="size-12 shrink-0 rounded-lg object-cover" /><span className="min-w-0"><span className="block text-[10px] font-bold text-[#df1f3d]">{step.stepLabel}</span><strong className="block truncate text-xs">{step.name}</strong><span className="text-[11px] text-[#75767b]">{formatMnt(step.priceMnt)}</span></span></Link>
         <button type="button" disabled={addItem.isPending || step.stockQuantity === 0} onClick={() => addItem.mutate({ productId: step.productId, quantity: 1 })} className="shrink-0 rounded-full bg-[#17181b] p-2.5 text-white transition hover:bg-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-40" aria-label={`${step.name} сагслах`}><ShoppingBag size={14} /></button>
       </div>)}
     </div>
@@ -71,7 +72,7 @@ function RelatedProducts({ productId }: { productId: number }) {
     <h3 className="mt-2 font-[var(--font-display)] text-2xl font-semibold tracking-[-.05em]">Мөн танд таалагдаж магадгүй</h3>
     <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
       {related.map(product => <Link href={`/product/${product.slug}`} key={product.id} className="rounded-2xl bg-white p-3 transition hover:-translate-y-0.5">
-        <img src={product.imageUrl ?? getCategoryPlaceholderImage(product.categorySlug)} alt={product.name} className="aspect-square w-full rounded-xl object-cover" />
+        <img src={product.imageUrl ?? getCategoryPlaceholderImage(product.categorySlug)} alt={product.name} loading="lazy" className="aspect-square w-full rounded-xl object-cover" {...(imageSrcSet(product.imageUrl, 1600) ? { srcSet: imageSrcSet(product.imageUrl, 1600)!, sizes: "(max-width: 640px) 45vw, 30vw" } : {})} />
         <p className="mt-2 text-[10px] font-bold text-[#75767b]">{product.brand ?? product.categoryName ?? "SUGI ASAYAKE"}</p>
         <strong className="block truncate text-xs">{product.name}</strong>
         <span className="text-[11px] text-[#75767b]">{formatMnt(product.priceMnt)}</span>
@@ -170,7 +171,7 @@ export default function ProductDetail() {
   }
 
   if (productQuery.isError || !product) {
-    return <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]"><CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="SUGI ASAYAKE дэлгүүр" /><main className="mx-auto grid min-h-[62vh] max-w-3xl place-items-center px-4 py-12 sm:px-8"><section className="w-full rounded-[2rem] border border-black/8 bg-white p-8 text-center shadow-[0_18px_55px_rgba(44,39,32,.08)] sm:p-12"><p className="text-[10px] font-extrabold tracking-[.18em] text-[#df1f3d]">CATALOG NOTICE</p><h1 className="mt-4 font-[var(--font-display)] text-4xl font-semibold tracking-[-.07em] sm:text-5xl">Бүтээгдэхүүн олдсонгүй.</h1><p className="mx-auto mt-5 max-w-md text-sm leading-6 text-[#67686c]">Таны хайсан бүтээгдэхүүн одоогоор нийтлэгдээгүй, эсвэл холбоос өөрчлөгдсөн байж болно. Манай каталогоос бусад сонголтыг хараарай.</p><Link href="/#products" className="mt-8 inline-flex min-h-12 items-center justify-center rounded-full bg-[#df1f3d] px-6 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97]">Бүтээгдэхүүнүүдийг харах</Link></section></main><CartDrawer open={cartOpen} onOpenChange={setCartOpen} /></div>;
+    return <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]"><CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="SUGI ASAYAKE дэлгүүр" /><main className="mx-auto grid min-h-[62vh] max-w-3xl place-items-center px-4 py-12 sm:px-8"><section className="w-full rounded-[2rem] border border-black/8 bg-white p-8 text-center shadow-[var(--shadow-md)] sm:p-12"><p className="text-[10px] font-extrabold tracking-[.18em] text-[#df1f3d]">CATALOG NOTICE</p><h1 className="mt-4 font-[var(--font-display)] text-4xl font-semibold tracking-[-.07em] sm:text-5xl">Бүтээгдэхүүн олдсонгүй.</h1><p className="mx-auto mt-5 max-w-md text-sm leading-6 text-[#67686c]">Таны хайсан бүтээгдэхүүн одоогоор нийтлэгдээгүй, эсвэл холбоос өөрчлөгдсөн байж болно. Манай каталогоос бусад сонголтыг хараарай.</p><Link href="/#products" className="mt-8 inline-flex min-h-12 items-center justify-center rounded-full bg-[#df1f3d] px-6 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97]">Бүтээгдэхүүнүүдийг харах</Link></section></main><CartDrawer open={cartOpen} onOpenChange={setCartOpen} /></div>;
   }
   const display = product;
   const currentImage = gallery[Math.min(activeImage, Math.max(0, gallery.length - 1))] ?? previewGallery[0];

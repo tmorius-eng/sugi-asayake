@@ -34,7 +34,26 @@ export function serveStatic(app: Express) {
     throw new Error(`Could not find the build directory: ${distPath}. Run "pnpm build" first.`);
   }
 
-  app.use(express.static(distPath));
+  // Frontend performance audit (2026-09-02): this used to pass no options
+  // at all, so content-hashed, cache-forever-safe build output (every file
+  // under assets/, e.g. index-y8Ypxe4P.js) shipped with no Cache-Control
+  // header whatsoever -- a real cost on Mongolia's median 17 Mbps mobile
+  // connection, where a returning visitor re-downloads the same JS/CSS on
+  // every visit for no reason. assets/ gets a year-long immutable cache
+  // (safe -- a new build produces new hashed filenames, never reuses one);
+  // everything else (index.html, and public/ files copied verbatim without
+  // a hash, e.g. category-placeholder-*.svg) keeps no-cache, so a deploy
+  // never leaves a returning visitor's browser holding a stale index.html
+  // that references asset filenames which no longer exist.
+  app.use(express.static(distPath, {
+    setHeaders: (res, filePath) => {
+      if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      } else {
+        res.setHeader("Cache-Control", "no-cache");
+      }
+    },
+  }));
 
   // SPA fallback: any route that isn't a static asset or an already-handled
   // /api/* route falls back to index.html so client-side routing works.

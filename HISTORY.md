@@ -4,6 +4,66 @@
 
 ---
 
+## Гүйцэтгэл + гар утасны навигацийн bug + зургийн pipeline (2026-09-02/03)
+
+Tom "энэ website world-class харагдаад маш хурдан ачаалагдах ёстой, серверийн тал юу дутуу вэ" гэж websearch/brainstorm хийж, **action хийхээс өмнө** төлөвлөгөө гаргахыг тодорхой шаардав.
+
+### Судалгаа: 3 Explore agent + 1 Plan agent + websearch
+
+3 agent зэрэг ажиллуулж кодыг file:line-аар баталгаажуулсан аудит хийв:
+- **Frontend performance**: vendor chunk байхгүй, cache header огт байхгүй (content-hash-тай асset хүртэл), `loading="lazy"` ердөө 1 газарт, `srcset` хаана ч байхгүй, React Query staleTime тохируулаагүй, **хамгийн том олдвор**: `Shop.tsx` бүх 937/938 барааны бүрэн metadata-г /shop хуудас бүр ачаалах бүрд шилжүүлдэг байсан (client-side filter/sort/paginate).
+- **Backend architecture**: rate limiting/CSP/CSRF сайн хийгдсэн, raw SQL injection алга (аль хэдийн баталгаажуулсан), гэхдээ `getAdminOrders` бүрэн хязгааргүй query, `orders.paymentStatus`/`createdAt`-д index алга, Aiven connection pool-д timeout/keepAlive алга (CLAUDE.md-ийн баримтжуулсан Aiven latency асуудалтай шууд холбоотой), unhandledRejection handler алга, health endpoint tRPC procedure хэлбэртэй (uuptime monitor-д тохиромжгүй).
+- **Design consistency**: **хамгийн чухал олдвор** — `CommerceHeader.tsx` (Shop/ProductDetail/Checkout/Profile) гар утсан дээр hamburger цэс огт байхгүй байхад index.css-ийн `@media(max-width:760px)` дүрэм "Дэлгүүр"/wishlist холбоосыг **нуучихдаг**, хүрэх өөр зам байхгүй — bug, эстетикийн асуудал биш. Мөн Home.tsx-ийн redesign token (`--shadow-sm/md/lg`) зөвхөн Home-ийн component-д ашиглагдаж, Shop/Checkout/ProductDetail өөр өөр гараар бичсэн ойролцоо утга ашигладаг байв.
+
+Гадаад судалгаа (2026 Core Web Vitals, зургийн формат, **Монголын дундаж 17 Mbps mobile хурд/92ms latency — глобал дундаж 33.9 Mbps-ээс 2 дахин удаан**, "quiet luxury" дизайны чиг хандлага, Cloudflare-ийн үнэгүй tier-ийн боломж).
+
+Plan agent эдгээрийг нэгтгэж 6 Phase-той төлөвлөгөө гаргав. Tom **Phase 1 + Phase 2 + Phase 4a**-г одоо шууд хийхээр сонгов (Phase 3/4b/5/6 дараагийн session-д баримт бичиг хэлбэрээр).
+
+### Phase 1 — Гүйцэтгэл ба найдвартай байдлын код-л засвар
+
+- **1a (хамгийн том нөлөөтэй)**: `getPublishedCatalog()`-ийг ашиглан шинэ `getPublishedCatalogPage()` функц нэмж, `catalog.list` procedure-д category/skinType/inStockOnly/sort/page/pageSize input нэмэв. Одоо байгаа `shared/catalog-filter.ts`-ийн pure функцуудыг (filter/sort) **server талд дахин ашиглаж**, ижил семантик хадгалав. Client-side facet (categories/skinTypes) full catalog-оос тооцоологдож хэвээр (Shop.tsx-ийн одоогийн зан төлөвтэй яг таарна). Шинэ `catalog.byIds` endpoint нэмж, "Таны сүүлд үзсэн" rail-ийг тусад нь тэжээв (өмнө нь бүх catalog-ийг санах ойд байлгаж арга хэрэглэдэг байсан). **Playwright-ээр баталгаажуулсан**: анхны ачаалт 18KB (өмнө нь 937/938 барааны бүрэн metadata байсан), category/sort/page солиход яг 1 шинэ жижиг (~12KB) хүсэлт явна.
+  - ⚠️ **Aiven latency-ийн эрсдэл олж, шийдэв**: pagination нэмэхэд `getPublishedCatalogPage` нь click бүрд Aiven руу дахин бүтэн query явуулах болсон — CLAUDE.md-ийн баримтжуулсан Aiven latency асуудалтай давхцаж болзошгүй регресс. 10 секундийн in-memory TTL кэш (**зөвхөн энэ функцэд**, `getPublishedCatalog()`-ийн бусад хэрэглэгчид (admin write-ийн дараах шууд унших, `commerce.database.integration.test.ts`) огт нөлөөгүй) нэмж шийдэв.
+- **1b**: Vite static serving-д `Cache-Control` header нэмэв (`assets/`-д мөнхийн immutable cache, root-level файлд no-cache — index.html хуучирсан hash-руу заахаас сэргийлнэ). S3 `PutObjectCommand`-д мөн адил. `storageProxy.ts`-ийн 302 redirect-д cache header нэмэв. `compression` (gzip) middleware шинээр нэмэв.
+- **1c**: `loading="lazy"` 7 газарт нэмэв (Shop grid+recently-viewed, RecommendedForYou, Home 2 rail, ProductDetail 2 rail). `vite.config.ts`-д `manualChunks` нэмж React/react-query/trpc-г тусдаа vendor chunk болгов (473KB → 375KB main + 97KB vendor).
+- **1d**: React Query `staleTime: 30_000` тохируулав (өмнө нь 0, remount бүрд дахин ачаалдаг байсан).
+- **1e**: `orders.paymentStatus`/`orders.createdAt`-д DB index нэмж (`drizzle/0039_orders_payment_created_indexes.sql`) бодит Aiven дээр ажиллуулав. `getAdminOrders()`-д LIMIT 200 нэмж, `orderItems`-ийн WHERE-гүй бүтэн scan-ийг `inArray`-ээр хязгаарлав. `process.on("unhandledRejection"/"uncaughtException")` handler шинээр нэмэв. `GET /health` (dbPing ашигладаг, uptime monitor-д зориулсан plain endpoint) нэмэв. `getDb()`-ийн mysql2 pool-д `connectTimeout: 10_000`/`enableKeepAlive: true` нэмэв (drizzle-ийн `{ connection: {...} }` config хэлбэрээр, cross-package Pool type clash-аас зайлсхийхийн тулд).
+- **1f**: `Home.tsx`-ийн bestseller/recommended rail-д skeleton loading state нэмэв (шинэ `BestsellerCardSkeleton`, `Skeleton.tsx`-д нэмэгдсэн) — өмнө нь ачаалж байх үед юу ч харагдаагүй ("байхгүй" мэт).
+
+### Phase 2 — Гар утасны навигацийн bug + дизайны token нэгтгэл
+
+- **2a (bug засвар)**: `CommerceHeader.tsx`-д hamburger+slide-down drawer нэмэв (`.commerce-menu-toggle`/`.commerce-mobile-menu`, Home.tsx-ийн `.mobile-menu`-тэй ижил техник, тусдаа class нэртэй). Дотор нь Дэлгүүр/Хүслийн жагсаалт (нэвтэрсэн бол)/Профайл 3 холбоос. **Playwright-ээр баталгаажуулсан**: 390px viewport дээр hamburger харагдаж, дарахад drawer нээгдэж, "Дэлгүүр" дарахад шилжиж, drawer хаагдана.
+- **2b**: `ProductDetail.tsx`/`Checkout.tsx`/`.profile-section`-ийн гараар бичсэн ойролцоо `box-shadow` утгуудыг `--shadow-sm/md/lg` token-оор сольсон. Category data давхардал (Home.tsx 6 vs Shop.tsx-ийн бараг хэзээ ч харагдахгүй empty-state deck-ийн 4) болон shared ProductCard component extraction-ыг **зориудаар хойшлуулсан** — учир нь эдгээр нь Phase 3 (хойшлогдсон)-ийн жинхэнэ payoff-той, одоо хагас хийвэл эрсдэл нэмнэ гэж үзсэн.
+
+### Phase 4a — WebP + responsive зургийн pipeline
+
+- Шинэ `shared/image-variants.ts`: `.webp` өргөтгөл = "600px grid derivative байгаа" гэсэн дохио (баримт бичиггүй, зөвхөн файлын нэрээр). Хуучин `.jpg`/`.png` зурагт хэзээ ч 404 үүсгэхгүй тул аюулгүй, аажимдаа шилждэг.
+- `imageProcessing.ts`-д шинэ `processUploadedImageVariants()` — WebP full + 600px grid хоёуланг зэрэг үүсгэнэ. `storage.ts`-д `storagePutImageVariants()` — хоёуланг **нэг ижил hash**-тайгаар бичдэг (derivation key-ээс тооцоологдоно).
+- 3 upload procedure (product/siteMedia/postCover) шинэ pipeline руу шилжив.
+- Frontend: Shop grid+recently-viewed, Home 2 rail, ProductDetail 2 rail-д `srcset`/`sizes` нэмэв.
+- **Backfill**: `scripts/backfill-image-variants.ts` бичиж, backup аваад (`defaultdb_2026-09-03_193151.zip`) бодит Aiven+R2 дээр ажиллуулав — **526/529 бодит зураг WebP руу хөрвүүлэгдэв, 66.9MB → 17.4MB (74% хэмнэлт)**, 0 алдаа.
+- **🔴 Явцад олдсон бодит bug**: анхны хувилбар "эх зураг аль хэдийн 600px-ээс жижиг бол grid derivative огт үүсгэхгүй" гэсэн "хэмнэлт" хийсэн байв. Гэвч `shared/image-variants.ts`-ийн `gridVariantUrl()` нь **зөвхөн `.webp` өргөтгөлөөр** grid URL тооцоолдог тул ямар ч тохиолдолд grid байхгүй гэдгийг мэдэхгүй — үр дүнд **224/529 (42%) бодит зурагт срсет candidate 404 өгч байсныг** дараагийн шат дахин баталгаажуулах явцад HTTP HEAD-ээр шууд илрүүлэв. `processUploadedImageVariants()`-ийг **хэзээ ч null биш, үргэлж бодит grid buffer** буцаадаг болгож зассан (`grid: Buffer | null` → `grid: Buffer`), `scripts/repair-image-grid-variants.ts` бичиж дутуу 224-ийг бүгдийг нөхөв. **529/529 эцэслэн баталгаажсан** (HTTP HEAD бүх grid URL-д 200). Энэ bug-ийг regression тест болгосон (`imageProcessing.test.ts`-д "always returns a real grid buffer, even for a source already at or below GRID_VARIANT_WIDTH").
+
+### Явцад олдсон, миний ажилтай хамааралгүй pre-existing bug 2
+
+Тест suite болон бодит DB query-ээр Playwright QA хийх явцад **амьд Shop хуудсанд харагдаж байсан тестийн үлдэгдэл** олдов:
+- `Order Notify Test Product` + `order-notify-1788273618514 category` (2026-09-01 06:40:20-д үүссэн, `order-notifications.integration.test.ts` цэвэрлэгдээгүй).
+- `Telemetry Test Product` (`telemetry.integration.test.ts`-ийн үлдэгдэл, `catalog.recommended`/`catalog.bestsellers`-ийн цорын ганц "бодит захиалгатай" бараа болж, Home-ийн rail дээр зурагтай бодит бараа биш, зурагтгүй тестийн бараа гарч байх шалтгаан болсон).
+
+Эдгээр нь миний Phase 1/2/4a ажилтай **хамааралгүй**, зөвхөн QA-гийн явцад анзаарагдсан тул засаагүй — Tom-д тусад нь мэдэгдэв.
+
+### Баталгаажуулалт
+
+- `pnpm check`/`pnpm build` бүх checkpoint дээр цэвэр.
+- Бүрэн `vitest` suite (бүх integration gate идэвхтэй): **204/204 ✅ (35/35 файл)** — 194-ээс +10 шинэ тест (8 `image-variants.test.ts` + 2 `imageProcessing.test.ts` regression). Явцад 2 одоо байсан тест `catalog.list`-ийн шинэ paginated хэлбэрт тааруулж засагдсан (`commerce.router.test.ts`, `product-reviews.integration.test.ts` — сүүлийнх нь `catalog.byIds`-г ашиглах болсон, `catalog.list`-ийн default page 1-д тухайн тестийн бараа байх баталгаагүй тул илүү зөв).
+- Playwright-ээр (түр суулгаад дараа нь **бүрэн, зөв хассан** — эхний оролдлогод `compression` dependency-г санамсаргүй хамт устгаж, олж зассан) Shop/Home/ProductDetail-ийг 1440px/390px дээр шалгав: эвдэрсэн зураг 0, srcset зөв ажиллаж байна, console алдаа 0.
+- Backup: `backups/defaultdb_2026-09-03_193151.zip` (image backfill-ийн өмнө).
+
+### Branch
+
+`perf-nav-image-fixes` (main-аас салгасан) — commit хараахан хийгдээгүй, Tom-ийн шийдвэрийг хүлээж байна.
+
+---
+
 ## Санал болголтын чанар: 246 зураг сэргээв, tagging дүрэм засав, 2 bug олов (2026-09-01, гэрийн лаптоп)
 
 Tom: "ажлын лаптоп дээр хийж байсан ажлыг гэрийн лаптоп дээр үргэлжлүүл, localhost:3000 асаа, 937 tag бараг бүрэн болсон байх ёстой". Эхлээд CLAUDE.md-ийн эхний 83 мөр, `HISTORY.md`, `self-review.md`-г уншсан.
@@ -133,6 +193,24 @@ Tom дээрх "S-Select-ийн зураг онлайнд байдаггүй" г
 **Үлдсэн 415** — `docs/products-needing-photos.csv` (id, баркод, ангилал, брэнд, нэр, үнэ; ангиллаар эрэмбэлсэн, дэлгүүрт ажиллахад бэлэн). Ангиллаар: Арьс арчилгаа 199, Эрүүл ахуй 122, Үс ба бие 42, Ээж ба хүүхэд 22, Гоо сайхан 17, Эрүүл мэнд 13. Үүнээс S-Select 104, брэндийн бараа 311. Дээрх бүх автомат эх сурвалжийг шавхсан тул эдгээрт **дэлгүүрт өөрөө зураг авах** нь бодит цорын ганц зам (`PRODUCT-IMPORT.md` үүнийг анхнаасаа таамагласан).
 
 **Мөн засварласан өгөгдлийн алдаа**: `id=807` нь `PRIECLAT serum W` гэж нэрлэгдсэн атал баркод нь (`4955814711863`) албан ёсны SUGI Drug каталогаар **クリームW (Cream W) 27g** байв; жинхэнэ Serum W (`4955814707477`) нь id=804 гэж аль хэдийн байсан (давхардал). Tom зөвшөөрснөөр `PRIECLAT Cream W` болгож нэр/slug/тайлбарыг зассаад албан ёсны зургийг нь хэрэглэв.
+
+### CI-ийн `INTEGRATIONS_ENCRYPTION_KEY` улаан шийдэгдэв (2026-09-01)
+
+Tom бодит GitHub Actions-ийн гаралтыг илгээв: `server/integrations.integration.test.ts`-ийн "integration config encryption (unit)" 2 тест `INTEGRATIONS_ENCRYPTION_KEY must be set to a 64-character hex string`-ээр унаж, ажил урсгал бүхэлдээ exit 1 болж байв.
+
+**Шалтгаан**: `.github/workflows/ci.yml` нь өмнөх session-д `INTEGRATIONS_ENCRYPTION_KEY: ${{ secrets.INTEGRATIONS_ENCRYPTION_KEY }}` гэж бичигдсэн байсан ба CLAUDE.md-д "Tom repo settings дээр secret-ийг гараар нэмэх шаардлагатай" гэж тэмдэглэгдсэн байв. Secret хэзээ ч нэмэгдээгүй тул илэрхийлэл **хоосон мөр** болж, `server/_core/env.ts`-ийн `process.env.INTEGRATIONS_ENCRYPTION_KEY ?? ""` хоосон утга авч, `server/_core/crypto.ts`-ийн `getKey()` шууд шатаж байв. Энэ 2 тест нь тухайн файлын бусад тестээс ялгаатай нь `RUN_*_INTEGRATION_TESTS` gate-ийн ард биш, **үргэлж ажилладаг**.
+
+**Шийдэл сонгох**: Санал болгож болох 3 зам байв — (а) Tom repo secret нэмэх, (б) ci.yml-д түлхүүрийг hardcode хийх, (в) тестийг өөрөө түлхүүрээ өгдөг болгох.
+
+(в)-г сонгов. Учир нь эдгээр 2 тест бол **crypto helper-ийн цэвэр unit тест**: `encryptJson`/`decryptJson` round-trip хийдэг эсэх, гэмтээсэн blob-ыг илрүүлдэг эсэхийг шалгадаг. Хоёр шинж чанар нь **ямар ч хүчинтэй түлхүүрт үнэн** тул түлхүүрийн утга огт хамаагүй, тэд ямар ч бодит нууцыг хамгаалдаггүй — тестийн процесс дотор өөрсдийнхөө зохиосон өгөгдлийг л шифрлэдэг. (а) бол Tom-д гар ажил үлдээх бөгөөд шинэ clone/fork бүрт дахин унана; (б) бол зөвхөн GitHub Actions-ийг засах ба локал `pnpm test` шинэ орчинд улаан хэвээр үлдэнэ.
+
+**Хэрэгжүүлэлт**: `server/_test-setup.ts` (энэ session-д dotenv-д зориулж үүсгэсэн setup файл) нь орчинд түлхүүр **байхгүй** үед л түр зуурын түлхүүр тавьдаг болов. Бодит `.env`/орчны утга байвал үргэлж тэр нь давамгайлна — энэ нь зөвхөн цоорхойг нөхнө, хэзээ ч дарж бичихгүй.
+
+⚠️ **Чухал ялгаа**: CLAUDE.md өмнө нь "санамсаргүй insecure dev fallback нэмэхээс болгоомжил" гэж анхааруулсан нь **аппликейшний код** (`env.ts`/`crypto.ts`)-д fallback тавихыг хэлж байсан — тэгвэл жинхэнэ production сул түлхүүрээр чимээгүй ажиллах эрсдэлтэй. Энд тэр код **огт хөндөгдөөгүй**: жинхэнэ сервер бодит түлхүүргүйгээр юу ч шифрлэхээс татгалзсан хэвээр. Fallback зөвхөн vitest-ийн setup файлд, зөвхөн тестийн процесст л оршино.
+
+`ci.yml`-ээс env блокыг бүрэн хасав — GitHub repo secret одоо **огт шаардлагагүй**, шинэ clone дээр ямар ч тохиргоогүйгээр `pnpm test` ногоон гарна.
+
+**Баталгаажуулалт**: CI-г яг хуулбарлаж шалгав (`.env`-ийг түр зөөж, `INTEGRATIONS_ENCRYPTION_KEY`/`DATABASE_URL`/бүх gate-ийг `env -u`-ээр устгаж) → **13 файл passed, 21 skipped, 83 тест passed, 0 fail** (өмнө нь 1 файл failed / 2 тест failed байсан). Дараа нь `.env`-ийг буцааж, бүх gate-тэй бүрэн suite-ийг дахин ажиллуулж регресс байхгүйг баталгаажуулав. `pnpm check` цэвэр.
 
 ### Баталгаажуулалт
 

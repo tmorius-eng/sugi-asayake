@@ -18,6 +18,21 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        // Frontend performance audit (2026-09-02): without this, React/
+        // ReactDOM/react-query/trpc-client end up fused into the same chunk
+        // as app code (client/src/main.tsx:9's eager Home import pulls them
+        // all in together), so every app-code change invalidates the whole
+        // framework layer's browser cache on every deploy. Splitting them
+        // into their own chunk means a returning visitor keeps this chunk
+        // cached across deploys that only touch app code -- real savings on
+        // Mongolia's median 17 Mbps mobile connection.
+        manualChunks: {
+          vendor: ["react", "react-dom", "@tanstack/react-query", "@trpc/client", "@trpc/react-query"],
+        },
+      },
+    },
   },
   server: {
     host: true,

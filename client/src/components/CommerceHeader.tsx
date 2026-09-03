@@ -1,4 +1,5 @@
-import { ArrowLeft, Heart, MailWarning, ShoppingBag, User } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Heart, MailWarning, Menu, ShoppingBag, User, X } from "lucide-react";
+import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import HeaderSearch from "@/components/HeaderSearch";
@@ -29,6 +30,16 @@ function VerifyEmailBanner() {
 export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = "SUGI ASAYAKE" }: CommerceHeaderProps) {
   const { user } = useAuth();
   const [location] = useLocation();
+  // Design consistency audit (2026-09-02): on mobile, index.css's
+  // @media(max-width:760px) rule hides every direct <a> child of
+  // .commerce-header-actions to make room ("Дэлгүүр"/wishlist), with no
+  // other way to reach them -- CommerceHeader had no hamburger/drawer at
+  // all, unlike Home.tsx's own header. This restores those destinations via
+  // the same slide-down drawer technique Home.tsx's .mobile-menu already
+  // uses (own class names -- .commerce-mobile-menu -- so the two headers'
+  // CSS stays independent rather than coupled by a shared class name).
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = () => setMenuOpen(false);
   const initial = user?.name?.trim()?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? null;
   // matsukiyococokara-online.com's header utility row (recently viewed /
   // store locator / favorites / cart, each with a visible count) —
@@ -73,7 +84,19 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
               <ShoppingBag size={15} aria-hidden="true" /> Сагс
               {cartCount > 0 && <span className="grid size-5 place-items-center rounded-full bg-[#f0b52d] text-[10px] text-[#17181b]">{cartCount}</span>}
             </button>
+            <button type="button" className="commerce-menu-toggle" aria-expanded={menuOpen} aria-label={menuOpen ? "Цэс хаах" : "Цэс нээх"} onClick={() => setMenuOpen(open => !open)}>
+              {menuOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
           </div>
+        </div>
+        <div className={`commerce-mobile-menu ${menuOpen ? "open" : ""}`}>
+          <Link href="/shop" onClick={closeMenu}><span>Дэлгүүр</span><ArrowUpRight size={16} /></Link>
+          {user && (
+            <Link href="/profile?tab=wishlist" onClick={closeMenu}>
+              <span>Хүслийн жагсаалт{wishlistCount > 0 ? ` (${wishlistCount})` : ""}</span><ArrowUpRight size={16} />
+            </Link>
+          )}
+          <Link href="/profile" onClick={closeMenu}><span>Профайл</span><ArrowUpRight size={16} /></Link>
         </div>
       </header>
     </>

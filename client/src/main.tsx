@@ -11,7 +11,12 @@ import "./index.css";
 
 captureTrafficSource();
 
-const queryClient = new QueryClient();
+// Frontend performance audit (2026-09-02): with no defaultOptions, React
+// Query's own default staleTime is 0 -- every remount/window-refocus
+// re-fetches even data that just resolved moments earlier, a visible
+// loading flicker on repeat navigation. 30s matches current (2026) React
+// Query guidance for a client this shape.
+const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000 } } });
 
 const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;

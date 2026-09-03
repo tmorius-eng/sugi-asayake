@@ -114,7 +114,13 @@ describeWithDatabase("product reviews integration", () => {
     expect(publicList).toHaveLength(1);
     expect(publicList[0]).toMatchObject({ rating: 4, reviewerName: "Reviews Test Shopper" });
 
-    const catalogEntry = (await shopper.catalog.list()).find(p => p.id === productId);
+    // Frontend performance audit (2026-09-02): catalog.list is now
+    // paginated (see getPublishedCatalogPage), so it no longer reliably
+    // surfaces one specific product by id on its default first page --
+    // catalog.byIds (added for Shop.tsx's "recently viewed" rail) is the
+    // right tool for "look up this exact product from the public catalog
+    // surface", same as bySlug just below.
+    const catalogEntry = (await shopper.catalog.byIds({ ids: [productId] }))[0];
     expect(catalogEntry?.avgRating).toBe(4);
     expect(catalogEntry?.reviewCount).toBe(1);
     const bySlug = await shopper.catalog.bySlug({ slug: `${marker}-product` });
@@ -123,7 +129,7 @@ describeWithDatabase("product reviews integration", () => {
     // Staff (not just admin) can moderate.
     await staff.admin.updateReviewApproval({ id: review.id, isApproved: false });
     expect(await shopper.reviews.list({ productId })).toHaveLength(0);
-    const catalogAfterHide = (await shopper.catalog.list()).find(p => p.id === productId);
+    const catalogAfterHide = (await shopper.catalog.byIds({ ids: [productId] }))[0];
     expect(catalogAfterHide?.avgRating).toBeNull();
     expect(catalogAfterHide?.reviewCount).toBe(0);
 
