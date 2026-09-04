@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { KeyRound, LoaderCircle, Plus, Trash2 } from "lucide-react";
+import { KeyRound, LoaderCircle, Plus, TriangleAlert, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
@@ -21,11 +21,22 @@ type IntegrationRow = {
   updatedAt: string | Date | null;
 };
 
-const providerMeta: Record<Provider, { label: string; note: string }> = {
-  ebarimt: { label: "И-баримт", note: "Татварын албаны цахим баримт (SmartSoftware эсвэл POS API 3.0)" },
-  storepay: { label: "StorePay", note: "Хэсэгчилсэн төлбөр (BNPL)" },
-  card_golomt: { label: "Голомт банк (карт)", note: "Visa/Mastercard шууд төлбөр (e-Merchant)" },
-  courier_ebuuhia: { label: "eBuuhia хүргэлт", note: "Эльчийн хүргэлтийн үйлчилгээ" },
+// 2026-09-04 audit finding: this screen lets an admin flip a provider to
+// "Идэвхтэй" and paste in real credentials, but that flag has never had a
+// runtime reader anywhere -- no code path in Checkout.tsx/server/db.ts ever
+// offers StorePay/Golomt-card as a payment method or calls eBarimt/eBuuhia.
+// The "Идэвхтэй" toggle only reflects the admin's own intent, not whether
+// the feature does anything for a real customer -- which could otherwise
+// mislead Tom into thinking a provider is live. `wiredUp: false` for all 4
+// records that honestly; flip a provider's flag to true only once real
+// checkout/order code actually calls it (see server/qpay.ts for what a
+// wired-up provider looks like -- QPay isn't in this table because it's
+// already real).
+const providerMeta: Record<Provider, { label: string; note: string; wiredUp: boolean }> = {
+  ebarimt: { label: "И-баримт", note: "Татварын албаны цахим баримт (SmartSoftware эсвэл POS API 3.0)", wiredUp: false },
+  storepay: { label: "StorePay", note: "Хэсэгчилсэн төлбөр (BNPL)", wiredUp: false },
+  card_golomt: { label: "Голомт банк (карт)", note: "Visa/Mastercard шууд төлбөр (e-Merchant)", wiredUp: false },
+  courier_ebuuhia: { label: "eBuuhia хүргэлт", note: "Эльчийн хүргэлтийн үйлчилгээ", wiredUp: false },
 };
 
 export default function AdminIntegrationsPanel() {
@@ -85,7 +96,7 @@ export default function AdminIntegrationsPanel() {
           return (
             <div key={row.provider} className="rounded-3xl border border-black/8 bg-white p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div><p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">{row.provider.toUpperCase()}</p><h3 className="mt-1 font-bold">{meta.label}</h3><p className="mt-1 text-xs text-[#77787d]">{meta.note}</p>{row.hasCredentials ? <p className="mt-1 text-[11px] text-[#8b8c90]">{row.configuredKeys.length} талбар тохируулагдсан: {row.configuredKeys.join(", ")}</p> : <p className="mt-1 text-[11px] text-[#8b8c90]">Тохиргоо оруулаагүй байна.</p>}</div>
+                <div><p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">{row.provider.toUpperCase()}</p><h3 className="mt-1 font-bold">{meta.label}</h3><p className="mt-1 text-xs text-[#77787d]">{meta.note}</p>{row.hasCredentials ? <p className="mt-1 text-[11px] text-[#8b8c90]">{row.configuredKeys.length} талбар тохируулагдсан: {row.configuredKeys.join(", ")}</p> : <p className="mt-1 text-[11px] text-[#8b8c90]">Тохиргоо оруулаагүй байна.</p>}{!meta.wiredUp && <p className="mt-2 flex items-start gap-1.5 text-[11px] font-bold text-[#9b6417]"><TriangleAlert size={13} className="mt-0.5 shrink-0" />"Идэвхтэй" гэдэг нь зөвхөн энэ тохиргоог хадгалсан гэсэн үг — захиалга/төлбөрийн урсгалд одоогоор холбогдоогүй тул харилцагчид харагдахгүй, нөлөөлөхгүй.</p>}</div>
                 <div className="flex items-center gap-2">
                   <button type="button" onClick={() => toggleActive(row)} disabled={updateIntegration.isPending} className={`rounded-full px-3 py-1.5 text-[10px] font-extrabold transition ${row.isActive ? "bg-[#e7f2ec] text-[#2c7650]" : "bg-[#f1f1f2] text-[#75767b]"}`}>{row.isActive ? "Идэвхтэй" : "Идэвхгүй"}</button>
                   <button type="button" onClick={() => { setEditingProvider(row.provider); openEditor(); }} className="inline-flex items-center gap-1.5 rounded-full border border-black/10 px-3 py-1.5 text-[10px] font-extrabold text-[#57585e] transition hover:border-[#df1f3d] hover:text-[#df1f3d]"><KeyRound size={12} />Тохиргоо засах</button>

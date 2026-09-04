@@ -274,9 +274,6 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .care-points { display: grid; gap: 12px; margin-top: 28px; color: #414247; font-size: 12px; font-weight: 700; }
 .care-points div { display: flex; align-items: center; gap: 9px; }
 .care-points svg { color: var(--primary); }
-.storepay-note { display: flex; align-items: center; gap: 14px; margin-top: 34px; padding-top: 20px; border-top: 1px solid rgba(23,24,27,.14); }
-.storepay-note strong { color: var(--primary); font-family: var(--font-display); font-size: 17px; }
-.storepay-note span { color: #77787c; font-size: 11px; line-height: 1.45; }
 
 .locations-section { display: grid; grid-template-columns: .72fr 1.28fr; gap: 11%; width: 100%; padding: 136px max(34px, 7vw); background: #eef3f1; }
 .locations-copy { padding-top: 2px; }

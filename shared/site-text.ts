@@ -455,14 +455,11 @@ export const siteTextSlots = [
     group: "Гэр бүлийн арчилгаа",
     label: "3-р жагсаалтын мөр",
     description: "",
-    fallbackValue: "Storepay-ээр төлөх боломжтой",
-  },
-  {
-    key: "home-text-care-storepay-note",
-    group: "Гэр бүлийн арчилгаа",
-    label: "Storepay тэмдэглэлийн текст",
-    description: "",
-    fallbackValue: "Хэрэгтэй зүйлээ өнөөдөр сонгоод, төлбөрөө өөрт тохиромжтой хуваарил.",
+    // 2026-09-04: was "Storepay-ээр төлөх боломжтой" -- Storepay has never
+    // been a real payment option at /checkout (only cash and QPay), so this
+    // was a false claim shown to every visitor. Replaced with a real,
+    // already-verified fact (same delivery window promised on /shop's hero).
+    fallbackValue: "24–48 цагийн дотор Улаанбаатарт хүргэнэ",
   },
 
   // ---- Journal ------------------------------------------------------------------
