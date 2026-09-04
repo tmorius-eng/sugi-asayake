@@ -17,6 +17,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { registerQPayCallbackRoute } from "../qpay";
 import { dbPing } from "../db";
+import { notifyError, registerHoneybadgerErrorMiddleware, registerHoneybadgerMiddleware } from "./honeybadger";
 import { limitApiTraffic, protectStateChangingApiRequests, setSecurityHeaders } from "./security";
 import { serveStatic, setupVite } from "./vite";
 
@@ -52,6 +53,10 @@ async function startServer() {
   // front of this would compress too, but there's no reason to wait for
   // that to exist before compressing responses this server already sends).
   app.use(compression());
+  // Error tracking (2026-09): a no-op unless HONEYBADGER_API_KEY is set --
+  // see server/_core/honeybadger.ts. Must be this early per Honeybadger's
+  // own setup contract (before other app middleware).
+  registerHoneybadgerMiddleware(app);
   app.use(limitApiTraffic);
   app.use(protectStateChangingApiRequests);
   // Configure body parser with larger size limit for file uploads
@@ -71,12 +76,26 @@ async function startServer() {
     const db = await dbPing();
     res.status(db.ok ? 200 : 503).json({ ok: db.ok, database: db.ok ? "up" : db.error, time: new Date().toISOString() });
   });
+  // Expected, user-facing outcomes (bad input, wrong password, an
+  // already-used coupon, ...) -- reporting these to Honeybadger would flood
+  // the free tier's 5,000/mo cap with routine validation results, not bugs.
+  // Anything else (INTERNAL_SERVER_ERROR, or a thrown non-TRPCError the
+  // adapter wrapped) is a real, unexpected failure and gets reported.
+  const EXPECTED_TRPC_ERROR_CODES = new Set(["BAD_REQUEST", "UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND", "CONFLICT", "PRECONDITION_FAILED", "TOO_MANY_REQUESTS"]);
   // tRPC API
   app.use(
     "/api/trpc",
     createExpressMiddleware({
       router: appRouter,
       createContext,
+      // Error tracking (2026-09): tRPC serializes its own errors before they
+      // ever reach Express's error-middleware chain, so
+      // registerHoneybadgerErrorMiddleware below never sees a tRPC
+      // procedure's failure -- this hook is the actual integration point.
+      onError({ error, path, type }) {
+        if (EXPECTED_TRPC_ERROR_CODES.has(error.code)) return;
+        notifyError(error, { path, type });
+      },
     })
   );
   // development mode uses Vite, production mode uses static files
@@ -85,6 +104,10 @@ async function startServer() {
   } else {
     serveStatic(app);
   }
+  // Catches errors from routes OUTSIDE tRPC (the storage proxy, the QPay
+  // webhook) -- must come after all routes, per Honeybadger's own
+  // requestHandler/errorHandler ordering contract.
+  registerHoneybadgerErrorMiddleware(app);
 
   const preferredPort = parseInt(process.env.PORT || "3000");
   const port = await findAvailablePort(preferredPort);
@@ -109,9 +132,11 @@ async function startServer() {
 // explaining why, before that happens.
 process.on("unhandledRejection", reason => {
   console.error("[process] Unhandled promise rejection:", reason);
+  notifyError(reason, { source: "unhandledRejection" });
 });
 process.on("uncaughtException", error => {
   console.error("[process] Uncaught exception:", error);
+  notifyError(error, { source: "uncaughtException" });
 });
 
 startServer().catch(console.error);

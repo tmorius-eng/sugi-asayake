@@ -2,6 +2,7 @@ import { trpc } from "@/lib/trpc";
 import { UNAUTHED_ERR_MSG } from '@shared/const';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, TRPCClientError } from "@trpc/client";
+import { Honeybadger, HoneybadgerErrorBoundary } from "@honeybadger-io/react";
 import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
@@ -10,6 +11,17 @@ import { captureTrafficSource } from "./lib/trafficSource";
 import "./index.css";
 
 captureTrafficSource();
+
+// Error tracking (2026-09): same Honeybadger project as server/_core/
+// honeybadger.ts, a separate VITE_-prefixed key because only VITE_-prefixed
+// env vars are exposed to the client bundle -- Vite bakes it into the built
+// JS either way, but that's expected here (same trust model as Sentry's
+// public DSN, not a secret). No-ops entirely without a key, same as the
+// server side, so local dev without one behaves exactly as before.
+const honeybadgerApiKey = import.meta.env.VITE_HONEYBADGER_API_KEY as string | undefined;
+if (honeybadgerApiKey) {
+  Honeybadger.configure({ apiKey: honeybadgerApiKey, environment: import.meta.env.DEV ? "development" : "production" });
+}
 
 // Frontend performance audit (2026-09-02): with no defaultOptions, React
 // Query's own default staleTime is 0 -- every remount/window-refocus
@@ -59,10 +71,14 @@ const trpcClient = trpc.createClient({
   ],
 });
 
-createRoot(document.getElementById("root")!).render(
+const app = (
   <trpc.Provider client={trpcClient} queryClient={queryClient}>
     <QueryClientProvider client={queryClient}>
       <App />
     </QueryClientProvider>
   </trpc.Provider>
+);
+
+createRoot(document.getElementById("root")!).render(
+  honeybadgerApiKey ? <HoneybadgerErrorBoundary honeybadger={Honeybadger}>{app}</HoneybadgerErrorBoundary> : app
 );
