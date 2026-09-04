@@ -229,7 +229,7 @@ export default function Home() {
           </div>
         </section>
 
-        <WhyChooseUs branchCount={locations.length} />
+        <WhyChooseUs branchCount={locations.length} productCountLabel={productCountLabel} />
 
         <CategoryMasonry
           categories={categories.map(category => ({

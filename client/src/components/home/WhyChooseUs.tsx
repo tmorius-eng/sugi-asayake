@@ -13,8 +13,19 @@ import SectionHeading from "./SectionHeading";
  * comes from the shared `locations` data (same source TrustStrip and the
  * store locator use) so the "3 байршилд" claim can't drift from the actual
  * branch list.
+ *
+ * 2026-09-04 (Phase C, "AI slop" rhythm audit): the original 3 cards were
+ * visually identical (icon-in-circle, title, description) -- exactly the
+ * "identical feature cards with icons" pattern named in 2026 design-community
+ * research on generic-feeling AI-built sites. Rather than inventing a new
+ * visual language, card 1 now reuses the site's OWN existing big-number
+ * motif (the hero badge / QuickStatsSection already display large stats
+ * prominently) and spans both grid rows as an anchor -- one deliberate,
+ * distinctive layout primitive instead of the same treatment repeated 3x.
+ * `productCountLabel` is the same live, catalog-derived value ("900+")
+ * HeroSection's badge uses -- computed once in Home.tsx, never invented here.
  */
-export default function WhyChooseUs({ branchCount }: { branchCount: number }) {
+export default function WhyChooseUs({ branchCount, productCountLabel }: { branchCount: number; productCountLabel: string }) {
   const textFor = useSiteText();
   const [headingLine1, headingLine2] = textFor("home-text-wcu-heading", "Япон чанарыг\nтанд ойртуулна.").split("\n");
   return (
@@ -25,10 +36,10 @@ export default function WhyChooseUs({ branchCount }: { branchCount: number }) {
         <p>{textFor("home-text-wcu-description", "SUGI ASAYAKE-ийг сонгох гурван шалтгаан — өргөн сонголт, баталгаат импорт, ойрхон салбарууд.")}</p>
       </div>
       <div className="wcu-cards">
-        <div className="wcu-card">
-          <span className="wcu-card-icon"><ShoppingBag size={20} /></span>
-          <strong>{textFor("home-text-wcu-card1-title", "Сонголт")}</strong>
-          <span>{textFor("home-text-wcu-card1-desc", "Арчилгаа, гоо сайхан, эрүүл ахуйн 900+ төрөл")}</span>
+        <div className="wcu-card wcu-card-stat">
+          <strong className="wcu-stat-number">{productCountLabel}</strong>
+          <span className="wcu-stat-label"><ShoppingBag size={16} /> {textFor("home-text-wcu-card1-title", "Сонголт")}</span>
+          <p>{textFor("home-text-wcu-card1-desc", "Арчилгаа, гоо сайхан, эрүүл ахуйн 900+ төрөл")}</p>
         </div>
         <div className="wcu-card">
           <span className="wcu-card-icon"><ShieldCheck size={20} /></span>
