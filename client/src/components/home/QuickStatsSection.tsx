@@ -65,7 +65,7 @@ export default function QuickStatsSection() {
   const [headingLine1, headingLine2] = textFor("home-text-qs-heading", "Quick\nStats").split("\n");
 
   return (
-    <section className="qs-section" data-reveal aria-label="Гишүүнчлэлийн хураангуй">
+    <section className="qs-section" id="membership" data-reveal aria-label="Гишүүнчлэлийн хураангуй">
       <div className="qs-grid">
         <div className="qs-copy">
           <p className="eyebrow"><span /> {textFor("home-text-qs-eyebrow-label", "ГИШҮҮНЧЛЭЛ")}</p>

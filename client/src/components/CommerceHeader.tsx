@@ -9,7 +9,27 @@ type CommerceHeaderProps = {
   cartCount?: number;
   onCartOpen?: () => void;
   backLabel?: string;
+  // NEWVISION.md §8: Home used to render its own separate <header> (no
+  // cart button, no profile/wishlist links at all -- a signed-in shopper
+  // browsing the homepage had no way to see their cart or reach their
+  // account without navigating to /shop first). marketingNav adds a second,
+  // plain-text nav row of homepage-section anchors -- deliberately only
+  // meaningful on the page that owns those sections, so every other caller
+  // leaves this unset and renders exactly as before.
+  marketingNav?: boolean;
 };
+
+// Anchor hrefs match Home.tsx's own existing #story/#collection/#stores
+// convention (plain <a>, not wouter <Link> -- same-page fragment jumps
+// don't need client-side routing). Only ever rendered on Home (marketingNav
+// is opt-in per caller), so these are safe as bare fragments.
+const marketingNavItems = [
+  { label: "Дэлгүүр", href: "/shop", anchor: false },
+  { label: "Топ брэнд", href: "#top-brands", anchor: true },
+  { label: "Гишүүнчлэл", href: "#membership", anchor: true },
+  { label: "Салбарууд", href: "#stores", anchor: true },
+  { label: "Journal", href: "/journal", anchor: false },
+];
 
 function VerifyEmailBanner() {
   const { user } = useAuth();
@@ -27,9 +47,12 @@ function VerifyEmailBanner() {
   );
 }
 
-export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = "SUGI ASAYAKE" }: CommerceHeaderProps) {
+export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = "SUGI ASAYAKE", marketingNav = false }: CommerceHeaderProps) {
   const { user } = useAuth();
   const [location] = useLocation();
+  // The circular back-arrow means "return to the homepage" -- meaningless
+  // (and previously just a same-page no-op link) on the homepage itself.
+  const isHome = location === "/";
   // Design consistency audit (2026-09-02): on mobile, index.css's
   // @media(max-width:760px) rule hides every direct <a> child of
   // .commerce-header-actions to make room ("Дэлгүүр"/wishlist), with no
@@ -55,7 +78,7 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
       <header className="commerce-header">
         <div className="commerce-header-inner">
           <Link href="/" className="commerce-brand">
-            <span className="commerce-back"><ArrowLeft size={17} aria-hidden="true" /></span>
+            {!isHome && <span className="commerce-back"><ArrowLeft size={17} aria-hidden="true" /></span>}
             <img src="/manus-storage/sugi-logo-transparent-clean_fee66cad.png" alt="SUGI ASAYAKE" />
             <span>{backLabel}</span>
           </Link>
@@ -89,8 +112,19 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
             </button>
           </div>
         </div>
+        {marketingNav && (
+          <nav className="commerce-marketing-nav" aria-label="Нүүр хуудасны цэс">
+            {marketingNavItems.map(item => item.anchor
+              ? <a href={item.href} key={item.label}>{item.label}</a>
+              : <Link href={item.href} key={item.label}>{item.label}</Link>)}
+          </nav>
+        )}
         <div className={`commerce-mobile-menu ${menuOpen ? "open" : ""}`}>
           <Link href="/shop" onClick={closeMenu}><span>Дэлгүүр</span><ArrowUpRight size={16} /></Link>
+          {/* "Дэлгүүр" already covered by the link above -- avoid listing it twice. */}
+          {marketingNav && marketingNavItems.filter(item => item.label !== "Дэлгүүр").map(item => item.anchor
+            ? <a href={item.href} key={item.label} onClick={closeMenu}><span>{item.label}</span><ArrowUpRight size={16} /></a>
+            : <Link href={item.href} key={item.label} onClick={closeMenu}><span>{item.label}</span><ArrowUpRight size={16} /></Link>)}
           {user && (
             <Link href="/profile?tab=wishlist" onClick={closeMenu}>
               <span>Хүслийн жагсаалт{wishlistCount > 0 ? ` (${wishlistCount})` : ""}</span><ArrowUpRight size={16} />

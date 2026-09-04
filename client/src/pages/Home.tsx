@@ -12,15 +12,13 @@ import {
   CircleCheck,
   Facebook,
   Instagram,
-  Menu,
   Phone,
-  ShoppingBag,
   Sparkles,
   Star,
   TrendingUp,
-  X,
 } from "lucide-react";
-import HeaderSearch from "@/components/HeaderSearch";
+import CartDrawer from "@/components/CartDrawer";
+import CommerceHeader from "@/components/CommerceHeader";
 import SeasonalCampaignCarousel from "@/components/SeasonalCampaignCarousel";
 import HeroSection from "@/components/home/HeroSection";
 import CategoryMasonry from "@/components/home/CategoryMasonry";
@@ -53,12 +51,6 @@ const heroImage = null;
 const assortmentImage = "/product-placeholder.svg";
 const familyImage = null;
 const symbolImage = "/manus-storage/sugi-symbol_0a534a76.png";
-
-const navItems = [
-  { label: "Бидний тухай", href: "#story" },
-  { label: "Бүтээгдэхүүн", href: "#collection" },
-  { label: "Салбарууд", href: "#stores" },
-];
 
 const socials = [
   { label: "Facebook", href: "https://www.facebook.com/AsayakeJapaneseDrugstore/", Icon: Facebook },
@@ -102,8 +94,13 @@ function BestsellerRailCard({ product, rank }: { product: BestsellerRailProduct;
 }
 
 export default function Home() {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
+  // NEWVISION.md §8: Home used to have no cart integration in its header at
+  // all -- a signed-in shopper browsing the homepage had no way to see
+  // their cart without navigating to /shop first. Same trpc.cart.current
+  // pattern every other page already uses.
+  const cart = trpc.cart.current.useQuery();
+  const cartCount = cart.data?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   const siteMediaQuery = trpc.content.siteMedia.useQuery();
   // matsukiyococokara-online.com's 売れ筋ランキング (bestseller ranking) —
   // adapted as a real-data section, not a curated list. See
@@ -180,46 +177,9 @@ export default function Home() {
   );
   useScrollReveal();
 
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
   return (
     <div className="sugi-site" id="top">
-      <header className={`site-header ${scrolled ? "is-scrolled" : ""}`}>
-        <div className="site-header-inner">
-          <a className="site-brand" href="#top" aria-label="SUGI ASAYAKE Mongolia home">
-            <img src={logoUrl} alt="SUGI ASAYAKE Mongolia" />
-          </a>
-          <nav className="site-nav" aria-label="Үндсэн цэс">
-            {navItems.map((item) => (
-              <a key={item.href} href={item.href}>{item.label}</a>
-            ))}
-          </nav>
-          <div className="site-actions">
-            <span className="official-note">Албан ёсны эрхтэй</span>
-            <div className="header-socials" aria-label="Сошиал хуудаснууд">
-              {socials.map(({ label, href, Icon }) => <a className="social-icon-link" href={href} target="_blank" rel="noreferrer" aria-label={`${label} хуудас нээх`} key={label}><Icon size={15} strokeWidth={1.8} /></a>)}
-            </div>
-            <HeaderSearch />
-            <Link className="shop-entry" href="/shop"><ShoppingBag size={14} /> Дэлгүүр</Link>
-            <a className="phone-link" href="tel:94509911"><Phone size={14} /> 9450-9911</a>
-            <button className="menu-toggle" type="button" aria-expanded={menuOpen} aria-label={menuOpen ? "Цэс хаах" : "Цэс нээх"} onClick={() => setMenuOpen((open) => !open)}>
-              {menuOpen ? <X size={20} /> : <Menu size={20} />}
-            </button>
-          </div>
-        </div>
-        <div className={`mobile-menu ${menuOpen ? "open" : ""}`}>
-          {navItems.map((item) => (
-            <a key={item.href} href={item.href} onClick={() => setMenuOpen(false)}>
-              <span>{item.label}</span><ArrowUpRight size={16} />
-            </a>
-          ))}
-          <a href="tel:94509911" onClick={() => setMenuOpen(false)}><span>9450-9911</span><Phone size={16} /></a>
-        </div>
-      </header>
+      <CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="SUGI ASAYAKE" marketingNav />
 
       <main>
         <HeroSection heroImageStyle={bgStyle("home-hero", heroImage)} productCountLabel={productCountLabel} />
@@ -246,7 +206,7 @@ export default function Home() {
         <WhyChooseUs branchCount={locations.length} productCountLabel={productCountLabel} />
 
         {featuredBrands.length > 0 && (
-          <section className="top-brands-section" data-reveal>
+          <section className="top-brands-section" id="top-brands" data-reveal>
             <div className="top-brands-heading">
               <p className="eyebrow"><span /> {textFor("home-text-brands-eyebrow", "ТОП БРЭНД")}</p>
               <h2>{textFor("home-text-brands-heading", "Тансаг брэндүүд.")}</h2>
@@ -400,6 +360,7 @@ export default function Home() {
       </main>
 
       <footer className="site-footer"><div className="footer-grid"><div><img src={logoUrl} alt="SUGI ASAYAKE Mongolia" className="footer-logo" /><p>Япон чанарыг гэр бүл бүрт.</p><div className="footer-socials" aria-label="SUGI ASAYAKE сошиал хуудаснууд">{socials.map(({ label, href, Icon }) => <a className="footer-social-link" href={href} target="_blank" rel="noreferrer" aria-label={`${label} хуудас нээх`} key={label}><Icon size={17} strokeWidth={1.8} /><span>{label}</span></a>)}</div></div><div className="footer-column"><span>Шуурхай холбоос</span><a href="#story">Бидний тухай</a><a href="#collection">Бүтээгдэхүүн</a><a href="#stores">Салбарууд</a></div><div className="footer-column"><span>Нөхцөл ба бодлого</span><Link href="/privacy">Хувийн нууцлал</Link><Link href="/terms">Үйлчилгээний нөхцөл</Link><Link href="/returns">Буцаалт, солилцоо</Link></div><div className="footer-column"><span>Холбоо барих</span><a href="tel:94509911">9450-9911</a><a href="mailto:asayake0307@gmail.com">asayake0307@gmail.com</a></div></div><div className="footer-bottom"><span>© 2026 SUGI ASAYAKE Mongolia</span><span>Official SUGI Drug Store Japan subsidiary</span></div></footer>
+      <CartDrawer open={cartOpen} onOpenChange={setCartOpen} />
     </div>
   );
 }

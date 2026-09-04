@@ -147,30 +147,25 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
   button:not(:disabled), [role="button"]:not([aria-disabled="true"]), [type="button"]:not(:disabled), a[href] { @apply cursor-pointer; }
 }
 
-.sugi-site { overflow: hidden; background: var(--background); }
-/* top uses --promo-banner-offset (set by SitePromo.tsx when its banner mode
-   is showing) instead of a hardcoded 0 so a live promo banner pushes this
-   fixed header down by its own height instead of getting painted over. */
-.site-header { position: fixed; top: var(--promo-banner-offset, 0px); left: 0; right: 0; z-index: 50; padding: 18px 34px; background: rgba(248, 245, 239, .9); border-bottom: 1px solid rgba(23, 24, 27, .08); backdrop-filter: blur(18px) saturate(120%); transition: padding .24s var(--ease-out), box-shadow .24s var(--ease-out), background .24s var(--ease-out), top .2s var(--ease-out); }
-.site-header.is-scrolled { padding-top: 11px; padding-bottom: 11px; background: rgba(248, 245, 239, .98); box-shadow: 0 12px 28px rgba(20, 22, 24, .08); }
-.site-header-inner { width: min(1380px, 100%); min-height: 40px; margin: 0 auto; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 28px; }
-.site-brand { display: inline-flex; width: 172px; align-items: center; }
-.site-brand img { width: 100%; height: auto; }
-.site-nav { display: flex; align-items: center; justify-content: center; gap: 30px; color: #3e3e42; font-size: 12px; font-weight: 700; }
-.site-nav a { position: relative; white-space: nowrap; }
-.site-nav a::after { content: ""; position: absolute; left: 0; right: 100%; bottom: -7px; height: 2px; background: var(--primary); transition: right .2s var(--ease-out); }
-.site-nav a:hover::after { right: 0; }
-.site-actions { display: flex; align-items: center; justify-content: flex-end; gap: 16px; }
-.official-note { color: #8d8d91; font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
-.header-socials { display: inline-flex; align-items: center; gap: 5px; }
-.social-icon-link { display: inline-grid; width: 28px; height: 28px; place-items: center; color: #707177; border: 1px solid rgba(23,24,27,.16); border-radius: 50%; transition: color .18s var(--ease-out), border-color .18s var(--ease-out), background .18s var(--ease-out), transform .18s var(--ease-out); }
-.social-icon-link:hover { color: #fff; border-color: var(--primary); background: var(--primary); transform: translateY(-2px); }
-.social-icon-link svg, .footer-social-link svg { transition: transform .2s var(--ease-out); }
-.social-icon-link:hover svg, .footer-social-link:hover svg { transform: scale(1.12) rotate(-6deg); }
-.phone-link { display: inline-flex; align-items: center; gap: 7px; color: var(--primary); font-size: 12px; font-weight: 800; }
-.phone-link:hover { color: #a9112a; }
-.menu-toggle { display: none; padding: 5px; border: 0; background: transparent; color: var(--foreground); }
-.mobile-menu { display: none; }
+/* 2026-09-04: was `overflow: hidden` -- harmless on its own, but any
+   `overflow` other than visible on an ancestor breaks position:sticky for
+   descendants (CSS spec: it becomes the sticky element's scroll-container
+   reference instead of the real viewport). CommerceHeader (sticky, used
+   here since NEWVISION.md §8) silently stopped sticking as a result.
+   Verified via Playwright at 1440/1024/768/390/320px with this removed:
+   zero horizontal overflow anywhere on Home -- unlike Shop/ProductDetail/
+   Checkout/Profile's shared .sugi-commerce wrapper, which has a real,
+   separate 320px-width overflow (Checkout specifically) and so keeps its
+   own overflow:hidden for now until that's investigated on its own. */
+.sugi-site { background: var(--background); }
+/* 2026-09-04 (NEWVISION.md §8): Home's own separate header/nav/mobile-menu
+   (.site-header/.site-nav/.site-brand/.site-actions/.official-note/
+   .header-socials/.social-icon-link/.phone-link/.menu-toggle/.mobile-menu)
+   is gone -- Home now renders the same CommerceHeader every other page
+   uses (with marketingNav for its homepage-section links), so there is no
+   longer a second, independently-styled header to maintain. */
+.footer-social-link svg { transition: transform .2s var(--ease-out); }
+.footer-social-link:hover svg { transform: scale(1.12) rotate(-6deg); }
 
 .hero-section { min-height: 720px; padding: 78px 34px 24px; display: grid; grid-template-columns: minmax(0, .88fr) minmax(0, 1.12fr); gap: 24px; background: var(--background); }
 .hero-copy { width: min(680px, 100%); margin: auto; padding: 76px clamp(20px, 5.4vw, 86px) 76px 0; }
@@ -319,7 +314,6 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .footer-bottom { display: flex; justify-content: space-between; gap: 24px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,.14); color: rgba(255,255,255,.42); font-size: 10px; }
 
 @media (max-width: 1040px) {
-  .official-note { display: none; }
   .hero-section { grid-template-columns: .9fr 1.1fr; }
   .hero-copy { padding-right: 24px; }
   .story-grid, .collection-heading { padding-left: 0; padding-right: 0; }
@@ -329,18 +323,6 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 }
 
 @media (max-width: 760px) {
-  .site-header { padding: 14px 18px; }
-  .site-header.is-scrolled { padding-top: 9px; padding-bottom: 9px; }
-  .site-header-inner { grid-template-columns: 1fr auto; gap: 12px; }
-  .site-brand { width: 156px; }
-  .site-nav, .phone-link { display: none; }
-  .header-socials { display: none; }
-  .site-actions { gap: 4px; }
-  .menu-toggle { display: inline-flex; }
-  .mobile-menu { position: absolute; left: 0; right: 0; top: 100%; display: grid; max-height: 0; overflow: hidden; padding: 0 18px; background: rgba(248,245,239,.98); border-bottom: 1px solid transparent; transition: max-height .26s var(--ease-out), padding .26s var(--ease-out), border-color .26s var(--ease-out); }
-  .mobile-menu.open { max-height: 280px; padding-top: 8px; padding-bottom: 10px; border-color: var(--border); }
-  .mobile-menu a { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 800; }
-  .mobile-menu a:last-child { border-bottom: 0; color: var(--primary); }
   .hero-section { grid-template-columns: 1fr; gap: 0; padding: 64px 18px 18px; }
   .hero-copy { padding: 68px 6px 50px; }
   .hero-copy h1 { font-size: clamp(46px, 13vw, 70px); }
@@ -529,7 +511,12 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .final-cta-sun { display: grid; place-items: center; width: 92px; height: 92px; border-radius: 50%; background: #f0b52d; color: #17181b; font-size: 10px; font-weight: 800; letter-spacing: .13em; line-height: 1.15; text-align: center; transform: rotate(-11deg); }
 
 /* Storefront header and catalog retain the same visual language instead of a generic e-commerce shell. */
-.commerce-header { position: sticky; top: 0; z-index: 30; padding: 14px clamp(18px, 4vw, 56px); border-bottom: 1px solid rgba(23,24,27,.1); background: rgba(255,249,242,.88); backdrop-filter: blur(16px) saturate(150%); }
+/* top uses --promo-banner-offset (set by SitePromo.tsx when its banner mode
+   is showing, same mechanism Home's old fixed header used) instead of a
+   hardcoded 0 -- SitePromo's banner is ALSO sticky at top:0, so without
+   this a live promo would sit stuck on top of (partially covering) this
+   also-stuck header once both pass their sticky thresholds on scroll. */
+.commerce-header { position: sticky; top: var(--promo-banner-offset, 0px); z-index: 30; padding: 14px clamp(18px, 4vw, 56px); border-bottom: 1px solid rgba(23,24,27,.1); background: rgba(255,249,242,.88); backdrop-filter: blur(16px) saturate(150%); }
 .commerce-header::before { content: ""; position: absolute; top: 0; right: 0; left: 0; height: 4px; background: linear-gradient(90deg, #df1f3d 0 36%, #f0b52d 36% 54%, #3970a7 54% 72%, #97c6b8 72% 100%); }
 .commerce-header-inner { display: flex; width: min(1380px,100%); min-height: 40px; margin: 0 auto; align-items: center; justify-content: space-between; gap: 18px; }
 .commerce-brand { display: flex; min-width: 0; align-items: center; gap: 12px; color: var(--foreground); }
@@ -549,17 +536,25 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 /* Design consistency audit (2026-09-02): mobile hamburger + slide-down
    drawer for CommerceHeader, restoring the "Дэлгүүр"/wishlist links the
    @media(max-width:760px) rule below hides from the top bar on mobile.
-   Same slide-down technique as Home.tsx's .menu-toggle/.mobile-menu (own
-   class names so the two headers' CSS stays independent). Hidden by
-   default here; the media query further down flips these to visible. */
+   Hidden by default here; the media query further down flips these to
+   visible. */
 .commerce-menu-toggle { display: none; padding: 5px; border: 0; background: transparent; color: var(--foreground); }
 .commerce-mobile-menu { display: none; }
-/* Site-wide search-with-suggestions (HeaderSearch.tsx), reachable from
-   CommerceHeader and Home's own .site-header alike. Overrides the generic
-   ".commerce-header-actions button" pill styling above with higher
-   specificity -- this trigger is a plain icon button, not a CTA pill. */
+/* NEWVISION.md §8: Home's own marketing-section links (opt-in via
+   marketingNav prop), a second plain-text row below the main utility row
+   -- distinct from .commerce-header-actions above (search/cart/profile,
+   present on every page) since these are anchors into Home-only sections. */
+.commerce-marketing-nav { display: flex; width: min(1380px,100%); margin: 10px auto 0; align-items: center; gap: 22px; }
+.commerce-marketing-nav a { color: #4e4f53; font-size: 12px; font-weight: 800; transition: color .18s var(--ease-out); }
+.commerce-marketing-nav a:hover { color: var(--primary); }
+@media (max-width: 760px) { .commerce-marketing-nav { display: none; } }
+/* Site-wide search-with-suggestions (HeaderSearch.tsx), used by
+   CommerceHeader (every page, Home included since NEWVISION.md §8).
+   Overrides the generic ".commerce-header-actions button" pill styling
+   above with higher specificity -- this trigger is a plain icon button,
+   not a CTA pill. */
 .header-search { position: relative; }
-.header-search .header-search-trigger, .site-actions .header-search .header-search-trigger { display: grid; width: 36px; height: 36px; padding: 0; place-items: center; border-radius: 50%; background: transparent; color: #4e4f53; transition: background .18s var(--ease-out), color .18s var(--ease-out); }
+.header-search .header-search-trigger { display: grid; width: 36px; height: 36px; padding: 0; place-items: center; border-radius: 50%; background: transparent; color: #4e4f53; transition: background .18s var(--ease-out), color .18s var(--ease-out); }
 .header-search .header-search-trigger:hover { background: rgba(23,24,27,.06); color: #17181b; transform: none; }
 .header-search-panel { position: absolute; top: calc(100% + 12px); right: 0; z-index: 40; width: min(360px, 90vw); border-radius: 20px; background: #fff; box-shadow: 0 24px 60px rgba(20,22,24,.18); padding: 14px; }
 .header-search-input { width: 100%; height: 44px; border: 1px solid rgba(23,24,27,.12); border-radius: 12px; padding: 0 14px; font-size: 13px; outline: none; transition: border-color .18s var(--ease-out); }
