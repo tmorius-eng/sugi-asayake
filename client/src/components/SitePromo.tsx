@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
@@ -20,6 +20,11 @@ export default function SitePromo() {
   const [dismissed, setDismissed] = useState(false);
   const [visible, setVisible] = useState(false);
   const bannerRef = useRef<HTMLDivElement>(null);
+  const tickerRef = useRef<HTMLDivElement>(null);
+  // Real promo copy varies wildly in length (a short "50% хямдрал!" vs. a
+  // full sentence) -- computed once, unconditionally, so both the duration
+  // effect below and the JSX further down stay in sync with the same string.
+  const promoText = promo ? (promo.message ? `${promo.headline} — ${promo.message}` : promo.headline) : "";
 
   useEffect(() => {
     if (!promo) { setVisible(false); return; }
@@ -57,6 +62,28 @@ export default function SitePromo() {
     };
   }, [showBanner]);
 
+  // 2026-09-04 (Tom, explicit): the ticker must always read as one
+  // continuous, unhurried line -- but `animation: Ns linear infinite` moves
+  // by exactly one row-width every N seconds, so a fixed duration means a
+  // long headline+message would fly past far faster (px/second) than a
+  // short one repeated the same tickerRepeats times. Measuring the actual
+  // rendered row width and deriving the duration from a fixed px/second
+  // target keeps the visual pace consistent (similar to the sunrise/shop
+  // ribbons' own unhurried speed) regardless of how long the admin's copy
+  // is. Published as a CSS variable (not a plain inline animation-duration)
+  // specifically so the reduced-motion 24/7 override in index.css -- which
+  // must win via !important -- can reference the same computed value
+  // instead of re-hardcoding a duration here.
+  useEffect(() => {
+    const el = tickerRef.current;
+    const firstRow = el?.firstElementChild as HTMLElement | null | undefined;
+    if (!el || !firstRow) return;
+    const TARGET_PX_PER_SECOND = 42;
+    const MIN_DURATION_SECONDS = 12;
+    const seconds = Math.max(MIN_DURATION_SECONDS, firstRow.scrollWidth / TARGET_PX_PER_SECOND);
+    el.style.setProperty("--promo-ticker-duration", `${seconds.toFixed(1)}s`);
+  }, [showBanner, promoText]);
+
   if (!promo || !eligiblePage || dismissed || !visible) return null;
 
   const dismiss = () => {
@@ -66,16 +93,34 @@ export default function SitePromo() {
   };
 
   if (promo.displayMode === "banner") {
-    // sticky (not fixed, not plain static): it occupies real space in normal
-    // flow -- which is what correctly pushes non-fixed headers (e.g.
-    // CommerceHeader) down -- and then pins to the viewport top once
-    // scrolled past, so it never leaves a gap above Home's fixed
-    // .site-header (which reads --promo-banner-offset, set below, to shift
-    // itself down by this element's real height).
-    return <div ref={bannerRef} className="sticky top-0 z-[60] flex items-center justify-center gap-3 bg-[#17181b] px-4 py-2.5 text-center text-xs font-semibold text-white sm:text-sm">
-      <span>{promo.headline}{promo.message ? <span className="hidden font-normal text-white/70 sm:inline"> — {promo.message}</span> : null}</span>
-      {promo.ctaLabel && promo.ctaUrl ? <a href={promo.ctaUrl} className="shrink-0 rounded-full bg-[#df1f3d] px-3 py-1 text-[11px] font-bold text-white transition hover:bg-[#bc1732]">{promo.ctaLabel}</a> : null}
-      <button type="button" onClick={dismiss} aria-label="Зарыг хаах" className="shrink-0 text-white/60 transition hover:text-white"><X size={16} /></button>
+    // 2026-09-04 (Tom, explicit): a long headline+message used to wrap onto
+    // a second centered line -- he asked for this to always read as ONE
+    // line instead, scrolling continuously "24 цагийн турш" the same way
+    // the sunrise ribbon (Home) and shop ribbon (Shop) already do. Reuses
+    // that exact technique verbatim -- two identical rows sharing the
+    // sunrise-track keyframe, so the mid-loop jump swaps to the visually
+    // identical second row and reads as seamless, endless motion -- rather
+    // than inventing a new animation. Repeated tickerRepeats times per row
+    // just guarantees the row is wider than any realistic viewport (so
+    // there's no gap between the two rows) -- the duration effect above is
+    // what actually keeps the visual speed sane regardless of this count.
+    const tickerRepeats = 6;
+    const tickerRow = (keyPrefix: string) => (
+      <>
+        {Array.from({ length: tickerRepeats }, (_, index) => (
+          <Fragment key={`${keyPrefix}-${index}`}><span>{promoText}</span><i /></Fragment>
+        ))}
+      </>
+    );
+    return <div ref={bannerRef} className="site-promo-banner sticky top-0 z-[60] flex items-center gap-3 bg-[#17181b] px-4 py-2.5 text-white">
+      <div ref={tickerRef} className="site-promo-ticker" aria-label={promoText}>
+        <div>{tickerRow("promo-a")}</div>
+        <div aria-hidden="true">{tickerRow("promo-b")}</div>
+      </div>
+      <div className="flex shrink-0 items-center gap-3">
+        {promo.ctaLabel && promo.ctaUrl ? <a href={promo.ctaUrl} className="shrink-0 rounded-full bg-[#df1f3d] px-3 py-1 text-[11px] font-bold text-white transition hover:bg-[#bc1732]">{promo.ctaLabel}</a> : null}
+        <button type="button" onClick={dismiss} aria-label="Зарыг хаах" className="shrink-0 text-white/60 transition hover:text-white"><X size={16} /></button>
+      </div>
     </div>;
   }
 

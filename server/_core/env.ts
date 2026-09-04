@@ -57,4 +57,12 @@ export const ENV = {
   // string (32 bytes) for AES-256-GCM. Generate one with:
   //   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
   integrationsEncryptionKey: process.env.INTEGRATIONS_ENCRYPTION_KEY ?? "",
+
+  // Error tracking (2026-09): Honeybadger's free tier (5,000 errors/mo) --
+  // chosen specifically because it needs no hosting decision to start
+  // (ROADMAP.md's Sentry/staging/CDN items are otherwise blocked on one).
+  // Empty by default, on purpose: see server/_core/honeybadger.ts, which
+  // simply never calls Honeybadger.configure() without a real key rather
+  // than silently reporting to nowhere or throwing.
+  honeybadgerApiKey: process.env.HONEYBADGER_API_KEY ?? "",
 };

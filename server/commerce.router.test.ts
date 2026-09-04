@@ -39,8 +39,12 @@ describe("commerce router", () => {
     // endpoint is public and doesn't throw) — it should and does hold
     // regardless of what's actually in the catalog at the time.
     const caller = appRouter.createCaller(createContext(null));
+    // Frontend performance audit (2026-09-02): catalog.list now returns a
+    // paginated { items, totalCount, totalPublishedCount, categories,
+    // skinTypes } shape instead of a bare array -- see getPublishedCatalogPage
+    // in server/db.ts.
     const catalog = await caller.catalog.list();
-    expect(Array.isArray(catalog)).toBe(true);
+    expect(Array.isArray(catalog.items)).toBe(true);
   });
 
   it("returns null rather than undefined when a public product slug is absent", async () => {

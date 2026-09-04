@@ -457,6 +457,13 @@ export const orders = mysqlTable("orders", {
   index("orders_user_idx").on(table.userId),
   index("orders_status_idx").on(table.status),
   index("orders_ebarimt_status_idx").on(table.ebarimtStatus),
+  // Backend audit (2026-09-02): queried by eq(orders.paymentStatus, "paid")
+  // in getBestsellingProducts/getRecommendedProducts/the admin dashboard,
+  // and by ORDER BY desc(orders.createdAt) in getAdminOrders/the admin
+  // dashboard's recent-orders list -- neither had an index. Invisible at
+  // today's ~4 real orders; cheap to add now, before it isn't.
+  index("orders_payment_status_idx").on(table.paymentStatus),
+  index("orders_created_at_idx").on(table.createdAt),
 ]);
 
 export const orderItems = mysqlTable("order_items", {

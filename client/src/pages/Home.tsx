@@ -32,6 +32,8 @@ import WhyChooseUs from "@/components/home/WhyChooseUs";
 import JournalSection from "@/components/home/JournalSection";
 import StoreLocatorSection from "@/components/home/StoreLocatorSection";
 import QuickStatsSection from "@/components/home/QuickStatsSection";
+import { BestsellerCardSkeleton } from "@/components/Skeleton";
+import { imageSrcSet } from "@shared/image-variants";
 import { locations } from "@/components/home/locations-data";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { useSiteText } from "@/hooks/useSiteText";
@@ -225,9 +227,23 @@ export default function Home() {
         {/* matsukiyococokara-online.com's 売れ筋ランキング (bestseller ranking)
             section, adapted: real paid-order history via getBestsellingProducts,
             not a manually curated "featured" list. Hidden entirely (not shown
-            with an empty state) until real orders exist — same "don't show a
-            placeholder" rule as RecentlyViewed/RecommendedForYou on /shop. */}
-        {bestsellers.length > 0 && (
+            with an empty state) once loaded with zero results — same "don't
+            show a placeholder" rule as RecentlyViewed/RecommendedForYou on
+            /shop. Design consistency audit (2026-09-02): that used to also
+            hide the section WHILE STILL LOADING (bestsellers.length===0 is
+            true both before data arrives and once it's confirmed empty) --
+            indistinguishable from "this section doesn't exist". A skeleton
+            grid (isLoading branch below) makes the loading state visible,
+            matching what Shop.tsx/ProductDetail.tsx/Profile.tsx already do. */}
+        {bestsellersQuery.isLoading ? (
+          <section className="bestseller-section" data-reveal aria-busy="true" aria-label="Онцлох сонголтуудыг бэлдэж байна">
+            <div className="bestseller-heading">
+              <div><p className="shop-kicker"><TrendingUp size={12} /> {textFor("home-text-bestseller-kicker", "ОНЦЛОХ СОНГОЛТ")}</p><h2>{bestsellerHeadingLine1}<br /><em>{bestsellerHeadingLine2}</em></h2></div>
+              <p>{textFor("home-text-bestseller-description", "Манай захиалгын бодит түүхээр эрэмбэлсэн, хамгийн их итгэл олсон сонголтууд.")}</p>
+            </div>
+            <div className="bestseller-grid">{Array.from({ length: 6 }, (_, index) => <BestsellerCardSkeleton key={index} />)}</div>
+          </section>
+        ) : bestsellers.length > 0 && (
           <section className="bestseller-section" data-reveal>
             <div className="bestseller-heading">
               <div><p className="shop-kicker"><TrendingUp size={12} /> {textFor("home-text-bestseller-kicker", "ОНЦЛОХ СОНГОЛТ")}</p><h2>{bestsellerHeadingLine1}<br /><em>{bestsellerHeadingLine2}</em></h2></div>
@@ -237,7 +253,11 @@ export default function Home() {
               {bestsellers.slice(0, 6).map((product, index) => (
                 <Link href={`/product/${product.slug}`} className="bestseller-card" key={product.id}>
                   <span className="bestseller-rank">{index + 1}</span>
-                  <img src={product.imageUrl ?? bestsellerFallbackImage} alt={product.name} />
+                  {/* .bestseller-grid is 6-up desktop / 3-up under 980px, so
+                      each card image renders around 120-220 CSS px -- the
+                      600px derivative covers it; null (plain <img>) for
+                      pre-derivative uploads. See shared/image-variants.ts. */}
+                  <img src={product.imageUrl ?? bestsellerFallbackImage} alt={product.name} loading="lazy" {...(imageSrcSet(product.imageUrl, 1600) ? { srcSet: imageSrcSet(product.imageUrl, 1600)!, sizes: "(max-width: 980px) 31vw, 16vw" } : {})} />
                   <div>
                     <p>{product.brand ?? "SUGI ASAYAKE"}</p>
                     <h3>{product.name}</h3>
@@ -256,8 +276,21 @@ export default function Home() {
             and always backed by a bestseller fallback server-side, so this
             only hides on a genuinely failed/loading request, not "no
             preferences yet". Same card markup as the bestseller rail above
-            (no quick-view affordance exists on this page). */}
-        {recommended.length > 0 && (
+            (no quick-view affordance exists on this page). Design
+            consistency audit (2026-09-02): loading state now shows a
+            skeleton grid, same reasoning as the bestseller section above. */}
+        {recommendedQuery.isLoading ? (
+          <section className="bestseller-section" data-reveal aria-busy="true" aria-label="Танд санал болгож буй бүтээгдэхүүнийг бэлдэж байна">
+            {(() => {
+              const [line1, line2] = textFor("home-text-recommended-heading", "Танд санал\nболгож байна.").split("\n");
+              return <div className="bestseller-heading">
+                <div><p className="shop-kicker"><Sparkles size={12} /> {textFor("home-text-recommended-kicker", "ТАНД ЗОРИУЛАН")}</p><h2>{line1}<br /><em>{line2}</em></h2></div>
+                <p>{textFor("home-text-recommended-description", "Таны профайл дээр хадгалсан тохиргоо, эсвэл манай хамгийн эрэлттэй сонголтуудад тулгуурласан жагсаалт.")}</p>
+              </div>;
+            })()}
+            <div className="bestseller-grid">{Array.from({ length: 6 }, (_, index) => <BestsellerCardSkeleton key={index} />)}</div>
+          </section>
+        ) : recommended.length > 0 && (
           <section className="bestseller-section" data-reveal>
             {(() => {
               const [line1, line2] = textFor("home-text-recommended-heading", "Танд санал\nболгож байна.").split("\n");
@@ -269,7 +302,7 @@ export default function Home() {
             <div className="bestseller-grid">
               {recommended.slice(0, 6).map(product => (
                 <Link href={`/product/${product.slug}`} className="bestseller-card" key={product.id}>
-                  <img src={product.imageUrl ?? bestsellerFallbackImage} alt={product.name} />
+                  <img src={product.imageUrl ?? bestsellerFallbackImage} alt={product.name} loading="lazy" {...(imageSrcSet(product.imageUrl, 1600) ? { srcSet: imageSrcSet(product.imageUrl, 1600)!, sizes: "(max-width: 980px) 31vw, 16vw" } : {})} />
                   <div>
                     <p>{product.brand ?? "SUGI ASAYAKE"}</p>
                     <h3>{product.name}</h3>

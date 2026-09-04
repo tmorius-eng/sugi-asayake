@@ -20,6 +20,15 @@ export function registerStorageProxy(app: Express) {
     if (!ENV.s3PublicBaseUrl) {
       return res.status(503).send("Storage is not configured yet. Set S3_PUBLIC_BASE_URL.");
     }
+    // Frontend performance audit (2026-09-02): storage.ts's appendHashSuffix
+    // gives every stored key a random hash, so a given key's target content
+    // never changes -- same "content-hashed, safe to cache forever"
+    // property as Vite's build output. Previously this redirect carried no
+    // Cache-Control at all, so a repeat visitor's browser re-requested this
+    // redirect (an extra round trip before even reaching R2) on every page
+    // load. Cache-Control is respected on redirect responses per RFC 7231,
+    // not just 200s, so a cache hit here skips this server entirely.
+    res.set("Cache-Control", "public, max-age=31536000, immutable");
     res.redirect(302, `${ENV.s3PublicBaseUrl}/${key}`);
   });
 }

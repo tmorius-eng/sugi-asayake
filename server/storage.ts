@@ -11,6 +11,7 @@ import { S3Client, PutObjectCommand, HeadBucketCommand } from "@aws-sdk/client-s
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { ENV } from "./_core/env";
+import { gridVariantKey } from "../shared/image-variants";
 
 let _client: S3Client | null = null;
 
@@ -43,25 +44,73 @@ function appendHashSuffix(relKey: string): string {
   return `${relKey.slice(0, lastDot)}_${hash}${relKey.slice(lastDot)}`;
 }
 
-export async function storagePut(
-  relKey: string,
-  data: Buffer | Uint8Array | string,
-  contentType = "application/octet-stream",
-): Promise<{ key: string; url: string }> {
+async function putObject(key: string, data: Buffer | Uint8Array | string, contentType: string) {
   const client = getClient();
-  const key = appendHashSuffix(normalizeKey(relKey));
-
   await client.send(
     new PutObjectCommand({
       Bucket: ENV.s3Bucket,
       Key: key,
       Body: typeof data === "string" ? Buffer.from(data) : data,
       ContentType: contentType,
+      // Frontend performance audit (2026-09-02): appendHashSuffix already
+      // gives every upload a random hash in its filename, so a re-upload
+      // never reuses a URL for different content -- the same
+      // "content-hashed, safe to cache forever" property Vite's build
+      // output has. Previously no CacheControl was set at all, so R2
+      // served every product/site-media photo with no caching directive.
+      CacheControl: "public, max-age=31536000, immutable",
     })
   );
+}
+
+export async function storagePut(
+  relKey: string,
+  data: Buffer | Uint8Array | string,
+  contentType = "application/octet-stream",
+): Promise<{ key: string; url: string }> {
+  const key = appendHashSuffix(normalizeKey(relKey));
+  await putObject(key, data, contentType);
 
   // Keep the same "/manus-storage/{key}" URL shape the rest of the app
   // already stores and expects (see server/_core/storageProxy.ts).
+  return { key, url: `/manus-storage/${key}` };
+}
+
+/**
+ * Stores a full-size image plus its small grid derivative under ONE shared
+ * random hash, so the derivative's key is derivable from the full one by
+ * string transformation alone (see shared/image-variants.ts) -- no schema
+ * column, no second lookup. Calling storagePut twice would give the two
+ * files different hashes and break that derivation, which is the whole
+ * reason this exists rather than two plain puts.
+ *
+ * Only the full-size URL is returned/stored; the grid variant is found by
+ * gridVariantUrl() at render time.
+ */
+export async function storagePutImageVariants(
+  relKey: string,
+  variants: { full: Buffer; grid: Buffer },
+): Promise<{ key: string; url: string }> {
+  const key = appendHashSuffix(normalizeKey(relKey));
+  await putObject(key, variants.full, "image/webp");
+  await putObject(gridVariantKey(key), variants.grid, "image/webp");
+  return { key, url: `/manus-storage/${key}` };
+}
+
+/**
+ * Writes one object at an EXACT key, with no hash suffix appended. Only for
+ * repairing a derivative whose key is already determined by an existing
+ * stored URL (see scripts/repair-image-grid-variants.ts) -- normal uploads
+ * must go through storagePut/storagePutImageVariants so every new object
+ * gets its own hash and can be cached immutably.
+ */
+export async function storagePutExactKey(
+  relKey: string,
+  data: Buffer,
+  contentType: string,
+): Promise<{ key: string; url: string }> {
+  const key = normalizeKey(relKey);
+  await putObject(key, data, contentType);
   return { key, url: `/manus-storage/${key}` };
 }
 

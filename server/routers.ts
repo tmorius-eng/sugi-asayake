@@ -79,7 +79,8 @@ import {
   getProductWriteConflicts,
   getBestsellingProducts,
   getPublicProductVariants,
-  getPublishedCatalog,
+  getPublishedCatalogPage,
+  getPublishedProductsByIds,
   searchPublishedCatalog,
   getPublishedRoutineBySlug,
   getRecommendedProducts,
@@ -140,8 +141,8 @@ import {
   verifyEmailWithCode,
 } from "./db";
 import { adminProcedure, lenientRateLimitedProcedure, moderateRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure } from "./_core/trpc";
-import { storagePing, storagePut } from "./storage";
-import { IMAGE_MAX_DIMENSION, processUploadedImage } from "./_core/imageProcessing";
+import { storagePing, storagePut, storagePutImageVariants } from "./storage";
+import { IMAGE_MAX_DIMENSION, processUploadedImage, processUploadedImageVariants } from "./_core/imageProcessing";
 import { createQPayInvoice, getQPayAvailability } from "./qpay";
 import { getCategoryWriteViolation, getProductWriteViolation } from "./catalog-validation";
 import { getAnalyticsReport, exportAnalyticsExcel, exportAnalyticsPdf } from "./analytics";
@@ -469,6 +470,15 @@ async function processUploadedImageOrThrow(buffer: Buffer, contentType: (typeof 
   }
 }
 
+/** Same BAD_REQUEST translation as above, for the WebP + grid-derivative path. */
+async function processUploadedImageVariantsOrThrow(buffer: Buffer, maxDimension: number) {
+  try {
+    return await processUploadedImageVariants(buffer, maxDimension);
+  } catch {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Зургийг уншиж чадсангүй. Файл гэмтсэн эсвэл дэмжигдээгүй байж магадгүй." });
+  }
+}
+
 async function validateProductWrite(input: { categoryId?: number; slug?: string; sku?: string; id?: number }) {
   const categoryFound = input.categoryId === undefined ? null : await categoryExists(input.categoryId);
   const conflicts = input.slug !== undefined || input.sku !== undefined ? await getProductWriteConflicts({ slug: input.slug, sku: input.sku, excludeId: input.id }) : [];
@@ -676,7 +686,30 @@ export const appRouter = router({
       }),
   }),
   catalog: router({
-    list: publicProcedure.query(() => getPublishedCatalog()),
+    // Frontend performance audit (2026-09-02): used to take no input and
+    // return the entire published catalog for Shop.tsx to filter/sort/
+    // paginate in the browser -- see getPublishedCatalogPage's own comment
+    // for why that was a real cost on this audience's actual mobile
+    // network conditions, not a cosmetic nitpick. Every field here is
+    // optional and defaults sensibly (see getPublishedCatalogPage), so a
+    // bare `catalog.list.useQuery()` (e.g. an `invalidate()` call
+    // elsewhere) still behaves like the old unfiltered first-page fetch.
+    list: publicProcedure
+      .input(z.object({
+        search: z.string().trim().max(120).optional(),
+        category: z.string().trim().max(120).optional(),
+        skinType: z.enum(["dry", "oily", "combination", "sensitive", "normal", "all"]).optional(),
+        inStockOnly: z.boolean().optional(),
+        sort: z.enum(["featured", "price-low", "price-high", "name-asc"]).optional(),
+        page: z.number().int().positive().optional(),
+        pageSize: z.number().int().positive().max(100).optional(),
+      }).optional())
+      .query(({ input }) => getPublishedCatalogPage(input ?? {})),
+    // Backs Shop.tsx's "Таны сүүлд үзсэн" rail -- see
+    // getPublishedProductsByIds's own comment for why this exists
+    // separately from catalog.list now that catalog.list no longer ships
+    // the full catalog for the client to resolve arbitrary ids against.
+    byIds: publicProcedure.input(z.object({ ids: z.array(z.number().int().positive()).max(12) })).query(({ input }) => getPublishedProductsByIds(input.ids)),
     // Server-side search (ROADMAP.md TIER 2) — a 2+ character query returns
     // matches from the FULLTEXT index instead of the client filtering the
     // full catalog.list payload. See searchPublishedCatalog for the exact
@@ -1560,10 +1593,13 @@ export const appRouter = router({
         }
         assertImageSignature(buffer, input.contentType);
 
-        const extension = input.contentType === "image/jpeg" ? "jpg" : input.contentType === "image/png" ? "png" : "webp";
+        // Frontend performance audit (2026-09-02): always stored as WebP
+        // now, with a 600px grid derivative alongside it -- see
+        // shared/image-variants.ts for why the .webp extension is what
+        // signals "a derivative exists" to components that render srcset.
         const safeStem = input.fileName.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 70) || "product";
-        const processed = await processUploadedImageOrThrow(buffer, input.contentType, IMAGE_MAX_DIMENSION.product);
-        const stored = await storagePut(`catalog/products/${ctx.user.id}/${safeStem}.${extension}`, processed, input.contentType);
+        const variants = await processUploadedImageVariantsOrThrow(buffer, IMAGE_MAX_DIMENSION.product);
+        const stored = await storagePutImageVariants(`catalog/products/${ctx.user.id}/${safeStem}.webp`, variants);
         return { url: stored.url, key: stored.key };
       }),
     uploadSiteMediaImage: staffProcedure
@@ -1579,10 +1615,9 @@ export const appRouter = router({
           throw new TRPCError({ code: "BAD_REQUEST", message: "Content images must be between 1 byte and 8 MB." });
         }
         assertImageSignature(buffer, input.contentType);
-        const extension = input.contentType === "image/jpeg" ? "jpg" : input.contentType === "image/png" ? "png" : "webp";
         const safeStem = input.fileName.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 70) || "site-media";
-        const processed = await processUploadedImageOrThrow(buffer, input.contentType, IMAGE_MAX_DIMENSION.siteMedia);
-        const stored = await storagePut(`site-media/${ctx.user.id}/${safeStem}-${Date.now()}.${extension}`, processed, input.contentType);
+        const variants = await processUploadedImageVariantsOrThrow(buffer, IMAGE_MAX_DIMENSION.siteMedia);
+        const stored = await storagePutImageVariants(`site-media/${ctx.user.id}/${safeStem}-${Date.now()}.webp`, variants);
         return { url: stored.url, key: stored.key };
       }),
     // Journal post cover images (posts.coverImageUrl) -- same generic
@@ -1603,10 +1638,9 @@ export const appRouter = router({
           throw new TRPCError({ code: "BAD_REQUEST", message: "Cover images must be between 1 byte and 8 MB." });
         }
         assertImageSignature(buffer, input.contentType);
-        const extension = input.contentType === "image/jpeg" ? "jpg" : input.contentType === "image/png" ? "png" : "webp";
         const safeStem = input.fileName.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 70) || "post";
-        const processed = await processUploadedImageOrThrow(buffer, input.contentType, IMAGE_MAX_DIMENSION.siteMedia);
-        const stored = await storagePut(`posts/${ctx.user.id}/${safeStem}-${Date.now()}.${extension}`, processed, input.contentType);
+        const variants = await processUploadedImageVariantsOrThrow(buffer, IMAGE_MAX_DIMENSION.siteMedia);
+        const stored = await storagePutImageVariants(`posts/${ctx.user.id}/${safeStem}-${Date.now()}.webp`, variants);
         return { url: stored.url, key: stored.key };
       }),
   }),
