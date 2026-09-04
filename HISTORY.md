@@ -4,6 +4,50 @@
 
 ---
 
+## "Нэг бүтэн бүтээгдэхүүн" мэт биш, "AI-аар хийсэн" мэт харагдах шалтгаан — Cohesion audit + NEWVISION Phase A-D (2026-09-04)
+
+Tom 3 асуулт тавив: (1) сайт яагаад "fully integrated as one" биш, feature-үүд "arai ydan" (санамсаргүй) нэмэгдсэн мэт санагддаг вэ, (2) функциональ талаас юу дутагдаж байна, (3) сайт **AI-аар хийсэн мэт харагдахгүй байх ёстой** — үүнийг таамаглалаар биш, **бодит Reddit/coding community судалгаа** дээр үндэслэж хариулахыг тодорхой шаардав. `/plan`-оор дуудагдсан, action хийхээс өмнө төлөвлөгөө шаардсан.
+
+### Судалгаа (3 зэрэгцээ эх сурвалж)
+
+- **2 Explore agent** кодыг бүхэлд нь file:line баталгаатай шалгаж, cohesion болон функциональ цоорхойг олов.
+- **Бодит WebSearch** (2025-2026 dev community, Reddit r/webdev чиглэлтэй, developersdigest.tech, 925studios.co) — "AI slop" гэдэг нэрээр тогтсон **16 нэрлэгдсэн design pattern**.
+- Миний өөрийн шууд grep/read баталгаажуулалт (жишээ нь `SectionEyebrow.tsx`-ийн ӨӨРИЙН comment "used at the top of every homepage section" гэж бичсэн байсныг олов).
+
+**Гол дүгнэлт**: 3 асуулт ижил нэг эх сурвалжтай — SUGI-ийн код бааз зөв pattern (design tokens, shared component, CMS)-ийг **мэддэг ч**, шинэ feature бүрийг тусдаа session/component/локал хувьсагчаар нэмсэн тул (а) ижил зүйл (ProductCard, formatMnt, eyebrow badge) 3-4 удаа дахин зохиогдсон, (б) ganц section-heading pattern **хэт олон удаа** давтагдсан → 2025-2026 "AI slop" tell-үүдтэй (badge above H1, numbered 01/02/03, all-caps kicker, identical 3-card grid) шууд таарсан, (в) StorePay/eBarimt зэрэг feature admin дээр бэлэн боловч хэрэглэгчид хэзээ ч бодитоор ажилладаггүй.
+
+**Чухал нээлт**: Tom өөрөө 2026-09-02-нд яг энэ асуултад (header тусдаа, footer нимгэн, merchandising rail байхгүй, Топ брэнд/бодит review харагдахгүй) аль хэдийн хариулж, `NEWVISION.md`-г plan mode-оор **батлаад, хэрэгжүүлээгүй орхисон** байсныг олов. Энэ бол хамгийн том, аль хэдийн зөвшөөрөгдсөн шийдэл байв.
+
+### Phase A — Итгэлийн засвар
+
+StorePay-ийн Home/footer-ийн худал зар (Checkout-д энэ сонголт огт байхгүй байтал "боломжтой" гэж зарладаг байсан) арилгаж бодит хүргэлтийн хугацааны амлалтаар сольсон; `ProductDetail.tsx`-ийн `/#products` dead link → `/shop`; `AdminIntegrationsPanel.tsx`-д 4 холбогдоогүй provider дээр (eBarimt/StorePay/Golomt-карт/eBuuhia) "идэвхжээгүй" амбер анхааруулга нэмэв.
+
+### Phase B — Хуваалцсан эх сурвалж
+
+`shared/format.ts`-руу `formatMnt` нэгтгэв (21 файлд copy-paste хийгдэж байсныг нэг эх сурвалж болгов). `shared/format.ts`-руу нэгтгэсэн. Category жагсаалт (Home 6-тай, Shop 4-тэй, өөр өөр дараалал/тайлбартай байсан) нэг `client/src/components/home/categories-data.ts`-руу нэгтгэв. "800+" тоог `catalog.publishedCount` шинэ endpoint-оор (`getPublishedProductCount`) сервэрээс тооцоолж, Hero/WhyChooseUs/CategoryMasonry 3 slot-д ижил бодит утга дамжуулав (өмнө нь 3 тусдаа hardcode байсан, зөрөх боломжтой). `BestsellerRailCard`/`RailProductCard` shared component-ууд нэмж, Home.tsx-ийн 2 давхардсан inline card JSX болон `RecommendedForYou.tsx`/Shop.tsx-ийн `RecentlyViewed`-ийн тусдаа markup-ийг нэгтгэв.
+
+**Явцад олдсон admin bug**: `AdminWorkspace.tsx`-ийн section navigation зөвхөн "media" URL param-ыг л уншдаг байсныг бүх section-д ажилладаг болгож, admin бус эрхтэй хэрэглэгчийг зөвхөн-admin section-оос redirect хийдэг хамгаалалт нэмэв.
+
+### Phase C — WhyChooseUs дахин зохион байгуулалт
+
+3 ижил icon-карт эгнээ ("AI slop" pattern #12-той шууд таарсан) → 1 том stat card (bodит "900+" тоо) + 2 жижиг card-тай тэгш бус grid болгов, `productCountLabel` prop дамжуулав.
+
+### Phase D — NEWVISION.md хэрэгжүүлэлт (Tier 1-8, өөрийн 8 бие даасан commit)
+
+- **Tier 1-2**: шинэ, хуудсанд холбогдоогүй primitive-үүд — `CarouselShelf.tsx` (scroll-edge detection, `prefers-reduced-motion`-той нийцсэн scroll), `ShelfProductCard.tsx`, `EditorialBanner.tsx` (3 variant), `TrustTriptych.tsx`.
+- **Tier 3**: backend — шинэ `featured_brands` хүснэгт (`drizzle/0040_featured_brands.sql`), `getCategoryShelfProducts`/`getHomeCategoryShelves`/`getFeaturedReviews`/`getFeaturedBrands`/admin CRUD функцууд, `catalog.categoryShelves`/`catalog.featuredBrands`/`reviews.featured` public procedure-үүд.
+- **Tier 4**: `AdminBrandsPanel.tsx` (шинэ, бүрэн CRUD UI, brand нэр нь чөлөөт текст биш `<select>` — `admin.distinctRealBrands`-аас сонгоно). Tom-ийн бодит зарласан 2 top brand-ыг (PRIECLAT, Cocochi) бодит admin UI-аар үүсгэв. Явцад олдсон "alignment symmetrical биш" гомдлыг шалгах явцад дээрх admin URL-state bug-ыг олов (Tier B-д аль хэдийн засагдсан).
+- **Tier 5**: `Home.tsx`-д Топ Брэнд section, 6 CarouselShelf ангиллын rail, CustomerVoices section холбов. **Шинэ `filterCatalogBrand`** (`shared/catalog-filter.ts`) + Shop.tsx-д бодит `brand` URL-state нэмэв (NEWVISION-ийн урьдчилсан нөхцөл байсан, Shop-д брэндээр шүүх сонголт огт байгаагүй).
+- **Tier 6**: `CommerceHeader.tsx`-г Home.tsx-ийн тусдаа `.site-header`-ийн оронд ашиглаж, marketing nav row (Дэлгүүр/Топ брэнд/Гишүүнчлэл/Салбарууд/Journal) нэмэв. **2 бодит bug олж заслаа**: (1) `.sugi-site { overflow: hidden }` нь `position: sticky`-г CSS spec-ийн дагуу бүрэн эвддэг байсныг bounding-box шалгалтаар олж (`header: { y: -559.86 }` гэж дэлгэцээс гарсан байсныг баримтжуулж) арилгав (Playwright-ээр 5 breakpoint дээр 0 overflow баталгаажуулсны дараа; **`.sugi-commerce`-ийн ижил төстэй, тусдаа, Checkout-д байгаа 320px overflow bug-ийг зориудаар хөндөөгүй**, тусдаа ажил болгож үлдээв); (2) sticky header жинхэнэ болмогц SitePromo-ийн мөн адил sticky зурвастай давхцах эрсдэлийг `--promo-banner-offset` CSS variable-ийг дахин ашиглаж шийдэв.
+- **Tier 7**: `SiteFooter.tsx` (шинэ, standalone component) — 3 багана (Брэнд/Шуурхай холбоос/Нөхцөл/Холбоо барих)-аас 5 багана (Дэлгүүр — 6 бодит ангилал, Салбарууд — 4 бодит салбарын Google Maps холбоос орсон) руу өргөжүүлэв. **QA-ийн явцад "0 үр дүн" гэсэн худал сэжигтэй үр дүн гарсан** боловч дахин шалгахад (server-side тRPC хариу шууд шалгаж, дараа нь илүү удаан хугацаа хүлээж) энэ нь **тестийн скриптийн өөрийнх нь урьдчилсан унших (premature read) алдаа** байсан (+1000ms дээр Aiven-ийн бодит сүлжээний хариу хараахан ирээгүй, +3000ms дээр зөв "115 үр дүн / 937 бүтээгдэхүүн" гарсан) — код дээр бодит bug байгаагүй.
+- **Tier 8 (бүрэн баталгаажуулалт, §13 чеклист)**: `pnpm check`/`pnpm build` цэвэр, **`pnpm exec vitest run --no-file-parallelism` 204/204 (35/35 файл)**. Playwright (түр суулгаад бүрэн хассан)-ээр: 7 breakpoint (1440/1024/768/430/390/375/320px) дээр 0 хэвтээ overflow, 0 console алдаа; `reducedMotion:"reduce"` emulation дор sunrise/shop ribbon-ийн адил зурвасын exemption хэвээр ажиллаж байгааг баталгаажуулав; CarouselShelf/mobile drawer хоёулаа **гар товчлуураар** (Tab+Enter) ажиллаж байгааг баталгаажуулав; **CustomerVoices-ийн шударга хоосон төлөв** — одоогийн бодит каталогт ≥4 од + баталгаажсан + сэтгэгдэлтэй review 0 байгааг `reviews.featured` public endpoint-оор шууд баталгаажуулж (section бүхэлдээ зөв нуугдаж байгаа), дараа нь throwaway review нэмж section бодит өгөгдлөөр зөв харагдаж байгааг (rating/comment/avatar/product холбоос) баталгаажуулаад бүрэн устгав; **Топ Брэнд admin CRUD** бодит throwaway admin хэрэглэгчээр create→Home дээр харагдах→delete гурвыг бүрэн дугуйлж баталгаажуулав (`featured_brands` хүснэгтэд шууд бичигдэж, Home-ийн Топ Брэнд section-д бодитоор гарч, устгасны дараа алга болсныг баталгаажуулсан); Shop/ProductDetail/Checkout/Profile 4 хуудсанд 0 overflow, 0 console алдаа, `CommerceHeader`-ийн marketing nav зөвхөн Home дээр л гарч (бусад хуудсанд leak хийгээгүй) байгааг баталгаажуулав. Бүх throwaway өгөгдөл (review+user, admin+audit log, featured_brands мөр) DB-ээс бүрэн устгаж баталгаажуулсан.
+
+**Үлдсэн, NEWVISION.md §14-т тэмдэглэгдсэн, тусдаа ажил (одоо эхлээгүй)**: Isetan-ийн density-toggle, гүн faceted filter (үнийн зурвас), ProductDetail-ийн "Pairs well with" cross-sell-ийг шинэ `CarouselShelf`-ээр дахин зурах.
+
+**Cohesion audit-ийн Phase E (функциональ код засвар) болон Phase F (Tom-ийн бизнес шийдвэр шаардсан зүйлс — QPay merchant, eBarimt, StorePay гэрээ) энэ session-д эхлээгүй**, зөвхөн диагноз хэлбэрээр баримтжуулагдсан.
+
+---
+
 ## Гүйцэтгэл + гар утасны навигацийн bug + зургийн pipeline (2026-09-02/03)
 
 Tom "энэ website world-class харагдаад маш хурдан ачаалагдах ёстой, серверийн тал юу дутуу вэ" гэж websearch/brainstorm хийж, **action хийхээс өмнө** төлөвлөгөө гаргахыг тодорхой шаардав.
