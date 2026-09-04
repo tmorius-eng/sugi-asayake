@@ -32,8 +32,26 @@ type IntegrationRow = {
 // checkout/order code actually calls it (see server/qpay.ts for what a
 // wired-up provider looks like -- QPay isn't in this table because it's
 // already real).
-const providerMeta: Record<Provider, { label: string; note: string; wiredUp: boolean }> = {
-  ebarimt: { label: "И-баримт", note: "Татварын албаны цахим баримт (SmartSoftware эсвэл POS API 3.0)", wiredUp: false },
+const providerMeta: Record<Provider, { label: string; note: string; wiredUp: boolean; guidance?: string }> = {
+  // 2026-09-04: read the developer.smartsoftware.mn page Tom pointed at --
+  // it's a marketing/company-overview page with zero API/webhook docs, not
+  // a technical integration guide. Separately confirmed (3 independent
+  // open-source ebarimt client libraries, incl. a Node.js one) that
+  // Mongolia's underlying POS API 3.0 -- which every ebarimt POS vendor,
+  // SmartSoftware included, is built on -- requires a "PosService" process
+  // running LOCALLY on the merchant's own network (e.g. 127.0.0.1:7080),
+  // registered with an 8-digit POS number, not a plain cloud REST call our
+  // Aiven-hosted server could dial from anywhere. Writing server/ebarimt.ts
+  // against a guessed cloud shape would risk shipping something that looks
+  // configured but can never actually reach the tax system -- see
+  // EBARIMT.md's now-7 open questions for exactly what to ask SmartSoftware
+  // support before any code here can be real.
+  ebarimt: {
+    label: "И-баримт",
+    note: "Татварын албаны цахим баримт (SmartSoftware эсвэл POS API 3.0)",
+    wiredUp: false,
+    guidance: "developer.smartsoftware.mn-д техникийн API баримт бичиг байхгүй байсныг баталгаажуулсан. EBARIMT.md-д SmartSoftware-аас тодруулах 7 асуулт бэлэн байгаа -- ялангуяа: манай сервер таны PosService-тэй нэг сүлжээнд байх ёстой юу, эсвэл хаанаас ч дуудаж болох cloud endpoint байгаа юу? Хариу ирмэгц энд бодит талбарууд (жишээ нь posServiceUrl/posNumber) нэмэгдэнэ.",
+  },
   storepay: { label: "StorePay", note: "Хэсэгчилсэн төлбөр (BNPL)", wiredUp: false },
   card_golomt: { label: "Голомт банк (карт)", note: "Visa/Mastercard шууд төлбөр (e-Merchant)", wiredUp: false },
   courier_ebuuhia: { label: "eBuuhia хүргэлт", note: "Эльчийн хүргэлтийн үйлчилгээ", wiredUp: false },
@@ -96,7 +114,7 @@ export default function AdminIntegrationsPanel() {
           return (
             <div key={row.provider} className="rounded-3xl border border-black/8 bg-white p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div><p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">{row.provider.toUpperCase()}</p><h3 className="mt-1 font-bold">{meta.label}</h3><p className="mt-1 text-xs text-[#77787d]">{meta.note}</p>{row.hasCredentials ? <p className="mt-1 text-[11px] text-[#8b8c90]">{row.configuredKeys.length} талбар тохируулагдсан: {row.configuredKeys.join(", ")}</p> : <p className="mt-1 text-[11px] text-[#8b8c90]">Тохиргоо оруулаагүй байна.</p>}{!meta.wiredUp && <p className="mt-2 flex items-start gap-1.5 text-[11px] font-bold text-[#9b6417]"><TriangleAlert size={13} className="mt-0.5 shrink-0" />"Идэвхтэй" гэдэг нь зөвхөн энэ тохиргоог хадгалсан гэсэн үг — захиалга/төлбөрийн урсгалд одоогоор холбогдоогүй тул харилцагчид харагдахгүй, нөлөөлөхгүй.</p>}</div>
+                <div><p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">{row.provider.toUpperCase()}</p><h3 className="mt-1 font-bold">{meta.label}</h3><p className="mt-1 text-xs text-[#77787d]">{meta.note}</p>{row.hasCredentials ? <p className="mt-1 text-[11px] text-[#8b8c90]">{row.configuredKeys.length} талбар тохируулагдсан: {row.configuredKeys.join(", ")}</p> : <p className="mt-1 text-[11px] text-[#8b8c90]">Тохиргоо оруулаагүй байна.</p>}{!meta.wiredUp && <p className="mt-2 flex items-start gap-1.5 text-[11px] font-bold text-[#9b6417]"><TriangleAlert size={13} className="mt-0.5 shrink-0" />"Идэвхтэй" гэдэг нь зөвхөн энэ тохиргоог хадгалсан гэсэн үг — захиалга/төлбөрийн урсгалд одоогоор холбогдоогүй тул харилцагчид харагдахгүй, нөлөөлөхгүй.</p>}{meta.guidance && <p className="mt-2 rounded-xl bg-[#eef3f8] p-3 text-[11px] leading-4 text-[#3970a7]">{meta.guidance}</p>}</div>
                 <div className="flex items-center gap-2">
                   <button type="button" onClick={() => toggleActive(row)} disabled={updateIntegration.isPending} className={`rounded-full px-3 py-1.5 text-[10px] font-extrabold transition ${row.isActive ? "bg-[#e7f2ec] text-[#2c7650]" : "bg-[#f1f1f2] text-[#75767b]"}`}>{row.isActive ? "Идэвхтэй" : "Идэвхгүй"}</button>
                   <button type="button" onClick={() => { setEditingProvider(row.provider); openEditor(); }} className="inline-flex items-center gap-1.5 rounded-full border border-black/10 px-3 py-1.5 text-[10px] font-extrabold text-[#57585e] transition hover:border-[#df1f3d] hover:text-[#df1f3d]"><KeyRound size={12} />Тохиргоо засах</button>
