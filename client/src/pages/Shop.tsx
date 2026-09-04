@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
 import QuickViewDialog, { type QuickViewProduct } from "@/components/QuickViewDialog";
+import RailProductCard from "@/components/RailProductCard";
 import RecommendedForYou from "@/components/RecommendedForYou";
 import { ProductCardSkeleton } from "@/components/Skeleton";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -43,13 +44,7 @@ function RecentlyViewed({ products, rememberedCount, onRemember, onQuickView }: 
       </div>
       <p>Энэ жагсаалт зөвхөн таны энэ төхөөрөмж дээр хадгалагдана. Нэвтрэх мэдээлэл, захиалга, эсвэл хувийн таних мэдээлэл цуглуулахгүй.</p>
     </div>
-    {products.length ? <><div className="recently-viewed-grid">{products.map(product => <article className="recently-viewed-card" key={product.id}>
-      <Link href={`/product/${product.slug}`} onClick={() => onRemember(product.id)}>
-        <img src={product.imageUrl ?? getCategoryPlaceholderImage(product.categorySlug)} alt={product.name} loading="lazy" {...(imageSrcSet(product.imageUrl, 1600) ? { srcSet: imageSrcSet(product.imageUrl, 1600)!, sizes: "112px" } : {})} />
-        <div><p>{product.brand ?? product.categoryName ?? "SUGI ASAYAKE"}</p><h3>{product.name}</h3><strong>{formatMnt(product.priceMnt)}</strong></div>
-      </Link>
-      <button type="button" onClick={() => onQuickView(product)} aria-label={`${product.name} шуурхай харах`}>Шуурхай харах <Eye size={14} /></button>
-    </article>)}</div>{unavailableCount ? <p className="recently-viewed-notice">Таны өмнө үзсэн {unavailableCount} бүтээгдэхүүн одоогоор онлайн каталогоос хасагдсан байна.</p> : null}</> : <div className="recently-viewed-empty"><Eye size={19} /><p>{rememberedCount ? `Таны өмнө үзсэн ${rememberedCount} бүтээгдэхүүн одоогоор онлайн каталогоос хасагдсан байна. Шинэ сонголт нэмэгдэхэд энд дахин гарна.` : "Таны үзсэн бүтээгдэхүүн энд гарна. Бодит каталог нийтлэгдсэний дараа бүтээгдэхүүний картнаас “Шуурхай харах” эсвэл дэлгэрэнгүй хуудас нээгээрэй."}</p></div>}
+    {products.length ? <><div className="recently-viewed-grid">{products.map(product => <RailProductCard product={product} onRemember={onRemember} onQuickView={onQuickView} key={product.id} />)}</div>{unavailableCount ? <p className="recently-viewed-notice">Таны өмнө үзсэн {unavailableCount} бүтээгдэхүүн одоогоор онлайн каталогоос хасагдсан байна.</p> : null}</> : <div className="recently-viewed-empty"><Eye size={19} /><p>{rememberedCount ? `Таны өмнө үзсэн ${rememberedCount} бүтээгдэхүүн одоогоор онлайн каталогоос хасагдсан байна. Шинэ сонголт нэмэгдэхэд энд дахин гарна.` : "Таны үзсэн бүтээгдэхүүн энд гарна. Бодит каталог нийтлэгдсэний дараа бүтээгдэхүүний картнаас “Шуурхай харах” эсвэл дэлгэрэнгүй хуудас нээгээрэй."}</p></div>}
   </section>;
 }
 

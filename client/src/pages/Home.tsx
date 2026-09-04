@@ -67,6 +67,37 @@ const socials = [
 
 const bestsellerFallbackImage = "/product-placeholder.svg";
 
+// 2026-09-04 cohesion audit: the bestseller and recommended rails below used
+// to each hand-write their own copy of this exact card markup -- identical
+// except the bestseller version showed a rank badge and a rating, the
+// recommended version showed neither. The missing rank badge on recommended
+// cards is intentional (rank only means something for a "top sellers"
+// ranking); the missing rating had no such reason -- a recommended product
+// with real reviews just never showed them, purely because that copy of the
+// markup happened not to include the conditional. One component now, `rank`
+// optional, rating shown on both whenever reviewCount > 0.
+// reviewCount/avgRating are optional, not just nullable: getRecommendedProducts'
+// cold-start fallback tier (see server/db.ts) returns a leaner product shape
+// with no review-stats columns at all when preference/bestseller matches run
+// out, distinct from the bestseller rail's product shape which always has them.
+type BestsellerRailProduct = { id: number; slug: string; name: string; brand?: string | null; imageUrl?: string | null; priceMnt: number; reviewCount?: number; avgRating?: number | null };
+function BestsellerRailCard({ product, rank }: { product: BestsellerRailProduct; rank?: number }) {
+  return <Link href={`/product/${product.slug}`} className="bestseller-card">
+    {rank !== undefined && <span className="bestseller-rank">{rank}</span>}
+    {/* .bestseller-grid is 6-up desktop / 3-up under 980px, so each card
+        image renders around 120-220 CSS px -- the 600px derivative covers
+        it; null (plain <img>) for pre-derivative uploads. See
+        shared/image-variants.ts. */}
+    <img src={product.imageUrl ?? bestsellerFallbackImage} alt={product.name} loading="lazy" {...(imageSrcSet(product.imageUrl, 1600) ? { srcSet: imageSrcSet(product.imageUrl, 1600)!, sizes: "(max-width: 980px) 31vw, 16vw" } : {})} />
+    <div>
+      <p>{product.brand ?? "SUGI ASAYAKE"}</p>
+      <h3>{product.name}</h3>
+      {!!product.reviewCount && product.reviewCount > 0 && <span className="bestseller-rating"><Star size={11} fill="#17181b" stroke="#17181b" /> {product.avgRating?.toFixed(1)} <em>({product.reviewCount})</em></span>}
+      <strong>{formatMnt(product.priceMnt)}</strong>
+    </div>
+  </Link>;
+}
+
 export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -240,22 +271,7 @@ export default function Home() {
               <p>{textFor("home-text-bestseller-description", "Манай захиалгын бодит түүхээр эрэмбэлсэн, хамгийн их итгэл олсон сонголтууд.")}</p>
             </div>
             <div className="bestseller-grid">
-              {bestsellers.slice(0, 6).map((product, index) => (
-                <Link href={`/product/${product.slug}`} className="bestseller-card" key={product.id}>
-                  <span className="bestseller-rank">{index + 1}</span>
-                  {/* .bestseller-grid is 6-up desktop / 3-up under 980px, so
-                      each card image renders around 120-220 CSS px -- the
-                      600px derivative covers it; null (plain <img>) for
-                      pre-derivative uploads. See shared/image-variants.ts. */}
-                  <img src={product.imageUrl ?? bestsellerFallbackImage} alt={product.name} loading="lazy" {...(imageSrcSet(product.imageUrl, 1600) ? { srcSet: imageSrcSet(product.imageUrl, 1600)!, sizes: "(max-width: 980px) 31vw, 16vw" } : {})} />
-                  <div>
-                    <p>{product.brand ?? "SUGI ASAYAKE"}</p>
-                    <h3>{product.name}</h3>
-                    {product.reviewCount > 0 && <span className="bestseller-rating"><Star size={11} fill="#17181b" stroke="#17181b" /> {product.avgRating?.toFixed(1)} <em>({product.reviewCount})</em></span>}
-                    <strong>{formatMnt(product.priceMnt)}</strong>
-                  </div>
-                </Link>
-              ))}
+              {bestsellers.slice(0, 6).map((product, index) => <BestsellerRailCard product={product} rank={index + 1} key={product.id} />)}
             </div>
             <Link href="/shop" className="bestseller-all-link">{textFor("home-text-bestseller-all-link", "Бүх бүтээгдэхүүн үзэх")} <ArrowUpRight size={16} /></Link>
           </section>
@@ -290,16 +306,7 @@ export default function Home() {
               </div>;
             })()}
             <div className="bestseller-grid">
-              {recommended.slice(0, 6).map(product => (
-                <Link href={`/product/${product.slug}`} className="bestseller-card" key={product.id}>
-                  <img src={product.imageUrl ?? bestsellerFallbackImage} alt={product.name} loading="lazy" {...(imageSrcSet(product.imageUrl, 1600) ? { srcSet: imageSrcSet(product.imageUrl, 1600)!, sizes: "(max-width: 980px) 31vw, 16vw" } : {})} />
-                  <div>
-                    <p>{product.brand ?? "SUGI ASAYAKE"}</p>
-                    <h3>{product.name}</h3>
-                    <strong>{formatMnt(product.priceMnt)}</strong>
-                  </div>
-                </Link>
-              ))}
+              {recommended.slice(0, 6).map(product => <BestsellerRailCard product={product} key={product.id} />)}
             </div>
           </section>
         )}
