@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { and, asc, desc, eq, gte, inArray, isNull, like, lt, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { adminAuditLogs, cartItems, carts, discountCodes, emailVerificationTokens, InsertProduct, InsertProductCategory, InsertUser, integrationConfigs, loginAttempts, marketingSpend, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, productReviews, productVariants, products, routines, routineSteps, siteMedia, siteText, sitePromotions, staffInvitations, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
+import { adminAuditLogs, cartItems, carts, discountCodes, emailVerificationTokens, featuredBrands, InsertProduct, InsertProductCategory, InsertUser, integrationConfigs, loginAttempts, marketingSpend, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, productReviews, productVariants, products, routines, routineSteps, siteMedia, siteText, sitePromotions, staffInvitations, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
 import { UB_DELIVERY_FEE_MNT } from "../shared/const";
 import { guessDistrictFromAddress, type UbDistrict } from "../shared/districts";
 import { decryptJson, encryptJson } from "./_core/crypto";
@@ -640,6 +640,80 @@ export async function getBestsellingProducts(limit = 8) {
     .map(row => ({ ...row, soldQuantity: soldQuantityByProduct.get(row.id) ?? 0 }))
     .sort((a, b) => b.soldQuantity - a.soldQuantity)
     .slice(0, limit);
+}
+
+/**
+ * NEWVISION.md §7/§11: one category's shelf for the new homepage
+ * CarouselShelf rail. "нөөцтэй эхэлж, борлуулалтаар эрэмбэлнэ" (in-stock
+ * first, then by sales) -- but real paid-order volume is near zero today
+ * (same reality getRecommendedProducts' cold-start tier already handles),
+ * so this ranks by real sold quantity where it exists, then fills any
+ * remaining slots with other published, in-stock products in the category
+ * (newest first) rather than returning a half-empty shelf. Never returns an
+ * out-of-stock product ahead of an in-stock one.
+ */
+export async function getCategoryShelfProducts(categoryId: number, limit = 12) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const soldQtyExpr = sql<number>`SUM(${orderItems.quantity})`;
+  const soldRows = await db
+    .select({ productId: orderItems.productId, soldQuantity: soldQtyExpr })
+    .from(orderItems)
+    .innerJoin(orders, eq(orderItems.orderId, orders.id))
+    .innerJoin(products, eq(orderItems.productId, products.id))
+    .where(and(eq(orders.paymentStatus, "paid"), eq(products.categoryId, categoryId), eq(products.isPublished, true)))
+    .groupBy(orderItems.productId)
+    .orderBy(desc(soldQtyExpr))
+    .limit(limit);
+  const soldQuantityByProduct = new Map(soldRows.map(row => [row.productId, Number(row.soldQuantity)]));
+
+  const catalogColumns = {
+    id: products.id, name: products.name, slug: products.slug, brand: products.brand,
+    priceMnt: products.priceMnt, compareAtPriceMnt: products.compareAtPriceMnt, imageUrl: products.imageUrl,
+    stockQuantity: products.stockQuantity, avgRating: avgRatingExpr, reviewCount: reviewCountExpr,
+  };
+
+  const soldProductIds = soldRows.map(row => row.productId).filter((id): id is number => id != null);
+  const soldCatalogRows = soldProductIds.length
+    ? await db.select(catalogColumns).from(products).leftJoin(productReviews, eq(productReviews.productId, products.id))
+        .where(inArray(products.id, soldProductIds)).groupBy(products.id)
+    : [];
+
+  const picked = soldCatalogRows
+    .map(row => ({ ...row, soldQuantity: soldQuantityByProduct.get(row.id) ?? 0 }))
+    .sort((a, b) => b.soldQuantity - a.soldQuantity);
+
+  if (picked.length < limit) {
+    const excludeIds = picked.map(row => row.id);
+    const fillerRows = await db.select({ ...catalogColumns, createdAt: products.createdAt }).from(products)
+      .leftJoin(productReviews, eq(productReviews.productId, products.id))
+      .where(and(
+        eq(products.categoryId, categoryId),
+        eq(products.isPublished, true),
+        excludeIds.length ? sql`${products.id} NOT IN (${sql.join(excludeIds, sql`, `)})` : sql`1=1`,
+      ))
+      .groupBy(products.id)
+      .orderBy(desc(sql`${products.stockQuantity} > 0`), desc(products.createdAt))
+      .limit(limit - picked.length);
+    picked.push(...fillerRows.map(({ createdAt: _createdAt, ...row }) => ({ ...row, soldQuantity: 0 })));
+  }
+
+  return picked.slice(0, limit);
+}
+
+/** All 6 real, active categories with their shelf products -- backs the
+ *  homepage's category CarouselShelf rails (NEWVISION.md §7). */
+export async function getHomeCategoryShelves(limitPerShelf = 12) {
+  const db = await getDb();
+  if (!db) return [];
+  const categories = await db.select({ id: productCategories.id, name: productCategories.name, slug: productCategories.slug })
+    .from(productCategories).where(eq(productCategories.isActive, true)).orderBy(asc(productCategories.sortOrder));
+  const shelves = await Promise.all(categories.map(async category => ({
+    category,
+    products: await getCategoryShelfProducts(category.id, limitPerShelf),
+  })));
+  return shelves.filter(shelf => shelf.products.length > 0);
 }
 
 /**
@@ -1528,6 +1602,43 @@ export async function getProductReviews(productId: number) {
     .orderBy(desc(productReviews.createdAt));
 }
 
+/**
+ * NEWVISION.md §6 "Юу ярьж байна" -- Isetan's "Let Customers Speak for Us"
+ * equivalent, real reviews only (rating >= 4, a real non-empty comment,
+ * approved). Real paid-order volume is near zero today, so this can
+ * legitimately return few or zero rows -- CustomerVoices.tsx hides the whole
+ * section rather than padding it with lower-rated or commentless reviews to
+ * hit a target count (same "never fabricate to fill a section" discipline
+ * as the bestseller rail's empty state).
+ */
+export async function getFeaturedReviews(limit = 8) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: productReviews.id,
+      rating: productReviews.rating,
+      comment: productReviews.comment,
+      createdAt: productReviews.createdAt,
+      reviewerName: users.name,
+      productId: products.id,
+      productName: products.name,
+      productSlug: products.slug,
+      productImageUrl: products.imageUrl,
+    })
+    .from(productReviews)
+    .innerJoin(users, eq(users.id, productReviews.userId))
+    .innerJoin(products, eq(products.id, productReviews.productId))
+    .where(and(
+      eq(productReviews.isApproved, true),
+      eq(products.isPublished, true),
+      gte(productReviews.rating, 4),
+      sql`${productReviews.comment} IS NOT NULL AND ${productReviews.comment} <> ''`,
+    ))
+    .orderBy(desc(productReviews.createdAt))
+    .limit(limit);
+}
+
 /** Whether the current user has already reviewed this product, and whether
  *  they're even eligible to (verified purchase) — drives the ProductDetail
  *  review form's three states: write / already-reviewed / not-eligible. */
@@ -1850,6 +1961,74 @@ export async function deleteAdminPost(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.delete(posts).where(eq(posts.id, id));
+  return { id };
+}
+
+// NEWVISION.md §5 "Топ брэндүүд" -- same CRUD shape as posts above.
+export type FeaturedBrandWriteInput = { brandName: string; tagline?: string | null; photoUrl?: string | null; sortOrder?: number; isActive?: boolean };
+
+/**
+ * Public, customer-facing list -- active brands only, in admin-chosen
+ * order. `photoUrl` falls back to the most recently added real, published,
+ * imaged product carrying this brand when the admin hasn't uploaded a
+ * dedicated brand photo, same "never show a broken/placeholder tile"
+ * discipline as CategoryMasonry's per-category photo fallback.
+ */
+export async function getFeaturedBrands() {
+  const db = await getDb();
+  if (!db) return [];
+  const brands = await db.select().from(featuredBrands).where(eq(featuredBrands.isActive, true)).orderBy(asc(featuredBrands.sortOrder));
+  return Promise.all(brands.map(async brand => {
+    if (brand.photoUrl) return brand;
+    const fallbackPhoto = await db.select({ imageUrl: products.imageUrl }).from(products)
+      .where(and(eq(products.brand, brand.brandName), eq(products.isPublished, true), sql`${products.imageUrl} IS NOT NULL`))
+      .orderBy(desc(products.createdAt)).limit(1);
+    return { ...brand, photoUrl: fallbackPhoto[0]?.imageUrl ?? null };
+  }));
+}
+
+export async function getAdminFeaturedBrands() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(featuredBrands).orderBy(asc(featuredBrands.sortOrder));
+}
+
+/** Admin's "add a brand" dropdown -- real, currently-used products.brand
+ *  values only (never free text), so a featured-brand tile can never point
+ *  at zero real products. Counts help the admin judge which brands are
+ *  actually worth featuring. */
+export async function getDistinctRealBrands() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({ brand: products.brand, count: sql<number>`count(*)` }).from(products)
+    .where(and(eq(products.isPublished, true), sql`${products.brand} IS NOT NULL AND ${products.brand} <> ''`))
+    .groupBy(products.brand)
+    .orderBy(desc(sql`count(*)`));
+}
+
+export async function createFeaturedBrand(input: FeaturedBrandWriteInput) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const inserted = await db.insert(featuredBrands).values({ ...input, tagline: input.tagline ?? null, photoUrl: input.photoUrl ?? null, sortOrder: input.sortOrder ?? 0, isActive: input.isActive ?? true });
+  const created = await db.select().from(featuredBrands).where(eq(featuredBrands.id, Number(inserted[0].insertId))).limit(1);
+  return created[0];
+}
+
+export async function updateFeaturedBrand(input: { id: number } & Partial<FeaturedBrandWriteInput>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const existing = await db.select().from(featuredBrands).where(eq(featuredBrands.id, input.id)).limit(1);
+  if (!existing[0]) throw new Error("Brand not found.");
+  const { id, ...changes } = input;
+  await db.update(featuredBrands).set({ ...changes, updatedAt: new Date() }).where(eq(featuredBrands.id, id));
+  const updated = await db.select().from(featuredBrands).where(eq(featuredBrands.id, id)).limit(1);
+  return updated[0];
+}
+
+export async function deleteFeaturedBrand(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.delete(featuredBrands).where(eq(featuredBrands.id, id));
   return { id };
 }
 

@@ -187,6 +187,29 @@ export const productCategories = mysqlTable("product_categories", {
 });
 
 /**
+ * NEWVISION.md §5 "Топ брэндүүд" -- same shape as product_categories above.
+ * `brandName` is deliberately free varchar, not a foreign key, but the admin
+ * UI (AdminBrandsPanel) only ever offers a dropdown of real, currently-used
+ * `products.brand` values (see getDistinctRealBrands) -- never free text --
+ * so a tile can't point at zero real products. `photoUrl` is optional: when
+ * unset, the customer-facing query falls back to the most recently added
+ * real, published, imaged product carrying this brand (see
+ * getFeaturedBrands's own comment) rather than a stock/invented image.
+ */
+export const featuredBrands = mysqlTable("featured_brands", {
+  id: int("id").autoincrement().primaryKey(),
+  brandName: varchar("brandName", { length: 120 }).notNull(),
+  tagline: text("tagline"),
+  photoUrl: text("photoUrl"),
+  sortOrder: int("sortOrder").notNull().default(0),
+  isActive: boolean("isActive").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type FeaturedBrand = typeof featuredBrands.$inferSelect;
+export type InsertFeaturedBrand = typeof featuredBrands.$inferInsert;
+
+/**
  * `products` also carries a FULLTEXT index over (name, brand,
  * shortDescription) — `products_search_idx`, added by
  * drizzle/0027_catalog_fulltext_search.sql — powering server-side catalog

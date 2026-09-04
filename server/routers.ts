@@ -27,6 +27,14 @@ import {
   createAdminProductVariant,
   createAdminDiscountCode,
   createAdminRoutine,
+  createFeaturedBrand,
+  updateFeaturedBrand,
+  deleteFeaturedBrand,
+  getAdminFeaturedBrands,
+  getDistinctRealBrands,
+  getFeaturedBrands,
+  getFeaturedReviews,
+  getHomeCategoryShelves,
   createAdminSitePromotion,
   createEmailVerificationCode,
   createOrderFromActiveCart,
@@ -262,6 +270,21 @@ const postWriteSchema = z.object({
 const postUpdateSchema = postWriteSchema.partial().extend({ id: z.number().int().positive() }).refine(
   value => Object.keys(value).some(key => key !== "id"),
   { message: "Provide at least one post field to update." },
+);
+// NEWVISION.md §5 "Топ брэндүүд" -- brandName is validated server-side too
+// (see createFeaturedBrand's caller below), but the real guarantee that it
+// matches an existing products.brand value is the admin UI only offering a
+// dropdown built from getDistinctRealBrands, never a free-text field.
+const featuredBrandWriteSchema = z.object({
+  brandName: z.string().trim().min(1).max(120),
+  tagline: nullableText(300),
+  photoUrl: nullableText(1_000),
+  sortOrder: z.number().int().default(0),
+  isActive: z.boolean().default(true),
+});
+const featuredBrandUpdateSchema = featuredBrandWriteSchema.partial().extend({ id: z.number().int().positive() }).refine(
+  value => Object.keys(value).some(key => key !== "id"),
+  { message: "Provide at least one brand field to update." },
 );
 // PREMIUM-FEATURES.md TIER 4.
 const routineWriteSchema = z.object({
@@ -742,6 +765,12 @@ export const appRouter = router({
     // — a single-variant product (the common case) looks exactly as it did
     // before variants existed.
     variants: publicProcedure.input(z.object({ productId: z.number().int().positive() })).query(({ input }) => getPublicProductVariants(input.productId)),
+    // NEWVISION.md §7/§11: the 6 category CarouselShelf rails on the
+    // redesigned homepage. Filters out any category with zero real
+    // products (never renders an empty shelf) inside getHomeCategoryShelves.
+    categoryShelves: publicProcedure.query(() => getHomeCategoryShelves()),
+    // NEWVISION.md §5: real, admin-curated "Топ брэндүүд" tiles.
+    featuredBrands: publicProcedure.query(() => getFeaturedBrands()),
   }),
   // PREMIUM-FEATURES.md TIER 5: cumulative-spend loyalty tiers (mirrors
   // Tom's Smart POS in-store membership card — see shared/loyalty.ts).
@@ -761,6 +790,9 @@ export const appRouter = router({
   // PREMIUM-FEATURES.md TIER 2: verified-purchase reviews & ratings.
   reviews: router({
     list: publicProcedure.input(z.object({ productId: z.number().int().positive() })).query(({ input }) => getProductReviews(input.productId)),
+    // NEWVISION.md §6 "Юу ярьж байна" -- real, high-rated, commented reviews
+    // for the homepage's CustomerVoices section. See getFeaturedReviews.
+    featured: publicProcedure.query(() => getFeaturedReviews(8)),
     // protectedProcedure: a guest has no order history to verify against, so
     // there's nothing meaningful to check — the ProductDetail page only asks
     // this for a logged-in shopper.
@@ -1380,6 +1412,26 @@ export const appRouter = router({
     deletePost: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const result = await deleteAdminPost(input.id);
       await logAdminAction({ actorUserId: ctx.user.id, action: "post.deleted", entityType: "post", entityId: input.id });
+      return result;
+    }),
+    // NEWVISION.md §5 "Топ брэндүүд" -- same staffProcedure weight as
+    // Posts/Discount Codes (Tom's explicit correction to the original plan,
+    // which had omitted a Brands admin section entirely).
+    featuredBrands: staffProcedure.query(() => getAdminFeaturedBrands()),
+    distinctRealBrands: staffProcedure.query(() => getDistinctRealBrands()),
+    createFeaturedBrand: staffProcedure.input(featuredBrandWriteSchema).mutation(async ({ ctx, input }) => {
+      const brand = await createFeaturedBrand(input);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "featuredBrand.created", entityType: "featuredBrand", entityId: brand.id, metadata: { brandName: brand.brandName } });
+      return brand;
+    }),
+    updateFeaturedBrand: staffProcedure.input(featuredBrandUpdateSchema).mutation(async ({ ctx, input }) => {
+      const brand = await updateFeaturedBrand(input);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "featuredBrand.updated", entityType: "featuredBrand", entityId: brand.id, metadata: { brandName: brand.brandName } });
+      return brand;
+    }),
+    deleteFeaturedBrand: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const result = await deleteFeaturedBrand(input.id);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "featuredBrand.deleted", entityType: "featuredBrand", entityId: input.id });
       return result;
     }),
     createProduct: staffProcedure.input(productWriteSchema).mutation(async ({ ctx, input }) => {
