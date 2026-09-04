@@ -12,6 +12,7 @@ import AdminDashboardHome from "./AdminDashboardHome";
 import AdminGlobalSearch from "./AdminGlobalSearch";
 import AdminOperationsPanel from "./AdminOperationsPanel";
 import AdminReviewsPanel from "./AdminReviewsPanel";
+import AdminBrandsPanel from "./AdminBrandsPanel";
 import AdminDiscountCodesPanel from "./AdminDiscountCodesPanel";
 import AdminIntegrationsPanel from "./AdminIntegrationsPanel";
 import AdminProductVariantsPanel from "./AdminProductVariantsPanel";
@@ -140,7 +141,33 @@ function TagSuggestionChips({ suggestions, current, labelFor, onApply }: { sugge
 export default function AdminWorkspace({ preview = false }: { preview?: boolean }) {
   const { user: currentUser } = useAuth();
   const isFullAdmin = preview || currentUser?.role === "admin";
-  const [section, setSection] = useState<"dashboard" | "analytics" | "products" | "orders" | "posts" | "reviews" | "routines" | "promotions" | "discountCodes" | "users" | "media" | "security" | "integrations">(() => new URLSearchParams(window.location.search).get("adminSection") === "media" ? "media" : "dashboard");
+  type AdminSection = "dashboard" | "analytics" | "products" | "orders" | "posts" | "reviews" | "routines" | "promotions" | "discountCodes" | "brands" | "users" | "media" | "security" | "integrations";
+  const adminSectionKeys: AdminSection[] = ["dashboard", "products", "orders", "posts", "reviews", "routines", "promotions", "discountCodes", "brands", "media", "users", "analytics", "security", "integrations"];
+  // 2026-09-04 (Tom, "does admin panel really work 100% functional?" audit):
+  // section switching only ever lived in React state, never the URL --
+  // only ?adminSection=media (the one pre-existing special case) survived a
+  // refresh. Every other section silently reset to the dashboard on
+  // reload, and browser back/forward jumped straight out of /admin entirely
+  // rather than stepping through sections, since no click ever touched
+  // history at all. Same URL-state pattern Shop.tsx already uses for its
+  // own filters (replaceState, not pushState -- deliberately doesn't spam
+  // history per click, same tradeoff Shop.tsx made).
+  const [section, setSection] = useState<AdminSection>(() => {
+    const requested = new URLSearchParams(window.location.search).get("adminSection");
+    return adminSectionKeys.includes(requested as AdminSection) ? (requested as AdminSection) : "dashboard";
+  });
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (section === "dashboard") params.delete("adminSection"); else params.set("adminSection", section);
+    window.history.replaceState(null, "", `${window.location.pathname}${params.toString() ? `?${params}` : ""}`);
+  }, [section]);
+  // A direct link to a full-admin-only section (users/analytics/security/
+  // integrations), loaded by a staff (non-admin) account, must not silently
+  // render a section that role can't actually use -- currentUser resolves
+  // asynchronously, so this can't be decided at the useState initializer above.
+  useEffect(() => {
+    if (!isFullAdmin && ["users", "analytics", "security", "integrations"].includes(section)) setSection("dashboard");
+  }, [isFullAdmin, section]);
   // Content & Media has 2 sub-tabs: images (site_media, existing) and text
   // (site_text, new -- see shared/site-text.ts) -- Tom asked for the text
   // editor to live right next to the image editor, not as its own top-level
@@ -459,13 +486,13 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
         <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
           <aside className="rounded-3xl bg-[#17181b] p-3 text-white shadow-[0_16px_34px_rgba(20,22,24,.16)]">
             <div className="border-b border-white/12 px-3 py-4"><p className="text-[10px] font-extrabold tracking-[.15em] text-[#f0b52d]">COMMERCE ADMIN</p><p className="mt-1 text-sm text-white/65">Custom backend ready</p></div>
-            <nav className="mt-3 grid gap-1">{[{ key: "dashboard", label: "Хянах самбар", Icon: LayoutDashboard }, { key: "products", label: "Бүтээгдэхүүн", Icon: PackagePlus }, { key: "orders", label: "Захиалга", Icon: CheckCircle2 }, { key: "posts", label: "Шинэ мэдээ", Icon: FilePenLine }, { key: "reviews", label: "Сэтгэгдэл", Icon: Star }, { key: "routines", label: "Routine", Icon: ListChecks }, { key: "promotions", label: "Урамшуулал", Icon: Megaphone }, { key: "discountCodes", label: "Хямдралын код", Icon: Tag }, { key: "media", label: "Content & Media", Icon: ImageUp }, ...(isFullAdmin ? [{ key: "users", label: "Хэрэглэгч", Icon: UsersRound }, { key: "analytics", label: "Аналитик", Icon: ChartColumnIncreasing }, { key: "security", label: "Аюулгүй байдал", Icon: ShieldAlert }, { key: "integrations", label: "Интеграцууд", Icon: Plug }] : [])].map(({ key, label, Icon }) => <button type="button" key={key} onClick={() => { setSection(key as typeof section); setQuery(""); setComposer(null); }} className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-bold transition ${section === key ? "bg-white text-[#17181b]" : "text-white/70 hover:bg-white/10 hover:text-white"}`}><Icon size={17} />{label}</button>)}</nav>
+            <nav className="mt-3 grid gap-1">{[{ key: "dashboard", label: "Хянах самбар", Icon: LayoutDashboard }, { key: "products", label: "Бүтээгдэхүүн", Icon: PackagePlus }, { key: "orders", label: "Захиалга", Icon: CheckCircle2 }, { key: "posts", label: "Шинэ мэдээ", Icon: FilePenLine }, { key: "reviews", label: "Сэтгэгдэл", Icon: Star }, { key: "routines", label: "Routine", Icon: ListChecks }, { key: "promotions", label: "Урамшуулал", Icon: Megaphone }, { key: "discountCodes", label: "Хямдралын код", Icon: Tag }, { key: "brands", label: "Брэндүүд", Icon: Tags }, { key: "media", label: "Content & Media", Icon: ImageUp }, ...(isFullAdmin ? [{ key: "users", label: "Хэрэглэгч", Icon: UsersRound }, { key: "analytics", label: "Аналитик", Icon: ChartColumnIncreasing }, { key: "security", label: "Аюулгүй байдал", Icon: ShieldAlert }, { key: "integrations", label: "Интеграцууд", Icon: Plug }] : [])].map(({ key, label, Icon }) => <button type="button" key={key} onClick={() => { setSection(key as typeof section); setQuery(""); setComposer(null); }} className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-bold transition ${section === key ? "bg-white text-[#17181b]" : "text-white/70 hover:bg-white/10 hover:text-white"}`}><Icon size={17} />{label}</button>)}</nav>
             <div className="mt-7 rounded-2xl bg-white/8 p-4"><span className="text-[10px] font-extrabold tracking-[.14em] text-[#f0b52d]">ACCESS</span><p className="mt-2 text-xs leading-5 text-white/66">Нэвтэрсэн админ л каталог, зураг, хэрэглэгчийн эрхийг өөрчилж чадна.</p></div>
           </aside>
           <section className="min-w-0 rounded-3xl bg-white p-5 shadow-[0_16px_34px_rgba(20,22,24,.05)] sm:p-7">
             <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div><h2 className="font-[var(--font-display)] text-2xl font-semibold tracking-[-.06em]">{section === "dashboard" ? "Хянах самбар" : section === "products" ? "Бүтээгдэхүүний сан" : section === "orders" ? "Захиалгын гүйцэтгэл" : section === "posts" ? "Шинэ бүтээгдэхүүний пост" : section === "reviews" ? "Сэтгэгдэл ба үнэлгээ" : section === "routines" ? "Routine (арчилгааны дараалал)" : section === "promotions" ? "Урамшуулал (попап/banner)" : section === "discountCodes" ? "Хямдралын код" : section === "media" ? "Content & Media" : section === "analytics" ? "Аналитик ба тайлан" : section === "security" ? "Аюулгүй байдал" : section === "integrations" ? "Интеграцууд" : "Хэрэглэгч ба эрх"}</h2><p className="mt-1 text-xs text-[#77787d]">{section === "dashboard" ? "Дэлгүүрийн ерөнхий байдал нэг дэлгэцэд" : section === "products" ? "SKU, үнэ, үлдэгдэл, нийтлэх төлөв" : section === "orders" ? "Төлбөрийн төлөв, хүргэлтийн явц, захиалгын мэдээлэл" : section === "posts" ? "Бодитоор хадгалагдах шинэ бүтээгдэхүүний мэдээ" : section === "reviews" ? "Баталгаажсан худалдан авалтын сэтгэгдэл, жижиг moderation" : section === "routines" ? "Алхам дараалалтай бүтээгдэхүүний багц, идэвхтэй хямдралтай" : section === "promotions" ? "Шинэ бүтээгдэхүүн, хямдрал зарлах попап/banner мессеж" : section === "discountCodes" ? "Захиалгын үед оруулах хямдралын код (жишээ нь SALE10)" : section === "media" ? "Нүүр хуудасны зураг болон текстийг кодгүйгээр солих" : section === "analytics" ? "Борлуулалт, ашиг, харилцагчийн бодит дата нэг дэлгэцэд" : section === "security" ? "Admin аудит лог болон нэвтрэлтийн түүх" : section === "integrations" ? "QPay, И-баримт, StorePay, карт, хүргэлтийн үйлчилгээ тохируулах" : "Шинэ хэрэглэгчийг урих болон staff/admin эрх удирдах"}</p></div>
-              {section !== "dashboard" && section !== "posts" && section !== "reviews" && section !== "routines" && section !== "promotions" && section !== "discountCodes" && section !== "media" && section !== "security" && section !== "integrations" && <label className="flex h-10 items-center gap-2 rounded-full border border-black/10 bg-[#fffdf9] px-4"><Search size={15} className="text-[#85868a]" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={section === "users" ? "Нэр эсвэл имэйл хайх" : section === "orders" ? "Дугаар, хэрэглэгч, утас хайх" : "Нэр, SKU хайх"} className="w-full bg-transparent text-xs outline-none" /></label>}
+              <div><h2 className="font-[var(--font-display)] text-2xl font-semibold tracking-[-.06em]">{section === "dashboard" ? "Хянах самбар" : section === "products" ? "Бүтээгдэхүүний сан" : section === "orders" ? "Захиалгын гүйцэтгэл" : section === "posts" ? "Шинэ бүтээгдэхүүний пост" : section === "reviews" ? "Сэтгэгдэл ба үнэлгээ" : section === "routines" ? "Routine (арчилгааны дараалал)" : section === "promotions" ? "Урамшуулал (попап/banner)" : section === "discountCodes" ? "Хямдралын код" : section === "brands" ? "Топ брэндүүд" : section === "media" ? "Content & Media" : section === "analytics" ? "Аналитик ба тайлан" : section === "security" ? "Аюулгүй байдал" : section === "integrations" ? "Интеграцууд" : "Хэрэглэгч ба эрх"}</h2><p className="mt-1 text-xs text-[#77787d]">{section === "dashboard" ? "Дэлгүүрийн ерөнхий байдал нэг дэлгэцэд" : section === "products" ? "SKU, үнэ, үлдэгдэл, нийтлэх төлөв" : section === "orders" ? "Төлбөрийн төлөв, хүргэлтийн явц, захиалгын мэдээлэл" : section === "posts" ? "Бодитоор хадгалагдах шинэ бүтээгдэхүүний мэдээ" : section === "reviews" ? "Баталгаажсан худалдан авалтын сэтгэгдэл, жижиг moderation" : section === "routines" ? "Алхам дараалалтай бүтээгдэхүүний багц, идэвхтэй хямдралтай" : section === "promotions" ? "Шинэ бүтээгдэхүүн, хямдрал зарлах попап/banner мессеж" : section === "discountCodes" ? "Захиалгын үед оруулах хямдралын код (жишээ нь SALE10)" : section === "brands" ? "Нүүр хуудасны 'Топ брэндүүд' хэсэгт харагдах бодит брэндүүд" : section === "media" ? "Нүүр хуудасны зураг болон текстийг кодгүйгээр солих" : section === "analytics" ? "Борлуулалт, ашиг, харилцагчийн бодит дата нэг дэлгэцэд" : section === "security" ? "Admin аудит лог болон нэвтрэлтийн түүх" : section === "integrations" ? "QPay, И-баримт, StorePay, карт, хүргэлтийн үйлчилгээ тохируулах" : "Шинэ хэрэглэгчийг урих болон staff/admin эрх удирдах"}</p></div>
+              {section !== "dashboard" && section !== "posts" && section !== "reviews" && section !== "routines" && section !== "promotions" && section !== "discountCodes" && section !== "brands" && section !== "media" && section !== "security" && section !== "integrations" && <label className="flex h-10 items-center gap-2 rounded-full border border-black/10 bg-[#fffdf9] px-4"><Search size={15} className="text-[#85868a]" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={section === "users" ? "Нэр эсвэл имэйл хайх" : section === "orders" ? "Дугаар, хэрэглэгч, утас хайх" : "Нэр, SKU хайх"} className="w-full bg-transparent text-xs outline-none" /></label>}
             </div>
             {section === "dashboard" && <AdminDashboardHome preview={preview} onNavigate={target => { setSection(target); setQuery(""); }} />}
             {section === "security" && !preview && <AdminSecurityCenter />}
@@ -478,6 +505,8 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
             {section === "promotions" && preview && <div className="rounded-3xl bg-[#f8f5ef] p-8 text-center text-sm text-[#707176]">Preview горимд урамшуулал удирдлага харагдахгүй.</div>}
             {section === "discountCodes" && !preview && <AdminDiscountCodesPanel />}
             {section === "discountCodes" && preview && <div className="rounded-3xl bg-[#f8f5ef] p-8 text-center text-sm text-[#707176]">Preview горимд хямдралын код удирдлага харагдахгүй.</div>}
+            {section === "brands" && !preview && <AdminBrandsPanel />}
+            {section === "brands" && preview && <div className="rounded-3xl bg-[#f8f5ef] p-8 text-center text-sm text-[#707176]">Preview горимд Топ брэнд удирдлага харагдахгүй.</div>}
             {section === "integrations" && !preview && <AdminIntegrationsPanel />}
             {section === "integrations" && preview && <div className="rounded-3xl bg-[#f8f5ef] p-8 text-center text-sm text-[#707176]">Preview горимд интеграцийн тохиргоо харагдахгүй.</div>}
             {section === "analytics" && !preview && <AdminAnalyticsPanel />}
