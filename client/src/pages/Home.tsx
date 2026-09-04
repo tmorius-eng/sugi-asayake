@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
+import SiteFooter from "@/components/SiteFooter";
 import SeasonalCampaignCarousel from "@/components/SeasonalCampaignCarousel";
 import HeroSection from "@/components/home/HeroSection";
 import CategoryMasonry from "@/components/home/CategoryMasonry";
@@ -359,7 +360,7 @@ export default function Home() {
         <section className="final-cta" data-reveal><div className="final-cta-sun" aria-hidden="true">SUGI<br />CARE</div><div><p className="eyebrow">{textFor("home-text-finalcta-eyebrow", "NEED A LITTLE HELP?")}</p><h2>{finalCtaHeadingLine1} <em>{finalCtaHeadingLine2}</em></h2></div><a className="button button-light" href="tel:94509911">9450-9911 <Phone size={15} /></a></section>
       </main>
 
-      <footer className="site-footer"><div className="footer-grid"><div><img src={logoUrl} alt="SUGI ASAYAKE Mongolia" className="footer-logo" /><p>Япон чанарыг гэр бүл бүрт.</p><div className="footer-socials" aria-label="SUGI ASAYAKE сошиал хуудаснууд">{socials.map(({ label, href, Icon }) => <a className="footer-social-link" href={href} target="_blank" rel="noreferrer" aria-label={`${label} хуудас нээх`} key={label}><Icon size={17} strokeWidth={1.8} /><span>{label}</span></a>)}</div></div><div className="footer-column"><span>Шуурхай холбоос</span><a href="#story">Бидний тухай</a><a href="#collection">Бүтээгдэхүүн</a><a href="#stores">Салбарууд</a></div><div className="footer-column"><span>Нөхцөл ба бодлого</span><Link href="/privacy">Хувийн нууцлал</Link><Link href="/terms">Үйлчилгээний нөхцөл</Link><Link href="/returns">Буцаалт, солилцоо</Link></div><div className="footer-column"><span>Холбоо барих</span><a href="tel:94509911">9450-9911</a><a href="mailto:asayake0307@gmail.com">asayake0307@gmail.com</a></div></div><div className="footer-bottom"><span>© 2026 SUGI ASAYAKE Mongolia</span><span>Official SUGI Drug Store Japan subsidiary</span></div></footer>
+      <SiteFooter logoUrl={logoUrl} socials={socials} />
       <CartDrawer open={cartOpen} onOpenChange={setCartOpen} />
     </div>
   );

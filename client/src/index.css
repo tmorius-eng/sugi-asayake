@@ -300,7 +300,11 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .final-cta h2 { color: #fff; font-size: clamp(36px, 4.4vw, 64px); }
 .final-cta h2 em { color: #ffd27a; }
 .site-footer { padding: 68px max(34px, 7vw) 24px; background: #17181b; color: #fff; }
-.footer-grid { display: grid; grid-template-columns: 1.5fr .75fr .75fr; gap: 60px; padding-bottom: 64px; }
+/* 2026-09-04 (NEWVISION.md §9): grew from 4 columns (Брэнд/Шуурхай
+   холбоос/Нөхцөл/Холбоо барих) to 5 -- Шуурхай холбоос's one generic
+   category-anchor and one generic stores-anchor became real Дэлгүүр (6
+   categories) and Салбарууд (4 branches) columns instead. */
+.footer-grid { display: grid; grid-template-columns: 1.3fr .85fr .85fr .8fr .8fr; gap: 40px; padding-bottom: 64px; }
 .footer-logo { width: 190px; filter: brightness(0) invert(1); }
 .footer-grid > div:first-child p { margin: 16px 0 0; color: rgba(255,255,255,.56); font-size: 12px; }
 .footer-socials { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 22px; }
