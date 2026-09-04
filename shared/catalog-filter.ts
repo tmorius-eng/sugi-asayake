@@ -111,6 +111,15 @@ export function filterCatalogSkinType<T extends CatalogSkinTypeItem>(products: T
   return skinType === "all" ? products : products.filter(product => product.skinType === skinType);
 }
 
+// NEWVISION.md §5: the homepage's "Топ брэндүүд" tiles link to /shop?brand=X
+// -- without this, they'd be links that filter nothing (Shop.tsx had no
+// brand facet at all before this). Exact match against the real
+// products.brand string, same convention as category (also an exact match,
+// not a substring search).
+export function filterCatalogBrand<T extends CatalogSearchItem>(products: T[], brand: string) {
+  return !brand || brand === "all" ? products : products.filter(product => product.brand === brand);
+}
+
 // ---------------------------------------------------------------------
 // Preference Profile v2 (2026-09-01) — recommendation engine v2 vocabulary
 // and pure scoring. Label maps here are the single source of truth for the

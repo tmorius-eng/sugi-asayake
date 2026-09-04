@@ -28,6 +28,9 @@ import WhyChooseUs from "@/components/home/WhyChooseUs";
 import JournalSection from "@/components/home/JournalSection";
 import StoreLocatorSection from "@/components/home/StoreLocatorSection";
 import QuickStatsSection from "@/components/home/QuickStatsSection";
+import BrandTileCard from "@/components/home/BrandTileCard";
+import CarouselShelf from "@/components/home/CarouselShelf";
+import ShelfProductCard from "@/components/home/ShelfProductCard";
 import { BestsellerCardSkeleton } from "@/components/Skeleton";
 import { imageSrcSet } from "@shared/image-variants";
 import { locations } from "@/components/home/locations-data";
@@ -129,6 +132,17 @@ export default function Home() {
   // fetching" conventions.
   const publishedCountQuery = trpc.catalog.publishedCount.useQuery();
   const productCountLabel = publishedCountQuery.data === undefined ? "…+" : `${Math.floor(publishedCountQuery.data / 100) * 100}+`;
+  // NEWVISION.md §5/§7/§11/§6 -- Tier 5: wiring the Tier 1-3 primitives/
+  // backend into the homepage itself. Each hides entirely when empty (no
+  // brands curated yet, a category shelf with zero real products, no real
+  // reviews meeting the bar) rather than rendering a placeholder -- same
+  // discipline as the bestseller/recommended rails above.
+  const featuredBrandsQuery = trpc.catalog.featuredBrands.useQuery();
+  const featuredBrands = featuredBrandsQuery.data ?? [];
+  const categoryShelvesQuery = trpc.catalog.categoryShelves.useQuery();
+  const categoryShelves = categoryShelvesQuery.data ?? [];
+  const featuredReviewsQuery = trpc.reviews.featured.useQuery();
+  const featuredReviews = featuredReviewsQuery.data ?? [];
   const mediaBySlot = useMemo(() => new Map((siteMediaQuery.data ?? []).map(media => [media.slotKey, media.imageUrl])), [siteMediaQuery.data]);
   const imageFor = (slotKey: string, fallbackUrl: string | null) => mediaBySlot.get(slotKey) || fallbackUrl;
   // Only sets an inline background-image when there's an actual URL --
@@ -231,6 +245,18 @@ export default function Home() {
 
         <WhyChooseUs branchCount={locations.length} productCountLabel={productCountLabel} />
 
+        {featuredBrands.length > 0 && (
+          <section className="top-brands-section" data-reveal>
+            <div className="top-brands-heading">
+              <p className="eyebrow"><span /> {textFor("home-text-brands-eyebrow", "ТОП БРЭНД")}</p>
+              <h2>{textFor("home-text-brands-heading", "Тансаг брэндүүд.")}</h2>
+            </div>
+            <div className="top-brands-grid">
+              {featuredBrands.map(brand => <BrandTileCard brand={brand} key={brand.id} />)}
+            </div>
+          </section>
+        )}
+
         <CategoryMasonry
           categories={categories.map(category => ({
             ...category,
@@ -311,6 +337,22 @@ export default function Home() {
           </section>
         )}
 
+        {/* NEWVISION.md §7/§11: one horizontally-scrolling CarouselShelf per
+            real category -- SUGI's first "shelf" merchandising rail
+            (CategoryMasonry above is a static grid). getHomeCategoryShelves
+            already filters out any category with zero real products, so
+            every shelf rendered here is guaranteed non-empty. */}
+        {categoryShelves.map(shelf => (
+          <CarouselShelf
+            key={shelf.category.id}
+            eyebrow={shelf.category.name}
+            title={<>{shelf.category.name} <em>сонголт.</em></>}
+            viewAllHref={`/shop?category=${encodeURIComponent(shelf.category.name)}`}
+          >
+            {shelf.products.map((product, index) => <ShelfProductCard product={product} rank={product.soldQuantity > 0 ? index + 1 : undefined} key={product.id} />)}
+          </CarouselShelf>
+        ))}
+
         <SeasonalCampaignCarousel imageOverrides={{ "summer-slide-1": imageFor("summer-slide-1", heroImage) ?? undefined, "summer-slide-2": imageFor("summer-slide-2", assortmentImage) ?? undefined, "summer-slide-3": imageFor("summer-slide-3", familyImage) ?? undefined }} />
 
         <section className="care-section" data-reveal>
@@ -325,6 +367,32 @@ export default function Home() {
             empty-state discipline as the bestseller rail above, until an
             admin has actually published something. */}
         <JournalSection posts={latestPosts} />
+
+        {/* NEWVISION.md §6 "Юу ярьж байна" -- Isetan's "Let Customers Speak
+            for Us" equivalent, real reviews only. Hidden entirely (same
+            discipline as the bestseller rail above) rather than padding
+            itself with lower-rated/commentless reviews -- real paid-order
+            volume is near zero today, so this can legitimately be empty. */}
+        {featuredReviews.length > 0 && (
+          <section className="customer-voices-section" data-reveal>
+            <div className="customer-voices-heading">
+              <p className="eyebrow"><span /> {textFor("home-text-voices-eyebrow", "ХАРИЛЦАГЧИЙН ҮГ")}</p>
+              <h2>{textFor("home-text-voices-heading", "Юу ярьж байна вэ.")}</h2>
+            </div>
+            <div className="customer-voices-grid">
+              {featuredReviews.map(review => (
+                <div className="customer-voice-card" key={review.id}>
+                  <div className="customer-voice-stars">{Array.from({ length: 5 }, (_, index) => <Star key={index} size={13} fill={index < review.rating ? "#f0b52d" : "none"} stroke={index < review.rating ? "#f0b52d" : "#c7c8cc"} />)}</div>
+                  <p>&ldquo;{review.comment}&rdquo;</p>
+                  <div className="customer-voice-footer">
+                    <span className="customer-voice-avatar">{(review.reviewerName ?? "?").charAt(0).toUpperCase()}</span>
+                    <div><strong>{review.reviewerName ?? "Нэргүй"}</strong><span>{review.productName}</span></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         <StoreLocatorSection />
 

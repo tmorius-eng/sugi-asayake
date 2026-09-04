@@ -8,7 +8,7 @@ import { decryptJson, encryptJson } from "./_core/crypto";
 import { ENV } from './_core/env';
 import { getInventoryReservationFailure, shouldRestoreStock } from "./commerce-lifecycle";
 import { getLoyaltyTier, getNextLoyaltyTier } from "../shared/loyalty";
-import { applyDiversityCap, computeCategoryAffinity, filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCatalogCategories, getCatalogSkinTypes, scorePreferenceMatch, scorePriceBandAffinity, sortCatalogProducts, type CatalogSortOption, type PreferenceProfile, type SkinType } from "../shared/catalog-filter";
+import { applyDiversityCap, computeCategoryAffinity, filterCatalogBrand, filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCatalogCategories, getCatalogSkinTypes, scorePreferenceMatch, scorePriceBandAffinity, sortCatalogProducts, type CatalogSortOption, type PreferenceProfile, type SkinType } from "../shared/catalog-filter";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -480,6 +480,7 @@ export async function getPublishedProductCount(): Promise<number> {
 export type CatalogPageParams = {
   search?: string;
   category?: string;
+  brand?: string;
   skinType?: SkinType | "all";
   inStockOnly?: boolean;
   sort?: CatalogSortOption;
@@ -547,7 +548,10 @@ export async function getPublishedCatalogPage(params: CatalogPageParams) {
   const matching = sortCatalogProducts(
     filterCatalogStock(
       filterCatalogSkinType(
-        filterCatalogProducts(fullCatalog, params.search ?? "", params.category ?? "all"),
+        filterCatalogBrand(
+          filterCatalogProducts(fullCatalog, params.search ?? "", params.category ?? "all"),
+          params.brand ?? "all",
+        ),
         params.skinType ?? "all",
       ),
       params.inStockOnly ?? false,

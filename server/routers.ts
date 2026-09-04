@@ -722,6 +722,7 @@ export const appRouter = router({
       .input(z.object({
         search: z.string().trim().max(120).optional(),
         category: z.string().trim().max(120).optional(),
+        brand: z.string().trim().max(120).optional(),
         skinType: z.enum(["dry", "oily", "combination", "sensitive", "normal", "all"]).optional(),
         inStockOnly: z.boolean().optional(),
         sort: z.enum(["featured", "price-low", "price-high", "name-asc"]).optional(),

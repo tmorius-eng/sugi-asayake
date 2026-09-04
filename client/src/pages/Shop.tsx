@@ -10,7 +10,7 @@ import { ProductCardSkeleton } from "@/components/Skeleton";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCategoryPlaceholderImage, getSalePercent, LOW_STOCK_THRESHOLD, skinTypeLabels, sortCatalogProducts, type CatalogSortOption, type SkinType } from "@shared/catalog-filter";
+import { filterCatalogBrand, filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCategoryPlaceholderImage, getSalePercent, LOW_STOCK_THRESHOLD, skinTypeLabels, sortCatalogProducts, type CatalogSortOption, type SkinType } from "@shared/catalog-filter";
 import { imageSrcSet } from "@shared/image-variants";
 import { rememberRecentlyViewed, resolveRecentlyViewed } from "@shared/recently-viewed";
 import { UB_DELIVERY_FEE_MNT } from "@shared/const";
@@ -74,6 +74,10 @@ export default function Shop() {
   // filtered, instead of dropping the shopper's query on the floor.
   const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get("q") ?? "");
   const [category, setCategory] = useState(() => initialParams.get("category") ?? "all");
+  // NEWVISION.md §5: the homepage's "Топ брэндүүд" tiles link here with
+  // ?brand=<real brand name> -- without a real URL-state facet, those tiles
+  // would be links that filter nothing.
+  const [brand, setBrand] = useState(() => initialParams.get("brand") ?? "all");
   const [skinTypeFilter, setSkinTypeFilter] = useState<SkinType | "all">("all");
   const [inStockOnly, setInStockOnly] = useState(false);
   const [sort, setSort] = useState<CatalogSortOption>("featured");
@@ -109,6 +113,7 @@ export default function Shop() {
   const catalog = trpc.catalog.list.useQuery({
     search: isSearching ? undefined : (search.trim() || undefined),
     category,
+    brand,
     skinType: skinTypeFilter,
     inStockOnly,
     sort,
@@ -140,9 +145,9 @@ export default function Shop() {
   // client-side pass cheap, unlike the old always-937-row version of this
   // same logic.
   const searchFiltered = useMemo(() => {
-    const matching = filterCatalogSkinType(filterCatalogProducts(searchResults.data ?? [], "", category), skinTypeFilter);
+    const matching = filterCatalogSkinType(filterCatalogBrand(filterCatalogProducts(searchResults.data ?? [], "", category), brand), skinTypeFilter);
     return sortCatalogProducts(filterCatalogStock(matching, inStockOnly), sort);
-  }, [searchResults.data, category, skinTypeFilter, inStockOnly, sort]);
+  }, [searchResults.data, category, brand, skinTypeFilter, inStockOnly, sort]);
   const pagedProducts = isSearching ? searchFiltered.slice((page - 1) * SHOP_PAGE_SIZE, page * SHOP_PAGE_SIZE) : (catalog.data?.items ?? []);
   // "X илэрц" (matches after filters) vs "Y бүтээгдэхүүн" (raw source size
   // before category/skinType/stock filters) — two different numbers the
@@ -158,8 +163,9 @@ export default function Shop() {
     params.delete("page");
     if (search.trim()) params.set("q", search.trim()); else params.delete("q");
     if (category !== "all") params.set("category", category); else params.delete("category");
+    if (brand !== "all") params.set("brand", brand); else params.delete("brand");
     window.history.replaceState(null, "", `${window.location.pathname}${params.toString() ? `?${params}` : ""}`);
-  }, [search, category, skinTypeFilter, inStockOnly, sort]);
+  }, [search, category, brand, skinTypeFilter, inStockOnly, sort]);
   useEffect(() => { if (!catalogLoading && page > totalPages) setPage(totalPages); }, [catalogLoading, totalPages, page]);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -183,7 +189,7 @@ export default function Shop() {
     } catch { window.localStorage.removeItem(RECENTLY_VIEWED_KEY); }
   }, []);
 
-  const resetControls = () => { setSearch(""); setCategory("all"); setSkinTypeFilter("all"); setInStockOnly(false); setSort("featured"); };
+  const resetControls = () => { setSearch(""); setCategory("all"); setBrand("all"); setSkinTypeFilter("all"); setInStockOnly(false); setSort("featured"); };
   const rememberProduct = (productId: number) => setRecentlyViewedIds(current => {
     const next = rememberRecentlyViewed(current, productId);
     window.localStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify(next));

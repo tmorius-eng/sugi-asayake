@@ -462,6 +462,36 @@ export const siteTextSlots = [
     fallbackValue: "24–48 цагийн дотор Улаанбаатарт хүргэнэ",
   },
 
+  // ---- Топ брэндүүд (2026-09-04, NEWVISION.md §5) --------------------------------
+  {
+    key: "home-text-brands-eyebrow",
+    group: "Топ брэндүүд",
+    label: "Эйброу текст",
+    description: "",
+    fallbackValue: "ТОП БРЭНД",
+  },
+  {
+    key: "home-text-brands-heading",
+    group: "Топ брэндүүд",
+    label: "Гарчиг",
+    description: "",
+    fallbackValue: "Тансаг брэндүүд.",
+  },
+  // ---- Харилцагчийн үг (2026-09-04, NEWVISION.md §6) ------------------------------
+  {
+    key: "home-text-voices-eyebrow",
+    group: "Харилцагчийн үг",
+    label: "Эйброу текст",
+    description: "",
+    fallbackValue: "ХАРИЛЦАГЧИЙН ҮГ",
+  },
+  {
+    key: "home-text-voices-heading",
+    group: "Харилцагчийн үг",
+    label: "Гарчиг",
+    description: "",
+    fallbackValue: "Юу ярьж байна вэ.",
+  },
   // ---- Journal ------------------------------------------------------------------
   {
     key: "home-text-jn-eyebrow-label",

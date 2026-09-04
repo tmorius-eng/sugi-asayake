@@ -1081,6 +1081,39 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
   .editorial-banner--full-bleed { min-height: 420px; }
 }
 
+/* NEWVISION.md §5 "Топ брэндүүд" -- a small, admin-curated grid (typically
+   2-6 tiles), not a scrolling shelf like CarouselShelf: too few items to
+   need horizontal scroll, and a dark editorial-poster treatment (image +
+   gradient + overlaid name) suits "these are our premium brands" better
+   than a plain product-card grid. */
+.top-brands-section { padding: clamp(56px, 7vw, 88px) max(34px, 7vw); }
+.top-brands-heading { margin-bottom: 28px; }
+.top-brands-heading h2 { margin: 8px 0 0; font-family: var(--font-display); font-size: clamp(32px, 3.6vw, 48px); font-weight: 650; letter-spacing: -.06em; line-height: 1; }
+.top-brands-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.brand-tile { position: relative; display: flex; min-height: 220px; flex-direction: column; justify-content: flex-end; overflow: hidden; border-radius: 20px; background: #17181b; color: #fff; transition: transform .22s var(--ease-out), box-shadow .22s var(--ease-out); }
+.brand-tile:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
+.brand-tile-image { position: absolute; inset: 0; background-position: center; background-size: cover; background-color: #2a2b2f; }
+.brand-tile-image::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(23,24,27,.92) 0%, rgba(23,24,27,.35) 55%, rgba(23,24,27,0) 100%); }
+.brand-tile-body { position: relative; z-index: 1; padding: 20px; }
+.brand-tile-body strong { display: block; font-family: var(--font-display); font-size: 22px; font-weight: 600; letter-spacing: -.03em; }
+.brand-tile-body span { display: block; margin-top: 4px; color: rgba(255,255,255,.72); font-size: 12px; line-height: 1.5; }
+
+/* NEWVISION.md §6 "Юу ярьж байна" -- real customer reviews, Isetan's "Let
+   Customers Speak for Us" equivalent. Simple card grid; hides entirely
+   (see Home.tsx) rather than padding itself with lower-rated reviews when
+   there aren't enough real ones yet. */
+.customer-voices-section { padding: clamp(56px, 7vw, 88px) max(34px, 7vw); background: #f8f5ef; }
+.customer-voices-heading { margin-bottom: 28px; }
+.customer-voices-heading h2 { margin: 8px 0 0; font-family: var(--font-display); font-size: clamp(32px, 3.6vw, 48px); font-weight: 650; letter-spacing: -.06em; line-height: 1; }
+.customer-voices-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.customer-voice-card { display: flex; flex-direction: column; gap: 12px; padding: 24px; border-radius: 18px; background: #fffdf9; box-shadow: var(--shadow-sm); }
+.customer-voice-stars { display: flex; gap: 2px; }
+.customer-voice-card p { margin: 0; flex: 1 1 auto; color: #414247; font-size: 14px; line-height: 1.65; }
+.customer-voice-footer { display: flex; align-items: center; gap: 10px; }
+.customer-voice-avatar { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: #17181b; color: #f0b52d; font-family: var(--font-display); font-size: 13px; font-weight: 700; }
+.customer-voice-footer strong { display: block; font-size: 12px; font-weight: 700; }
+.customer-voice-footer span { display: block; margin-top: 1px; color: #85868a; font-size: 11px; }
+
 /* Journal/news rail — a deliberate dark "editorial break" band for contrast
    against the surrounding pastel sections (mirrors the reference site's
    loud section-to-section color changes without borrowing its palette). */
