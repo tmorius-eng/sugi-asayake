@@ -462,6 +462,21 @@ export async function getPublishedCatalog() {
     .orderBy(asc(productCategories.sortOrder), desc(products.createdAt));
 }
 
+// 2026-09-04 cohesion audit: the "800+" product-count claim on the homepage
+// was hardcoded independently in 3 separate places (hero badge, category
+// section description, "why choose us" card) with only a code comment (not
+// a real mechanism) keeping them in sync -- one of them wasn't even
+// admin-editable, so all 3 could silently drift from the real catalog size
+// and from each other. A plain COUNT(*) rather than getPublishedCatalog()
+// (which selects every column, joins reviews, and groups by product for the
+// full catalog) since the homepage only ever needs the number.
+export async function getPublishedProductCount(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(products).where(eq(products.isPublished, true));
+  return count;
+}
+
 export type CatalogPageParams = {
   search?: string;
   category?: string;

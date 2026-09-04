@@ -28,7 +28,7 @@ export default function WhyChooseUs({ branchCount }: { branchCount: number }) {
         <div className="wcu-card">
           <span className="wcu-card-icon"><ShoppingBag size={20} /></span>
           <strong>{textFor("home-text-wcu-card1-title", "Сонголт")}</strong>
-          <span>{textFor("home-text-wcu-card1-desc", "Арчилгаа, гоо сайхан, эрүүл ахуйн 800+ төрөл")}</span>
+          <span>{textFor("home-text-wcu-card1-desc", "Арчилгаа, гоо сайхан, эрүүл ахуйн 900+ төрөл")}</span>
         </div>
         <div className="wcu-card">
           <span className="wcu-card-icon"><ShieldCheck size={20} /></span>

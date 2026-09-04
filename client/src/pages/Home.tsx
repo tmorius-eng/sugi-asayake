@@ -89,6 +89,15 @@ export default function Home() {
   // but nothing ever surfaced it on the homepage itself.
   const latestPostsQuery = trpc.content.latestPosts.useQuery();
   const latestPosts = (latestPostsQuery.data ?? []).slice(0, 3);
+  // 2026-09-04 cohesion audit: the hero badge's "800+" used to be hardcoded
+  // directly in HeroSection.tsx with no way to update it short of a code
+  // deploy -- real count is 937 today. Rounds down to the nearest hundred so
+  // it still reads as marketing copy ("900+") rather than an oddly precise
+  // number, and can never overstate the real published catalog size. "…+"
+  // while still loading, matching this page's other "don't show 0 while
+  // fetching" conventions.
+  const publishedCountQuery = trpc.catalog.publishedCount.useQuery();
+  const productCountLabel = publishedCountQuery.data === undefined ? "…+" : `${Math.floor(publishedCountQuery.data / 100) * 100}+`;
   const mediaBySlot = useMemo(() => new Map((siteMediaQuery.data ?? []).map(media => [media.slotKey, media.imageUrl])), [siteMediaQuery.data]);
   const imageFor = (slotKey: string, fallbackUrl: string | null) => mediaBySlot.get(slotKey) || fallbackUrl;
   // Only sets an inline background-image when there's an actual URL --
@@ -168,7 +177,7 @@ export default function Home() {
       </header>
 
       <main>
-        <HeroSection heroImageStyle={bgStyle("home-hero", heroImage)} />
+        <HeroSection heroImageStyle={bgStyle("home-hero", heroImage)} productCountLabel={productCountLabel} />
 
         <div className="sunrise-ribbon" aria-label="SUGI ASAYAKE brand promise">
           <div>{ribbonRow("ribbon-a")}</div>

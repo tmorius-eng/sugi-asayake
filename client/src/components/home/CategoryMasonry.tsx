@@ -70,7 +70,7 @@ export default function CategoryMasonry({
       <div className="cat-mosaic-top">
         <div className="cat-mosaic-heading-block">
           <SectionHeading>{headingLine1}<br /><em>{headingLine2}</em></SectionHeading>
-          <p>{textFor("home-text-cat-description", "Арьс арчилгаа, гоо сайхан, эрүүл ахуй, гэр бүлийн өдөр тутмын хэрэгцээг 800+ сонголтоос нэг дороос.")}</p>
+          <p>{textFor("home-text-cat-description", "Арьс арчилгаа, гоо сайхан, эрүүл ахуй, гэр бүлийн өдөр тутмын хэрэгцээг 900+ сонголтоос нэг дороос.")}</p>
           <a className="quiet-link" href="#stores">{textFor("home-text-cat-link-label", "Дэлгэрэнгүй үзэх")} <ArrowUpRight size={16} /></a>
         </div>
         <a className="cat-mosaic-anchor" href={anchorHref} style={anchorImageStyle} aria-label="Ойр салбараа олох">

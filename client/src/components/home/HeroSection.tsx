@@ -17,7 +17,7 @@ import { useSiteText } from "@/hooks/useSiteText";
  * siteMedia query), this component just renders whatever style object it's
  * given, same as the old inline markup did.
  */
-export default function HeroSection({ heroImageStyle }: { heroImageStyle: CSSProperties | undefined }) {
+export default function HeroSection({ heroImageStyle, productCountLabel }: { heroImageStyle: CSSProperties | undefined; productCountLabel: string }) {
   const textFor = useSiteText();
   const [headingLine1, headingLine2, headingLine3] = textFor("home-text-hero-heading", "ГЭР БҮЛИЙН\nГИШҮҮН БҮРТ\nЯПОН ЧАНАР").split("\n");
   return (
@@ -46,11 +46,17 @@ export default function HeroSection({ heroImageStyle }: { heroImageStyle: CSSPro
       </div>
       <div className="hero-image" style={heroImageStyle} aria-label="SUGI ASAYAKE everyday-care products" role="img">
         <div className="hero-image-shade" />
-        {/* "800+" itself stays code, not a text slot (same real product-count
-            fact repeated in TrustStrip/CategoryMasonry/WhyChooseUs -- see
-            shared/site-text.ts's header comment on why each repetition is
-            independently editable text instead of one shared token). */}
-        <div className="hero-image-sun" aria-hidden="true"><span>800+</span><small>{textFor("home-text-hero-badge-label", "DAILY CHOICES")}</small></div>
+        {/* 2026-09-04: this badge used to hardcode "800+" directly (never
+            admin-editable, and stale the moment the real catalog outgrew
+            it -- confirmed at 937 published products). Now derived from a
+            real COUNT(*) (see getPublishedProductCount, Home.tsx), rounded
+            down to the nearest hundred so it still reads as marketing
+            copy ("900+") rather than an oddly precise number, and never
+            overstates. CategoryMasonry/WhyChooseUs still carry their own
+            "800+"-containing sentences as free CMS text (an admin can
+            already edit those directly) -- only this one was purely
+            hardcoded code with no way to fix it short of a deploy. */}
+        <div className="hero-image-sun" aria-hidden="true"><span>{productCountLabel}</span><small>{textFor("home-text-hero-badge-label", "DAILY CHOICES")}</small></div>
         <div className="hero-image-marker" aria-hidden="true"><Sparkles size={15} /><span>{textFor("home-text-hero-marker-label", "THE MORNING OF CARE")}</span></div>
         <div className="hero-image-label"><span>JAPAN QUALITY</span><strong>01</strong></div>
         <div className="hero-image-caption">{textFor("home-text-hero-image-caption", "Өдөр бүрийн арчилгаа, илүү ойрхон")}</div>

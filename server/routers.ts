@@ -80,6 +80,7 @@ import {
   getBestsellingProducts,
   getPublicProductVariants,
   getPublishedCatalogPage,
+  getPublishedProductCount,
   getPublishedProductsByIds,
   searchPublishedCatalog,
   getPublishedRoutineBySlug,
@@ -730,6 +731,12 @@ export const appRouter = router({
     // Homepage "Их зарагддаг бараа" rail — real paid-order history, not a
     // manually curated list. See getBestsellingProducts.
     bestsellers: publicProcedure.query(() => getBestsellingProducts(8)),
+    // 2026-09-04 cohesion audit: backs the homepage's "800+" claim (hero
+    // badge, category section, why-choose-us card) from one real COUNT(*)
+    // instead of 3 independently hardcoded copies that could drift from
+    // each other and from the real catalog size. See
+    // getPublishedProductCount's own comment.
+    publishedCount: publicProcedure.query(() => getPublishedProductCount()),
     // PHASE 2 of product variants: powers the ProductDetail/QuickView
     // picker. Only rendered client-side when this returns more than one row
     // — a single-variant product (the common case) looks exactly as it did
