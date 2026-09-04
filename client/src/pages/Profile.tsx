@@ -22,9 +22,9 @@ import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
 import type { RouterOutputs } from "@/lib/trpc";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
+import { formatMnt } from "@shared/format";
 
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Гүйцэтгэж чадсангүй. Дахин оролдоно уу.";
-const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
 
 type TabKey = "overview" | "orders" | "preferences" | "wishlist" | "addresses" | "notifications" | "security" | "support" | "loyalty";
 const TAB_KEYS: TabKey[] = ["overview", "orders", "preferences", "wishlist", "addresses", "notifications", "security", "support", "loyalty"];

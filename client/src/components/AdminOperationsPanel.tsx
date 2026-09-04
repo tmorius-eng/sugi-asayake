@@ -4,12 +4,12 @@ import { toast } from "sonner";
 import { downloadCsv } from "@/lib/csv";
 import { trpc } from "@/lib/trpc";
 import AdminBulkActionBar from "./AdminBulkActionBar";
+import { formatMnt } from "@shared/format";
 
 type Section = "orders" | "posts";
 type OrderStatus = "pending" | "confirmed" | "packed" | "out_for_delivery" | "completed" | "cancelled" | "returned";
 const statusLabels: Record<string, string> = { pending: "Хүлээгдэж байна", confirmed: "Баталгаажсан", packed: "Бэлтгэсэн", out_for_delivery: "Хүргэлтэд гарсан", completed: "Дууссан", cancelled: "Цуцалсан", returned: "Буцаагдсан" };
 const slugify = (value: string) => value.toLocaleLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-const formatMnt = (amount: number) => `${new Intl.NumberFormat("mn-MN").format(amount)}₮`;
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Хүсэлт амжилтгүй боллоо.";
 
 export default function AdminOperationsPanel({ section, preview = false, query = "" }: { section: Section; preview?: boolean; query?: string }) {

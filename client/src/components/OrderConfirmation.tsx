@@ -2,8 +2,8 @@ import { Check, ClipboardList, MapPin, ShoppingBag, Smartphone } from "lucide-re
 import { Link } from "wouter";
 import type { RouterOutputs } from "@/lib/trpc";
 import { formatVariantAttributes } from "@shared/catalog-filter";
+import { formatMnt } from "@shared/format";
 
-const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
 
 type ConfirmedOrder = RouterOutputs["checkout"]["createOrder"];
 

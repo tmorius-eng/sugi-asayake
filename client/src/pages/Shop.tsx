@@ -15,8 +15,8 @@ import { rememberRecentlyViewed, resolveRecentlyViewed } from "@shared/recently-
 import { UB_DELIVERY_FEE_MNT } from "@shared/const";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { useSiteText } from "@/hooks/useSiteText";
+import { formatMnt } from "@shared/format";
 
-const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
 const RECENTLY_VIEWED_KEY = "sugi-asayake-recently-viewed-v1";
 
 const discoveryCategories = [

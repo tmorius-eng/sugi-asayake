@@ -1,7 +1,7 @@
 import { AlertTriangle, Database, HardDrive, Lock, LoaderCircle, ReceiptText, Users2, Wallet, type LucideIcon } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { formatMnt } from "@shared/format";
 
-const formatMnt = (amount: number) => `${new Intl.NumberFormat("mn-MN").format(amount)}₮`;
 const statusLabels: Record<string, string> = { pending: "Хүлээгдэж байна", confirmed: "Баталгаажсан", packed: "Бэлтгэсэн", out_for_delivery: "Хүргэлтэд гарсан", completed: "Дууссан", cancelled: "Цуцалсан" };
 
 const previewSummary = {

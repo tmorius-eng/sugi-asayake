@@ -148,6 +148,7 @@ import { getCategoryWriteViolation, getProductWriteViolation } from "./catalog-v
 import { getAnalyticsReport, exportAnalyticsExcel, exportAnalyticsPdf } from "./analytics";
 import { siteMediaSlotKeys } from "../shared/site-media";
 import { siteTextSlotKeys } from "../shared/site-text";
+import { formatMnt } from "@shared/format";
 
 const slugSchema = z.string().trim().min(2).max(200).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens only.");
 const nullableText = (max: number) => z.string().trim().max(max).nullable().optional();
@@ -406,7 +407,6 @@ async function sendVerificationCode(userId: number, email: string): Promise<bool
 // ROADMAP.md TIER 2: order confirmation + status-change notifications.
 // Both are best-effort (see the try/catch at each call site) — a Brevo
 // hiccup should never fail or roll back a real order.
-const formatMnt = (amountMnt: number) => `${new Intl.NumberFormat("mn-MN").format(amountMnt)}₮`;
 const orderStatusMessages: Record<string, string> = {
   confirmed: "Таны захиалгыг баталгаажууллаа.",
   packed: "Таны захиалгыг бэлтгэж дууслаа.",

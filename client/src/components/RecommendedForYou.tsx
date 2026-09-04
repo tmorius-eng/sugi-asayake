@@ -3,8 +3,8 @@ import { Link } from "wouter";
 import type { QuickViewProduct } from "@/components/QuickViewDialog";
 import { getCategoryPlaceholderImage } from "@shared/catalog-filter";
 import { imageSrcSet } from "@shared/image-variants";
+import { formatMnt } from "@shared/format";
 
-const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
 
 /**
  * Preference Profile v2 (2026-09-01): extracted out of Shop.tsx (where this

@@ -6,8 +6,8 @@ import { trpc } from "@/lib/trpc";
 import { useSiteText } from "@/hooks/useSiteText";
 import SectionHeading from "./SectionHeading";
 import InfinityGraph from "./InfinityGraph";
+import { formatMnt } from "@shared/format";
 
-const formatMnt = (amount: number) => `${new Intl.NumberFormat("mn-MN").format(amount)}₮`;
 // Master-prompt section 16.7 explicitly suggests a compact form for the
 // infinity graph's loop-center value ("actual eligible lifetime spend, for
 // example: '₮1.2M'") -- the full formatMnt() precision is kept everywhere

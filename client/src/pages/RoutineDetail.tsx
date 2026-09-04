@@ -5,9 +5,9 @@ import { toast } from "sonner";
 import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
 import { trpc } from "@/lib/trpc";
+import { formatMnt } from "@shared/format";
 
 // PREMIUM-FEATURES.md TIER 4: customer-facing Routine (bundle) detail page.
-const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
 const fallbackImage = "/product-placeholder.svg";
 
 export default function RoutineDetail() {

@@ -13,6 +13,7 @@ import { carts, cartItems, orderItems, orders, productCategories, products, user
 import { getDb, getMarketingSpendRows } from "./db";
 import { ubDistrictLabels, type UbDistrict } from "../shared/districts";
 import { LOYALTY_TIERS, getLoyaltyTier } from "../shared/loyalty";
+import { formatMnt } from "@shared/format";
 
 // pdfkit's built-in standard-14 fonts (Helvetica etc.) are Latin-only per
 // the PDF spec — Cyrillic text renders as garbage without embedding a real
@@ -35,7 +36,6 @@ function dateRangeConditions(input: DateRangeInput) {
   return conditions;
 }
 
-const formatMnt = (amount: number) => `${new Intl.NumberFormat("mn-MN").format(amount)}₮`;
 
 /**
  * Headline KPIs. Only counts paymentStatus="paid" orders (same "actually

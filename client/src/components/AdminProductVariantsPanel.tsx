@@ -2,13 +2,13 @@ import { useState } from "react";
 import { LoaderCircle, Plus, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { formatMnt } from "@shared/format";
 
 // Product variants -- PHASE 1 (additive only). See the long comment on
 // productVariants in drizzle/schema.ts: nothing in cart/checkout/orders
 // reads this table yet, so creating variants here is safe prep work, not
 // yet something a shopper can pick between when buying.
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Үйлдэл амжилтгүй боллоо.";
-const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
 
 type VariantRow = {
   id: number;

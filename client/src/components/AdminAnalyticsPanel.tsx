@@ -8,6 +8,7 @@ import { downloadCsv } from "@/lib/csv";
 import { arcPath, polarPoint } from "@/lib/svg-arc";
 import type { RouterOutputs } from "@/lib/trpc";
 import { genderLabels, skinTypeLabels as customerSkinTypeLabels, hairTypeLabels, skinConcernOptions } from "@shared/catalog-filter";
+import { formatMnt } from "@shared/format";
 
 const preferenceSegmentLabelFor = (field: "gender" | "skinType" | "hairType" | "concern", value: string): string => {
   if (field === "gender") return genderLabels[value as keyof typeof genderLabels] ?? value;
@@ -16,7 +17,6 @@ const preferenceSegmentLabelFor = (field: "gender" | "skinType" | "hairType" | "
   return skinConcernOptions.find(option => option.value === value)?.label ?? value;
 };
 
-const formatMnt = (amount: number) => `${new Intl.NumberFormat("mn-MN").format(amount)}₮`;
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Тайлан ачаалж чадсангүй.";
 type AnalyticsReport = RouterOutputs["admin"]["analyticsReport"];
 

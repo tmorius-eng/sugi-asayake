@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import VariantPicker from "@/components/VariantPicker";
 import { trpc } from "@/lib/trpc";
 import { getCategoryPlaceholderImage, getSalePercent } from "@shared/catalog-filter";
+import { formatMnt } from "@shared/format";
 
 export type QuickViewProduct = {
   id: number;
@@ -28,7 +29,6 @@ type QuickViewDialogProps = {
   onAdded: () => void;
 };
 
-const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Сагсанд нэмж чадсангүй.";
 
 export default function QuickViewDialog({ open, product, onOpenChange, onAdded }: QuickViewDialogProps) {

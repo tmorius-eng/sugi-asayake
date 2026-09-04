@@ -13,11 +13,11 @@ import { trpc } from "@/lib/trpc";
 import { getCategoryPlaceholderImage, getSalePercent, LOW_STOCK_THRESHOLD } from "@shared/catalog-filter";
 import { UB_DELIVERY_FEE_MNT } from "@shared/const";
 import { imageSrcSet } from "@shared/image-variants";
+import { formatMnt } from "@shared/format";
 
 // A product with no uploaded photos at all falls back to just this one
 // placeholder tile -- not a 3-item fake "gallery" of stock photography.
 const previewGallery = ["/product-placeholder.svg"];
-const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Сагсанд нэмж чадсангүй.";
 const reviewMessageFrom = (error: unknown) => error instanceof Error ? error.message : "Сэтгэгдэл илгээж чадсангүй.";
 

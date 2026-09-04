@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { LoaderCircle, Package, Receipt, Search, UserRound, type LucideIcon } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { formatMnt } from "@shared/format";
 
-const formatMnt = (amount: number) => `${new Intl.NumberFormat("mn-MN").format(amount)}₮`;
 
 export default function AdminGlobalSearch({ preview = false, onSelectProduct, onSelectOrder, onSelectUser }: {
   preview?: boolean;

@@ -21,6 +21,7 @@ import AdminSecurityCenter from "./AdminSecurityCenter";
 import AdminUserDetailDrawer from "./AdminUserDetailDrawer";
 import ContentMediaPanel from "./ContentMediaPanel";
 import ContentTextPanel from "./ContentTextPanel";
+import { formatMnt } from "@shared/format";
 
 type ProductRow = {
   id: number;
@@ -115,7 +116,6 @@ const previewCategories: CategoryRow[] = [
   { id: 2, name: "Үс ба бие", slug: "hair-body", description: null, imageUrl: null, sortOrder: 2, isActive: true, updatedAt: new Date() },
 ];
 
-const formatMnt = (amount: number) => `${new Intl.NumberFormat("mn-MN").format(amount)}₮`;
 const slugify = (value: string) => value.toLocaleLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 const emptyProduct = (): ProductForm => ({ categoryId: "", name: "", slug: "", brand: "", shortDescription: "", description: "", sku: "", priceMnt: "", compareAtPriceMnt: "", costMnt: "", imageUrl: "", stockQuantity: "0", isPublished: false, skinType: "", skinConcerns: "", interiorStyle: "", hairType: "", hairConcerns: "", fragrancePreference: "", wellnessInterests: "" });
 const skinTypeLabels: Record<string, string> = { dry: "Хуурай", oily: "Тослог", combination: "Холимог", sensitive: "Мэдрэмтгий", normal: "Хэвийн" };

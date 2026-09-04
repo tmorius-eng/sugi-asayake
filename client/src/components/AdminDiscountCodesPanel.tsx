@@ -2,6 +2,7 @@ import { useState } from "react";
 import { LoaderCircle, Pencil, Tag, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { formatMnt } from "@shared/format";
 
 // Manually-entered checkout discount codes ("SALE10") -- distinct from the
 // automatic routine-bundle and loyalty-tier discounts, which need no code.
@@ -9,7 +10,6 @@ import { trpc } from "@/lib/trpc";
 // redemption happens in server/db.ts's validateDiscountCode/
 // createOrderFromActiveCart, never trusting a client-supplied amount.
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Үйлдэл амжилтгүй боллоо.";
-const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
 
 type DiscountCodeRow = {
   id: number;

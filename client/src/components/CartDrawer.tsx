@@ -5,9 +5,9 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { trpc } from "@/lib/trpc";
 import { formatVariantAttributes } from "@shared/catalog-filter";
 import { UB_DELIVERY_FEE_MNT } from "@shared/const";
+import { formatMnt } from "@shared/format";
 
 type CartDrawerProps = { open: boolean; onOpenChange: (open: boolean) => void };
-const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Сагсыг шинэчилж чадсангүй.";
 
 export default function CartDrawer({ open, onOpenChange }: CartDrawerProps) {

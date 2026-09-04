@@ -38,6 +38,7 @@ import { locations } from "@/components/home/locations-data";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { useSiteText } from "@/hooks/useSiteText";
 import { trpc } from "@/lib/trpc";
+import { formatMnt } from "@shared/format";
 
 const logoUrl = "/manus-storage/sugi-logo-transparent-clean_fee66cad.png";
 // These have no bundled fallback photo (unlike product shots, there's no
@@ -83,7 +84,6 @@ const categories = [
   { number: "06", title: "Ээж ба хүүхэд", detail: "Зөөлөн, хэрэгцээт сонголтууд", slug: "eej-ba-khuukhed", Icon: Gift, imageUrl: "/manus-storage/catalog/products/275/milk-save-blend_d14e5ce4.jpg" },
 ];
 
-const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
 const bestsellerFallbackImage = "/product-placeholder.svg";
 
 export default function Home() {

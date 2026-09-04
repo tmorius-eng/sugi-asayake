@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { formatMnt } from "@shared/format";
 
 // Site-wide search-with-suggestions, reachable from every page (previously
 // the only search box lived inside /shop's hero panel -- a shopper on Home,
@@ -16,7 +17,6 @@ import { trpc } from "@/lib/trpc";
 // so "view all results" could land a shopper on an empty/different page
 // from what they just saw suggested.
 const fallbackImage = "/product-placeholder.svg";
-const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
 const MIN_QUERY_LENGTH = 2;
 
 export default function HeaderSearch() {

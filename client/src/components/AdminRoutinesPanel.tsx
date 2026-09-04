@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, LoaderCircle, ListPlus, Pencil, Search, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { formatMnt } from "@shared/format";
 
 // PREMIUM-FEATURES.md TIER 4: admin management for "Routine" bundles — an
 // ordered list of products (Алхам 1: Цэвэрлэгч -> Алхам 2: Тонер -> ...)
 // with an optional bundle discount that's actually enforced at checkout
 // (see server/db.ts getApplicableRoutineDiscount), not just a label here.
 const slugify = (value: string) => value.toLocaleLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Үйлдэл амжилтгүй боллоо.";
 
 type StepDraft = { productId: number; productName: string; priceMnt: number; stepLabel: string };

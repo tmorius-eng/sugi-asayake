@@ -12,8 +12,8 @@ import { getStoredTrafficSource } from "@/lib/trafficSource";
 import { formatVariantAttributes } from "@shared/catalog-filter";
 import { UB_DELIVERY_FEE_MNT } from "@shared/const";
 import { ubDistricts, ubDistrictLabels, type UbDistrict } from "@shared/districts";
+import { formatMnt } from "@shared/format";
 
-const formatMnt = (amount: number) => new Intl.NumberFormat("mn-MN").format(amount) + "₮";
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Захиалгыг үргэлжлүүлж чадсангүй. Дахин оролдоно уу.";
 const branches = ["Орос элчингийн салбар", "Их наяд плаза салбар", "Яармаг FOOD CITY салбар"] as const;
 
