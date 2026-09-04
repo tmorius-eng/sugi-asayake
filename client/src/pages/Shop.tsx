@@ -16,15 +16,15 @@ import { UB_DELIVERY_FEE_MNT } from "@shared/const";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { useSiteText } from "@/hooks/useSiteText";
 import { formatMnt } from "@shared/format";
+// 2026-09-04 cohesion audit: this used to be a locally hardcoded 4-of-6-category
+// list with its own copy/ordering, independent of (and already drifted from)
+// Home.tsx's real 6-category array -- now the same shared source of truth
+// (see categories-data.ts), so the empty-catalog discovery cards below can
+// never silently disagree with what the rest of the site calls these
+// categories again.
+import { categories as discoveryCategories } from "@/components/home/categories-data";
 
 const RECENTLY_VIEWED_KEY = "sugi-asayake-recently-viewed-v1";
-
-const discoveryCategories = [
-  { number: "01", title: "Арьс арчилгаа", detail: "Зөөлөн, өдөр тутмын арчилгаа", tone: "rose" },
-  { number: "02", title: "Гоо сайхан", detail: "Өөртөө итгэх жижиг мөчүүд", tone: "cobalt" },
-  { number: "03", title: "Эрүүл мэнд", detail: "Гэр бүлийн тайван өдөр бүр", tone: "marigold" },
-  { number: "04", title: "Ээж ба хүүхэд", detail: "Хамгийн зөөлөн сонголтууд", tone: "mint" },
-];
 
 type RecentlyViewedProps = {
   products: QuickViewProduct[];
