@@ -394,6 +394,26 @@ export const siteTextSlots = [
     fallbackValue: "Таны профайл дээр хадгалсан тохиргоо, эсвэл манай хамгийн эрэлттэй сонголтуудад тулгуурласан жагсаалт.",
   },
 
+  // ---- Топ брэндүүд (2026-09-04, NEWVISION.md §5; 2026-09-06: briefly
+  // retired from the homepage during the design-review consolidation, then
+  // restored the same day at Tom's explicit "we need Top Brands, must
+  // have!!" -- back in Home.tsx between BrandStorySection and
+  // CategoryMasonry, same position it always had.) --------------------
+  {
+    key: "home-text-brands-eyebrow",
+    group: "Топ брэндүүд",
+    label: "Эйброу текст",
+    description: "",
+    fallbackValue: "ТОП БРЭНД",
+  },
+  {
+    key: "home-text-brands-heading",
+    group: "Топ брэндүүд",
+    label: "Гарчиг",
+    description: "",
+    fallbackValue: "Тансаг брэндүүд.",
+  },
+
   // ---- Family / care section ------------------------------------------------
   // 2026-09-06: SeasonalCampaignCarousel no longer renders on the homepage
   // (Tom's "cut to ~6 sections" call) -- its 3 home-text-summer-* slots were

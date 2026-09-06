@@ -12,17 +12,19 @@
  * overlapping "why choose us" trust messaging. Retired from THIS page's
  * render tree (not from the codebase -- every component, its backend, and
  * its admin CRUD stay intact and reusable elsewhere, this is a JSX-level
- * change only): the Top Brands rail (brand browsing still works via Shop's
- * `brand` URL filter), the per-category CarouselShelf loop,
- * SeasonalCampaignCarousel, JournalSection (still lives at /journal), and
- * the standalone customer-voices-section (its real reviews now show as a
- * compact strip inside BrandStorySection instead). Final structure: Hero ->
- * Quick Stats -> BrandStorySection (merges the old story-section +
- * WhyChooseUs + review strip) -> CategoryMasonry -> Bestseller rail ->
- * Recommended rail -> EditorialBanner (the old care-section's real content,
- * restyled via the already-built-but-previously-unused EditorialBanner
- * primitive) -> StoreLocatorSection -> Footer (absorbing the old
- * standalone final-cta as an opt-in banner, see SiteFooter.tsx).
+ * change only): the per-category CarouselShelf loop, SeasonalCampaignCarousel,
+ * JournalSection (still lives at /journal), and the standalone
+ * customer-voices-section (its real reviews now show as a compact strip
+ * inside BrandStorySection instead). Top Brands was briefly retired here
+ * too, then restored the same day at Tom's explicit "must have" -- back in
+ * its original position, between BrandStorySection and CategoryMasonry.
+ * Final structure: Hero -> Quick Stats -> BrandStorySection (merges the old
+ * story-section + WhyChooseUs + review strip) -> Top Brands rail ->
+ * CategoryMasonry -> Bestseller rail -> Recommended rail -> EditorialBanner
+ * (the old care-section's real content, restyled via the already-built-
+ * but-previously-unused EditorialBanner primitive) -> StoreLocatorSection
+ * -> Footer (absorbing the old standalone final-cta as an opt-in banner,
+ * see SiteFooter.tsx).
  */
 import { Fragment, useMemo, useState } from "react";
 import { Link } from "wouter";
@@ -43,6 +45,8 @@ import BrandStorySection from "@/components/home/BrandStorySection";
 import EditorialBanner from "@/components/home/EditorialBanner";
 import StoreLocatorSection from "@/components/home/StoreLocatorSection";
 import QuickStatsSection from "@/components/home/QuickStatsSection";
+import BrandTileCard from "@/components/home/BrandTileCard";
+import CarouselShelf from "@/components/home/CarouselShelf";
 import { BestsellerCardSkeleton } from "@/components/Skeleton";
 import { imageSrcSet } from "@shared/image-variants";
 import { getSalePercent } from "@shared/catalog-filter";
@@ -143,6 +147,11 @@ export default function Home() {
   // rather than padding itself with lower-rated/commentless reviews.
   const featuredReviewsQuery = trpc.reviews.featured.useQuery();
   const featuredReviews = featuredReviewsQuery.data ?? [];
+  // NEWVISION.md §5 -- restored 2026-09-06 (Tom, same day it was briefly
+  // retired during the design-review consolidation): hides entirely when
+  // no brands are curated yet, same discipline as every other rail here.
+  const featuredBrandsQuery = trpc.catalog.featuredBrands.useQuery();
+  const featuredBrands = featuredBrandsQuery.data ?? [];
   const mediaBySlot = useMemo(() => new Map((siteMediaQuery.data ?? []).map(media => [media.slotKey, media.imageUrl])), [siteMediaQuery.data]);
   const imageFor = (slotKey: string, fallbackUrl: string | null) => mediaBySlot.get(slotKey) || fallbackUrl;
   // Only sets an inline background-image when there's an actual URL --
@@ -194,6 +203,19 @@ export default function Home() {
         <QuickStatsSection />
 
         <BrandStorySection branchCount={locations.length} productCountLabel={productCountLabel} featuredReviews={featuredReviews} />
+
+        {/* Restored 2026-09-06 (Tom: "we need Top Brands, must have!!") --
+            same CarouselShelf horizontal-scroll primitive as the bestseller/
+            recommended/category rails, real admin-curated brands only. See
+            AdminBrandsPanel.tsx for the CRUD side; #top-brands is the header
+            nav's anchor target. */}
+        {featuredBrands.length > 0 && (
+          <div id="top-brands">
+            <CarouselShelf eyebrow={textFor("home-text-brands-eyebrow", "ТОП БРЭНД")} title={textFor("home-text-brands-heading", "Тансаг брэндүүд.")} cardWidth={240}>
+              {featuredBrands.map(brand => <BrandTileCard brand={brand} key={brand.id} />)}
+            </CarouselShelf>
+          </div>
+        )}
 
         <CategoryMasonry
           categories={categories.map(category => ({
