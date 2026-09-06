@@ -31,7 +31,7 @@ export default function Journal() {
     <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]">
       <CommerceHeader backLabel="SUGI ASAYAKE" />
       <main className="mx-auto max-w-6xl px-4 py-10 sm:px-8 sm:py-14">
-        <p className="flex items-center gap-3 text-[10px] font-extrabold tracking-[.18em] text-[#df1f3d]">
+        <p className="flex items-center gap-3 text-[10px] font-extrabold tracking-[.18em] text-[#c81b34]">
           <span className="h-px w-10 bg-[#df1f3d]" />
           <Newspaper size={13} /> SUGI JOURNAL
         </p>
@@ -68,7 +68,7 @@ export default function Journal() {
                   )}
                 </div>
                 <div className="flex flex-1 flex-col p-6">
-                  {post.publishedAt && <span className="text-[10px] font-extrabold tracking-[.12em] text-[#df1f3d]">{formatDate(post.publishedAt)}</span>}
+                  {post.publishedAt && <span className="text-[10px] font-extrabold tracking-[.12em] text-[#c81b34]">{formatDate(post.publishedAt)}</span>}
                   <h3 className="mt-2 font-[var(--font-display)] text-lg font-semibold tracking-[-.03em]">{post.title}</h3>
                   {post.excerpt && <p className="mt-2 line-clamp-2 flex-1 text-[13px] leading-6 text-[#74757a]">{post.excerpt}</p>}
                   <span className="mt-4 inline-flex items-center gap-1.5 text-[11px] font-bold text-[#17181b] group-hover:text-[#df1f3d]">

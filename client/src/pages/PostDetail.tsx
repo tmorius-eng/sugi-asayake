@@ -34,12 +34,12 @@ export default function PostDetail() {
         <CommerceHeader backLabel="SUGI ASAYAKE" />
         <main className="mx-auto grid min-h-[62vh] max-w-3xl place-items-center px-4 py-12 sm:px-8">
           <section className="w-full rounded-[2rem] border border-black/8 bg-white p-8 text-center shadow-[0_18px_55px_rgba(44,39,32,.08)] sm:p-12">
-            <p className="text-[10px] font-extrabold tracking-[.18em] text-[#df1f3d]">CONTENT NOTICE</p>
+            <p className="text-[10px] font-extrabold tracking-[.18em] text-[#c81b34]">CONTENT NOTICE</p>
             <h1 className="mt-4 font-[var(--font-display)] text-4xl font-semibold tracking-[-.07em] sm:text-5xl">Мэдээ олдсонгүй.</h1>
             <p className="mx-auto mt-5 max-w-md text-sm leading-6 text-[#67686c]">
               Энэ мэдээ нийтлэгдээгүй, устгагдсан, эсвэл холбоос буруу байж болно.
             </p>
-            <Link href="/" className="mt-8 inline-flex min-h-12 items-center justify-center rounded-full bg-[#df1f3d] px-6 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97]">
+            <Link href="/" className="mt-8 inline-flex min-h-12 items-center justify-center rounded-full bg-[#df1f3d] px-6 text-sm font-bold text-white! transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97]">
               Нүүр хуудас руу буцах
             </Link>
           </section>
@@ -53,7 +53,7 @@ export default function PostDetail() {
     <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]">
       <CommerceHeader backLabel="SUGI ASAYAKE" />
       <main className="mx-auto max-w-3xl px-4 py-10 sm:px-8 sm:py-14">
-        <p className="flex items-center gap-3 text-[10px] font-extrabold tracking-[.18em] text-[#df1f3d]">
+        <p className="flex items-center gap-3 text-[10px] font-extrabold tracking-[.18em] text-[#c81b34]">
           <span className="h-px w-10 bg-[#df1f3d]" />
           МЭДЭЭ {post.publishedAt ? `· ${formatDate(post.publishedAt)}` : ""}
         </p>

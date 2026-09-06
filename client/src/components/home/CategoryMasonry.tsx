@@ -119,7 +119,12 @@ export default function CategoryMasonry({
               </span>
               <span className="cat-mosaic-item-body">
                 <span className="cat-mosaic-item-top">
-                  <span className="cat-mosaic-item-number">{category.number}</span>
+                  {/* Purely decorative index ("01".."06") -- the real,
+                      meaningful label is category.title right below it, so
+                      hiding this from assistive tech (2026-09-06 a11y audit)
+                      is correct rather than darkening it to meet a text-
+                      contrast threshold it was never meant to carry. */}
+                  <span className="cat-mosaic-item-number" aria-hidden="true">{category.number}</span>
                 </span>
                 <span className="cat-mosaic-item-title">{category.title}</span>
                 <span className="cat-mosaic-item-detail">{detail}</span>

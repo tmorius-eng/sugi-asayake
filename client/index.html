@@ -3,9 +3,12 @@
 
   <head>
     <meta charset="UTF-8" />
+    <!-- 2026-09-06 (real a11y-audit finding, axe-core meta-viewport): had
+         maximum-scale=1, which disables pinch-to-zoom -- a real WCAG 1.4.4
+         failure for any low-vision visitor who needs to zoom in. -->
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+      content="width=device-width, initial-scale=1.0" />
     <title>SUGI ASAYAKE Mongolia — Япон чанарыг гэр бүл бүрт</title>
     <meta name="description" content="SUGI ASAYAKE Mongolia — Японоос баталгаат бүтээгдэхүүнүүдийг албан ёсны эрхтэйгээр хүргэж байна. Улаанбаатар хотод 3 салбартай." />
     <meta name="theme-color" content="#e31b3b" />

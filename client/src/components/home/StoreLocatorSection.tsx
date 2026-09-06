@@ -43,14 +43,25 @@ export default function StoreLocatorSection() {
           <a className="button button-primary" href="tel:94509911">9450-9911 руу залгах <Phone size={15} /></a>
         </div>
 
-        <div className="locator-map" role="img" aria-label={`SUGI ASAYAKE-ийн ${locations.length} салбарын байршлыг харуулсан зурган дүрслэл`}>
-          <svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-            <rect width="400" height="300" fill="none" />
-            <g stroke="#c9d6cf" strokeWidth="1.5" opacity=".7">
+        {/* 2026-09-06 (real a11y-audit finding, axe-core aria-hidden-focus +
+            nested-interactive): this used to put role="img"/aria-label on the
+            wrapper and aria-hidden="true" on the <svg> itself -- but the svg
+            contains REAL, focusable <a href={mapUrl}> pin links, not just a
+            static picture. That combination hid genuinely interactive
+            content from assistive tech while leaving it keyboard-focusable
+            (a confusing, broken state), and role="img" contradicts having
+            real interactive descendants at all. Fix: no role/aria-hidden on
+            the container or <svg> -- only the truly decorative background
+            shapes (grid lines, building blocks) are aria-hidden; the real
+            pins keep their own already-correct aria-label each. */}
+        <div className="locator-map">
+          <svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" role="group" aria-label={`SUGI ASAYAKE-ийн ${locations.length} салбарын байршлыг харуулсан зурган дүрслэл`}>
+            <rect width="400" height="300" fill="none" aria-hidden="true" />
+            <g stroke="#c9d6cf" strokeWidth="1.5" opacity=".7" aria-hidden="true">
               <path d="M0 60 H400" /><path d="M0 140 H400" /><path d="M0 220 H400" />
               <path d="M70 0 V300" /><path d="M180 0 V300" /><path d="M290 0 V300" />
             </g>
-            <g fill="#dfe9e2">
+            <g fill="#dfe9e2" aria-hidden="true">
               <rect x="20" y="20" width="34" height="26" rx="3" />
               <rect x="90" y="170" width="46" height="30" rx="3" />
               <rect x="200" y="20" width="40" height="28" rx="3" />
