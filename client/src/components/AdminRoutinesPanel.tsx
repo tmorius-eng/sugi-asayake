@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, LoaderCircle, ListPlus, Pencil, Search, Sparkles, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ExternalLink, LoaderCircle, ListPlus, Pencil, Search, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
@@ -24,6 +24,12 @@ export default function AdminRoutinesPanel() {
 
   const [composerOpen, setComposerOpen] = useState(false);
   const [form, setForm] = useState<RoutineForm>(emptyForm());
+  // What's actually live right now for the routine being edited -- tracked
+  // separately from form.slug/.isPublished (which the admin can edit
+  // before saving), same discipline as AdminWorkspace.tsx's
+  // liveProductRef -- the "view live" link must never point at a
+  // not-yet-saved candidate slug that would just 404.
+  const [liveRoutineRef, setLiveRoutineRef] = useState<{ slug: string; isPublished: boolean } | null>(null);
   const [steps, setSteps] = useState<StepDraft[]>([]);
   const [productSearch, setProductSearch] = useState("");
 
@@ -44,15 +50,17 @@ export default function AdminRoutinesPanel() {
   const openComposer = (routine?: { id: number; name: string; slug: string; description: string | null; discountPercent: number; isPublished: boolean }) => {
     if (routine) {
       setForm({ id: routine.id, name: routine.name, slug: routine.slug, description: routine.description ?? "", discountPercent: String(routine.discountPercent), isPublished: routine.isPublished });
+      setLiveRoutineRef({ slug: routine.slug, isPublished: routine.isPublished });
       setSteps([]);
     } else {
       setForm(emptyForm());
+      setLiveRoutineRef(null);
       setSteps([]);
     }
     setProductSearch("");
     setComposerOpen(true);
   };
-  const closeComposer = () => { setComposerOpen(false); setForm(emptyForm()); setSteps([]); };
+  const closeComposer = () => { setComposerOpen(false); setForm(emptyForm()); setLiveRoutineRef(null); setSteps([]); };
 
   const matchingProducts = useMemo(() => {
     const needle = productSearch.trim().toLocaleLowerCase();
@@ -125,7 +133,7 @@ export default function AdminRoutinesPanel() {
               <td className="border-b border-black/6 py-3 text-xs text-[#6f7075]">{routine.stepCount} алхам</td>
               <td className="border-b border-black/6 py-3 font-bold">{routine.discountPercent > 0 ? `-${routine.discountPercent}%` : "—"}</td>
               <td className="border-b border-black/6 py-3"><span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${routine.isPublished ? "bg-[#e7f2ec] text-[#2c7650]" : "bg-[#fff0d2] text-[#9b6417]"}`}>{routine.isPublished ? "Нийтлэгдсэн" : "Ноорог"}</span></td>
-              <td className="border-b border-black/6 py-3 text-right"><div className="flex justify-end gap-1"><button type="button" onClick={() => openComposer(routine)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d]" aria-label={`${routine.name} засах`}><Pencil size={15} /></button><button type="button" onClick={() => { if (window.confirm(`"${routine.name}" routine-ыг бүрмөсөн устгах уу?`)) deleteRoutine.mutate({ id: routine.id }); }} className="rounded-full p-2 text-[#707176] transition hover:bg-[#fff0f2] hover:text-[#df1f3d]" aria-label={`${routine.name} устгах`}><Trash2 size={15} /></button></div></td>
+              <td className="border-b border-black/6 py-3 text-right"><div className="flex justify-end gap-1">{routine.isPublished && <a href={`/routine/${routine.slug}`} target="_blank" rel="noopener noreferrer" className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#3970a7]" aria-label={`${routine.name} — амьд хуудсыг харах`} title="Амьд хуудсыг харах"><ExternalLink size={15} /></a>}<button type="button" onClick={() => openComposer(routine)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d]" aria-label={`${routine.name} засах`} title="Засах"><Pencil size={15} /></button><button type="button" onClick={() => { if (window.confirm(`"${routine.name}" routine-ыг бүрмөсөн устгах уу?`)) deleteRoutine.mutate({ id: routine.id }); }} className="rounded-full p-2 text-[#707176] transition hover:bg-[#fff0f2] hover:text-[#df1f3d]" aria-label={`${routine.name} устгах`} title="Устгах"><Trash2 size={15} /></button></div></td>
             </tr>)}
             {routines.length === 0 && <tr><td colSpan={5} className="py-10 text-center text-sm text-[#77787d]">Одоогоор Routine алга. Дээрх товчоор эхнийхээ үүсгээрэй.</td></tr>}
           </tbody>
@@ -135,13 +143,13 @@ export default function AdminRoutinesPanel() {
       {composerOpen && <form onSubmit={save} className="mt-2 rounded-3xl border border-[#df1f3d]/25 bg-[#fff5f6] p-5">
         <div className="flex items-center justify-between gap-3">
           <div><p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">ROUTINE {form.id ? "EDIT" : "CREATION"}</p><h3 className="mt-1 font-[var(--font-display)] text-xl font-semibold tracking-[-.05em]">{form.id ? "Routine засах" : "Шинэ Routine үүсгэх"}</h3></div>
-          <button type="button" onClick={closeComposer} className="text-xs font-bold text-[#707176]">Хаах</button>
+          <div className="flex items-center gap-4">{liveRoutineRef?.isPublished && <a href={`/routine/${liveRoutineRef.slug}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-bold text-[#3970a7]"><ExternalLink size={13} />Амьд хуудсыг харах</a>}<button type="button" onClick={closeComposer} className="text-xs font-bold text-[#707176]">Хаах</button></div>
         </div>
 
         {form.id && detailQuery.isLoading ? <p className="mt-5 flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={15} />Ачааллаж байна…</p> : <>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <label className="grid gap-1.5 text-xs font-bold">Нэр<input required value={form.name} onChange={event => setForm(current => ({ ...current, name: event.target.value, slug: current.slug || slugify(event.target.value) }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
-            <label className="grid gap-1.5 text-xs font-bold">URL slug<input required value={form.slug} onChange={event => setForm(current => ({ ...current, slug: slugify(event.target.value) }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+            <label className="grid gap-1.5 text-xs font-bold">URL slug<input required value={form.slug} onChange={event => setForm(current => ({ ...current, slug: slugify(event.target.value) }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /><span className="mt-0.5 block text-[11px] font-normal text-[#8a8b8f]">Бодит хаяг: /routine/{form.slug || "…"}</span></label>
             <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Тайлбар<textarea value={form.description} onChange={event => setForm(current => ({ ...current, description: event.target.value }))} className="min-h-20 rounded-xl border border-black/10 bg-white p-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
             <label className="grid gap-1.5 text-xs font-bold">Багцын хямдрал (%)<input type="number" min="0" max="100" value={form.discountPercent} onChange={event => setForm(current => ({ ...current, discountPercent: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
             <label className="flex items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold"><input type="checkbox" checked={form.isPublished} onChange={event => setForm(current => ({ ...current, isPublished: event.target.checked }))} className="size-4 accent-[#df1f3d]" />Нийтлэхэд бэлэн</label>

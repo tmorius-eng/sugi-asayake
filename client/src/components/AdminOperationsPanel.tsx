@@ -1,5 +1,5 @@
 import { useState, type ChangeEvent, type FormEvent } from "react";
-import { Download, ImageUp, LoaderCircle, PackageCheck, PencilLine, Send, X } from "lucide-react";
+import { Download, ExternalLink, ImageUp, LoaderCircle, PackageCheck, PencilLine, Send, X } from "lucide-react";
 import { toast } from "sonner";
 import { downloadCsv } from "@/lib/csv";
 import { trpc } from "@/lib/trpc";
@@ -167,7 +167,7 @@ export default function AdminOperationsPanel({ section, preview = false, query =
             </label>}
       </label>
       <label className="mt-3 grid gap-1.5 text-xs font-bold">Гарчиг<input required value={post.title} onChange={event => setPost(value => ({ ...value, title: event.target.value, slug: value.slug || slugify(event.target.value) }))} className="h-10 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
-      <label className="mt-3 grid gap-1.5 text-xs font-bold">URL slug<input required value={post.slug} onChange={event => setPost(value => ({ ...value, slug: event.target.value }))} className="h-10 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+      <label className="mt-3 grid gap-1.5 text-xs font-bold">URL slug<input required value={post.slug} onChange={event => setPost(value => ({ ...value, slug: event.target.value }))} className="h-10 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /><span className="mt-0.5 block text-[11px] font-normal text-[#8a8b8f]">Бодит хаяг: /{post.slug || "…"}</span></label>
       <label className="mt-3 grid gap-1.5 text-xs font-bold">Товч тайлбар<textarea value={post.excerpt} onChange={event => setPost(value => ({ ...value, excerpt: event.target.value }))} className="min-h-16 rounded-xl border border-black/10 bg-white p-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
       <label className="mt-3 grid gap-1.5 text-xs font-bold">Нийтлэл<textarea required value={post.content} onChange={event => setPost(value => ({ ...value, content: event.target.value }))} className="min-h-28 rounded-xl border border-black/10 bg-white p-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
       <label className="mt-3 flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={post.isPublished} onChange={event => setPost(value => ({ ...value, isPublished: event.target.checked }))} />Шууд нийтлэх</label>
@@ -189,6 +189,7 @@ export default function AdminOperationsPanel({ section, preview = false, query =
         <div className="flex flex-1 justify-between gap-3">
           <div><strong className="block text-sm">{item.title}</strong><span className="mt-1 block text-[11px] text-[#77787d]">/{item.slug} · {item.isPublished ? "Нийтлэгдсэн" : "Ноорог"}</span></div>
           <div className="flex shrink-0 items-start gap-3">
+            {item.isPublished && <a href={`/${item.slug}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-bold text-[#3970a7] hover:text-[#df1f3d]"><ExternalLink size={13} />Харах</a>}
             <button type="button" onClick={() => startEditPost(item)} className="text-xs font-bold text-[#3970a7] hover:text-[#df1f3d]">Засах</button>
             <button type="button" onClick={() => { if (window.confirm(`"${item.title}" нийтлэлийг устгах уу?`)) deletePost.mutate({ id: item.id }); }} className="text-xs font-bold text-[#a51630]">Устгах</button>
           </div>
