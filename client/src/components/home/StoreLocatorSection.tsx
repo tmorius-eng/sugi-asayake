@@ -34,7 +34,7 @@ export default function StoreLocatorSection() {
     <section className="locator-section page-section" id="stores" data-reveal>
       <div className="locator-grid">
         <div className="locator-copy">
-          <SectionEyebrow number="04" label={textFor("home-text-locator-eyebrow-label", "FIND YOUR ASAYAKE")} />
+          <SectionEyebrow number={textFor("home-text-locator-number", "06")} label={textFor("home-text-locator-eyebrow-label", "FIND YOUR ASAYAKE")} />
           {/* locations.length is real data (see the file-level comment
               above) -- stays code, followed by an editable text slot. */}
           <p className="eyebrow"><Navigation size={14} /> {locations.length} {textFor("home-text-locator-count-suffix", "БАЙРШИЛ")}</p>

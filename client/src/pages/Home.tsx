@@ -190,7 +190,7 @@ export default function Home() {
         <QuickStatsSection />
 
         <section className="story-section page-section" id="story" data-reveal>
-          <div className="section-heading"><span>01</span><span>{textFor("home-text-story-eyebrow-label", "THE SUGI DIFFERENCE")}</span></div>
+          <div className="section-heading"><span>{textFor("home-text-story-number", "01")}</span><span>{textFor("home-text-story-eyebrow-label", "THE SUGI DIFFERENCE")}</span></div>
           <div className="story-grid">
             <h2>{storyHeadingLine1}<br /><em>{storyHeadingLine2}</em></h2>
             <div className="story-copy"><p>{textFor("home-text-story-description", "SUGI ASAYAKE нь Японы SUGI Drug Store-ийн албан ёсны охин компани. Өдөр тутмын эрүүл мэнд, гоо сайхан, арчилгааг Монголын гэр бүл бүрт илүү ойртуулна.")}</p><a className="inline-link" href="#collection">{textFor("home-text-story-link-label", "Бидний ялгаа")} <ArrowUpRight size={16} /></a></div>
@@ -318,7 +318,7 @@ export default function Home() {
         <SeasonalCampaignCarousel imageOverrides={{ "summer-slide-1": imageFor("summer-slide-1", heroImage) ?? undefined, "summer-slide-2": imageFor("summer-slide-2", assortmentImage) ?? undefined, "summer-slide-3": imageFor("summer-slide-3", familyImage) ?? undefined }} />
 
         <section className="care-section" data-reveal>
-          <div className="care-image" style={bgStyle("home-family", familyImage)}><span>{textFor("home-text-care-tag", "03 / FAMILY CARE")}</span></div>
+          <div className="care-image" style={bgStyle("home-family", familyImage)}><span>{textFor("home-text-care-tag", "04 / FAMILY CARE")}</span></div>
           <div className="care-copy-panel"><div className="care-sun-stamp" aria-hidden="true"><span>{textFor("home-text-care-stamp", "FAMILY CARE")}</span></div><p className="eyebrow">{textFor("home-text-care-eyebrow", "ГЭР БҮЛИЙН ӨДӨР БҮРТ")}</p><h2>{careHeadingLine1}<br />{careHeadingLine2}</h2><p>{textFor("home-text-care-description", "Бидний сонголт зөвхөн бүтээгдэхүүн биш. Таны гэр бүлийн өдөр тутмын амар тайван байдал, итгэл, халамж юм.")}</p><div className="care-points"><div><CircleCheck size={17} /> {textFor("home-text-care-point1", "Баталгаат Япон бүтээгдэхүүн")}</div><div><CircleCheck size={17} /> {textFor("home-text-care-point2", "Гэр бүл бүрт зориулсан сонголт")}</div><div><CircleCheck size={17} /> {textFor("home-text-care-point3", "24–48 цагийн дотор Улаанбаатарт хүргэнэ")}</div></div></div>
         </section>
 

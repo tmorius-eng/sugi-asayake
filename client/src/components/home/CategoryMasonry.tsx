@@ -65,7 +65,7 @@ export default function CategoryMasonry({
   const [anchorLine1, anchorLine2] = textFor("home-text-cat-anchor-heading", "Нэг өдөрт\nхэрэгтэй бүх зүйл.").split("\n");
   return (
     <section className="cat-mosaic-section page-section" id="collection" data-reveal>
-      <SectionEyebrow number="02" label={textFor("home-text-cat-eyebrow-label", "EVERYDAY JAPAN")} />
+      <SectionEyebrow number={textFor("home-text-cat-number", "02")} label={textFor("home-text-cat-eyebrow-label", "EVERYDAY JAPAN")} />
 
       <div className="cat-mosaic-top">
         <div className="cat-mosaic-heading-block">

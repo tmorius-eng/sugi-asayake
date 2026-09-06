@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowUpRight, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import { Link } from "wouter";
 import type { SiteMediaSlotKey } from "@shared/site-media";
+import { useSiteText } from "@/hooks/useSiteText";
 
 type Campaign = {
   eyebrow: string;
@@ -51,6 +52,7 @@ const campaigns: Campaign[] = [
 ];
 
 export default function SeasonalCampaignCarousel({ imageOverrides = {} }: { imageOverrides?: Partial<Record<SiteMediaSlotKey, string>> }) {
+  const textFor = useSiteText();
   const [active, setActive] = useState(0);
   const campaign = campaigns[active];
   const campaignImage = imageOverrides[campaign.slotKey] || campaign.image;
@@ -67,7 +69,7 @@ export default function SeasonalCampaignCarousel({ imageOverrides = {} }: { imag
 
   return (
     <section className={`seasonal-section tone-${campaign.tone}`} aria-labelledby="summer-campaign-title" data-reveal>
-      <div className="seasonal-topline"><span>03</span><span>ASAYAKE SUMMER / 2026</span><i /><span>EDIT YOUR DAY</span></div>
+      <div className="seasonal-topline"><span>{textFor("home-text-summer-number", "03")}</span><span>{textFor("home-text-summer-label", "ASAYAKE SUMMER / 2026")}</span><i /><span>{textFor("home-text-summer-note", "EDIT YOUR DAY")}</span></div>
       <div className="seasonal-carousel" aria-roledescription="carousel" aria-label="Зуны арчилгааны онцлох сонголтууд">
         <div className="seasonal-copy" key={campaign.eyebrow}>
           <p className="eyebrow"><Sparkles size={13} /> {campaign.eyebrow}</p>

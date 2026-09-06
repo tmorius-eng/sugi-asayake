@@ -147,6 +147,13 @@ export const siteTextSlots = [
 
   // ---- Story section ("01 THE SUGI DIFFERENCE") --------------------------
   {
+    key: "home-text-story-number",
+    group: "Бидний ялгаа",
+    label: "Дугаар (жишээ: 01)",
+    description: "2026-09-06: Нүүр хуудасны хэсгүүдийн дараалсан дугаарлалт (01→06) урьд нь кодод шууд бичигдсэн байсан тул зөрж болдог байсан (жишээ нь 05 нь 04-ээс өмнө гарч ирдэг байсан bug). Одоо эндээс засварлаж болно -- бусад хэсгийн дугаартай (02/03/04/05/06) дараалал зөрчихгүй байхыг өөрөө шалгаарай.",
+    fallbackValue: "01",
+  },
+  {
     key: "home-text-story-eyebrow-label",
     group: "Бидний ялгаа",
     label: "Эйброу текст",
@@ -248,6 +255,13 @@ export const siteTextSlots = [
   },
 
   // ---- Category Masonry ---------------------------------------------------
+  {
+    key: "home-text-cat-number",
+    group: "Бүтээгдэхүүний ангилал",
+    label: "Дугаар (жишээ: 02)",
+    description: "Нүүр хуудасны дараалсан дугаарлалт -- home-text-story-numberийн тайлбарыг үзнэ үү.",
+    fallbackValue: "02",
+  },
   {
     key: "home-text-cat-eyebrow-label",
     group: "Бүтээгдэхүүний ангилал",
@@ -400,13 +414,40 @@ export const siteTextSlots = [
     fallbackValue: "Таны профайл дээр хадгалсан тохиргоо, эсвэл манай хамгийн эрэлттэй сонголтуудад тулгуурласан жагсаалт.",
   },
 
+  // ---- Seasonal campaign carousel ("03 ASAYAKE SUMMER / 2026") -----------
+  // 2026-09-06: was fully hardcoded in SeasonalCampaignCarousel.tsx (no
+  // useSiteText at all) -- Tom flagged this row's "03" as part of the
+  // dugaarлалт zörchij bui жишээ, brought into the same admin-editable
+  // system as every other section's numbered eyebrow row.
+  {
+    key: "home-text-summer-number",
+    group: "Зуны онцлох сонголт",
+    label: "Дугаар (жишээ: 03)",
+    description: "Нүүр хуудасны дараалсан дугаарлалт -- home-text-story-numberийн тайлбарыг үзнэ үү.",
+    fallbackValue: "03",
+  },
+  {
+    key: "home-text-summer-label",
+    group: "Зуны онцлох сонголт",
+    label: "Дундах текст",
+    description: "",
+    fallbackValue: "ASAYAKE SUMMER / 2026",
+  },
+  {
+    key: "home-text-summer-note",
+    group: "Зуны онцлох сонголт",
+    label: "Баруун талын текст",
+    description: "",
+    fallbackValue: "EDIT YOUR DAY",
+  },
+
   // ---- Family / care section ------------------------------------------------
   {
     key: "home-text-care-tag",
     group: "Гэр бүлийн арчилгаа",
-    label: "Зургийн дээд жижиг тэмдэглэгээ",
-    description: "",
-    fallbackValue: "03 / FAMILY CARE",
+    label: "Зургийн дээд жижиг тэмдэглэгээ (дугаар + текст хамт)",
+    description: "2026-09-06: энэ хэсэг дараалалд \"04\" байх ёстой атал \"03\" гэж Зуны онцлох сонголттой давхардаж байсан (Tom-ийн олсон bug) -- заслаа. Дугаарыг доод зурвасын \"/\" тэмдгийн өмнө хэвээр бичнэ.",
+    fallbackValue: "04 / FAMILY CARE",
   },
   {
     key: "home-text-care-stamp",
@@ -494,6 +535,13 @@ export const siteTextSlots = [
   },
   // ---- Journal ------------------------------------------------------------------
   {
+    key: "home-text-jn-number",
+    group: "SUGI Journal",
+    label: "Дугаар (жишээ: 05)",
+    description: "Нүүр хуудасны дараалсан дугаарлалт -- home-text-story-numberийн тайлбарыг үзнэ үү.",
+    fallbackValue: "05",
+  },
+  {
     key: "home-text-jn-eyebrow-label",
     group: "SUGI Journal",
     label: "Эйброу текст",
@@ -523,6 +571,13 @@ export const siteTextSlots = [
   },
 
   // ---- Store locator ---------------------------------------------------------
+  {
+    key: "home-text-locator-number",
+    group: "Салбарууд",
+    label: "Дугаар (жишээ: 06)",
+    description: "2026-09-06: урьд нь \"04\" гэж бичигдсэн байсан ч энэ хэсэг SUGI Journal (05)-ийн ДАРАА орж ирдэг тул дараалал зөрчиж байсан (Tom-ийн олсон bug) -- \"06\" болгож заслаа. Бусад хэсгийн дугаартай (01/02/03/04/05) дараалал зөрчихгүй байхыг өөрөө шалгаарай.",
+    fallbackValue: "06",
+  },
   {
     key: "home-text-locator-eyebrow-label",
     group: "Салбарууд",
