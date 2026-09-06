@@ -3,9 +3,9 @@
 //
 // Single source of truth for the real branch records -- previously
 // duplicated as constants inline in Home.tsx. Now shared by StoreLocatorSection
-// (the branch list itself), TrustStrip (branch count), and WhyChooseUs (the
-// "Ойрхон" card's branch count), so all of them can never silently disagree
-// about how many branches there are.
+// (the branch list itself) and BrandStorySection (the "Ойрхон" card's
+// branch count), so all of them can never silently disagree about how many
+// branches there are.
 export const BRANCH_HOURS = "Өдөр бүр 11:00–20:00";
 // The first 3 branches share one central line; branch 04 (2026-09-01, Tom)
 // has its own distinct number -- see `phone` per-branch below instead of a

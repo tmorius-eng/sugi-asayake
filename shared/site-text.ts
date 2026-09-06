@@ -145,44 +145,13 @@ export const siteTextSlots = [
     fallbackValue: "CURATED IN JAPAN\nFIND YOUR DAILY CARE\nУЛААНБААТАР / MONGOLIA",
   },
 
-  // ---- Story section ("01 THE SUGI DIFFERENCE") --------------------------
-  {
-    key: "home-text-story-number",
-    group: "Бидний ялгаа",
-    label: "Дугаар (жишээ: 01)",
-    description: "2026-09-06: Нүүр хуудасны хэсгүүдийн дараалсан дугаарлалт (01→06) урьд нь кодод шууд бичигдсэн байсан тул зөрж болдог байсан (жишээ нь 05 нь 04-ээс өмнө гарч ирдэг байсан bug). Одоо эндээс засварлаж болно -- бусад хэсгийн дугаартай (02/03/04/05/06) дараалал зөрчихгүй байхыг өөрөө шалгаарай.",
-    fallbackValue: "01",
-  },
-  {
-    key: "home-text-story-eyebrow-label",
-    group: "Бидний ялгаа",
-    label: "Эйброу текст",
-    description: "\"01\" дугаарын хажуугийн жижиг тэмдэглэгээ.",
-    fallbackValue: "THE SUGI DIFFERENCE",
-  },
-  {
-    key: "home-text-story-heading",
-    group: "Бидний ялгаа",
-    label: "Гарчиг (2 мөр)",
-    description: "Энэ хэсгийн гарчиг. 2 мөр.",
-    fallbackValue: "Японы чанарыг\nойртуулна.",
-  },
-  {
-    key: "home-text-story-description",
-    group: "Бидний ялгаа",
-    label: "Тайлбар өгүүлбэр",
-    description: "Гарчигийн доорх параграф.",
-    fallbackValue: "SUGI ASAYAKE нь Японы SUGI Drug Store-ийн албан ёсны охин компани. Өдөр тутмын эрүүл мэнд, гоо сайхан, арчилгааг Монголын гэр бүл бүрт илүү ойртуулна.",
-  },
-  {
-    key: "home-text-story-link-label",
-    group: "Бидний ялгаа",
-    label: "Холбоосын текст",
-    description: "\"Бидний ялгаа\" линкийн текст.",
-    fallbackValue: "Бидний ялгаа",
-  },
-
-  // ---- Why Choose Us ------------------------------------------------------
+  // ---- Why Choose Us (2026-09-06: absorbed the old standalone "Бидний
+  // ялгаа" story section and the customer-voices review strip -- see
+  // BrandStorySection.tsx. home-text-story-number/-eyebrow-label/-heading/
+  // -link-label were retired (fully redundant with this section's own
+  // eyebrow/heading once merged, and -link-label pointed at a "#collection"
+  // anchor that no longer exists) -- only -description survived, repurposed
+  // below as this section's first lede paragraph. ------------------------
   {
     key: "home-text-wcu-eyebrow-label",
     group: "Яагаад биднийг сонгох вэ",
@@ -198,10 +167,21 @@ export const siteTextSlots = [
     fallbackValue: "Япон чанарыг\nтанд ойртуулна.",
   },
   {
+    // Was "home-text-story-heading" + the old standalone Story section's
+    // own <h2> -- repurposed as the 1st lede paragraph (BrandStorySection
+    // renders this ABOVE home-text-wcu-description below), key kept
+    // unchanged so any admin-saved override survives the merge.
+    key: "home-text-story-description",
+    group: "Яагаад биднийг сонгох вэ",
+    label: "Танилцуулга догол мөр (1)",
+    description: "Гарчигийн доорх эхний параграф -- \"бид хэн бэ\" гэсэн танилцуулга.",
+    fallbackValue: "SUGI ASAYAKE нь Японы SUGI Drug Store-ийн албан ёсны охин компани. Өдөр тутмын эрүүл мэнд, гоо сайхан, арчилгааг Монголын гэр бүл бүрт илүү ойртуулна.",
+  },
+  {
     key: "home-text-wcu-description",
     group: "Яагаад биднийг сонгох вэ",
-    label: "Тайлбар өгүүлбэр",
-    description: "Гарчигийн хажуугийн параграф.",
+    label: "Танилцуулга догол мөр (2)",
+    description: "Гарчигийн доорх хоёр дахь параграф.",
     fallbackValue: "SUGI ASAYAKE-ийг сонгох гурван шалтгаан — өргөн сонголт, баталгаат импорт, ойрхон салбарууд.",
   },
   {
@@ -414,47 +394,20 @@ export const siteTextSlots = [
     fallbackValue: "Таны профайл дээр хадгалсан тохиргоо, эсвэл манай хамгийн эрэлттэй сонголтуудад тулгуурласан жагсаалт.",
   },
 
-  // ---- Seasonal campaign carousel ("03 ASAYAKE SUMMER / 2026") -----------
-  // 2026-09-06: was fully hardcoded in SeasonalCampaignCarousel.tsx (no
-  // useSiteText at all) -- Tom flagged this row's "03" as part of the
-  // dugaarлалт zörchij bui жишээ, brought into the same admin-editable
-  // system as every other section's numbered eyebrow row.
-  {
-    key: "home-text-summer-number",
-    group: "Зуны онцлох сонголт",
-    label: "Дугаар (жишээ: 03)",
-    description: "Нүүр хуудасны дараалсан дугаарлалт -- home-text-story-numberийн тайлбарыг үзнэ үү.",
-    fallbackValue: "03",
-  },
-  {
-    key: "home-text-summer-label",
-    group: "Зуны онцлох сонголт",
-    label: "Дундах текст",
-    description: "",
-    fallbackValue: "ASAYAKE SUMMER / 2026",
-  },
-  {
-    key: "home-text-summer-note",
-    group: "Зуны онцлох сонголт",
-    label: "Баруун талын текст",
-    description: "",
-    fallbackValue: "EDIT YOUR DAY",
-  },
-
   // ---- Family / care section ------------------------------------------------
+  // 2026-09-06: SeasonalCampaignCarousel no longer renders on the homepage
+  // (Tom's "cut to ~6 sections" call) -- its 3 home-text-summer-* slots were
+  // retired here. This section's own old hand-rolled markup (a rotated
+  // "sun stamp" badge, home-text-care-stamp) was replaced by the
+  // already-built EditorialBanner primitive's plain rectangular `tag` --
+  // home-text-care-tag now feeds that prop, home-text-care-stamp retired
+  // as redundant with it (both said "FAMILY CARE").
   {
     key: "home-text-care-tag",
     group: "Гэр бүлийн арчилгаа",
-    label: "Зургийн дээд жижиг тэмдэглэгээ (дугаар + текст хамт)",
-    description: "2026-09-06: энэ хэсэг дараалалд \"04\" байх ёстой атал \"03\" гэж Зуны онцлох сонголттой давхардаж байсан (Tom-ийн олсон bug) -- заслаа. Дугаарыг доод зурвасын \"/\" тэмдгийн өмнө хэвээр бичнэ.",
+    label: "Зургийн дээд жижиг тэмдэглэгээ",
+    description: "EditorialBanner-ийн зургийн буланд харагдах жижиг тэмдэглэгээ.",
     fallbackValue: "04 / FAMILY CARE",
-  },
-  {
-    key: "home-text-care-stamp",
-    group: "Гэр бүлийн арчилгаа",
-    label: "Тамганы текст",
-    description: "Хэсгийн зүүн талд байрлах дугуй тамга дахь текст.",
-    fallbackValue: "FAMILY CARE",
   },
   {
     key: "home-text-care-eyebrow",
@@ -503,22 +456,14 @@ export const siteTextSlots = [
     fallbackValue: "24–48 цагийн дотор Улаанбаатарт хүргэнэ",
   },
 
-  // ---- Топ брэндүүд (2026-09-04, NEWVISION.md §5) --------------------------------
-  {
-    key: "home-text-brands-eyebrow",
-    group: "Топ брэндүүд",
-    label: "Эйброу текст",
-    description: "",
-    fallbackValue: "ТОП БРЭНД",
-  },
-  {
-    key: "home-text-brands-heading",
-    group: "Топ брэндүүд",
-    label: "Гарчиг",
-    description: "",
-    fallbackValue: "Тансаг брэндүүд.",
-  },
-  // ---- Харилцагчийн үг (2026-09-04, NEWVISION.md §6) ------------------------------
+  // ---- Харилцагчийн үг (2026-09-04, NEWVISION.md §6; 2026-09-06: this
+  // group's 2 slots now feed BrandStorySection's compact review-strip
+  // kicker instead of a standalone customer-voices-section -- see that
+  // file. home-text-brands-eyebrow/-heading (Топ брэндүүд) and all 5
+  // home-text-jn-* (SUGI Journal) slots were retired here: the Top Brands
+  // rail and JournalSection no longer render on the homepage (still real,
+  // reusable components -- JournalSection still lives at /journal -- just
+  // not shown here, see Home.tsx's top comment). ----------------------
   {
     key: "home-text-voices-eyebrow",
     group: "Харилцагчийн үг",
@@ -533,50 +478,14 @@ export const siteTextSlots = [
     description: "",
     fallbackValue: "Юу ярьж байна вэ.",
   },
-  // ---- Journal ------------------------------------------------------------------
-  {
-    key: "home-text-jn-number",
-    group: "SUGI Journal",
-    label: "Дугаар (жишээ: 05)",
-    description: "Нүүр хуудасны дараалсан дугаарлалт -- home-text-story-numberийн тайлбарыг үзнэ үү.",
-    fallbackValue: "05",
-  },
-  {
-    key: "home-text-jn-eyebrow-label",
-    group: "SUGI Journal",
-    label: "Эйброу текст",
-    description: "",
-    fallbackValue: "SUGI JOURNAL",
-  },
-  {
-    key: "home-text-jn-heading",
-    group: "SUGI Journal",
-    label: "Гарчиг (2 мөр)",
-    description: "",
-    fallbackValue: "Зөвлөгөө ба\nмэдээ.",
-  },
-  {
-    key: "home-text-jn-all-link",
-    group: "SUGI Journal",
-    label: "\"Бүгдийг үзэх\" линкийн текст",
-    description: "",
-    fallbackValue: "Бүх нийтлэл",
-  },
-  {
-    key: "home-text-jn-read-more",
-    group: "SUGI Journal",
-    label: "Нийтлэл картын CTA текст",
-    description: "Пост картуудын доод \"дэлгэрэнгүй унших\" линк -- бүх картад ижил.",
-    fallbackValue: "Дэлгэрэнгүй унших",
-  },
 
   // ---- Store locator ---------------------------------------------------------
   {
     key: "home-text-locator-number",
     group: "Салбарууд",
-    label: "Дугаар (жишээ: 06)",
-    description: "2026-09-06: урьд нь \"04\" гэж бичигдсэн байсан ч энэ хэсэг SUGI Journal (05)-ийн ДАРАА орж ирдэг тул дараалал зөрчиж байсан (Tom-ийн олсон bug) -- \"06\" болгож заслаа. Бусад хэсгийн дугаартай (01/02/03/04/05) дараалал зөрчихгүй байхыг өөрөө шалгаарай.",
-    fallbackValue: "06",
+    label: "Дугаар (жишээ: 03)",
+    description: "2026-09-06: хуудасны хэсгүүдийг цөөлсний дараа энэ бол одоо үлдсэн 3 дугаартай хэсгийн сүүлчийнх (Бүтээгдэхүүний ангилал=02-ийн дараа). Бусад хэсгийн дугаартай (02) дараалал зөрчихгүй байхыг өөрөө шалгаарай.",
+    fallbackValue: "03",
   },
   {
     key: "home-text-locator-eyebrow-label",
@@ -665,7 +574,9 @@ export const siteTextSlots = [
     fallbackValue: "Гишүүнээр бүртгүүлэх",
   },
 
-  // ---- Final CTA -------------------------------------------------------------
+  // ---- Final CTA (2026-09-06: moved from a standalone Home.tsx section into
+  // an opt-in banner rendered by SiteFooter.tsx -- same real content/slots,
+  // just read from a different component now; only Home.tsx passes it). ---
   {
     key: "home-text-finalcta-eyebrow",
     group: "Эцсийн CTA",

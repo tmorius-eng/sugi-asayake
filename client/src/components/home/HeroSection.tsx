@@ -22,8 +22,6 @@ export default function HeroSection({ heroImageStyle, productCountLabel }: { her
   const [headingLine1, headingLine2, headingLine3] = textFor("home-text-hero-heading", "ГЭР БҮЛИЙН\nГИШҮҮН БҮРТ\nЯПОН ЧАНАР").split("\n");
   return (
     <section className="hero-section hero-sunrise" aria-labelledby="hero-title">
-      <div className="hero-color-orbit orbit-one" aria-hidden="true" />
-      <div className="hero-color-orbit orbit-two" aria-hidden="true" />
       <div className="hero-copy">
         <div className="hero-topline">
           <p className="eyebrow"><span /> {textFor("home-text-hero-eyebrow", "SUGI ASAYAKE / MONGOLIA")}</p>
@@ -52,11 +50,13 @@ export default function HeroSection({ heroImageStyle, productCountLabel }: { her
             real COUNT(*) (see getPublishedProductCount, Home.tsx), rounded
             down to the nearest hundred so it still reads as marketing
             copy ("900+") rather than an oddly precise number, and never
-            overstates. CategoryMasonry/WhyChooseUs still carry their own
-            "800+"-containing sentences as free CMS text (an admin can
+            overstates. CategoryMasonry/BrandStorySection still carry their
+            own "800+"-containing sentences as free CMS text (an admin can
             already edit those directly) -- only this one was purely
-            hardcoded code with no way to fix it short of a deploy. */}
-        <div className="hero-image-sun" aria-hidden="true"><span>{productCountLabel}</span><small>{textFor("home-text-hero-badge-label", "DAILY CHOICES")}</small></div>
+            hardcoded code with no way to fix it short of a deploy.
+            2026-09-06: rotated gold circle ("hero-image-sun") replaced with
+            a restrained rectangular pill (design-review consolidation). */}
+        <div className="hero-image-badge" aria-hidden="true"><span>{productCountLabel}</span><small>{textFor("home-text-hero-badge-label", "DAILY CHOICES")}</small></div>
         <div className="hero-image-marker" aria-hidden="true"><Sparkles size={15} /><span>{textFor("home-text-hero-marker-label", "THE MORNING OF CARE")}</span></div>
         <div className="hero-image-label"><span>JAPAN QUALITY</span><strong>01</strong></div>
         <div className="hero-image-caption">{textFor("home-text-hero-image-caption", "Өдөр бүрийн арчилгаа, илүү ойрхон")}</div>

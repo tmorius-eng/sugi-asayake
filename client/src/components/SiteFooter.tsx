@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import { Phone } from "lucide-react";
 import { Link } from "wouter";
 import { categories } from "@/components/home/categories-data";
 import { locations } from "@/components/home/locations-data";
@@ -21,9 +22,28 @@ import { locations } from "@/components/home/locations-data";
 // or /shipping page.
 export type FooterSocial = { label: string; href: string; Icon: LucideIcon };
 
-export default function SiteFooter({ logoUrl, socials }: { logoUrl: string; socials: FooterSocial[] }) {
+/**
+ * `ctaBanner` (2026-09-06 homepage consolidation): optional, off by default
+ * -- SiteFooter renders on nearly every page (Shop, Checkout, Profile,
+ * Login, etc. all use it, see the grep this comment replaces a guess with),
+ * so the old standalone `.final-cta` "Сайн сонголт ойрхон байна." band
+ * folds in here as an opt-in prop rather than becoming permanent chrome on
+ * every page site-wide. Only Home.tsx passes it.
+ */
+export type FooterCtaBanner = { eyebrow: string; headingLine1: string; headingLine2: string; phoneLabel: string };
+
+export default function SiteFooter({ logoUrl, socials, ctaBanner }: { logoUrl: string; socials: FooterSocial[]; ctaBanner?: FooterCtaBanner }) {
   return (
     <footer className="site-footer">
+      {ctaBanner && (
+        <div className="footer-cta-banner">
+          <div>
+            <p className="eyebrow">{ctaBanner.eyebrow}</p>
+            <h2>{ctaBanner.headingLine1} <em>{ctaBanner.headingLine2}</em></h2>
+          </div>
+          <a className="button button-light" href="tel:94509911">{ctaBanner.phoneLabel} <Phone size={15} /></a>
+        </div>
+      )}
       <div className="footer-grid">
         <div>
           <img src={logoUrl} alt="SUGI ASAYAKE Mongolia" className="footer-logo" />
