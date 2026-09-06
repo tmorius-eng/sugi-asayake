@@ -299,7 +299,7 @@ export default function Home() {
             no decorative circle badge. */}
         <EditorialBanner
           variant="image-left"
-          tag={textFor("home-text-care-tag", "04 / FAMILY CARE")}
+          tag={textFor("home-text-care-tag", "03 / FAMILY CARE")}
           eyebrow={textFor("home-text-care-eyebrow", "ГЭР БҮЛИЙН ӨДӨР БҮРТ")}
           headingLine1={careHeadingLine1}
           headingLine2={careHeadingLine2}
