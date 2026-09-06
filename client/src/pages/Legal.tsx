@@ -35,8 +35,77 @@ import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
 // not by SUGI ASAYAKE) and that the phone number is shared with verify.mn
 // solely for that verification, per the same Personal Data Protection Law
 // transparency duty §8 above already commits to.
+//
+// 2026-09-06 (Tom: "монголын хамгийн сүүлийн үеийн хувь хүний privacy-тай
+// хуулийг судал" + "ecommerce-д тохирсон мэдээлэл нэмж оруул"): privacy.sections
+// rewritten from a bare 3-paragraph placeholder into a full policy, researched
+// (real websearch against legalinfo.mn/Wikisource's full law text, gratanet.com
+// and lehmanlaw.mn legal-alert summaries, parliament.mn) against:
+//   Хүний хувийн мэдээлэл хамгаалах тухай хууль (Шинэчилсэн найруулга) --
+//     adopted 2021.12.17, in force since 2022.05.01. Concrete provisions
+//     used below, with real article numbers (not paraphrased from memory):
+//     Art 16.1 data-subject rights (know/access 16.1.2, obtain a copy 16.1.8,
+//     correction 16.1.5, deletion 16.1.6), Art 16.2 right to complain, Art 8.7
+//     right to withdraw consent any time, Art 8.5 guardian consent for minors,
+//     Art 15.1.3 deletion once the original purpose is met, Art 18.2 data-
+//     handler duties (verify identity, transparent consent, keep processing
+//     records, handle complaints), Art 30 penalties (disciplinary for
+//     officials; criminal/administrative for others). Cross-border transfer
+//     requires the data subject's explicit consent or a legal basis (applies
+//     even to sharing within one's own corporate group) -- no such group
+//     exists here, but this is why §6 below discloses every foreign
+//     processor by name instead of a vague "may transfer abroad" line.
+//     Oversight body: Хүний эрхийн үндэсний комисс (National Human Rights
+//     Commission, nhrcm.gov.mn).
+//   Кибер аюулгүй байдлын тухай хууль -- also adopted 2021.12.17, general
+//     data-security-practice basis for §9 below.
+//   Нягтлан бодох бүртгэлийн тухай хууль, 11 дүгээр зүйл -- accounting
+//     records/financial statements must be kept "10-аас доошгүй жил" (at
+//     least 10 years) -- the real, checked number behind §7's order/payment
+//     retention period, not a guessed "5 жил" or similar.
+//   Хэрэглэгчийн эрхийг хамгаалах тухай хууль -- same law/citation already
+//     researched for terms.sections §2 above, reused for the complaint path
+//     (Зохистой өрсөлдөөн, хэрэглэгчийн төлөө газар) in §10 below.
+// Deliberately did NOT invent a standalone "Цахим худалдааны тухай хууль"
+// (E-commerce Law) citation -- websearch turned up only an ADB technical-
+// assistance draft-law report, not an enacted statute, so e-commerce
+// conduct here is grounded in the Civil Code / Consumer Rights / Personal
+// Data / Cybersecurity laws actually in force, not a law that may not exist.
+//
+// The "ecommerce-д тохирсон" (e-commerce-appropriate, day-to-day) half is
+// this site's own REAL, code-verified data practices, not generic
+// boilerplate -- every claim below was checked against the actual
+// implementation before being written: exactly 3 first-party cookies exist
+// (shared/const.ts: app_session_id, guest_cart_token, sugi_visitor_session),
+// all httpOnly+secure+SameSite=Lax (server/_core/cookies.ts) -- no Google
+// Analytics/Meta Pixel/any 3rd-party ad cookie is present anywhere in this
+// codebase, so "no 3rd-party ad tracking" is a checked fact, not a promise.
+// localStorage use is exactly grid-density and recently-viewed-product
+// prefs (Shop.tsx) plus dark/light theme (ThemeContext.tsx) -- device-only,
+// never transmitted. Named processors are exactly the ones with real,
+// active integrations documented in CLAUDE.md (Brevo for transactional
+// email, Cloudflare R2 for image storage, Aiven for the database, verify.mn
+// for SMS phone verification) -- QPay is phrased conditionally ("идэвхжсэн
+// тохиолдолд"), matching terms.sections' own existing hedge, since it isn't
+// fully live yet per CLAUDE.md. Honeybadger error tracking is deliberately
+// NOT named here (its API key isn't configured yet per CLAUDE.md, so it is
+// not actually collecting anything right now) -- naming an inactive service
+// would be exactly the kind of unverified claim this project's own house
+// rule forbids.
 const documents = {
-  privacy: { title: "Хувийн нууцлал", lead: "SUGI ASAYAKE Mongolia нь захиалга, хүргэлт, үйлчлүүлэгчийн дэмжлэг үзүүлэхэд шаардлагатай мэдээллийг л ашиглана.", updated: "2026.08.13", sections: [["Цуглуулдаг мэдээлэл", "Захиалга хийх үед таны нэр, утас, хүргэлтийн хаяг болон сайн дураар өгсөн имэйл хаягийг авна."], ["Ашиглалт", "Энэ мэдээллийг захиалга баталгаажуулах, хүргэлт зохион байгуулах, төлбөрийн асуудлыг шалгах болон үйлчлүүлэгчийн хүсэлтэд хариулахад ашиглана."], ["Хамгаалалт ба хүсэлт", "Төлбөрийн картын мэдээллийг сайт хадгалахгүй. Хувийн мэдээлэлтэй холбоотой хүсэлтээ 9450-9911 дугаарт гаргаж болно."]] },
+  privacy: { title: "Хувийн нууцлал", lead: "Энэхүү бодлого нь Монгол Улсын Хүний хувийн мэдээлэл хамгаалах тухай хуулийн (Шинэчилсэн найруулга, 2022 оны 5 сарын 1-нээс дагаж мөрдөгдсөн) дагуу боловсруулагдсан бөгөөд SUGI ASAYAKE Mongolia онлайн дэлгүүрийг ашиглах, бүртгүүлэх, захиалга хийх бүх үйл ажиллагаанд хамаарна.", updated: "2026.09.06", sections: [
+    ["Бид цуглуулдаг мэдээлэл", "Бүртгүүлэхэд: утасны дугаар (заавал, verify.mn үйлчилгээгээр SMS-ээр баталгаажуулна) болон нэр (сонголттой). Захиалга хийхэд: хүргэлтийн хаяг, холбогдох утасны дугаар. Профайл дээр сонголтоор: арьс/үсний төрөл, гоо сайхны сонирхол зэрэг зөвлөмж гаргахад ашиглагдах тохиргоо. Сэтгэгдэл бичихэд: таны нэр, үнэлгээ, сэтгэгдлийн бичвэр (эдгээр нь тухайн барааны хуудсанд нийтэд харагдана). Мөн вэбсайттай харилцах явцад автоматаар IP хаяг, орж үзсэн хуудас зэрэг техникийн мэдээллийг нэрлэгдээгүй, нэгтгэсэн хэлбэрээр цуглуулна (доорх §3-г үзнэ үү). Төлбөрийн картын дэлгэрэнгүй мэдээллийг (картын дугаар гэх мэт) бид хэзээ ч хадгалдаггүй, харагддаггүй."],
+    ["Ашиглах зорилго, эрх зүйн үндэслэл", "Таны мэдээллийг: (а) захиалга, хүргэлтийн гэрээг гүйцэтгэх, (б) утасны дугаарыг баталгаажуулах, захиалгын мэдэгдэл илгээх зэрэгт таны өгсөн зөвшөөрлийн үндсэн дээр, (в) санхүү, татварын хуулиар шаардагдсан бүртгэл хөтлөх, (г) сайтын аюулгүй байдал, залилан мэхлэлтээс сэргийлэх, гүйцэтгэлийг сайжруулах хууль ёсны ашиг сонирхлын үндсэн дээр ашиглана. Дээрх зорилгоос өөр, тухайлбал зорилтот сурталчилгаанд зарах, түрээслэхэд ашигладаггүй."],
+    ["Küki (cookie) болон төхөөрөмж дэх хадгалалт", "Манай сайт зөвхөн өөрийн үйл ажиллагаанд шаардлагатай 3 нэрийн эхний талын (first-party) күки ашигладаг: нэвтэрсэн төлөвийг санах session күки, зочны сагсыг санах күки, мөн зочдын хандалтын статистик (жишээ нь хөрвүүлэлтийн хувь тооцоолол) цуглуулах анонимчилсан күки — эдгээр бүгд httpOnly, зөвхөн HTTPS-ээр дамждаг (secure) бөгөөд гуравдагч сайт руу дагаж дамждаггүй (SameSite=Lax). Google Analytics, Meta (Facebook) Pixel зэрэг ГУРАВДАГЧ ТАЛЫН СУРТАЛЧИЛГААНЫ küki огт ашигладаггүй. Дэлгүүрийн торны хэмжээ, сүүлд үзсэн бараа, өдөр/шөнийн горимын сонголтыг зөвхөн таны төхөөрөмжийн browser-ийн санах ойд (localStorage) хадгалдаг бөгөөд серверт огт илгээгддэггүй."],
+    ["Гуравдагч этгээдтэй хуваалцах", "Таны мэдээллийг зөвхөн үйлчилгээгээ бодитоор гүйцэтгэхэд шаардлагатай дараах үйлчилгээ үзүүлэгчидтэй хуваалцана: verify.mn (зөвхөн утасны дугаар баталгаажуулах зорилгоор, таны утасны дугаарыг дамжуулна), Brevo (захиалгын баталгаажуулах имэйл илгээхэд), Cloudflare (бүтээгдэхүүний зураг хадгалах, хувийн мэдээлэл агуулдаггүй), Aiven (өгөгдлийн сангийн найдвартай хадгалалт), мөн идэвхжсэн тохиолдолд QPay (төлбөр боловсруулах). Эдгээрээс бусад ямар ч этгээдэд таны зөвшөөрөлгүйгээр мэдээллийг худалдах, шилжүүлэхгүй."],
+    ["Хилийн чанадад дамжуулах", "Хуулийн 8 дугаар зүйлийн дагуу таны мэдээллийг хилийн чанадад дамжуулахад таны илэрхий зөвшөөрөл эсвэл хууль зүйн бусад үндэслэл шаардлагатай. Дээрх §4-т нэрлэсэн зарим үйлчилгээ (жишээ нь Brevo) олон улсын сервер ашигладаг тул та эдгээр үйлчилгээг идэвхжүүлэх үйлдэл хийхдээ (жишээ нь захиалга өгөх, бүртгүүлэх) энэ дамжуулалтад зөвшөөрөл өгсөнд тооцно."],
+    ["Хадгалах хугацаа", "Захиалга, төлбөртэй холбоотой санхүүгийн бүртгэлийг Нягтлан бодох бүртгэлийн тухай хуулийн 11 дүгээр зүйлийн дагуу дор хаяж 10 жил хадгална — таны акаунтыг устгуулсан ч энэ хугацаанд хадгалагдана. Бусад мэдээллийг (жишээ нь профайлын тохиргоо) цуглуулсан зорилгодоо хүрмэгц эсвэл акаунтаа устгуулахад устгана."],
+    ["Таны эрх", "Хуулийн 16 дугаар зүйлийн дагуу та: (а) өөрийн ямар мэдээлэл цуглуулж, ашиглаж байгааг мэдэх, түүний хуулбарыг цаасан эсвэл цахим хэлбэрээр авах, (б) алдаатай мэдээллээ засуулах, (в) хуульд заасны дагуу мэдээллээ устгуулах, (г) өгсөн зөвшөөрлөө хэдийд ч цуцлах (8.7 дугаар зүйл), (д) эрх зөрчигдсөн гэж үзвэл гомдол гаргах эрхтэй. Эдгээр хүсэлтээ 9450-9911 дугаар эсвэл asayake0307@gmail.com хаягаар илгээнэ үү; таны хувийн байдлыг баталгаажуулсны үндсэн дээр шийдвэрлэнэ."],
+    ["Насанд хүрээгүй хэрэглэгч", "Иргэний хуулийн 16-19 дүгээр зүйлд заасан насны бүрэн эрх зүйт чадамжид хүрээгүй хүнээс асран хамгаалагчийн зөвшөөрөлгүйгээр хувийн мэдээлэл цуглуулахгүй. Насанд хүрээгүй хүүхдийн мэдээллийг санамсаргүй цуглуулсан нь тогтоогдвол шуурхай устгана."],
+    ["Мэдээллийн аюулгүй байдал", "Нууц үгийг эргэн сэргээшгүй hash хэлбэрээр хадгалдаг, админы хандалтыг эрхийн түвшингээр хязгаарладаг, төлбөрийн картын дэлгэрэнгүй мэдээллийг огт хадгалдаггүй зэрэг Кибер аюулгүй байдлын тухай хуульд нийцсэн техникийн болон зохион байгуулалтын арга хэмжээг авч хэрэгжүүлдэг. Аюулгүй байдлын ноцтой зөрчил илэрвэл хуулийн дагуу нөлөөлөгдсөн хэрэглэгч болон эрх бүхий байгууллагад шуурхай мэдэгдэнэ."],
+    ["Гомдол гаргах, хяналтын байгууллага", "Юуны түрүүнд 9450-9911 дугаараар шууд холбогдож асуудлаа шийдвэрлүүлэхийг зөвлөж байна. Хэрэв шийдэгдээгүй бол хувийн мэдээлэлтэй холбоотой гомдлыг Хүний эрхийн үндэсний комисс (nhrcm.gov.mn), хэрэглэгчийн эрхтэй холбоотой гомдлыг Зохистой өрсөлдөөн, хэрэглэгчийн төлөө газарт, эсвэл эрх бүхий шүүхэд гаргах эрхтэй."],
+    ["Бодлогын өөрчлөлт", "Хууль тогтоомж, үйл ажиллагааны өөрчлөлтөд нийцүүлэн энэ бодлогыг цаг үргэлж шинэчлэх эрхтэй бөгөөд шинэчлэлт вэбсайтад нийтлэгдсэн даруй хүчин төгөлдөр болно. Мэдэгдэхүйц өөрчлөлт орсон тохиолдолд сүүлд шинэчилсэн огноог дээд талд шинэчилнэ."],
+  ] },
   terms: { title: "Үйлчилгээний нөхцөл", lead: "Энэхүү нөхцөл нь SUGI ASAYAKE Mongolia-ийн онлайн дэлгүүрээр дамжуулан бараа захиалах, худалдан авах үйл ажиллагаанд хамаарах бөгөөд Монгол Улсын хууль тогтоомжид нийцүүлэн боловсруулагдсан.", updated: "2026.09.05", sections: [
     ["Ерөнхий зүйл", "Та вэбсайтыг ашиглах, захиалга өгснөөрөө энэхүү нөхцөлийг бүрэн зөвшөөрсөнд тооцно. Энэ нөхцөл Монгол Улсын Иргэний хууль, Хэрэглэгчийн эрхийг хамгаалах тухай хууль болон холбогдох бусад хууль тогтоомжид үндэслэнэ."],
     ["Хэрэглэгчийн эрх", "Хэрэглэгчийн эрхийг хамгаалах тухай хуулийн дагуу та чанартай, аюулгүй бараа авах, барааны талаар үнэн зөв мэдээлэл авах, гэмтэлтэй буюу зарласан шинж чанараа хангаагүй бараанд засвар хийлгэх, солиулах, үнийн бууралт эсвэл мөнгөө буцаан авах шаардлага тавих, шаардлагаа хангуулж чадаагүй тохиолдолд шүүхэд хандах эрхтэй."],
