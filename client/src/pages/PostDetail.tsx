@@ -1,6 +1,8 @@
 import { LoaderCircle } from "lucide-react";
 import { Link, useRoute } from "wouter";
 import CommerceHeader from "@/components/CommerceHeader";
+import SiteFooter from "@/components/SiteFooter";
+import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
 import { trpc } from "@/lib/trpc";
 
 const formatDate = (value: string | Date | null | undefined) => {
@@ -19,6 +21,7 @@ export default function PostDetail() {
         <main className="mx-auto grid min-h-[60vh] max-w-3xl place-items-center px-4 sm:px-8">
           <LoaderCircle className="animate-spin text-[#df1f3d]" size={28} aria-label="Мэдээг ачаалж байна" />
         </main>
+        <SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} />
       </div>
     );
   }
@@ -41,6 +44,7 @@ export default function PostDetail() {
             </Link>
           </section>
         </main>
+        <SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} />
       </div>
     );
   }
@@ -72,6 +76,7 @@ export default function PostDetail() {
           ← Нүүр хуудас руу буцах
         </Link>
       </main>
+      <SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} />
     </div>
   );
 }

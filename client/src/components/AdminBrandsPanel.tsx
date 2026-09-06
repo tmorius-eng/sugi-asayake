@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ArrowDown, ArrowUp, LoaderCircle, Pencil, Tags, Trash2 } from "lucide-react";
+import { useState, type ChangeEvent } from "react";
+import { ArrowDown, ArrowUp, ImageUp, LoaderCircle, Pencil, Tags, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
@@ -38,6 +38,16 @@ export default function AdminBrandsPanel() {
 
   const createBrand = trpc.admin.createFeaturedBrand.useMutation();
   const updateBrand = trpc.admin.updateFeaturedBrand.useMutation();
+  // Tom, 2026-09-05 ("add upload img section"): this form only ever had a
+  // raw text input for photoUrl (placeholder literally showed the old
+  // "/manus-storage/..." shape as an example -- confusing, since an admin
+  // has no R2 key to type in by hand). Reuses the exact same
+  // uploadSiteMediaImage endpoint + FileReader pattern ContentMediaPanel.tsx
+  // already uses for the homepage's other image slots -- same size/type
+  // validation, same WebP-variant pipeline -- rather than inventing a
+  // brand-specific upload endpoint for what is functionally identical work.
+  const uploadImage = trpc.admin.uploadSiteMediaImage.useMutation();
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const deleteBrand = trpc.admin.deleteFeaturedBrand.useMutation({
     onSuccess: () => { toast.success("Брэнд устгагдлаа."); utils.admin.featuredBrands.invalidate(); },
     onError: error => toast.error(messageFrom(error)),
@@ -68,6 +78,31 @@ export default function AdminBrandsPanel() {
     if (!swapWith) return;
     reorderBrand.mutate({ id: brand.id, sortOrder: swapWith.sortOrder });
     reorderBrand.mutate({ id: swapWith.id, sortOrder: brand.sortOrder });
+  };
+
+  const onPhotoFileSelected = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 8 * 1024 * 1024) {
+      toast.error("JPG, PNG, WEBP форматтай, 8 MB-аас бага зураг сонгоно уу.");
+      event.target.value = "";
+      return;
+    }
+    setIsUploadingPhoto(true);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const stored = await uploadImage.mutateAsync({ fileName: file.name, contentType: file.type as "image/jpeg" | "image/png" | "image/webp", dataBase64: String(reader.result) });
+        setForm(current => ({ ...current, photoUrl: stored.url }));
+        toast.success("Зураг байршуулагдлаа.");
+      } catch (error) {
+        toast.error(messageFrom(error));
+      } finally {
+        setIsUploadingPhoto(false);
+        event.target.value = "";
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const save = async (event: React.FormEvent) => {
@@ -132,10 +167,19 @@ export default function AdminBrandsPanel() {
                 </select>}
           </label>
           <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Тайлбар үг (заавал биш)<input value={form.tagline} onChange={event => setForm(current => ({ ...current, tagline: event.target.value }))} placeholder="Жишээ: Японы тансаг арчилгаа" className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
-          <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">
-            Зургийн URL (заавал биш — хоосон бол энэ брэндийн хамгийн сүүлд нэмэгдсэн бодит бүтээгдэхүүний зургийг автоматаар ашиглана)
-            <input value={form.photoUrl} onChange={event => setForm(current => ({ ...current, photoUrl: event.target.value }))} placeholder="/manus-storage/..." className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" />
-          </label>
+          <div className="grid gap-1.5 text-xs font-bold sm:col-span-2">
+            <span>Зураг (заавал биш — хоосон бол энэ брэндийн хамгийн сүүлд нэмэгдсэн бодит бүтээгдэхүүний зургийг автоматаар ашиглана)</span>
+            <div className="flex items-center gap-3">
+              <img src={form.photoUrl || "/product-placeholder.svg"} alt="" className="size-14 shrink-0 rounded-xl border border-black/10 bg-[#f8f5ef] object-cover" />
+              <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-black/10 bg-white px-4 text-xs font-bold text-[#57585e] transition hover:border-[#df1f3d] hover:text-[#df1f3d]">
+                {isUploadingPhoto ? <LoaderCircle className="animate-spin" size={15} /> : <ImageUp size={15} />}
+                {isUploadingPhoto ? "Байршуулж байна…" : "Зураг байршуулах"}
+                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={onPhotoFileSelected} disabled={isUploadingPhoto} className="hidden" />
+              </label>
+              {form.photoUrl && <button type="button" onClick={() => setForm(current => ({ ...current, photoUrl: "" }))} className="text-xs font-bold text-[#8b8c90] transition hover:text-[#df1f3d]">Арилгах</button>}
+            </div>
+            <input value={form.photoUrl} onChange={event => setForm(current => ({ ...current, photoUrl: event.target.value }))} placeholder="эсвэл зургийн холбоос шууд бичих" className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" />
+          </div>
           <label className="flex items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold"><input type="checkbox" checked={form.isActive} onChange={event => setForm(current => ({ ...current, isActive: event.target.checked }))} className="size-4 accent-[#df1f3d]" />Идэвхтэй (нүүр хуудсанд харагдана)</label>
         </div>
 

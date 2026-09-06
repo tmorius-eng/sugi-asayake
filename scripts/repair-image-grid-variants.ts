@@ -28,7 +28,7 @@ import { storagePutExactKey } from "../server/storage";
 
 const APPLY = process.argv.includes("--apply");
 const PUBLIC_BASE = process.env.S3_PUBLIC_BASE_URL ?? "";
-const publicUrl = (storagePath: string) => `${PUBLIC_BASE}${storagePath.replace("/manus-storage", "")}`;
+const publicUrl = (storagePath: string) => `${PUBLIC_BASE}${storagePath.replace("/cdn", "")}`;
 
 async function main() {
   const db = await getDb();
@@ -63,7 +63,7 @@ async function main() {
       if (APPLY) {
         // Exact key, no new hash: the grid URL is derived from the full-size
         // one that is already stored in the DB, so it must land there.
-        await storagePutExactKey(gridPath.replace("/manus-storage/", ""), variants.grid, "image/webp");
+        await storagePutExactKey(gridPath.replace("/cdn/", ""), variants.grid, "image/webp");
       }
       repaired++;
       if (repaired % 25 === 0) console.log(`  ...${repaired} repaired`);

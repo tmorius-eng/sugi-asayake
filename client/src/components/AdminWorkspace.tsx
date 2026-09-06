@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
-import { CheckCircle2, ChevronLeft, ChevronRight, ChartColumnIncreasing, Download, Eye, FilePenLine, ImageUp, LayoutDashboard, ListChecks, LoaderCircle, Megaphone, PackagePlus, Pencil, Plug, Search, ShieldAlert, ShieldCheck, Star, Tag, Tags, Trash2, UserPlus, UsersRound } from "lucide-react";
+import { Link } from "wouter";
+import { CheckCircle2, ChevronLeft, ChevronRight, ChartColumnIncreasing, Download, Eye, FilePenLine, Home, ImageUp, LayoutDashboard, ListChecks, LoaderCircle, LogOut, Megaphone, PackagePlus, Pencil, Plug, Search, ShieldAlert, ShieldCheck, Star, Tag, Tags, Trash2, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { downloadCsv } from "@/lib/csv";
@@ -96,16 +97,6 @@ type CategoryForm = {
   isActive: boolean;
 };
 
-type StaffInvitationRow = {
-  id: number;
-  email: string;
-  role: "user" | "staff" | "admin";
-  status: "pending" | "accepted" | "revoked" | "expired";
-  expiresAt: Date;
-  acceptedAt: Date | null;
-  createdAt: Date;
-};
-
 const previewProducts: ProductRow[] = [
   { id: 1, categoryId: 1, name: "Hada Labo Gokujyun Lotion", slug: "hada-labo-gokujyun-lotion", brand: "Hada Labo", shortDescription: null, description: null, sku: "HADA-GL-170", priceMnt: 29800, compareAtPriceMnt: null, costMnt: null, imageUrl: null, galleryJson: null, stockQuantity: 34, isPublished: true, updatedAt: new Date(), categoryName: "Арьс арчилгаа", skinType: "dry", skinConcerns: "aging", interiorStyle: null, hairType: null, hairConcerns: null, fragrancePreference: null, wellnessInterests: null },
   { id: 2, categoryId: 2, name: "Shiseido Tsubaki Premium Repair", slug: "shiseido-tsubaki-premium-repair", brand: "Shiseido", shortDescription: null, description: null, sku: "TSUB-PR-490", priceMnt: 42500, compareAtPriceMnt: null, costMnt: null, imageUrl: null, galleryJson: null, stockQuantity: 18, isPublished: true, updatedAt: new Date(), categoryName: "Үс ба бие", skinType: null, skinConcerns: null, interiorStyle: null, hairType: null, hairConcerns: null, fragrancePreference: null, wellnessInterests: null },
@@ -139,7 +130,7 @@ function TagSuggestionChips({ suggestions, current, labelFor, onApply }: { sugge
 }
 
 export default function AdminWorkspace({ preview = false }: { preview?: boolean }) {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, logout } = useAuth();
   const isFullAdmin = preview || currentUser?.role === "admin";
   type AdminSection = "dashboard" | "analytics" | "products" | "orders" | "posts" | "reviews" | "routines" | "promotions" | "discountCodes" | "brands" | "users" | "media" | "security" | "integrations";
   const adminSectionKeys: AdminSection[] = ["dashboard", "products", "orders", "posts", "reviews", "routines", "promotions", "discountCodes", "brands", "media", "users", "analytics", "security", "integrations"];
@@ -174,12 +165,9 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
   // sidebar section.
   const [mediaTab, setMediaTab] = useState<"images" | "text">("images");
   const [query, setQuery] = useState("");
-  const [composer, setComposer] = useState<"product" | "category" | "user" | null>(null);
+  const [composer, setComposer] = useState<"product" | "category" | null>(null);
   const [productForm, setProductForm] = useState<ProductForm>(emptyProduct);
   const [categoryForm, setCategoryForm] = useState<CategoryForm>(emptyCategory);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"user" | "staff" | "admin">("staff");
-  const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [selectedProductIds, setSelectedProductIds] = useState<Set<number>>(new Set());
   const [showProductExport, setShowProductExport] = useState(false);
@@ -189,7 +177,6 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
   const productsQuery = trpc.admin.products.useQuery(undefined, { enabled: !preview });
   const categoriesQuery = trpc.admin.categories.useQuery(undefined, { enabled: !preview });
   const usersQuery = trpc.admin.users.useQuery(undefined, { enabled: !preview });
-  const invitationsQuery = trpc.admin.staffInvitations.useQuery(undefined, { enabled: !preview });
 
   const refreshCatalog = async () => {
     await Promise.all([utils.admin.products.invalidate(), utils.admin.categories.invalidate(), utils.catalog.list.invalidate()]);
@@ -202,19 +189,14 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
   const createCategory = trpc.admin.createCategory.useMutation({ onSuccess: refreshCatalog });
   const updateCategory = trpc.admin.updateCategory.useMutation({ onSuccess: refreshCatalog });
   const uploadProductImage = trpc.admin.uploadProductImage.useMutation();
-  const inviteStaff = trpc.admin.inviteStaff.useMutation();
-  const revokeStaffInvitation = trpc.admin.revokeStaffInvitation.useMutation();
   const updateUserRole = trpc.admin.updateUserRole.useMutation();
 
   const products: ProductRow[] = preview ? previewProducts : (productsQuery.data ?? []);
   const categories: CategoryRow[] = preview ? previewCategories : (categoriesQuery.data ?? []);
   const users = preview ? [
-    { id: 1, name: "SUGI ASAYAKE Owner", email: "owner@asayake.mn", role: "admin", createdAt: new Date(), lastSignedIn: new Date(), suspendedAt: null, suspendedReason: null },
-    { id: 2, name: "Store manager", email: "manager@asayake.mn", role: "user", createdAt: new Date(), lastSignedIn: new Date(), suspendedAt: null, suspendedReason: null },
+    { id: 1, name: "SUGI ASAYAKE Owner", email: "owner@asayake.mn", phone: "99110022", role: "admin", createdAt: new Date(), lastSignedIn: new Date(), suspendedAt: null, suspendedReason: null },
+    { id: 2, name: "Store manager", email: null, phone: "88112233", role: "user", createdAt: new Date(), lastSignedIn: new Date(), suspendedAt: null, suspendedReason: null },
   ] : (usersQuery.data ?? []);
-  const invitations: StaffInvitationRow[] = preview ? [
-    { id: 1, email: "manager@asayake.mn", role: "user", status: "pending", expiresAt: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000), acceptedAt: null, createdAt: new Date() },
-  ] : (invitationsQuery.data ?? []);
 
   const filteredProducts = useMemo(() => products.filter(product => [product.name, product.sku, product.categoryName ?? ""].some(value => value.toLocaleLowerCase().includes(query.toLocaleLowerCase()))), [products, query]);
   // The catalog is ~940 real products (see PRODUCT-IMPORT.md) — rendering
@@ -230,7 +212,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
   const productTotalPages = Math.max(1, Math.ceil(filteredProducts.length / PRODUCTS_PAGE_SIZE));
   useEffect(() => { if (productPage > productTotalPages) setProductPage(productTotalPages); }, [productTotalPages, productPage]);
   const pagedProducts = useMemo(() => filteredProducts.slice((productPage - 1) * PRODUCTS_PAGE_SIZE, productPage * PRODUCTS_PAGE_SIZE), [filteredProducts, productPage]);
-  const filteredUsers = useMemo(() => users.filter(user => [user.name ?? "", user.email ?? ""].some(value => value.toLocaleLowerCase().includes(query.toLocaleLowerCase()))), [users, query]);
+  const filteredUsers = useMemo(() => users.filter(user => [user.name ?? "", user.email ?? "", user.phone ?? ""].some(value => value.toLocaleLowerCase().includes(query.toLocaleLowerCase()))), [users, query]);
   // Preference Profile v2 (2026-09-01): same rule-based matcher the bulk
   // auto-tag script uses (shared/product-tagging.ts) -- dismissible
   // suggestion chips below each already-empty tag field, so per-product
@@ -246,10 +228,10 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
   }), [productForm.name, productForm.brand, productForm.categoryId, productForm.shortDescription, productForm.description, categories]);
   const isCatalogBusy = createProduct.isPending || updateProduct.isPending || deleteProduct.isPending || createCategory.isPending || updateCategory.isPending;
   const isBulkProductBusy = bulkUpdateProductPublishStatus.isPending;
-  const isUserBusy = inviteStaff.isPending || revokeStaffInvitation.isPending || updateUserRole.isPending;
+  const isUserBusy = updateUserRole.isPending;
 
   const refreshUsers = async () => {
-    await Promise.all([utils.admin.users.invalidate(), utils.admin.staffInvitations.invalidate()]);
+    await utils.admin.users.invalidate();
   };
 
   const openProductComposer = (product?: ProductRow) => {
@@ -416,23 +398,6 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
     downloadCsv(`sugi-products-${new Date().toISOString().slice(0, 10)}.csv`, ["ID", "Нэр", "SKU", "Ангилал", "Үнэ (MNT)", "Үлдэгдэл", "Төлөв"], rows);
   };
 
-  const sendStaffInvitation = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (preview) {
-      toast.message("Preview горим", { description: "Бодит урилга зөвхөн хамгаалагдсан /admin хэсэгт үүснэ." });
-      return;
-    }
-    try {
-      const invitation = await inviteStaff.mutateAsync({ email: inviteEmail.trim(), role: inviteRole, origin: window.location.origin });
-      await refreshUsers();
-      setLastInviteUrl(invitation.inviteUrl);
-      setInviteEmail("");
-      toast.success(invitation.ownerAlertSent ? "Урилга үүсгэж, эзэнд мэдэгдэл илгээлээ." : "Урилга үүслээ. Доорх холбоосыг аюулгүйгээр дамжуулна уу.");
-    } catch (error) {
-      toast.error(messageFrom(error));
-    }
-  };
-
   const changeUserRole = async (userId: number, role: "user" | "staff" | "admin") => {
     if (preview) {
       toast.message("Preview горим", { description: "Эрх солих үйлдэл зөвхөн хамгаалагдсан /admin хэсэгт ажиллана." });
@@ -442,20 +407,6 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
       await updateUserRole.mutateAsync({ userId, role });
       await refreshUsers();
       toast.success("Хэрэглэгчийн эрхийг шинэчиллээ.");
-    } catch (error) {
-      toast.error(messageFrom(error));
-    }
-  };
-
-  const revokeInvitation = async (id: number) => {
-    if (preview) {
-      toast.message("Preview горим", { description: "Урилга цуцлах үйлдэл зөвхөн хамгаалагдсан /admin хэсэгт ажиллана." });
-      return;
-    }
-    try {
-      await revokeStaffInvitation.mutateAsync({ id });
-      await refreshUsers();
-      toast.success("Урилгыг цуцаллаа.");
     } catch (error) {
       toast.error(messageFrom(error));
     }
@@ -479,7 +430,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
             />
             {section === "products" && <button type="button" onClick={() => setShowProductExport(current => !current)} className="inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-4 py-3 text-xs font-bold text-[#57585e] transition hover:-translate-y-0.5 hover:border-[#df1f3d] hover:text-[#df1f3d] active:scale-[.97]"><Download size={15} />Экспорт</button>}
             {section === "products" && <button type="button" onClick={() => openCategoryComposer()} className="inline-flex items-center justify-center gap-2 rounded-full border border-[#df1f3d]/25 bg-white px-4 py-3 text-xs font-bold text-[#b41831] transition hover:-translate-y-0.5 hover:border-[#df1f3d] active:scale-[.97]"><Tags size={15} />Ангилал</button>}
-            {(section === "products" || (section === "users" && isFullAdmin)) && <button type="button" onClick={() => section === "products" ? openProductComposer() : setComposer("user")} className="inline-flex items-center justify-center gap-2 rounded-full bg-[#df1f3d] px-5 py-3 text-xs font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97]">{section === "products" ? <PackagePlus size={16} /> : <UserPlus size={16} />}{section === "products" ? "Бүтээгдэхүүн нэмэх" : "Ажилтан урих"}</button>}
+            {section === "products" && <button type="button" onClick={() => openProductComposer()} className="inline-flex items-center justify-center gap-2 rounded-full bg-[#df1f3d] px-5 py-3 text-xs font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97]"><PackagePlus size={16} />Бүтээгдэхүүн нэмэх</button>}
           </div>
         </div>
         {preview && <div className="mb-6 flex gap-3 rounded-2xl border border-[#e9ba62] bg-[#fff5dd] p-4 text-xs leading-5 text-[#6c531f]"><ShieldCheck className="mt-0.5 shrink-0" size={17} /><p><strong>Preview only.</strong> Энэ дэлгэц нь удирдлагын интерфэйсийн загвар юм. Бодит <code>/admin</code> зам нь нэвтэрсэн, <code>admin</code> эрхтэй хэрэглэгчдэд хамгаалагдсан.</p></div>}
@@ -488,6 +439,17 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
             <div className="border-b border-white/12 px-3 py-4"><p className="text-[10px] font-extrabold tracking-[.15em] text-[#f0b52d]">COMMERCE ADMIN</p><p className="mt-1 text-sm text-white/65">Custom backend ready</p></div>
             <nav className="mt-3 grid gap-1">{[{ key: "dashboard", label: "Хянах самбар", Icon: LayoutDashboard }, { key: "products", label: "Бүтээгдэхүүн", Icon: PackagePlus }, { key: "orders", label: "Захиалга", Icon: CheckCircle2 }, { key: "posts", label: "Шинэ мэдээ", Icon: FilePenLine }, { key: "reviews", label: "Сэтгэгдэл", Icon: Star }, { key: "routines", label: "Routine", Icon: ListChecks }, { key: "promotions", label: "Урамшуулал", Icon: Megaphone }, { key: "discountCodes", label: "Хямдралын код", Icon: Tag }, { key: "brands", label: "Брэндүүд", Icon: Tags }, { key: "media", label: "Content & Media", Icon: ImageUp }, ...(isFullAdmin ? [{ key: "users", label: "Хэрэглэгч", Icon: UsersRound }, { key: "analytics", label: "Аналитик", Icon: ChartColumnIncreasing }, { key: "security", label: "Аюулгүй байдал", Icon: ShieldAlert }, { key: "integrations", label: "Интеграцууд", Icon: Plug }] : [])].map(({ key, label, Icon }) => <button type="button" key={key} onClick={() => { setSection(key as typeof section); setQuery(""); setComposer(null); }} className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-bold transition ${section === key ? "bg-white text-[#17181b]" : "text-white/70 hover:bg-white/10 hover:text-white"}`}><Icon size={17} />{label}</button>)}</nav>
             <div className="mt-7 rounded-2xl bg-white/8 p-4"><span className="text-[10px] font-extrabold tracking-[.14em] text-[#f0b52d]">ACCESS</span><p className="mt-2 text-xs leading-5 text-white/66">Нэвтэрсэн админ л каталог, зураг, хэрэглэгчийн эрхийг өөрчилж чадна.</p></div>
+            {/* Tom, 2026-09-05: this was the ONLY place these 2 controls
+                existed -- a now-removed outer "SUGI CONTROL" shell
+                (DashboardLayout, a generic unused scaffold wrapping this
+                real admin panel) had its own separate sidebar footer with a
+                "Нүүр хуудас" link and Гарах/logout menu. Merging the 2
+                sidebars into this one meant those 2 controls needed a new
+                home, not just deletion. */}
+            <div className="mt-3 grid gap-1 border-t border-white/12 pt-3">
+              <Link href="/" className="flex items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-bold text-white/70 transition hover:bg-white/10 hover:text-white"><Home size={17} />Нүүр хуудас</Link>
+              <button type="button" onClick={logout} className="flex items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-bold text-white/70 transition hover:bg-white/10 hover:text-white"><LogOut size={17} />Гарах</button>
+            </div>
           </aside>
           <section className="min-w-0 rounded-3xl bg-white p-5 shadow-[0_16px_34px_rgba(20,22,24,.05)] sm:p-7">
             <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -542,19 +504,20 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
                 {mediaTab === "text" && <ContentTextPanel preview={preview} />}
               </>
             )}
-            {section === "users" && <div className="overflow-x-auto"><table className="min-w-[720px] w-full border-separate border-spacing-0 text-left"><thead><tr className="text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]"><th className="border-b border-black/8 pb-3">ХЭРЭГЛЭГЧ</th><th className="border-b border-black/8 pb-3">ЭРХ</th><th className="border-b border-black/8 pb-3">ТӨЛӨВ</th><th className="border-b border-black/8 pb-3">СҮҮЛД НЭВТЭРСЭН</th><th className="border-b border-black/8 pb-3" /></tr></thead><tbody>{filteredUsers.map(user => <tr key={user.id} className="text-sm"><td className="border-b border-black/6 py-4"><strong className="block">{user.name ?? "Нэр оруулаагүй"}</strong><small className="mt-1 block text-xs text-[#77787d]">{user.email ?? "Имэйл байхгүй"}</small></td><td className="border-b border-black/6 py-4"><span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${user.role === "admin" ? "bg-[#fff0d2] text-[#9b6417]" : user.role === "staff" ? "bg-[#e6f0fb] text-[#2c5a91]" : "bg-[#edf0f5] text-[#505d70]"}`}>{user.role === "admin" ? "Admin" : user.role === "staff" ? "Staff" : "User"}</span></td><td className="border-b border-black/6 py-4">{user.suspendedAt ? <span className="rounded-full bg-[#fff0f2] px-2.5 py-1 text-[10px] font-extrabold text-[#a51630]">Түр хаагдсан</span> : <span className="rounded-full bg-[#e7f2ec] px-2.5 py-1 text-[10px] font-extrabold text-[#2c7650]">Идэвхтэй</span>}</td><td className="border-b border-black/6 py-4 text-xs text-[#6f7075]">{user.lastSignedIn ? new Date(user.lastSignedIn).toLocaleDateString("mn-MN") : "—"}</td><td className="border-b border-black/6 py-4 text-right">{!preview && <button type="button" onClick={() => setSelectedUserId(user.id)} className="rounded-full border border-black/10 px-3 py-1.5 text-[11px] font-bold text-[#57585e] transition hover:border-[#df1f3d] hover:text-[#df1f3d]">Дэлгэрэнгүй</button>}</td></tr>)}{filteredUsers.length === 0 && <tr><td colSpan={5} className="py-10 text-center text-sm text-[#77787d]">Хэрэглэгч олдсонгүй.</td></tr>}</tbody></table></div>}
+            {section === "users" && <div className="overflow-x-auto"><table className="min-w-[720px] w-full border-separate border-spacing-0 text-left"><thead><tr className="text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]"><th className="border-b border-black/8 pb-3">ХЭРЭГЛЭГЧ</th><th className="border-b border-black/8 pb-3">УТАС</th><th className="border-b border-black/8 pb-3">ЭРХ</th><th className="border-b border-black/8 pb-3">ТӨЛӨВ</th><th className="border-b border-black/8 pb-3">СҮҮЛД НЭВТЭРСЭН</th><th className="border-b border-black/8 pb-3" /></tr></thead><tbody>{filteredUsers.map(user => <tr key={user.id} className="text-sm"><td className="border-b border-black/6 py-4"><strong className="block">{user.name ?? "Нэр оруулаагүй"}</strong><small className="mt-1 block text-xs text-[#77787d]">{user.email ?? "Имэйл байхгүй"}</small></td><td className="border-b border-black/6 py-4 text-xs">{user.phone ?? <span className="text-[#a51630]">Утасгүй</span>}</td><td className="border-b border-black/6 py-4"><span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${user.role === "admin" ? "bg-[#fff0d2] text-[#9b6417]" : user.role === "staff" ? "bg-[#e6f0fb] text-[#2c5a91]" : "bg-[#edf0f5] text-[#505d70]"}`}>{user.role === "admin" ? "Admin" : user.role === "staff" ? "Staff" : "User"}</span></td><td className="border-b border-black/6 py-4">{user.suspendedAt ? <span className="rounded-full bg-[#fff0f2] px-2.5 py-1 text-[10px] font-extrabold text-[#a51630]">Түр хаагдсан</span> : <span className="rounded-full bg-[#e7f2ec] px-2.5 py-1 text-[10px] font-extrabold text-[#2c7650]">Идэвхтэй</span>}</td><td className="border-b border-black/6 py-4 text-xs text-[#6f7075]">{user.lastSignedIn ? new Date(user.lastSignedIn).toLocaleDateString("mn-MN") : "—"}</td><td className="border-b border-black/6 py-4 text-right">{!preview && <button type="button" onClick={() => setSelectedUserId(user.id)} className="rounded-full border border-black/10 px-3 py-1.5 text-[11px] font-bold text-[#57585e] transition hover:border-[#df1f3d] hover:text-[#df1f3d]">Дэлгэрэнгүй</button>}</td></tr>)}{filteredUsers.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-sm text-[#77787d]">Хэрэглэгч олдсонгүй.</td></tr>}</tbody></table></div>}
 
-            {section === "users" && <div className="mt-7 grid gap-5 lg:grid-cols-[1fr_.92fr]">
-              <section className="rounded-3xl bg-[#f8f5ef] p-5">
-                <p className="text-[10px] font-extrabold tracking-[.14em] text-[#3970a7]">ROLE MANAGEMENT</p>
-                <p className="mt-2 text-xs leading-5 text-[#707176]">Админ эрх нь каталог, захиалга, багийн урилгыг удирдах боломж олгоно. Өөрийн эрхийг энэ дэлгэцээс бууруулахгүй.</p>
-                <div className="mt-4 grid gap-2">{filteredUsers.map(user => <div key={user.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white px-3 py-3"><div className="min-w-0"><strong className="block truncate text-xs">{user.name ?? user.email ?? "Хэрэглэгч"}</strong><span className="block truncate text-[11px] text-[#77787d]">{user.email ?? "Имэйл байхгүй"}</span></div>{preview ? <span className="text-xs font-bold">{user.role}</span> : <select value={user.role} disabled={isUserBusy} onChange={event => changeUserRole(user.id, event.target.value as "user" | "staff" | "admin")} className="h-9 rounded-lg border border-black/10 bg-white px-2 text-xs font-bold outline-none focus:border-[#df1f3d]"><option value="user">User</option><option value="staff">Staff</option><option value="admin">Admin</option></select>}</div>)}</div>
-              </section>
-              <section className="rounded-3xl border border-[#df1f3d]/15 bg-[#fff5f6] p-5">
-                <p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">ACTIVE INVITATIONS</p>
-                <div className="mt-4 grid gap-2">{invitations.map(invitation => <div key={invitation.id} className="rounded-2xl bg-white px-3 py-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><strong className="block truncate text-xs">{invitation.email}</strong><span className="mt-1 block text-[11px] text-[#77787d]">{invitation.role === "admin" ? "Admin" : invitation.role === "staff" ? "Staff" : "User"} · {invitation.status} · {new Date(invitation.expiresAt).toLocaleDateString("mn-MN")}</span></div>{invitation.status === "pending" && <button type="button" disabled={isUserBusy} onClick={() => revokeInvitation(invitation.id)} className="shrink-0 text-[11px] font-bold text-[#a51630] disabled:opacity-50">Цуцлах</button>}</div></div>)}{invitations.length === 0 && <p className="rounded-2xl bg-white px-3 py-5 text-center text-xs text-[#77787d]">Идэвхтэй урилга алга.</p>}</div>
-              </section>
-            </div>}
+            {/* 2026-09-05 ("admin invite staff section just change it to manually
+                only admin give staff role to default users" -- Tom, explicit):
+                the old 2-column "ROLE MANAGEMENT" + "ACTIVE INVITATIONS" layout
+                is gone along with the email-invite flow -- this is now the
+                only staff-access control, full width. Утас олдохгүй бол
+                "Дэлгэрэнгүй" цонхны (AdminUserDetailDrawer) шинэ утас засах
+                хэрэгслээр (recovery path) нэмнэ. */}
+            {section === "users" && <section className="mt-7 rounded-3xl bg-[#f8f5ef] p-5">
+              <p className="text-[10px] font-extrabold tracking-[.14em] text-[#3970a7]">ROLE MANAGEMENT</p>
+              <p className="mt-2 text-xs leading-5 text-[#707176]">Одоо бүртгэлтэй хэрэглэгчийн эрхийг эндээс шууд өөрчилнө — шинэ ажилтныг урих шаардлагагүй, тухайн хүн эхлээд өөрөө утасны дугаараа ашиглан бүртгүүлсэн байх ёстой. Админ эрх нь каталог, захиалга, хэрэглэгчийн эрхийг удирдах боломж олгоно. Өөрийн эрхийг энэ дэлгэцээс бууруулахгүй.</p>
+              <div className="mt-4 grid gap-2">{filteredUsers.map(user => <div key={user.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white px-3 py-3"><div className="min-w-0"><strong className="block truncate text-xs">{user.name ?? user.phone ?? user.email ?? "Хэрэглэгч"}</strong><span className="block truncate text-[11px] text-[#77787d]">{user.phone ?? "Утасгүй"}</span></div>{preview ? <span className="text-xs font-bold">{user.role}</span> : <select value={user.role} disabled={isUserBusy} onChange={event => changeUserRole(user.id, event.target.value as "user" | "staff" | "admin")} className="h-9 rounded-lg border border-black/10 bg-white px-2 text-xs font-bold outline-none focus:border-[#df1f3d]"><option value="user">User</option><option value="staff">Staff</option><option value="admin">Admin</option></select>}</div>)}</div>
+            </section>}
 
             {composer === "product" && <form onSubmit={saveProduct} className="mt-7 rounded-3xl border border-[#df1f3d]/25 bg-[#fff5f6] p-5"><div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">PRODUCT {productForm.id ? "EDIT" : "CREATION"}</p><h3 className="mt-1 font-[var(--font-display)] text-xl font-semibold tracking-[-.05em]">{productForm.id ? "Бүтээгдэхүүн засах" : "Шинэ бүтээгдэхүүн нэмэх"}</h3></div><button type="button" onClick={() => setComposer(null)} className="text-xs font-bold text-[#707176]">Хаах</button></div><div className="mt-5 grid gap-3 sm:grid-cols-2"><label className="grid gap-1.5 text-xs font-bold">Нэр<input required value={productForm.name} onChange={event => setProductForm(current => ({ ...current, name: event.target.value, slug: current.slug || slugify(event.target.value) }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold">SKU<input required value={productForm.sku} onChange={event => setProductForm(current => ({ ...current, sku: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold">URL slug<input required value={productForm.slug} onChange={event => setProductForm(current => ({ ...current, slug: slugify(event.target.value) }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold">Ангилал<select required value={productForm.categoryId} onChange={event => setProductForm(current => ({ ...current, categoryId: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]"><option value="" disabled>Сонгох</option>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label><label className="grid gap-1.5 text-xs font-bold">Брэнд<input value={productForm.brand} onChange={event => setProductForm(current => ({ ...current, brand: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold">Үнэ (₮)<input required min="0" type="number" value={productForm.priceMnt} onChange={event => setProductForm(current => ({ ...current, priceMnt: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold">Хуучин үнэ (сонголтоор)<input min="0" type="number" value={productForm.compareAtPriceMnt} onChange={event => setProductForm(current => ({ ...current, compareAtPriceMnt: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold">Өртөг үнэ, зөвхөн админд (сонголтоор)<input min="0" type="number" value={productForm.costMnt} onChange={event => setProductForm(current => ({ ...current, costMnt: event.target.value }))} placeholder="Ашиг тооцоход л ашиглагдана" className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold">Үлдэгдэл<input required min="0" type="number" value={productForm.stockQuantity} onChange={event => setProductForm(current => ({ ...current, stockQuantity: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Товч тайлбар<textarea value={productForm.shortDescription} onChange={event => setProductForm(current => ({ ...current, shortDescription: event.target.value }))} className="min-h-20 rounded-xl border border-black/10 bg-white p-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Дэлгэрэнгүй тайлбар<textarea value={productForm.description} onChange={event => setProductForm(current => ({ ...current, description: event.target.value }))} className="min-h-28 rounded-xl border border-black/10 bg-white p-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><div className="sm:col-span-2 rounded-2xl bg-white/60 p-3"><p className="text-[10px] font-extrabold tracking-[.12em] text-[#3970a7]">PERSONALIZATION TAGS (сонголтоор)</p><p className="mt-1 text-[11px] text-[#77787d]">"Танд санал болгох" section-д ашиглагдана — хэрэглэгчийн профайл дээрх тохиргоотой таарвал энэ бараа санал болгогдоно. Зурын доорх зурвасууд бол зөвхөн санал — дарж сонговол л хадгалагдана.</p><div className="mt-3 grid gap-3 sm:grid-cols-2">
               <label className="grid gap-1.5 text-xs font-bold">Арьсны төрөл (skincare)<select value={productForm.skinType} onChange={event => setProductForm(current => ({ ...current, skinType: event.target.value as ProductForm["skinType"] }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#3970a7]"><option value="">Бүх төрөлд (сонгоогүй)</option>{Object.entries(skinTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
@@ -579,8 +542,6 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
             </div></div>{productForm.id && <AdminProductVariantsPanel productId={productForm.id} />}<div className="sm:col-span-2"><p className="text-xs font-bold">Бүтээгдэхүүний зураг</p><div className="mt-2 flex flex-col gap-3 rounded-2xl border border-dashed border-[#df1f3d]/30 bg-white p-3 sm:flex-row sm:items-center"><label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-full bg-[#17181b] px-4 text-xs font-bold text-white transition hover:bg-[#df1f3d]"><ImageUp size={15} />{uploadProductImage.isPending ? "Байршуулж байна…" : "Зураг сонгох"}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={onImageSelected} disabled={uploadProductImage.isPending} className="sr-only" /></label>{productForm.imageUrl ? <><img src={productForm.imageUrl} alt="Selected product" className="size-12 rounded-xl object-cover" /><span className="min-w-0 truncate text-xs text-[#77787d]">{productForm.imageUrl}</span></> : <span className="text-xs text-[#77787d]">JPG, PNG эсвэл WEBP · 8 MB хүртэл</span>}</div></div><label className="flex items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold sm:col-span-2"><input type="checkbox" checked={productForm.isPublished} onChange={event => setProductForm(current => ({ ...current, isPublished: event.target.checked }))} className="size-4 accent-[#df1f3d]" />Нийтлэхэд бэлэн</label></div><button type="submit" disabled={isCatalogBusy || uploadProductImage.isPending} className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#df1f3d] px-5 py-3 text-xs font-bold text-white disabled:opacity-60">{isCatalogBusy && <LoaderCircle className="animate-spin" size={15} />}{productForm.id ? "Өөрчлөлт хадгалах" : "Бүтээгдэхүүн үүсгэх"}</button></form>}
 
             {composer === "category" && <form onSubmit={saveCategory} className="mt-7 rounded-3xl border border-[#3970a7]/25 bg-[#f1f6fb] p-5"><div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-extrabold tracking-[.14em] text-[#3970a7]">CATALOG CATEGORY</p><h3 className="mt-1 font-[var(--font-display)] text-xl font-semibold tracking-[-.05em]">{categoryForm.id ? "Ангилал засах" : "Шинэ ангилал үүсгэх"}</h3></div><button type="button" onClick={() => setComposer(null)} className="text-xs font-bold text-[#707176]">Хаах</button></div><div className="mt-5 grid gap-3 sm:grid-cols-2"><label className="grid gap-1.5 text-xs font-bold">Нэр<input required value={categoryForm.name} onChange={event => setCategoryForm(current => ({ ...current, name: event.target.value, slug: current.slug || slugify(event.target.value) }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#3970a7]" /></label><label className="grid gap-1.5 text-xs font-bold">URL slug<input required value={categoryForm.slug} onChange={event => setCategoryForm(current => ({ ...current, slug: slugify(event.target.value) }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#3970a7]" /></label><label className="grid gap-1.5 text-xs font-bold">Эрэмбэ<input required min="0" type="number" value={categoryForm.sortOrder} onChange={event => setCategoryForm(current => ({ ...current, sortOrder: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#3970a7]" /></label><label className="flex items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold"><input type="checkbox" checked={categoryForm.isActive} onChange={event => setCategoryForm(current => ({ ...current, isActive: event.target.checked }))} className="size-4 accent-[#3970a7]" />Идэвхтэй ангилал</label><label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Тайлбар<textarea value={categoryForm.description} onChange={event => setCategoryForm(current => ({ ...current, description: event.target.value }))} className="min-h-20 rounded-xl border border-black/10 bg-white p-3 text-sm font-normal outline-none focus:border-[#3970a7]" /></label></div><button type="submit" disabled={isCatalogBusy} className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#3970a7] px-5 py-3 text-xs font-bold text-white disabled:opacity-60">{isCatalogBusy && <LoaderCircle className="animate-spin" size={15} />}{categoryForm.id ? "Өөрчлөлт хадгалах" : "Ангилал үүсгэх"}</button></form>}
-
-            {composer === "user" && <form onSubmit={sendStaffInvitation} className="mt-7 rounded-3xl border border-[#df1f3d]/25 bg-[#fff5f6] p-5"><div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">STAFF ACCESS</p><h3 className="mt-1 font-[var(--font-display)] text-xl font-semibold tracking-[-.05em]">Ажилтан урих</h3></div><button type="button" onClick={() => setComposer(null)} className="text-xs font-bold text-[#707176]">Хаах</button></div><p className="mt-3 max-w-2xl text-xs leading-5 text-[#6f7075]">Урилга нь 7 хоног хүчинтэй, нэг удаагийн нууц токентой. Имэйл илгээх суваг одоогоор холбогдоогүй тул холбоос нь энд харагдаж, төслийн эзэнд аюулгүй мэдэгдлээр дамжина.</p><div className="mt-5 grid gap-3 sm:grid-cols-[1fr_160px]"><label className="grid gap-1.5 text-xs font-bold">Ажилтны имэйл<input type="email" required value={inviteEmail} onChange={event => setInviteEmail(event.target.value)} placeholder="staff@asayake.mn" className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold">Эрх<select value={inviteRole} onChange={event => setInviteRole(event.target.value as "user" | "staff" | "admin")} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]"><option value="user">User</option><option value="staff">Staff</option><option value="admin">Administrator</option></select></label></div><button type="submit" disabled={isUserBusy} className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#df1f3d] px-5 py-3 text-xs font-bold text-white disabled:opacity-60">{inviteStaff.isPending && <LoaderCircle className="animate-spin" size={15} />}Аюулгүй урилга үүсгэх</button>{lastInviteUrl && <div className="mt-5 rounded-2xl bg-white p-4"><p className="text-[10px] font-extrabold tracking-[.13em] text-[#3970a7]">SECURE INVITE LINK</p><p className="mt-2 break-all text-xs leading-5 text-[#57585e]">{lastInviteUrl}</p><button type="button" onClick={async () => { await navigator.clipboard.writeText(lastInviteUrl); toast.success("Урилгын холбоосыг хууллаа."); }} className="mt-3 rounded-full border border-[#3970a7]/30 px-3 py-2 text-[11px] font-bold text-[#3970a7]">Холбоос хуулах</button></div>}</form>}
           </section>
         </div>
       </div>

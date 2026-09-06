@@ -71,9 +71,9 @@ export async function storagePut(
   const key = appendHashSuffix(normalizeKey(relKey));
   await putObject(key, data, contentType);
 
-  // Keep the same "/manus-storage/{key}" URL shape the rest of the app
-  // already stores and expects (see server/_core/storageProxy.ts).
-  return { key, url: `/manus-storage/${key}` };
+  // "/cdn/{key}" URL shape the rest of the app stores and expects (see
+  // server/_core/storageProxy.ts) -- renamed from "/manus-storage/" 2026-09-05.
+  return { key, url: `/cdn/${key}` };
 }
 
 /**
@@ -94,7 +94,7 @@ export async function storagePutImageVariants(
   const key = appendHashSuffix(normalizeKey(relKey));
   await putObject(key, variants.full, "image/webp");
   await putObject(gridVariantKey(key), variants.grid, "image/webp");
-  return { key, url: `/manus-storage/${key}` };
+  return { key, url: `/cdn/${key}` };
 }
 
 /**
@@ -111,12 +111,12 @@ export async function storagePutExactKey(
 ): Promise<{ key: string; url: string }> {
   const key = normalizeKey(relKey);
   await putObject(key, data, contentType);
-  return { key, url: `/manus-storage/${key}` };
+  return { key, url: `/cdn/${key}` };
 }
 
 export async function storageGet(relKey: string): Promise<{ key: string; url: string }> {
   const key = normalizeKey(relKey);
-  return { key, url: `/manus-storage/${key}` };
+  return { key, url: `/cdn/${key}` };
 }
 
 export async function storageGetSignedUrl(relKey: string): Promise<string> {

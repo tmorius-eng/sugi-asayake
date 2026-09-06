@@ -122,8 +122,8 @@ function LoginHistoryTab() {
   return (
     <div>
       <div className="flex flex-wrap items-end gap-3 rounded-2xl bg-[#f8f5ef] p-4">
-        <label className="grid gap-1.5 text-xs font-bold">Имэйл
-          <input value={email} onChange={event => setEmail(event.target.value)} placeholder="хайх имэйл" className="h-10 rounded-lg border border-black/10 bg-white px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" />
+        <label className="grid gap-1.5 text-xs font-bold">Утас
+          <input value={email} onChange={event => setEmail(event.target.value)} placeholder="хайх утасны дугаар" className="h-10 rounded-lg border border-black/10 bg-white px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" />
         </label>
         <label className="grid gap-1.5 text-xs font-bold">Төлөв
           <select value={outcome} onChange={event => setOutcome(event.target.value as typeof outcome)} className="h-10 rounded-lg border border-black/10 bg-white px-2 text-xs font-normal outline-none focus:border-[#df1f3d]">
@@ -143,7 +143,7 @@ function LoginHistoryTab() {
             <thead>
               <tr className="text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]">
                 <th className="border-b border-black/8 pb-2">ОГНОО</th>
-                <th className="border-b border-black/8 pb-2">ИМЭЙЛ</th>
+                <th className="border-b border-black/8 pb-2">УТАС</th>
                 <th className="border-b border-black/8 pb-2">ТӨЛӨВ</th>
                 <th className="border-b border-black/8 pb-2">IP</th>
               </tr>

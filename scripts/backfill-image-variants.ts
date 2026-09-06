@@ -35,9 +35,9 @@ const PUBLIC_BASE = process.env.S3_PUBLIC_BASE_URL ?? "";
 
 type Row = { id: number; imageUrl: string | null; label: string };
 
-/** "/manus-storage/catalog/products/1/x_ab12.jpg" -> "catalog/products/1/x_ab12.jpg" */
+/** "/cdn/catalog/products/1/x_ab12.jpg" -> "catalog/products/1/x_ab12.jpg" */
 function storageKeyOf(url: string): string | null {
-  const prefix = "/manus-storage/";
+  const prefix = "/cdn/";
   return url.startsWith(prefix) ? url.slice(prefix.length) : null;
 }
 
@@ -73,13 +73,13 @@ async function main() {
   const productRows = (await db
     .select({ id: products.id, imageUrl: products.imageUrl, name: products.name })
     .from(products)
-    .where(sql`${products.imageUrl} LIKE '/manus-storage/%' AND ${products.imageUrl} NOT LIKE '%.webp'`))
+    .where(sql`${products.imageUrl} LIKE '/cdn/%' AND ${products.imageUrl} NOT LIKE '%.webp'`))
     .map(r => ({ id: r.id, imageUrl: r.imageUrl, label: `product ${r.id} ${r.name.slice(0, 42)}` }));
 
   const mediaRows = (await db
     .select({ id: siteMedia.id, imageUrl: siteMedia.imageUrl, slotKey: siteMedia.slotKey })
     .from(siteMedia)
-    .where(sql`${siteMedia.imageUrl} LIKE '/manus-storage/%' AND ${siteMedia.imageUrl} NOT LIKE '%.webp'`))
+    .where(sql`${siteMedia.imageUrl} LIKE '/cdn/%' AND ${siteMedia.imageUrl} NOT LIKE '%.webp'`))
     .map(r => ({ id: r.id, imageUrl: r.imageUrl, label: `siteMedia ${r.id} ${r.slotKey}` }));
 
   console.log(`${APPLY ? "APPLYING" : "DRY RUN (nothing written -- pass --apply to commit)"}`);

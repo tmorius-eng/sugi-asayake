@@ -16,6 +16,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { registerQPayCallbackRoute } from "../qpay";
+import { registerVerifyMnCallbackRoute } from "../verifyMn";
 import { dbPing } from "../db";
 import { notifyError, registerHoneybadgerErrorMiddleware, registerHoneybadgerMiddleware } from "./honeybadger";
 import { limitApiTraffic, protectStateChangingApiRequests, setSecurityHeaders } from "./security";
@@ -64,6 +65,7 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerQPayCallbackRoute(app);
+  registerVerifyMnCallbackRoute(app);
   // Backend audit (2026-09-02): the existing system.health is a tRPC
   // procedure (/api/trpc/system.health), which most external uptime
   // monitors (UptimeRobot etc.) can't probe directly -- they expect a

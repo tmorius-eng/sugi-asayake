@@ -1,6 +1,8 @@
 import { ArrowUpRight, LoaderCircle, Newspaper } from "lucide-react";
 import { Link } from "wouter";
 import CommerceHeader from "@/components/CommerceHeader";
+import SiteFooter from "@/components/SiteFooter";
+import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
 import { trpc } from "@/lib/trpc";
 
 const formatDate = (value: string | Date | null | undefined) => {
@@ -78,6 +80,7 @@ export default function Journal() {
           </div>
         )}
       </main>
+      <SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} />
     </div>
   );
 }

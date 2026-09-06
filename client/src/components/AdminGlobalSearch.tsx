@@ -68,9 +68,9 @@ export default function AdminGlobalSearch({ preview = false, onSelectProduct, on
           {!preview && results && results.users.length > 0 && (
             <ResultGroup label="ХЭРЭГЛЭГЧ" icon={UserRound}>
               {results.users.map(user => (
-                <button key={user.id} type="button" onClick={() => select(() => onSelectUser(user.email ?? user.name ?? ""))} className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-xs hover:bg-[#f8f5ef]">
+                <button key={user.id} type="button" onClick={() => select(() => onSelectUser(user.phone ?? user.email ?? user.name ?? ""))} className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-xs hover:bg-[#f8f5ef]">
                   <span className="truncate font-bold">{user.name ?? "Нэргүй хэрэглэгч"}</span>
-                  <span className="shrink-0 text-[#85868a]">{user.email}</span>
+                  <span className="shrink-0 text-[#85868a]">{user.phone ?? user.email ?? "—"}</span>
                 </button>
               ))}
             </ResultGroup>

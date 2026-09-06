@@ -39,15 +39,20 @@ describeWithDatabase("customer profile integration", () => {
   beforeAll(async () => {
     const db = await getDb();
     if (!db) throw new Error("DATABASE_URL is required for profile integration tests.");
+    // 2026-09-05 ("remove email!!! only phone number!!!" -- Tom, explicit):
+    // auth.login is phone+password now, so this fixture needs a real phone
+    // on file for the login-round-trip assertions below.
+    const phone = `9${String(Date.now()).slice(-7)}`;
     const inserted = await db.insert(users).values({
       email: `${marker}@example.invalid`,
+      phone,
       passwordHash: await hashPassword("Passw0rd!123"),
       name: "Profile Test User",
       role: "user",
       emailVerifiedAt: new Date(),
     });
     userId = Number(inserted[0].insertId);
-    sessionUser = { id: userId, email: `${marker}@example.invalid`, name: "Profile Test User", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, phone: null, avatarUrl: null, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
+    sessionUser = { id: userId, email: `${marker}@example.invalid`, name: "Profile Test User", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, phone, avatarUrl: null, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
 
     const insertedOther = await db.insert(users).values({
       email: `${marker}-other@example.invalid`,
@@ -202,15 +207,19 @@ describeWithDatabase("customer profile — change password & delete account", ()
   beforeAll(async () => {
     const db = await getDb();
     if (!db) throw new Error("DATABASE_URL is required for profile integration tests.");
+    // 2026-09-05: auth.login is phone+password now -- see the sibling
+    // describe block above's own comment on this same fixture change.
+    const phone = `9${String(Date.now()).slice(-7)}`;
     const inserted = await db.insert(users).values({
       email: `${marker}@example.invalid`,
+      phone,
       passwordHash: await hashPassword("OriginalPassw0rd!"),
       name: "Security Test User",
       role: "user",
       emailVerifiedAt: new Date(),
     });
     userId = Number(inserted[0].insertId);
-    sessionUser = { id: userId, email: `${marker}@example.invalid`, name: "Security Test User", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, phone: null, avatarUrl: null, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
+    sessionUser = { id: userId, email: `${marker}@example.invalid`, name: "Security Test User", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, phone, avatarUrl: null, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
   });
 
   afterAll(async () => {
@@ -233,8 +242,8 @@ describeWithDatabase("customer profile — change password & delete account", ()
     expect(cookieSet).toBeTruthy(); // a fresh session token was issued in the same response
 
     const loginCaller = makeCaller(null);
-    await expect(loginCaller.auth.login({ email: sessionUser!.email, password: "OriginalPassw0rd!" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
-    const loggedIn = await loginCaller.auth.login({ email: sessionUser!.email, password: "BrandNewPassw0rd!" });
+    await expect(loginCaller.auth.login({ phone: sessionUser!.phone!, password: "OriginalPassw0rd!" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    const loggedIn = await loginCaller.auth.login({ phone: sessionUser!.phone!, password: "BrandNewPassw0rd!" });
     expect(loggedIn.id).toBe(userId);
   });
 

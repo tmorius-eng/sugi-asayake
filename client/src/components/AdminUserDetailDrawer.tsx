@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CreditCard, LoaderCircle, LogOut, ShieldAlert, ShieldCheck, X } from "lucide-react";
+import { CreditCard, LoaderCircle, LogOut, Phone, ShieldAlert, ShieldCheck, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
@@ -22,13 +22,32 @@ export default function AdminUserDetailDrawer({ userId, onClose }: { userId: num
   // PREMIUM-FEATURES.md TIER 5: bridges the physical-POS gap manually.
   const updateLoyaltyAdjustment = trpc.admin.updateUserLoyaltyAdjustment.useMutation({ onSuccess: refresh });
   const [loyaltyAdjustment, setLoyaltyAdjustment] = useState("0");
+  // 2026-09-05 ("require phone for everyone" + "contacting admin for
+  // recovery is okay" -- Tom, explicit): login is phone+password only now,
+  // no email fallback -- this is the recovery tool for a legacy account
+  // with no phone on file, or a mistyped one. See admin.updateUserPhone's
+  // own comment in server/routers.ts for the full reasoning.
+  const updatePhone = trpc.admin.updateUserPhone.useMutation({ onSuccess: refresh });
+  const [phoneDraft, setPhoneDraft] = useState("");
 
   const detail = detailQuery.data;
   const isBusy = suspendUser.isPending || unsuspendUser.isPending;
 
   useEffect(() => {
-    if (detail) setLoyaltyAdjustment(String(detail.loyalty.manualAdjustmentMnt));
+    if (detail) {
+      setLoyaltyAdjustment(String(detail.loyalty.manualAdjustmentMnt));
+      setPhoneDraft(detail.phone ?? "");
+    }
   }, [detail]);
+
+  const onSavePhone = async () => {
+    try {
+      await updatePhone.mutateAsync({ userId, phone: phoneDraft.trim() || null });
+      toast.success("Утасны дугаарыг шинэчиллээ.");
+    } catch (error) {
+      toast.error(messageFrom(error));
+    }
+  };
 
   const onSaveLoyaltyAdjustment = async () => {
     const value = Number(loyaltyAdjustment);
@@ -84,7 +103,7 @@ export default function AdminUserDetailDrawer({ userId, onClose }: { userId: num
 
         {detail && <>
           <h2 className="mt-3 font-[var(--font-display)] text-2xl font-semibold tracking-[-.05em]">{detail.name ?? "Нэр оруулаагүй"}</h2>
-          <p className="mt-1 text-xs text-[#707176]">{detail.email}</p>
+          <p className="mt-1 text-xs text-[#707176]">{detail.phone ?? "Утасгүй"}{detail.email ? ` · ${detail.email}` : ""}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${detail.role === "admin" ? "bg-[#fff0d2] text-[#9b6417]" : detail.role === "staff" ? "bg-[#e6f0fb] text-[#2c5a91]" : "bg-[#edf0f5] text-[#505d70]"}`}>{detail.role === "admin" ? "Admin" : detail.role === "staff" ? "Staff" : "User"}</span>
             {detail.suspendedAt ? <span className="rounded-full bg-[#fff0f2] px-2.5 py-1 text-[10px] font-extrabold text-[#a51630]">Түр хаагдсан</span> : <span className="rounded-full bg-[#e7f2ec] px-2.5 py-1 text-[10px] font-extrabold text-[#2c7650]">Идэвхтэй</span>}
@@ -109,7 +128,23 @@ export default function AdminUserDetailDrawer({ userId, onClose }: { userId: num
             <p className="mt-2 text-[10px] leading-4 text-[#a9a49a]">Smart POS-той API холбоогүй тул үйлчлүүлэгчийн дэлгүүрт биечлэн худалдан авсан түүхийг эндээс гараар нэмж, тохирох шатанд шилжүүлж болно.</p>
           </div>
 
-          <div className="mt-6 rounded-2xl border border-black/8 p-4">
+          {/* 2026-09-05 ("require phone for everyone" -- Tom, explicit): login
+              is phone+password only, no email fallback -- this is the
+              account-recovery tool for a legacy account with no phone on
+              file, or a mistyped one. Fixing the phone here never touches
+              the password: once it's right, the account's existing password
+              keeps working immediately (login just needed the right phone
+              to find the row). */}
+          <div className="mt-4 rounded-2xl border border-black/8 p-4">
+            <p className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]"><Phone size={13} /> УТАСНЫ ДУГААР</p>
+            <p className="mt-1 text-[11px] leading-4 text-[#a9a49a]">Нэвтрэх нь одоо зөвхөн утасны дугаар + нууц үгээр хийгддэг. Хэрэглэгч утасгүй эсвэл буруу дугаартай бол (нэвтэрч чадахгүй) эндээс шууд засаж болно.</p>
+            <div className="mt-3 flex gap-2">
+              <input value={phoneDraft} onChange={event => setPhoneDraft(event.target.value)} placeholder="9911 2233" inputMode="tel" className="h-10 flex-1 rounded-xl border border-black/10 px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" />
+              <button type="button" disabled={updatePhone.isPending} onClick={onSavePhone} className="shrink-0 rounded-xl bg-[#17181b] px-4 text-xs font-bold text-white disabled:opacity-60">{updatePhone.isPending ? <LoaderCircle className="animate-spin" size={14} /> : "Хадгалах"}</button>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-black/8 p-4">
             {detail.suspendedReason && <p className="mb-3 rounded-xl bg-[#fff0f2] px-3 py-2 text-xs leading-5 text-[#a51630]">Шалтгаан: {detail.suspendedReason}</p>}
             <div className="flex flex-wrap gap-2">
               {detail.suspendedAt

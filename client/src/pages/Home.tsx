@@ -10,8 +10,6 @@ import {
   ArrowUpRight,
   ChevronRight,
   CircleCheck,
-  Facebook,
-  Instagram,
   Phone,
   Sparkles,
   Star,
@@ -20,6 +18,7 @@ import {
 import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
 import SiteFooter from "@/components/SiteFooter";
+import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
 import SeasonalCampaignCarousel from "@/components/SeasonalCampaignCarousel";
 import HeroSection from "@/components/home/HeroSection";
 import CategoryMasonry from "@/components/home/CategoryMasonry";
@@ -39,7 +38,6 @@ import { useSiteText } from "@/hooks/useSiteText";
 import { trpc } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
 
-const logoUrl = "/manus-storage/sugi-logo-transparent-clean_fee66cad.png";
 // These have no bundled fallback photo (unlike product shots, there's no
 // generic stand-in for real store/lifestyle photography) -- null here
 // means "nothing to show until an admin uploads one for this slot", which
@@ -51,12 +49,7 @@ const logoUrl = "/manus-storage/sugi-logo-transparent-clean_fee66cad.png";
 const heroImage = null;
 const assortmentImage = "/product-placeholder.svg";
 const familyImage = null;
-const symbolImage = "/manus-storage/sugi-symbol_0a534a76.png";
-
-const socials = [
-  { label: "Facebook", href: "https://www.facebook.com/AsayakeJapaneseDrugstore/", Icon: Facebook },
-  { label: "Instagram", href: "https://www.instagram.com/asayake_japan_cosmetics/", Icon: Instagram },
-];
+const symbolImage = "/cdn/sugi-symbol_0a534a76.png";
 
 // 2026-09-04: moved to categories-data.ts (single source of truth also used
 // by Shop.tsx's empty-catalog discovery cards -- see that file's comment).
@@ -206,16 +199,21 @@ export default function Home() {
 
         <WhyChooseUs branchCount={locations.length} productCountLabel={productCountLabel} />
 
+        {/* Tom, 2026-09-05: was a wrapping CSS grid (repeat(auto-fit,
+            minmax(240px,1fr))) -- fine at exactly enough tiles to fill a row,
+            but adding just 1 more brand pushed it onto an awkward half-empty
+            2nd row instead of just... having more brands. Same horizontal-
+            scroll CarouselShelf primitive as the bestseller/recommended/
+            category rails below: always exactly 1 row, scrolls right as
+            admin adds brands, never wraps no matter the count. #top-brands
+            (the header nav's anchor target) moves to this wrapping div since
+            CarouselShelf doesn't take an id/className of its own. */}
         {featuredBrands.length > 0 && (
-          <section className="top-brands-section" id="top-brands" data-reveal>
-            <div className="top-brands-heading">
-              <p className="eyebrow"><span /> {textFor("home-text-brands-eyebrow", "ТОП БРЭНД")}</p>
-              <h2>{textFor("home-text-brands-heading", "Тансаг брэндүүд.")}</h2>
-            </div>
-            <div className="top-brands-grid">
+          <div id="top-brands">
+            <CarouselShelf eyebrow={textFor("home-text-brands-eyebrow", "ТОП БРЭНД")} title={textFor("home-text-brands-heading", "Тансаг брэндүүд.")} cardWidth={240}>
               {featuredBrands.map(brand => <BrandTileCard brand={brand} key={brand.id} />)}
-            </div>
-          </section>
+            </CarouselShelf>
+          </div>
         )}
 
         <CategoryMasonry
@@ -302,12 +300,15 @@ export default function Home() {
             real category -- SUGI's first "shelf" merchandising rail
             (CategoryMasonry above is a static grid). getHomeCategoryShelves
             already filters out any category with zero real products, so
-            every shelf rendered here is guaranteed non-empty. */}
+            every shelf rendered here is guaranteed non-empty.
+            Tom, 2026-09-05 (explicit): dropped the "X сонголт." <h2> --
+            it just repeated the eyebrow's own category name, bigger. The
+            eyebrow above the rail already names it; viewAllHref is
+            unaffected. */}
         {categoryShelves.map(shelf => (
           <CarouselShelf
             key={shelf.category.id}
             eyebrow={shelf.category.name}
-            title={<>{shelf.category.name} <em>сонголт.</em></>}
             viewAllHref={`/shop?category=${encodeURIComponent(shelf.category.name)}`}
           >
             {shelf.products.map((product, index) => <ShelfProductCard product={product} rank={product.soldQuantity > 0 ? index + 1 : undefined} key={product.id} />)}
@@ -360,7 +361,7 @@ export default function Home() {
         <section className="final-cta" data-reveal><div className="final-cta-sun" aria-hidden="true">SUGI<br />CARE</div><div><p className="eyebrow">{textFor("home-text-finalcta-eyebrow", "NEED A LITTLE HELP?")}</p><h2>{finalCtaHeadingLine1} <em>{finalCtaHeadingLine2}</em></h2></div><a className="button button-light" href="tel:94509911">9450-9911 <Phone size={15} /></a></section>
       </main>
 
-      <SiteFooter logoUrl={logoUrl} socials={socials} />
+      <SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} />
       <CartDrawer open={cartOpen} onOpenChange={setCartOpen} />
     </div>
   );

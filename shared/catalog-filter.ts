@@ -120,6 +120,21 @@ export function filterCatalogBrand<T extends CatalogSearchItem>(products: T[], b
   return !brand || brand === "all" ? products : products.filter(product => product.brand === brand);
 }
 
+// NEWVISION.md §14 (Phase 2): Isetan's deep faceted filter, starting with a
+// price range -- alongside category/brand/skinType, all exact-facet filters
+// composed the same way in getPublishedCatalogPage/Shop.tsx's searchFiltered
+// pipeline. Either bound is optional (a shopper who only sets a floor or
+// only a ceiling shouldn't need to know/guess the other), and both are
+// inclusive so a bound typed as exactly a product's price still matches.
+export function filterCatalogPriceRange<T extends CatalogDiscoveryItem>(products: T[], minPriceMnt?: number | null, maxPriceMnt?: number | null): T[] {
+  if (minPriceMnt == null && maxPriceMnt == null) return products;
+  return products.filter(product => {
+    if (minPriceMnt != null && product.priceMnt < minPriceMnt) return false;
+    if (maxPriceMnt != null && product.priceMnt > maxPriceMnt) return false;
+    return true;
+  });
+}
+
 // ---------------------------------------------------------------------
 // Preference Profile v2 (2026-09-01) — recommendation engine v2 vocabulary
 // and pure scoring. Label maps here are the single source of truth for the

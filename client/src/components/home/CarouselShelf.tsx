@@ -33,7 +33,12 @@ export default function CarouselShelf({
   cardWidth = 220,
   children,
 }: {
-  title: ReactNode;
+  // Tom, 2026-09-05 (explicit, re: the 6 category shelves): "X сонголт."
+  // repeated the category name a shelf's own eyebrow already shows, just
+  // bigger -- optional now so a caller can render just eyebrow +
+  // viewAllHref with no h2 at all, instead of every caller being forced
+  // into a title.
+  title?: ReactNode;
   eyebrow?: ReactNode;
   description?: ReactNode;
   viewAllHref?: string;
@@ -80,7 +85,7 @@ export default function CarouselShelf({
       <div className="carousel-shelf-heading">
         <div>
           {eyebrow ? <p className="eyebrow"><span /> {eyebrow}</p> : null}
-          <h2>{title}</h2>
+          {title ? <h2>{title}</h2> : null}
           {description ? <p className="carousel-shelf-description">{description}</p> : null}
         </div>
         {viewAllHref ? <a className="carousel-shelf-all-link" href={viewAllHref}>{viewAllLabel} <ChevronRight size={16} /></a> : null}

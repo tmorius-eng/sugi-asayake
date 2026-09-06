@@ -1,7 +1,6 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useAuth } from "@/_core/hooks/useAuth";
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense } from "react";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SitePromo from "./components/SitePromo";
@@ -9,7 +8,6 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import { PageviewTracker } from "./lib/pageviewTracking";
 
-const AcceptInvitation = lazy(() => import("./pages/AcceptInvitation"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const Checkout = lazy(() => import("./pages/Checkout"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
@@ -23,7 +21,6 @@ const ProductDetail = lazy(() => import("./pages/ProductDetail"));
 const Profile = lazy(() => import("./pages/Profile"));
 const RoutineDetail = lazy(() => import("./pages/RoutineDetail"));
 const Shop = lazy(() => import("./pages/Shop"));
-const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 
 function RouteLoadingFallback() {
   return <main className="min-h-screen bg-[#f6f3ee] grid place-items-center px-6 text-center">
@@ -46,8 +43,6 @@ function Router() {
     <Route path={"/admin"} component={AdminDashboard} />
     <Route path={"/login"} component={Login} />
     <Route path={"/forgot-password"} component={ForgotPassword} />
-    <Route path={"/verify-email"} component={VerifyEmail} />
-    <Route path={"/invite/:token"} component={AcceptInvitation} />
     <Route path={"/privacy"} component={Legal} />
     <Route path={"/terms"} component={Legal} />
     <Route path={"/returns"} component={Legal} />
@@ -61,26 +56,11 @@ function Router() {
   </Switch></Suspense>;
 }
 
-function ResumeStaffInvitation() {
-  const { user, loading } = useAuth();
-
-  useEffect(() => {
-    if (loading || !user || typeof window === "undefined") return;
-    const token = sessionStorage.getItem("sugi-pending-invite");
-    if (!token || window.location.pathname.startsWith("/invite/")) return;
-    sessionStorage.removeItem("sugi-pending-invite");
-    window.location.assign(`/invite/${token}`);
-  }, [loading, user]);
-
-  return null;
-}
-
 function App() {
   return <ErrorBoundary>
     <ThemeProvider defaultTheme="light">
       <TooltipProvider>
         <Toaster />
-        <ResumeStaffInvitation />
         <PageviewTracker />
         <SitePromo />
         <Router />

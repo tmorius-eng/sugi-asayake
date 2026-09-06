@@ -65,4 +65,15 @@ export const ENV = {
   // simply never calls Honeybadger.configure() without a real key rather
   // than silently reporting to nowhere or throwing.
   honeybadgerApiKey: process.env.HONEYBADGER_API_KEY ?? "",
+
+  // verify.mn (2026-09-05): Mongolian Mobile-Originated SMS phone
+  // verification -- backs an optional "verify your phone" step at register
+  // and a phone-based alternative to the emailed reset code at
+  // forgot-password (added specifically because Brevo email delivery has
+  // been unreliable). UNLIKE every other integration above, this is read
+  // as an empty string here too, but server/verifyMn.ts's own functions
+  // throw loudly the moment they're actually called with it missing,
+  // instead of silently falling back to a console.log -- a deliberate,
+  // explicit exception to this file's usual convention, not an oversight.
+  verifyMnApiKey: process.env.VERIFY_MN_API_KEY ?? "",
 };

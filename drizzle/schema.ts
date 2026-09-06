@@ -13,10 +13,21 @@ export const users = mysqlTable("users", {
    */
   id: int("id").autoincrement().primaryKey(),
   name: text("name"),
-  /** Customer profile page (TIER: account). Free-form; also duplicated onto
-   *  each saved address since a delivery contact number can differ from the
-   *  account owner's own number. */
-  phone: varchar("phone", { length: 40 }),
+  /**
+   * 2026-09-05 ("remove email!!! only phone number!!!" -- Tom, explicit): the
+   * app's actual login identifier now. Every new registration requires one;
+   * findUserByPhone (server/db.ts) is what auth.login/auth.register resolve
+   * against, matching digits-only right-anchored to the local 8-digit mobile
+   * number regardless of how it was typed (spaces/dashes/+976 or not) --
+   * see that function's own comment. UNIQUE below enforces one account per
+   * number; every write path (register, admin.updateUserPhone,
+   * attachPhoneFromVerifiedSession) normalizes to the bare 8-digit form
+   * first (normalizePhoneForVerifyMn) so the unique index and the flexible
+   * lookup never disagree with each other. Still doubles as the plain
+   * contact number shown on the profile page, same column as before this
+   * date -- not a new field, just a new load-bearing responsibility.
+   */
+  phone: varchar("phone", { length: 40 }).unique(),
   /** Public S3/MinIO URL of the uploaded profile photo. Null = no avatar
    *  (the UI falls back to an initial-letter badge). */
   avatarUrl: varchar("avatarUrl", { length: 500 }),
@@ -75,8 +86,16 @@ export const users = mysqlTable("users", {
    *  not a blanket promise every future email/SMS respects them yet. */
   emailOptIn: boolean("emailOptIn").notNull().default(true),
   smsOptIn: boolean("smsOptIn").notNull().default(true),
-  /** Unique login identifier for the app's own email+password auth. */
-  email: varchar("email", { length: 320 }).notNull().unique(),
+  /**
+   * 2026-09-05: no longer the login identifier (see `phone` above) and no
+   * longer collected at registration -- kept nullable so legacy accounts
+   * created before this date keep their address on file (admin display,
+   * order-confirmation emails on old orders), and so nothing stops a future
+   * account from optionally adding one later. Still UNIQUE among rows that
+   * do have one; MySQL's unique index permits any number of NULLs, so this
+   * imposes no constraint on phone-only accounts that never set it.
+   */
+  email: varchar("email", { length: 320 }).unique(),
   /** scrypt("<saltHex>:<hashHex>") — see server/_core/password.ts. Never sent to the client. */
   passwordHash: varchar("passwordHash", { length: 200 }).notNull(),
   // "staff" (TIER 3): can manage products/categories/orders/posts/media but
@@ -862,6 +881,47 @@ export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type InsertPasswordResetToken = typeof passwordResetTokens.$inferInsert;
 export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
 export type InsertEmailVerificationToken = typeof emailVerificationTokens.$inferInsert;
+
+/**
+ * verify.mn (Mongolian Mobile-Originated SMS) phone-verification sessions --
+ * backs BOTH register (optional "verify your phone" step) and forgot-password
+ * (a phone-based alternative to the email code above, added 2026-09-05
+ * specifically because Brevo email delivery has been unreliable for Tom --
+ * see CLAUDE.md). We never generate or check the SMS code ourselves;
+ * verify.mn's own API does that match. This table only remembers which
+ * local account/purpose a verify.mn sessionId unlocks, and guards against
+ * replay via consumedAt.
+ */
+export const phoneVerificationSessions = mysqlTable("phone_verification_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  // NULL during register (no account exists yet at session-creation time);
+  // set for password_reset, resolved by looking up users.phone.
+  userId: int("userId").references(() => users.id, { onDelete: "cascade" }),
+  purpose: mysqlEnum("purpose", ["register", "password_reset"]).notNull(),
+  // Normalized digits only (see server/verifyMn.ts's normalizePhoneForVerifyMn).
+  phone: varchar("phone", { length: 20 }).notNull(),
+  verifyMnSessionId: varchar("verifyMnSessionId", { length: 64 }).notNull(),
+  // The 6-digit code we asked the user to text back -- not a secret we check
+  // ourselves (verify.mn's API is the one that matches it), kept only for
+  // support/debugging.
+  code: varchar("code", { length: 6 }).notNull(),
+  // Cached last-known verify.mn status; the source of truth is always a live
+  // GET /sessions/{id} (see getSessionStatus in server/verifyMn.ts), never
+  // this column alone.
+  status: mysqlEnum("status", ["pending", "verified", "expired"]).notNull().default("pending"),
+  // Set once a VERIFIED session is actually spent (password changed / phone
+  // attached) -- prevents replaying the same verified session twice.
+  consumedAt: timestamp("consumedAt"),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  index("phone_verification_sessions_user_idx").on(table.userId),
+  uniqueIndex("phone_verification_sessions_verifymn_idx").on(table.verifyMnSessionId),
+  index("phone_verification_sessions_phone_purpose_idx").on(table.phone, table.purpose),
+]);
+
+export type PhoneVerificationSession = typeof phoneVerificationSessions.$inferSelect;
+export type InsertPhoneVerificationSession = typeof phoneVerificationSessions.$inferInsert;
 
 export type ProductCategory = typeof productCategories.$inferSelect;
 export type InsertProductCategory = typeof productCategories.$inferInsert;

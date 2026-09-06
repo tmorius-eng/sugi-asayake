@@ -1,14 +1,14 @@
 import { randomBytes } from "node:crypto";
 import { and, asc, desc, eq, gte, inArray, isNull, like, lt, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { adminAuditLogs, cartItems, carts, discountCodes, emailVerificationTokens, featuredBrands, InsertProduct, InsertProductCategory, InsertUser, integrationConfigs, loginAttempts, marketingSpend, orderItems, orders, passwordResetTokens, paymentAttempts, posts, productCategories, productReviews, productVariants, products, routines, routineSteps, siteMedia, siteText, sitePromotions, staffInvitations, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
+import { adminAuditLogs, cartItems, carts, discountCodes, featuredBrands, InsertProduct, InsertProductCategory, InsertUser, integrationConfigs, loginAttempts, marketingSpend, orderItems, orders, paymentAttempts, phoneVerificationSessions, posts, productCategories, productReviews, productVariants, products, routines, routineSteps, siteMedia, siteText, sitePromotions, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
 import { UB_DELIVERY_FEE_MNT } from "../shared/const";
 import { guessDistrictFromAddress, type UbDistrict } from "../shared/districts";
 import { decryptJson, encryptJson } from "./_core/crypto";
 import { ENV } from './_core/env';
 import { getInventoryReservationFailure, shouldRestoreStock } from "./commerce-lifecycle";
 import { getLoyaltyTier, getNextLoyaltyTier } from "../shared/loyalty";
-import { applyDiversityCap, computeCategoryAffinity, filterCatalogBrand, filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCatalogCategories, getCatalogSkinTypes, scorePreferenceMatch, scorePriceBandAffinity, sortCatalogProducts, type CatalogSortOption, type PreferenceProfile, type SkinType } from "../shared/catalog-filter";
+import { applyDiversityCap, computeCategoryAffinity, filterCatalogBrand, filterCatalogPriceRange, filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCatalogCategories, getCatalogSkinTypes, scorePreferenceMatch, scorePriceBandAffinity, sortCatalogProducts, type CatalogSortOption, type PreferenceProfile, type SkinType } from "../shared/catalog-filter";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -90,24 +90,34 @@ export async function getUserById(id: number) {
   return result[0];
 }
 
-export async function createUserWithPassword(input: { email: string; passwordHash: string; name?: string | null }) {
+// 2026-09-05 ("remove email!!! only phone number!!!" -- Tom, explicit):
+// phone is now the required, unique account identifier (see users.phone's
+// own comment in drizzle/schema.ts) -- email is optional and only ever
+// populated for legacy accounts created before this date, never collected
+// at registration anymore. `phone` here MUST already be the normalized
+// bare 8-digit form (normalizePhoneForVerifyMn) -- callers (auth.register)
+// are responsible for that, same discipline server/verifyMn.ts already
+// applies before writing to this column anywhere else.
+export async function createUserWithPassword(input: { phone: string; passwordHash: string; name?: string | null }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
 
-  const email = input.email.trim().toLowerCase();
-  const existing = await getUserByEmail(email);
-  if (existing) throw new Error("An account with this email already exists.");
+  const existing = await findUserByPhone(input.phone);
+  if (existing) throw new Error("Энэ утасны дугаараар бүртгэл үүссэн байна.");
 
-  // The very first account on a fresh deployment, or an email that matches
-  // OWNER_EMAIL, is granted admin automatically — this replaces the old
-  // "openId === ENV.ownerOpenId" bootstrap rule.
+  // The very first account on a fresh deployment is granted admin
+  // automatically -- this replaces the old "openId === ENV.ownerOpenId"
+  // bootstrap rule. The old second bootstrap path (email === OWNER_EMAIL)
+  // is gone along with it: registration no longer collects an email to
+  // compare, and the one real owner account already exists with admin role
+  // and its own phone on file. ENV.ownerEmail itself is untouched -- it
+  // still routes owner alert emails (server/_core/notification.ts).
   const [{ userCount }] = await db.select({ userCount: sql<number>`count(*)` }).from(users);
   const isFirstUser = Number(userCount) === 0;
-  const isOwnerEmail = Boolean(ENV.ownerEmail) && email === ENV.ownerEmail;
-  const role: "user" | "admin" = isFirstUser || isOwnerEmail ? "admin" : "user";
+  const role: "user" | "admin" = isFirstUser ? "admin" : "user";
 
   const inserted = await db.insert(users).values({
-    email,
+    phone: input.phone,
     passwordHash: input.passwordHash,
     name: input.name ?? null,
     role,
@@ -116,17 +126,6 @@ export async function createUserWithPassword(input: { email: string; passwordHas
   const created = await getUserById(Number(inserted[0].insertId));
   if (!created) throw new Error("Unable to create the account.");
   return created;
-}
-
-// Re-submitting the register form with an email that already has an
-// unconfirmed (emailVerifiedAt is null) account refreshes that account's
-// credentials instead of hard-failing on the email uniqueness constraint —
-// see auth.register in server/routers.ts for the caller-side guard that
-// makes sure this never touches an already-verified account.
-export async function updatePendingRegistration(input: { userId: number; passwordHash: string; name?: string | null }) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  await db.update(users).set({ passwordHash: input.passwordHash, ...(input.name !== undefined ? { name: input.name } : {}), updatedAt: new Date() }).where(eq(users.id, input.userId));
 }
 
 export async function touchUserLastSignedIn(id: number) {
@@ -346,72 +345,153 @@ export async function bumpUserSessionVersion(id: number) {
   await db.update(users).set({ sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: new Date() }).where(eq(users.id, id));
 }
 
-// --- Password reset (TIER 0: this was entirely missing before — a user who
-// forgot their password had no way back into their account) ---------------
+// Tom, 2026-09-05 ("we do not need brevo at all"): the email-OTP password
+// reset (createPasswordResetCode/resetPasswordWithCode) and email
+// verification (createEmailVerificationCode/verifyEmailWithCode) functions
+// that used to live here are gone -- verify.mn phone verification below is
+// the only account-recovery/verification mechanism now (see
+// server/routers.ts auth.register/auth.resetPasswordViaPhone). The
+// password_reset_tokens/email_verification_tokens tables themselves are
+// left in drizzle/schema.ts (an empty-going-forward schema, not deleted --
+// dropping a live table is a separate, riskier migration with no functional
+// upside here).
 
-// Failed-code guesses allowed against a single OTP row before it's burned
-// (usedAt set) regardless of remaining time-to-expiry — a second line of
-// defense against brute force beyond the IP-based rate limit on the
-// procedures that call these, since a 6-digit code only has 1e6 possibilities.
-const MAX_CODE_ATTEMPTS = 5;
+// --- verify.mn phone verification (2026-09-05) -----------------------------
+// See server/verifyMn.ts for the HTTP integration this backs, and
+// drizzle/schema.ts's comment on phoneVerificationSessions for why the
+// table exists and what it does/doesn't store.
 
-export async function createPasswordResetCode(input: { userId: number; codeHash: string; expiresAt: Date }) {
+// Forgot-password's phone path needs to find the account a given phone
+// number belongs to -- users.phone is free-form (spaces/dashes/+976 or not,
+// whatever a shopper typed at checkout/in their profile), so this compares
+// digits-only, right-anchored to the 8-digit local mobile number, rather
+// than requiring an exact string match against however it happened to be
+// stored. Returns undefined (not an error) when nothing matches -- the only
+// caller (auth.startPhoneVerification) treats "no match" as a normal,
+// anti-enumeration-safe outcome, not a failure.
+export async function findUserByPhone(localEightDigitPhone: string) {
   const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  // Requesting a new code invalidates any still-pending one for the same
-  // user, so only the most recently issued code can ever be used.
-  await db.update(passwordResetTokens).set({ usedAt: new Date() }).where(and(eq(passwordResetTokens.userId, input.userId), sql`${passwordResetTokens.usedAt} is null`));
-  await db.insert(passwordResetTokens).values({ userId: input.userId, tokenHash: input.codeHash, expiresAt: input.expiresAt });
+  if (!db) return undefined;
+  if (!/^\d{8}$/.test(localEightDigitPhone)) return undefined;
+  const result = await db.select().from(users).where(sql`RIGHT(REGEXP_REPLACE(${users.phone}, '[^0-9]', ''), 8) = ${localEightDigitPhone}`).limit(1);
+  return result[0];
 }
 
-export async function resetPasswordWithCode(input: { userId: number; codeHash: string; passwordHash: string }) {
+// Inserted BEFORE calling verify.mn's API (see createVerificationSession's
+// own comment for why: our callback URL has to name this row's id, but that
+// URL is submitted in the same POST that returns verify.mn's real session
+// id, so we can't have the real id yet). verifyMnSessionId is NOT NULL
+// UNIQUE, so a random local placeholder fills that column until
+// attachVerifyMnSessionId overwrites it.
+export async function createPendingPhoneVerificationSession(input: { userId: number | null; purpose: "register" | "password_reset"; phone: string; code: string; expiresAt: Date }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  const found = await db.select().from(passwordResetTokens).where(and(eq(passwordResetTokens.userId, input.userId), sql`${passwordResetTokens.usedAt} is null`)).orderBy(desc(passwordResetTokens.createdAt)).limit(1);
-  const token = found[0];
-  if (!token) throw new Error("Идэвхтэй код олдсонгүй. Дахин нууц үг сэргээх хүсэлт илгээнэ үү.");
-  if (token.expiresAt.getTime() <= Date.now()) throw new Error("Кодны хугацаа дууссан байна. Дахин нууц үг сэргээх хүсэлт илгээнэ үү.");
-  if (token.tokenHash !== input.codeHash) {
-    const attempts = token.attempts + 1;
-    const exhausted = attempts >= MAX_CODE_ATTEMPTS;
-    await db.update(passwordResetTokens).set({ attempts, ...(exhausted ? { usedAt: new Date() } : {}) }).where(eq(passwordResetTokens.id, token.id));
-    throw new Error(exhausted ? "Оролдлогын хязгаарт хүрлээ. Дахин нууц үг сэргээх хүсэлт илгээнэ үү." : `Код буруу байна. ${MAX_CODE_ATTEMPTS - attempts} оролдлого үлдлээ.`);
-  }
-
-  // Bumping sessionVersion in the same update invalidates every session
-  // token issued before the reset — if the account was ever compromised, the
-  // attacker's existing cookie stops working the moment the password changes.
-  await db.update(users).set({ passwordHash: input.passwordHash, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: new Date() }).where(eq(users.id, token.userId));
-  await db.update(passwordResetTokens).set({ usedAt: new Date() }).where(eq(passwordResetTokens.id, token.id));
-  return { userId: token.userId };
+  const placeholder = `pending:${randomBytes(16).toString("hex")}`;
+  const inserted = await db.insert(phoneVerificationSessions).values({ userId: input.userId, purpose: input.purpose, phone: input.phone, verifyMnSessionId: placeholder, code: input.code, expiresAt: input.expiresAt });
+  return Number(inserted[0].insertId);
 }
 
-// --- Email verification (TIER 0: optional, but good practice) -------------
-
-export async function createEmailVerificationCode(input: { userId: number; codeHash: string; expiresAt: Date }) {
+export async function attachVerifyMnSessionId(id: number, verifyMnSessionId: string) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  await db.update(emailVerificationTokens).set({ usedAt: new Date() }).where(and(eq(emailVerificationTokens.userId, input.userId), sql`${emailVerificationTokens.usedAt} is null`));
-  await db.insert(emailVerificationTokens).values({ userId: input.userId, tokenHash: input.codeHash, expiresAt: input.expiresAt });
+  await db.update(phoneVerificationSessions).set({ verifyMnSessionId }).where(eq(phoneVerificationSessions.id, id));
 }
 
-export async function verifyEmailWithCode(input: { userId: number; codeHash: string }) {
+// Cleans up a reserved row when the verify.mn API call itself failed (bad
+// key, network error, etc.) -- otherwise a placeholder row with a fake
+// verifyMnSessionId would sit there forever, matching nothing real.
+export async function deletePendingPhoneVerificationSession(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(phoneVerificationSessions).where(eq(phoneVerificationSessions.id, id));
+}
+
+export async function getPhoneVerificationSessionByLocalId(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(phoneVerificationSessions).where(eq(phoneVerificationSessions.id, id)).limit(1);
+  return result[0];
+}
+
+export async function getPhoneVerificationSessionByVerifyMnId(verifyMnSessionId: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(phoneVerificationSessions).where(eq(phoneVerificationSessions.verifyMnSessionId, verifyMnSessionId)).limit(1);
+  return result[0];
+}
+
+export async function updatePhoneVerificationSessionStatus(id: number, status: "pending" | "verified" | "expired") {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(phoneVerificationSessions).set({ status }).where(eq(phoneVerificationSessions.id, id));
+}
+
+// Spends a VERIFIED password_reset session: updates the linked user's
+// password and bumps sessionVersion in the same update (same "kill every
+// other existing session the moment the password changes" discipline
+// resetPasswordWithCode already applies to the email-code path above), then
+// marks the session consumed so it can't be replayed. Caller
+// (auth.resetPasswordViaPhone) is responsible for re-checking verify.mn's
+// LIVE status immediately before calling this -- this function trusts
+// whatever status is already on the row, so it must be fresh.
+export async function resetPasswordViaPhoneSession(input: { sessionId: number; passwordHash: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  const found = await db.select().from(emailVerificationTokens).where(and(eq(emailVerificationTokens.userId, input.userId), sql`${emailVerificationTokens.usedAt} is null`)).orderBy(desc(emailVerificationTokens.createdAt)).limit(1);
-  const token = found[0];
-  if (!token) throw new Error("Идэвхтэй код олдсонгүй. Шинэ код илгээнэ үү.");
-  if (token.expiresAt.getTime() <= Date.now()) throw new Error("Кодны хугацаа дууссан байна. Шинэ код илгээнэ үү.");
-  if (token.tokenHash !== input.codeHash) {
-    const attempts = token.attempts + 1;
-    const exhausted = attempts >= MAX_CODE_ATTEMPTS;
-    await db.update(emailVerificationTokens).set({ attempts, ...(exhausted ? { usedAt: new Date() } : {}) }).where(eq(emailVerificationTokens.id, token.id));
-    throw new Error(exhausted ? "Оролдлогын хязгаарт хүрлээ. Шинэ код илгээнэ үү." : `Код буруу байна. ${MAX_CODE_ATTEMPTS - attempts} оролдлого үлдлээ.`);
-  }
+  const session = await getPhoneVerificationSessionByLocalId(input.sessionId);
+  if (!session || session.purpose !== "password_reset" || !session.userId) throw new Error("Баталгаажуулалт олдсонгүй.");
+  if (session.consumedAt) throw new Error("Энэ баталгаажуулалт аль хэдийн ашиглагдсан байна.");
+  if (session.expiresAt.getTime() <= Date.now()) throw new Error("Баталгаажуулалтын хугацаа дууссан байна.");
+  if (session.status !== "verified") throw new Error("Утасны дугаараа эхлээд баталгаажуулна уу.");
 
-  await db.update(users).set({ emailVerifiedAt: new Date(), updatedAt: new Date() }).where(eq(users.id, token.userId));
-  await db.update(emailVerificationTokens).set({ usedAt: new Date() }).where(eq(emailVerificationTokens.id, token.id));
-  return { userId: token.userId };
+  await db.update(users).set({ passwordHash: input.passwordHash, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: new Date() }).where(eq(users.id, session.userId));
+  await db.update(phoneVerificationSessions).set({ consumedAt: new Date() }).where(eq(phoneVerificationSessions.id, session.id));
+  return { userId: session.userId };
+}
+
+// 2026-09-06 (Tom, after watching an unverified registration go through
+// with his wife's phone number: "ehneriinhee utasiig hiigeed burtguulsen
+// chine shuud burtgegdej baina!! verify.mn geed ajilahgui baina" --
+// reversing the earlier "optional, contact admin if typo'd" call once he
+// saw what skipping verification actually allowed): registration now
+// REQUIRES a live-confirmed SMS reply before an account exists at all, so
+// this is the real signup path -- the session was created with userId:null
+// (see auth.startPhoneVerification's purpose:"register" branch), and this
+// is what actually creates the account once verify.mn confirms it. Distinct
+// from attachPhoneFromVerifiedSession below (which attaches a phone to an
+// ALREADY-EXISTING logged-in user -- still valid for a possible future
+// Profile "change my phone" feature, just no longer reachable from Login.tsx
+// since verification now happens before an account exists, not after).
+export async function completeRegistrationViaPhoneSession(input: { sessionId: number; passwordHash: string; name: string | null }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const session = await getPhoneVerificationSessionByLocalId(input.sessionId);
+  if (!session || session.purpose !== "register" || session.userId) throw new Error("Баталгаажуулалт олдсонгүй.");
+  if (session.consumedAt) throw new Error("Энэ баталгаажуулалт аль хэдийн ашиглагдсан байна.");
+  if (session.expiresAt.getTime() <= Date.now()) throw new Error("Баталгаажуулалтын хугацаа дууссан байна.");
+  if (session.status !== "verified") throw new Error("Утасны дугаараа эхлээд баталгаажуулна уу.");
+
+  const user = await createUserWithPassword({ phone: session.phone, passwordHash: input.passwordHash, name: input.name });
+  await db.update(phoneVerificationSessions).set({ consumedAt: new Date(), userId: user.id }).where(eq(phoneVerificationSessions.id, session.id));
+  return user;
+}
+
+// Spends a VERIFIED register session: attaches the phone number to the
+// account that started the verification (set at session-creation time, for
+// an already-logged-in user attaching/changing their own phone -- see
+// auth.startPhoneVerification's ctx.user branch). Same fresh-status
+// contract as resetPasswordViaPhoneSession above.
+export async function attachPhoneFromVerifiedSession(input: { sessionId: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const session = await getPhoneVerificationSessionByLocalId(input.sessionId);
+  if (!session || session.purpose !== "register" || !session.userId) throw new Error("Баталгаажуулалт олдсонгүй.");
+  if (session.consumedAt) throw new Error("Энэ баталгаажуулалт аль хэдийн ашиглагдсан байна.");
+  if (session.expiresAt.getTime() <= Date.now()) throw new Error("Баталгаажуулалтын хугацаа дууссан байна.");
+  if (session.status !== "verified") throw new Error("Утасны дугаараа эхлээд баталгаажуулна уу.");
+
+  await db.update(users).set({ phone: session.phone, updatedAt: new Date() }).where(eq(users.id, session.userId));
+  await db.update(phoneVerificationSessions).set({ consumedAt: new Date() }).where(eq(phoneVerificationSessions.id, session.id));
+  return { userId: session.userId };
 }
 
 // PREMIUM-FEATURES.md TIER 2: average rating + review count, shared by the
@@ -482,6 +562,11 @@ export type CatalogPageParams = {
   category?: string;
   brand?: string;
   skinType?: SkinType | "all";
+  // NEWVISION.md §14 (Phase 2): Isetan-style deep faceted filter, either
+  // bound optional -- a shopper setting only a floor or only a ceiling
+  // shouldn't have to also guess the other. See filterCatalogPriceRange.
+  minPriceMnt?: number;
+  maxPriceMnt?: number;
   inStockOnly?: boolean;
   sort?: CatalogSortOption;
   page?: number;
@@ -547,12 +632,16 @@ export async function getPublishedCatalogPage(params: CatalogPageParams) {
 
   const matching = sortCatalogProducts(
     filterCatalogStock(
-      filterCatalogSkinType(
-        filterCatalogBrand(
-          filterCatalogProducts(fullCatalog, params.search ?? "", params.category ?? "all"),
-          params.brand ?? "all",
+      filterCatalogPriceRange(
+        filterCatalogSkinType(
+          filterCatalogBrand(
+            filterCatalogProducts(fullCatalog, params.search ?? "", params.category ?? "all"),
+            params.brand ?? "all",
+          ),
+          params.skinType ?? "all",
         ),
-        params.skinType ?? "all",
+        params.minPriceMnt,
+        params.maxPriceMnt,
       ),
       params.inStockOnly ?? false,
     ),
@@ -1850,9 +1939,9 @@ export async function adminGlobalSearch(queryText: string) {
       .from(orders)
       .where(or(like(orders.orderNumber, term), like(orders.customerName, term), like(orders.customerPhone, term)))
       .limit(5),
-    db.select({ id: users.id, name: users.name, email: users.email, role: users.role })
+    db.select({ id: users.id, name: users.name, email: users.email, phone: users.phone, role: users.role })
       .from(users)
-      .where(or(like(users.name, term), like(users.email, term)))
+      .where(or(like(users.name, term), like(users.email, term), like(users.phone, term)))
       .limit(5),
   ]);
 
@@ -2206,6 +2295,12 @@ export async function getAdminAuditLogs(filters: { action?: string; actorEmail?:
 // Best-effort: a DB hiccup while recording history should never be the
 // reason a legitimate login fails, so this swallows its own errors (same
 // pattern as the email/SMS senders in _core/notification.ts).
+// NOTE (2026-09-05): the `email` column/param name predates login moving to
+// phone+password -- it now holds whatever identifier was actually typed
+// into the login form (a phone number, going forward). Left as `email`
+// rather than renamed: this is a security/rate-limit audit log, not a real
+// email address field, and a column rename here is a schema migration with
+// no functional upside (same call as leaving staff_invitations in place).
 export async function recordLoginAttempt(input: { email: string; userId: number | null; success: boolean; reason?: string | null; ipAddress: string | null }) {
   const db = await getDb();
   if (!db) return;
@@ -2488,6 +2583,7 @@ export async function getAdminUsers() {
       id: users.id,
       name: users.name,
       email: users.email,
+      phone: users.phone,
       role: users.role,
       createdAt: users.createdAt,
       lastSignedIn: users.lastSignedIn,
@@ -2711,69 +2807,19 @@ export async function unsuspendUser(userId: number) {
   return safeUser;
 }
 
-export async function getAdminStaffInvitations() {
-  const db = await getDb();
-  if (!db) return [];
-
-  return db
-    .select({
-      id: staffInvitations.id,
-      email: staffInvitations.email,
-      role: staffInvitations.role,
-      status: staffInvitations.status,
-      expiresAt: staffInvitations.expiresAt,
-      acceptedAt: staffInvitations.acceptedAt,
-      createdAt: staffInvitations.createdAt,
-    })
-    .from(staffInvitations)
-    .orderBy(desc(staffInvitations.createdAt));
-}
-
-export async function createStaffInvitation(input: { email: string; role: "user" | "staff" | "admin"; tokenHash: string; invitedByUserId: number; expiresAt: Date }) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  const email = input.email.trim().toLocaleLowerCase();
-
-  await db.update(staffInvitations).set({ status: "revoked", updatedAt: new Date() }).where(and(eq(staffInvitations.email, email), eq(staffInvitations.status, "pending")));
-  const inserted = await db.insert(staffInvitations).values({ ...input, email });
-  const invitation = await db.select().from(staffInvitations).where(eq(staffInvitations.id, Number(inserted[0].insertId))).limit(1);
-  if (!invitation[0]) throw new Error("Unable to create the staff invitation.");
-  return invitation[0];
-}
-
-export async function getStaffInvitationByTokenHash(tokenHash: string) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  const invitation = await db.select().from(staffInvitations).where(eq(staffInvitations.tokenHash, tokenHash)).limit(1);
-  return invitation[0];
-}
-
-export async function acceptStaffInvitation(input: { tokenHash: string; userId: number; userEmail: string }) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  const invitation = await getStaffInvitationByTokenHash(input.tokenHash);
-  if (!invitation) throw new Error("This staff invitation is not valid.");
-  if (invitation.status !== "pending") throw new Error("This staff invitation is no longer active.");
-  if (invitation.expiresAt.getTime() <= Date.now()) {
-    await db.update(staffInvitations).set({ status: "expired", updatedAt: new Date() }).where(eq(staffInvitations.id, invitation.id));
-    throw new Error("This staff invitation has expired.");
-  }
-  if (invitation.email.toLocaleLowerCase() !== input.userEmail.trim().toLocaleLowerCase()) {
-    throw new Error("Please sign in with the email address that received this invitation.");
-  }
-
-  await db.update(users).set({ role: invitation.role, updatedAt: new Date() }).where(eq(users.id, input.userId));
-  await db.update(staffInvitations).set({ status: "accepted", acceptedAt: new Date(), acceptedUserId: input.userId, updatedAt: new Date() }).where(eq(staffInvitations.id, invitation.id));
-  return { role: invitation.role, email: invitation.email };
-}
-
-export async function revokeStaffInvitation(id: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is not available");
-  await db.update(staffInvitations).set({ status: "revoked", updatedAt: new Date() }).where(and(eq(staffInvitations.id, id), eq(staffInvitations.status, "pending")));
-  return { id };
-}
-
+// 2026-09-05 ("admin invite staff section just change it to manually only
+// admin give staff role to default users" -- Tom, explicit): the whole
+// email-invitation flow (createStaffInvitation/getStaffInvitationByTokenHash/
+// acceptStaffInvitation/revokeStaffInvitation/getAdminStaffInvitations, plus
+// the invites.* router and /invite/:token page) is removed -- it also
+// depended on matching an invitee's email, which doesn't fit a phone-first
+// account model anyway. updateAdminUserRole below (already existed, already
+// wired to a per-row role <select> in the admin Users panel) is now the
+// *only* way to grant staff/admin: pick an existing, already-registered
+// user and change their role directly. The staff_invitations table itself
+// is left in place, unused -- same call as the old password/email-code
+// tables made during the Brevo removal (dropping a live table is a
+// separate, riskier migration with no functional upside here).
 export async function updateAdminUserRole(input: { userId: number; role: "user" | "staff" | "admin" }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
@@ -2781,6 +2827,30 @@ export async function updateAdminUserRole(input: { userId: number; role: "user" 
   if (!user[0]) throw new Error("User not found.");
   await db.update(users).set({ role: input.role, updatedAt: new Date() }).where(eq(users.id, input.userId));
   return { ...user[0], role: input.role };
+}
+
+// 2026-09-05: the account-recovery path for "require phone for everyone"
+// (Tom's explicit choice over keeping legacy email accounts working) -- a
+// legacy account with no phone on file can't log in at all anymore (login
+// is phone+password only, see auth.login), and a shopper who mistypes their
+// number at registration can't self-serve a phone-based reset to the WRONG
+// number either. Both resolve the same way Tom asked for: contact an admin,
+// who corrects/sets the phone here. No password touched -- once the phone
+// is right, the account's existing password keeps working immediately
+// (login just needed the right phone to find the row), and the normal
+// verify.mn forgot-password flow (server/verifyMn.ts) works from then on
+// if they've also forgotten the password.
+export async function updateAdminUserPhone(input: { userId: number; phone: string | null }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const user = await db.select({ id: users.id, name: users.name, email: users.email, phone: users.phone, role: users.role }).from(users).where(eq(users.id, input.userId)).limit(1);
+  if (!user[0]) throw new Error("Хэрэглэгч олдсонгүй.");
+  if (input.phone) {
+    const existing = await findUserByPhone(input.phone);
+    if (existing && existing.id !== input.userId) throw new Error("Энэ утасны дугаарыг өөр хэрэглэгч ашиглаж байна.");
+  }
+  await db.update(users).set({ phone: input.phone, updatedAt: new Date() }).where(eq(users.id, input.userId));
+  return { ...user[0], phone: input.phone };
 }
 
 /**

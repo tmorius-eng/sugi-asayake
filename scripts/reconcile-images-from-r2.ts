@@ -75,7 +75,7 @@ async function main() {
 
     let toUpdate: { id: number; url: string }[] = [];
     for (const [id, { key }] of latestByProductId) {
-      const url = `/manus-storage/${key}`;
+      const url = `/cdn/${key}`;
       const current = dbState.get(id);
       if (current === undefined) continue; // id not in DB at all
       if (current === null) {

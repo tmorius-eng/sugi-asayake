@@ -21,6 +21,10 @@ S3_PUBLIC_BASE_URL=https://pub-<hash>.r2.dev
 PORT=3000
 # Сонголттой (2026-09-04, доор дэлгэрэнгүй) — байхгүй бол error tracking чимээгүй no-op:
 HONEYBADGER_API_KEY=
+# Сонголттой (2026-09-05, доор дэлгэрэнгүй) — байхгүй бол утасны SMS баталгаажуулалт
+# (бүртгэл + нууц үг сэргээх) дуудагдмагц ШУУД алдаа шидэнэ (бусад интеграцаас ялгаатай,
+# чимээгүй no-op БИШ — эсвэл шалтгаан server/_core/env.ts-ийн verifyMnApiKey-ийн тайлбарт):
+VERIFY_MN_API_KEY=
 ```
 Клиент талд мөн `VITE_HONEYBADGER_API_KEY` (server-ийн `HONEYBADGER_API_KEY`-тэй ижил утга) тохируулж болно — Vite build руу шингэдэг тул нууц биш, Sentry-ийн public DSN-тэй ижил итгэлийн загвар.
 (Бодит Aiven нууц үг/R2 утгууд: Tom-оос асуух, эсвэл Aiven dashboard → sugi-asayake-db → Connection information / Cloudflare dashboard → R2 → Manage R2 API Tokens. Хоёр laptop **нэг ижил Aiven DB, нэг ижил R2 bucket**-ыг хуваалцдаг тул `DATABASE_URL`/`S3_*` утгууд хаана ч яг ижил байх ёстой.)
@@ -387,6 +391,45 @@ Tom "Error tracking (Honeybadger) — hosting хүлээхгүйгээр эхл�
 **⚠️ Одоогоор бодит үйлдэлгүй — key оруулаагүй байгаа тул**: `HONEYBADGER_API_KEY`/`VITE_HONEYBADGER_API_KEY` хоёулаа `.env`-д хоосон/байхгүй. Tom [honeybadger.io](https://www.honeybadger.io)-д (эсвэл багийн gpt/claude-той зөвлөлдөж өөр вэндорыг) үнэгүй бүртгүүлж, төслийн API key-г хоёр газарт (server `.env`-ийн `HONEYBADGER_API_KEY`, client-д зориулсан `VITE_HONEYBADGER_API_KEY`, хоёулаа ижил утга) тавихад л идэвхжинэ — код талд нэмэлт өөрчлөлт шаардлагагүй.
 
 **Баталгаажуулалт**: `pnpm check`/`pnpm build` цэвэр. **Бүрэн `pnpm exec vitest run --no-file-parallelism` 204/204 ✅ (35/35 файл)** — Honeybadger нэмэлт ямар ч регресс үүсгээгүй (key байхгүй тул бүх код зам no-op хэвээр). `curl http://localhost:3000/health` 200 хэвээр, dev server hot-reload-оор асуудалгүй ажиллав. Playwright screenshot-оор дахин баталгаажуулаагүй (key байхгүй үед UI-д ямар ч харагдах өөрчлөлт байхгүй тул шаардлагагүй гэж дүгнэв).
+
+## ✅ (2026-09-06) Бүртгэл одоо заавал verify.mn SMS-ээр баталгаажсан утас шаарддаг (Tom амьдаар туршиж, шийдвэрээ эргүүлэн өөрчилсөн)
+
+2026-09-05-ний доорх бичлэгт баталгаажуулалтыг **сонголттой** болгосон байсан ч Tom өөрийн эхнэрийн утасны дугаараар бодитоор бүртгүүлж үзэхэд ямар ч SMS баталгаажуулалтгүйгээр шууд бүртгэгдсэнийг хараад ("ehneriinhee utasiig hiigeed burtguulsen chine shuud burtgegdej baina!! verify.mn geed ajilahgui baina") шийдвэрээ эргүүлэн өөрчилж, **заавал баталгаажуулах ёстой** гэдгийг тодорхой шаардав ("not just only used for forgot-password!! also create account!!!! do it professionally!!!").
+
+**Шинэ 2-алхамт бүртгэлийн урсгал** (`auth.startPhoneVerification` → `auth.completeRegistration`, хуучин ганц алхамт `auth.register` бүрмөсөн хассан):
+1. Хэрэглэгч утасны дугаараа оруулна → бодит verify.mn SMS session үүсэж, SMS хүлээнэ (`PhoneVerificationStep` компонент, `ForgotPassword.tsx`-тэй ижил, аль хэдийн Tom-ийн тусгайлан батласан дизайнтай).
+2. Утас **бодитоор баталгаажсаны дараа** л Нэр (сонголтоор) + Нууц үг оруулж бүртгэлээ дуусгана (`auth.completeRegistration`) — энэ мөчид л жинхэнэ хэрэглэгчийн бүртгэл (`users` мөр) үүснэ, өмнөх нь зөвхөн `phone_verification_sessions`-д session хадгалагдана.
+3. `auth.startPhoneVerification`-ийн "register" branch endо public болов (`ctx.user` шаардахгүй) — учир нь бүртгэл үүсэхээс өмнө session эхэлдэг болсон тул нэвтэрсэн хэрэглэгч байх боломжгүй. Аль хэдийн өөр акаунтад холбогдсон утсаар шинэ session эхлүүлэхийг шууд `CONFLICT`-оор татгалзана (энэ бол anti-enumeration биш — бүртгэлийн энгийн urgent conflict мэдэгдэл).
+4. `server/db.ts`-д шинэ `completeRegistrationViaPhoneSession` (VERIFIED session-оос бодит акаунт үүсгэнэ) — хуучин `attachPhoneFromVerifiedSession` (аль хэдийн нэвтэрсэн хэрэглэгчийн утсыг солих/нэмэх зориулалттай, одоо ямар ч UI-аас дуудагдахгүй ч ирээдүйн Profile "утсаа дахин баталгаажуулах" функцэд бэлэн хэвээр үлдсэн) хэвээрээ, зөрчилдөхгүй.
+
+Ажилтай холбоотой хамгийн том эрсдэл — тест дэх verify.mn session бодит биш (fake sessionId) байдаг тул router-ийн "live status дахин шалгах" хэсэг бодит verify.mn API руу очих гэж оролдсон — `server/checkout.guest.integration.test.ts`-ийн "merges a guest's cart..." тестэд `vi.stubGlobal("fetch", ...)`-аар шийдвэрлэв (fake VERIFIED хариу буцаадаг, тестийн төгсгөлд `finally`-д сэргээдэг).
+
+**Баталгаажуулалт**: `pnpm check`/`pnpm build` цэвэр. **Бүрэн `pnpm exec vitest run --no-file-parallelism` 211/211 ✅ (37/37 файл)**. Dev server дахин асааж `/health` 200 баталгаажуулсан.
+
+---
+
+## ✅ (2026-09-05) Бүртгэл/нэвтрэлт зөвхөн утасны дугаараар боллоо (имэйл бүрмөсөн хассан) + ажилтны имэйл-урилга бүрмөсөн хассан
+
+Tom тодорхой шаардав: "remove email !!! only phone number!!!" (бүртгэлийн формоос имэйл талбарыг арилгаад зөвхөн утасны дугаараар бүртгүүлдэг болгох). Хоёр судалгааны асуултад тодорхой хариулав: (1) **бүх хэрэглэгч (хуучин болон шинэ) заавал утастай байх ёстой** ("Require phone for everyone" — хуучин имэйлээр нэвтэрдэг байсан аргыг хэвээр үлдээхийг сонгоогүй), (2) бүртгүүлэхэд заавал 150₮-ийн SMS баталгаажуулалт (⚠️ **энэ хоёр дахь заалт 2026-09-06-нд дээрх шинэ бичлэгээр эргүүлэн өөрчлөгдсөн, одоо ЗААВАЛ баталгаажуулна**) — тухайн үед "typo хийвэл админтай холбогдоод шийднэ, боломжит бүх нөхцлийг бодож үз" гэж тодорхой зөвшөөрсөн байсан.
+
+**Бодит эрсдэлийн үнэлгээ (Aiven-аас шууд шалгасан)**: production дээр ердөө **4 хэрэглэгч** байсан (1 нь Tom, утастай; 2 нь item #12-т аль хэдийн тэмдэглэсэн тестийн үлдэгдэл admin акаунт; 1 нь энгийн user, утасгүй) — тул "бүх хэрэглэгч заавал утастай байх ёстой" гэсэн эрсдэлтэй сонголт бодит хохирол багатай байсныг баталгаажуулаад хэрэгжүүлсэн.
+
+**Схем**: `users.email` → nullable (NOT NULL хасав, UNIQUE хэвээр), `users.phone` → UNIQUE нэмэв (`drizzle/0042_phone_primary_auth.sql`, Aiven дээр шууд ажиллуулж баталгаажуулсан). Бүх бичих цэг (`register`, `admin.updateUserPhone`, `profile.update`, `attachPhoneFromVerifiedSession`) нэгдсэн 8-оронтой хэлбэрт normalize хийдэг (`normalizePhoneForVerifyMn`) тул raw баганын UNIQUE index нь `findUserByPhone`-ийн уян хатан (сүүлийн 8 орон харьцуулах) хайлттай хэзээ ч зөрчилдөхгүй.
+
+- **`auth.register`**: `{email, password}` → `{phone, password, name?}`. Давхардсан утас шалгаад `CONFLICT`, амжилттай бол шууд session нээнэ (Brevo хасалтын дараах нэг алхамт бүртгэл хэвээр).
+- **`auth.login`**: `{email, password}` → `{phone, password}`. `findUserByPhone`-оор хайна.
+- **Login.tsx**: бүх Имэйл талбар Утасны дугаар болов, бүртгэлийн дараах "утсаа баталгаажуулах уу?" сонголт бүрмөсөн арилав (утас аль хэдийн заавал бөглөгддөг тул илүүц) — `attachPhoneViaVerification`/`PhoneVerificationStep` backend код хэвээр үлдсэн (ашиглагдаагүй ч гэсэн, ирээдүйд Profile дээр "утсаа дахин баталгаажуулах" функц хэрэгтэй бол бэлэн).
+- **Admin-side сэргээх хэрэгсэл (шинэ, "зөвхөн админтай холбогдоод шийднэ" гэсэн Tom-ийн шийдвэрийг бодитоор хэрэгжүүлсэн)**: `admin.updateUserPhone` + `AdminUserDetailDrawer.tsx`-д шинэ "УТАСНЫ ДУГААР" карт — нэвтэрч чадахгүй болсон (утасгүй/буруу утастай) хэрэглэгчийн утсыг админ шууд засна, нууц үгэнд хэзээ ч хүрэхгүй (утас зөв болмогц хуучин нууц үг шууд ажиллана, эсвэл хэрэглэгч өөрөө SMS-ээр сэргээнэ).
+- **`profile.update`**: утас солиход мөн normalize + давхардал шалгалт нэмэв (өөр хэрэглэгчийн утсыг санамсаргүй "авахаас" сэргийлнэ).
+- **Admin Users жагсаалт/хайлт**: утасны багана нэмэгдэв, `adminGlobalSearch` одоо утсаар ч хайдаг болов (`AdminGlobalSearch.tsx`), Нэвтрэлтийн түүх (`AdminSecurityCenter.tsx`) багана "Имэйл"→"Утас" болов (`login_attempts.email` баганын нэрийг хэвээр үлдээсэн — зөвхөн миграцийн эрсдэлгүй, зорилго нь өөрчлөгдсөнийг код/UI-д тэмдэглэсэн).
+
+**Хоёрдугаар хэсэг: "admin invite staff section just change it to manually only admin give staff role to default users"** — имэйлээр ажилтан урих бүхэл систем (`admin.inviteStaff`/`admin.staffInvitations`/`admin.revokeStaffInvitation`, `invites.*` router, `/invite/:token` хуудас/`AcceptInvitation.tsx`) **бүрмөсөн хассан** (Tom-ийн шинэ утас-төвтэй загварт "имэйлээр урих" ойлголт зохицохгүй болсон тул). Оронд нь аль хэдийн байсан **`admin.updateUserRole`** (Users жагсаалтын мөр бүрийн эрхийн dropdown) цорын ганц арга болов — админ өөрөө аль хэдийн бүртгүүлсэн хэрэглэгчийг сонгоод шууд эрх өгнө. `staff_invitations` хүснэгт DB-д хэвээр (ашиглагдахгүй, Brevo-цэвэрлэгээний адил зарчмаар устгаагүй).
+
+**Тестийн засвар, явцад олдсон холбоогүй бодит bug**: бүрэн suite ажиллуулахад `server/verifyMn.test.ts`/`server/verifyMn.integration.test.ts`-ийн "VERIFY_MN_API_KEY тохируулаагүй үед л шалгадаг" 2 тест **бодит амжилттай session үүсгэж unшид** (ROLLBACK-гүй!) — учир нь энэ session-ий эхэн үед `.env`-д Tom-ий өгсөн **бодит** verify.mn API key нэмэгдсэн байсан тул тестийн "key байхгүй" урьдач нөхцөл худал болсон байв. Засвар: хоёр файлд `vi.mock("./_core/env", ...)`-оор `verifyMnApiKey`-г тухайн тестийн хувьд зорчилтойгоор хоосон болгов (нэг нь бүрэн ENV орлуулга, нөгөө нь `importOriginal`-аар бусад бодит утгыг хэвээр хадгалсан хэсэгчилсэн орлуулга — учир нь тэр файл бодит DB рүү холбогддог). Бодит үр дагавар: цаашид энэ suite ажиллуулах бүрт verify.mn-ийн бодит dashboard дээр хуурамч session үүсэхгүй болов.
+
+**Баталгаажуулалт**: `pnpm check`/`pnpm build` цэвэр. **Бүрэн `pnpm exec vitest run --no-file-parallelism` 211/211 ✅ (37/37 файл)**. Migration Aiven дээр шууд ажиллуулж баталгаажуулсан (`SHOW COLUMNS`/`SHOW INDEX`-ээр). Dev server дахин асааж `/health` 200 баталгаажуулсан.
+
+**⚠️ Мэдэгдэж буй үлдэгдэл**: одоогийн 4 хэрэглэгчийн 1 нь (item #12-ын тестийн artifact-уудаас өөр, жинхэнэ "user" эрхтэй) утасгүй тул одоо нэвтэрч чадахгүй болсон — тухайн хэрэглэгч гомдоллосон тохиолдолд admin → Хэрэглэгч → Дэлгэрэнгүй → "УТАСНЫ ДУГААР" картаар шууд засах боломжтой (кодоор аль хэдийн бэлэн).
 
 ## ✅ (2026-09-04) Phase 3 review (Shop/ProductDetail/Checkout/Profile) — том дахин зохион байгуулалт хэрэггүй байсныг баталгаажуулав, 3 бодит гарц-defect олж заслаа
 

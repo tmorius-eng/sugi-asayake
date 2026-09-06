@@ -26,6 +26,12 @@ describeWithDatabase("admin security center integration", () => {
   const marker = `security-center-test-${Date.now()}`;
   const adminEmail = `${marker}-admin@example.invalid`;
   const targetEmail = `${marker}-target@example.invalid`;
+  // 2026-09-05 ("remove email!!! only phone number!!!" -- Tom, explicit):
+  // auth.login is phone+password now, and login_attempts.email now records
+  // whatever identifier was actually typed (see recordLoginAttempt's own
+  // comment in server/db.ts) -- so this fixture needs a real phone, and
+  // admin.loginHistory below is searched by that phone, not by email.
+  const targetPhone = `9${String(Date.now()).slice(-7)}`;
   let adminUserId = 0;
   let targetUserId = 0;
 
@@ -34,7 +40,7 @@ describeWithDatabase("admin security center integration", () => {
     if (!db) throw new Error("DATABASE_URL is required for admin security center integration tests.");
     const adminInsert = await db.insert(users).values({ email: adminEmail, passwordHash: await hashPassword("AdminPassw0rd!"), name: "Security Center Admin", role: "admin", emailVerifiedAt: new Date() });
     adminUserId = Number(adminInsert[0].insertId);
-    const targetInsert = await db.insert(users).values({ email: targetEmail, passwordHash: await hashPassword("TargetPassw0rd!"), name: "Security Center Target", role: "user", emailVerifiedAt: new Date() });
+    const targetInsert = await db.insert(users).values({ email: targetEmail, phone: targetPhone, passwordHash: await hashPassword("TargetPassw0rd!"), name: "Security Center Target", role: "user", emailVerifiedAt: new Date() });
     targetUserId = Number(targetInsert[0].insertId);
   });
 
@@ -50,20 +56,20 @@ describeWithDatabase("admin security center integration", () => {
 
   it("records a failed then a successful login attempt, both visible via admin.loginHistory", async () => {
     const anon = callerFor(null);
-    await expect(anon.auth.login({ email: targetEmail, password: "WrongPassword!" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
-    await anon.auth.login({ email: targetEmail, password: "TargetPassw0rd!" });
+    await expect(anon.auth.login({ phone: targetPhone, password: "WrongPassword!" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await anon.auth.login({ phone: targetPhone, password: "TargetPassw0rd!" });
 
     const admin = callerFor({ id: adminUserId, email: adminEmail, name: "Security Center Admin", role: "admin", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
-    const history = await admin.admin.loginHistory({ email: targetEmail, outcome: "all" });
+    const history = await admin.admin.loginHistory({ email: targetPhone, outcome: "all" });
     expect(history.length).toBeGreaterThanOrEqual(2);
     const failed = history.find(entry => !entry.success);
     const succeeded = history.find(entry => entry.success);
     expect(failed?.reason).toBe("invalid_credentials");
     expect(succeeded?.userId).toBe(targetUserId);
 
-    const failedOnly = await admin.admin.loginHistory({ email: targetEmail, outcome: "failed" });
+    const failedOnly = await admin.admin.loginHistory({ email: targetPhone, outcome: "failed" });
     expect(failedOnly.every(entry => !entry.success)).toBe(true);
-    const successOnly = await admin.admin.loginHistory({ email: targetEmail, outcome: "success" });
+    const successOnly = await admin.admin.loginHistory({ email: targetPhone, outcome: "success" });
     expect(successOnly.every(entry => entry.success)).toBe(true);
   });
 

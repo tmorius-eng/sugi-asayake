@@ -1,10 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { COOKIE_NAME } from "../shared/const";
-import { passwordResetTokens, users } from "../drizzle/schema";
+import { phoneVerificationSessions, users } from "../drizzle/schema";
 import { createContext, signSessionToken } from "./_core/context";
-import { bumpUserSessionVersion, createPasswordResetCode, getDb, resetPasswordWithCode } from "./db";
+import { bumpUserSessionVersion, getDb, resetPasswordViaPhoneSession } from "./db";
 import { hashPassword } from "./_core/password";
 import type { TrpcContext } from "./_core/context";
 
@@ -14,8 +13,6 @@ import type { TrpcContext } from "./_core/context";
 // immediately, even though it hasn't expired. This exercises the real
 // sign/verify code path (server/_core/context.ts), not just the HTTP layer.
 const describeWithDatabase = process.env.RUN_AUTH_INTEGRATION_TESTS === "1" ? describe : describe.skip;
-
-const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
 
 function contextFor(sessionToken: string): Promise<TrpcContext> {
   const options = {
@@ -67,29 +64,25 @@ describeWithDatabase("session versioning integration", () => {
     expect(newCtx.user?.id).toBe(userId);
   });
 
-  it("rejects a pre-reset token after the password is reset", async () => {
+  // 2026-09-05 ("we do not need brevo at all"): the email-code password
+  // reset path (createPasswordResetCode/resetPasswordWithCode) is gone --
+  // this now exercises the same "sessionVersion bumps on reset, old tokens
+  // die" behavior through resetPasswordViaPhoneSession instead, faking a
+  // verify.mn-VERIFIED session row directly (same "no real phone reply in
+  // CI" discipline server/verifyMn.integration.test.ts already uses).
+  it("rejects a pre-reset token after the password is reset via a verified phone session", async () => {
     const db = await getDb();
-    const [current] = await db!.select({ sessionVersion: users.sessionVersion }).from(users).where(eq(users.id, userId));
+    if (!db) throw new Error("DATABASE_URL is required for session versioning integration tests.");
+    const [current] = await db.select({ sessionVersion: users.sessionVersion }).from(users).where(eq(users.id, userId));
     const preResetToken = await signSessionToken(userId, current!.sessionVersion);
     expect((await contextFor(preResetToken)).user?.id).toBe(userId);
 
-    const resetCode = "356894";
-    await createPasswordResetCode({ userId, codeHash: tokenHash(resetCode), expiresAt: new Date(Date.now() + 60 * 60 * 1000) });
-    await resetPasswordWithCode({ userId, codeHash: tokenHash(resetCode), passwordHash: await hashPassword("YetAnotherPassw0rd!") });
+    const inserted = await db.insert(phoneVerificationSessions).values({
+      userId, purpose: "password_reset", phone: "88990011", verifyMnSessionId: `session-versioning-test-${Date.now()}`, code: "356894", status: "verified", expiresAt: new Date(Date.now() + 60_000),
+    });
+    const sessionId = Number(inserted[0].insertId);
+    await resetPasswordViaPhoneSession({ sessionId, passwordHash: await hashPassword("YetAnotherPassw0rd!") });
 
     expect((await contextFor(preResetToken)).user).toBeNull();
-  });
-
-  it("cleans up dangling password reset tokens when the owning user is deleted (FK cascade)", async () => {
-    const db = await getDb();
-    if (!db) throw new Error("DATABASE_URL is required.");
-    const code = "204813";
-    await createPasswordResetCode({ userId, codeHash: tokenHash(code), expiresAt: new Date(Date.now() + 60 * 60 * 1000) });
-
-    await db.delete(users).where(eq(users.id, userId));
-    userId = 0; // already gone — afterAll shouldn't try to delete it again
-
-    const remaining = await db.select().from(passwordResetTokens).where(eq(passwordResetTokens.tokenHash, tokenHash(code)));
-    expect(remaining).toHaveLength(0);
   });
 });

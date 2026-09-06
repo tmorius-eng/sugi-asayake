@@ -22,27 +22,31 @@ function makeCaller(ip: string) {
   return appRouter.createCaller(ctx);
 }
 
+// 2026-09-05 ("remove email!!! only phone number!!!" -- Tom, explicit):
+// auth.login is phone+password now -- these still use credentials that
+// can't possibly match a real account, just a phone number instead of an
+// email address.
 describe("auth.login rate limiting", () => {
   it("allows a handful of failed attempts, then blocks further attempts from the same IP", async () => {
     const ip = uniqueTestIp();
-    const email = `nonexistent-${Date.now()}@example.invalid`;
+    const phone = `9${String(Date.now()).slice(-7)}`;
 
     for (let attempt = 0; attempt < 8; attempt++) {
-      await expect(makeCaller(ip).auth.login({ email, password: "wrong-password" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      await expect(makeCaller(ip).auth.login({ phone, password: "wrong-password" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     }
 
-    await expect(makeCaller(ip).auth.login({ email, password: "wrong-password" })).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS" });
+    await expect(makeCaller(ip).auth.login({ phone, password: "wrong-password" })).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS" });
   });
 
   it("does not penalize a different IP for another client's failed attempts", async () => {
     const busyIp = uniqueTestIp();
     const quietIp = uniqueTestIp();
-    const email = `nonexistent-${Date.now()}@example.invalid`;
+    const phone = `9${String(Date.now()).slice(-7)}`;
 
     for (let attempt = 0; attempt < 9; attempt++) {
-      await makeCaller(busyIp).auth.login({ email, password: "wrong-password" }).catch(() => undefined);
+      await makeCaller(busyIp).auth.login({ phone, password: "wrong-password" }).catch(() => undefined);
     }
-    await expect(makeCaller(busyIp).auth.login({ email, password: "wrong-password" })).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS" });
-    await expect(makeCaller(quietIp).auth.login({ email, password: "wrong-password" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(makeCaller(busyIp).auth.login({ phone, password: "wrong-password" })).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS" });
+    await expect(makeCaller(quietIp).auth.login({ phone, password: "wrong-password" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 });

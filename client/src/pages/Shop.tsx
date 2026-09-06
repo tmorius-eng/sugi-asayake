@@ -1,4 +1,4 @@
-import { ArrowDownUp, ArrowUpRight, ChevronLeft, ChevronRight, Eye, Heart, MapPin, PackageCheck, Phone, RotateCcw, Search, ShoppingBag, SlidersHorizontal, Sparkles, Star, Truck } from "lucide-react";
+import { ArrowDownUp, ArrowUpRight, ChevronLeft, ChevronRight, Eye, Grid3x3, Heart, LayoutGrid, MapPin, PackageCheck, Phone, RotateCcw, Search, ShoppingBag, SlidersHorizontal, Sparkles, Star, Truck, Wallet } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import CartDrawer from "@/components/CartDrawer";
@@ -6,11 +6,13 @@ import CommerceHeader from "@/components/CommerceHeader";
 import QuickViewDialog, { type QuickViewProduct } from "@/components/QuickViewDialog";
 import RailProductCard from "@/components/RailProductCard";
 import RecommendedForYou from "@/components/RecommendedForYou";
+import SiteFooter from "@/components/SiteFooter";
+import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
 import { ProductCardSkeleton } from "@/components/Skeleton";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { filterCatalogBrand, filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCategoryPlaceholderImage, getSalePercent, LOW_STOCK_THRESHOLD, skinTypeLabels, sortCatalogProducts, type CatalogSortOption, type SkinType } from "@shared/catalog-filter";
+import { filterCatalogBrand, filterCatalogPriceRange, filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCategoryPlaceholderImage, getSalePercent, LOW_STOCK_THRESHOLD, skinTypeLabels, sortCatalogProducts, type CatalogSortOption, type SkinType } from "@shared/catalog-filter";
 import { imageSrcSet } from "@shared/image-variants";
 import { rememberRecentlyViewed, resolveRecentlyViewed } from "@shared/recently-viewed";
 import { UB_DELIVERY_FEE_MNT } from "@shared/const";
@@ -26,6 +28,12 @@ import { formatMnt } from "@shared/format";
 import { categories as discoveryCategories } from "@/components/home/categories-data";
 
 const RECENTLY_VIEWED_KEY = "sugi-asayake-recently-viewed-v1";
+// NEWVISION.md §14 (Phase 2): Isetan's small/large grid density toggle --
+// a per-device view preference, not catalog state, so localStorage (not
+// URL/server) is the right home for it, same reasoning as
+// RECENTLY_VIEWED_KEY above.
+const DENSITY_KEY = "sugi-asayake-shop-density-v1";
+type GridDensity = "comfortable" | "compact";
 
 type RecentlyViewedProps = {
   products: QuickViewProduct[];
@@ -78,9 +86,24 @@ export default function Shop() {
   // ?brand=<real brand name> -- without a real URL-state facet, those tiles
   // would be links that filter nothing.
   const [brand, setBrand] = useState(() => initialParams.get("brand") ?? "all");
+  // NEWVISION.md §14 (Phase 2): Isetan's deep faceted filter, starting with
+  // a price range -- kept as text state (not number) so the input can be
+  // legitimately empty (no floor/ceiling) while typing, same reasoning as
+  // Number(initialParams.get("page")) below but without that immediate
+  // coercion, since "" -> 0 would wrongly mean "only free products".
+  const [minPrice, setMinPrice] = useState(() => initialParams.get("minPrice") ?? "");
+  const [maxPrice, setMaxPrice] = useState(() => initialParams.get("maxPrice") ?? "");
+  const parsedMinPrice = minPrice.trim() ? Number(minPrice) : undefined;
+  const parsedMaxPrice = maxPrice.trim() ? Number(maxPrice) : undefined;
   const [skinTypeFilter, setSkinTypeFilter] = useState<SkinType | "all">("all");
   const [inStockOnly, setInStockOnly] = useState(false);
   const [sort, setSort] = useState<CatalogSortOption>("featured");
+  const [density, setDensity] = useState<GridDensity>(() => {
+    try { return window.localStorage.getItem(DENSITY_KEY) === "compact" ? "compact" : "comfortable"; } catch { return "comfortable"; }
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem(DENSITY_KEY, density); } catch { /* private-browsing/blocked storage -- the toggle still works for this visit */ }
+  }, [density]);
   const [cartOpen, setCartOpen] = useState(false);
   const [quickViewProduct, setQuickViewProduct] = useState<QuickViewProduct | null>(null);
   const [recentlyViewedIds, setRecentlyViewedIds] = useState<number[]>([]);
@@ -115,6 +138,8 @@ export default function Shop() {
     category,
     brand,
     skinType: skinTypeFilter,
+    minPriceMnt: parsedMinPrice,
+    maxPriceMnt: parsedMaxPrice,
     inStockOnly,
     sort,
     page,
@@ -145,9 +170,9 @@ export default function Shop() {
   // client-side pass cheap, unlike the old always-937-row version of this
   // same logic.
   const searchFiltered = useMemo(() => {
-    const matching = filterCatalogSkinType(filterCatalogBrand(filterCatalogProducts(searchResults.data ?? [], "", category), brand), skinTypeFilter);
+    const matching = filterCatalogPriceRange(filterCatalogSkinType(filterCatalogBrand(filterCatalogProducts(searchResults.data ?? [], "", category), brand), skinTypeFilter), parsedMinPrice, parsedMaxPrice);
     return sortCatalogProducts(filterCatalogStock(matching, inStockOnly), sort);
-  }, [searchResults.data, category, brand, skinTypeFilter, inStockOnly, sort]);
+  }, [searchResults.data, category, brand, skinTypeFilter, parsedMinPrice, parsedMaxPrice, inStockOnly, sort]);
   const pagedProducts = isSearching ? searchFiltered.slice((page - 1) * SHOP_PAGE_SIZE, page * SHOP_PAGE_SIZE) : (catalog.data?.items ?? []);
   // "X илэрц" (matches after filters) vs "Y бүтээгдэхүүн" (raw source size
   // before category/skinType/stock filters) — two different numbers the
@@ -164,8 +189,10 @@ export default function Shop() {
     if (search.trim()) params.set("q", search.trim()); else params.delete("q");
     if (category !== "all") params.set("category", category); else params.delete("category");
     if (brand !== "all") params.set("brand", brand); else params.delete("brand");
+    if (minPrice.trim()) params.set("minPrice", minPrice.trim()); else params.delete("minPrice");
+    if (maxPrice.trim()) params.set("maxPrice", maxPrice.trim()); else params.delete("maxPrice");
     window.history.replaceState(null, "", `${window.location.pathname}${params.toString() ? `?${params}` : ""}`);
-  }, [search, category, brand, skinTypeFilter, inStockOnly, sort]);
+  }, [search, category, brand, minPrice, maxPrice, skinTypeFilter, inStockOnly, sort]);
   useEffect(() => { if (!catalogLoading && page > totalPages) setPage(totalPages); }, [catalogLoading, totalPages, page]);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -189,7 +216,7 @@ export default function Shop() {
     } catch { window.localStorage.removeItem(RECENTLY_VIEWED_KEY); }
   }, []);
 
-  const resetControls = () => { setSearch(""); setCategory("all"); setBrand("all"); setSkinTypeFilter("all"); setInStockOnly(false); setSort("featured"); };
+  const resetControls = () => { setSearch(""); setCategory("all"); setBrand("all"); setMinPrice(""); setMaxPrice(""); setSkinTypeFilter("all"); setInStockOnly(false); setSort("featured"); };
   const rememberProduct = (productId: number) => setRecentlyViewedIds(current => {
     const next = rememberRecentlyViewed(current, productId);
     window.localStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify(next));
@@ -198,7 +225,11 @@ export default function Shop() {
   const openQuickView = (product: QuickViewProduct) => { rememberProduct(product.id); setQuickViewProduct(product); };
 
   return <div className="sugi-commerce">
-    <CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="SUGI ASAYAKE дэлгүүр" />
+    {/* Tom, 2026-09-05 (explicit, /shop only): the logo already reads "SUGI
+        ASAYAKE" -- backLabel="" (not omitted -- omitting it would fall back
+        to CommerceHeader's own "SUGI ASAYAKE" default) suppresses the
+        redundant text span entirely, leaving just the logo + back-arrow. */}
+    <CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="" />
     <main className="shop-main">
       <section className="shop-hero" data-reveal>
         <div className="shop-hero-copy"><p className="shop-kicker"><span /> 02 / SUGI MARKET</p><h1>Өдөр тутмын<br /><em>сонголтууд.</em></h1><p>Японоос албан ёсоор нийлүүлсэн арьс арчилгаа, эрүүл мэнд, гэр бүлийн хэрэгцээний бүтээгдэхүүнээ өөртөө тохируулан олоорой.</p><div className="shop-hero-badges"><div className="shop-hero-signature"><Sparkles size={17} /><span>ТАНЫ ӨДӨР БҮРТ / ЯПОН ЧАНАР</span></div><div className="shop-hero-delivery"><Truck size={17} /><span>УБ ХҮРГЭЛТ {formatMnt(UB_DELIVERY_FEE_MNT)} / САЛБАРААС ҮНЭГҮЙ АВАХ</span></div></div></div>
@@ -210,15 +241,31 @@ export default function Shop() {
       </div>
       <section className="shop-filter" data-reveal>
         <div><p><SlidersHorizontal size={15} /> АНГИЛЛААР ШҮҮХ</p><span>Таны өдөр тутмын хэрэгцээний хэмнэлээр</span></div>
-        <div className="shop-filter-pills"><button type="button" onClick={() => setCategory("all")} className={category === "all" ? "active" : ""}>Бүгд</button>{categories.map(item => <button type="button" key={item} onClick={() => setCategory(item)} className={category === item ? "active" : ""}>{item}</button>)}</div>
-        {skinTypes.length ? <div className="shop-filter-pills shop-skin-filter"><button type="button" onClick={() => setSkinTypeFilter("all")} className={skinTypeFilter === "all" ? "active" : ""}>Арьсны төрөл: Бүгд</button>{skinTypes.map(type => <button type="button" key={type} onClick={() => setSkinTypeFilter(type)} className={skinTypeFilter === type ? "active" : ""}>{skinTypeLabels[type]}</button>)}</div> : null}
-        <div className="shop-control-row"><label className="stock-toggle"><input type="checkbox" checked={inStockOnly} onChange={event => setInStockOnly(event.target.checked)} /><span><PackageCheck size={14} /> Бэлэн нөөцтэй</span></label><label className="sort-control"><ArrowDownUp size={14} /><span>Эрэмбэ</span><select value={sort} onChange={event => setSort(event.target.value as CatalogSortOption)}><option value="featured">Онцлох</option><option value="price-low">Үнэ: багаас</option><option value="price-high">Үнэ: ихээс</option><option value="name-asc">Нэр: A–Я</option></select></label></div>
+        {/* Tom, 2026-09-05: category pills + skin-type pills are now ONE flex
+            item (a right-aligned column) instead of 2 separate siblings of
+            .shop-filter -- previously the skin-type row's only way to reach
+            its own line was `width:100%`, which also flushed it to the far
+            LEFT, under the label instead of under the category pills it
+            filters within. Grouping them guarantees the skin-type row lines
+            up directly under category pills regardless of how much room
+            .shop-control-row needs on the line below. */}
+        <div className="shop-filter-facets">
+          <div className="shop-filter-pills"><button type="button" onClick={() => setCategory("all")} className={category === "all" ? "active" : ""}>Бүгд</button>{categories.map(item => <button type="button" key={item} onClick={() => setCategory(item)} className={category === item ? "active" : ""}>{item}</button>)}</div>
+          {skinTypes.length ? <div className="shop-filter-pills shop-skin-filter"><button type="button" onClick={() => setSkinTypeFilter("all")} className={skinTypeFilter === "all" ? "active" : ""}>Арьсны төрөл: Бүгд</button>{skinTypes.map(type => <button type="button" key={type} onClick={() => setSkinTypeFilter(type)} className={skinTypeFilter === type ? "active" : ""}>{skinTypeLabels[type]}</button>)}</div> : null}
+        </div>
+        <div className="shop-control-row">
+          {/* NEWVISION.md §14 (Phase 2): Isetan's deep faceted filter --
+              price range, either bound optional. Text inputs (not
+              type="number" state) so an in-progress empty field never
+              silently becomes "0" -- see minPrice/maxPrice's own comment. */}
+          <div className="price-range-filter"><Wallet size={14} /><input type="number" inputMode="numeric" min={0} step={1000} placeholder="Доод" value={minPrice} onChange={event => setMinPrice(event.target.value)} aria-label="Доод үнэ (₮)" /><span aria-hidden="true">–</span><input type="number" inputMode="numeric" min={0} step={1000} placeholder="Дээд" value={maxPrice} onChange={event => setMaxPrice(event.target.value)} aria-label="Дээд үнэ (₮)" /></div>
+          <label className="stock-toggle"><input type="checkbox" checked={inStockOnly} onChange={event => setInStockOnly(event.target.checked)} /><span><PackageCheck size={14} /> Бэлэн нөөцтэй</span></label><label className="sort-control"><ArrowDownUp size={14} /><span>Эрэмбэ</span><select value={sort} onChange={event => setSort(event.target.value as CatalogSortOption)}><option value="featured">Онцлох</option><option value="price-low">Үнэ: багаас</option><option value="price-high">Үнэ: ихээс</option><option value="name-asc">Нэр: A–Я</option></select></label></div>
       </section>
       {catalogLoading ? <section className="shop-product-grid" aria-busy="true" aria-label={isSearching ? "Хайж байна" : "Каталогийг бэлдэж байна"}>{Array.from({ length: 8 }, (_, index) => <ProductCardSkeleton key={index} />)}</section> : catalogErrored ? <section className="shop-status-card error"><h2>Каталогийг ачаалж чадсангүй.</h2><p>Интернэт холболтоо шалгаад дахин оролдоно уу.</p></section> : !isSearching && sourceCount === 0 && !forceZeroResults ? <section className="shop-discovery" data-reveal>
         <div className="shop-discovery-heading"><p className="shop-kicker"><span /> SUGI ASAYAKE / DISCOVER</p><h2>Өнөөдрийн хэрэгцээ<br /><em>эндээс эхэлнэ.</em></h2><p>Онлайн каталогийг бид салбарын бодит нөөцтэй нь уялдуулан шинэчилж байна. Харин та өөрт ойр салбараас дараах ангиллаар шууд асууж болно.</p></div>
         <div className="shop-category-deck">{discoveryCategories.map(item => <div className={`shop-category-card ${item.tone}`} key={item.number}><span>{item.number}</span><div><small>SUGI DAILY CARE</small><h3>{item.title}</h3><p>{item.detail}</p></div><ArrowUpRight size={20} /></div>)}</div>
         <div className="shop-discovery-cta" id="shop-contact"><div><MapPin size={20} /><span><strong>3 салбар, нэг өдөр тутмын сонголт.</strong><small>Таны хайж буй бүтээгдэхүүнийг ойр салбараас асуугаарай.</small></span></div><div><Link href="/#stores">Салбар олох <ArrowUpRight size={16} /></Link><a href="tel:94509911">9450-9911 <Phone size={15} /></a></div></div>
-      </section> : resultCount ? <><section className="shop-product-grid" id="shop-product-grid">{pagedProducts.map((product, index) => {
+      </section> : resultCount ? <><div className="shop-grid-toolbar"><button type="button" className={density === "comfortable" ? "active" : ""} onClick={() => setDensity("comfortable")} aria-pressed={density === "comfortable"} aria-label="Том grid харагдац"><LayoutGrid size={15} /></button><button type="button" className={density === "compact" ? "active" : ""} onClick={() => setDensity("compact")} aria-pressed={density === "compact"} aria-label="Жижиг grid харагдац"><Grid3x3 size={15} /></button></div><section className={`shop-product-grid${density === "compact" ? " is-compact" : ""}`} id="shop-product-grid">{pagedProducts.map((product, index) => {
         const salePercent = getSalePercent(product.priceMnt, product.compareAtPriceMnt);
         const lowStock = product.stockQuantity > 0 && product.stockQuantity <= LOW_STOCK_THRESHOLD;
         // Frontend performance audit (2026-09-02): grid cards render at
@@ -245,6 +292,7 @@ export default function Shop() {
           render this once the shopper has actually looked at something. */}
       {!recentIdsQuery.isLoading && !recentIdsQuery.isError && effectiveRecentIds.length > 0 ? <RecentlyViewed products={recentlyViewed} rememberedCount={effectiveRecentIds.length} onRemember={rememberProduct} onQuickView={openQuickView} /> : null}
     </main>
+    <SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} />
     <QuickViewDialog open={Boolean(quickViewProduct)} product={quickViewProduct} onOpenChange={open => { if (!open) setQuickViewProduct(null); }} onAdded={() => setCartOpen(true)} />
     <CartDrawer open={cartOpen} onOpenChange={setCartOpen} />
   </div>;

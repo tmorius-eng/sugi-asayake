@@ -16,6 +16,8 @@ import { toast } from "sonner";
 import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
 import ProfileQuizWizard from "@/components/ProfileQuizWizard";
+import SiteFooter from "@/components/SiteFooter";
+import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
 import { LineSkeleton, Skeleton } from "@/components/Skeleton";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
@@ -107,7 +109,11 @@ export default function Profile() {
   if (!loading && !isAuthenticated) {
     return (
       <div className="sugi-commerce" style={{ overflow: "visible" }}>
-        <CommerceHeader backLabel="SUGI ASAYAKE профайл" />
+        {/* Tom, 2026-09-05 (explicit): backLabel="" suppresses the redundant
+            "SUGI ASAYAKE профайл" text span -- see Shop.tsx's identical
+            change and CommerceHeader.tsx's comment for why an empty string
+            (not omitting the prop) is what actually removes it. */}
+        <CommerceHeader backLabel="" />
         <main className="profile-main">
           <section className="orders-gate">
             <LogIn size={24} style={{ margin: "0 auto" }} />
@@ -116,13 +122,14 @@ export default function Profile() {
             <button type="button" onClick={startLogin} className="button button-primary" style={{ marginTop: "24px" }}>Нэвтрэх</button>
           </section>
         </main>
+        <SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} />
       </div>
     );
   }
 
   return (
     <div className="sugi-commerce" style={{ overflow: "visible" }}>
-      <CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="SUGI ASAYAKE профайл" />
+      <CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="" />
       <main className="profile-main" style={{ paddingBottom: "0" }}>
         <div className="profile-head" data-reveal>
           <div className="profile-avatar">
@@ -167,6 +174,7 @@ export default function Profile() {
         </div>
       </div>
 
+      <SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} />
       <CartDrawer open={cartOpen} onOpenChange={setCartOpen} />
     </div>
   );

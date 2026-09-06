@@ -1,26 +1,38 @@
 import { useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
-import { KeyRound, LoaderCircle, Lock, LogIn, Mail, User as UserIcon, UserPlus } from "lucide-react";
+import { LoaderCircle, Lock, LogIn, Phone, User as UserIcon, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import CommerceHeader from "@/components/CommerceHeader";
+import PhoneVerificationStep from "@/components/PhoneVerificationStep";
+import SiteFooter from "@/components/SiteFooter";
+import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
 import { trpc } from "@/lib/trpc";
 
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Хүсэлт амжилтгүй боллоо. Дахин оролдоно уу.";
 
+// Tom, 2026-09-06 (explicit, after seeing an unverified registration accept
+// his wife's phone number with zero proof of ownership: "verify.mn geed
+// ajilahgui baina shww!!! ... not just only used for forgot-password!! also
+// create account!!!!"): registration is a real 2-step verify.mn flow now --
+// (1) PhoneVerificationStep sends a real SMS and waits for it to come back
+// VERIFIED (same shared component ForgotPassword.tsx already uses), THEN
+// (2) a short name+password form actually creates the account
+// (auth.completeRegistration). No account exists until step 2 succeeds, so
+// there is no way to register with a number you can't actually text from.
+// Login itself is still one-step phone+password (unchanged).
 export default function Login() {
   const search = useSearch();
   // Lets an outside link (e.g. the homepage membership strip) land the
   // shopper directly on the registration step instead of login — same
   // read-once-at-mount pattern as redirectTarget below.
   const [mode, setMode] = useState<"login" | "register">(() => new URLSearchParams(search).get("mode") === "register" ? "register" : "login");
-  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [code, setCode] = useState("");
-  // Set once auth.register creates a pending (unconfirmed) account — from
-  // then on this page shows the "enter the code we emailed you" step instead
-  // of the register form, until auth.confirmRegistration succeeds.
-  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  // Set the instant PhoneVerificationStep reports "verified" -- its presence
+  // is what switches the register form from "step 1: verify" to "step 2:
+  // set a name + password".
+  const [verifiedSessionId, setVerifiedSessionId] = useState<string | null>(null);
   const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
 
@@ -31,101 +43,51 @@ export default function Login() {
   })();
 
   const loginMutation = trpc.auth.login.useMutation();
-  const registerMutation = trpc.auth.register.useMutation();
-  const confirmRegistration = trpc.auth.confirmRegistration.useMutation();
-  const resendCode = trpc.auth.resendRegistrationCode.useMutation();
-  const isSubmitting = loginMutation.isPending || registerMutation.isPending || confirmRegistration.isPending;
+  const completeRegistration = trpc.auth.completeRegistration.useMutation();
+  const isSubmitting = loginMutation.isPending || completeRegistration.isPending;
 
-  const afterSuccess = async () => {
-    await utils.auth.me.invalidate();
-    setLocation(redirectTarget);
-  };
-
-  const submit = async () => {
-    if (!email.trim() || !password) {
-      toast.error("Имэйл болон нууц үгээ оруулна уу.");
+  const submitLogin = async () => {
+    if (!phone.trim() || !password) {
+      toast.error("Утасны дугаар болон нууц үгээ оруулна уу.");
       return;
     }
     try {
-      if (mode === "login") {
-        await loginMutation.mutateAsync({ email: email.trim(), password });
-        await afterSuccess();
-      } else {
-        const result = await registerMutation.mutateAsync({ email: email.trim(), password, name: name.trim() || undefined });
-        setPendingEmail(result.email);
-        if (!result.codeSent) toast.message("Баталгаажуулах кодыг сервер лог руу бичлээ (Brevo холбогдоогүй байна).");
-      }
+      await loginMutation.mutateAsync({ phone: phone.trim(), password });
+      await utils.auth.me.invalidate();
+      setLocation(redirectTarget);
     } catch (error) {
       toast.error(messageFrom(error));
     }
   };
 
-  const submitCode = async () => {
-    if (!pendingEmail) return;
-    if (!/^\d{6}$/.test(code.trim())) {
-      toast.error("6 оронтой кодоо оруулна уу.");
+  const submitRegistration = async () => {
+    if (!verifiedSessionId || !password) {
+      toast.error("Нууц үгээ оруулна уу.");
       return;
     }
     try {
-      await confirmRegistration.mutateAsync({ email: pendingEmail, code: code.trim() });
-      await afterSuccess();
+      await completeRegistration.mutateAsync({ sessionId: verifiedSessionId, password, name: name.trim() || undefined });
+      await utils.auth.me.invalidate();
+      setLocation(redirectTarget);
     } catch (error) {
       toast.error(messageFrom(error));
     }
   };
 
-  const resend = async () => {
-    if (!pendingEmail) return;
-    try {
-      await resendCode.mutateAsync({ email: pendingEmail });
-      toast.success("Шинэ код илгээлээ. Инбоксоо шалгана уу.");
-    } catch (error) {
-      toast.error(messageFrom(error));
-    }
-  };
-
-  if (pendingEmail) {
+  if (mode === "register" && !verifiedSessionId) {
     return (
       <div className="auth-shell">
         <CommerceHeader cartCount={0} backLabel="SUGI ASAYAKE" />
         <main className="auth-main">
           <div className="auth-head">
-            <p className="auth-kicker">02 / CONFIRM EMAIL</p>
-            <h1>Кодоо <em>оруулна уу.</em></h1>
-            <p className="auth-lede"><strong>{pendingEmail}</strong> хаяг руу 6 оронтой баталгаажуулах код илгээлээ (15 минут хүчинтэй).</p>
+            <p className="auth-kicker">01 / VERIFY PHONE</p>
+            <h1>Утасны дугаараа <em>баталгаажуулах.</em></h1>
+            <p className="auth-lede">Бүртгэл үүсгэхийн тулд эхлээд утасны дугаараа SMS-ээр баталгаажуулна уу.</p>
           </div>
-
-          <form onSubmit={event => { event.preventDefault(); submitCode(); }} className="auth-card">
-            <label className="auth-field">
-              Баталгаажуулах код
-              <div className="auth-field-shell otp">
-                <KeyRound size={16} aria-hidden="true" />
-                <input
-                  value={code}
-                  onChange={event => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                  placeholder="000000"
-                  inputMode="numeric"
-                  pattern="\d{6}"
-                  maxLength={6}
-                  autoComplete="one-time-code"
-                  autoFocus
-                />
-              </div>
-            </label>
-
-            <button type="submit" disabled={isSubmitting} className="auth-submit">
-              {isSubmitting && <LoaderCircle className="animate-spin" size={17} aria-hidden="true" />}
-              Баталгаажуулж бүртгэл дуусгах
-            </button>
-          </form>
-
-          <button type="button" disabled={resendCode.isPending} onClick={resend} className="auth-quiet" style={{ marginTop: "18px" }}>
-            {resendCode.isPending ? "Илгээж байна…" : "Код ирээгүй юу? Дахин илгээх"}
-          </button>
-          <button type="button" onClick={() => { setPendingEmail(null); setCode(""); }} className="auth-quiet" style={{ marginTop: "10px" }}>
-            Имэйлээ өөрчлөх
-          </button>
+          <PhoneVerificationStep purpose="register" onVerified={setVerifiedSessionId} />
+          <button type="button" onClick={() => setMode("login")} className="auth-switch">Бүртгэлтэй юу? Нэвтрэх</button>
         </main>
+        <SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} />
       </div>
     );
   }
@@ -135,12 +97,38 @@ export default function Login() {
       <CommerceHeader cartCount={0} backLabel="SUGI ASAYAKE" />
       <main className="auth-main">
         <div className="auth-head">
-          <p className="auth-kicker">{mode === "login" ? "01 / SIGN IN" : "01 / CREATE ACCOUNT"}</p>
+          <p className="auth-kicker">{mode === "login" ? "01 / SIGN IN" : "02 / CREATE ACCOUNT"}</p>
           <h1>{mode === "login" ? <>Дахин <em>тавтай морил.</em></> : <>Бүртгэл <em>үүсгэх.</em></>}</h1>
         </div>
 
-        <form onSubmit={event => { event.preventDefault(); submit(); }} className="auth-card">
-          {mode === "register" && (
+        {mode === "login" ? (
+          <form onSubmit={event => { event.preventDefault(); submitLogin(); }} className="auth-card">
+            <label className="auth-field">
+              Утасны дугаар
+              <div className="auth-field-shell">
+                <Phone size={16} aria-hidden="true" />
+                <input type="tel" inputMode="tel" value={phone} onChange={event => setPhone(event.target.value)} placeholder="9911 2233" autoComplete="tel" />
+              </div>
+            </label>
+            <label className="auth-field">
+              Нууц үг
+              <div className="auth-field-shell">
+                <Lock size={16} aria-hidden="true" />
+                <input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="••••••••" autoComplete="current-password" />
+              </div>
+            </label>
+            <div style={{ textAlign: "right" }}>
+              <Link href="/forgot-password" className="auth-quiet" style={{ display: "inline" }}>Нууц үгээ мартсан уу?</Link>
+            </div>
+
+            <button type="submit" disabled={isSubmitting} className="auth-submit">
+              {isSubmitting ? <LoaderCircle className="animate-spin" size={17} /> : <LogIn size={16} />}
+              Нэвтрэх
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={event => { event.preventDefault(); submitRegistration(); }} className="auth-card">
+            <div className="auth-note success" style={{ marginBottom: "16px" }}>Утасны дугаар баталгаажлаа. Одоо нэр (сонголтоор) болон нууц үгээ тохируулаад бүртгэлээ дуусгана уу.</div>
             <label className="auth-field">
               Нэр (сонголтоор)
               <div className="auth-field-shell">
@@ -148,43 +136,26 @@ export default function Login() {
                 <input value={name} onChange={event => setName(event.target.value)} placeholder="Таны нэр" />
               </div>
             </label>
-          )}
-          <label className="auth-field">
-            Имэйл
-            <div className="auth-field-shell">
-              <Mail size={16} aria-hidden="true" />
-              <input type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="name@email.com" autoComplete="email" />
-            </div>
-          </label>
-          <label className="auth-field">
-            Нууц үг
-            <div className="auth-field-shell">
-              <Lock size={16} aria-hidden="true" />
-              <input
-                type="password"
-                value={password}
-                onChange={event => setPassword(event.target.value)}
-                placeholder={mode === "register" ? "8-с дээш тэмдэгт" : "••••••••"}
-                autoComplete={mode === "login" ? "current-password" : "new-password"}
-              />
-            </div>
-          </label>
-          {mode === "login" && (
-            <div style={{ textAlign: "right" }}>
-              <Link href="/forgot-password" className="auth-quiet" style={{ display: "inline" }}>Нууц үгээ мартсан уу?</Link>
-            </div>
-          )}
+            <label className="auth-field">
+              Нууц үг
+              <div className="auth-field-shell">
+                <Lock size={16} aria-hidden="true" />
+                <input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="8-с дээш тэмдэгт" autoComplete="new-password" />
+              </div>
+            </label>
 
-          <button type="submit" disabled={isSubmitting} className="auth-submit">
-            {isSubmitting ? <LoaderCircle className="animate-spin" size={17} /> : mode === "login" ? <LogIn size={16} /> : <UserPlus size={16} />}
-            {mode === "login" ? "Нэвтрэх" : "Бүртгүүлэх"}
-          </button>
-        </form>
+            <button type="submit" disabled={isSubmitting} className="auth-submit">
+              {isSubmitting ? <LoaderCircle className="animate-spin" size={17} /> : <UserPlus size={16} />}
+              Бүртгэл дуусгах
+            </button>
+          </form>
+        )}
 
-        <button type="button" onClick={() => setMode(mode === "login" ? "register" : "login")} className="auth-switch">
+        <button type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setVerifiedSessionId(null); }} className="auth-switch">
           {mode === "login" ? "Шинэ хэрэглэгч үү? Бүртгүүлэх" : "Бүртгэлтэй юу? Нэвтрэх"}
         </button>
       </main>
+      <SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} />
     </div>
   );
 }

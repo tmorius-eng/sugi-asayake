@@ -1,5 +1,7 @@
 import { ArrowLeft, Compass } from "lucide-react";
 import { Link } from "wouter";
+import SiteFooter from "@/components/SiteFooter";
+import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
 
 export default function NotFound() {
   return (
@@ -14,6 +16,7 @@ export default function NotFound() {
           <Link href="/shop" className="quiet-link"><Compass size={14} /> Дэлгүүр үзэх</Link>
         </div>
       </div>
+      <SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} />
     </div>
   );
 }

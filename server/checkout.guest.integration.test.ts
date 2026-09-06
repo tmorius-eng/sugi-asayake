@@ -1,14 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createHash } from "node:crypto";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import { GUEST_CART_COOKIE_NAME } from "../shared/const";
-import { carts, cartItems, orderItems, orders, productCategories, productVariants, products, users } from "../drizzle/schema";
+import { carts, cartItems, orderItems, orders, phoneVerificationSessions, productCategories, productVariants, products, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
-import { createEmailVerificationCode, getDb, getUserByEmail } from "./db";
+import { getDb } from "./db";
 import { hashPassword } from "./_core/password";
 import type { TrpcContext } from "./_core/context";
-
-const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
 
 // UX-RESEARCH.md priority #1: guest checkout. This suite exercises the real
 // database (same opt-in convention as commerce.database.integration.test.ts)
@@ -135,7 +132,7 @@ describeWithDatabase("guest checkout integration", () => {
     expect(cartAfterCheckout).toBeNull();
   });
 
-  it("merges a guest's cart into their account the moment they confirm registration", async () => {
+  it("merges a guest's cart into their account the moment they register", async () => {
     const guestCtx = makeGuestContext();
     await appRouter.createCaller(guestCtx.ctx).cart.addItem({ productId, quantity: 1 });
     const guestToken = guestCtx.cookiesSet[GUEST_CART_COOKIE_NAME];
@@ -143,36 +140,43 @@ describeWithDatabase("guest checkout integration", () => {
 
     // Register while presenting that guest-cart cookie, exactly like a
     // shopper who decides to create an account right before checking out.
-    // auth.register alone does NOT log the shopper in or merge the cart —
-    // since the OTP registration flow shipped, that only happens once
-    // auth.confirmRegistration checks out the emailed code (see
-    // auth.account-recovery.integration.test.ts for the same two-step
-    // shape). The guest cookie has to be replayed on *that* request too.
+    // 2026-09-06 (Tom, explicit, after seeing an unverified registration
+    // accept a phone with zero proof of ownership): registration is a real
+    // 2-step verify.mn flow now, no more single-step auth.register. This
+    // fakes a PENDING session row directly (same "no real phone reply in
+    // CI" discipline verifyMn.integration.test.ts already uses) and stubs
+    // fetch so auth.completeRegistration's live re-check of that session
+    // reports VERIFIED without ever hitting verify.mn's real API with a
+    // fake session id -- restored in `finally` so no other test is affected.
+    const db = await getDb();
+    if (!db) throw new Error("DATABASE_URL is required for guest checkout integration tests.");
+    const phone = `9${String(Date.now()).slice(-7)}`;
+    const verifyMnSessionId = `guest-merge-test-${Date.now()}`;
+    await db.insert(phoneVerificationSessions).values({
+      userId: null, purpose: "register", phone, verifyMnSessionId, code: "135790", status: "pending", expiresAt: new Date(Date.now() + 60_000),
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      sessionStatus: "VERIFIED", callbackStatus: "SENT", verifiedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    }), { status: 200 })));
+
     const cookieHeader = { cookie: `${GUEST_CART_COOKIE_NAME}=${guestToken}` };
-    const makeGuestFlowContext = (): TrpcContext => ({
+    const guestFlowContext: TrpcContext = {
       user: null,
       req: { protocol: "https", headers: cookieHeader, ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1" } } as unknown as TrpcContext["req"],
       res: { cookie: () => undefined, clearCookie: () => undefined } as unknown as TrpcContext["res"],
-    });
-    const email = `${marker}-merge@example.invalid`;
-    // auth.register only returns { pendingVerification, email, codeSent } —
-    // no id yet (the account isn't "real" until confirmRegistration), so the
-    // pending user has to be looked up by email like the real OTP flow does.
-    const registerResult = await appRouter.createCaller(makeGuestFlowContext()).auth.register({
-      email,
-      password: "GuestMergeTestPassw0rd!",
-    });
-    expect(registerResult.pendingVerification).toBe(true);
-    const pending = await getUserByEmail(email);
-    if (!pending) throw new Error("Expected a pending user row right after auth.register.");
-    createdUserIds.push(pending.id);
+    };
+    let registered;
+    try {
+      registered = await appRouter.createCaller(guestFlowContext).auth.completeRegistration({
+        sessionId: verifyMnSessionId,
+        password: "GuestMergeTestPassw0rd!",
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    createdUserIds.push(registered.id);
 
-    const code = "913042";
-    await createEmailVerificationCode({ userId: pending.id, codeHash: tokenHash(code), expiresAt: new Date(Date.now() + 60 * 60 * 1000) });
-    const confirmed = await appRouter.createCaller(makeGuestFlowContext()).auth.confirmRegistration({ email, code });
-    expect(confirmed.id).toBe(pending.id);
-
-    const userCart = await appRouter.createCaller(makeUserContext(pending.id)).cart.current();
+    const userCart = await appRouter.createCaller(makeUserContext(registered.id)).cart.current();
     expect(userCart?.items[0]).toMatchObject({ productId, quantity: 1 });
   });
 });

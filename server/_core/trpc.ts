@@ -77,3 +77,13 @@ export const moderateRateLimitedProcedure = publicProcedure.use(moderateRateLimi
 // that throttles a real shopper's cart/checkout calls from the same IP.
 const lenientRateLimit = rateLimitMiddleware("lenient", 600, 15 * 60 * 1000);
 export const lenientRateLimitedProcedure = publicProcedure.use(lenientRateLimit);
+
+// Phone-verify tier (3 attempts/15min/IP), tighter than the general "strict"
+// tier (8/15min): every verify.mn session creation costs the END USER 150₮
+// once they text back the code, whether or not it's a legitimate attempt —
+// unlike a free email OTP resend, spamming this endpoint has a real victim
+// cost, not just a nuisance-abuse cost. Only wraps auth.startPhoneVerification
+// (session creation); the status-poll and reset/attach procedures don't
+// trigger a new SMS, so they stay on the standard strict tier.
+const phoneVerifyRateLimit = rateLimitMiddleware("phoneVerify", 3, 15 * 60 * 1000);
+export const phoneVerifyRateLimitedProcedure = publicProcedure.use(phoneVerifyRateLimit);

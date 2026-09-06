@@ -99,7 +99,7 @@ describe("commerce router", () => {
   it("does not expose Content & Media administration or uploads to a standard user", async () => {
     const caller = appRouter.createCaller(createContext("user"));
     await expect(caller.admin.siteMedia()).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
-    await expect(caller.admin.updateSiteMedia({ slotKey: "home-hero", imageUrl: "/manus-storage/test.jpg", altText: "Test" })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+    await expect(caller.admin.updateSiteMedia({ slotKey: "home-hero", imageUrl: "/cdn/test.jpg", altText: "Test" })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
     await expect(caller.admin.uploadSiteMediaImage({ fileName: "test.png", contentType: "image/png", dataBase64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB" })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
   });
 
@@ -131,10 +131,10 @@ describe("commerce router", () => {
     await expect(caller.profile.addresses.create({ label: "Гэр", recipientName: "Test", phone: "abc", addressLine: "Test address line" })).rejects.toThrow();
   });
 
-  it("does not expose staff invitations or role changes to a standard user", async () => {
+  it("does not expose role changes or the phone-recovery tool to a standard user", async () => {
     const caller = appRouter.createCaller(createContext("user"));
-    await expect(caller.admin.inviteStaff({ email: "staff@example.com", role: "user", origin: "https://sugi.example" })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
     await expect(caller.admin.updateUserRole({ userId: 2, role: "admin" })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+    await expect(caller.admin.updateUserPhone({ userId: 2, phone: "99001122" })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
   });
 
   it("does not expose order fulfilment or editorial publishing to a standard user", async () => {
@@ -197,12 +197,7 @@ describe("commerce router", () => {
     })).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 
-  it("requires authentication before an invitation token can be accepted", async () => {
-    const caller = appRouter.createCaller(createContext(null));
-    await expect(caller.invites.accept({ token: "a".repeat(43) })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
-  });
-
-  it("lets staff manage products, orders, posts, and media, but not user accounts, roles, or staff invitations (TIER 3)", async () => {
+  it("lets staff manage products, orders, posts, and media, but not user accounts, roles, or the phone-recovery tool (TIER 3)", async () => {
     const caller = appRouter.createCaller(createContext("staff"));
 
     // Storefront operations: allowed — resolves to an array (empty without a
@@ -217,9 +212,8 @@ describe("commerce router", () => {
 
     // User/role management: still admin-only.
     await expect(caller.admin.users()).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
-    await expect(caller.admin.staffInvitations()).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
-    await expect(caller.admin.inviteStaff({ email: "someone@example.com", role: "staff", origin: "https://sugi.example" })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
     await expect(caller.admin.updateUserRole({ userId: 2, role: "admin" })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+    await expect(caller.admin.updateUserPhone({ userId: 2, phone: "99001122" })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
     await expect(caller.admin.suspendUser({ userId: 2 })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
     await expect(caller.admin.forceLogoutUser({ userId: 2 })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
   });

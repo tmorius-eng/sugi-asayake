@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowUpRight, Heart, MailWarning, Menu, ShoppingBag, User, X } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Heart, Menu, ShoppingBag, User, X } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -23,29 +23,23 @@ type CommerceHeaderProps = {
 // convention (plain <a>, not wouter <Link> -- same-page fragment jumps
 // don't need client-side routing). Only ever rendered on Home (marketingNav
 // is opt-in per caller), so these are safe as bare fragments.
+//
+// Tom, 2026-09-05: the last item was the plain-Latin "Journal" sitting next
+// to 4 Cyrillic labels -- --font-body is "DM Sans, Noto Sans Mongolian,
+// sans-serif", and DM Sans has no Cyrillic glyphs, so the browser fell back
+// to Noto Sans Mongolian per-character for the other 4 labels while
+// "Journal"'s Latin letters rendered directly in DM Sans -- one CSS rule,
+// two different physical typefaces side by side. Matching this label's
+// script to its siblings (instead of forcing a font override) fixes it at
+// the root; Journal.tsx's own "SUGI JOURNAL" kicker is a separate,
+// deliberate editorial mark and is unaffected.
 const marketingNavItems = [
   { label: "Дэлгүүр", href: "/shop", anchor: false },
   { label: "Топ брэнд", href: "#top-brands", anchor: true },
   { label: "Гишүүнчлэл", href: "#membership", anchor: true },
   { label: "Салбарууд", href: "#stores", anchor: true },
-  { label: "Journal", href: "/journal", anchor: false },
+  { label: "Зөвлөгөө", href: "/journal", anchor: false },
 ];
-
-function VerifyEmailBanner() {
-  const { user } = useAuth();
-
-  if (!user || user.emailVerifiedAt) return null;
-
-  return (
-    <div className="flex flex-wrap items-center justify-center gap-2 bg-[#fff7e0] px-4 py-2 text-center text-xs font-semibold text-[#8a6a10]">
-      <MailWarning size={14} aria-hidden="true" />
-      Та имэйл хаягаа баталгаажуулаагүй байна.
-      <Link href="/verify-email" className="underline underline-offset-2 hover:text-[#df1f3d]">
-        Баталгаажуулах код оруулах
-      </Link>
-    </div>
-  );
-}
 
 export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = "SUGI ASAYAKE", marketingNav = false }: CommerceHeaderProps) {
   const { user } = useAuth();
@@ -74,14 +68,33 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
 
   return (
     <>
-      <VerifyEmailBanner />
       <header className="commerce-header">
         <div className="commerce-header-inner">
-          <Link href="/" className="commerce-brand">
-            {!isHome && <span className="commerce-back"><ArrowLeft size={17} aria-hidden="true" /></span>}
-            <img src="/manus-storage/sugi-logo-transparent-clean_fee66cad.png" alt="SUGI ASAYAKE" />
-            <span>{backLabel}</span>
-          </Link>
+          {/* Tom, 2026-09-05: on Home the logo image already carries the
+              "SUGI ASAYAKE" wordmark -- a plain-text repeat of it right next
+              to the image read as redundant, so marketingNav (only ever true
+              on Home) drops that trailing <span>. Same call on /shop
+              (Tom, explicit) -- Shop.tsx now passes backLabel="" instead of
+              text, and an empty/falsy backLabel renders nothing here. Every
+              other page still passes real text and keeps it (paired with
+              the back-arrow, it names the section you'd return from, e.g.
+              "SUGI ASAYAKE профайл") -- untouched. */}
+          <div className="commerce-header-left">
+            <Link href="/" className="commerce-brand">
+              {!isHome && <span className="commerce-back"><ArrowLeft size={17} aria-hidden="true" /></span>}
+              <img src="/cdn/sugi-logo-transparent-clean_fee66cad.png" alt="SUGI ASAYAKE" />
+              {!marketingNav && backLabel ? <span>{backLabel}</span> : null}
+            </Link>
+            {/* Moved to sit directly beside the logo instead of its own
+                full-width row below the header -- same nav, same items. */}
+            {marketingNav && (
+              <nav className="commerce-marketing-nav" aria-label="Нүүр хуудасны цэс">
+                {marketingNavItems.map(item => item.anchor
+                  ? <a href={item.href} key={item.label}>{item.label}</a>
+                  : <Link href={item.href} key={item.label}>{item.label}</Link>)}
+              </nav>
+            )}
+          </div>
           <div className="commerce-header-actions">
             <HeaderSearch />
             <Link href="/shop" className={location.startsWith("/shop") ? "is-current" : ""}>Дэлгүүр</Link>
@@ -112,13 +125,6 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
             </button>
           </div>
         </div>
-        {marketingNav && (
-          <nav className="commerce-marketing-nav" aria-label="Нүүр хуудасны цэс">
-            {marketingNavItems.map(item => item.anchor
-              ? <a href={item.href} key={item.label}>{item.label}</a>
-              : <Link href={item.href} key={item.label}>{item.label}</Link>)}
-          </nav>
-        )}
         <div className={`commerce-mobile-menu ${menuOpen ? "open" : ""}`}>
           <Link href="/shop" onClick={closeMenu}><span>Дэлгүүр</span><ArrowUpRight size={16} /></Link>
           {/* "Дэлгүүр" already covered by the link above -- avoid listing it twice. */}

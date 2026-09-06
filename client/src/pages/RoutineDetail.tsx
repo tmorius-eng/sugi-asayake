@@ -4,6 +4,8 @@ import { Link, useRoute } from "wouter";
 import { toast } from "sonner";
 import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
+import SiteFooter from "@/components/SiteFooter";
+import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
 import { trpc } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
 
@@ -22,11 +24,11 @@ export default function RoutineDetail() {
   const routine = routineQuery.data;
 
   if (routineQuery.isLoading) {
-    return <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]"><CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="SUGI ASAYAKE дэлгүүр" /><main className="mx-auto grid min-h-[60vh] max-w-7xl place-items-center px-4 sm:px-8"><LoaderCircle className="animate-spin text-[#df1f3d]" size={28} aria-label="Routine ачаалж байна" /></main><CartDrawer open={cartOpen} onOpenChange={setCartOpen} /></div>;
+    return <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]"><CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="SUGI ASAYAKE дэлгүүр" /><main className="mx-auto grid min-h-[60vh] max-w-7xl place-items-center px-4 sm:px-8"><LoaderCircle className="animate-spin text-[#df1f3d]" size={28} aria-label="Routine ачаалж байна" /></main><SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} /><CartDrawer open={cartOpen} onOpenChange={setCartOpen} /></div>;
   }
 
   if (routineQuery.isError || !routine) {
-    return <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]"><CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="SUGI ASAYAKE дэлгүүр" /><main className="mx-auto grid min-h-[62vh] max-w-3xl place-items-center px-4 py-12 sm:px-8"><section className="w-full rounded-[2rem] border border-black/8 bg-white p-8 text-center shadow-[0_18px_55px_rgba(44,39,32,.08)] sm:p-12"><p className="text-[10px] font-extrabold tracking-[.18em] text-[#df1f3d]">ROUTINE NOTICE</p><h1 className="mt-4 font-[var(--font-display)] text-4xl font-semibold tracking-[-.07em] sm:text-5xl">Routine олдсонгүй.</h1><p className="mx-auto mt-5 max-w-md text-sm leading-6 text-[#67686c]">Таны хайсан routine одоогоор нийтлэгдээгүй, эсвэл холбоос өөрчлөгдсөн байж болно.</p><Link href="/shop" className="mt-8 inline-flex min-h-12 items-center justify-center rounded-full bg-[#df1f3d] px-6 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97]">Дэлгүүр рүү очих</Link></section></main><CartDrawer open={cartOpen} onOpenChange={setCartOpen} /></div>;
+    return <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]"><CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="SUGI ASAYAKE дэлгүүр" /><main className="mx-auto grid min-h-[62vh] max-w-3xl place-items-center px-4 py-12 sm:px-8"><section className="w-full rounded-[2rem] border border-black/8 bg-white p-8 text-center shadow-[0_18px_55px_rgba(44,39,32,.08)] sm:p-12"><p className="text-[10px] font-extrabold tracking-[.18em] text-[#df1f3d]">ROUTINE NOTICE</p><h1 className="mt-4 font-[var(--font-display)] text-4xl font-semibold tracking-[-.07em] sm:text-5xl">Routine олдсонгүй.</h1><p className="mx-auto mt-5 max-w-md text-sm leading-6 text-[#67686c]">Таны хайсан routine одоогоор нийтлэгдээгүй, эсвэл холбоос өөрчлөгдсөн байж болно.</p><Link href="/shop" className="mt-8 inline-flex min-h-12 items-center justify-center rounded-full bg-[#df1f3d] px-6 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97]">Дэлгүүр рүү очих</Link></section></main><SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} /><CartDrawer open={cartOpen} onOpenChange={setCartOpen} /></div>;
   }
 
   const originalTotalMnt = routine.steps.reduce((sum, step) => sum + step.priceMnt, 0);
@@ -90,5 +92,5 @@ export default function RoutineDetail() {
     </section>
 
     <div className="mt-10 rounded-2xl border border-black/8 bg-[#eef3f1] p-6"><div className="flex items-center gap-2 text-xs font-bold text-[#df1f3d]"><BadgeCheck size={16} /> Routine-ийн тухай</div><p className="mt-3 text-sm leading-6 text-[#65666b]">Энэхүү арчилгааны дараалал нь SUGI ASAYAKE-ийн сонгосон бүтээгдэхүүнүүдээс бүрдэнэ. Алхам бүрийг дараалан хэрэглэхийг зөвлөж байна.</p></div>
-  </main><CartDrawer open={cartOpen} onOpenChange={setCartOpen} /></div>;
+  </main><SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} /><CartDrawer open={cartOpen} onOpenChange={setCartOpen} /></div>;
 }

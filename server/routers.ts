@@ -4,15 +4,14 @@ import { ubDistricts } from "@shared/districts";
 import { parseDeviceType, isLikelyBot } from "@shared/deviceType";
 import { TRPCError } from "@trpc/server";
 import { parse as parseCookieHeader } from "cookie";
-import { createHash, randomBytes, randomInt } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { getGuestCartCookieOptions, getSessionCookieOptions, getVisitorSessionCookieOptions } from "./_core/cookies";
-import { notifyOwner, sendAccountEmail } from "./_core/notification";
+import { sendAccountEmail } from "./_core/notification";
 import { systemRouter } from "./_core/systemRouter";
 import { signSessionToken, type TrpcContext } from "./_core/context";
 import { hashPassword, verifyPassword } from "./_core/password";
 import {
-  acceptStaffInvitation,
   addCartItem,
   addWishlistItem,
   adminGlobalSearch,
@@ -36,18 +35,14 @@ import {
   getFeaturedReviews,
   getHomeCategoryShelves,
   createAdminSitePromotion,
-  createEmailVerificationCode,
   createOrderFromActiveCart,
-  createPasswordResetCode,
   createProductReview,
   getActiveCartForOwner,
   getApplicableLoyaltyDiscount,
   getApplicableRoutineDiscount,
   getUserLoyaltyStatus,
   createQPayPaymentAttempt,
-  createStaffInvitation,
   createUserAddress,
-  createUserWithPassword,
   dbPing,
   deleteAdminDiscountCode,
   deleteAdminReview,
@@ -73,7 +68,6 @@ import {
   getAdminReviews,
   getAdminRoutineDetail,
   getAdminRoutines,
-  getAdminStaffInvitations,
   getAdminUserDetail,
   getAdminUsers,
   getCategoryWriteConflicts,
@@ -101,8 +95,6 @@ import {
   getRoutineForProduct,
   getSiteMedia,
   getSiteText,
-  getStaffInvitationByTokenHash,
-  getUserByEmail,
   getUserById,
   getVisitorSessionIdByToken,
   getWishlistForUser,
@@ -112,9 +104,14 @@ import {
   mergeGuestCartIntoUserCart,
   postSlugExists,
   recordLoginAttempt,
+  // verify.mn phone verification (2026-09-05) -- see server/verifyMn.ts
+  findUserByPhone,
+  getPhoneVerificationSessionByVerifyMnId,
+  resetPasswordViaPhoneSession,
+  attachPhoneFromVerifiedSession,
+  completeRegistrationViaPhoneSession,
+  updatePhoneVerificationSessionStatus,
   removeWishlistItem,
-  resetPasswordWithCode,
-  revokeStaffInvitation,
   deleteSiteMedia,
   deleteSiteText,
   getUserAddresses,
@@ -138,21 +135,21 @@ import {
   updateAdminRoutine,
   updateAdminSitePromotion,
   updateAdminUserRole,
+  updateAdminUserPhone,
   updateAdminIntegration,
   updateUserLoyaltyAdjustment,
   updateCartItemQuantity,
   updateNotificationPreferences,
-  updatePendingRegistration,
   updateUserAddress,
   updateUserAvatar,
   updateUserPreferences,
   updateUserProfile,
-  verifyEmailWithCode,
 } from "./db";
-import { adminProcedure, lenientRateLimitedProcedure, moderateRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure } from "./_core/trpc";
+import { adminProcedure, lenientRateLimitedProcedure, moderateRateLimitedProcedure, phoneVerifyRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure } from "./_core/trpc";
 import { storagePing, storagePut, storagePutImageVariants } from "./storage";
 import { IMAGE_MAX_DIMENSION, processUploadedImage, processUploadedImageVariants } from "./_core/imageProcessing";
 import { createQPayInvoice, getQPayAvailability } from "./qpay";
+import { createNoOpVerificationSession, createVerificationSession, getSessionStatus, isNoOpSessionExpired, normalizePhoneForVerifyMn } from "./verifyMn";
 import { getCategoryWriteViolation, getProductWriteViolation } from "./catalog-validation";
 import { getAnalyticsReport, exportAnalyticsExcel, exportAnalyticsPdf } from "./analytics";
 import { siteMediaSlotKeys } from "../shared/site-media";
@@ -349,29 +346,14 @@ const imageContentTypes = ["image/jpeg", "image/png", "image/webp"] as const;
 const staffRoleSchema = z.enum(["user", "staff", "admin"]);
 const siteMediaSlotSchema = z.enum(siteMediaSlotKeys);
 const siteTextSlotSchema = z.enum(siteTextSlotKeys);
-const invitationTokenSchema = z.string().trim().min(32).max(256);
-const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
-// 6-digit OTP codes (email verification + password reset) — validity window
-// and the input shape the client submits them in.
-const OTP_TTL_MS = 15 * 60 * 1000;
-const otpCodeSchema = z.string().trim().regex(/^\d{6}$/, "6 оронтой кодоо оруулна уу.");
-
 // A syntactically valid but unusable scrypt hash (correct salt/hash lengths,
 // see server/_core/password.ts), used to run `verifyPassword` through its
-// full computation even when no account matches the submitted email. Without
-// this, a login attempt for a real account pays for a scrypt derivation
-// while one for a nonexistent email returns almost instantly — an attacker
-// can use that timing gap alone to enumerate registered emails without ever
-// guessing a password.
+// full computation even when no account matches the submitted phone number.
+// Without this, a login attempt for a real account pays for a scrypt
+// derivation while one for a nonexistent phone returns almost instantly —
+// an attacker can use that timing gap alone to enumerate registered phone
+// numbers without ever guessing a password.
 const DUMMY_PASSWORD_HASH = `${"0".repeat(32)}:${"0".repeat(128)}`;
-
-function parseAppOrigin(originInput: string): URL {
-  const origin = new URL(originInput);
-  if (origin.protocol !== "https:" && origin.protocol !== "http:") {
-    throw new TRPCError({ code: "BAD_REQUEST", message: "A secure application origin is required for this link." });
-  }
-  return origin;
-}
 
 // Called right after auth.login/auth.register issue a session: if the
 // browser was shopping as a guest, fold that cart into the now-known
@@ -413,20 +395,6 @@ function resolveCartOwnerForWrite(ctx: TrpcContext): CartOwner {
   return { guestToken };
 }
 
-// Generates a 6-digit OTP, stores its hash, and emails it. Shared by
-// register (new account), resendRegistrationCode (pending account, not
-// logged in yet) and resendVerificationEmail (already logged in, legacy
-// unverified account). Returns whether the email was actually dispatched via
-// Brevo (false = only logged to the server console — see notification.ts).
-async function sendVerificationCode(userId: number, email: string): Promise<boolean> {
-  const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
-  await createEmailVerificationCode({ userId, codeHash: tokenHash(code), expiresAt: new Date(Date.now() + OTP_TTL_MS) });
-  return sendAccountEmail({
-    to: email,
-    subject: "SUGI ASAYAKE — Баталгаажуулах код",
-    content: `Таны баталгаажуулах код: ${code}\n\nЭнэ код 15 минутын дотор хүчинтэй. Хэрэв та энэ хүсэлтийг илгээгээгүй бол энэ имэйлийг үл тоомсорлож болно.`,
-  });
-}
 
 // ROADMAP.md TIER 2: order confirmation + status-change notifications.
 // Both are best-effort (see the try/catch at each call site) — a Brevo
@@ -527,108 +495,40 @@ export const appRouter = router({
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
-    // Creates the account but does NOT log the caller in — that only
-    // happens once auth.confirmRegistration checks out the emailed code, so
-    // an account with an unconfirmed email address can never shop or log in
-    // (see the emailVerifiedAt gate on auth.login below).
-    register: strictRateLimitedProcedure
-      .input(z.object({
-        email: z.string().trim().email().max(320),
-        password: z.string().min(8).max(200),
-        name: z.string().trim().min(1).max(160).optional(),
-      }))
-      .mutation(async ({ input }) => {
-        const passwordHash = await hashPassword(input.password);
-        const existing = await getUserByEmail(input.email);
-        let userId: number;
-        let email: string;
-        if (existing) {
-          if (existing.emailVerifiedAt) {
-            throw new TRPCError({ code: "CONFLICT", message: "Энэ имэйлээр бүртгэл үүссэн байна. Нэвтэрнэ үү." });
-          }
-          // A previous registration with this email was never confirmed —
-          // treat this submission as a retry rather than hard-failing on the
-          // email uniqueness constraint: refresh the credentials and send a
-          // fresh code.
-          await updatePendingRegistration({ userId: existing.id, passwordHash, name: input.name ?? null });
-          userId = existing.id;
-          email = existing.email;
-        } else {
-          let user;
-          try {
-            user = await createUserWithPassword({ email: input.email, passwordHash, name: input.name ?? null });
-          } catch (error) {
-            throw new TRPCError({ code: "CONFLICT", message: error instanceof Error ? error.message : "Энэ имэйлээр бүртгэл үүссэн байна." });
-          }
-          userId = user.id;
-          email = user.email;
-        }
-        const codeSent = await sendVerificationCode(userId, email);
-        return { pendingVerification: true, email, codeSent } as const;
-      }),
-    // Second step of registration: exchanges the emailed 6-digit code for
-    // the account's first session.
-    confirmRegistration: strictRateLimitedProcedure
-      .input(z.object({ email: z.string().trim().email().max(320), code: otpCodeSchema }))
-      .mutation(async ({ ctx, input }) => {
-        const pending = await getUserByEmail(input.email);
-        if (!pending) throw new TRPCError({ code: "BAD_REQUEST", message: "Код буруу эсвэл хугацаа дууссан байна." });
-        try {
-          await verifyEmailWithCode({ userId: pending.id, codeHash: tokenHash(input.code) });
-        } catch (error) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Код баталгаажуулж чадсангүй." });
-        }
-        const user = await getUserByEmail(input.email); // refetch: emailVerifiedAt just changed
-        if (!user) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Бүртгэл олдсонгүй." });
-        await touchUserLastSignedIn(user.id);
-        const token = await signSessionToken(user.id, user.sessionVersion);
-        ctx.res.cookie(COOKIE_NAME, token, getSessionCookieOptions(ctx.req));
-        await mergeGuestCartAndClearCookie(ctx, user.id);
-        const { passwordHash: _omit, ...safeUser } = user;
-        return safeUser;
-      }),
-    // Public (not logged in yet) resend, for the pending-registration step.
-    resendRegistrationCode: strictRateLimitedProcedure
-      .input(z.object({ email: z.string().trim().email().max(320) }))
-      .mutation(async ({ input }) => {
-        const pending = await getUserByEmail(input.email);
-        // Same generic-response shape as requestPasswordReset: don't reveal
-        // whether the address has a pending registration.
-        if (pending && !pending.emailVerifiedAt) {
-          await sendVerificationCode(pending.id, pending.email);
-        }
-        return { success: true } as const;
-      }),
+    // 2026-09-06: there is no more single-step auth.register. Tom initially
+    // asked for phone+password registration with OPTIONAL verification
+    // ("only contacting admin for recovery is okay") -- then, after
+    // literally seeing an account get created with his wife's phone number
+    // with zero proof of ownership, explicitly reversed that: registration
+    // now REQUIRES a real, live-confirmed verify.mn SMS reply before any
+    // account exists. See auth.startPhoneVerification (purpose:"register",
+    // now reachable with no session) + auth.completeRegistration below,
+    // which is what actually creates the account once verify.mn confirms.
+    //
+    // Login is phone+password (unchanged) -- findUserByPhone's flexible digits-only-right-8
+    // match means however the shopper happens to type their number (spaces,
+    // dashes, +976 or not) still resolves to their one account.
     login: strictRateLimitedProcedure
       .input(z.object({
-        email: z.string().trim().email().max(320),
+        phone: phoneSchema,
         password: z.string().min(1).max(200),
       }))
       .mutation(async ({ ctx, input }) => {
-        const user = await getUserByEmail(input.email);
+        const normalizedPhone = normalizePhoneForVerifyMn(input.phone);
+        const user = normalizedPhone ? await findUserByPhone(normalizedPhone) : undefined;
         // Always run the full password check, even for a nonexistent user
         // (against a dummy hash) — see DUMMY_PASSWORD_HASH above.
         const valid = await verifyPassword(input.password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
         const ipAddress = ctx.req.ip || ctx.req.socket.remoteAddress || null;
-        const logAttempt = (success: boolean, reason?: string) => recordLoginAttempt({ email: input.email, userId: user?.id ?? null, success, reason, ipAddress });
+        const logAttempt = (success: boolean, reason?: string) => recordLoginAttempt({ email: input.phone, userId: user?.id ?? null, success, reason, ipAddress });
 
         if (!user || !valid) {
           await logAttempt(false, "invalid_credentials");
-          throw new TRPCError({ code: "UNAUTHORIZED", message: "Имэйл эсвэл нууц үг буруу байна." });
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Утасны дугаар эсвэл нууц үг буруу байна." });
         }
         if (user.suspendedAt) {
           await logAttempt(false, "suspended");
           throw new TRPCError({ code: "FORBIDDEN", message: "Таны эрх түр хаагдсан байна. Дэлгүүрийн админтай холбогдоно уу." });
-        }
-        // Accounts created after the OTP-code registration flow shipped
-        // never get a session until confirmRegistration succeeds; this
-        // closes the loophole of registering, ignoring the code, and just
-        // logging in directly. Accounts that existed before this flow
-        // shipped were backfilled to verified (drizzle/0016) so this never
-        // locks out a pre-existing user.
-        if (!user.emailVerifiedAt) {
-          await logAttempt(false, "unverified");
-          throw new TRPCError({ code: "FORBIDDEN", message: "Имэйл хаягаа баталгаажуулаагүй байна. Бүртгүүлэх хуудас руу ижил имэйлээрээ дахин орж, код дахин авна уу." });
         }
         await touchUserLastSignedIn(user.id);
         await logAttempt(true);
@@ -654,59 +554,157 @@ export const appRouter = router({
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
-    requestPasswordReset: strictRateLimitedProcedure
-      .input(z.object({ email: z.string().trim().email().max(320) }))
-      .mutation(async ({ input }) => {
-        const user = await getUserByEmail(input.email);
-        // Always generate a code, whether or not the email is registered:
-        // both branches should pay the same CPU cost, so this endpoint can't
-        // be used to enumerate accounts via a response-time side channel (the
-        // 8-request/15min cap on this procedure also makes that attack hard
-        // to mount in practice, but there's no reason to leave the gap open).
-        const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
-        if (user) {
-          await createPasswordResetCode({ userId: user.id, codeHash: tokenHash(code), expiresAt: new Date(Date.now() + OTP_TTL_MS) });
-          await sendAccountEmail({
-            to: user.email,
-            subject: "SUGI ASAYAKE — Нууц үг сэргээх код",
-            content: `Таны нууц үг сэргээх код: ${code}\n\nЭнэ код 15 минутын дотор хүчинтэй. Хэрэв та энэ хүсэлтийг илгээгээгүй бол энэ имэйлийг үл тоомсорлож болно.`,
-          });
+    // verify.mn phone verification (2026-09-05) -- the ONLY password-reset
+    // method now ("we do not need brevo at all" -- the old email-code
+    // requestPasswordReset/resetPassword pair is gone). purpose:"register" also lets an
+    // already-logged-in user attach+verify a phone number, optionally (see
+    // Login.tsx) -- never a blocking requirement to sign up, since each real
+    // verification costs the shopper 150₮ via their own mobile operator.
+    // 2026-09-06 (Tom, explicit, after seeing an unverified registration
+    // accept someone else's phone number: "ehneriinhee utasiig hiigeed
+    // burtguulsen chine shuud burtgegdej baina!! verify.mn geed ajilahgui
+    // baina" -- reversing the earlier "optional at signup" call): "register"
+    // purpose now works with NO session too (an anonymous shopper about to
+    // create an account, not just an already-logged-in one attaching a
+    // phone afterward) -- see auth.completeRegistration below for how a
+    // no-ctx.user session actually finishes.
+    startPhoneVerification: phoneVerifyRateLimitedProcedure
+      .input(z.object({ phone: phoneSchema, purpose: z.enum(["register", "password_reset"]) }))
+      .mutation(async ({ ctx, input }) => {
+        let userId: number | null = null;
+        if (input.purpose === "register") {
+          // A phone already tied to an account can't start a fresh register
+          // session -- unlike password_reset below, this is NOT an
+          // anti-enumeration case: telling a registrant "this number is
+          // already registered, sign in instead" up front is completely
+          // ordinary signup UX, not a privacy leak, and saves them a real
+          // 150₮ SMS for a session that could never complete anyway.
+          const normalizedPhone = normalizePhoneForVerifyMn(input.phone);
+          const existing = normalizedPhone ? await findUserByPhone(normalizedPhone) : undefined;
+          if (existing && existing.id !== ctx.user?.id) {
+            throw new TRPCError({ code: "CONFLICT", message: "Энэ утасны дугаараар бүртгэл үүссэн байна. Нэвтэрнэ үү." });
+          }
+          userId = ctx.user?.id ?? null;
+        } else {
+          // password_reset: resolve the account by phone, but never let the
+          // response reveal whether a match was found -- same
+          // anti-enumeration discipline requestPasswordReset already uses
+          // for email above.
+          const matched = await findUserByPhone(normalizePhoneForVerifyMn(input.phone) ?? "");
+          userId = matched?.id ?? null;
         }
-        // Always return the same generic response either way.
-        return { success: true } as const;
+        if (input.purpose === "password_reset" && !userId) {
+          // Deliberately never calls verify.mn here: doing so would send a
+          // real, 150₮-to-them SMS to whatever phone number was typed in,
+          // even though it belongs to nobody with an account here — an
+          // innocent third party, not just a wasted request. Returns a fake
+          // session that looks and behaves EXACTLY like a real one (same
+          // instruction shape, same 300s pending-then-expired lifecycle —
+          // see createNoOpVerificationSession's own comment for why this
+          // matters beyond just the UI) that can simply never become verified.
+          return createNoOpVerificationSession(input.phone);
+        }
+        try {
+          return await createVerificationSession({ phone: input.phone, purpose: input.purpose, userId });
+        } catch (error) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Баталгаажуулах SMS илгээж чадсангүй." });
+        }
       }),
-    resetPassword: strictRateLimitedProcedure
-      .input(z.object({ email: z.string().trim().email().max(320), code: otpCodeSchema, password: z.string().min(8).max(200) }))
+    // publicProcedure, not rate-limit-tiered beyond the blanket API cap:
+    // polled every 3s by the client (same pattern as payments.qpayStatus /
+    // Checkout.tsx's refetchInterval) and never triggers a new SMS itself.
+    phoneVerificationStatus: publicProcedure
+      .input(z.object({ sessionId: z.string().trim().min(1).max(80) }))
+      .query(async ({ input }) => {
+        if (input.sessionId.startsWith("noop:")) return { status: isNoOpSessionExpired(input.sessionId) ? ("expired" as const) : ("pending" as const) };
+        const session = await getPhoneVerificationSessionByVerifyMnId(input.sessionId);
+        if (!session) return { status: "expired" as const };
+        if (session.consumedAt) return { status: "verified" as const };
+        if (session.expiresAt.getTime() <= Date.now()) return { status: "expired" as const };
+        try {
+          const live = await getSessionStatus(session.verifyMnSessionId);
+          const mapped = live.sessionStatus === "VERIFIED" ? ("verified" as const) : live.sessionStatus === "EXPIRED" ? ("expired" as const) : ("pending" as const);
+          return { status: mapped };
+        } catch (error) {
+          console.error("[VerifyMn] Status poll failed", error);
+          return { status: "pending" as const };
+        }
+      }),
+    resetPasswordViaPhone: strictRateLimitedProcedure
+      .input(z.object({ sessionId: z.string().trim().min(1).max(80), password: z.string().min(8).max(200) }))
       .mutation(async ({ input }) => {
-        const user = await getUserByEmail(input.email);
-        if (!user) throw new TRPCError({ code: "BAD_REQUEST", message: "Код буруу эсвэл хугацаа дууссан байна." });
+        const session = await getPhoneVerificationSessionByVerifyMnId(input.sessionId);
+        if (!session) throw new TRPCError({ code: "BAD_REQUEST", message: "Баталгаажуулалт олдсонгүй." });
+        // Always re-check verify.mn's LIVE status right before spending the
+        // session — never trust the cached status column alone here.
+        try {
+          const live = await getSessionStatus(session.verifyMnSessionId);
+          await updatePhoneVerificationSessionStatus(session.id, live.sessionStatus === "VERIFIED" ? "verified" : live.sessionStatus === "EXPIRED" ? "expired" : "pending");
+          if (live.sessionStatus !== "VERIFIED") throw new Error("Утасны дугаараа эхлээд баталгаажуулна уу.");
+        } catch (error) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Баталгаажуулж чадсангүй." });
+        }
         const passwordHash = await hashPassword(input.password);
         try {
-          await resetPasswordWithCode({ userId: user.id, codeHash: tokenHash(input.code), passwordHash });
+          await resetPasswordViaPhoneSession({ sessionId: session.id, passwordHash });
         } catch (error) {
           throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Нууц үг сэргээж чадсангүй." });
         }
         return { success: true } as const;
       }),
-    // For an already-logged-in user with an unverified email (legacy
-    // accounts only — every account created after this flow shipped is
-    // already verified by the time it has a session, see auth.login above).
-    verifyEmailCode: strictRateLimitedProtectedProcedure
-      .input(z.object({ code: otpCodeSchema }))
+    // 2026-09-06: the actual signup mutation now -- there is no more
+    // single-step auth.register. A phone must be live-verified via
+    // startPhoneVerification/phoneVerificationStatus FIRST (no account
+    // exists yet at that point, hence no ctx.user requirement here either),
+    // and this is what turns that verified session into a real account,
+    // exactly the same "re-check verify.mn's LIVE status, never trust the
+    // cached column alone" discipline as resetPasswordViaPhone above.
+    completeRegistration: strictRateLimitedProcedure
+      .input(z.object({ sessionId: z.string().trim().min(1).max(80), password: z.string().min(8).max(200), name: z.string().trim().min(1).max(160).optional() }))
       .mutation(async ({ ctx, input }) => {
+        const session = await getPhoneVerificationSessionByVerifyMnId(input.sessionId);
+        if (!session) throw new TRPCError({ code: "BAD_REQUEST", message: "Баталгаажуулалт олдсонгүй." });
         try {
-          await verifyEmailWithCode({ userId: ctx.user.id, codeHash: tokenHash(input.code) });
+          const live = await getSessionStatus(session.verifyMnSessionId);
+          await updatePhoneVerificationSessionStatus(session.id, live.sessionStatus === "VERIFIED" ? "verified" : live.sessionStatus === "EXPIRED" ? "expired" : "pending");
+          if (live.sessionStatus !== "VERIFIED") throw new Error("Утасны дугаараа эхлээд баталгаажуулна уу.");
         } catch (error) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Имэйл хаягийг баталгаажуулж чадсангүй." });
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Баталгаажуулж чадсангүй." });
+        }
+        const passwordHash = await hashPassword(input.password);
+        let user;
+        try {
+          user = await completeRegistrationViaPhoneSession({ sessionId: session.id, passwordHash, name: input.name ?? null });
+        } catch (error) {
+          throw new TRPCError({ code: "CONFLICT", message: error instanceof Error ? error.message : "Бүртгэл үүсгэж чадсангүй." });
+        }
+        await touchUserLastSignedIn(user.id);
+        const token = await signSessionToken(user.id, user.sessionVersion);
+        ctx.res.cookie(COOKIE_NAME, token, getSessionCookieOptions(ctx.req));
+        await mergeGuestCartAndClearCookie(ctx, user.id);
+        const { passwordHash: _omit, ...safeUser } = user;
+        return safeUser;
+      }),
+    // register-flow only: attaches+verifies a phone for an already-logged-in
+    // user (see startPhoneVerification's purpose:"register" branch above).
+    attachPhoneViaVerification: strictRateLimitedProtectedProcedure
+      .input(z.object({ sessionId: z.string().trim().min(1).max(80) }))
+      .mutation(async ({ input }) => {
+        const session = await getPhoneVerificationSessionByVerifyMnId(input.sessionId);
+        if (!session) throw new TRPCError({ code: "BAD_REQUEST", message: "Баталгаажуулалт олдсонгүй." });
+        try {
+          const live = await getSessionStatus(session.verifyMnSessionId);
+          await updatePhoneVerificationSessionStatus(session.id, live.sessionStatus === "VERIFIED" ? "verified" : live.sessionStatus === "EXPIRED" ? "expired" : "pending");
+          if (live.sessionStatus !== "VERIFIED") throw new Error("Утасны дугаараа эхлээд баталгаажуулна уу.");
+        } catch (error) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Баталгаажуулж чадсангүй." });
+        }
+        try {
+          await attachPhoneFromVerifiedSession({ sessionId: session.id });
+        } catch (error) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Утасны дугаар хадгалж чадсангүй." });
         }
         return { success: true } as const;
-      }),
-    resendVerificationEmail: strictRateLimitedProtectedProcedure
-      .mutation(async ({ ctx }) => {
-        if (!ctx.user.email) throw new TRPCError({ code: "BAD_REQUEST", message: "Таны бүртгэлд имэйл хаяг байхгүй байна." });
-        if (ctx.user.emailVerifiedAt) return { success: true, alreadyVerified: true } as const;
-        await sendVerificationCode(ctx.user.id, ctx.user.email);
-        return { success: true, alreadyVerified: false } as const;
       }),
   }),
   catalog: router({
@@ -724,6 +722,11 @@ export const appRouter = router({
         category: z.string().trim().max(120).optional(),
         brand: z.string().trim().max(120).optional(),
         skinType: z.enum(["dry", "oily", "combination", "sensitive", "normal", "all"]).optional(),
+        // NEWVISION.md §14 (Phase 2): price-range facet, alongside category/
+        // brand/skinType above. int() + nonnegative() since priceMnt is
+        // always a whole-tugrik integer in this catalog.
+        minPriceMnt: z.number().int().nonnegative().optional(),
+        maxPriceMnt: z.number().int().nonnegative().optional(),
         inStockOnly: z.boolean().optional(),
         sort: z.enum(["featured", "price-low", "price-high", "name-asc"]).optional(),
         page: z.number().int().positive().optional(),
@@ -987,10 +990,27 @@ export const appRouter = router({
   // saved-address book (checkout can prefill from the default address so
   // returning shoppers don't retype it every order).
   profile: router({
+    // 2026-09-05: phone is the login identifier now (users.phone UNIQUE), so
+    // an edit here has to go through the same normalize-then-check-conflict
+    // discipline register/admin.updateUserPhone use -- otherwise two
+    // differently-formatted-but-identical numbers could collide invisibly,
+    // or a shopper could accidentally hand their login phone to someone
+    // else's account without any warning.
     update: protectedProcedure
       .input(z.object({ name: z.string().trim().min(1).max(160).nullable().optional(), phone: phoneSchema.nullable().optional() }))
       .mutation(async ({ ctx, input }) => {
-        const updated = await updateUserProfile(ctx.user.id, input);
+        let normalizedPhone: string | null | undefined;
+        if (input.phone !== undefined) {
+          if (input.phone === null) {
+            normalizedPhone = null;
+          } else {
+            normalizedPhone = normalizePhoneForVerifyMn(input.phone);
+            if (!normalizedPhone) throw new TRPCError({ code: "BAD_REQUEST", message: "Утасны дугаараа зөв оруулна уу." });
+            const existing = await findUserByPhone(normalizedPhone);
+            if (existing && existing.id !== ctx.user.id) throw new TRPCError({ code: "CONFLICT", message: "Энэ утасны дугаарыг өөр хэрэглэгч ашиглаж байна." });
+          }
+        }
+        const updated = await updateUserProfile(ctx.user.id, { ...input, phone: normalizedPhone });
         if (!updated) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Профайл шинэчилж чадсангүй." });
         const { passwordHash: _omit, ...safeUser } = updated;
         return safeUser;
@@ -1165,23 +1185,6 @@ export const appRouter = router({
       return { orderId: order.id, paymentStatus: order.paymentStatus, orderStatus: order.status, invoiceId: attempt?.providerInvoiceId ?? null, attemptStatus: attempt?.status ?? null };
     }),
   }),
-  invites: router({
-    details: publicProcedure.input(z.object({ token: invitationTokenSchema })).query(async ({ input }) => {
-      const invitation = await getStaffInvitationByTokenHash(tokenHash(input.token));
-      if (!invitation) return { valid: false, message: "Урилга олдсонгүй." };
-      if (invitation.status !== "pending") return { valid: false, message: "Энэ урилга идэвхгүй болсон байна." };
-      if (invitation.expiresAt.getTime() <= Date.now()) return { valid: false, message: "Энэ урилгын хугацаа дууссан байна." };
-      return { valid: true, email: invitation.email, role: invitation.role, expiresAt: invitation.expiresAt };
-    }),
-    accept: protectedProcedure.input(z.object({ token: invitationTokenSchema })).mutation(async ({ ctx, input }) => {
-      if (!ctx.user.email) throw new TRPCError({ code: "BAD_REQUEST", message: "Your authenticated account does not provide an email address required to accept a staff invitation." });
-      try {
-        return await acceptStaffInvitation({ tokenHash: tokenHash(input.token), userId: ctx.user.id, userEmail: ctx.user.email });
-      } catch (error) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to accept this staff invitation." });
-      }
-    }),
-  }),
   admin: router({
     // staffProcedure, not adminProcedure: staff should still see what's
     // going on operationally (orders, low stock), just not the money —
@@ -1215,21 +1218,13 @@ export const appRouter = router({
     siteMedia: staffProcedure.query(() => getSiteMedia()),
     siteText: staffProcedure.query(() => getSiteText()),
     users: adminProcedure.query(() => getAdminUsers()),
-    staffInvitations: adminProcedure.query(() => getAdminStaffInvitations()),
-    inviteStaff: adminProcedure.input(z.object({ email: z.string().trim().email().max(320), role: staffRoleSchema.default("user"), origin: z.string().url().max(500) })).mutation(async ({ ctx, input }) => {
-      const origin = parseAppOrigin(input.origin);
-      const token = randomBytes(32).toString("base64url");
-      const invitation = await createStaffInvitation({ email: input.email, role: input.role, tokenHash: tokenHash(token), invitedByUserId: ctx.user.id, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) });
-      const inviteUrl = `${origin.origin}/invite/${token}`;
-      const ownerAlertSent = await notifyOwner({ title: "SUGI ASAYAKE staff invitation", content: `Invitation created for ${invitation.email} with ${invitation.role} access. Share this link securely before ${invitation.expiresAt.toISOString()}: ${inviteUrl}` });
-      await logAdminAction({ actorUserId: ctx.user.id, action: "staff_invitation.created", entityType: "staff_invitation", entityId: invitation.id, metadata: { email: invitation.email, role: invitation.role } });
-      return { id: invitation.id, email: invitation.email, role: invitation.role, expiresAt: invitation.expiresAt, inviteUrl, ownerAlertSent };
-    }),
-    revokeStaffInvitation: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
-      const result = await revokeStaffInvitation(input.id);
-      await logAdminAction({ actorUserId: ctx.user.id, action: "staff_invitation.revoked", entityType: "staff_invitation", entityId: input.id });
-      return result;
-    }),
+    // 2026-09-05 ("admin invite staff section just change it to manually
+    // only admin give staff role to default users" -- Tom, explicit): the
+    // email-invitation flow (staffInvitations/inviteStaff/
+    // revokeStaffInvitation, plus the invites.* router and /invite/:token
+    // page) is gone. This is now the only way to grant staff/admin: pick an
+    // existing registered user (already in the list below) and change their
+    // role directly. See updateAdminUserRole's own comment in server/db.ts.
     updateUserRole: adminProcedure.input(z.object({ userId: z.number().int().positive(), role: staffRoleSchema })).mutation(async ({ ctx, input }) => {
       if (ctx.user.id === input.userId) throw new TRPCError({ code: "BAD_REQUEST", message: "You cannot change your own administrator role here." });
       try {
@@ -1238,6 +1233,22 @@ export const appRouter = router({
         return updated;
       } catch (error) {
         throw new TRPCError({ code: "NOT_FOUND", message: error instanceof Error ? error.message : "Unable to update user role." });
+      }
+    }),
+    // 2026-09-05: the admin-side half of "phone is now required for
+    // everyone" (Tom's explicit choice) -- the account-recovery path for a
+    // legacy account with no phone on file, or a mistyped one, since there
+    // is no email fallback anymore. See updateAdminUserPhone's own comment
+    // in server/db.ts for the full reasoning.
+    updateUserPhone: adminProcedure.input(z.object({ userId: z.number().int().positive(), phone: phoneSchema.nullable() })).mutation(async ({ ctx, input }) => {
+      const normalizedPhone = input.phone === null ? null : normalizePhoneForVerifyMn(input.phone);
+      if (input.phone !== null && !normalizedPhone) throw new TRPCError({ code: "BAD_REQUEST", message: "Утасны дугаараа зөв оруулна уу." });
+      try {
+        const updated = await updateAdminUserPhone({ userId: input.userId, phone: normalizedPhone });
+        await logAdminAction({ actorUserId: ctx.user.id, action: "user.phone_updated", entityType: "user", entityId: input.userId, metadata: { phone: normalizedPhone } });
+        return updated;
+      } catch (error) {
+        throw new TRPCError({ code: "CONFLICT", message: error instanceof Error ? error.message : "Утасны дугаарыг шинэчилж чадсангүй." });
       }
     }),
     userDetail: adminProcedure.input(z.object({ userId: z.number().int().positive() })).query(async ({ input }) => {
@@ -1451,7 +1462,10 @@ export const appRouter = router({
       if (stockBefore === 0 && product.stockQuantity > 0) {
         const watchers = await getWishlistWatchersForProduct(product.id);
         for (const watcher of watchers) {
-          if (!watcher.emailOptIn) continue;
+          // 2026-09-05: users.email is nullable now (phone-only accounts) --
+          // a watcher with no email on file simply can't get this alert by
+          // email; there's no SMS equivalent for this notification yet.
+          if (!watcher.emailOptIn || !watcher.email) continue;
           // No absolute site URL is configured anywhere in this app yet (see
           // ENV in server/_core/env.ts) — every other transactional email is
           // plain text with no link for the same reason, so this follows

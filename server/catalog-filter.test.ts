@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCatalogCategories, getCatalogSkinTypes, sortCatalogProducts, scorePreferenceMatch, scorePriceBandAffinity, applyDiversityCap, computeCategoryAffinity } from "../shared/catalog-filter";
+import { filterCatalogPriceRange, filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCatalogCategories, getCatalogSkinTypes, sortCatalogProducts, scorePreferenceMatch, scorePriceBandAffinity, applyDiversityCap, computeCategoryAffinity } from "../shared/catalog-filter";
 
 const catalog = [
   { name: "Gokujyun Lotion", brand: "Hada Labo", categoryName: "Арьс арчилгаа", shortDescription: "Hyaluronic moisture", priceMnt: 29000, stockQuantity: 4, skinType: "dry" as const },
@@ -39,6 +39,26 @@ describe("catalog discovery", () => {
     expect(filterCatalogSkinType(catalog, "all")).toEqual(catalog);
     expect(filterCatalogSkinType(catalog, "dry")).toEqual([catalog[0]]);
     expect(filterCatalogSkinType(catalog, "sensitive")).toEqual([]);
+  });
+});
+
+// NEWVISION.md §14 (Phase 2): price-range facet.
+describe("filterCatalogPriceRange", () => {
+  it("returns everything unfiltered when neither bound is set", () => {
+    expect(filterCatalogPriceRange(catalog)).toEqual(catalog);
+    expect(filterCatalogPriceRange(catalog, null, null)).toEqual(catalog);
+  });
+
+  it("applies a floor only, a ceiling only, or both -- each bound inclusive", () => {
+    expect(filterCatalogPriceRange(catalog, 20_000).map(p => p.name)).toEqual(["Gokujyun Lotion", "Aqua Gel"]);
+    expect(filterCatalogPriceRange(catalog, undefined, 22_000).map(p => p.name)).toEqual(["Vitamin C", "Aqua Gel"]);
+    expect(filterCatalogPriceRange(catalog, 20_000, 25_000).map(p => p.name)).toEqual(["Aqua Gel"]);
+    // Exact-match boundary, not strictly-between.
+    expect(filterCatalogPriceRange(catalog, 22_000, 22_000).map(p => p.name)).toEqual(["Aqua Gel"]);
+  });
+
+  it("can produce zero results when the range excludes every product", () => {
+    expect(filterCatalogPriceRange(catalog, 100_000)).toEqual([]);
   });
 });
 

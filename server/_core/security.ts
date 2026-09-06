@@ -133,6 +133,31 @@ export function limitQPayCallbackTraffic(request: Request, response: Response, n
   next();
 }
 
+// The verify.mn callback (`/api/verify-mn/callback`) sits outside
+// `/api/trpc` too, same reasoning as limitQPayCallbackTraffic above — a
+// separate bucket so the two integrations' webhook traffic never shares
+// state with each other or with anything else.
+const verifyMnCallbackBuckets = new Map<string, Bucket>();
+const VERIFY_MN_CALLBACK_WINDOW_MS = 60 * 1000;
+const VERIFY_MN_CALLBACK_MAX_REQUESTS = 30;
+
+export function limitVerifyMnCallbackTraffic(request: Request, response: Response, next: NextFunction) {
+  const now = Date.now();
+  if (verifyMnCallbackBuckets.size > 10_000) sweepExpired(verifyMnCallbackBuckets, now);
+  const key = clientKey(request);
+  const bucket = verifyMnCallbackBuckets.get(key);
+  if (!bucket || bucket.resetAt <= now) {
+    verifyMnCallbackBuckets.set(key, { count: 1, resetAt: now + VERIFY_MN_CALLBACK_WINDOW_MS });
+    return next();
+  }
+  bucket.count += 1;
+  if (bucket.count > VERIFY_MN_CALLBACK_MAX_REQUESTS) {
+    response.setHeader("Retry-After", Math.ceil((bucket.resetAt - now) / 1000));
+    return response.status(429).json({ ok: false, error: "Too many requests. Please try again shortly." });
+  }
+  next();
+}
+
 export function protectStateChangingApiRequests(request: Request, response: Response, next: NextFunction) {
   if (!request.path.startsWith("/api/trpc") || !["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return next();
   const origin = request.get("origin");
