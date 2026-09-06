@@ -1065,6 +1065,14 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    that yellow stays specific to the one section it was designed for, not
    reused as "the shelf color" for every shelf on the page. */
 .carousel-shelf-section { padding: clamp(48px, 6vw, 76px) max(34px, 7vw); }
+/* 2026-09-06 (real bug, Tom): see CarouselShelf.tsx's `inset` prop comment --
+   used only by ProductDetail.tsx's RelatedProducts, whose <main> already
+   applies its own horizontal padding, so this shelf's own would otherwise
+   double up and misalign it against the rest of the page. Vertical padding
+   removed too -- the caller's own "mt-10" wrapper (top) and
+   ReviewsSection's "mt-16 border-t" (bottom) already provide real spacing
+   here, this section doesn't need its own on top of both. */
+.carousel-shelf-section--inset { padding: 0; }
 .carousel-shelf-heading { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 26px; }
 .carousel-shelf-heading h2 { margin: 8px 0 0; font-family: var(--font-display); font-size: clamp(28px, 3.2vw, 40px); font-weight: 650; letter-spacing: -.06em; line-height: 1; }
 .carousel-shelf-description { max-width: 420px; margin: 8px 0 0; color: #6f7076; font-size: 13px; line-height: 1.6; }

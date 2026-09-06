@@ -31,6 +31,7 @@ export default function CarouselShelf({
   loading,
   emptyState,
   cardWidth = 220,
+  inset = false,
   children,
 }: {
   // Tom, 2026-09-05 (explicit, re: the 6 category shelves): "X сонголт."
@@ -46,6 +47,18 @@ export default function CarouselShelf({
   loading?: boolean;
   emptyState?: ReactNode;
   cardWidth?: number;
+  // 2026-09-06 (real bug, Tom): this component's own .carousel-shelf-section
+  // padding (clamp() vertical + max(34px,7vw) horizontal) was designed for
+  // Home.tsx's usage, where <main> has NO padding of its own -- there, this
+  // is the section's only inset. ProductDetail.tsx's RelatedProducts renders
+  // the SAME component inside <main className="... px-4 sm:px-8 ...">, which
+  // ALREADY insets its content -- so the shelf's own horizontal padding
+  // stacked on top of that, making the related-products row visibly more
+  // indented than the rest of the product page (gallery, price, etc.) right
+  // above it. `inset` (only ProductDetail passes it) zeroes the shelf's own
+  // padding so it aligns flush with whatever padded container it's already
+  // sitting in, instead of adding a second, redundant one.
+  inset?: boolean;
   children: ReactNode[];
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
@@ -81,7 +94,7 @@ export default function CarouselShelf({
   if (isEmpty && emptyState === null) return null;
 
   return (
-    <section className="carousel-shelf-section" data-reveal>
+    <section className={`carousel-shelf-section${inset ? " carousel-shelf-section--inset" : ""}`} data-reveal>
       <div className="carousel-shelf-heading">
         <div>
           {eyebrow ? <p className="eyebrow"><span /> {eyebrow}</p> : null}

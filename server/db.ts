@@ -1070,7 +1070,7 @@ export async function getRelatedProducts(productId: number, limit = 6) {
       return { product: candidate, score, sold: soldByProduct.get(candidate.id) ?? 0 };
     })
     .filter(entry => entry.score > 0)
-    .sort((a, b) => b.score - a.score || b.sold - a.sold);
+    .sort((a, b) => b.score - a.score || b.sold - a.sold || tiebreakHash(productId, a.product.id) - tiebreakHash(productId, b.product.id));
 
   if (scored.length >= Math.min(3, limit)) return scored.slice(0, limit).map(entry => entry.product);
 
@@ -1079,8 +1079,27 @@ export async function getRelatedProducts(productId: number, limit = 6) {
   const alreadyIncluded = new Set(scored.map(entry => entry.product.id));
   const sameCategoryFillers = candidates
     .filter(candidate => candidate.id !== productId && candidate.categoryId === viewed.categoryId && !alreadyIncluded.has(candidate.id))
+    .sort((a, b) => tiebreakHash(productId, a.id) - tiebreakHash(productId, b.id))
     .slice(0, limit - scored.length);
   return [...scored.map(entry => entry.product), ...sameCategoryFillers].slice(0, limit);
+}
+
+// Deterministic, per-viewed-product tiebreak for candidates that score
+// identically -- extremely common today: most products still carry the same
+// "normal"/null placeholder tags (see PRODUCT-IMPORT.md), so the category-match
+// "+1" alone ties nearly an entire category together. Without this, both
+// `.sort()` calls above are stable, so ties always fell back to raw,
+// viewed-product-independent DB row order -- meaning almost every product in a
+// category showed the exact same handful of "related" products (real bug,
+// Tom, 2026-09-06: "most of them present these products"). This hash varies
+// by (viewedProductId, candidateId), so ties resolve differently per product
+// page, while staying 100% stable across repeat visits to the SAME page (no
+// randomness, no flicker between renders, safely cacheable).
+function tiebreakHash(a: number, b: number): number {
+  let h = (a * 2654435761) ^ (b * 40503);
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return (h ^ (h >>> 16)) >>> 0;
 }
 
 export async function getProductBySlug(slug: string) {
