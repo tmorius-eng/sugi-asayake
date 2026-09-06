@@ -59,7 +59,7 @@ function SidebarNavContent({ section, isFullAdmin, onSelect, userName, userRoleL
   return (
     <div className="flex h-full flex-col bg-[#17181b] p-3 text-white">
       <div className="border-b border-white/12 px-3 py-4"><p className="text-[10px] font-extrabold tracking-[.15em] text-[#f0b52d]">SUGI ADMIN</p><p className="mt-1 text-sm text-white/65">Дэлгүүрийн удирдлага</p></div>
-      <nav className="mt-3 grid flex-1 gap-1 overflow-y-auto">
+      <nav className="mt-3 grid flex-1 content-start gap-1 overflow-y-auto">
         <p className="px-3 pt-2 pb-1 text-[10px] font-extrabold tracking-[.15em] text-white/35">ЕРӨНХИЙ</p>
         {visibleNested.length > 1 ? (
           <>
@@ -117,7 +117,14 @@ export default function AdminSidebar({ section, isFullAdmin, onSelect, userName,
 }) {
   return (
     <>
-      <aside className="hidden w-64 shrink-0 lg:block">
+      {/* sticky + h-screen -- without this the aside is just a natural-
+          height flex sibling of the main content column, so on a tall page
+          (e.g. the Products list) it stretches to match that height. The
+          nav is a CSS grid with no explicit row sizing, so that extra
+          vertical space then gets distributed BETWEEN the nav buttons via
+          grid's default align-content:stretch -- exactly the "broken
+          padding" (huge gaps between menu items) this was. */}
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 self-start lg:block">
         <SidebarNavContent section={section} isFullAdmin={isFullAdmin} onSelect={onSelect} userName={userName} userRoleLabel={userRoleLabel} userAvatarUrl={userAvatarUrl} />
       </aside>
       <Sheet open={mobileOpen} onOpenChange={onMobileOpenChange}>
