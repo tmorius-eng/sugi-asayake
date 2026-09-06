@@ -122,4 +122,63 @@ describeWithDatabase("commerce database integration", () => {
     const afterRepeatedCancellation = await db.select({ stockQuantity: productVariants.stockQuantity }).from(productVariants).where(eq(productVariants.id, publishedVariantId)).limit(1);
     expect(afterRepeatedCancellation[0]?.stockQuantity).toBe(4);
   });
+
+  // Audit finding BUG-004 (2026-09-06): addCartItem already checks
+  // isPublished at add-to-cart time, but nothing re-checked it at the
+  // actual moment of purchase -- a product added while published, then
+  // unpublished by an admin (recalled/mispriced/discontinued) before the
+  // shopper checks out, could still be bought successfully. This exercises
+  // the exact real-world sequence: add to cart while published -> admin
+  // unpublishes -> checkout must fail and leave stock untouched.
+  it("refuses to check out a product that was unpublished after it was added to the cart", async () => {
+    const db = await getDb();
+    if (!db) throw new Error("Database unavailable");
+
+    const productResult = await db.insert(products).values({
+      categoryId,
+      name: "Unpublished-mid-cart integration product",
+      slug: `${marker}-unpublish-race`,
+      sku: `${marker}-UNPUB-RACE`,
+      priceMnt: 1000,
+      stockQuantity: 4,
+      isPublished: true,
+    });
+    const productId = Number(productResult[0].insertId);
+    const variantResult = await db.insert(productVariants).values({
+      productId,
+      sku: `${marker}-UNPUB-RACE`,
+      priceMnt: 1000,
+      stockQuantity: 4,
+      isDefault: true,
+    });
+    const variantId = Number(variantResult[0].insertId);
+
+    try {
+      const cartResult = await db.insert(carts).values({ userId, status: "active" });
+      const cartId = Number(cartResult[0].insertId);
+      await db.insert(cartItems).values({ cartId, variantId, quantity: 1 });
+
+      // Simulates an admin pulling the product from sale after it's already
+      // sitting in this shopper's cart.
+      await db.update(products).set({ isPublished: false }).where(eq(products.id, productId));
+
+      await expect(createOrderFromActiveCart({
+        owner: { userId },
+        customerName: "Integration test",
+        customerPhone: "00000000",
+        deliveryMethod: "store_pickup",
+        pickupBranch: "Integration test branch",
+        paymentMethod: "cash_on_delivery",
+      })).rejects.toThrow("no longer available");
+
+      const afterAttempt = await db.select({ stockQuantity: productVariants.stockQuantity }).from(productVariants).where(eq(productVariants.id, variantId)).limit(1);
+      expect(afterAttempt[0]?.stockQuantity).toBe(4);
+    } finally {
+      await db.delete(cartItems).where(eq(cartItems.variantId, variantId));
+      const testCarts = await db.select({ id: carts.id }).from(carts).where(eq(carts.userId, userId));
+      if (testCarts.length) await db.delete(carts).where(inArray(carts.id, testCarts.map(cart => cart.id)));
+      await db.delete(productVariants).where(eq(productVariants.id, variantId));
+      await db.delete(products).where(eq(products.id, productId));
+    }
+  });
 });

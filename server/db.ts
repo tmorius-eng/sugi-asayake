@@ -373,6 +373,22 @@ export async function findUserByPhone(localEightDigitPhone: string) {
   const db = await getDb();
   if (!db) return undefined;
   if (!/^\d{8}$/.test(localEightDigitPhone)) return undefined;
+  // Audit finding BUG-005 (2026-09-06): wrapping the indexed `phone` column
+  // in REGEXP_REPLACE/RIGHT below defeats the users.phone UNIQUE index --
+  // every call was a full table scan, on the single highest-traffic query in
+  // the app (every login, register-duplicate-check, and password-reset
+  // attempt runs through this). In practice every current write path
+  // (auth.register/completeRegistration, admin.updateUserPhone,
+  // profile.update, attachPhoneFromVerifiedSession) already normalizes to
+  // this exact bare 8-digit form before writing -- so try a plain indexed
+  // exact match first. It's a straight semantic no-op (still returns the
+  // same row an exact-format phone would have matched via the slow path
+  // below), just fast for the overwhelming majority of real rows. Only a
+  // legacy row written in some other format (pre-dating that normalization
+  // discipline, or a manual DB edit) falls through to the original
+  // full-scan comparison, so matching behavior is unchanged either way.
+  const fastMatch = await db.select().from(users).where(eq(users.phone, localEightDigitPhone)).limit(1);
+  if (fastMatch[0]) return fastMatch[0];
   const result = await db.select().from(users).where(sql`RIGHT(REGEXP_REPLACE(${users.phone}, '[^0-9]', ''), 8) = ${localEightDigitPhone}`).limit(1);
   return result[0];
 }
@@ -443,8 +459,28 @@ export async function resetPasswordViaPhoneSession(input: { sessionId: number; p
   if (session.expiresAt.getTime() <= Date.now()) throw new Error("Баталгаажуулалтын хугацаа дууссан байна.");
   if (session.status !== "verified") throw new Error("Утасны дугаараа эхлээд баталгаажуулна уу.");
 
-  await db.update(users).set({ passwordHash: input.passwordHash, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: new Date() }).where(eq(users.id, session.userId));
-  await db.update(phoneVerificationSessions).set({ consumedAt: new Date() }).where(eq(phoneVerificationSessions.id, session.id));
+  // Audit finding BUG-003 (2026-09-06): the `consumedAt` check above is a
+  // plain read, not a DB-level guard -- two concurrent calls with the same
+  // sessionId (a double-click, a flaky-network client retry) could both pass
+  // it before either commits. Claiming the session with the same
+  // WHERE-guard + affectedRows idiom createOrderFromActiveCart's stock
+  // decrement already uses elsewhere in this file closes that: exactly one
+  // concurrent caller can ever win this UPDATE, so only one password change
+  // ever actually applies.
+  const claimed = await db.update(phoneVerificationSessions)
+    .set({ consumedAt: new Date() })
+    .where(and(eq(phoneVerificationSessions.id, session.id), isNull(phoneVerificationSessions.consumedAt)));
+  if (Number(claimed[0].affectedRows ?? 0) !== 1) throw new Error("Энэ баталгаажуулалт аль хэдийн ашиглагдсан байна.");
+
+  try {
+    await db.update(users).set({ passwordHash: input.passwordHash, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: new Date() }).where(eq(users.id, session.userId));
+  } catch (error) {
+    // Claimed the session but the actual password update failed (a genuine
+    // DB error) -- release the claim so the shopper isn't left with a
+    // burned, unusable session and no changed password.
+    await db.update(phoneVerificationSessions).set({ consumedAt: null }).where(eq(phoneVerificationSessions.id, session.id));
+    throw error;
+  }
   return { userId: session.userId };
 }
 
@@ -470,9 +506,30 @@ export async function completeRegistrationViaPhoneSession(input: { sessionId: nu
   if (session.expiresAt.getTime() <= Date.now()) throw new Error("Баталгаажуулалтын хугацаа дууссан байна.");
   if (session.status !== "verified") throw new Error("Утасны дугаараа эхлээд баталгаажуулна уу.");
 
-  const user = await createUserWithPassword({ phone: session.phone, passwordHash: input.passwordHash, name: input.name });
-  await db.update(phoneVerificationSessions).set({ consumedAt: new Date(), userId: user.id }).where(eq(phoneVerificationSessions.id, session.id));
-  return user;
+  // Audit finding BUG-003 (2026-09-06): claim the session atomically BEFORE
+  // creating any account -- the plain `session.consumedAt` read above can't
+  // stop two concurrent calls (a double-click, a client retry) with the
+  // same sessionId from both reaching createUserWithPassword. Previously the
+  // users.phone UNIQUE constraint was the only thing stopping a genuine
+  // duplicate account, which meant the losing racer got a raw DB
+  // constraint-violation error instead of the clean "already used" message.
+  // Same WHERE-guard + affectedRows idiom as createOrderFromActiveCart's
+  // stock decrement: exactly one concurrent caller can ever win this UPDATE.
+  const claimed = await db.update(phoneVerificationSessions)
+    .set({ consumedAt: new Date() })
+    .where(and(eq(phoneVerificationSessions.id, session.id), isNull(phoneVerificationSessions.consumedAt)));
+  if (Number(claimed[0].affectedRows ?? 0) !== 1) throw new Error("Энэ баталгаажуулалт аль хэдийн ашиглагдсан байна.");
+
+  try {
+    const user = await createUserWithPassword({ phone: session.phone, passwordHash: input.passwordHash, name: input.name });
+    await db.update(phoneVerificationSessions).set({ userId: user.id }).where(eq(phoneVerificationSessions.id, session.id));
+    return user;
+  } catch (error) {
+    // Claimed the session but account creation failed -- release the claim
+    // so it isn't burned for nothing and the shopper can retry.
+    await db.update(phoneVerificationSessions).set({ consumedAt: null }).where(eq(phoneVerificationSessions.id, session.id));
+    throw error;
+  }
 }
 
 // Spends a VERIFIED register session: attaches the phone number to the
@@ -489,8 +546,21 @@ export async function attachPhoneFromVerifiedSession(input: { sessionId: number 
   if (session.expiresAt.getTime() <= Date.now()) throw new Error("Баталгаажуулалтын хугацаа дууссан байна.");
   if (session.status !== "verified") throw new Error("Утасны дугаараа эхлээд баталгаажуулна уу.");
 
-  await db.update(users).set({ phone: session.phone, updatedAt: new Date() }).where(eq(users.id, session.userId));
-  await db.update(phoneVerificationSessions).set({ consumedAt: new Date() }).where(eq(phoneVerificationSessions.id, session.id));
+  // Audit finding BUG-003 (2026-09-06): same atomic-claim fix as
+  // resetPasswordViaPhoneSession/completeRegistrationViaPhoneSession above --
+  // see either's comment for why the plain `session.consumedAt` read alone
+  // isn't race-proof.
+  const claimed = await db.update(phoneVerificationSessions)
+    .set({ consumedAt: new Date() })
+    .where(and(eq(phoneVerificationSessions.id, session.id), isNull(phoneVerificationSessions.consumedAt)));
+  if (Number(claimed[0].affectedRows ?? 0) !== 1) throw new Error("Энэ баталгаажуулалт аль хэдийн ашиглагдсан байна.");
+
+  try {
+    await db.update(users).set({ phone: session.phone, updatedAt: new Date() }).where(eq(users.id, session.userId));
+  } catch (error) {
+    await db.update(phoneVerificationSessions).set({ consumedAt: null }).where(eq(phoneVerificationSessions.id, session.id));
+    throw error;
+  }
   return { userId: session.userId };
 }
 
@@ -1348,10 +1418,25 @@ export async function createOrderFromActiveCart(input: {
       // the product row -- same atomic WHERE-guard technique as before, just
       // keyed by variantId so two different options of the same product
       // decrement independently.
+      //
+      // Audit finding BUG-004 (2026-09-06): this guard used to only check
+      // stockQuantity. addCartItem checks products.isPublished at
+      // add-to-cart time, but nothing re-checked it here at the actual
+      // moment of purchase -- so a product an admin unpublished (recalled,
+      // mispriced, discontinued) AFTER a shopper already added it to their
+      // cart could still be bought successfully, defeating the entire point
+      // of unpublishing it. The EXISTS subquery below folds that check into
+      // the same atomic UPDATE, so an unpublish takes effect immediately for
+      // any pending cart, without a second round trip or losing the
+      // race-proof affectedRows guard.
       const update = await tx.update(productVariants).set({
         stockQuantity: sql`${productVariants.stockQuantity} - ${item.quantity}`,
         updatedAt: new Date(),
-      }).where(and(eq(productVariants.id, item.variantId), gte(productVariants.stockQuantity, item.quantity)));
+      }).where(and(
+        eq(productVariants.id, item.variantId),
+        gte(productVariants.stockQuantity, item.quantity),
+        sql`EXISTS (SELECT 1 FROM ${products} WHERE ${products.id} = ${productVariants.productId} AND ${products.isPublished} = TRUE)`,
+      ));
       if (Number(update[0].affectedRows ?? 0) !== 1) {
         throw new Error(`${item.name} is no longer available in the requested quantity. Please refresh your cart.`);
       }

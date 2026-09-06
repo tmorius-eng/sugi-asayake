@@ -14,7 +14,7 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
-import { createContext } from "./context";
+import { assertProductionSecrets, createContext } from "./context";
 import { registerQPayCallbackRoute } from "../qpay";
 import { registerVerifyMnCallbackRoute } from "../verifyMn";
 import { dbPing } from "../db";
@@ -42,6 +42,10 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
+  // Audit finding BUG-001: refuse to start in production with no real
+  // session-signing secret configured, rather than silently falling back to
+  // a hardcoded, publicly-committed one (see context.ts's secretKey()).
+  assertProductionSecrets();
   const app = express();
   const server = createServer(app);
   app.set("trust proxy", 1);

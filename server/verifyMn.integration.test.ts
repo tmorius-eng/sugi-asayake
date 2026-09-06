@@ -16,7 +16,7 @@ vi.mock("./_core/env", async importOriginal => {
 
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
-import { attachPhoneFromVerifiedSession, createUserWithPassword, getDb, getUserById, resetPasswordViaPhoneSession } from "./db";
+import { attachPhoneFromVerifiedSession, completeRegistrationViaPhoneSession, createUserWithPassword, getDb, getUserById, resetPasswordViaPhoneSession } from "./db";
 import { hashPassword, verifyPassword } from "./_core/password";
 import { phoneVerificationSessions, users } from "../drizzle/schema";
 
@@ -110,5 +110,63 @@ describeWithDatabase("verify.mn phone verification integration", () => {
     await attachPhoneFromVerifiedSession({ sessionId });
     const updated = await getUserById(userId);
     expect(updated!.phone).toBe(newPhone);
+  });
+
+  // Audit finding BUG-003 (2026-09-06): a double-click / client retry firing
+  // the same sessionId twice used to be a plain read-then-write race --
+  // both concurrent calls could read `consumedAt: null` before either
+  // committed. Fired for real (not just reasoned about) against the live
+  // test DB below, for both spend paths.
+  it("resetPasswordViaPhoneSession: two concurrent calls with the same session apply exactly one password change", async () => {
+    const db = await getDb();
+    if (!db) throw new Error("DATABASE_URL is required for this test.");
+    const inserted = await db.insert(phoneVerificationSessions).values({
+      userId, purpose: "password_reset", phone: testPhone, verifyMnSessionId: `test-race-reset-${Date.now()}`, code: "111111", status: "verified", expiresAt: new Date(Date.now() + 60_000),
+    });
+    const sessionId = Number(inserted[0].insertId);
+
+    const results = await Promise.allSettled([
+      resetPasswordViaPhoneSession({ sessionId, passwordHash: await hashPassword("racer-a-password") }),
+      resetPasswordViaPhoneSession({ sessionId, passwordHash: await hashPassword("racer-b-password") }),
+    ]);
+
+    const fulfilled = results.filter(result => result.status === "fulfilled");
+    const rejected = results.filter(result => result.status === "rejected");
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(String((rejected[0] as PromiseRejectedResult).reason)).toMatch(/аль хэдийн ашиглагдсан/);
+  });
+
+  it("completeRegistrationViaPhoneSession: two concurrent calls with the same session create exactly one account", async () => {
+    const db = await getDb();
+    if (!db) throw new Error("DATABASE_URL is required for this test.");
+    const racePhone = "88778899";
+    const inserted = await db.insert(phoneVerificationSessions).values({
+      userId: null, purpose: "register", phone: racePhone, verifyMnSessionId: `test-race-register-${Date.now()}`, code: "222222", status: "verified", expiresAt: new Date(Date.now() + 60_000),
+    });
+    const sessionId = Number(inserted[0].insertId);
+
+    let createdUserId: number | null = null;
+    try {
+      const results = await Promise.allSettled([
+        completeRegistrationViaPhoneSession({ sessionId, passwordHash: await hashPassword("racer-a-password"), name: "Racer A" }),
+        completeRegistrationViaPhoneSession({ sessionId, passwordHash: await hashPassword("racer-b-password"), name: "Racer B" }),
+      ]);
+
+      const fulfilled = results.filter(result => result.status === "fulfilled") as PromiseFulfilledResult<Awaited<ReturnType<typeof completeRegistrationViaPhoneSession>>>[];
+      const rejected = results.filter(result => result.status === "rejected");
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      // The loser must get the friendly "already used" message, never a raw
+      // users.phone UNIQUE constraint error.
+      expect(String((rejected[0] as PromiseRejectedResult).reason)).toMatch(/аль хэдийн ашиглагдсан/);
+      createdUserId = fulfilled[0].value.id;
+
+      const matchingAccounts = await db.select({ id: users.id }).from(users).where(eq(users.phone, racePhone));
+      expect(matchingAccounts).toHaveLength(1);
+    } finally {
+      if (createdUserId) await db.delete(users).where(eq(users.id, createdUserId));
+      await db.delete(phoneVerificationSessions).where(eq(phoneVerificationSessions.id, sessionId));
+    }
   });
 });

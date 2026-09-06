@@ -1,11 +1,27 @@
 import type { Request, Response } from "express";
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
+import { randomBytes } from "node:crypto";
 import { parse as parseCookieHeader } from "cookie";
 import { jwtVerify } from "jose";
 import { COOKIE_NAME } from "@shared/const";
 import { ENV } from "./env";
 import { getUserById } from "../db";
 import type { User } from "../../drizzle/schema";
+
+// Audit finding BUG-001: called once at process startup (see
+// server/_core/index.ts), before the server ever binds to a port. Every
+// other security-sensitive secret in this codebase already fails loudly when
+// missing in a real deployment (crypto.ts's getKey() for
+// INTEGRATIONS_ENCRYPTION_KEY, verifyMn.ts's requireApiKey()) -- JWT_SECRET
+// was the one exception, and it's the most sensitive one of all (it's what a
+// session cookie's authenticity rests on). Scoped to production specifically
+// so local dev / CI / vitest (none of which set NODE_ENV=production) keep
+// working with no secret configured, same as today.
+export function assertProductionSecrets() {
+  if (ENV.isProduction && !ENV.cookieSecret) {
+    throw new Error("JWT_SECRET must be set in production -- refusing to start with an insecure fallback signing key. Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"");
+  }
+}
 
 export type SessionUser = Omit<User, "passwordHash">;
 
@@ -15,8 +31,27 @@ export type TrpcContext = {
   res: Response;
 };
 
+// Audit finding BUG-001 (2026-09-06): this used to fall back to a hardcoded
+// "insecure-development-secret-change-me" string whenever JWT_SECRET was
+// unset -- fine for local tooling that never signs a real cookie, but a
+// silent, committed-to-a-public-repo fallback for the ONE secret that lets
+// anyone forge a session for any user id (including the bootstrap admin,
+// user id 1) if it were ever left unset in a real deployment. No code
+// anywhere asserted JWT_SECRET was actually set before the server started.
+// assertProductionSecrets() below is the fix: fail loudly at startup in
+// production instead of silently signing tokens nobody can trust. This
+// function keeps a much narrower, in-memory-only fallback (a fresh random
+// key generated once per process) purely so non-production tooling that
+// never calls assertProductionSecrets (drizzle-kit, unit tests that never
+// touch a cookie) doesn't crash -- a random key still means "no real secret
+// configured" fails safely (nothing signed with it survives a restart, and
+// nobody outside this process can predict it), instead of the previous
+// fallback being a known, publicly-committed string.
+let devFallbackSecret: Uint8Array | null = null;
 function secretKey() {
-  return new TextEncoder().encode(ENV.cookieSecret || "insecure-development-secret-change-me");
+  if (ENV.cookieSecret) return new TextEncoder().encode(ENV.cookieSecret);
+  if (!devFallbackSecret) devFallbackSecret = randomBytes(32);
+  return devFallbackSecret;
 }
 
 export async function signSessionToken(userId: number, sessionVersion: number): Promise<string> {

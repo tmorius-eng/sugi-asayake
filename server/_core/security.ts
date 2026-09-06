@@ -158,13 +158,36 @@ export function limitVerifyMnCallbackTraffic(request: Request, response: Respons
   next();
 }
 
+// Audit finding BUG-007 (2026-09-06): a request with no Origin header used
+// to sail straight through with zero check at all. The session cookie's
+// SameSite=Lax (see cookies.ts) already blocks the primary CSRF threat --
+// a genuine cross-site browser POST won't carry it regardless of anything
+// here -- but this function's whole job is checking the request's claimed
+// source, and "no Origin" isn't the same as "same-origin." Falls back to
+// Referer (which real same-origin browser requests still send) before
+// giving up and allowing the request through, narrowing the previous
+// unconditional bypass to only genuinely header-less requests (some
+// non-browser clients, certain proxies) -- not a live exploit path given
+// the SameSite cookie, but this now actually checks what it claims to.
+function requestClaimsOrigin(request: Request): string | null {
+  const origin = request.get("origin");
+  if (origin) return origin;
+  const referer = request.get("referer");
+  if (!referer) return null;
+  try {
+    return new URL(referer).origin;
+  } catch {
+    return null;
+  }
+}
+
 export function protectStateChangingApiRequests(request: Request, response: Response, next: NextFunction) {
   if (!request.path.startsWith("/api/trpc") || !["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return next();
-  const origin = request.get("origin");
-  if (!origin) return next();
+  const claimedOrigin = requestClaimsOrigin(request);
+  if (!claimedOrigin) return next();
   try {
     const expected = `${request.protocol}://${request.get("host")}`;
-    if (new URL(origin).origin !== expected) return response.status(403).json({ error: "Cross-site state-changing requests are not allowed." });
+    if (new URL(claimedOrigin).origin !== expected) return response.status(403).json({ error: "Cross-site state-changing requests are not allowed." });
   } catch {
     return response.status(403).json({ error: "Invalid request origin." });
   }
