@@ -6,5 +6,5 @@
   <path d="M210 146h16" stroke="#df1f3d" stroke-width="6" stroke-linecap="round"/>
   <circle cx="232" cy="132" r="6" fill="none" stroke="#df1f3d" stroke-width="4" opacity=".6"/>
   <line x1="190" y1="196" x2="210" y2="196" stroke="#df1f3d" stroke-width="4" opacity=".5"/>
-  <text x="200" y="335" font-family="'DM Sans', 'Noto Sans Mongolian', sans-serif" font-size="15" font-weight="700" letter-spacing="3" fill="#a3a4a9" text-anchor="middle">SUGI ASAYAKE</text>
+  <text x="200" y="335" font-family="'Golos Text', sans-serif" font-size="15" font-weight="700" letter-spacing="3" fill="#a3a4a9" text-anchor="middle">SUGI ASAYAKE</text>
 </svg>

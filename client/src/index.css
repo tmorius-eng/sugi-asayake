@@ -93,8 +93,17 @@
   --sidebar-accent-foreground: #fff;
   --sidebar-border: rgba(255, 255, 255, .1);
   --sidebar-ring: #f0b52d;
-  --font-body: "DM Sans", "Noto Sans Mongolian", sans-serif;
-  --font-display: "Space Grotesk", "Noto Sans Mongolian", sans-serif;
+  /* 2026-09-06: unified to one font sitewide (was DM Sans body / Space Grotesk
+     display / "Noto Sans Mongolian" fallback -- none of the three had any
+     Cyrillic glyphs, confirmed against Google's real served font data, so
+     ~100% of this site's Mongolian text was silently rendering in the OS
+     default font). Golos Text has real cyrillic + cyrillic-ext coverage
+     (Өө/Үү included) and matches index.html's <link>. Kept as two variables
+     pointing at the same family (not consolidated to one) so every existing
+     var(--font-display)/var(--font-body) consumer -- ~60 CSS rules plus
+     font-[var(--font-display)] in 20+ admin components -- needed zero edits. */
+  --font-body: "Golos Text", sans-serif;
+  --font-display: "Golos Text", sans-serif;
   --ease-out: cubic-bezier(.23, 1, .32, 1);
 
   /* --- Home redesign tokens (2026-08-28) --------------------------------
@@ -316,8 +325,17 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .footer-column a:hover, .footer-column-button:hover { color: #ffd27a; }
 /* Resets default <button> chrome so "Күкийн тохиргоо" reads identically to
    the <a> links beside it in the same column -- it's a button (triggers
-   Silktide's resetConsent(), not navigation) but shouldn't look like one. */
-.footer-column-button { background: none; border: none; padding: 0; margin: 0; font: inherit; text-align: left; cursor: pointer; }
+   Silktide's resetConsent(), not navigation) but shouldn't look like one.
+   2026-09-06: was `font: inherit` -- that shorthand resets EVERY font
+   sub-property at once, including font-weight, which silently overrode the
+   `font-weight: 700` the rule above (line 324) already gives this same
+   selector (equal specificity, later in the file wins per property) --
+   verified via getComputedStyle: the button rendered at weight 400 next to
+   700-weight <a> siblings, same font-family, which is what actually read as
+   "a different font" even though the family itself was already correct.
+   Only inheriting the sub-properties native <button> chrome actually needs
+   overriding (family/size/line-height) leaves font-weight alone. */
+.footer-column-button { background: none; border: none; padding: 0; margin: 0; font-family: inherit; font-size: inherit; line-height: inherit; text-align: left; cursor: pointer; }
 .footer-column small { margin-top: 8px; color: rgba(255,255,255,.46); }
 /* 2026-09-06 (real a11y-audit finding): .42 opacity measured 4.07:1 against
    the dark footer, under the 4.5:1 small-text threshold -- bumped to .5
