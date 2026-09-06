@@ -44,7 +44,6 @@
   --color-surface-dark: var(--surface-dark);
   --color-surface-dark-raised: var(--surface-dark-raised);
   --color-surface-dark-raised-hover: var(--surface-dark-raised-hover);
-  --color-surface-journal-muted: var(--surface-journal-muted);
   --color-foreground-inverse: var(--foreground-inverse);
 }
 
@@ -93,17 +92,17 @@
      --sky names the 4th brand color that --ring already carries and that
      several sections (the hero's "THE MORNING OF CARE" marker, seasonal
      "sky" tone, locations stripe) already hardcode as #3970a7 ad hoc.
-     --surface-dark* and
-     --surface-journal-muted name the dark-canvas hex values already
-     hardcoded in .site-footer/.home-news-section (#17181b, #1f2024,
-     #26272c) plus one new muted-green tone for the Journal section's
-     3rd card tone, so new components reference one name instead of
-     retyping hex. See docs/REFERENCE-DRIVEN-PREMIUM-REDESIGN-MASTER-PROMPT.md */
+     --surface-dark* names the dark-canvas hex values already hardcoded in
+     .site-footer/.home-news-section (#17181b, #1f2024, #26272c), so new
+     components reference one name instead of retyping hex. See
+     docs/REFERENCE-DRIVEN-PREMIUM-REDESIGN-MASTER-PROMPT.md
+     (--surface-journal-muted, a 3rd Journal-card tone, was removed
+     2026-09-06 along with that card slot in the hero-plus-stack rebuild --
+     see JournalSection.tsx.) */
   --sky: #3970a7;
   --surface-dark: #17181b;
   --surface-dark-raised: #1f2024;
   --surface-dark-raised-hover: #26272c;
-  --surface-journal-muted: #2c332e;
   --foreground-inverse: #fffdf9;
 
   /* Spacing scale -- sections built before this token set hand-pick their
@@ -1463,44 +1462,75 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .jn-heading > .jn-all-link { color: rgba(255, 255, 255, .68); }
 .jn-heading > .jn-all-link:hover { color: var(--accent); }
 
-.jn-grid { display: grid; gap: 20px; }
-.jn-grid[data-count="3"] { grid-template-columns: 1.5fr 1fr 1fr; align-items: start; }
-.jn-grid[data-count="3"] .jn-card:nth-child(2) { margin-top: 34px; }
-.jn-grid[data-count="3"] .jn-card:nth-child(3) { margin-top: 68px; }
-.jn-grid[data-count="2"] { grid-template-columns: 1.4fr 1fr; align-items: start; }
-.jn-grid[data-count="2"] .jn-card:nth-child(2) { margin-top: 30px; }
-.jn-grid[data-count="1"] { grid-template-columns: min(560px, 100%); justify-content: center; }
+/* 2026-09-06: hero-plus-stack editorial layout (one large featured story,
+   smaller supporting cards beside it) -- the pattern NYT/Medium/Substack/
+   The Verge all converge on for exactly this "N latest posts" shape,
+   researched specifically rather than guessed, replacing the earlier
+   equal-ish 3-column stagger. */
+.jn-grid { display: grid; gap: 22px; }
+.jn-grid[data-count="3"] { grid-template-columns: 1.35fr 1fr; grid-template-rows: repeat(2, minmax(150px, 1fr)); }
+.jn-grid[data-count="3"] .jn-card--featured { grid-row: 1 / 3; }
+.jn-grid[data-count="2"] { grid-template-columns: 1.35fr 1fr; }
+.jn-grid[data-count="1"] { grid-template-columns: min(720px, 100%); justify-content: center; }
 
-.jn-card { display: flex; flex-direction: column; overflow: hidden; border-radius: 16px; transition: transform .2s var(--ease-out), box-shadow .2s var(--ease-out); }
+.jn-card { position: relative; display: flex; flex-direction: column; overflow: hidden; border-radius: 20px; transition: transform .25s var(--ease-out), box-shadow .25s var(--ease-out); }
 .jn-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
-.jn-card img { width: 100%; aspect-ratio: 16/10; object-fit: cover; }
-.jn-card > div { display: flex; flex: 1; flex-direction: column; padding: 20px 22px 24px; }
-.jn-card span.jn-card-date { color: var(--accent); font-size: 10px; font-weight: 800; letter-spacing: .1em; }
-.jn-card h3 { display: -webkit-box; overflow: hidden; margin: 10px 0; font-family: var(--font-display); font-size: 18px; font-weight: 650; letter-spacing: -.03em; line-height: 1.25; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.jn-grid[data-count="3"] .jn-card:first-child h3 { font-size: 22px; }
-.jn-card p { display: -webkit-box; overflow: hidden; flex: 1; margin: 0 0 14px; font-size: 12px; line-height: 1.6; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.jn-card em { display: inline-flex; align-items: center; gap: 6px; margin-top: auto; font-size: 10px; font-style: normal; font-weight: 800; letter-spacing: .06em; }
+.jn-card img { width: 100%; aspect-ratio: 16/10; object-fit: cover; transition: transform .5s var(--ease-out); }
+.jn-card:hover img { transform: scale(1.045); }
+/* 2026-09-06: the featured card spans 2 rows sized by its 2 stacked
+   siblings' natural content height -- at 16/10 a ~600px-wide side image
+   alone rendered ~370px tall, so 2 stacked cards forced a ~950px-tall
+   hero. Capping the side cards' own image height (not aspect-ratio-driven)
+   keeps the whole grid's height predictable and modest regardless of
+   source image proportions. */
+.jn-card--tone-0 img, .jn-card--tone-1 img { aspect-ratio: auto; height: 128px; }
+.jn-card-body { display: flex; flex: 1; flex-direction: column; padding: 22px 24px 26px; }
+.jn-card-date { font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.jn-card h3 { display: -webkit-box; overflow: hidden; margin: 10px 0; font-family: var(--font-display); font-size: 19px; font-weight: 650; letter-spacing: -.03em; line-height: 1.28; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.jn-card p { display: -webkit-box; overflow: hidden; flex: 1; margin: 0 0 16px; font-size: 12.5px; line-height: 1.65; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.jn-card em { display: inline-flex; align-items: center; gap: 6px; margin-top: auto; font-size: 10px; font-style: normal; font-weight: 800; letter-spacing: .06em; transition: gap .2s var(--ease-out); }
+.jn-card:hover em { gap: 10px; }
 
-/* tone-0 (ivory, the large/feature card), tone-1 (raised dark), tone-2
-   (muted green) -- cycled by index, matching the reference's mixed-tone
-   staggered cards instead of one repeated dark card. */
+/* Featured card: image fills the whole tile, text overlays it directly
+   (dark bottom-up gradient scrim) instead of sitting in a separate content
+   block below -- the classic "hero story" treatment, distinct from the two
+   plain supporting cards. */
+.jn-card--featured { color: #fff; }
+.jn-card--featured img { position: absolute; inset: 0; height: 100%; aspect-ratio: auto; }
+/* 2026-09-06: darkens most of the image height, not just the bottom third
+   -- with real editorial photography a light top/dark bottom split usually
+   reads fine, but this has to stay legible over ANY cover image an admin
+   uploads (a screenshot, a busy product photo, anything), so the dark zone
+   is deliberately generous rather than tuned to one nice test photo. */
+.jn-card-scrim { position: absolute; inset: 0; background: linear-gradient(0deg, rgba(8, 9, 10, .95) 0%, rgba(8, 9, 10, .82) 45%, rgba(8, 9, 10, .35) 78%, rgba(8, 9, 10, .05) 100%); pointer-events: none; }
+.jn-card--featured .jn-card-body { position: relative; justify-content: flex-end; min-height: 100%; padding: 28px 30px 30px; }
+.jn-card--featured .jn-card-date { color: var(--accent); text-shadow: 0 1px 8px rgba(0, 0, 0, .5); }
+.jn-card--featured h3 { font-size: clamp(22px, 2.4vw, 28px); -webkit-line-clamp: 3; text-shadow: 0 2px 12px rgba(0, 0, 0, .5); }
+.jn-card--featured p { color: rgba(255, 255, 255, .78); -webkit-line-clamp: 2; }
+.jn-card--featured em { color: #fff; }
+
+/* Supporting cards: tone-0 (ivory) and tone-1 (raised dark), alternating --
+   keeps the same "not one repeated dark card" contrast the previous
+   version had, minus the 3rd muted-green tone (redundant once there are
+   only 2 supporting slots instead of 3). */
 .jn-card--tone-0 { background: var(--card); color: var(--foreground); }
 .jn-card--tone-0 h3 { color: var(--foreground); }
+.jn-card--tone-0 .jn-card-date { color: var(--primary); }
 .jn-card--tone-0 p { color: #6f7076; }
 .jn-card--tone-0 em { color: var(--foreground); }
 .jn-card--tone-1 { background: var(--surface-dark-raised); color: #fff; }
 .jn-card--tone-1:hover { background: var(--surface-dark-raised-hover); }
+.jn-card--tone-1 .jn-card-date { color: var(--accent); }
 .jn-card--tone-1 p { color: rgba(255, 255, 255, .55); }
 .jn-card--tone-1 em { color: #fff; }
-.jn-card--tone-2 { background: var(--surface-journal-muted); color: #fff; }
-.jn-card--tone-2:hover { filter: brightness(1.08); }
-.jn-card--tone-2 p { color: rgba(255, 255, 255, .6); }
-.jn-card--tone-2 em { color: #fff; }
 
 @media (max-width: 900px) {
   .jn-heading { flex-direction: column; align-items: flex-start; gap: 10px; }
-  .jn-grid[data-count="3"], .jn-grid[data-count="2"] { grid-template-columns: 1fr; }
-  .jn-grid[data-count="3"] .jn-card:nth-child(2), .jn-grid[data-count="3"] .jn-card:nth-child(3), .jn-grid[data-count="2"] .jn-card:nth-child(2) { margin-top: 0; }
+  .jn-grid[data-count="3"], .jn-grid[data-count="2"] { grid-template-columns: 1fr; grid-template-rows: none; }
+  .jn-grid[data-count="3"] .jn-card--featured { grid-row: auto; }
+  .jn-card--featured img { position: static; aspect-ratio: 16/10; }
+  .jn-card--featured .jn-card-body { min-height: 0; }
+  .jn-card-scrim { display: none; }
 }
 
 /* --- Tier 6: StoreLocatorSection ------------------------------------------
