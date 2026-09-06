@@ -5,5 +5,5 @@
   <rect x="192" y="150" width="16" height="15" fill="none" stroke="#df1f3d" stroke-width="6"/>
   <ellipse cx="200" cy="140" rx="14" ry="9" fill="none" stroke="#df1f3d" stroke-width="6"/>
   <line x1="180" y1="200" x2="220" y2="200" stroke="#df1f3d" stroke-width="4" opacity=".5"/>
-  <text x="200" y="335" font-family="'DM Sans', 'Noto Sans Mongolian', sans-serif" font-size="15" font-weight="700" letter-spacing="3" fill="#a3a4a9" text-anchor="middle">SUGI ASAYAKE</text>
+  <text x="200" y="335" font-family="'Golos Text', sans-serif" font-size="15" font-weight="700" letter-spacing="3" fill="#a3a4a9" text-anchor="middle">SUGI ASAYAKE</text>
 </svg>

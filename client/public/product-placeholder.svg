@@ -4,5 +4,5 @@
   <rect x="182" y="118" width="36" height="20" rx="4" fill="none" stroke="#df1f3d" stroke-width="6"/>
   <path d="M170 138h60a12 12 0 0 1 12 12v96a12 12 0 0 1-12 12h-60a12 12 0 0 1-12-12v-96a12 12 0 0 1 12-12z" fill="none" stroke="#df1f3d" stroke-width="6" stroke-linejoin="round"/>
   <line x1="170" y1="188" x2="230" y2="188" stroke="#df1f3d" stroke-width="4" opacity=".5"/>
-  <text x="200" y="335" font-family="'DM Sans', 'Noto Sans Mongolian', sans-serif" font-size="15" font-weight="700" letter-spacing="3" fill="#a3a4a9" text-anchor="middle">SUGI ASAYAKE</text>
+  <text x="200" y="335" font-family="'Golos Text', sans-serif" font-size="15" font-weight="700" letter-spacing="3" fill="#a3a4a9" text-anchor="middle">SUGI ASAYAKE</text>
 </svg>
