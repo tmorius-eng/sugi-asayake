@@ -1882,12 +1882,23 @@ const LOW_STOCK_THRESHOLD = 5;
 export async function getAdminDashboardSummary() {
   const db = await getDb();
   if (!db) {
-    return { totalOrders: 0, totalRevenueMnt: 0, activeUsers: 0, recentOrders: [], lowStockProducts: [], failedPayments: [] };
+    return { totalOrders: 0, totalRevenueMnt: 0, activeUsers: 0, recentOrders: [], lowStockProducts: [], failedPayments: [], ordersLast7d: 0, ordersPrevious7d: 0, ordersDailySeries: [] as { date: string; orderCount: number }[] };
   }
 
   const activeSince = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  // 2026-09-06: for the new admin dashboard's "Захиалга" stat card + its
+  // sparkline. Plain COUNT(*) over orders.createdAt, not payment-status
+  // filtered -- matches totalOrders's own "every order regardless of
+  // payment outcome" operational semantics (this counts orders placed, not
+  // orders paid). One grouped query over the last 14 days, bucketed in JS
+  // into "this week" vs "the week before" -- zero-filled so the sparkline
+  // always has exactly 7 points, unlike getRevenueTimeseries's sparse
+  // convention elsewhere (a sparkline needs a fixed length; a day with 0
+  // orders is a real, meaningful zero, not a gap to omit).
+  const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+  const dailyOrderDateExpr = sql<string>`date(${orders.createdAt})`;
 
-  const [[orderCountRow], [revenueRow], [activeUserRow], recentOrders, lowStockProducts, failedPayments] = await Promise.all([
+  const [[orderCountRow], [revenueRow], [activeUserRow], recentOrders, lowStockProducts, failedPayments, dailyOrderRows] = await Promise.all([
     db.select({ count: sql<number>`count(*)` }).from(orders),
     db.select({ total: sql<number>`coalesce(sum(${orders.totalMnt}), 0)` }).from(orders).where(eq(orders.paymentStatus, "paid")),
     db.select({ count: sql<number>`count(*)` }).from(users).where(gte(users.lastSignedIn, activeSince)),
@@ -1913,7 +1924,20 @@ export async function getAdminDashboardSummary() {
       provider: paymentAttempts.provider,
       createdAt: paymentAttempts.createdAt,
     }).from(paymentAttempts).leftJoin(orders, eq(paymentAttempts.orderId, orders.id)).where(eq(paymentAttempts.status, "failed")).orderBy(desc(paymentAttempts.createdAt)).limit(10),
+    db.select({ date: dailyOrderDateExpr, count: sql<number>`count(*)` }).from(orders).where(gte(orders.createdAt, fourteenDaysAgo)).groupBy(dailyOrderDateExpr),
   ]);
+
+  const countsByDate = new Map(dailyOrderRows.map(row => [row.date, Number(row.count)]));
+  const dayString = (daysAgo: number) => new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const ordersDailySeries: { date: string; orderCount: number }[] = [];
+  let ordersLast7d = 0;
+  for (let daysAgo = 6; daysAgo >= 0; daysAgo--) {
+    const orderCount = countsByDate.get(dayString(daysAgo)) ?? 0;
+    ordersDailySeries.push({ date: dayString(daysAgo), orderCount });
+    ordersLast7d += orderCount;
+  }
+  let ordersPrevious7d = 0;
+  for (let daysAgo = 13; daysAgo >= 7; daysAgo--) ordersPrevious7d += countsByDate.get(dayString(daysAgo)) ?? 0;
 
   return {
     totalOrders: Number(orderCountRow?.count ?? 0),
@@ -1922,6 +1946,9 @@ export async function getAdminDashboardSummary() {
     recentOrders,
     lowStockProducts,
     failedPayments,
+    ordersLast7d,
+    ordersPrevious7d,
+    ordersDailySeries,
   };
 }
 

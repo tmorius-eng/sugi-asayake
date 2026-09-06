@@ -1,9 +1,19 @@
-import { AlertTriangle, Database, HardDrive, Lock, LoaderCircle, ReceiptText, Users2, Wallet, type LucideIcon } from "lucide-react";
+import { useMemo } from "react";
+import { AlertTriangle, Clock, Database, Eye, HardDrive, LoaderCircle, Percent, ReceiptText, Users, Wallet, type LucideIcon } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
+import AdminStatCard from "./admin/AdminStatCard";
+import AdminMiniSparkline from "./admin/AdminMiniSparkline";
+import AdminNetworkActivitiesCard from "./admin/AdminNetworkActivitiesCard";
+import AdminRecentActivityFeed from "./admin/AdminRecentActivityFeed";
 
 const statusLabels: Record<string, string> = { pending: "Хүлээгдэж байна", confirmed: "Баталгаажсан", packed: "Бэлтгэсэн", out_for_delivery: "Хүргэлтэд гарсан", completed: "Дууссан", cancelled: "Цуцалсан" };
 
+// 2026-09-06: extended for the new Gentelella-style stat-card grid + chart
+// (see the approved plan) -- same established "static example numbers under
+// the explicitly-labeled ADMIN UI PROTOTYPE banner" convention this
+// constant already used for the original 3-card row, not a fabrication-rule
+// exception (preview mode is never presented as real data).
 const previewSummary = {
   totalOrders: 128,
   totalRevenueMnt: 18_450_000,
@@ -14,10 +24,30 @@ const previewSummary = {
   ],
   lowStockProducts: [{ id: 3, name: "Rohto Melano CC Essence", sku: "ROHTO-MCC-20", stockQuantity: 0 }],
   failedPayments: [{ id: 1, orderId: 2, orderNumber: "SA-0119", provider: "qpay" as const, createdAt: new Date() }],
+  ordersLast7d: 24,
+  ordersPrevious7d: 19,
+  ordersDailySeries: [3, 2, 5, 4, 3, 4, 3].map((orderCount, i) => ({ date: new Date(Date.now() - (6 - i) * 86_400_000).toISOString().slice(0, 10), orderCount })),
 };
 
-export default function AdminDashboardHome({ preview = false, onNavigate }: { preview?: boolean; onNavigate: (section: "orders" | "products") => void }) {
+const previewConversion = { avgSessionDurationSec: 145, conversionRatePercent: 3, totalPageViews: 2140, sessionsCount: 640 };
+const previewProfit = { marginPercent: 34 };
+const previewDeltas = { avgSessionDurationSec: 6, revenueMnt: 12, conversionRatePercent: -4, totalPageViews: 9 };
+const previewPageViewSeries = [260, 240, 320, 300, 340, 310, 280];
+
+function formatDurationShort(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const remainderSec = Math.round(seconds % 60);
+  return minutes > 0 ? `${minutes}мин ${remainderSec}с` : `${remainderSec}с`;
+}
+
+export default function AdminDashboardHome({ preview = false, isFullAdmin, onNavigate }: { preview?: boolean; isFullAdmin: boolean; onNavigate: (section: "orders" | "products") => void }) {
   const summaryQuery = trpc.admin.dashboardSummary.useQuery(undefined, { enabled: !preview });
+  // Fixed 7-day window, independent of AdminNetworkActivitiesCard's own
+  // separately-toggleable 7/30/90 range -- these stat cards always report
+  // "this week", matching the Orders card's own 7-day figures above them.
+  const weekInput = useMemo(() => ({ dateFrom: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), dateTo: new Date().toISOString() }), []);
+  const analyticsQuery = trpc.admin.analyticsReport.useQuery(weekInput, { enabled: !preview && isFullAdmin });
+
   const data = preview ? previewSummary : summaryQuery.data;
 
   if (!preview && summaryQuery.isLoading) {
@@ -28,12 +58,80 @@ export default function AdminDashboardHome({ preview = false, onNavigate }: { pr
   }
   if (!data) return null;
 
+  const conversion = preview ? previewConversion : analyticsQuery.data?.conversion;
+  const profit = preview ? previewProfit : analyticsQuery.data?.profit;
+  const periodComparison = preview ? null : analyticsQuery.data?.periodComparison;
+  const deltas = preview ? previewDeltas : {
+    avgSessionDurationSec: periodComparison?.deltaPercent.avgSessionDurationSec ?? null,
+    revenueMnt: periodComparison?.deltaPercent.revenueMnt ?? null,
+    conversionRatePercent: periodComparison?.deltaPercent.conversionRatePercent ?? null,
+    totalPageViews: periodComparison?.deltaPercent.totalPageViews ?? null,
+  };
+  const stillLoadingAnalytics = !preview && isFullAdmin && analyticsQuery.isLoading;
+  const revenueMnt = preview ? 6_420_000 : periodComparison?.current.revenueMnt;
+  const pageViewSeries = preview ? previewPageViewSeries : analyticsQuery.data?.visitorSessionTimeseries.map(row => row.pageViewCount) ?? [];
+
+  const ordersDeltaPercent = data.ordersPrevious7d === 0 ? null : Math.round(((data.ordersLast7d - data.ordersPrevious7d) / data.ordersPrevious7d) * 100);
+
   return (
     <div className="grid gap-6">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <KpiCard icon={ReceiptText} label="Нийт захиалга" value={String(data.totalOrders)} accent="#3970a7" />
-        <KpiCard icon={Wallet} label="Орлого (төлөгдсөн)" value={data.totalRevenueMnt === null ? null : formatMnt(data.totalRevenueMnt)} accent="#2c7650" />
-        <KpiCard icon={Users2} label="Идэвхтэй хэрэглэгч (30 хоног)" value={data.activeUsers === null ? null : String(data.activeUsers)} accent="#df1f3d" />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <AdminStatCard
+          icon={Users}
+          iconBg="#eef1fb" iconColor="#3970a7"
+          label="Идэвхтэй хэрэглэгч"
+          value={data.activeUsers === null ? "locked" : String(data.activeUsers)}
+          caption="сүүлийн 30 хоногт нэвтэрсэн"
+        />
+        <AdminStatCard
+          icon={Clock}
+          iconBg="#fff4e5" iconColor="#c67c1f"
+          label="Дундаж сессийн хугацаа"
+          value={!isFullAdmin ? "locked" : stillLoadingAnalytics ? "…" : conversion?.avgSessionDurationSec != null ? formatDurationShort(conversion.avgSessionDurationSec) : "—"}
+          deltaPercent={!isFullAdmin ? undefined : deltas.avgSessionDurationSec}
+          caption="сүүлийн 7 хоногт"
+        />
+        <AdminStatCard
+          icon={ReceiptText}
+          iconBg="#eaf5ef" iconColor="#2c7650"
+          label="Захиалга"
+          value={String(data.ordersLast7d)}
+          deltaPercent={ordersDeltaPercent}
+          caption="сүүлийн 7 хоногт"
+          sparkline={<AdminMiniSparkline values={data.ordersDailySeries.map(row => row.orderCount)} color="#2c7650" />}
+        />
+        <AdminStatCard
+          icon={Wallet}
+          iconBg="#fdeaea" iconColor="#df1f3d"
+          label="Орлого"
+          value={!isFullAdmin ? "locked" : stillLoadingAnalytics ? "…" : revenueMnt != null ? formatMnt(revenueMnt) : "—"}
+          deltaPercent={!isFullAdmin ? undefined : deltas.revenueMnt}
+          caption="сүүлийн 7 хоногт (төлөгдсөн)"
+          progressBar={!isFullAdmin || profit == null ? undefined : { percent: profit.marginPercent, barClassName: "bg-[#2c7650]", caption: `Ашгийн маржин: ${profit.marginPercent}%` }}
+        />
+        <AdminStatCard
+          icon={Percent}
+          iconBg="#f5eefb" iconColor="#6b4fa0"
+          label="Хөрвүүлэлт"
+          value={!isFullAdmin ? "locked" : stillLoadingAnalytics ? "…" : conversion?.conversionRatePercent != null ? `${conversion.conversionRatePercent}%` : "—"}
+          deltaPercent={!isFullAdmin ? undefined : deltas.conversionRatePercent}
+          caption={conversion && conversion.sessionsCount === 0 ? "хараахан сесс алга" : "захиалга ÷ сесс"}
+          progressBar={!isFullAdmin || conversion?.conversionRatePercent == null ? undefined : { percent: conversion.conversionRatePercent, barClassName: "bg-[#a51630]", caption: `${conversion.sessionsCount} сесснээс` }}
+        />
+        <AdminStatCard
+          icon={Eye}
+          iconBg="#e8f3fb" iconColor="#2f7ab8"
+          label="Хуудас үзэлт"
+          value={!isFullAdmin ? "locked" : stillLoadingAnalytics ? "…" : conversion ? conversion.totalPageViews.toLocaleString("mn-MN") : "—"}
+          deltaPercent={!isFullAdmin ? undefined : deltas.totalPageViews}
+          caption="сүүлийн 7 хоногт"
+          sparkline={pageViewSeries.length > 0 ? <AdminMiniSparkline values={pageViewSeries} color="#2f7ab8" /> : undefined}
+        />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
+        <AdminNetworkActivitiesCard preview={preview} isFullAdmin={isFullAdmin} />
+        <AdminRecentActivityFeed preview={preview} isFullAdmin={isFullAdmin} recentOrders={data.recentOrders} failedPayments={data.failedPayments} />
       </div>
 
       {!preview && <SystemHealthWidget />}
@@ -135,17 +233,5 @@ function HealthPing({ icon: Icon, label, ok, error }: { icon: LucideIcon; label:
       <span aria-hidden="true">{ok ? "🟢" : "🔴"}</span>
       <span className="sr-only">{ok ? "ажиллаж байна" : `доголдолтой${error ? `: ${error}` : ""}`}</span>
     </span>
-  );
-}
-
-function KpiCard({ icon: Icon, label, value, accent }: { icon: LucideIcon; label: string; value: string | null; accent: string }) {
-  return (
-    <div className="rounded-3xl border border-black/7 p-5">
-      <span className="grid size-9 place-items-center rounded-2xl" style={{ backgroundColor: `${accent}1a`, color: accent }}><Icon size={17} /></span>
-      <p className="mt-4 text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]">{label.toUpperCase()}</p>
-      {value === null
-        ? <p className="mt-1 flex items-center gap-1.5 text-sm font-bold text-[#a9a49a]"><Lock size={13} aria-hidden="true" />Зөвхөн админд</p>
-        : <p className="mt-1 font-[var(--font-display)] text-2xl font-semibold tracking-[-.05em]">{value}</p>}
-    </div>
   );
 }

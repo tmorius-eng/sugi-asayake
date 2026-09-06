@@ -1189,7 +1189,10 @@ export const appRouter = router({
     // staffProcedure, not adminProcedure: staff should still see what's
     // going on operationally (orders, low stock), just not the money —
     // revenue and the active-user count are redacted below the plain-admin
-    // tier.
+    // tier. ordersLast7d/ordersPrevious7d/ordersDailySeries (2026-09-06,
+    // new admin dashboard) pass through the `...summary` spread untouched —
+    // deliberately, not an oversight: order *counts* are operational, same
+    // tier as totalOrders/recentOrders above.
     dashboardSummary: staffProcedure.query(async ({ ctx }) => {
       const summary = await getAdminDashboardSummary();
       if (ctx.user.role === "admin") return summary;

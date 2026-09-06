@@ -498,22 +498,31 @@ export async function getTrafficBreakdown(input: DateRangeInput = {}) {
  * fabricated comparison. The previous window is the same duration,
  * immediately preceding dateFrom.
  */
-export type PeriodComparisonMetrics = { revenueMnt: number; orderCount: number; aovMnt: number; profitMnt: number };
+export type PeriodComparisonMetrics = {
+  revenueMnt: number; orderCount: number; aovMnt: number; profitMnt: number;
+  // 2026-09-06: for the new admin dashboard's stat cards -- same
+  // "getConversionOverview" honesty rules apply (avgSessionDurationSec/
+  // conversionRatePercent are null, not 0, whenever sessionsCount is 0).
+  sessionsCount: number; totalPageViews: number; avgSessionDurationSec: number | null; conversionRatePercent: number | null;
+};
 export type PeriodComparison = {
   available: boolean;
   current: PeriodComparisonMetrics;
   previous: PeriodComparisonMetrics | null;
-  deltaPercent: { revenueMnt: number | null; orderCount: number | null; aovMnt: number | null; profitMnt: number | null };
+  deltaPercent: { revenueMnt: number | null; orderCount: number | null; aovMnt: number | null; profitMnt: number | null; sessionsCount: number | null; totalPageViews: number | null; avgSessionDurationSec: number | null; conversionRatePercent: number | null };
   previousRevenueTimeseries: { date: string; revenueMnt: number; orderCount: number }[];
+  previousVisitorSessionTimeseries: { date: string; sessionCount: number; pageViewCount: number }[];
 };
 
 export async function getPeriodComparison(input: DateRangeInput = {}): Promise<PeriodComparison> {
+  const emptyMetrics: PeriodComparisonMetrics = { revenueMnt: 0, orderCount: 0, aovMnt: 0, profitMnt: 0, sessionsCount: 0, totalPageViews: 0, avgSessionDurationSec: null, conversionRatePercent: null };
   const unavailable: PeriodComparison = {
     available: false,
-    current: { revenueMnt: 0, orderCount: 0, aovMnt: 0, profitMnt: 0 },
+    current: emptyMetrics,
     previous: null,
-    deltaPercent: { revenueMnt: null, orderCount: null, aovMnt: null, profitMnt: null },
+    deltaPercent: { revenueMnt: null, orderCount: null, aovMnt: null, profitMnt: null, sessionsCount: null, totalPageViews: null, avgSessionDurationSec: null, conversionRatePercent: null },
     previousRevenueTimeseries: [],
+    previousVisitorSessionTimeseries: [],
   };
   if (!input.dateFrom) return unavailable;
   const dateTo = input.dateTo ?? new Date();
@@ -523,17 +532,24 @@ export async function getPeriodComparison(input: DateRangeInput = {}): Promise<P
   const previousDateTo = new Date(input.dateFrom.getTime() - 1);
   const previousInput: DateRangeInput = { dateFrom: new Date(previousDateTo.getTime() - durationMs), dateTo: previousDateTo };
 
-  const [currentOverview, currentProfit, previousOverview, previousProfit, previousRevenueTimeseries] = await Promise.all([
+  const [currentOverview, currentProfit, currentConversion, previousOverview, previousProfit, previousConversion, previousRevenueTimeseries, previousVisitorSessionTimeseries] = await Promise.all([
     getSalesOverview(input),
     getProfitOverview(input),
+    getConversionOverview(input),
     getSalesOverview(previousInput),
     getProfitOverview(previousInput),
+    getConversionOverview(previousInput),
     getRevenueTimeseries(previousInput),
+    getVisitorSessionTimeseries(previousInput),
   ]);
 
-  const current: PeriodComparisonMetrics = { revenueMnt: currentOverview.revenueMnt, orderCount: currentOverview.orderCount, aovMnt: currentOverview.aovMnt, profitMnt: currentProfit.profitMnt };
-  const previous: PeriodComparisonMetrics = { revenueMnt: previousOverview.revenueMnt, orderCount: previousOverview.orderCount, aovMnt: previousOverview.aovMnt, profitMnt: previousProfit.profitMnt };
+  const current: PeriodComparisonMetrics = { revenueMnt: currentOverview.revenueMnt, orderCount: currentOverview.orderCount, aovMnt: currentOverview.aovMnt, profitMnt: currentProfit.profitMnt, sessionsCount: currentConversion.sessionsCount, totalPageViews: currentConversion.totalPageViews, avgSessionDurationSec: currentConversion.avgSessionDurationSec, conversionRatePercent: currentConversion.conversionRatePercent };
+  const previous: PeriodComparisonMetrics = { revenueMnt: previousOverview.revenueMnt, orderCount: previousOverview.orderCount, aovMnt: previousOverview.aovMnt, profitMnt: previousProfit.profitMnt, sessionsCount: previousConversion.sessionsCount, totalPageViews: previousConversion.totalPageViews, avgSessionDurationSec: previousConversion.avgSessionDurationSec, conversionRatePercent: previousConversion.conversionRatePercent };
   const deltaOf = (curr: number, prev: number) => prev === 0 ? null : Math.round(((curr - prev) / prev) * 100);
+  // Nullable pair (avgSessionDurationSec/conversionRatePercent): only a real
+  // delta when BOTH periods have at least one session -- never compare
+  // against/produce a fabricated number for a period with no tracking data.
+  const deltaOfNullable = (curr: number | null, prev: number | null) => curr == null || prev == null || prev === 0 ? null : Math.round(((curr - prev) / prev) * 100);
 
   return {
     available: true,
@@ -544,8 +560,13 @@ export async function getPeriodComparison(input: DateRangeInput = {}): Promise<P
       orderCount: deltaOf(current.orderCount, previous.orderCount),
       aovMnt: deltaOf(current.aovMnt, previous.aovMnt),
       profitMnt: deltaOf(current.profitMnt, previous.profitMnt),
+      sessionsCount: deltaOf(current.sessionsCount, previous.sessionsCount),
+      totalPageViews: deltaOf(current.totalPageViews, previous.totalPageViews),
+      avgSessionDurationSec: deltaOfNullable(current.avgSessionDurationSec, previous.avgSessionDurationSec),
+      conversionRatePercent: deltaOfNullable(current.conversionRatePercent, previous.conversionRatePercent),
     },
     previousRevenueTimeseries,
+    previousVisitorSessionTimeseries,
   };
 }
 
@@ -670,11 +691,20 @@ export type ConversionOverview = {
   convertedSessionsCount: number;
   conversionRatePercent: number | null;
   trackingStartedAt: string | null;
+  // 2026-09-06: added for the new admin dashboard's "Дундаж сессийн
+  // хугацаа"/"Хуудас үзэлт" stat cards -- both computed in this same
+  // query (one extra aggregate each), not a second round trip.
+  // avgSessionDurationSec is null under the same "no sessions yet" rule as
+  // conversionRatePercent, never a fabricated 0. A genuine single-pageview
+  // session contributes 0 seconds to the average -- that's correct (GA's
+  // own definition of a bounce), not a data gap.
+  totalPageViews: number;
+  avgSessionDurationSec: number | null;
 };
 
 export async function getConversionOverview(input: DateRangeInput = {}): Promise<ConversionOverview> {
   const db = await getDb();
-  const empty: ConversionOverview = { sessionsCount: 0, convertedSessionsCount: 0, conversionRatePercent: null, trackingStartedAt: null };
+  const empty: ConversionOverview = { sessionsCount: 0, convertedSessionsCount: 0, conversionRatePercent: null, trackingStartedAt: null, totalPageViews: 0, avgSessionDurationSec: null };
   if (!db) return empty;
 
   const sessionConditions = [];
@@ -682,7 +712,11 @@ export async function getConversionOverview(input: DateRangeInput = {}): Promise
   if (input.dateTo) sessionConditions.push(lte(visitorSessions.createdAt, input.dateTo));
 
   const [[sessionsRow], [convertedRow], [earliestRow]] = await Promise.all([
-    db.select({ count: sql<number>`count(*)` }).from(visitorSessions).where(sessionConditions.length ? and(...sessionConditions) : undefined),
+    db.select({
+      count: sql<number>`count(*)`,
+      totalPageViews: sql<number>`coalesce(sum(${visitorSessions.pageViewCount}), 0)`,
+      avgSessionDurationSec: sql<number | null>`avg(timestampdiff(second, ${visitorSessions.createdAt}, ${visitorSessions.lastSeenAt}))`,
+    }).from(visitorSessions).where(sessionConditions.length ? and(...sessionConditions) : undefined),
     db.select({ count: sql<number>`count(distinct ${orders.visitorSessionId})` })
       .from(orders)
       .innerJoin(visitorSessions, eq(orders.visitorSessionId, visitorSessions.id))
@@ -697,7 +731,28 @@ export async function getConversionOverview(input: DateRangeInput = {}): Promise
     convertedSessionsCount,
     conversionRatePercent: sessionsCount > 0 ? Math.round((convertedSessionsCount / sessionsCount) * 100) : null,
     trackingStartedAt: earliestRow?.earliest ? new Date(earliestRow.earliest).toISOString() : null,
+    totalPageViews: Number(sessionsRow?.totalPageViews ?? 0),
+    avgSessionDurationSec: sessionsCount > 0 && sessionsRow?.avgSessionDurationSec != null ? Math.round(Number(sessionsRow.avgSessionDurationSec)) : null,
   };
+}
+
+/** One point per calendar day with at least one session -- mirrors
+ *  getRevenueTimeseries's exact sparse-day convention (gap days simply
+ *  absent, the chart fills them) for the new "Network Activities" card. */
+export async function getVisitorSessionTimeseries(input: DateRangeInput = {}) {
+  const db = await getDb();
+  if (!db) return [];
+  const dateExpr = sql<string>`date(${visitorSessions.createdAt})`;
+  const conditions = [];
+  if (input.dateFrom) conditions.push(gte(visitorSessions.createdAt, input.dateFrom));
+  if (input.dateTo) conditions.push(lte(visitorSessions.createdAt, input.dateTo));
+  const rows = await db
+    .select({ date: dateExpr, sessionCount: sql<number>`count(*)`, pageViewCount: sql<number>`coalesce(sum(${visitorSessions.pageViewCount}), 0)` })
+    .from(visitorSessions)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .groupBy(dateExpr)
+    .orderBy(dateExpr);
+  return rows.map(row => ({ date: row.date, sessionCount: Number(row.sessionCount), pageViewCount: Number(row.pageViewCount) }));
 }
 
 /**
@@ -753,7 +808,7 @@ export async function getReturnRateOverview(input: DateRangeInput = {}): Promise
  *  round trips, and the two export functions below render from the exact
  *  same object so the downloaded file always matches what's on screen. */
 export async function getAnalyticsReport(input: DateRangeInput = {}) {
-  const [overview, revenueTimeseries, topProducts, topCategories, districtBreakdown, demographics, loyaltyTiers, ordersByChannel, cartAbandonment, inventory, profit, traffic, periodComparison, pnl, returnRate, cac, conversion, preferenceSegments, recommendationCoverage] = await Promise.all([
+  const [overview, revenueTimeseries, topProducts, topCategories, districtBreakdown, demographics, loyaltyTiers, ordersByChannel, cartAbandonment, inventory, profit, traffic, periodComparison, pnl, returnRate, cac, conversion, visitorSessionTimeseries, preferenceSegments, recommendationCoverage] = await Promise.all([
     getSalesOverview(input),
     getRevenueTimeseries(input),
     getTopProducts({ ...input, limit: 15 }),
@@ -771,10 +826,11 @@ export async function getAnalyticsReport(input: DateRangeInput = {}) {
     getReturnRateOverview(input),
     getCacOverview(input),
     getConversionOverview(input),
+    getVisitorSessionTimeseries(input),
     getPreferenceSegmentBreakdown(),
     getRecommendationCoverage(),
   ]);
-  return { overview, revenueTimeseries, topProducts, topCategories, districtBreakdown, demographics, loyaltyTiers, ordersByChannel, cartAbandonment, inventory, profit, traffic, periodComparison, pnl, returnRate, cac, conversion, preferenceSegments, recommendationCoverage };
+  return { overview, revenueTimeseries, topProducts, topCategories, districtBreakdown, demographics, loyaltyTiers, ordersByChannel, cartAbandonment, inventory, profit, traffic, periodComparison, pnl, returnRate, cac, conversion, visitorSessionTimeseries, preferenceSegments, recommendationCoverage };
 }
 
 type AnalyticsReport = Awaited<ReturnType<typeof getAnalyticsReport>>;

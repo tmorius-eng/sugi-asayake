@@ -9,6 +9,7 @@ import { arcPath, polarPoint } from "@/lib/svg-arc";
 import type { RouterOutputs } from "@/lib/trpc";
 import { genderLabels, skinTypeLabels as customerSkinTypeLabels, hairTypeLabels, skinConcernOptions } from "@shared/catalog-filter";
 import { formatMnt } from "@shared/format";
+import { buildDaySeries, rangeOptions, rangeToDates, type RangeKey } from "@/lib/analyticsRange";
 
 const preferenceSegmentLabelFor = (field: "gender" | "skinType" | "hairType" | "concern", value: string): string => {
   if (field === "gender") return genderLabels[value as keyof typeof genderLabels] ?? value;
@@ -29,37 +30,6 @@ const cacUnavailableCaption = (reason: AnalyticsReport["cac"]["unavailableReason
     default: return "Мэдээлэл дутуу байна.";
   }
 };
-
-type RangeKey = "7d" | "30d" | "90d" | "thisMonth" | "all";
-
-function rangeToDates(range: RangeKey): { dateFrom?: Date; dateTo?: Date } {
-  const now = new Date();
-  if (range === "all") return {};
-  if (range === "thisMonth") return { dateFrom: new Date(now.getFullYear(), now.getMonth(), 1) };
-  const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
-  return { dateFrom: new Date(now.getTime() - days * 24 * 60 * 60 * 1000) };
-}
-
-const rangeOptions: { key: RangeKey; label: string }[] = [
-  { key: "7d", label: "7 хоног" },
-  { key: "30d", label: "30 хоног" },
-  { key: "90d", label: "90 хоног" },
-  { key: "thisMonth", label: "Энэ сар" },
-  { key: "all", label: "Бүх цаг үе" },
-];
-
-/** Zero-fills a sparse day-keyed series (see getRevenueTimeseries's own doc
- *  comment: "days with zero orders are simply absent") into a fixed-length
- *  array indexed by day-offset from `from` -- required for a two-series
- *  sparkline overlay, which breaks if each series is merely "existing rows
- *  in order" rather than aligned to the same day-offset axis. */
-function buildDaySeries(rows: { date: string; revenueMnt: number; orderCount: number }[], from: Date, days: number, key: "revenueMnt" | "orderCount"): number[] {
-  const byDate = new Map(rows.map(row => [row.date, row]));
-  return Array.from({ length: days }, (_, i) => {
-    const day = new Date(from.getTime() + i * 86_400_000);
-    return byDate.get(day.toISOString().slice(0, 10))?.[key] ?? 0;
-  });
-}
 
 /** Rounds up to a "clean" scale (…, 1000, 2000, 5000, 10000, …) for the AOV
  *  gauge's max -- this app has no external "target AOV" to bind the gauge

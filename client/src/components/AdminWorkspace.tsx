@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
-import { Link } from "wouter";
-import { CheckCircle2, ChevronLeft, ChevronRight, ChartColumnIncreasing, Download, ExternalLink, FilePenLine, Home, ImageUp, LayoutDashboard, ListChecks, LoaderCircle, LogOut, Megaphone, PackagePlus, Pencil, Plug, Search, ShieldAlert, ShieldCheck, Star, Tag, Tags, Trash2, UsersRound } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, ExternalLink, ImageUp, LoaderCircle, PackagePlus, Pencil, Search, ShieldCheck, Tags, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { downloadCsv } from "@/lib/csv";
@@ -11,6 +10,8 @@ import AdminAnalyticsPanel from "./AdminAnalyticsPanel";
 import AdminBulkActionBar from "./AdminBulkActionBar";
 import AdminDashboardHome from "./AdminDashboardHome";
 import AdminGlobalSearch from "./AdminGlobalSearch";
+import AdminSidebar from "./admin/AdminSidebar";
+import AdminTopBar from "./admin/AdminTopBar";
 import AdminOperationsPanel from "./AdminOperationsPanel";
 import AdminReviewsPanel from "./AdminReviewsPanel";
 import AdminBrandsPanel from "./AdminBrandsPanel";
@@ -129,10 +130,11 @@ function TagSuggestionChips({ suggestions, current, labelFor, onApply }: { sugge
   ))}</div>;
 }
 
+export type AdminSection = "dashboard" | "analytics" | "products" | "orders" | "posts" | "reviews" | "routines" | "promotions" | "discountCodes" | "brands" | "users" | "media" | "security" | "integrations";
+
 export default function AdminWorkspace({ preview = false }: { preview?: boolean }) {
   const { user: currentUser, logout } = useAuth();
   const isFullAdmin = preview || currentUser?.role === "admin";
-  type AdminSection = "dashboard" | "analytics" | "products" | "orders" | "posts" | "reviews" | "routines" | "promotions" | "discountCodes" | "brands" | "users" | "media" | "security" | "integrations";
   const adminSectionKeys: AdminSection[] = ["dashboard", "products", "orders", "posts", "reviews", "routines", "promotions", "discountCodes", "brands", "media", "users", "analytics", "security", "integrations"];
   // 2026-09-04 (Tom, "does admin panel really work 100% functional?" audit):
   // section switching only ever lived in React state, never the URL --
@@ -172,6 +174,10 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
   // from the editable productForm fields.
   const [liveProductRef, setLiveProductRef] = useState<{ slug: string; isPublished: boolean } | null>(null);
   const [liveCategoryRef, setLiveCategoryRef] = useState<{ name: string; isActive: boolean } | null>(null);
+  // 2026-09-06: the new Gentelella-style shell's mobile nav drawer -- see
+  // AdminSidebar.tsx's own comment on why this is a plain toggle + the
+  // generic ui/sheet.tsx primitive, not ui/sidebar.tsx's shadcn Sidebar.
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [categoryForm, setCategoryForm] = useState<CategoryForm>(emptyCategory);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [selectedProductIds, setSelectedProductIds] = useState<Set<number>>(new Set());
@@ -181,7 +187,13 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
   const utils = trpc.useUtils();
   const productsQuery = trpc.admin.products.useQuery(undefined, { enabled: !preview });
   const categoriesQuery = trpc.admin.categories.useQuery(undefined, { enabled: !preview });
-  const usersQuery = trpc.admin.users.useQuery(undefined, { enabled: !preview });
+  // 2026-09-06: found while verifying the new dashboard's staff-redaction
+  // (a stray 403 console error) -- this was firing for EVERY non-preview
+  // session regardless of role, even though admin.users is adminProcedure
+  // and the "users" section itself is already hidden from staff. Harmless
+  // in effect (staff never saw the data, just a console 403), but a real
+  // pre-existing bug, not something this dashboard rebuild introduced.
+  const usersQuery = trpc.admin.users.useQuery(undefined, { enabled: !preview && isFullAdmin });
 
   const refreshCatalog = async () => {
     await Promise.all([utils.admin.products.invalidate(), utils.admin.categories.invalidate(), utils.catalog.list.invalidate()]);
@@ -429,51 +441,58 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
     }
   };
 
+  const sectionLabel = section === "dashboard" ? "Хянах самбар" : section === "products" ? "Бүтээгдэхүүн" : section === "orders" ? "Захиалга" : section === "posts" ? "Шинэ мэдээ" : section === "reviews" ? "Сэтгэгдэл" : section === "routines" ? "Routine" : section === "promotions" ? "Урамшуулал" : section === "discountCodes" ? "Хямдралын код" : section === "brands" ? "Топ брэндүүд" : section === "media" ? "Content & Media" : section === "analytics" ? "Аналитик" : section === "security" ? "Аюулгүй байдал" : section === "integrations" ? "Интеграцууд" : "Хэрэглэгч";
+  // Same query AdminDashboardHome makes (undefined input) -- React Query
+  // dedupes identical query keys, so this is a free cache read whenever
+  // the dashboard section already fetched it, and a real (still cheap)
+  // fetch otherwise. The bell needs a real count regardless of which
+  // section is currently open, not just while looking at the dashboard.
+  const notificationSummaryQuery = trpc.admin.dashboardSummary.useQuery(undefined, { enabled: !preview });
+  const notificationCount = preview ? 0 : (notificationSummaryQuery.data?.lowStockProducts.length ?? 0) + (notificationSummaryQuery.data?.failedPayments.length ?? 0);
+
   return (
-    <div className="min-h-full bg-[#f8f5ef] p-4 sm:p-7">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-7 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-[10px] font-extrabold tracking-[.17em] text-[#df1f3d]">{preview ? "ADMIN UI PROTOTYPE" : "SUGI ASAYAKE OPERATIONS"}</p>
-            <h1 className="mt-2 font-[var(--font-display)] text-4xl font-semibold tracking-[-.08em] sm:text-5xl">Дэлгүүрийн удирдлага.</h1>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-[#707176]">Бүтээгдэхүүн, шинэ мэдээ, хэрэглэгч, захиалгын мэдээлэл нэг хяналтын цэгт.</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <AdminGlobalSearch
-              preview={preview}
-              onSelectProduct={sku => { setSection("products"); setQuery(sku); setComposer(null); }}
-              onSelectOrder={orderNumber => { setSection("orders"); setQuery(orderNumber); setComposer(null); }}
-              onSelectUser={emailOrName => { setSection("users"); setQuery(emailOrName); setComposer(null); }}
-            />
-            {section === "products" && <button type="button" onClick={() => setShowProductExport(current => !current)} className="inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-4 py-3 text-xs font-bold text-[#57585e] transition hover:-translate-y-0.5 hover:border-[#df1f3d] hover:text-[#df1f3d] active:scale-[.97]"><Download size={15} />Экспорт</button>}
-            {section === "products" && <button type="button" onClick={() => openCategoryComposer()} className="inline-flex items-center justify-center gap-2 rounded-full border border-[#df1f3d]/25 bg-white px-4 py-3 text-xs font-bold text-[#b41831] transition hover:-translate-y-0.5 hover:border-[#df1f3d] active:scale-[.97]"><Tags size={15} />Ангилал</button>}
-            {section === "products" && <button type="button" onClick={() => openProductComposer()} className="inline-flex items-center justify-center gap-2 rounded-full bg-[#df1f3d] px-5 py-3 text-xs font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97]"><PackagePlus size={16} />Бүтээгдэхүүн нэмэх</button>}
-          </div>
-        </div>
-        {preview && <div className="mb-6 flex gap-3 rounded-2xl border border-[#e9ba62] bg-[#fff5dd] p-4 text-xs leading-5 text-[#6c531f]"><ShieldCheck className="mt-0.5 shrink-0" size={17} /><p><strong>Preview only.</strong> Энэ дэлгэц нь удирдлагын интерфэйсийн загвар юм. Бодит <code>/admin</code> зам нь нэвтэрсэн, <code>admin</code> эрхтэй хэрэглэгчдэд хамгаалагдсан.</p></div>}
-        <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
-          <aside className="rounded-3xl bg-[#17181b] p-3 text-white shadow-[0_16px_34px_rgba(20,22,24,.16)]">
-            <div className="border-b border-white/12 px-3 py-4"><p className="text-[10px] font-extrabold tracking-[.15em] text-[#f0b52d]">COMMERCE ADMIN</p><p className="mt-1 text-sm text-white/65">Custom backend ready</p></div>
-            <nav className="mt-3 grid gap-1">{[{ key: "dashboard", label: "Хянах самбар", Icon: LayoutDashboard }, { key: "products", label: "Бүтээгдэхүүн", Icon: PackagePlus }, { key: "orders", label: "Захиалга", Icon: CheckCircle2 }, { key: "posts", label: "Шинэ мэдээ", Icon: FilePenLine }, { key: "reviews", label: "Сэтгэгдэл", Icon: Star }, { key: "routines", label: "Routine", Icon: ListChecks }, { key: "promotions", label: "Урамшуулал", Icon: Megaphone }, { key: "discountCodes", label: "Хямдралын код", Icon: Tag }, { key: "brands", label: "Брэндүүд", Icon: Tags }, { key: "media", label: "Content & Media", Icon: ImageUp }, ...(isFullAdmin ? [{ key: "users", label: "Хэрэглэгч", Icon: UsersRound }, { key: "analytics", label: "Аналитик", Icon: ChartColumnIncreasing }, { key: "security", label: "Аюулгүй байдал", Icon: ShieldAlert }, { key: "integrations", label: "Интеграцууд", Icon: Plug }] : [])].map(({ key, label, Icon }) => <button type="button" key={key} onClick={() => { setSection(key as typeof section); setQuery(""); setComposer(null); }} className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-bold transition ${section === key ? "bg-white text-[#17181b]" : "text-white/70 hover:bg-white/10 hover:text-white"}`}><Icon size={17} />{label}</button>)}</nav>
-            <div className="mt-7 rounded-2xl bg-white/8 p-4"><span className="text-[10px] font-extrabold tracking-[.14em] text-[#f0b52d]">ACCESS</span><p className="mt-2 text-xs leading-5 text-white/66">Нэвтэрсэн админ л каталог, зураг, хэрэглэгчийн эрхийг өөрчилж чадна.</p></div>
-            {/* Tom, 2026-09-05: this was the ONLY place these 2 controls
-                existed -- a now-removed outer "SUGI CONTROL" shell
-                (DashboardLayout, a generic unused scaffold wrapping this
-                real admin panel) had its own separate sidebar footer with a
-                "Нүүр хуудас" link and Гарах/logout menu. Merging the 2
-                sidebars into this one meant those 2 controls needed a new
-                home, not just deletion. */}
-            <div className="mt-3 grid gap-1 border-t border-white/12 pt-3">
-              <Link href="/" className="flex items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-bold text-white/70 transition hover:bg-white/10 hover:text-white"><Home size={17} />Нүүр хуудас</Link>
-              <button type="button" onClick={logout} className="flex items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-bold text-white/70 transition hover:bg-white/10 hover:text-white"><LogOut size={17} />Гарах</button>
-            </div>
-          </aside>
+    <div className="flex min-h-screen bg-[#f8f5ef]">
+      <AdminSidebar
+        section={section}
+        isFullAdmin={isFullAdmin}
+        onSelect={target => { setSection(target); setQuery(""); setComposer(null); }}
+        userName={currentUser?.name ?? currentUser?.email ?? "Админ"}
+        userRoleLabel={currentUser?.role === "admin" ? "Admin" : currentUser?.role === "staff" ? "Staff" : "User"}
+        userAvatarUrl={currentUser?.avatarUrl ?? null}
+        mobileOpen={mobileSidebarOpen}
+        onMobileOpenChange={setMobileSidebarOpen}
+      />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <AdminTopBar
+          sectionLabel={sectionLabel}
+          onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
+          searchSlot={<AdminGlobalSearch
+            preview={preview}
+            onSelectProduct={sku => { setSection("products"); setQuery(sku); setComposer(null); }}
+            onSelectOrder={orderNumber => { setSection("orders"); setQuery(orderNumber); setComposer(null); }}
+            onSelectUser={emailOrName => { setSection("users"); setQuery(emailOrName); setComposer(null); }}
+          />}
+          notificationCount={notificationCount}
+          userName={currentUser?.name ?? currentUser?.email ?? "Админ"}
+          userRoleLabel={currentUser?.role === "admin" ? "Admin" : currentUser?.role === "staff" ? "Staff" : "User"}
+          userAvatarUrl={currentUser?.avatarUrl ?? null}
+          onLogout={logout}
+        />
+        <div className="mx-auto w-full max-w-7xl flex-1 p-4 sm:p-7">
+          {preview && <div className="mb-6 flex gap-3 rounded-2xl border border-[#e9ba62] bg-[#fff5dd] p-4 text-xs leading-5 text-[#6c531f]"><ShieldCheck className="mt-0.5 shrink-0" size={17} /><p><strong>Preview only.</strong> Энэ дэлгэц нь удирдлагын интерфэйсийн загвар юм. Бодит <code>/admin</code> зам нь нэвтэрсэн, <code>admin</code> эрхтэй хэрэглэгчдэд хамгаалагдсан.</p></div>}
           <section className="min-w-0 rounded-3xl bg-white p-5 shadow-[0_16px_34px_rgba(20,22,24,.05)] sm:p-7">
             <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div><h2 className="font-[var(--font-display)] text-2xl font-semibold tracking-[-.06em]">{section === "dashboard" ? "Хянах самбар" : section === "products" ? "Бүтээгдэхүүний сан" : section === "orders" ? "Захиалгын гүйцэтгэл" : section === "posts" ? "Шинэ бүтээгдэхүүний пост" : section === "reviews" ? "Сэтгэгдэл ба үнэлгээ" : section === "routines" ? "Routine (арчилгааны дараалал)" : section === "promotions" ? "Урамшуулал (попап/banner)" : section === "discountCodes" ? "Хямдралын код" : section === "brands" ? "Топ брэндүүд" : section === "media" ? "Content & Media" : section === "analytics" ? "Аналитик ба тайлан" : section === "security" ? "Аюулгүй байдал" : section === "integrations" ? "Интеграцууд" : "Хэрэглэгч ба эрх"}</h2><p className="mt-1 text-xs text-[#77787d]">{section === "dashboard" ? "Дэлгүүрийн ерөнхий байдал нэг дэлгэцэд" : section === "products" ? "SKU, үнэ, үлдэгдэл, нийтлэх төлөв" : section === "orders" ? "Төлбөрийн төлөв, хүргэлтийн явц, захиалгын мэдээлэл" : section === "posts" ? "Бодитоор хадгалагдах шинэ бүтээгдэхүүний мэдээ" : section === "reviews" ? "Баталгаажсан худалдан авалтын сэтгэгдэл, жижиг moderation" : section === "routines" ? "Алхам дараалалтай бүтээгдэхүүний багц, идэвхтэй хямдралтай" : section === "promotions" ? "Шинэ бүтээгдэхүүн, хямдрал зарлах попап/banner мессеж" : section === "discountCodes" ? "Захиалгын үед оруулах хямдралын код (жишээ нь SALE10)" : section === "brands" ? "Нүүр хуудасны 'Топ брэндүүд' хэсэгт харагдах бодит брэндүүд" : section === "media" ? "Нүүр хуудасны зураг болон текстийг кодгүйгээр солих" : section === "analytics" ? "Борлуулалт, ашиг, харилцагчийн бодит дата нэг дэлгэцэд" : section === "security" ? "Admin аудит лог болон нэвтрэлтийн түүх" : section === "integrations" ? "QPay, И-баримт, StorePay, карт, хүргэлтийн үйлчилгээ тохируулах" : "Шинэ хэрэглэгчийг урих болон staff/admin эрх удирдах"}</p></div>
-              {section !== "dashboard" && section !== "posts" && section !== "reviews" && section !== "routines" && section !== "promotions" && section !== "discountCodes" && section !== "brands" && section !== "media" && section !== "security" && section !== "integrations" && <label className="flex h-10 items-center gap-2 rounded-full border border-black/10 bg-[#fffdf9] px-4"><Search size={15} className="text-[#85868a]" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={section === "users" ? "Нэр эсвэл имэйл хайх" : section === "orders" ? "Дугаар, хэрэглэгч, утас хайх" : "Нэр, SKU хайх"} className="w-full bg-transparent text-xs outline-none" /></label>}
+              <div className="flex flex-wrap items-center gap-2">
+                {section === "products" && <>
+                  <button type="button" onClick={() => setShowProductExport(current => !current)} className="inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-4 py-3 text-xs font-bold text-[#57585e] transition hover:-translate-y-0.5 hover:border-[#df1f3d] hover:text-[#df1f3d] active:scale-[.97]"><Download size={15} />Экспорт</button>
+                  <button type="button" onClick={() => openCategoryComposer()} className="inline-flex items-center justify-center gap-2 rounded-full border border-[#df1f3d]/25 bg-white px-4 py-3 text-xs font-bold text-[#b41831] transition hover:-translate-y-0.5 hover:border-[#df1f3d] active:scale-[.97]"><Tags size={15} />Ангилал</button>
+                  <button type="button" onClick={() => openProductComposer()} className="inline-flex items-center justify-center gap-2 rounded-full bg-[#df1f3d] px-5 py-3 text-xs font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97]"><PackagePlus size={16} />Бүтээгдэхүүн нэмэх</button>
+                </>}
+                {section !== "dashboard" && section !== "posts" && section !== "reviews" && section !== "routines" && section !== "promotions" && section !== "discountCodes" && section !== "brands" && section !== "media" && section !== "security" && section !== "integrations" && <label className="flex h-10 items-center gap-2 rounded-full border border-black/10 bg-[#fffdf9] px-4"><Search size={15} className="text-[#85868a]" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={section === "users" ? "Нэр эсвэл имэйл хайх" : section === "orders" ? "Дугаар, хэрэглэгч, утас хайх" : "Нэр, SKU хайх"} className="w-full bg-transparent text-xs outline-none" /></label>}
+              </div>
             </div>
-            {section === "dashboard" && <AdminDashboardHome preview={preview} onNavigate={target => { setSection(target); setQuery(""); }} />}
+            {section === "dashboard" && <AdminDashboardHome preview={preview} isFullAdmin={isFullAdmin} onNavigate={target => { setSection(target); setQuery(""); }} />}
             {section === "security" && !preview && <AdminSecurityCenter />}
             {section === "security" && preview && <div className="rounded-3xl bg-[#f8f5ef] p-8 text-center text-sm text-[#707176]">Preview горимд аудит лог харагдахгүй.</div>}
             {section === "reviews" && !preview && <AdminReviewsPanel />}

@@ -1,27 +1,7 @@
 import { useState } from "react";
 import { CheckCircle2, ListFilter, LoaderCircle, LogIn, ShieldQuestion, XCircle } from "lucide-react";
 import { trpc } from "@/lib/trpc";
-
-const actionLabels: Record<string, string> = {
-  "staff_invitation.created": "Ажилтан урьсан",
-  "staff_invitation.revoked": "Урилга цуцалсан",
-  "user.role_updated": "Хэрэглэгчийн эрх өөрчилсөн",
-  "user.suspended": "Хэрэглэгчийг түр хаасан",
-  "user.unsuspended": "Хандалт сэргээсэн",
-  "user.force_logout": "Бүх төхөөрөмжөөс гаргасан",
-  "order.updated": "Захиалга шинэчилсэн",
-  "post.created": "Пост үүсгэсэн",
-  "post.updated": "Пост засварласан",
-  "post.deleted": "Пост устгасан",
-  "product.created": "Бүтээгдэхүүн үүсгэсэн",
-  "product.updated": "Бүтээгдэхүүн засварласан",
-  "product.deleted": "Бүтээгдэхүүн устгасан",
-  "category.created": "Ангилал үүсгэсэн",
-  "category.updated": "Ангилал засварласан",
-  "site_media.updated": "Медиа шинэчилсэн",
-  "site_media.cleared": "Медиа цэвэрлэсэн",
-};
-const actionLabel = (action: string) => actionLabels[action] ?? action;
+import { actionLabel, actionLabels } from "@/lib/adminAuditLabels";
 
 const reasonLabels: Record<string, string> = {
   invalid_credentials: "Имэйл/нууц үг буруу",
