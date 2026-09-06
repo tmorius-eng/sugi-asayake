@@ -262,8 +262,47 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .footer-social-link:hover { color: #fff; border-color: #ffd27a; background: rgba(255,210,122,.1); transform: translateY(-2px); }
 .footer-column { display: grid; align-content: start; gap: 9px; font-size: 12px; }
 .footer-column > span { margin-bottom: 8px; color: rgba(255,255,255,.48); font-size: 10px; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; }
-.footer-column a { color: rgba(255,255,255,.86); font-weight: 700; transition: color .18s var(--ease-out); }
-.footer-column a:hover { color: #ffd27a; }
+/* Silktide Consent Manager (2026-09-06) -- re-skinned to this site's own
+   design tokens instead of its bright-yellow/near-black defaults. Silktide
+   scopes its theming custom properties to #stcm-wrapper (confirmed by
+   reading client/public/vendor/silktide-consent-manager.css directly, not
+   assumed -- it's NOT on :root). Vite's own injected <link> for this
+   compiled stylesheet isn't guaranteed to load after the hand-written
+   vendor <link> in client/index.html's <head>, so these use !important on
+   purpose -- the standard, correct technique for overriding a 3rd-party
+   stylesheet's own declarations regardless of injection order, not a code
+   smell here. IDs (#stcm-wrapper/#stcm-banner/#stcm-modal/#stcm-icon) are
+   the library's own real selectors, verified against its source. */
+#stcm-wrapper {
+  --primaryColor: var(--accent) !important;
+  --backgroundColor: var(--surface-dark) !important;
+  --textColor: var(--foreground-inverse) !important;
+  --fontFamily: var(--font-body) !important;
+  --boxShadow: var(--shadow-lg) !important;
+  --iconColor: var(--surface-dark) !important;
+  --iconBackgroundColor: var(--accent) !important;
+}
+#stcm-banner, #stcm-modal { border-radius: 20px !important; }
+#stcm-wrapper .stcm-button { border-radius: 999px !important; font-weight: 800 !important; letter-spacing: .02em; }
+/* Silktide's own "Get this consent manager for free" credit link (in the
+   preferences modal footer) can't be removed via config -- its source
+   falls back to that default text via `||` whenever
+   config.text.preferences.creditLinkText is falsy, including "" (confirmed
+   by reading the source, not assumed) -- so hiding it via CSS is the only
+   real option short of hand-editing the vendored file (which would break
+   its verified-against-SRI-hash integrity). Same reasoning for
+   a.stcm-logo -- a 48px clickable Silktide-brand icon the banner itself
+   renders unconditionally (no config flag exists to omit it either),
+   linking away from this site to theirs. */
+#stcm-modal footer a.stcm-credit-link { display: none !important; }
+#stcm-banner a.stcm-logo { display: none !important; }
+
+.footer-column a, .footer-column-button { color: rgba(255,255,255,.86); font-weight: 700; transition: color .18s var(--ease-out); }
+.footer-column a:hover, .footer-column-button:hover { color: #ffd27a; }
+/* Resets default <button> chrome so "Күкийн тохиргоо" reads identically to
+   the <a> links beside it in the same column -- it's a button (triggers
+   Silktide's resetConsent(), not navigation) but shouldn't look like one. */
+.footer-column-button { background: none; border: none; padding: 0; margin: 0; font: inherit; text-align: left; cursor: pointer; }
 .footer-column small { margin-top: 8px; color: rgba(255,255,255,.46); }
 .footer-bottom { display: flex; justify-content: space-between; gap: 24px; padding: 20px max(34px, 7vw) 24px; border-top: 1px solid rgba(255,255,255,.14); color: rgba(255,255,255,.42); font-size: 10px; }
 

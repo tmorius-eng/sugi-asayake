@@ -24,6 +24,62 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Noto+Sans+Mongolian:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <!-- Silktide Consent Manager (2026-09-06) -- self-hosted per Tom's explicit
+         instruction, not the CDN-hosted default. The 2 files under
+         client/public/vendor/ are byte-verified against the vendor's published
+         SHA-384 SRI hashes (see git history / commit message for the exact
+         verification commands) before being committed, so this is a known-good,
+         pinned v2.0.1 copy -- update by re-downloading + re-verifying, not by
+         hand-editing. Real API/storage-key facts below were confirmed by reading
+         this exact shipped source, not the docs: consentTypes is a freely-defined
+         array (no fixed category set), choices are stored ONLY in localStorage
+         under literal keys `stcm.consent.${typeId}` (no namespace configured
+         here, so exactly `stcm.consent.essential` / `stcm.consent.analytics`),
+         and the value comparison this codebase relies on elsewhere
+         (client/src/lib/cookieConsent.ts) is the library's own literal
+         `value === 'true'` check. This site sets exactly 3 real cookies
+         (shared/const.ts) -- 2 strictly necessary (session, guest cart) and 1
+         first-party analytics cookie (sugi_visitor_session) gated behind the
+         "analytics" consentType below via that one localStorage read, not a
+         script-injection integration (no 3rd-party script exists anywhere in
+         this codebase to gate). -->
+    <link rel="stylesheet" href="/vendor/silktide-consent-manager.css">
+    <script src="/vendor/silktide-consent-manager.js"></script>
+    <script>
+      window.silktideConsentManager.init({
+        prompt: { position: "bottomRight" },
+        icon: { position: "bottomLeft" },
+        backdrop: { show: false },
+        consentTypes: [
+          {
+            id: "essential",
+            label: "Зайлшгүй шаардлагатай",
+            description: "Нэвтэрсэн төлөв, зочны сагсыг санах зэрэг сайтын үндсэн үйл ажиллагаанд шаардлагатай эхний талын күки. Унтраах боломжгүй.",
+            required: true,
+          },
+          {
+            id: "analytics",
+            label: "Статистик, аналитик",
+            description: "Зочдын хандалт, хөрвүүлэлтийн хувийг тооцоолоход туслах анонимчилсан, эхний талын күки. Гуравдагч тал (Google Analytics, Meta Pixel гэх мэт) огт ашигладаггүй.",
+            required: false,
+            defaultValue: false,
+          },
+        ],
+        text: {
+          prompt: {
+            description: "Бид энэ сайтад зайлшгүй шаардлагатай күки, мөн таны зөвшөөрснөөр сайтын статистик цуглуулах анонимчилсан күки ашигладаг.",
+            acceptAllButtonText: "Бүгдийг зөвшөөрөх",
+            rejectNonEssentialButtonText: "Зөвхөн шаардлагатайг зөвшөөрөх",
+            preferencesButtonText: "Тохиргоо",
+          },
+          preferences: {
+            title: "Күкийн тохиргоо",
+            description: "SUGI ASAYAKE Mongolia ямар күки ашигладгийг доор харж, зөвшөөрлөө өөрчлөх боломжтой.",
+            saveButtonText: "Тохиргоог хадгалах",
+          },
+        },
+      });
+    </script>
     <!-- THIS IS THE START OF A COMMENT BLOCK, BLOCK TO BE DELETED: Google Fonts here, example:
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

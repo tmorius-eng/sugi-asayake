@@ -65,6 +65,17 @@ export default function SiteFooter({ logoUrl, socials, ctaBanner }: { logoUrl: s
           <Link href="/privacy">Хувийн нууцлал</Link>
           <Link href="/terms">Үйлчилгээний нөхцөл</Link>
           <Link href="/returns">Буцаалт, солилцоо</Link>
+          {/* 2026-09-06: resetConsent() is Silktide Consent Manager's own
+              documented public method (client/public/vendor/silktide-consent-
+              manager.js) -- re-shows the initial Accept/Reject/Preferences
+              prompt (which itself has a "Тохиргоо" button into the granular
+              modal). Deliberately NOT the undocumented #stcm-icon click-
+              simulation trick some blog posts use to jump straight to
+              preferences -- that's unsupported and could silently break on a
+              future Silktide version. A <button>, not a <Link>: this
+              triggers JS, not navigation. Optional chaining throughout so a
+              blocked/failed script load never throws here. */}
+          <button type="button" onClick={() => window.silktideConsentManager?.resetConsent?.()} className="footer-column-button">Күкийн тохиргоо</button>
         </div>
         <div className="footer-column">
           <span>Холбоо барих</span>
