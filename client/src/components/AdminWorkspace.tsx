@@ -13,6 +13,7 @@ import AdminGlobalSearch from "./AdminGlobalSearch";
 import AdminSidebar from "./admin/AdminSidebar";
 import AdminTopBar from "./admin/AdminTopBar";
 import AdminOperationsPanel from "./AdminOperationsPanel";
+import AdminPostsPanel from "./AdminPostsPanel";
 import AdminReviewsPanel from "./AdminReviewsPanel";
 import AdminBrandsPanel from "./AdminBrandsPanel";
 import AdminDiscountCodesPanel from "./AdminDiscountCodesPanel";
@@ -528,8 +529,8 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
                 </div>
               </div>}
             </>}
-            {section === "orders" && <AdminOperationsPanel section="orders" preview={preview} query={query} />}
-            {section === "posts" && <AdminOperationsPanel section="posts" preview={preview} />}
+            {section === "orders" && <AdminOperationsPanel preview={preview} query={query} />}
+            {section === "posts" && <AdminPostsPanel preview={preview} />}
             {section === "media" && (
               <>
                 <div className="mb-5 inline-flex rounded-full border border-black/10 bg-white p-1">
