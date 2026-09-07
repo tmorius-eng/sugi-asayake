@@ -98,7 +98,15 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
           </div>
           <div className="commerce-header-actions">
             <HeaderSearch />
-            <Link href="/shop" className={location.startsWith("/shop") ? "is-current" : ""}>Дэлгүүр</Link>
+            {/* 2026-09-07: real duplicate, caught live (Tom's own screenshot) --
+                marketingNavItems (Home only) already leads with "Дэлгүүр" on
+                the left; this plain-text link is only needed on every OTHER
+                page, where there's no marketing nav to provide it. The mobile
+                drawer already avoided this exact duplication (its own
+                marketingNavItems.filter(item => item.label !== "Дэлгүүр")
+                below) -- this brings desktop in line with that, rather than
+                inventing a new pattern. */}
+            {!marketingNav && <Link href="/shop" className={location.startsWith("/shop") ? "is-current" : ""}>Дэлгүүр</Link>}
             {user && (
               <Link href="/profile?tab=wishlist" className="wishlist-link" aria-label={wishlistCount > 0 ? `Хүслийн жагсаалт, ${wishlistCount} бараатай` : "Хүслийн жагсаалт"}>
                 <Heart size={15} aria-hidden="true" /> Хүслийн жагсаалт

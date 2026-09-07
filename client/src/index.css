@@ -176,7 +176,20 @@
 }
 
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+/* 2026-09-07 (Tom, reported as "little gap on the right side, /checkout,
+   mobile"): that strip is the SCROLLBAR GUTTER, not a layout bug -- Chrome
+   DevTools' device toolbar renders a real, space-reserving scrollbar (~25px
+   of a 400px emulated viewport), so every in-flow element correctly sizes to
+   the remaining clientWidth and html's own background shows through beside
+   it. Verified with headless measurement: on a clean load the header and
+   footer both span exactly 0->viewport width, no gap, and Tom's own
+   screenshot shows the scrollbar thumb sitting in that strip. Real phones
+   use overlay scrollbars and reserve no space, so they never show it.
+   Nothing to "fix" structurally -- but a default OS scrollbar in that gutter
+   reads as a broken pale void next to this site's cream/dark sections, so
+   theme it: thin, brand-warm thumb on the site's own background. No effect
+   on overlay-scrollbar platforms (real mobile), where these are ignored. */
+html { scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: #c4bfb5 var(--background); }
 body { margin: 0; background: var(--background); color: var(--foreground); font-family: var(--font-body); font-size: 16px; line-height: 1.55; }
 a { color: inherit; text-decoration: none; }
 img { display: block; max-width: 100%; }
@@ -355,8 +368,24 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    above for this same vendor file -- shifts the icon to float just above
    the new bar instead of overlapping it. Desktop (>760px, no bottom bar)
    is untouched -- the icon keeps its original 10px position there. */
+/* 2026-09-07: same collision, but for the FIRST-VISIT banner itself -- the
+   icon above was lifted clear of the bottom bar back on 09-07's mobile pass,
+   #stcm-banner never was. Found the hard way: an automated click on
+   BottomNavBar's cart tab was blocked for 30s straight by
+   "<div id='stcm-banner'> ... intercepts pointer events", because the
+   vendor CSS pins the banner at `bottom: 16px` (position:fixed, near
+   full-width on mobile via `max-width: calc(100% - 32px)`) -- directly on
+   top of the bar. Unlike the icon, this one hits EVERY first-time mobile
+   visitor before they've chosen anything, so the primary nav is
+   unusable until the banner is dismissed. Lifts it above the bar and
+   shrinks max-height to match, so a tall banner still can't run off the
+   top. Desktop (>760px, no bottom bar) keeps the vendor's own 16px. */
 @media (max-width: 760px) {
   #stcm-icon { bottom: calc(var(--mobile-sticky-bar-h) + var(--safe-bottom) + 10px) !important; }
+  #stcm-banner {
+    bottom: calc(var(--mobile-sticky-bar-h) + var(--safe-bottom) + 16px) !important;
+    max-height: calc(100vh - var(--mobile-sticky-bar-h) - var(--safe-bottom) - 32px) !important;
+  }
 }
 
 .footer-column a, .footer-column-button { color: rgba(255,255,255,.86); font-weight: 700; transition: color .18s var(--ease-out); }
@@ -1213,6 +1242,13 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .carousel-shelf-outer { position: relative; }
 .carousel-shelf-track { display: flex; gap: 16px; overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 6px; scrollbar-width: none; }
 .carousel-shelf-track::-webkit-scrollbar { display: none; }
+/* 2026-09-07 (Tom, real screenshot): Checkout's ORDER SUMMARY cart-item list
+   -- a short, compact scroll region on a dark sidebar card -- was showing
+   the browser's chunky default scrollbar (arrows and all), clashing badly
+   with the design. Same hide-the-chrome-keep-the-scroll technique as
+   .carousel-shelf-track/.admin-sidebar-nav above, not a new pattern. */
+.order-summary-scroll { scrollbar-width: none; }
+.order-summary-scroll::-webkit-scrollbar { display: none; }
 
 /* Admin sidebar nav (2026-09-06): still scrollable on a short viewport
    where all 14 sections don't fit -- just without a visible scrollbar
