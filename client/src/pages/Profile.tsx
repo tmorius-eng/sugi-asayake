@@ -21,6 +21,7 @@ import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
 import { LineSkeleton, Skeleton } from "@/components/Skeleton";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
+import { notifyAddedToCart } from "@/lib/addedToCartToast";
 import { trpc } from "@/lib/trpc";
 import type { RouterOutputs } from "@/lib/trpc";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
@@ -278,7 +279,7 @@ function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
     }
     setBuyingAgainId(null);
     await utils.cart.current.invalidate();
-    if (added) { toast.success(`${added} бараа сагсанд нэмэгдлээ.`); onCartOpen(); }
+    if (added) { notifyAddedToCart(`${added} бараа сагсанд нэмэгдлээ.`); onCartOpen(); }
     else toast.error("Нэмэгдсэн бараа алга — нөөц дууссан байж магадгүй.");
   };
 
@@ -508,7 +509,7 @@ function WishlistTab({ onCartOpen }: { onCartOpen: () => void }) {
                 <Link href={`/product/${item.slug}`} style={{ color: "inherit" }}><h3>{item.name}</h3></Link>
                 <strong>{formatMnt(item.priceMnt)}</strong>
                 {item.stockQuantity > 0 ? (
-                  <button type="button" onClick={() => addItem.mutate({ productId: item.productId, quantity: 1 })} className="button button-primary" style={{ marginTop: "10px", width: "100%", minHeight: "38px", fontSize: "10px" }}>
+                  <button type="button" onClick={() => addItem.mutate({ productId: item.productId, quantity: 1 }, { onSuccess: () => notifyAddedToCart(`${item.name} сагсанд нэмэгдлээ.`) })} className="button button-primary" style={{ marginTop: "10px", width: "100%", minHeight: "38px", fontSize: "10px" }}>
                     <ShoppingBag size={13} /> Сагслах
                   </button>
                 ) : (

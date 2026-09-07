@@ -592,6 +592,46 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 
 .pd-sticky-cart { align-items: center; gap: 12px; padding: 0 16px; }
 
+/* Add-to-cart confirmation toast (bsb.mn reference, 2026-09-07) -- see
+   AddedToCartToast.tsx for the motion/color reasoning. z-[80]: one tier
+   above .site-promo popup's z-[70] (the highest existing tier), so this
+   toast can overlap an already-open CartDrawer (Sheet, z-50) the same way
+   bsb.mn's own toast overlapped their open cart drawer. bottom:24px is the
+   desktop default (no sticky bottom bar to clear there); the media query
+   below adds --mobile-sticky-bar-h/--safe-bottom only under 760px, matching
+   how .site-footer/#stcm-icon already handle the same two mobile-only bars. */
+/* left:78px (not the usual 16px both sides) -- measured collision, not a
+   guess: Silktide's persistent #stcm-icon (silktide-consent-manager.css)
+   sits fixed at bottom-left, left:10px, 60px wide, on every page/width, so
+   a centered 16px-inset toast overlapped it on anything narrower than
+   roughly 550px (confirmed via getBoundingClientRect on a 433px-wide test).
+   78px clears the icon's right edge (70px) with a small gap; max-width +
+   margin:auto still re-centers this within whatever room is left on wider
+   viewports, where the extra left inset is imperceptible. */
+.added-to-cart-toast { position: fixed; left: 78px; right: 16px; bottom: 24px; z-index: 80; display: flex; align-items: center; gap: 10px; max-width: 380px; margin: 0 auto; padding: 13px 14px; border-radius: 14px; background: #17181b; color: #fff; box-shadow: 0 18px 40px rgba(0,0,0,.28); transform: translateY(140%); opacity: 0; pointer-events: none; transition: transform .38s cubic-bezier(.16,1,.3,1), opacity .3s ease; overflow: hidden; }
+.added-to-cart-toast.is-visible { transform: translateY(0); opacity: 1; pointer-events: auto; }
+.added-to-cart-toast-icon { display: grid; flex: 0 0 auto; width: 24px; height: 24px; place-items: center; border-radius: 50%; background: #f0b52d; color: #17181b; }
+.added-to-cart-toast p { flex: 1; margin: 0; font-size: 12.5px; font-weight: 700; line-height: 1.4; }
+.added-to-cart-toast button { flex: 0 0 auto; color: rgba(255,255,255,.6); transition: color .18s var(--ease-out); }
+.added-to-cart-toast button:hover { color: #fff; }
+.added-to-cart-toast-bar { position: absolute; bottom: 0; left: 0; height: 3px; background: var(--primary); animation-name: added-to-cart-bar-deplete; animation-timing-function: linear; animation-fill-mode: forwards; }
+@keyframes added-to-cart-bar-deplete { from { width: 100%; } to { width: 0%; } }
+@media (max-width: 760px) { .added-to-cart-toast { bottom: calc(var(--mobile-sticky-bar-h) + var(--safe-bottom) + 14px); } }
+/* Same 24/7-ribbon precedent (Tom, 2026-09-01: sunrise/shop ribbons, and the
+   promo ticker after it) -- the blanket reduced-motion rule above crushes
+   EVERY animation-duration to .01ms, which for this bar would freeze it at
+   100% width forever (its whole point is visibly counting down to the
+   moment the toast dismisses) rather than just skipping a cosmetic flourish.
+   Restores the real 3200ms (DURATION_MS in AddedToCartToast.tsx -- keep
+   these two in sync if that constant ever changes) so the bar still
+   genuinely depletes. animation-iteration-count:1 from the blanket rule is
+   left as-is -- this bar only ever plays once regardless. The toast's own
+   slide-in/out transition is deliberately NOT exempted here (a single
+   non-repeating position change that just snaps instead of easing under
+   reduced motion -- normal, expected transition-reduction behavior, not
+   the "looks permanently stuck" failure mode the bar and the ribbons share). */
+@media (prefers-reduced-motion: reduce) { .added-to-cart-toast-bar { animation-duration: 3200ms !important; } }
+
 /* Design consistency audit (2026-09-02): mobile hamburger + slide-down
    drawer for CommerceHeader, restoring the "Дэлгүүр"/wishlist links the
    @media(max-width:760px) rule below hides from the top bar on mobile.

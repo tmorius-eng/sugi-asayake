@@ -6,6 +6,7 @@ import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
 import SiteFooter from "@/components/SiteFooter";
 import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
+import { notifyAddedToCart } from "@/lib/addedToCartToast";
 import { trpc } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
 
@@ -53,7 +54,7 @@ export default function RoutineDetail() {
     setIsAddingAll(false);
     await utils.cart.current.invalidate();
     if (added > 0) {
-      toast.success(skipped > 0 ? `${added} бараа сагсанд орлоо (${skipped} нөөцгүй тул алгассан).` : `Бүх ${added} бараа сагсанд орлоо.`);
+      notifyAddedToCart(skipped > 0 ? `${added} бараа сагсанд орлоо (${skipped} нөөцгүй тул алгассан).` : `Бүх ${added} бараа сагсанд орлоо.`);
       setCartOpen(true);
     } else {
       toast.error("Одоогоор бүх бараа нөөцгүй байна.");

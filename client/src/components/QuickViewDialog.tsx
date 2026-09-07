@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import VariantPicker from "@/components/VariantPicker";
+import { notifyAddedToCart } from "@/lib/addedToCartToast";
 import { trpc } from "@/lib/trpc";
 import { getCategoryPlaceholderImage, getSalePercent } from "@shared/catalog-filter";
 import { formatMnt } from "@shared/format";
@@ -38,7 +39,7 @@ export default function QuickViewDialog({ open, product, onOpenChange, onAdded }
   const addItem = trpc.cart.addItem.useMutation({
     onSuccess: () => {
       utils.cart.current.invalidate();
-      toast.success("Сагсанд нэмэгдлээ.");
+      notifyAddedToCart(`${display?.name ?? "Бараа"} сагсанд нэмэгдлээ.`);
       onOpenChange(false);
       onAdded();
     },

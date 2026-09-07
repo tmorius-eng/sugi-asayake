@@ -13,6 +13,7 @@ import ShelfProductCard from "@/components/home/ShelfProductCard";
 import SiteFooter from "@/components/SiteFooter";
 import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { notifyAddedToCart } from "@/lib/addedToCartToast";
 import { trpc } from "@/lib/trpc";
 import { getCategoryPlaceholderImage, getSalePercent, getStockStatusLabel } from "@shared/catalog-filter";
 import { UB_DELIVERY_FEE_MNT } from "@shared/const";
@@ -36,10 +37,13 @@ function StarRating({ value, size = 14 }: { value: number; size?: number }) {
 // PREMIUM-FEATURES.md TIER 4: "Хамт авбал тохирно" / "Routine-оо дуусга" —
 // shown only when this product is actually a step of a published routine.
 // 2026-09-07: `onAdded` opens the shared CartDrawer instead of this
-// function's own separate toast -- found during the bsb.mn mobile-UX pass
-// that this was the ONE add-to-cart entry point on this page that behaved
-// differently from the page's main add-to-cart button (which opens the
-// drawer, no toast). Both now behave identically.
+// function's own separate sonner toast.success -- found during the bsb.mn
+// mobile-UX pass that this was the ONE add-to-cart entry point on this page
+// that behaved differently from the page's main add-to-cart button (which
+// opens the drawer, no toast). Both now behave identically, and both fire
+// the new notifyAddedToCart() confirmation toast (AddedToCartToast.tsx) on
+// top of opening the drawer -- matching bsb.mn's own real behavior of
+// showing both at once.
 function RoutineCrossSell({ productId, onAdded }: { productId: number; onAdded: () => void }) {
   const utils = trpc.useUtils();
   const routineQuery = trpc.routines.forProduct.useQuery({ productId });
@@ -59,7 +63,7 @@ function RoutineCrossSell({ productId, onAdded }: { productId: number; onAdded: 
     <div className="mt-5 grid gap-3 sm:grid-cols-2">
       {otherSteps.map(step => <div key={step.id} className="flex items-center gap-3 rounded-xl bg-white p-3">
         <Link href={`/product/${step.slug}`} className="flex min-w-0 flex-1 items-center gap-3"><img src={step.imageUrl ?? previewGallery[0]} alt={step.name} loading="lazy" className="size-12 shrink-0 rounded-lg object-cover" /><span className="min-w-0"><span className="block text-[10px] font-bold text-[#df1f3d]">{step.stepLabel}</span><strong className="block truncate text-xs">{step.name}</strong><span className="text-[11px] text-[#6f7076]">{formatMnt(step.priceMnt)}</span></span></Link>
-        <button type="button" disabled={addItem.isPending || step.stockQuantity === 0} onClick={() => addItem.mutate({ productId: step.productId, quantity: 1 })} className="shrink-0 rounded-full bg-[#17181b] p-2.5 text-white transition hover:bg-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-40" aria-label={`${step.name} сагслах`}><ShoppingBag size={14} /></button>
+        <button type="button" disabled={addItem.isPending || step.stockQuantity === 0} onClick={() => addItem.mutate({ productId: step.productId, quantity: 1 }, { onSuccess: () => notifyAddedToCart(`${step.name} сагсанд нэмэгдлээ.`) })} className="shrink-0 rounded-full bg-[#17181b] p-2.5 text-white transition hover:bg-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-40" aria-label={`${step.name} сагслах`}><ShoppingBag size={14} /></button>
       </div>)}
     </div>
     <Link href={`/routine/${routine.slug}`} className="mt-5 inline-flex items-center gap-2 text-xs font-bold text-[#df1f3d] hover:underline"><Sparkles size={14} /> Бүтэн routine-г үзэх</Link>
@@ -138,7 +142,7 @@ export default function ProductDetail() {
   const utils = trpc.useUtils();
   const productQuery = trpc.catalog.bySlug.useQuery({ slug: params?.slug ?? "hada-labo-gokujyun-lotion" });
   const cartQuery = trpc.cart.current.useQuery();
-  const addItem = trpc.cart.addItem.useMutation({ onSuccess: () => { utils.cart.current.invalidate(); setCartOpen(true); }, onError: error => toast.error(messageFrom(error)) });
+  const addItem = trpc.cart.addItem.useMutation({ onSuccess: () => { utils.cart.current.invalidate(); setCartOpen(true); notifyAddedToCart(`${product?.name ?? "Бараа"} сагсанд нэмэгдлээ.`); }, onError: error => toast.error(messageFrom(error)) });
   const product = productQuery.data;
   const cartCount = cartQuery.data?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   // PHASE 2 of product variants: only queried to find out whether this
