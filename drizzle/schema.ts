@@ -622,6 +622,20 @@ export const posts = mysqlTable("posts", {
   coverImageUrl: text("coverImageUrl"),
   isPublished: boolean("isPublished").notNull().default(false),
   publishedAt: timestamp("publishedAt"),
+  // 2026-09-07 (WordPress-parity admin editor rebuild): soft-delete (Trash,
+  // matching WP's Trash/Restore/"Delete Permanently" 3-state flow instead of
+  // the previous hard delete), SEO fields (this codebase had zero per-entity
+  // SEO-field precedent anywhere before this — replaces WP's rarely-useful
+  // "Custom Fields" box with something that actually plugs a real gap), and
+  // `format` (WP post format — stored for fidelity with the reference
+  // screenshot; no template branches on it yet, same as most real WP themes).
+  // Scheduling deliberately reuses publishedAt/isPublished rather than adding
+  // a status enum — see getPublishedPosts/getPublishedPostBySlug's
+  // `publishedAt <= NOW()` gate in server/db.ts.
+  deletedAt: timestamp("deletedAt"),
+  metaTitle: varchar("metaTitle", { length: 70 }),
+  metaDescription: varchar("metaDescription", { length: 160 }),
+  format: varchar("format", { length: 20 }).notNull().default("standard"),
   // RESTRICT: content should never silently disappear because its author's
   // account was removed — reassign/delete the posts first.
   createdByUserId: int("createdByUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
@@ -630,6 +644,66 @@ export const posts = mysqlTable("posts", {
 }, table => [
   index("posts_published_idx").on(table.isPublished),
   index("posts_created_by_idx").on(table.createdByUserId),
+  index("posts_deleted_idx").on(table.deletedAt),
+]);
+
+// 2026-09-07: post taxonomy (WordPress-parity editor). Flat (no parent/child
+// nesting — not worth the complexity at this blog's scale). Many-to-many via
+// join tables, same shape as productCategories' relationship to products
+// elsewhere in this file.
+export const postCategories = mysqlTable("post_categories", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 80 }).notNull().unique(),
+  slug: varchar("slug", { length: 100 }).notNull().unique(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const postCategoryLinks = mysqlTable("post_category_links", {
+  id: int("id").autoincrement().primaryKey(),
+  postId: int("postId").notNull().references(() => posts.id, { onDelete: "cascade" }),
+  categoryId: int("categoryId").notNull().references(() => postCategories.id, { onDelete: "cascade" }),
+}, table => [
+  uniqueIndex("post_category_links_unique").on(table.postId, table.categoryId),
+  index("post_category_links_category_idx").on(table.categoryId),
+]);
+
+// Tags are free-text, created on the fly by name (matches WordPress's tag
+// input behavior) rather than picked from a fixed admin-managed list like
+// categories.
+export const postTags = mysqlTable("post_tags", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 60 }).notNull().unique(),
+  slug: varchar("slug", { length: 80 }).notNull().unique(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const postTagLinks = mysqlTable("post_tag_links", {
+  id: int("id").autoincrement().primaryKey(),
+  postId: int("postId").notNull().references(() => posts.id, { onDelete: "cascade" }),
+  tagId: int("tagId").notNull().references(() => postTags.id, { onDelete: "cascade" }),
+}, table => [
+  uniqueIndex("post_tag_links_unique").on(table.postId, table.tagId),
+  index("post_tag_links_tag_idx").on(table.tagId),
+]);
+
+// 2026-09-07: real media library backing the new Posts editor's "Add Media"
+// modal (no such concept existed anywhere in this codebase before — every
+// prior upload surface was "pick one new file, fill exactly one URL slot").
+// Every upload through admin.uploadMedia records a row here so the library
+// can be listed/searched fast without a live R2 bucket scan. Deliberately
+// scoped to the new upload path only — existing product-image/site-media
+// uploads are untouched.
+export const mediaLibrary = mysqlTable("media_library", {
+  id: int("id").autoincrement().primaryKey(),
+  key: varchar("key", { length: 500 }).notNull(),
+  url: varchar("url", { length: 500 }).notNull(),
+  fileName: varchar("fileName", { length: 200 }).notNull(),
+  contentType: varchar("contentType", { length: 50 }).notNull(),
+  sizeBytes: int("sizeBytes").notNull(),
+  uploadedByUserId: int("uploadedByUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  index("media_library_created_idx").on(table.createdAt),
 ]);
 
 export const siteMedia = mysqlTable("site_media", {

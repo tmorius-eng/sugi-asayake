@@ -68,6 +68,11 @@ export default function Journal() {
                   )}
                 </div>
                 <div className="flex flex-1 flex-col p-6">
+                  {post.categories.length > 0 && (
+                    <div className="mb-1.5 flex flex-wrap gap-1.5">
+                      {post.categories.map(category => <span key={category.id} className="rounded-full bg-[#eef3f1] px-2 py-0.5 text-[10px] font-bold text-[#3970a7]">{category.name}</span>)}
+                    </div>
+                  )}
                   {post.publishedAt && <span className="text-[10px] font-extrabold tracking-[.12em] text-[#c81b34]">{formatDate(post.publishedAt)}</span>}
                   <h3 className="mt-2 font-[var(--font-display)] text-lg font-semibold tracking-[-.03em]">{post.title}</h3>
                   {post.excerpt && <p className="mt-2 line-clamp-2 flex-1 text-[13px] leading-6 text-[#74757a]">{post.excerpt}</p>}

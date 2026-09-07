@@ -22,6 +22,7 @@ import {
   clearWishlistNotifyFlagsForProduct,
   createAdminCategory,
   createAdminPost,
+  createAdminPostCategory,
   createAdminProduct,
   createAdminProductVariant,
   createAdminDiscountCode,
@@ -51,7 +52,9 @@ import {
   deleteUserAccount,
   deleteUserAddress,
   discountCodeExists,
-  deleteAdminPost,
+  trashAdminPost,
+  restoreAdminPost,
+  permanentlyDeleteAdminPost,
   deleteAdminProduct,
   deleteAdminProductVariant,
   getActiveSitePromotion,
@@ -63,6 +66,9 @@ import {
   getAdminDashboardSummary,
   getAdminOrders,
   getAdminPosts,
+  getAdminPostCategories,
+  getAdminMediaLibrary,
+  insertMediaLibraryItem,
   getAdminProducts,
   getAdminProductVariants,
   getAdminReviews,
@@ -103,6 +109,7 @@ import {
   logAdminAction,
   mergeGuestCartIntoUserCart,
   postSlugExists,
+  postCategoryNameExists,
   recordLoginAttempt,
   // verify.mn phone verification (2026-09-05) -- see server/verifyMn.ts
   findUserByPhone,
@@ -256,18 +263,44 @@ const categoryUpdateSchema = categoryWriteSchema.partial().extend({ id: z.number
   { message: "Provide at least one category field to update." },
 );
 
+// 2026-09-07 (WordPress-parity admin editor rebuild): content max raised
+// 30_000 -> 200_000 -- real formatted HTML (headings/lists/links/inline
+// images) from TinyMCE runs far larger per character than the plain text the
+// old textarea produced. postFormats mirrors WordPress's 8 built-in post
+// formats (stored for visual fidelity with the reference screenshot; no
+// template branches on it yet -- true of most real WP themes too).
+const postFormats = ["standard", "aside", "image", "video", "audio", "quote", "link", "gallery"] as const;
 const postWriteSchema = z.object({
   title: z.string().trim().min(3).max(220),
   slug: slugSchema,
   excerpt: nullableText(1_000),
-  content: z.string().trim().min(10).max(30_000),
+  content: z.string().trim().min(10).max(200_000),
   coverImageUrl: nullableText(1_000),
   isPublished: z.boolean(),
+  metaTitle: nullableText(70),
+  metaDescription: nullableText(160),
+  format: z.enum(postFormats).default("standard"),
+  // No `.default([])` here: postUpdateSchema is `postWriteSchema.partial()`,
+  // and a real bug (caught by server/posts.integration.test.ts) showed a
+  // zod default still gets applied when a partial call simply omits the
+  // key -- turning "I didn't mention categories" into "set categories to
+  // empty" and silently wiping them on an update that only meant to change
+  // tags. `.optional()` (no default) lets `attachPostTaxonomy` correctly
+  // tell "omitted, leave alone" apart from "explicitly []", matching every
+  // other field on this schema's partial-update semantics.
+  categoryIds: z.array(z.number().int().positive()).max(20).optional(),
+  tagNames: z.array(z.string().trim().min(1).max(60)).max(30).optional(),
+  // When present and in the future, schedules the post rather than
+  // publishing it immediately -- see getPublishedPosts/getPublishedPostBySlug's
+  // `publishedAt <= NOW()` gate in server/db.ts for how this is enforced with
+  // no cron/worker involved.
+  publishAt: z.coerce.date().nullable().optional(),
 });
 const postUpdateSchema = postWriteSchema.partial().extend({ id: z.number().int().positive() }).refine(
   value => Object.keys(value).some(key => key !== "id"),
   { message: "Provide at least one post field to update." },
 );
+const postCategoryWriteSchema = z.object({ name: z.string().trim().min(1).max(80) });
 // NEWVISION.md §5 "Топ брэндүүд" -- brandName is validated server-side too
 // (see createFeaturedBrand's caller below), but the real guarantee that it
 // matches an existing products.brand value is the admin UI only offering a
@@ -487,6 +520,12 @@ async function validateCategoryWrite(input: { slug?: string; id?: number }) {
 async function validatePostSlug(slug?: string, id?: number) {
   if (slug && await postSlugExists(slug, id)) {
     throw new TRPCError({ code: "CONFLICT", message: "This post URL slug is already in use." });
+  }
+}
+
+async function validatePostCategoryName(name: string) {
+  if (await postCategoryNameExists(name)) {
+    throw new TRPCError({ code: "CONFLICT", message: "Энэ нэртэй ангилал аль хэдийн байна." });
   }
 }
 
@@ -819,7 +858,17 @@ export const appRouter = router({
     // page doesn't read as "fetch the latest posts" for what's actually
     // every published post.
     allPosts: publicProcedure.query(() => getPublishedPosts()),
-    bySlug: publicProcedure.input(z.object({ slug: z.string().min(1).max(240) })).query(({ input }) => getPublishedPostBySlug(input.slug)),
+    // publicProcedure, not staffProcedure: a guest reading a real published
+    // post is the overwhelmingly common case. The staff/admin bypass below
+    // is what makes "Preview" (AdminPostsPanel.tsx) work on an unpublished
+    // or not-yet-scheduled post -- ctx.user is populated from the session
+    // cookie on every request regardless of the calling procedure's public/
+    // protected status (verified in server/_core/context.ts), so this can
+    // branch on role without needing a second procedure.
+    bySlug: publicProcedure.input(z.object({ slug: z.string().min(1).max(240) })).query(({ ctx, input }) => {
+      const bypassGate = ctx.user?.role === "staff" || ctx.user?.role === "admin";
+      return getPublishedPostBySlug(input.slug, { bypassGate });
+    }),
     siteMedia: publicProcedure.query(() => getSiteMedia()),
     siteText: publicProcedure.query(() => getSiteText()),
   }),
@@ -1218,6 +1267,8 @@ export const appRouter = router({
     categories: staffProcedure.query(() => getAdminCategories()),
     orders: staffProcedure.query(() => getAdminOrders()),
     posts: staffProcedure.query(() => getAdminPosts()),
+    postCategories: staffProcedure.query(() => getAdminPostCategories()),
+    mediaLibrary: staffProcedure.input(z.object({ search: z.string().trim().max(120).optional(), page: z.number().int().positive().default(1) })).query(({ input }) => getAdminMediaLibrary(input)),
     siteMedia: staffProcedure.query(() => getSiteMedia()),
     siteText: staffProcedure.query(() => getSiteText()),
     users: adminProcedure.query(() => getAdminUsers()),
@@ -1424,10 +1475,28 @@ export const appRouter = router({
       await logAdminAction({ actorUserId: ctx.user.id, action: "post.updated", entityType: "post", entityId: post.id, metadata: { slug: post.slug, published: post.isPublished } });
       return post;
     }),
-    deletePost: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
-      const result = await deleteAdminPost(input.id);
-      await logAdminAction({ actorUserId: ctx.user.id, action: "post.deleted", entityType: "post", entityId: input.id });
+    // 2026-09-07: replaced the old one-click hard `deletePost` with
+    // WordPress's real 3-state Trash/Restore/"Delete Permanently" flow.
+    trashPost: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const result = await trashAdminPost(input.id);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "post.trashed", entityType: "post", entityId: input.id });
       return result;
+    }),
+    restorePost: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const result = await restoreAdminPost(input.id);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "post.restored", entityType: "post", entityId: input.id });
+      return result;
+    }),
+    permanentlyDeletePost: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const result = await permanentlyDeleteAdminPost(input.id);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "post.permanentlyDeleted", entityType: "post", entityId: input.id });
+      return result;
+    }),
+    createPostCategory: staffProcedure.input(postCategoryWriteSchema).mutation(async ({ ctx, input }) => {
+      await validatePostCategoryName(input.name);
+      const category = await createAdminPostCategory(input.name);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "postCategory.created", entityType: "postCategory", entityId: category.id, metadata: { name: category.name } });
+      return category;
     }),
     // NEWVISION.md §5 "Топ брэндүүд" -- same staffProcedure weight as
     // Posts/Discount Codes (Tom's explicit correction to the original plan,
@@ -1719,6 +1788,33 @@ export const appRouter = router({
         const variants = await processUploadedImageVariantsOrThrow(buffer, IMAGE_MAX_DIMENSION.siteMedia);
         const stored = await storagePutImageVariants(`posts/${ctx.user.id}/${safeStem}-${Date.now()}.webp`, variants);
         return { url: stored.url, key: stored.key };
+      }),
+    // 2026-09-07: backs the new Media Library modal (MediaLibraryModal.tsx)
+    // -- the first real, browsable/searchable media library in this codebase
+    // (every prior upload mutation above fills exactly one URL slot and
+    // forgets the upload ever happened). Same base64->sharp->R2 pipeline as
+    // uploadPostCoverImage, but additionally records a media_library row so
+    // it can be found again later, from either the cover-image picker or an
+    // in-content "Add Media" insert.
+    uploadMedia: staffProcedure
+      .input(z.object({
+        fileName: z.string().trim().min(1).max(120),
+        contentType: z.enum(imageContentTypes),
+        dataBase64: z.string().min(16).max(14_000_000),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const rawBase64 = input.dataBase64.includes(",") ? input.dataBase64.slice(input.dataBase64.indexOf(",") + 1) : input.dataBase64;
+        const buffer = Buffer.from(rawBase64, "base64");
+        if (buffer.length === 0 || buffer.length > 8 * 1024 * 1024) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Media files must be between 1 byte and 8 MB." });
+        }
+        assertImageSignature(buffer, input.contentType);
+        const safeStem = input.fileName.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 70) || "media";
+        const variants = await processUploadedImageVariantsOrThrow(buffer, IMAGE_MAX_DIMENSION.siteMedia);
+        const stored = await storagePutImageVariants(`media/${ctx.user.id}/${safeStem}-${Date.now()}.webp`, variants);
+        const item = await insertMediaLibraryItem({ key: stored.key, url: stored.url, fileName: input.fileName, contentType: "image/webp", sizeBytes: variants.full.length, uploadedByUserId: ctx.user.id });
+        await logAdminAction({ actorUserId: ctx.user.id, action: "media.uploaded", entityType: "media", entityId: item.id, metadata: { fileName: input.fileName } });
+        return item;
       }),
   }),
 });
