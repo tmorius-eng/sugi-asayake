@@ -2,6 +2,7 @@ import { useState } from "react";
 import { CheckCircle2, EyeOff, LoaderCircle, MessageSquareOff, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { GenericListView, type GenericListColumn } from "./admin/GenericListView";
 
 // PREMIUM-FEATURES.md TIER 2: "жижиг moderation хэсэг" — a flat, filterable
 // list an admin/staff can approve/hide/delete from, not a pre-publish
@@ -33,6 +34,23 @@ export default function AdminReviewsPanel() {
     onError: error => toast.error(messageFrom(error)),
   });
 
+  type Review = (typeof reviews)[number];
+  const headerCell = "border-b border-black/8 pb-2";
+  const bodyCell = "border-b border-black/6 py-3";
+  const columns: GenericListColumn<Review>[] = [
+    { id: "date", header: "ОГНОО", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[#6f7075] whitespace-nowrap`, render: review => formatDateTime(review.createdAt) },
+    { id: "product", header: "БҮТЭЭГДЭХҮҮН", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs`, render: review => <a href={`/product/${review.productSlug}`} target="_blank" rel="noreferrer" className="font-bold text-[#17181b] hover:text-[#df1f3d]">{review.productName}</a> },
+    { id: "rating", header: "ҮНЭЛГЭЭ", headerClassName: headerCell, cellClassName: bodyCell, render: review => <Stars value={review.rating} /> },
+    { id: "comment", header: "СЭТГЭГДЭЛ", headerClassName: headerCell, cellClassName: `${bodyCell} max-w-xs text-xs text-[#57585e]`, render: review => review.comment ?? <span className="text-[#a9a49a]">Сэтгэгдэл бичээгүй</span> },
+    { id: "author", header: "ЗОХИОГЧ", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs`, render: review => <><span className="block font-bold">{review.reviewerName ?? "Нэргүй"}</span><span className="text-[#9a9ba0]">{review.reviewerEmail}</span></> },
+    {
+      id: "status", header: "ТӨЛӨВ", headerClassName: headerCell, cellClassName: bodyCell,
+      render: review => review.isApproved
+        ? <span className="inline-flex items-center gap-1 rounded-full bg-[#e7f2ec] px-2.5 py-1 text-[10px] font-extrabold text-[#2c7650]"><CheckCircle2 size={11} />Идэвхтэй</span>
+        : <span className="inline-flex items-center gap-1 rounded-full bg-[#fff0f2] px-2.5 py-1 text-[10px] font-extrabold text-[#a51630]"><MessageSquareOff size={11} />Нуугдсан</span>,
+    },
+  ];
+
   return (
     <div>
       <div className="flex flex-wrap items-end gap-3 rounded-2xl bg-[#f8f5ef] p-4">
@@ -49,41 +67,23 @@ export default function AdminReviewsPanel() {
       {query.error && <p className="mt-5 rounded-2xl bg-[#fff0f2] p-4 text-xs text-[#a51630]">{query.error.message}</p>}
 
       {!query.isLoading && !query.error && (
-        <div className="mt-5 overflow-x-auto">
-          <table className="min-w-[820px] w-full border-separate border-spacing-0 text-left">
-            <thead>
-              <tr className="text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]">
-                <th className="border-b border-black/8 pb-2">ОГНОО</th>
-                <th className="border-b border-black/8 pb-2">БҮТЭЭГДЭХҮҮН</th>
-                <th className="border-b border-black/8 pb-2">ҮНЭЛГЭЭ</th>
-                <th className="border-b border-black/8 pb-2">СЭТГЭГДЭЛ</th>
-                <th className="border-b border-black/8 pb-2">ЗОХИОГЧ</th>
-                <th className="border-b border-black/8 pb-2">ТӨЛӨВ</th>
-                <th className="border-b border-black/8 pb-2" />
-              </tr>
-            </thead>
-            <tbody>
-              {reviews.map(review => (
-                <tr key={review.id} className="text-sm align-top">
-                  <td className="border-b border-black/6 py-3 text-xs text-[#6f7075] whitespace-nowrap">{formatDateTime(review.createdAt)}</td>
-                  <td className="border-b border-black/6 py-3 text-xs"><a href={`/product/${review.productSlug}`} target="_blank" rel="noreferrer" className="font-bold text-[#17181b] hover:text-[#df1f3d]">{review.productName}</a></td>
-                  <td className="border-b border-black/6 py-3"><Stars value={review.rating} /></td>
-                  <td className="border-b border-black/6 py-3 max-w-xs text-xs text-[#57585e]">{review.comment ?? <span className="text-[#a9a49a]">Сэтгэгдэл бичээгүй</span>}</td>
-                  <td className="border-b border-black/6 py-3 text-xs"><span className="block font-bold">{review.reviewerName ?? "Нэргүй"}</span><span className="text-[#9a9ba0]">{review.reviewerEmail}</span></td>
-                  <td className="border-b border-black/6 py-3">
-                    {review.isApproved
-                      ? <span className="inline-flex items-center gap-1 rounded-full bg-[#e7f2ec] px-2.5 py-1 text-[10px] font-extrabold text-[#2c7650]"><CheckCircle2 size={11} />Идэвхтэй</span>
-                      : <span className="inline-flex items-center gap-1 rounded-full bg-[#fff0f2] px-2.5 py-1 text-[10px] font-extrabold text-[#a51630]"><MessageSquareOff size={11} />Нуугдсан</span>}
-                  </td>
-                  <td className="border-b border-black/6 py-3 text-right whitespace-nowrap">
-                    <button type="button" onClick={() => updateApproval.mutate({ id: review.id, isApproved: !review.isApproved })} disabled={updateApproval.isPending} className="mr-2 rounded-full border border-black/10 px-3 py-1.5 text-[11px] font-bold text-[#57585e] transition hover:border-[#df1f3d] hover:text-[#df1f3d] disabled:opacity-50">{review.isApproved ? <EyeOff size={13} className="inline" /> : <CheckCircle2 size={13} className="inline" />} {review.isApproved ? "Нуух" : "Сэргээх"}</button>
-                    <button type="button" onClick={() => { if (window.confirm("Энэ сэтгэгдлийг бүрмөсөн устгах уу?")) deleteReview.mutate({ id: review.id }); }} disabled={deleteReview.isPending} className="rounded-full border border-[#df1f3d]/25 px-3 py-1.5 text-[11px] font-bold text-[#a51630] transition hover:border-[#df1f3d] disabled:opacity-50"><Trash2 size={13} className="inline" /> Устгах</button>
-                  </td>
-                </tr>
-              ))}
-              {reviews.length === 0 && <tr><td colSpan={7} className="py-10 text-center text-sm text-[#77787d]"><Star className="mx-auto mb-2 text-[#a9a49a]" size={22} />Тохирох сэтгэгдэл олдсонгүй.</td></tr>}
-            </tbody>
-          </table>
+        <div className="mt-5">
+          <GenericListView<Review>
+            rows={reviews}
+            getRowId={review => review.id}
+            columns={columns}
+            tableClassName="min-w-[820px] w-full border-separate border-spacing-0 text-left"
+            rowClassName="text-sm align-top"
+            actionsHeaderClassName={headerCell}
+            actionsCellClassName={`${bodyCell} text-right whitespace-nowrap`}
+            emptyMessage={<><Star className="mx-auto mb-2 text-[#a9a49a]" size={22} />Тохирох сэтгэгдэл олдсонгүй.</>}
+            rowActions={review => (
+              <>
+                <button type="button" onClick={() => updateApproval.mutate({ id: review.id, isApproved: !review.isApproved })} disabled={updateApproval.isPending} className="mr-2 rounded-full border border-black/10 px-3 py-1.5 text-[11px] font-bold text-[#57585e] transition hover:border-[#df1f3d] hover:text-[#df1f3d] disabled:opacity-50">{review.isApproved ? <EyeOff size={13} className="inline" /> : <CheckCircle2 size={13} className="inline" />} {review.isApproved ? "Нуух" : "Сэргээх"}</button>
+                <button type="button" onClick={() => { if (window.confirm("Энэ сэтгэгдлийг бүрмөсөн устгах уу?")) deleteReview.mutate({ id: review.id }); }} disabled={deleteReview.isPending} className="rounded-full border border-[#df1f3d]/25 px-3 py-1.5 text-[11px] font-bold text-[#a51630] transition hover:border-[#df1f3d] disabled:opacity-50"><Trash2 size={13} className="inline" /> Устгах</button>
+              </>
+            )}
+          />
         </div>
       )}
     </div>

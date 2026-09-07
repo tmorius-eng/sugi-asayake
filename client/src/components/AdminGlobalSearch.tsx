@@ -1,14 +1,22 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { LoaderCircle, Package, Receipt, Search, UserRound, type LucideIcon } from "lucide-react";
+import { FilePenLine, LoaderCircle, Megaphone, Package, Receipt, Search, Tag, UserRound, type LucideIcon } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
+import type { AdminSection } from "./AdminWorkspace";
 
 
-export default function AdminGlobalSearch({ preview = false, onSelectProduct, onSelectOrder, onSelectUser }: {
+export default function AdminGlobalSearch({ preview = false, onSelectProduct, onSelectOrder, onSelectUser, onNavigate }: {
   preview?: boolean;
   onSelectProduct: (skuOrName: string) => void;
   onSelectOrder: (orderNumber: string) => void;
   onSelectUser: (emailOrName: string) => void;
+  // 2026-09-07 (Project "SUGI Desk"): discount codes/promotions/posts don't
+  // have a single-record deep-link like product SKU/order number/user
+  // email do (AdminDiscountCodesPanel/AdminPromotionsPanel/AdminPostsPanel
+  // don't take a search query), so a match in one of these just navigates to
+  // its section -- same as AdminCommandPalette.tsx already does for these
+  // exact three categories.
+  onNavigate: (section: AdminSection) => void;
 }) {
   const [term, setTerm] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -30,7 +38,7 @@ export default function AdminGlobalSearch({ preview = false, onSelectProduct, on
 
   const searchQuery = trpc.admin.search.useQuery({ query: debounced }, { enabled: !preview && debounced.length >= 2 });
   const results = searchQuery.data;
-  const hasResults = Boolean(results && results.products.length + results.orders.length + results.users.length > 0);
+  const hasResults = Boolean(results && results.products.length + results.orders.length + results.users.length + results.discountCodes.length + results.promotions.length + results.posts.length > 0);
   const select = (action: () => void) => { action(); setOpen(false); setTerm(""); };
 
   return (
@@ -71,6 +79,36 @@ export default function AdminGlobalSearch({ preview = false, onSelectProduct, on
                 <button key={user.id} type="button" onClick={() => select(() => onSelectUser(user.phone ?? user.email ?? user.name ?? ""))} className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-xs hover:bg-[#f8f5ef]">
                   <span className="truncate font-bold">{user.name ?? "Нэргүй хэрэглэгч"}</span>
                   <span className="shrink-0 text-[#85868a]">{user.phone ?? user.email ?? "—"}</span>
+                </button>
+              ))}
+            </ResultGroup>
+          )}
+          {!preview && results && results.discountCodes.length > 0 && (
+            <ResultGroup label="ХЯМДРАЛЫН КОД" icon={Tag}>
+              {results.discountCodes.map(discountCode => (
+                <button key={discountCode.id} type="button" onClick={() => select(() => onNavigate("discountCodes"))} className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-xs hover:bg-[#f8f5ef]">
+                  <span className="truncate font-bold">{discountCode.code}</span>
+                  <span className="shrink-0 text-[#85868a]">{discountCode.isActive ? "Идэвхтэй" : "Идэвхгүй"}</span>
+                </button>
+              ))}
+            </ResultGroup>
+          )}
+          {!preview && results && results.promotions.length > 0 && (
+            <ResultGroup label="УРАМШУУЛАЛ" icon={Megaphone}>
+              {results.promotions.map(promotion => (
+                <button key={promotion.id} type="button" onClick={() => select(() => onNavigate("promotions"))} className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-xs hover:bg-[#f8f5ef]">
+                  <span className="truncate font-bold">{promotion.headline}</span>
+                  <span className="shrink-0 text-[#85868a]">{promotion.isActive ? "Идэвхтэй" : "Идэвхгүй"}</span>
+                </button>
+              ))}
+            </ResultGroup>
+          )}
+          {!preview && results && results.posts.length > 0 && (
+            <ResultGroup label="ПОСТ" icon={FilePenLine}>
+              {results.posts.map(post => (
+                <button key={post.id} type="button" onClick={() => select(() => onNavigate("posts"))} className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-xs hover:bg-[#f8f5ef]">
+                  <span className="truncate font-bold">{post.title}</span>
+                  <span className="shrink-0 text-[#85868a]">{post.isPublished ? "Нийтэлсэн" : "Ноорог"}</span>
                 </button>
               ))}
             </ResultGroup>

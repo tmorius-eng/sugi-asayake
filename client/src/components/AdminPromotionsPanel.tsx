@@ -2,6 +2,7 @@ import { useState } from "react";
 import { LoaderCircle, Megaphone, Pencil, Trash2, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { GenericListView, type GenericListColumn } from "./admin/GenericListView";
 
 // Admin-controlled site-wide marketing popup/banner (new-arrival announcement,
 // seasonal sale, store event). Whatever is entered here is exactly what
@@ -135,6 +136,22 @@ export default function AdminPromotionsPanel() {
   };
 
   const promotions = (promotionsQuery.data ?? []) as PromotionRow[];
+  const headerCell = "border-b border-black/8 pb-2";
+  const bodyCell = "border-b border-black/6 py-3";
+  const promotionColumns: GenericListColumn<PromotionRow>[] = [
+    { id: "headline", header: "ГАРЧИГ", headerClassName: headerCell, cellClassName: bodyCell, render: promotion => <><strong className="block max-w-[220px] truncate">{promotion.headline}</strong>{promotion.message && <small className="mt-1 block max-w-[220px] truncate text-[11px] text-[#85868a]">{promotion.message}</small>}</> },
+    { id: "type", header: "ТӨРӨЛ", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[#6f7075]`, render: promotion => promotion.displayMode === "popup" ? "Попап" : "Хэсэг (banner)" },
+    {
+      id: "window", header: "ХУГАЦАА", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[#6f7075]`,
+      render: promotion => promotion.startsAt || promotion.endsAt
+        ? <>{promotion.startsAt ? new Date(promotion.startsAt).toLocaleDateString("mn-MN") : "—"} → {promotion.endsAt ? new Date(promotion.endsAt).toLocaleDateString("mn-MN") : "—"}</>
+        : <span className="text-[#b7b8bc]">Хугацаагүй</span>,
+    },
+    {
+      id: "active", header: "ИДЭВХТЭЙ", headerClassName: headerCell, cellClassName: bodyCell,
+      render: promotion => <button type="button" onClick={() => toggleActive(promotion)} className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold transition ${promotion.isActive ? "bg-[#e7f2ec] text-[#2c7650]" : "bg-[#f1f1f2] text-[#75767b]"}`}>{promotion.isActive ? "Идэвхтэй" : "Идэвхгүй"}</button>,
+    },
+  ];
 
   return (
     <div>
@@ -142,33 +159,25 @@ export default function AdminPromotionsPanel() {
 
       {promotionsQuery.isLoading && <p className="mt-5 flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>}
 
-      {!promotionsQuery.isLoading && !composerOpen && <div className="mt-5 overflow-x-auto">
-        <table className="min-w-[720px] w-full border-separate border-spacing-0 text-left">
-          <thead><tr className="text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]">
-            <th className="border-b border-black/8 pb-2">ГАРЧИГ</th>
-            <th className="border-b border-black/8 pb-2">ТӨРӨЛ</th>
-            <th className="border-b border-black/8 pb-2">ХУГАЦАА</th>
-            <th className="border-b border-black/8 pb-2">ИДЭВХТЭЙ</th>
-            <th className="border-b border-black/8 pb-2" />
-          </tr></thead>
-          <tbody>
-            {promotions.map(promotion => <tr key={promotion.id} className="text-sm">
-              <td className="border-b border-black/6 py-3"><strong className="block max-w-[220px] truncate">{promotion.headline}</strong>{promotion.message && <small className="mt-1 block max-w-[220px] truncate text-[11px] text-[#85868a]">{promotion.message}</small>}</td>
-              <td className="border-b border-black/6 py-3 text-xs text-[#6f7075]">{promotion.displayMode === "popup" ? "Попап" : "Хэсэг (banner)"}</td>
-              <td className="border-b border-black/6 py-3 text-xs text-[#6f7075]">
-                {promotion.startsAt || promotion.endsAt
-                  ? <>{promotion.startsAt ? new Date(promotion.startsAt).toLocaleDateString("mn-MN") : "—"} → {promotion.endsAt ? new Date(promotion.endsAt).toLocaleDateString("mn-MN") : "—"}</>
-                  : <span className="text-[#b7b8bc]">Хугацаагүй</span>}
-              </td>
-              <td className="border-b border-black/6 py-3">
-                <button type="button" onClick={() => toggleActive(promotion)} className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold transition ${promotion.isActive ? "bg-[#e7f2ec] text-[#2c7650]" : "bg-[#f1f1f2] text-[#75767b]"}`}>{promotion.isActive ? "Идэвхтэй" : "Идэвхгүй"}</button>
-              </td>
-              <td className="border-b border-black/6 py-3 text-right"><div className="flex justify-end gap-1"><button type="button" onClick={() => openComposer(promotion)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d]" aria-label={`${promotion.headline} засах`}><Pencil size={15} /></button><button type="button" onClick={() => { if (window.confirm(`"${promotion.headline}" урамшууллыг бүрмөсөн устгах уу?`)) deletePromotion.mutate({ id: promotion.id }); }} className="rounded-full p-2 text-[#707176] transition hover:bg-[#fff0f2] hover:text-[#df1f3d]" aria-label={`${promotion.headline} устгах`}><Trash2 size={15} /></button></div></td>
-            </tr>)}
-            {promotions.length === 0 && <tr><td colSpan={5} className="py-10 text-center text-sm text-[#77787d]">Одоогоор урамшуулал алга. Дээрх товчоор эхнийхээ үүсгээрэй.</td></tr>}
-          </tbody>
-        </table>
-      </div>}
+      {!promotionsQuery.isLoading && !composerOpen && (
+        <div className="mt-5">
+          <GenericListView<PromotionRow>
+            rows={promotions}
+            getRowId={promotion => promotion.id}
+            columns={promotionColumns}
+            tableClassName="min-w-[720px] w-full border-separate border-spacing-0 text-left"
+            actionsHeaderClassName={headerCell}
+            actionsCellClassName={`${bodyCell} text-right`}
+            emptyMessage="Одоогоор урамшуулал алга. Дээрх товчоор эхнийхээ үүсгээрэй."
+            rowActions={promotion => (
+              <div className="flex justify-end gap-1">
+                <button type="button" onClick={() => openComposer(promotion)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d]" aria-label={`${promotion.headline} засах`}><Pencil size={15} /></button>
+                <button type="button" onClick={() => { if (window.confirm(`"${promotion.headline}" урамшууллыг бүрмөсөн устгах уу?`)) deletePromotion.mutate({ id: promotion.id }); }} className="rounded-full p-2 text-[#707176] transition hover:bg-[#fff0f2] hover:text-[#df1f3d]" aria-label={`${promotion.headline} устгах`}><Trash2 size={15} /></button>
+              </div>
+            )}
+          />
+        </div>
+      )}
 
       {composerOpen && <form onSubmit={save} className="mt-2 rounded-3xl border border-[#df1f3d]/25 bg-[#fff5f6] p-5">
         <div className="flex items-center justify-between gap-3">

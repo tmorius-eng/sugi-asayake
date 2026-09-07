@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { CheckCircle2, ListFilter, LoaderCircle, LogIn, ShieldQuestion, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ListFilter, LoaderCircle, LogIn, ShieldCheck, ShieldQuestion, XCircle } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { actionLabel, actionLabels } from "@/lib/adminAuditLabels";
+import { GenericListView, type GenericListColumn } from "./admin/GenericListView";
 
 const reasonLabels: Record<string, string> = {
   invalid_credentials: "Имэйл/нууц үг буруу",
@@ -11,16 +12,22 @@ const reasonLabels: Record<string, string> = {
 
 const formatDateTime = (date: Date) => new Date(date).toLocaleString("mn-MN", { dateStyle: "medium", timeStyle: "short" });
 
+// Project "SUGI Desk" Phase 7 (2026-09-07): "unified System Logs" is this
+// same 3-tab shell -- Audit Log + Login History were already exactly this
+// shape, so the only real addition is the third tab below, backed by a
+// genuinely new data source (Honeybadger's error feed) rather than a
+// relabeling of the first two.
 export default function AdminSecurityCenter() {
-  const [tab, setTab] = useState<"audit" | "logins">("audit");
+  const [tab, setTab] = useState<"audit" | "logins" | "errors">("audit");
 
   return (
     <div className="grid gap-5">
       <div className="inline-flex w-fit gap-1 rounded-full bg-[#f8f5ef] p-1">
         <button type="button" onClick={() => setTab("audit")} className={`rounded-full px-4 py-2 text-xs font-bold transition ${tab === "audit" ? "bg-white shadow-sm" : "text-[#77787d]"}`}>Аудит лог</button>
         <button type="button" onClick={() => setTab("logins")} className={`rounded-full px-4 py-2 text-xs font-bold transition ${tab === "logins" ? "bg-white shadow-sm" : "text-[#77787d]"}`}>Нэвтрэлтийн түүх</button>
+        <button type="button" onClick={() => setTab("errors")} className={`rounded-full px-4 py-2 text-xs font-bold transition ${tab === "errors" ? "bg-white shadow-sm" : "text-[#77787d]"}`}>Алдааны хяналт</button>
       </div>
-      {tab === "audit" ? <AuditLogTab /> : <LoginHistoryTab />}
+      {tab === "audit" ? <AuditLogTab /> : tab === "logins" ? <LoginHistoryTab /> : <ErrorMonitoringTab />}
     </div>
   );
 }
@@ -38,6 +45,15 @@ function AuditLogTab() {
     dateTo: dateTo || undefined,
   });
   const logs = query.data ?? [];
+  type AuditLogRow = (typeof logs)[number];
+  const headerCell = "border-b border-black/8 pb-2";
+  const bodyCell = "border-b border-black/6 py-3";
+  const columns: GenericListColumn<AuditLogRow>[] = [
+    { id: "date", header: "ОГНОО", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[#6f7075]`, render: log => formatDateTime(log.createdAt) },
+    { id: "admin", header: "ADMIN", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs`, render: log => log.actorEmail ?? `#${log.actorUserId}` },
+    { id: "action", header: "ҮЙЛДЭЛ", headerClassName: headerCell, cellClassName: bodyCell, render: log => <span className="rounded-full bg-[#f8f5ef] px-2.5 py-1 text-[10px] font-extrabold">{actionLabel(log.action)}</span> },
+    { id: "entity", header: "ОБЪЕКТ", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[#77787d]`, render: log => `${log.entityType}${log.entityId ? ` #${log.entityId}` : ""}` },
+  ];
 
   return (
     <div>
@@ -64,28 +80,14 @@ function AuditLogTab() {
       {query.error && <p className="mt-5 rounded-2xl bg-[#fff0f2] p-4 text-xs text-[#a51630]">{query.error.message}</p>}
 
       {!query.isLoading && !query.error && (
-        <div className="mt-5 overflow-x-auto">
-          <table className="min-w-[680px] w-full border-separate border-spacing-0 text-left">
-            <thead>
-              <tr className="text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]">
-                <th className="border-b border-black/8 pb-2">ОГНОО</th>
-                <th className="border-b border-black/8 pb-2">ADMIN</th>
-                <th className="border-b border-black/8 pb-2">ҮЙЛДЭЛ</th>
-                <th className="border-b border-black/8 pb-2">ОБЪЕКТ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {logs.map(log => (
-                <tr key={log.id} className="text-sm">
-                  <td className="border-b border-black/6 py-3 text-xs text-[#6f7075]">{formatDateTime(log.createdAt)}</td>
-                  <td className="border-b border-black/6 py-3 text-xs">{log.actorEmail ?? `#${log.actorUserId}`}</td>
-                  <td className="border-b border-black/6 py-3"><span className="rounded-full bg-[#f8f5ef] px-2.5 py-1 text-[10px] font-extrabold">{actionLabel(log.action)}</span></td>
-                  <td className="border-b border-black/6 py-3 text-xs text-[#77787d]">{log.entityType}{log.entityId ? ` #${log.entityId}` : ""}</td>
-                </tr>
-              ))}
-              {logs.length === 0 && <tr><td colSpan={4} className="py-10 text-center text-sm text-[#77787d]"><ListFilter className="mx-auto mb-2 text-[#a9a49a]" size={22} />Тохирох лог олдсонгүй.</td></tr>}
-            </tbody>
-          </table>
+        <div className="mt-5">
+          <GenericListView<AuditLogRow>
+            rows={logs}
+            getRowId={log => log.id}
+            columns={columns}
+            tableClassName="min-w-[680px] w-full border-separate border-spacing-0 text-left"
+            emptyMessage={<><ListFilter className="mx-auto mb-2 text-[#a9a49a]" size={22} />Тохирох лог олдсонгүй.</>}
+          />
         </div>
       )}
     </div>
@@ -98,6 +100,20 @@ function LoginHistoryTab() {
 
   const query = trpc.admin.loginHistory.useQuery({ email: email.trim() || undefined, outcome });
   const attempts = query.data ?? [];
+  type LoginAttemptRow = (typeof attempts)[number];
+  const headerCell = "border-b border-black/8 pb-2";
+  const bodyCell = "border-b border-black/6 py-3";
+  const columns: GenericListColumn<LoginAttemptRow>[] = [
+    { id: "date", header: "ОГНОО", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[#6f7075]`, render: attempt => formatDateTime(attempt.createdAt) },
+    { id: "phone", header: "УТАС", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs`, render: attempt => attempt.email },
+    {
+      id: "status", header: "ТӨЛӨВ", headerClassName: headerCell, cellClassName: bodyCell,
+      render: attempt => attempt.success
+        ? <span className="inline-flex items-center gap-1 rounded-full bg-[#e7f2ec] px-2.5 py-1 text-[10px] font-extrabold text-[#2c7650]"><CheckCircle2 size={11} />Амжилттай</span>
+        : <span className="inline-flex items-center gap-1 rounded-full bg-[#fff0f2] px-2.5 py-1 text-[10px] font-extrabold text-[#a51630]"><XCircle size={11} />{attempt.reason ? (reasonLabels[attempt.reason] ?? attempt.reason) : "Амжилтгүй"}</span>,
+    },
+    { id: "ip", header: "IP", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[#77787d]`, render: attempt => attempt.ipAddress ?? "—" },
+  ];
 
   return (
     <div>
@@ -118,35 +134,82 @@ function LoginHistoryTab() {
       {query.error && <p className="mt-5 rounded-2xl bg-[#fff0f2] p-4 text-xs text-[#a51630]">{query.error.message}</p>}
 
       {!query.isLoading && !query.error && (
-        <div className="mt-5 overflow-x-auto">
-          <table className="min-w-[640px] w-full border-separate border-spacing-0 text-left">
-            <thead>
-              <tr className="text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]">
-                <th className="border-b border-black/8 pb-2">ОГНОО</th>
-                <th className="border-b border-black/8 pb-2">УТАС</th>
-                <th className="border-b border-black/8 pb-2">ТӨЛӨВ</th>
-                <th className="border-b border-black/8 pb-2">IP</th>
-              </tr>
-            </thead>
-            <tbody>
-              {attempts.map(attempt => (
-                <tr key={attempt.id} className="text-sm">
-                  <td className="border-b border-black/6 py-3 text-xs text-[#6f7075]">{formatDateTime(attempt.createdAt)}</td>
-                  <td className="border-b border-black/6 py-3 text-xs">{attempt.email}</td>
-                  <td className="border-b border-black/6 py-3">
-                    {attempt.success
-                      ? <span className="inline-flex items-center gap-1 rounded-full bg-[#e7f2ec] px-2.5 py-1 text-[10px] font-extrabold text-[#2c7650]"><CheckCircle2 size={11} />Амжилттай</span>
-                      : <span className="inline-flex items-center gap-1 rounded-full bg-[#fff0f2] px-2.5 py-1 text-[10px] font-extrabold text-[#a51630]"><XCircle size={11} />{attempt.reason ? (reasonLabels[attempt.reason] ?? attempt.reason) : "Амжилтгүй"}</span>}
-                  </td>
-                  <td className="border-b border-black/6 py-3 text-xs text-[#77787d]">{attempt.ipAddress ?? "—"}</td>
-                </tr>
-              ))}
-              {attempts.length === 0 && <tr><td colSpan={4} className="py-10 text-center text-sm text-[#77787d]"><LogIn className="mx-auto mb-2 text-[#a9a49a]" size={22} />Нэвтрэлтийн түүх алга.</td></tr>}
-            </tbody>
-          </table>
+        <div className="mt-5">
+          <GenericListView<LoginAttemptRow>
+            rows={attempts}
+            getRowId={attempt => attempt.id}
+            columns={columns}
+            tableClassName="min-w-[640px] w-full border-separate border-spacing-0 text-left"
+            emptyMessage={<><LogIn className="mx-auto mb-2 text-[#a9a49a]" size={22} />Нэвтрэлтийн түүх алга.</>}
+          />
         </div>
       )}
       <p className="mt-4 flex items-center gap-1.5 text-[11px] text-[#a9a49a]"><ShieldQuestion size={13} aria-hidden="true" />Хамгийн сүүлийн 200 бичлэг харагдана.</p>
+    </div>
+  );
+}
+
+const formatDateTimeOrDash = (value: string | null) => (value ? formatDateTime(new Date(value)) : "—");
+
+// Project "SUGI Desk" Phase 7: Honeybadger's own error feed, read via
+// server/_core/honeybadgerReadApi.ts's Personal Auth Token integration
+// (distinct from server/_core/honeybadger.ts's send-only SDK config). Three
+// distinct, honestly-labeled states -- not configured / a real fetch error
+// (bad token, Honeybadger API down) / a genuinely empty, healthy feed --
+// never collapsed into one generic "no data" message the other two tabs use,
+// since conflating "nobody has set this up" with "nothing is currently
+// unresolved" would misinform whoever's reading this the most (an admin
+// checking site health).
+function ErrorMonitoringTab() {
+  const query = trpc.admin.honeybadgerFaults.useQuery();
+
+  if (query.isLoading) return <p className="flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>;
+  if (query.error) return <p className="rounded-2xl bg-[#fff0f2] p-4 text-xs text-[#a51630]">{query.error.message}</p>;
+
+  const result = query.data;
+  if (!result?.configured) {
+    return (
+      <p className="flex items-start gap-2 rounded-2xl bg-[#f8f5ef] p-4 text-xs leading-5 text-[#77787d]">
+        <ShieldQuestion className="mt-0.5 shrink-0" size={16} />
+        Honeybadger-ийн <code>HONEYBADGER_PERSONAL_AUTH_TOKEN</code> тохируулаагүй тул алдааны жагсаалт харагдахгүй байна. Honeybadger акаунтын Settings → Authentication хэсгээс аваад <code>.env</code>-д нэмнэ үү.
+      </p>
+    );
+  }
+  if (result.error) {
+    return <p className="flex items-start gap-2 rounded-2xl bg-[#fff0f2] p-4 text-xs leading-5 text-[#a51630]"><AlertTriangle className="mt-0.5 shrink-0" size={16} />Honeybadger-с уншихад алдаа гарлаа: {result.error}</p>;
+  }
+
+  type FaultRow = (typeof result.faults)[number];
+  const headerCell = "border-b border-black/8 pb-2";
+  const bodyCell = "border-b border-black/6 py-3";
+  const columns: GenericListColumn<FaultRow>[] = [
+    { id: "date", header: "СҮҮЛД ГАРСАН", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[#6f7075]`, render: fault => formatDateTimeOrDash(fault.lastNoticeAt ?? fault.createdAt) },
+    {
+      id: "error", header: "АЛДАА", headerClassName: headerCell, cellClassName: bodyCell,
+      render: fault => <div><p className="font-bold">{fault.klass}</p>{fault.message && <p className="mt-0.5 max-w-md truncate text-[11px] text-[#77787d]" title={fault.message}>{fault.message}</p>}</div>,
+    },
+    { id: "where", header: "ГАЗАР", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[#77787d]`, render: fault => [fault.environment, fault.component, fault.action].filter(Boolean).join(" · ") || "—" },
+    { id: "count", header: "ТОО", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs font-bold`, render: fault => fault.noticesCount },
+    {
+      id: "status", header: "ТӨЛӨВ", headerClassName: headerCell, cellClassName: bodyCell,
+      render: fault => fault.resolved
+        ? <span className="inline-flex items-center gap-1 rounded-full bg-[#e7f2ec] px-2.5 py-1 text-[10px] font-extrabold text-[#2c7650]"><CheckCircle2 size={11} />Шийдэгдсэн</span>
+        : fault.ignored
+          ? <span className="inline-flex items-center gap-1 rounded-full bg-[#f1f1f1] px-2.5 py-1 text-[10px] font-extrabold text-[#8a8b8f]">Игнорсон</span>
+          : <span className="inline-flex items-center gap-1 rounded-full bg-[#fff0f2] px-2.5 py-1 text-[10px] font-extrabold text-[#a51630]"><AlertTriangle size={11} />Идэвхтэй</span>,
+    },
+  ];
+
+  return (
+    <div>
+      <GenericListView<FaultRow>
+        rows={result.faults}
+        getRowId={fault => fault.id}
+        columns={columns}
+        tableClassName="min-w-[720px] w-full border-separate border-spacing-0 text-left"
+        emptyMessage={<><ShieldCheck className="mx-auto mb-2 text-[#2c7650]" size={22} />Сүүлийн үед бүртгэгдсэн алдаа алга.</>}
+      />
+      <p className="mt-4 flex items-center gap-1.5 text-[11px] text-[#a9a49a]"><ShieldQuestion size={13} aria-hidden="true" />Honeybadger-с хамгийн сүүлийн 25 алдаа харагдана.</p>
     </div>
   );
 }

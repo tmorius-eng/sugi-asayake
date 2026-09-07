@@ -2060,10 +2060,17 @@ export async function getAdminDashboardSummary() {
 
 export async function adminGlobalSearch(queryText: string) {
   const db = await getDb();
-  if (!db) return { products: [], orders: [], users: [] };
+  if (!db) return { products: [], orders: [], users: [], discountCodes: [], promotions: [], posts: [] };
   const term = `%${queryText}%`;
 
-  const [productRows, orderRows, userRows] = await Promise.all([
+  // discountCodes/promotions/posts added 2026-09-07 (Project "SUGI Desk") --
+  // found live: the admin command palette/top-bar search only ever covered
+  // products/orders/users, so searching for a real discount code, promotion,
+  // or post by name silently came back empty. Same shape as the queries
+  // already here, not a new pattern. Posts excludes soft-deleted (trashed)
+  // rows -- a post sitting in the trash shouldn't surface as a live search
+  // result an admin could try to open.
+  const [productRows, orderRows, userRows, discountCodeRows, promotionRows, postRows] = await Promise.all([
     db.select({ id: products.id, name: products.name, sku: products.sku, slug: products.slug })
       .from(products)
       .where(or(like(products.name, term), like(products.sku, term)))
@@ -2076,9 +2083,21 @@ export async function adminGlobalSearch(queryText: string) {
       .from(users)
       .where(or(like(users.name, term), like(users.email, term), like(users.phone, term)))
       .limit(5),
+    db.select({ id: discountCodes.id, code: discountCodes.code, isActive: discountCodes.isActive })
+      .from(discountCodes)
+      .where(like(discountCodes.code, term))
+      .limit(5),
+    db.select({ id: sitePromotions.id, headline: sitePromotions.headline, isActive: sitePromotions.isActive })
+      .from(sitePromotions)
+      .where(like(sitePromotions.headline, term))
+      .limit(5),
+    db.select({ id: posts.id, title: posts.title, slug: posts.slug, isPublished: posts.isPublished })
+      .from(posts)
+      .where(and(or(like(posts.title, term), like(posts.slug, term)), isNull(posts.deletedAt)))
+      .limit(5),
   ]);
 
-  return { products: productRows, orders: orderRows, users: userRows };
+  return { products: productRows, orders: orderRows, users: userRows, discountCodes: discountCodeRows, promotions: promotionRows, posts: postRows };
 }
 
 const orderStatusRank = { pending: 0, confirmed: 1, packed: 2, out_for_delivery: 3, completed: 4 } as const;
@@ -2610,7 +2629,10 @@ export async function logAdminAction(input: { actorUserId: number; action: strin
 }
 
 // TIER 4: admin-only Audit Log viewer — every filter is optional/additive.
-export async function getAdminAuditLogs(filters: { action?: string; actorEmail?: string; dateFrom?: Date; dateTo?: Date; limit?: number }) {
+// entityType/entityId (2026-09-07, Project "SUGI Desk" Phase 4) reuse this
+// same query for the new per-record History panel — same shape, same
+// admin-only gate, just scoped to one record instead of the global feed.
+export async function getAdminAuditLogs(filters: { action?: string; actorEmail?: string; dateFrom?: Date; dateTo?: Date; entityType?: string; entityId?: number; limit?: number }) {
   const db = await getDb();
   if (!db) return [];
   const conditions = [
@@ -2618,6 +2640,8 @@ export async function getAdminAuditLogs(filters: { action?: string; actorEmail?:
     filters.actorEmail ? like(users.email, `%${filters.actorEmail}%`) : undefined,
     filters.dateFrom ? gte(adminAuditLogs.createdAt, filters.dateFrom) : undefined,
     filters.dateTo ? lte(adminAuditLogs.createdAt, filters.dateTo) : undefined,
+    filters.entityType ? eq(adminAuditLogs.entityType, filters.entityType) : undefined,
+    filters.entityId !== undefined ? eq(adminAuditLogs.entityId, filters.entityId) : undefined,
   ].filter(condition => condition !== undefined);
 
   return db.select({

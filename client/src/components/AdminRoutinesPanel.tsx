@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ExternalLink, LoaderCircle, ListPlus, Pencil, Search, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { GenericListView, type GenericListColumn } from "./admin/GenericListView";
 import { formatMnt } from "@shared/format";
 
 // PREMIUM-FEATURES.md TIER 4: admin management for "Routine" bundles — an
@@ -111,6 +112,15 @@ export default function AdminRoutinesPanel() {
   };
 
   const routines = routinesQuery.data ?? [];
+  type RoutineRow = (typeof routines)[number];
+  const headerCell = "border-b border-black/8 pb-2";
+  const bodyCell = "border-b border-black/6 py-3";
+  const routineColumns: GenericListColumn<RoutineRow>[] = [
+    { id: "name", header: "NAME", headerClassName: headerCell, cellClassName: bodyCell, render: routine => <><strong className="block">{routine.name}</strong><small className="mt-1 block text-[10px] font-bold tracking-[.06em] text-[#85868a]">/routine/{routine.slug}</small></> },
+    { id: "steps", header: "АЛХАМ", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[#6f7075]`, render: routine => `${routine.stepCount} алхам` },
+    { id: "discount", header: "ХЯМДРАЛ", headerClassName: headerCell, cellClassName: `${bodyCell} font-bold`, render: routine => routine.discountPercent > 0 ? `-${routine.discountPercent}%` : "—" },
+    { id: "status", header: "ТӨЛӨВ", headerClassName: headerCell, cellClassName: bodyCell, render: routine => <span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${routine.isPublished ? "bg-[#e7f2ec] text-[#2c7650]" : "bg-[#fff0d2] text-[#9b6417]"}`}>{routine.isPublished ? "Нийтлэгдсэн" : "Ноорог"}</span> },
+  ];
 
   return (
     <div>
@@ -118,27 +128,26 @@ export default function AdminRoutinesPanel() {
 
       {routinesQuery.isLoading && <p className="mt-5 flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>}
 
-      {!routinesQuery.isLoading && !composerOpen && <div className="mt-5 overflow-x-auto">
-        <table className="min-w-[680px] w-full border-separate border-spacing-0 text-left">
-          <thead><tr className="text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]">
-            <th className="border-b border-black/8 pb-2">NAME</th>
-            <th className="border-b border-black/8 pb-2">АЛХАМ</th>
-            <th className="border-b border-black/8 pb-2">ХЯМДРАЛ</th>
-            <th className="border-b border-black/8 pb-2">ТӨЛӨВ</th>
-            <th className="border-b border-black/8 pb-2" />
-          </tr></thead>
-          <tbody>
-            {routines.map(routine => <tr key={routine.id} className="text-sm">
-              <td className="border-b border-black/6 py-3"><strong className="block">{routine.name}</strong><small className="mt-1 block text-[10px] font-bold tracking-[.06em] text-[#85868a]">/routine/{routine.slug}</small></td>
-              <td className="border-b border-black/6 py-3 text-xs text-[#6f7075]">{routine.stepCount} алхам</td>
-              <td className="border-b border-black/6 py-3 font-bold">{routine.discountPercent > 0 ? `-${routine.discountPercent}%` : "—"}</td>
-              <td className="border-b border-black/6 py-3"><span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${routine.isPublished ? "bg-[#e7f2ec] text-[#2c7650]" : "bg-[#fff0d2] text-[#9b6417]"}`}>{routine.isPublished ? "Нийтлэгдсэн" : "Ноорог"}</span></td>
-              <td className="border-b border-black/6 py-3 text-right"><div className="flex justify-end gap-1">{routine.isPublished && <a href={`/routine/${routine.slug}`} target="_blank" rel="noopener noreferrer" className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#3970a7]" aria-label={`${routine.name} — амьд хуудсыг харах`} title="Амьд хуудсыг харах"><ExternalLink size={15} /></a>}<button type="button" onClick={() => openComposer(routine)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d]" aria-label={`${routine.name} засах`} title="Засах"><Pencil size={15} /></button><button type="button" onClick={() => { if (window.confirm(`"${routine.name}" routine-ыг бүрмөсөн устгах уу?`)) deleteRoutine.mutate({ id: routine.id }); }} className="rounded-full p-2 text-[#707176] transition hover:bg-[#fff0f2] hover:text-[#df1f3d]" aria-label={`${routine.name} устгах`} title="Устгах"><Trash2 size={15} /></button></div></td>
-            </tr>)}
-            {routines.length === 0 && <tr><td colSpan={5} className="py-10 text-center text-sm text-[#77787d]">Одоогоор Routine алга. Дээрх товчоор эхнийхээ үүсгээрэй.</td></tr>}
-          </tbody>
-        </table>
-      </div>}
+      {!routinesQuery.isLoading && !composerOpen && (
+        <div className="mt-5">
+          <GenericListView<RoutineRow>
+            rows={routines}
+            getRowId={routine => routine.id}
+            columns={routineColumns}
+            tableClassName="min-w-[680px] w-full border-separate border-spacing-0 text-left"
+            actionsHeaderClassName={headerCell}
+            actionsCellClassName={`${bodyCell} text-right`}
+            emptyMessage="Одоогоор Routine алга. Дээрх товчоор эхнийхээ үүсгээрэй."
+            rowActions={routine => (
+              <div className="flex justify-end gap-1">
+                {routine.isPublished && <a href={`/routine/${routine.slug}`} target="_blank" rel="noopener noreferrer" className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#3970a7]" aria-label={`${routine.name} — амьд хуудсыг харах`} title="Амьд хуудсыг харах"><ExternalLink size={15} /></a>}
+                <button type="button" onClick={() => openComposer(routine)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d]" aria-label={`${routine.name} засах`} title="Засах"><Pencil size={15} /></button>
+                <button type="button" onClick={() => { if (window.confirm(`"${routine.name}" routine-ыг бүрмөсөн устгах уу?`)) deleteRoutine.mutate({ id: routine.id }); }} className="rounded-full p-2 text-[#707176] transition hover:bg-[#fff0f2] hover:text-[#df1f3d]" aria-label={`${routine.name} устгах`} title="Устгах"><Trash2 size={15} /></button>
+              </div>
+            )}
+          />
+        </div>
+      )}
 
       {composerOpen && <form onSubmit={save} className="mt-2 rounded-3xl border border-[#df1f3d]/25 bg-[#fff5f6] p-5">
         <div className="flex items-center justify-between gap-3">

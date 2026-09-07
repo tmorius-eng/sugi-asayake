@@ -1,9 +1,9 @@
-import { ChevronDown, ChevronRight, CircleUserRound, LayoutDashboard, PackagePlus, CheckCircle2, FilePenLine, Star, ListChecks, Megaphone, Tag, Tags, ImageUp, UsersRound, ChartColumnIncreasing, ShieldAlert, Plug, type LucideIcon } from "lucide-react";
+import { ChevronDown, ChevronRight, CircleUserRound, LayoutDashboard, PackagePlus, CheckCircle2, FilePenLine, Star, ListChecks, Megaphone, Tag, Tags, ImageUp, UsersRound, ChartColumnIncreasing, ShieldAlert, Plug, CalendarDays, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import type { AdminSection } from "../AdminWorkspace";
 
-type NavItem = { key: AdminSection; label: string; Icon: LucideIcon };
+export type NavItem = { key: AdminSection; label: string; Icon: LucideIcon };
 
 // Real sections only -- Gentelella's own demo nav (Forms/Tables/Charts/
 // Calendar/Map/Chat/Inbox/Kanban) has no equivalent here and none of that
@@ -22,6 +22,7 @@ const flatGroup: NavItem[] = [
   { key: "reviews", label: "Сэтгэгдэл", Icon: Star },
   { key: "routines", label: "Routine", Icon: ListChecks },
   { key: "promotions", label: "Урамшуулал", Icon: Megaphone },
+  { key: "calendar", label: "Хуанли", Icon: CalendarDays },
   { key: "discountCodes", label: "Хямдралын код", Icon: Tag },
   { key: "brands", label: "Брэндүүд", Icon: Tags },
   { key: "media", label: "Content & Media", Icon: ImageUp },
@@ -30,6 +31,15 @@ const adminOnlyFlatGroup: NavItem[] = [
   { key: "users", label: "Хэрэглэгч", Icon: UsersRound },
   { key: "integrations", label: "Интеграцууд", Icon: Plug },
 ];
+
+// Exported so the command palette (AdminCommandPalette.tsx) lists exactly
+// the same sections, in the same order, with the same staff/admin
+// visibility this sidebar itself enforces -- reuses these same three arrays
+// rather than a second, hand-copied list that could drift out of sync.
+export function getVisibleSections(isFullAdmin: boolean): NavItem[] {
+  const visibleNested = isFullAdmin ? nestedGroup : nestedGroup.filter(item => item.key === "dashboard");
+  return [...visibleNested, ...flatGroup, ...(isFullAdmin ? adminOnlyFlatGroup : [])];
+}
 
 function NavButton({ item, active, onSelect, nested = false }: { item: NavItem; active: boolean; onSelect: (section: AdminSection) => void; nested?: boolean }) {
   const Icon = item.Icon;

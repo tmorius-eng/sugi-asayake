@@ -1,7 +1,20 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq, inArray } from "drizzle-orm";
 import { cartItems, carts, orderItems, orders, productCategories, productVariants, products, users } from "../drizzle/schema";
-import { createOrderFromActiveCart, getDb, getPublishedCatalog, updateAdminOrder } from "./db";
+import { createOrderFromActiveCart, getAdminProducts, getDb, getPublishedCatalog, updateAdminOrder } from "./db";
+import { appRouter } from "./routers";
+import type { TrpcContext } from "./_core/context";
+
+function staffContext(): TrpcContext {
+  return {
+    user: {
+      id: 1, email: "staff-test@example.com", name: "Phase 2 Test Staff", role: "staff",
+      emailVerifiedAt: null, sessionVersion: 0, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date(),
+    },
+    req: { protocol: "https", headers: {}, ip: "198.51.100.9", socket: { remoteAddress: "198.51.100.9" } } as unknown as TrpcContext["req"],
+    res: { cookie: () => undefined, clearCookie: () => undefined } as TrpcContext["res"],
+  };
+}
 
 // This suite mutates an isolated, timestamp-tagged data set and removes it in afterAll.
 // It is intentionally opt-in because it requires a configured development database.
@@ -178,6 +191,49 @@ describeWithDatabase("commerce database integration", () => {
       const testCarts = await db.select({ id: carts.id }).from(carts).where(eq(carts.userId, userId));
       if (testCarts.length) await db.delete(carts).where(inArray(carts.id, testCarts.map(cart => cart.id)));
       await db.delete(productVariants).where(eq(productVariants.id, variantId));
+      await db.delete(products).where(eq(products.id, productId));
+    }
+  });
+
+  // Project "SUGI Desk" Phase 2 (2026-09-07): field-level permission,
+  // end-to-end. commerce.router.test.ts's version of this can't assert
+  // persistence (it targets a nonexistent id to avoid a real write) --
+  // this is the real create -> staff-edit-with-costMnt -> read-back cycle
+  // against a throwaway product, proving the router's `delete
+  // input.costMnt` for non-admin callers actually preserves the DB value
+  // rather than just type-checking.
+  it("preserves a product's admin-set costMnt when a staff session edits the product without permission to touch that field", async () => {
+    const db = await getDb();
+    if (!db) throw new Error("Database unavailable");
+
+    const productResult = await db.insert(products).values({
+      categoryId,
+      name: "Cost-permission integration product",
+      slug: `${marker}-cost-permission`,
+      sku: `${marker}-COST`,
+      priceMnt: 5000,
+      costMnt: 3000,
+      stockQuantity: 1,
+      isPublished: true,
+    });
+    const productId = Number(productResult[0].insertId);
+
+    try {
+      // Staff never sees the real value (admin.products redacts it)...
+      const staffCaller = appRouter.createCaller(staffContext());
+      const staffView = await staffCaller.admin.products();
+      const staffRow = staffView.find(product => product.id === productId);
+      expect(staffRow?.costMnt).toBeNull();
+
+      // ...and even an explicit attempt to set one is silently ignored,
+      // rather than overwriting the real number admin already entered.
+      await staffCaller.admin.updateProduct({ id: productId, costMnt: 999999, name: "Cost-permission integration product (edited)" });
+
+      const afterStaffEdit = await getAdminProducts();
+      const persistedRow = afterStaffEdit.find(product => product.id === productId);
+      expect(persistedRow?.name).toBe("Cost-permission integration product (edited)"); // the legitimate field DID save
+      expect(persistedRow?.costMnt).toBe(3000); // the admin-only field did NOT change
+    } finally {
       await db.delete(products).where(eq(products.id, productId));
     }
   });

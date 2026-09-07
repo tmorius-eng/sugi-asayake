@@ -7,6 +7,7 @@ import { parse as parseCookieHeader } from "cookie";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { getGuestCartCookieOptions, getSessionCookieOptions, getVisitorSessionCookieOptions } from "./_core/cookies";
+import { listRecentHoneybadgerFaults } from "./_core/honeybadgerReadApi";
 import { sendAccountEmail } from "./_core/notification";
 import { systemRouter } from "./_core/systemRouter";
 import { signSessionToken, type TrpcContext } from "./_core/context";
@@ -1263,7 +1264,18 @@ export const appRouter = router({
       if (ctx.user.role === "admin") return result;
       return { ...result, users: [] };
     }),
-    products: staffProcedure.query(() => getAdminProducts()),
+    // Project "SUGI Desk" Phase 2 (2026-09-07): the first real field-level
+    // permission in this codebase, not just a UI label -- costMnt's own
+    // schema comment above (productWriteSchema) already said "Admin-only"
+    // but staffProcedure here let staff read it regardless. Same redaction
+    // shape as dashboardSummary/search above (full object for admin, nulled
+    // field for staff), mirrored on the write side below so a stale/blank
+    // form value from a staff session can never overwrite the real number.
+    products: staffProcedure.query(async ({ ctx }) => {
+      const products = await getAdminProducts();
+      if (ctx.user.role === "admin") return products;
+      return products.map(product => ({ ...product, costMnt: null }));
+    }),
     categories: staffProcedure.query(() => getAdminCategories()),
     orders: staffProcedure.query(() => getAdminOrders()),
     posts: staffProcedure.query(() => getAdminPosts()),
@@ -1408,6 +1420,16 @@ export const appRouter = router({
       dateTo: input.dateTo,
       limit: input.limit,
     })),
+    // Project "SUGI Desk" Phase 4 (2026-09-07): per-record Activity/History
+    // -- Frappe's Timeline concept, built on the exact same audit log the
+    // global viewer above already reads, just scoped to one record. Same
+    // admin-only tier as auditLogs (this reveals which staff member did
+    // what, same sensitivity), surfaced as a "History" panel on individual
+    // Product/Order edit screens rather than a full-page log.
+    entityHistory: adminProcedure.input(z.object({
+      entityType: z.string().trim().min(1).max(60),
+      entityId: z.number().int().positive(),
+    })).query(({ input }) => getAdminAuditLogs({ entityType: input.entityType, entityId: input.entityId, limit: 50 })),
     loginHistory: adminProcedure.input(z.object({
       email: z.string().trim().max(320).optional(),
       outcome: z.enum(["all", "success", "failed"]).default("all"),
@@ -1417,6 +1439,12 @@ export const appRouter = router({
       success: input.outcome === "success" ? true : input.outcome === "failed" ? false : undefined,
       limit: input.limit,
     })),
+    // Project "SUGI Desk" Phase 7 (2026-09-07): the third tab of "unified
+    // System Logs" -- Honeybadger's own error feed, read back into the admin
+    // panel via server/_core/honeybadgerReadApi.ts. Same admin-only tier as
+    // the two tabs above (`configured: false` when no personal auth token is
+    // set, never an error -- see that file's own doc comment).
+    honeybadgerFaults: adminProcedure.query(() => listRecentHoneybadgerFaults()),
     updateOrder: staffProcedure.input(orderUpdateSchema).mutation(async ({ ctx, input }) => {
       let order;
       try {
@@ -1519,12 +1547,23 @@ export const appRouter = router({
       return result;
     }),
     createProduct: staffProcedure.input(productWriteSchema).mutation(async ({ ctx, input }) => {
+      // costMnt is admin-only (see the schema comment above) -- a staff
+      // session never even sees the real value (products query redacts it
+      // to null above), so it can never legitimately submit one either.
+      // Force-strip rather than trust the client to have omitted it.
+      if (ctx.user.role !== "admin") input.costMnt = null;
       await validateProductWrite(input);
       const product = await createAdminProduct(input);
       await logAdminAction({ actorUserId: ctx.user.id, action: "product.created", entityType: "product", entityId: product.id, metadata: { slug: product.slug, published: product.isPublished } });
       return product;
     }),
     updateProduct: staffProcedure.input(productUpdateSchema).mutation(async ({ ctx, input }) => {
+      // This is a PARTIAL update -- `delete`, not `= null`, so an omitted
+      // costMnt means "leave the existing value alone" rather than "wipe
+      // it to null." A staff session's product form always has costMnt
+      // blank (the query above redacts it), so without this, any ordinary
+      // edit by staff would silently erase whatever admin had set.
+      if (ctx.user.role !== "admin") delete input.costMnt;
       await validateProductWrite(input);
       // Snapshot stock before the write so a 0 -> >0 restock can be
       // detected below and fire wishlist "Ирэхээр мэдэгдэх" alerts.

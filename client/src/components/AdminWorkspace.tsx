@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
-import { ChevronLeft, ChevronRight, Download, ExternalLink, ImageUp, LoaderCircle, PackagePlus, Pencil, Search, ShieldCheck, Tags, Trash2 } from "lucide-react";
+import { Download, ExternalLink, ImageUp, LoaderCircle, PackagePlus, Pencil, Search, ShieldCheck, Tags, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { downloadCsv } from "@/lib/csv";
@@ -10,8 +10,12 @@ import AdminAnalyticsPanel from "./AdminAnalyticsPanel";
 import AdminBulkActionBar from "./AdminBulkActionBar";
 import AdminDashboardHome from "./AdminDashboardHome";
 import AdminGlobalSearch from "./AdminGlobalSearch";
+import AdminCommandPalette from "./admin/AdminCommandPalette";
+import AdminContentCalendarPanel from "./admin/AdminContentCalendarPanel";
 import AdminSidebar from "./admin/AdminSidebar";
 import AdminTopBar from "./admin/AdminTopBar";
+import { GenericListView, type GenericListColumn } from "./admin/GenericListView";
+import AdminHistoryPanel from "./admin/AdminHistoryPanel";
 import AdminOperationsPanel from "./AdminOperationsPanel";
 import AdminPostsPanel from "./AdminPostsPanel";
 import AdminReviewsPanel from "./AdminReviewsPanel";
@@ -131,12 +135,12 @@ function TagSuggestionChips({ suggestions, current, labelFor, onApply }: { sugge
   ))}</div>;
 }
 
-export type AdminSection = "dashboard" | "analytics" | "products" | "orders" | "posts" | "reviews" | "routines" | "promotions" | "discountCodes" | "brands" | "users" | "media" | "security" | "integrations";
+export type AdminSection = "dashboard" | "analytics" | "products" | "orders" | "posts" | "reviews" | "routines" | "promotions" | "calendar" | "discountCodes" | "brands" | "users" | "media" | "security" | "integrations";
 
 export default function AdminWorkspace({ preview = false }: { preview?: boolean }) {
   const { user: currentUser, logout } = useAuth();
   const isFullAdmin = preview || currentUser?.role === "admin";
-  const adminSectionKeys: AdminSection[] = ["dashboard", "products", "orders", "posts", "reviews", "routines", "promotions", "discountCodes", "brands", "media", "users", "analytics", "security", "integrations"];
+  const adminSectionKeys: AdminSection[] = ["dashboard", "products", "orders", "posts", "reviews", "routines", "promotions", "calendar", "discountCodes", "brands", "media", "users", "analytics", "security", "integrations"];
   // 2026-09-04 (Tom, "does admin panel really work 100% functional?" audit):
   // section switching only ever lived in React state, never the URL --
   // only ?adminSection=media (the one pre-existing special case) survived a
@@ -181,7 +185,6 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [categoryForm, setCategoryForm] = useState<CategoryForm>(emptyCategory);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
-  const [selectedProductIds, setSelectedProductIds] = useState<Set<number>>(new Set());
   const [showProductExport, setShowProductExport] = useState(false);
   const [exportCategoryFilter, setExportCategoryFilter] = useState("all");
   const [exportPublishedFilter, setExportPublishedFilter] = useState<"all" | "published" | "draft">("all");
@@ -215,21 +218,46 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
     { id: 1, name: "SUGI ASAYAKE Owner", email: "owner@asayake.mn", phone: "99110022", role: "admin", createdAt: new Date(), lastSignedIn: new Date(), suspendedAt: null, suspendedReason: null },
     { id: 2, name: "Store manager", email: null, phone: "88112233", role: "user", createdAt: new Date(), lastSignedIn: new Date(), suspendedAt: null, suspendedReason: null },
   ] : (usersQuery.data ?? []);
+  type UserRow = (typeof users)[number];
+  const userColumns: GenericListColumn<UserRow>[] = [
+    {
+      id: "user",
+      header: "ХЭРЭГЛЭГЧ",
+      render: user => (
+        <>
+          <strong className="block">{user.name ?? "Нэр оруулаагүй"}</strong>
+          <small className="mt-1 block text-xs text-[#77787d]">{user.email ?? "Имэйл байхгүй"}</small>
+        </>
+      ),
+    },
+    { id: "phone", header: "УТАС", cellClassName: "border-b border-black/6 py-4 text-xs", render: user => user.phone ?? <span className="text-[#a51630]">Утасгүй</span> },
+    {
+      id: "role",
+      header: "ЭРХ",
+      render: user => (
+        <span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${user.role === "admin" ? "bg-[#fff0d2] text-[#9b6417]" : user.role === "staff" ? "bg-[#e6f0fb] text-[#2c5a91]" : "bg-[#edf0f5] text-[#505d70]"}`}>
+            {user.role === "admin" ? "Admin" : user.role === "staff" ? "Staff" : "User"}
+          </span>
+      ),
+    },
+    {
+      id: "status",
+      header: "ТӨЛӨВ",
+      render: user => user.suspendedAt
+        ? <span className="rounded-full bg-[#fff0f2] px-2.5 py-1 text-[10px] font-extrabold text-[#a51630]">Түр хаагдсан</span>
+        : <span className="rounded-full bg-[#e7f2ec] px-2.5 py-1 text-[10px] font-extrabold text-[#2c7650]">Идэвхтэй</span>,
+    },
+    { id: "lastSignedIn", header: "СҮҮЛД НЭВТЭРСЭН", cellClassName: "border-b border-black/6 py-4 text-xs text-[#6f7075]", render: user => user.lastSignedIn ? new Date(user.lastSignedIn).toLocaleDateString("mn-MN") : "—" },
+  ];
 
-  const filteredProducts = useMemo(() => products.filter(product => [product.name, product.sku, product.categoryName ?? ""].some(value => value.toLocaleLowerCase().includes(query.toLocaleLowerCase()))), [products, query]);
-  // The catalog is ~940 real products (see PRODUCT-IMPORT.md) — rendering
-  // every row unpaginated made the edit table an endless scroll. Paged, not
-  // infinite-scrolled: an admin editing catalog data wants a stable, countable
-  // list, not rows shifting under them. "Select all" (toggleSelectAllProducts
-  // above) deliberately still operates on the full filtered set, not just the
-  // visible page — bulk-publishing "everything matching this search" is the
-  // whole point of that control.
+  // 2026-09-07 (Project "SUGI Desk" Phase 1): search/pagination/selection
+  // for the Products table now live inside <GenericListView> (see
+  // client/src/components/admin/GenericListView.tsx) instead of being
+  // hand-rolled here — filteredProducts/pagedProducts/productPage/
+  // selectedProductIds are gone. The catalog is ~940 real products (see
+  // PRODUCT-IMPORT.md), which is exactly why GenericListView paginates by
+  // default rather than rendering an endless-scroll table.
   const PRODUCTS_PAGE_SIZE = 25;
-  const [productPage, setProductPage] = useState(1);
-  useEffect(() => { setProductPage(1); }, [query]);
-  const productTotalPages = Math.max(1, Math.ceil(filteredProducts.length / PRODUCTS_PAGE_SIZE));
-  useEffect(() => { if (productPage > productTotalPages) setProductPage(productTotalPages); }, [productTotalPages, productPage]);
-  const pagedProducts = useMemo(() => filteredProducts.slice((productPage - 1) * PRODUCTS_PAGE_SIZE, productPage * PRODUCTS_PAGE_SIZE), [filteredProducts, productPage]);
   const filteredUsers = useMemo(() => users.filter(user => [user.name ?? "", user.email ?? "", user.phone ?? ""].some(value => value.toLocaleLowerCase().includes(query.toLocaleLowerCase()))), [users, query]);
   // Preference Profile v2 (2026-09-01): same rule-based matcher the bulk
   // auto-tag script uses (shared/product-tagging.ts) -- dismissible
@@ -392,29 +420,62 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
     }
   };
 
-  const toggleProductSelection = (id: number) => setSelectedProductIds(current => {
-    const next = new Set(current);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return next;
-  });
-  const toggleSelectAllProducts = () => setSelectedProductIds(current =>
-    current.size === filteredProducts.length ? new Set() : new Set(filteredProducts.map(product => product.id))
-  );
-
-  const applyBulkPublish = async (isPublished: boolean) => {
+  // 2026-09-07: selection now lives inside <GenericListView>, so this takes
+  // the selected ids + a clear-selection callback from its bulkActions
+  // render prop instead of reading/resetting its own state.
+  const applyBulkPublish = async (isPublished: boolean, ids: number[], clearSelection: () => void) => {
     if (preview) {
       toast.message("Preview горим", { description: "Багц үйлдэл зөвхөн хамгаалагдсан /admin хэсэгт ажиллана." });
       return;
     }
     try {
-      const result = await bulkUpdateProductPublishStatus.mutateAsync({ ids: Array.from(selectedProductIds), isPublished });
+      const result = await bulkUpdateProductPublishStatus.mutateAsync({ ids, isPublished });
       if (result.failed.length > 0) toast.error(`${result.succeeded.length} шинэчлэгдлээ, ${result.failed.length} амжилтгүй.`);
       else toast.success(`${result.succeeded.length} бүтээгдэхүүний төлөв шинэчлэгдлээ.`);
-      setSelectedProductIds(new Set());
+      clearSelection();
     } catch (error) {
       toast.error(messageFrom(error));
     }
   };
+
+  const productColumns: GenericListColumn<ProductRow>[] = [
+    {
+      id: "name",
+      header: "БҮТЭЭГДЭХҮҮН",
+      render: product => (
+        <>
+          <strong className="block">{product.name}</strong>
+          <small className="mt-1 block text-[10px] font-bold tracking-[.08em] text-[#85868a]">{product.sku}</small>
+        </>
+      ),
+    },
+    {
+      id: "category",
+      header: "АНГИЛАЛ",
+      cellClassName: "border-b border-black/6 py-4 text-xs text-[#6f7075]",
+      render: product => product.categoryName ?? "Ангилалгүй",
+    },
+    {
+      id: "price",
+      header: "ҮНЭ",
+      cellClassName: "border-b border-black/6 py-4 font-bold",
+      render: product => formatMnt(product.priceMnt),
+    },
+    {
+      id: "stock",
+      header: "ҮЛДЭГДЭЛ",
+      render: product => <span className={product.stockQuantity === 0 ? "font-bold text-[#df1f3d]" : "font-bold"}>{product.stockQuantity} ш</span>,
+    },
+    {
+      id: "status",
+      header: "ТӨЛӨВ",
+      render: product => (
+        <span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${product.isPublished ? "bg-[#e7f2ec] text-[#2c7650]" : "bg-[#fff0d2] text-[#9b6417]"}`}>
+          {product.isPublished ? "Нийтлэгдсэн" : "Ноорог"}
+        </span>
+      ),
+    },
+  ];
 
   const exportProductsCsv = () => {
     const rows = products
@@ -442,7 +503,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
     }
   };
 
-  const sectionLabel = section === "dashboard" ? "Хянах самбар" : section === "products" ? "Бүтээгдэхүүн" : section === "orders" ? "Захиалга" : section === "posts" ? "Шинэ мэдээ" : section === "reviews" ? "Сэтгэгдэл" : section === "routines" ? "Routine" : section === "promotions" ? "Урамшуулал" : section === "discountCodes" ? "Хямдралын код" : section === "brands" ? "Топ брэндүүд" : section === "media" ? "Content & Media" : section === "analytics" ? "Аналитик" : section === "security" ? "Аюулгүй байдал" : section === "integrations" ? "Интеграцууд" : "Хэрэглэгч";
+  const sectionLabel = section === "dashboard" ? "Хянах самбар" : section === "products" ? "Бүтээгдэхүүн" : section === "orders" ? "Захиалга" : section === "posts" ? "Шинэ мэдээ" : section === "reviews" ? "Сэтгэгдэл" : section === "routines" ? "Routine" : section === "promotions" ? "Урамшуулал" : section === "calendar" ? "Хуанли" : section === "discountCodes" ? "Хямдралын код" : section === "brands" ? "Топ брэндүүд" : section === "media" ? "Content & Media" : section === "analytics" ? "Аналитик" : section === "security" ? "Аюулгүй байдал" : section === "integrations" ? "Интеграцууд" : "Хэрэглэгч";
   // Same query AdminDashboardHome makes (undefined input) -- React Query
   // dedupes identical query keys, so this is a free cache read whenever
   // the dashboard section already fetched it, and a real (still cheap)
@@ -453,6 +514,14 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
 
   return (
     <div className="flex min-h-screen bg-[#f8f5ef]">
+      <AdminCommandPalette
+        preview={preview}
+        isFullAdmin={isFullAdmin}
+        onNavigate={target => { setSection(target); setQuery(""); setComposer(null); }}
+        onSelectProduct={sku => { setSection("products"); setQuery(sku); setComposer(null); }}
+        onSelectOrder={orderNumber => { setSection("orders"); setQuery(orderNumber); setComposer(null); }}
+        onSelectUser={emailOrName => { setSection("users"); setQuery(emailOrName); setComposer(null); }}
+      />
       <AdminSidebar
         section={section}
         isFullAdmin={isFullAdmin}
@@ -469,6 +538,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
           onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
           searchSlot={<AdminGlobalSearch
             preview={preview}
+            onNavigate={target => { setSection(target); setQuery(""); setComposer(null); }}
             onSelectProduct={sku => { setSection("products"); setQuery(sku); setComposer(null); }}
             onSelectOrder={orderNumber => { setSection("orders"); setQuery(orderNumber); setComposer(null); }}
             onSelectUser={emailOrName => { setSection("users"); setQuery(emailOrName); setComposer(null); }}
@@ -483,14 +553,14 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
           {preview && <div className="mb-6 flex gap-3 rounded-2xl border border-[#e9ba62] bg-[#fff5dd] p-4 text-xs leading-5 text-[#6c531f]"><ShieldCheck className="mt-0.5 shrink-0" size={17} /><p><strong>Preview only.</strong> Энэ дэлгэц нь удирдлагын интерфэйсийн загвар юм. Бодит <code>/admin</code> зам нь нэвтэрсэн, <code>admin</code> эрхтэй хэрэглэгчдэд хамгаалагдсан.</p></div>}
           <section className="min-w-0 rounded-3xl bg-white p-5 shadow-[0_16px_34px_rgba(20,22,24,.05)] sm:p-7">
             <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div><h2 className="font-[var(--font-display)] text-2xl font-semibold tracking-[-.06em]">{section === "dashboard" ? "Хянах самбар" : section === "products" ? "Бүтээгдэхүүний сан" : section === "orders" ? "Захиалгын гүйцэтгэл" : section === "posts" ? "Шинэ бүтээгдэхүүний пост" : section === "reviews" ? "Сэтгэгдэл ба үнэлгээ" : section === "routines" ? "Routine (арчилгааны дараалал)" : section === "promotions" ? "Урамшуулал (попап/banner)" : section === "discountCodes" ? "Хямдралын код" : section === "brands" ? "Топ брэндүүд" : section === "media" ? "Content & Media" : section === "analytics" ? "Аналитик ба тайлан" : section === "security" ? "Аюулгүй байдал" : section === "integrations" ? "Интеграцууд" : "Хэрэглэгч ба эрх"}</h2><p className="mt-1 text-xs text-[#77787d]">{section === "dashboard" ? "Дэлгүүрийн ерөнхий байдал нэг дэлгэцэд" : section === "products" ? "SKU, үнэ, үлдэгдэл, нийтлэх төлөв" : section === "orders" ? "Төлбөрийн төлөв, хүргэлтийн явц, захиалгын мэдээлэл" : section === "posts" ? "Бодитоор хадгалагдах шинэ бүтээгдэхүүний мэдээ" : section === "reviews" ? "Баталгаажсан худалдан авалтын сэтгэгдэл, жижиг moderation" : section === "routines" ? "Алхам дараалалтай бүтээгдэхүүний багц, идэвхтэй хямдралтай" : section === "promotions" ? "Шинэ бүтээгдэхүүн, хямдрал зарлах попап/banner мессеж" : section === "discountCodes" ? "Захиалгын үед оруулах хямдралын код (жишээ нь SALE10)" : section === "brands" ? "Нүүр хуудасны 'Топ брэндүүд' хэсэгт харагдах бодит брэндүүд" : section === "media" ? "Нүүр хуудасны зураг болон текстийг кодгүйгээр солих" : section === "analytics" ? "Борлуулалт, ашиг, харилцагчийн бодит дата нэг дэлгэцэд" : section === "security" ? "Admin аудит лог болон нэвтрэлтийн түүх" : section === "integrations" ? "QPay, И-баримт, StorePay, карт, хүргэлтийн үйлчилгээ тохируулах" : "Шинэ хэрэглэгчийг урих болон staff/admin эрх удирдах"}</p></div>
+              <div><h2 className="font-[var(--font-display)] text-2xl font-semibold tracking-[-.06em]">{section === "dashboard" ? "Хянах самбар" : section === "products" ? "Бүтээгдэхүүний сан" : section === "orders" ? "Захиалгын гүйцэтгэл" : section === "posts" ? "Шинэ бүтээгдэхүүний пост" : section === "reviews" ? "Сэтгэгдэл ба үнэлгээ" : section === "routines" ? "Routine (арчилгааны дараалал)" : section === "promotions" ? "Урамшуулал (попап/banner)" : section === "calendar" ? "Контентийн хуанли" : section === "discountCodes" ? "Хямдралын код" : section === "brands" ? "Топ брэндүүд" : section === "media" ? "Content & Media" : section === "analytics" ? "Аналитик ба тайлан" : section === "security" ? "Аюулгүй байдал" : section === "integrations" ? "Интеграцууд" : "Хэрэглэгч ба эрх"}</h2><p className="mt-1 text-xs text-[#77787d]">{section === "dashboard" ? "Дэлгүүрийн ерөнхий байдал нэг дэлгэцэд" : section === "products" ? "SKU, үнэ, үлдэгдэл, нийтлэх төлөв" : section === "orders" ? "Төлбөрийн төлөв, хүргэлтийн явц, захиалгын мэдээлэл" : section === "posts" ? "Бодитоор хадгалагдах шинэ бүтээгдэхүүний мэдээ" : section === "reviews" ? "Баталгаажсан худалдан авалтын сэтгэгдэл, жижиг moderation" : section === "routines" ? "Алхам дараалалтай бүтээгдэхүүний багц, идэвхтэй хямдралтай" : section === "promotions" ? "Шинэ бүтээгдэхүүн, хямдрал зарлах попап/banner мессеж" : section === "calendar" ? "Товлогдсон пост, урамшууллын хугацааг нэг дэлгэцэд" : section === "discountCodes" ? "Захиалгын үед оруулах хямдралын код (жишээ нь SALE10)" : section === "brands" ? "Нүүр хуудасны 'Топ брэндүүд' хэсэгт харагдах бодит брэндүүд" : section === "media" ? "Нүүр хуудасны зураг болон текстийг кодгүйгээр солих" : section === "analytics" ? "Борлуулалт, ашиг, харилцагчийн бодит дата нэг дэлгэцэд" : section === "security" ? "Admin аудит лог, нэвтрэлтийн түүх, Honeybadger алдааны хяналт" : section === "integrations" ? "QPay, И-баримт, StorePay, карт, хүргэлтийн үйлчилгээ тохируулах" : "Шинэ хэрэглэгчийг урих болон staff/admin эрх удирдах"}</p></div>
               <div className="flex flex-wrap items-center gap-2">
                 {section === "products" && <>
                   <button type="button" onClick={() => setShowProductExport(current => !current)} className="inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-4 py-3 text-xs font-bold text-[#57585e] transition hover:-translate-y-0.5 hover:border-[#df1f3d] hover:text-[#df1f3d] active:scale-[.97]"><Download size={15} />Экспорт</button>
                   <button type="button" onClick={() => openCategoryComposer()} className="inline-flex items-center justify-center gap-2 rounded-full border border-[#df1f3d]/25 bg-white px-4 py-3 text-xs font-bold text-[#b41831] transition hover:-translate-y-0.5 hover:border-[#df1f3d] active:scale-[.97]"><Tags size={15} />Ангилал</button>
                   <button type="button" onClick={() => openProductComposer()} className="inline-flex items-center justify-center gap-2 rounded-full bg-[#df1f3d] px-5 py-3 text-xs font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97]"><PackagePlus size={16} />Бүтээгдэхүүн нэмэх</button>
                 </>}
-                {section !== "dashboard" && section !== "posts" && section !== "reviews" && section !== "routines" && section !== "promotions" && section !== "discountCodes" && section !== "brands" && section !== "media" && section !== "security" && section !== "integrations" && <label className="flex h-10 items-center gap-2 rounded-full border border-black/10 bg-[#fffdf9] px-4"><Search size={15} className="text-[#85868a]" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={section === "users" ? "Нэр эсвэл имэйл хайх" : section === "orders" ? "Дугаар, хэрэглэгч, утас хайх" : "Нэр, SKU хайх"} className="w-full bg-transparent text-xs outline-none" /></label>}
+                {section !== "dashboard" && section !== "posts" && section !== "reviews" && section !== "routines" && section !== "promotions" && section !== "calendar" && section !== "discountCodes" && section !== "brands" && section !== "media" && section !== "security" && section !== "integrations" && <label className="flex h-10 items-center gap-2 rounded-full border border-black/10 bg-[#fffdf9] px-4"><Search size={15} className="text-[#85868a]" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={section === "users" ? "Нэр эсвэл имэйл хайх" : section === "orders" ? "Дугаар, хэрэглэгч, утас хайх" : "Нэр, SKU хайх"} className="w-full bg-transparent text-xs outline-none" /></label>}
               </div>
             </div>
             {section === "dashboard" && <AdminDashboardHome preview={preview} isFullAdmin={isFullAdmin} onNavigate={target => { setSection(target); setQuery(""); }} />}
@@ -502,6 +572,8 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
             {section === "routines" && preview && <div className="rounded-3xl bg-[#f8f5ef] p-8 text-center text-sm text-[#707176]">Preview горимд Routine удирдлага харагдахгүй.</div>}
             {section === "promotions" && !preview && <AdminPromotionsPanel />}
             {section === "promotions" && preview && <div className="rounded-3xl bg-[#f8f5ef] p-8 text-center text-sm text-[#707176]">Preview горимд урамшуулал удирдлага харагдахгүй.</div>}
+            {section === "calendar" && !preview && <AdminContentCalendarPanel onNavigate={target => { setSection(target); setQuery(""); setComposer(null); }} />}
+            {section === "calendar" && preview && <div className="rounded-3xl bg-[#f8f5ef] p-8 text-center text-sm text-[#707176]">Preview горимд хуанли харагдахгүй.</div>}
             {section === "discountCodes" && !preview && <AdminDiscountCodesPanel />}
             {section === "discountCodes" && preview && <div className="rounded-3xl bg-[#f8f5ef] p-8 text-center text-sm text-[#707176]">Preview горимд хямдралын код удирдлага харагдахгүй.</div>}
             {section === "brands" && !preview && <AdminBrandsPanel />}
@@ -515,19 +587,30 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
               {!preview && (productsQuery.error || categoriesQuery.error) && <div className="mb-5 rounded-2xl bg-[#fff0f2] p-4 text-xs text-[#a51630]">{messageFrom(productsQuery.error ?? categoriesQuery.error)}</div>}
               {showProductExport && <div className="mb-5 flex flex-wrap items-end gap-3 rounded-2xl bg-[#f8f5ef] p-4"><label className="grid gap-1.5 text-xs font-bold">Ангилал<select value={exportCategoryFilter} onChange={event => setExportCategoryFilter(event.target.value)} className="h-10 rounded-lg border border-black/10 bg-white px-2 text-xs font-normal outline-none focus:border-[#df1f3d]"><option value="all">Бүгд</option>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label><label className="grid gap-1.5 text-xs font-bold">Төлөв<select value={exportPublishedFilter} onChange={event => setExportPublishedFilter(event.target.value as typeof exportPublishedFilter)} className="h-10 rounded-lg border border-black/10 bg-white px-2 text-xs font-normal outline-none focus:border-[#df1f3d]"><option value="all">Бүгд</option><option value="published">Нийтлэгдсэн</option><option value="draft">Ноорог</option></select></label><button type="button" onClick={exportProductsCsv} className="inline-flex h-10 items-center gap-2 rounded-full bg-[#17181b] px-4 text-xs font-bold text-white transition hover:bg-[#df1f3d]"><Download size={14} />CSV татах</button></div>}
               <div className="mb-5 flex flex-wrap gap-2">{categories.map(category => <button key={category.id} type="button" onClick={() => openCategoryComposer(category)} className="inline-flex items-center gap-1.5 rounded-full bg-[#f8f5ef] px-3 py-1.5 text-[11px] font-bold text-[#57585e] transition hover:bg-[#fff0f2] hover:text-[#a51630]"><Tags size={12} />{category.name}<Pencil size={11} /></button>)}{categories.length === 0 && <button type="button" onClick={() => openCategoryComposer()} className="rounded-full border border-dashed border-[#df1f3d]/40 px-3 py-1.5 text-[11px] font-bold text-[#a51630]">Эхний ангиллаа үүсгэх</button>}</div>
-              <AdminBulkActionBar count={selectedProductIds.size} onClear={() => setSelectedProductIds(new Set())}>
-                <button type="button" disabled={isBulkProductBusy} onClick={() => applyBulkPublish(true)} className="rounded-full bg-white/15 px-3 py-1.5 text-[11px] font-bold text-white transition hover:bg-white/25 disabled:opacity-50">Нийтлэх</button>
-                <button type="button" disabled={isBulkProductBusy} onClick={() => applyBulkPublish(false)} className="rounded-full bg-white/15 px-3 py-1.5 text-[11px] font-bold text-white transition hover:bg-white/25 disabled:opacity-50">Ноорог болгох</button>
-              </AdminBulkActionBar>
-              <div className="overflow-x-auto"><table className="min-w-[740px] w-full border-separate border-spacing-0 text-left"><thead><tr className="text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]"><th className="w-8 border-b border-black/8 pb-3"><input type="checkbox" checked={selectedProductIds.size > 0 && selectedProductIds.size === filteredProducts.length} onChange={toggleSelectAllProducts} aria-label="Бүгдийг сонгох" className="size-4 accent-[#df1f3d]" /></th><th className="border-b border-black/8 pb-3">БҮТЭЭГДЭХҮҮН</th><th className="border-b border-black/8 pb-3">АНГИЛАЛ</th><th className="border-b border-black/8 pb-3">ҮНЭ</th><th className="border-b border-black/8 pb-3">ҮЛДЭГДЭЛ</th><th className="border-b border-black/8 pb-3">ТӨЛӨВ</th><th className="border-b border-black/8 pb-3" /></tr></thead><tbody>{pagedProducts.map(product => <tr key={product.id} className="group text-sm"><td className="border-b border-black/6 py-4"><input type="checkbox" checked={selectedProductIds.has(product.id)} onChange={() => toggleProductSelection(product.id)} aria-label={`${product.name} сонгох`} className="size-4 accent-[#df1f3d]" /></td><td className="border-b border-black/6 py-4"><strong className="block">{product.name}</strong><small className="mt-1 block text-[10px] font-bold tracking-[.08em] text-[#85868a]">{product.sku}</small></td><td className="border-b border-black/6 py-4 text-xs text-[#6f7075]">{product.categoryName ?? "Ангилалгүй"}</td><td className="border-b border-black/6 py-4 font-bold">{formatMnt(product.priceMnt)}</td><td className="border-b border-black/6 py-4"><span className={product.stockQuantity === 0 ? "font-bold text-[#df1f3d]" : "font-bold"}>{product.stockQuantity} ш</span></td><td className="border-b border-black/6 py-4"><span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${product.isPublished ? "bg-[#e7f2ec] text-[#2c7650]" : "bg-[#fff0d2] text-[#9b6417]"}`}>{product.isPublished ? "Нийтлэгдсэн" : "Ноорог"}</span></td><td className="border-b border-black/6 py-4 text-right"><div className="flex justify-end gap-1">{product.isPublished && <a href={`/product/${product.slug}`} target="_blank" rel="noopener noreferrer" className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#3970a7]" aria-label={`${product.name} — амьд хуудсыг харах`} title="Амьд хуудсыг харах"><ExternalLink size={15} /></a>}<button type="button" disabled={isCatalogBusy} onClick={() => openProductComposer(product)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d]" aria-label={`${product.name} засах`} title="Засах"><Pencil size={15} /></button><button type="button" disabled={isCatalogBusy} onClick={() => removeProduct(product)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#fff0f2] hover:text-[#df1f3d]" aria-label={`${product.name} устгах`} title="Устгах"><Trash2 size={15} /></button></div></td></tr>)}{filteredProducts.length === 0 && <tr><td colSpan={7} className="py-10 text-center text-sm text-[#77787d]">{query ? "Хайлтад тохирох бүтээгдэхүүн олдсонгүй." : "Одоогоор бүтээгдэхүүн алга. Ангилал үүсгээд эхний бүтээгдэхүүнээ нэмээрэй."}</td></tr>}</tbody></table></div>
-              {filteredProducts.length > 0 && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-[#77787d]">
-                <span>{(productPage - 1) * PRODUCTS_PAGE_SIZE + 1}–{Math.min(productPage * PRODUCTS_PAGE_SIZE, filteredProducts.length)} / {filteredProducts.length} бүтээгдэхүүн</span>
-                <div className="flex items-center gap-1.5">
-                  <button type="button" onClick={() => setProductPage(current => Math.max(1, current - 1))} disabled={productPage === 1} className="grid size-8 place-items-center rounded-full border border-black/10 text-[#57585e] transition hover:border-[#df1f3d] hover:text-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-35" aria-label="Өмнөх хуудас"><ChevronLeft size={15} /></button>
-                  <span className="min-w-16 text-center font-bold text-[#17181b]">{productPage} / {productTotalPages}</span>
-                  <button type="button" onClick={() => setProductPage(current => Math.min(productTotalPages, current + 1))} disabled={productPage === productTotalPages} className="grid size-8 place-items-center rounded-full border border-black/10 text-[#57585e] transition hover:border-[#df1f3d] hover:text-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-35" aria-label="Дараагийн хуудас"><ChevronRight size={15} /></button>
-                </div>
-              </div>}
+              <GenericListView<ProductRow>
+                rows={products}
+                getRowId={product => product.id}
+                columns={productColumns}
+                searchQuery={query}
+                getSearchText={product => `${product.name} ${product.sku} ${product.categoryName ?? ""}`}
+                selectable
+                bulkActions={({ selectedIds, clearSelection }) => (
+                  <AdminBulkActionBar count={selectedIds.size} onClear={clearSelection}>
+                    <button type="button" disabled={isBulkProductBusy} onClick={() => applyBulkPublish(true, Array.from(selectedIds, id => id as number), clearSelection)} className="rounded-full bg-white/15 px-3 py-1.5 text-[11px] font-bold text-white transition hover:bg-white/25 disabled:opacity-50">Нийтлэх</button>
+                    <button type="button" disabled={isBulkProductBusy} onClick={() => applyBulkPublish(false, Array.from(selectedIds, id => id as number), clearSelection)} className="rounded-full bg-white/15 px-3 py-1.5 text-[11px] font-bold text-white transition hover:bg-white/25 disabled:opacity-50">Ноорог болгох</button>
+                  </AdminBulkActionBar>
+                )}
+                pageSize={PRODUCTS_PAGE_SIZE}
+                itemLabel="бүтээгдэхүүн"
+                emptyMessage={hasQuery => hasQuery ? "Хайлтад тохирох бүтээгдэхүүн олдсонгүй." : "Одоогоор бүтээгдэхүүн алга. Ангилал үүсгээд эхний бүтээгдэхүүнээ нэмээрэй."}
+                rowActions={product => (
+                  <div className="flex justify-end gap-1">
+                    {product.isPublished && <a href={`/product/${product.slug}`} target="_blank" rel="noopener noreferrer" className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#3970a7]" aria-label={`${product.name} — амьд хуудсыг харах`} title="Амьд хуудсыг харах"><ExternalLink size={15} /></a>}
+                    <button type="button" disabled={isCatalogBusy} onClick={() => openProductComposer(product)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d]" aria-label={`${product.name} засах`} title="Засах"><Pencil size={15} /></button>
+                    <button type="button" disabled={isCatalogBusy} onClick={() => removeProduct(product)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#fff0f2] hover:text-[#df1f3d]" aria-label={`${product.name} устгах`} title="Устгах"><Trash2 size={15} /></button>
+                  </div>
+                )}
+              />
             </>}
             {section === "orders" && <AdminOperationsPanel preview={preview} query={query} />}
             {section === "posts" && <AdminPostsPanel preview={preview} />}
@@ -541,7 +624,18 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
                 {mediaTab === "text" && <ContentTextPanel preview={preview} />}
               </>
             )}
-            {section === "users" && <div className="overflow-x-auto"><table className="min-w-[720px] w-full border-separate border-spacing-0 text-left"><thead><tr className="text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]"><th className="border-b border-black/8 pb-3">ХЭРЭГЛЭГЧ</th><th className="border-b border-black/8 pb-3">УТАС</th><th className="border-b border-black/8 pb-3">ЭРХ</th><th className="border-b border-black/8 pb-3">ТӨЛӨВ</th><th className="border-b border-black/8 pb-3">СҮҮЛД НЭВТЭРСЭН</th><th className="border-b border-black/8 pb-3" /></tr></thead><tbody>{filteredUsers.map(user => <tr key={user.id} className="text-sm"><td className="border-b border-black/6 py-4"><strong className="block">{user.name ?? "Нэр оруулаагүй"}</strong><small className="mt-1 block text-xs text-[#77787d]">{user.email ?? "Имэйл байхгүй"}</small></td><td className="border-b border-black/6 py-4 text-xs">{user.phone ?? <span className="text-[#a51630]">Утасгүй</span>}</td><td className="border-b border-black/6 py-4"><span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${user.role === "admin" ? "bg-[#fff0d2] text-[#9b6417]" : user.role === "staff" ? "bg-[#e6f0fb] text-[#2c5a91]" : "bg-[#edf0f5] text-[#505d70]"}`}>{user.role === "admin" ? "Admin" : user.role === "staff" ? "Staff" : "User"}</span></td><td className="border-b border-black/6 py-4">{user.suspendedAt ? <span className="rounded-full bg-[#fff0f2] px-2.5 py-1 text-[10px] font-extrabold text-[#a51630]">Түр хаагдсан</span> : <span className="rounded-full bg-[#e7f2ec] px-2.5 py-1 text-[10px] font-extrabold text-[#2c7650]">Идэвхтэй</span>}</td><td className="border-b border-black/6 py-4 text-xs text-[#6f7075]">{user.lastSignedIn ? new Date(user.lastSignedIn).toLocaleDateString("mn-MN") : "—"}</td><td className="border-b border-black/6 py-4 text-right">{!preview && <button type="button" onClick={() => setSelectedUserId(user.id)} className="rounded-full border border-black/10 px-3 py-1.5 text-[11px] font-bold text-[#57585e] transition hover:border-[#df1f3d] hover:text-[#df1f3d]">Дэлгэрэнгүй</button>}</td></tr>)}{filteredUsers.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-sm text-[#77787d]">Хэрэглэгч олдсонгүй.</td></tr>}</tbody></table></div>}
+            {section === "users" && (
+              <GenericListView<UserRow>
+                rows={users}
+                getRowId={user => user.id}
+                columns={userColumns}
+                searchQuery={query}
+                getSearchText={user => `${user.name ?? ""} ${user.email ?? ""} ${user.phone ?? ""}`}
+                tableClassName="min-w-[720px] w-full border-separate border-spacing-0 text-left"
+                emptyMessage="Хэрэглэгч олдсонгүй."
+                rowActions={user => !preview && <button type="button" onClick={() => setSelectedUserId(user.id)} className="rounded-full border border-black/10 px-3 py-1.5 text-[11px] font-bold text-[#57585e] transition hover:border-[#df1f3d] hover:text-[#df1f3d]">Дэлгэрэнгүй</button>}
+              />
+            )}
 
             {/* 2026-09-05 ("admin invite staff section just change it to manually
                 only admin give staff role to default users" -- Tom, explicit):
@@ -556,7 +650,14 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
               <div className="mt-4 grid gap-2">{filteredUsers.map(user => <div key={user.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white px-3 py-3"><div className="min-w-0"><strong className="block truncate text-xs">{user.name ?? user.phone ?? user.email ?? "Хэрэглэгч"}</strong><span className="block truncate text-[11px] text-[#77787d]">{user.phone ?? "Утасгүй"}</span></div>{preview ? <span className="text-xs font-bold">{user.role}</span> : <select value={user.role} disabled={isUserBusy} onChange={event => changeUserRole(user.id, event.target.value as "user" | "staff" | "admin")} className="h-9 rounded-lg border border-black/10 bg-white px-2 text-xs font-bold outline-none focus:border-[#df1f3d]"><option value="user">User</option><option value="staff">Staff</option><option value="admin">Admin</option></select>}</div>)}</div>
             </section>}
 
-            {composer === "product" && <form onSubmit={saveProduct} className="mt-7 rounded-3xl border border-[#df1f3d]/25 bg-[#fff5f6] p-5"><div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">PRODUCT {productForm.id ? "EDIT" : "CREATION"}</p><h3 className="mt-1 font-[var(--font-display)] text-xl font-semibold tracking-[-.05em]">{productForm.id ? "Бүтээгдэхүүн засах" : "Шинэ бүтээгдэхүүн нэмэх"}</h3></div><div className="flex items-center gap-4">{liveProductRef?.isPublished && <a href={`/product/${liveProductRef.slug}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-bold text-[#3970a7]"><ExternalLink size={13} />Амьд хуудсыг харах</a>}<button type="button" onClick={() => setComposer(null)} className="text-xs font-bold text-[#707176]">Хаах</button></div></div><div className="mt-5 grid gap-3 sm:grid-cols-2"><label className="grid gap-1.5 text-xs font-bold">Нэр<input required value={productForm.name} onChange={event => setProductForm(current => ({ ...current, name: event.target.value, slug: current.slug || slugify(event.target.value) }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold">SKU<input required value={productForm.sku} onChange={event => setProductForm(current => ({ ...current, sku: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold">URL slug<input required value={productForm.slug} onChange={event => setProductForm(current => ({ ...current, slug: slugify(event.target.value) }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /><span className="mt-0.5 block text-[11px] font-normal text-[#8a8b8f]">Бодит хаяг: /product/{productForm.slug || "…"}</span></label><label className="grid gap-1.5 text-xs font-bold">Ангилал<select required value={productForm.categoryId} onChange={event => setProductForm(current => ({ ...current, categoryId: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]"><option value="" disabled>Сонгох</option>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label><label className="grid gap-1.5 text-xs font-bold">Брэнд<input value={productForm.brand} onChange={event => setProductForm(current => ({ ...current, brand: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold">Үнэ (₮)<input required min="0" type="number" value={productForm.priceMnt} onChange={event => setProductForm(current => ({ ...current, priceMnt: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold">Хуучин үнэ (сонголтоор)<input min="0" type="number" value={productForm.compareAtPriceMnt} onChange={event => setProductForm(current => ({ ...current, compareAtPriceMnt: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold">Өртөг үнэ, зөвхөн админд (сонголтоор)<input min="0" type="number" value={productForm.costMnt} onChange={event => setProductForm(current => ({ ...current, costMnt: event.target.value }))} placeholder="Ашиг тооцоход л ашиглагдана" className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold">Үлдэгдэл<input required min="0" type="number" value={productForm.stockQuantity} onChange={event => setProductForm(current => ({ ...current, stockQuantity: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Товч тайлбар<textarea value={productForm.shortDescription} onChange={event => setProductForm(current => ({ ...current, shortDescription: event.target.value }))} className="min-h-20 rounded-xl border border-black/10 bg-white p-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Дэлгэрэнгүй тайлбар<textarea value={productForm.description} onChange={event => setProductForm(current => ({ ...current, description: event.target.value }))} className="min-h-28 rounded-xl border border-black/10 bg-white p-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><div className="sm:col-span-2 rounded-2xl bg-white/60 p-3"><p className="text-[10px] font-extrabold tracking-[.12em] text-[#3970a7]">PERSONALIZATION TAGS (сонголтоор)</p><p className="mt-1 text-[11px] text-[#77787d]">"Танд санал болгох" section-д ашиглагдана — хэрэглэгчийн профайл дээрх тохиргоотой таарвал энэ бараа санал болгогдоно. Зурын доорх зурвасууд бол зөвхөн санал — дарж сонговол л хадгалагдана.</p><div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {composer === "product" && <form onSubmit={saveProduct} className="mt-7 rounded-3xl border border-[#df1f3d]/25 bg-[#fff5f6] p-5"><div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">PRODUCT {productForm.id ? "EDIT" : "CREATION"}</p><h3 className="mt-1 font-[var(--font-display)] text-xl font-semibold tracking-[-.05em]">{productForm.id ? "Бүтээгдэхүүн засах" : "Шинэ бүтээгдэхүүн нэмэх"}</h3></div><div className="flex items-center gap-4">{liveProductRef?.isPublished && <a href={`/product/${liveProductRef.slug}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-bold text-[#3970a7]"><ExternalLink size={13} />Амьд хуудсыг харах</a>}<button type="button" onClick={() => setComposer(null)} className="text-xs font-bold text-[#707176]">Хаах</button></div></div><div className="mt-5 grid gap-3 sm:grid-cols-2"><label className="grid gap-1.5 text-xs font-bold">Нэр<input required value={productForm.name} onChange={event => setProductForm(current => ({ ...current, name: event.target.value, slug: current.slug || slugify(event.target.value) }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold">SKU<input required value={productForm.sku} onChange={event => setProductForm(current => ({ ...current, sku: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold">URL slug<input required value={productForm.slug} onChange={event => setProductForm(current => ({ ...current, slug: slugify(event.target.value) }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /><span className="mt-0.5 block text-[11px] font-normal text-[#8a8b8f]">Бодит хаяг: /product/{productForm.slug || "…"}</span></label><label className="grid gap-1.5 text-xs font-bold">Ангилал<select required value={productForm.categoryId} onChange={event => setProductForm(current => ({ ...current, categoryId: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]"><option value="" disabled>Сонгох</option>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label><label className="grid gap-1.5 text-xs font-bold">Брэнд<input value={productForm.brand} onChange={event => setProductForm(current => ({ ...current, brand: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold">Үнэ (₮)<input required min="0" type="number" value={productForm.priceMnt} onChange={event => setProductForm(current => ({ ...current, priceMnt: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold">Хуучин үнэ (сонголтоор)<input min="0" type="number" value={productForm.compareAtPriceMnt} onChange={event => setProductForm(current => ({ ...current, compareAtPriceMnt: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>{isFullAdmin
+  ? <label className="grid gap-1.5 text-xs font-bold">Өртөг үнэ, зөвхөн админд (сонголтоор)<input min="0" type="number" value={productForm.costMnt} onChange={event => setProductForm(current => ({ ...current, costMnt: event.target.value }))} placeholder="Ашиг тооцоход л ашиглагдана" className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+  // Project "SUGI Desk" Phase 2: field-level permission, enforced server-side
+  // in server/routers.ts (staff never receives the real value, and any value
+  // staff submits is force-stripped) -- this is just the matching client-side
+  // affordance so a staff session sees a locked field instead of a
+  // confusingly-always-blank editable one.
+  : <div className="grid gap-1.5 text-xs font-bold text-[#8b8c90]">Өртөг үнэ<div className="flex h-11 items-center gap-2 rounded-xl border border-dashed border-black/10 bg-[#f8f5ef] px-3 text-xs font-normal">🔒 Зөвхөн админд харагдана</div></div>}<label className="grid gap-1.5 text-xs font-bold">Үлдэгдэл<input required min="0" type="number" value={productForm.stockQuantity} onChange={event => setProductForm(current => ({ ...current, stockQuantity: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Товч тайлбар<textarea value={productForm.shortDescription} onChange={event => setProductForm(current => ({ ...current, shortDescription: event.target.value }))} className="min-h-20 rounded-xl border border-black/10 bg-white p-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Дэлгэрэнгүй тайлбар<textarea value={productForm.description} onChange={event => setProductForm(current => ({ ...current, description: event.target.value }))} className="min-h-28 rounded-xl border border-black/10 bg-white p-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label><div className="sm:col-span-2 rounded-2xl bg-white/60 p-3"><p className="text-[10px] font-extrabold tracking-[.12em] text-[#3970a7]">PERSONALIZATION TAGS (сонголтоор)</p><p className="mt-1 text-[11px] text-[#77787d]">"Танд санал болгох" section-д ашиглагдана — хэрэглэгчийн профайл дээрх тохиргоотой таарвал энэ бараа санал болгогдоно. Зурын доорх зурвасууд бол зөвхөн санал — дарж сонговол л хадгалагдана.</p><div className="mt-3 grid gap-3 sm:grid-cols-2">
               <label className="grid gap-1.5 text-xs font-bold">Арьсны төрөл (skincare)<select value={productForm.skinType} onChange={event => setProductForm(current => ({ ...current, skinType: event.target.value as ProductForm["skinType"] }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#3970a7]"><option value="">Бүх төрөлд (сонгоогүй)</option>{Object.entries(skinTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
                 <TagSuggestionChips suggestions={tagSuggestions.skinType ? [tagSuggestions.skinType] : []} current={productForm.skinType ? [productForm.skinType] : []} labelFor={value => skinTypeLabels[value] ?? value} onApply={value => setProductForm(current => ({ ...current, skinType: value as ProductForm["skinType"] }))} />
               </label>
@@ -576,7 +677,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
                 <TagSuggestionChips suggestions={tagSuggestions.wellnessInterests ?? []} current={productForm.wellnessInterests.split(",").map(v => v.trim()).filter(Boolean)} labelFor={value => wellnessInterestLabelByValue.get(value) ?? value} onApply={value => setProductForm(current => { const list = current.wellnessInterests.split(",").map(v => v.trim()).filter(Boolean); return { ...current, wellnessInterests: [...list, value].join(",") }; })} />
               </label>
               <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Интерьерийн загвар (interior бараанд)<input value={productForm.interiorStyle} onChange={event => setProductForm(current => ({ ...current, interiorStyle: event.target.value }))} placeholder="жишээ: minimalist" className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#3970a7]" /></label>
-            </div></div>{productForm.id && <AdminProductVariantsPanel productId={productForm.id} />}<div className="sm:col-span-2"><p className="text-xs font-bold">Бүтээгдэхүүний зураг</p><div className="mt-2 flex flex-col gap-3 rounded-2xl border border-dashed border-[#df1f3d]/30 bg-white p-3 sm:flex-row sm:items-center"><label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-full bg-[#17181b] px-4 text-xs font-bold text-white transition hover:bg-[#df1f3d]"><ImageUp size={15} />{uploadProductImage.isPending ? "Байршуулж байна…" : "Зураг сонгох"}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={onImageSelected} disabled={uploadProductImage.isPending} className="sr-only" /></label>{productForm.imageUrl ? <><img src={productForm.imageUrl} alt="Selected product" className="size-12 rounded-xl object-cover" /><span className="min-w-0 truncate text-xs text-[#77787d]">{productForm.imageUrl}</span></> : <span className="text-xs text-[#77787d]">JPG, PNG эсвэл WEBP · 8 MB хүртэл</span>}</div></div><label className="flex items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold sm:col-span-2"><input type="checkbox" checked={productForm.isPublished} onChange={event => setProductForm(current => ({ ...current, isPublished: event.target.checked }))} className="size-4 accent-[#df1f3d]" />Нийтлэхэд бэлэн</label></div><button type="submit" disabled={isCatalogBusy || uploadProductImage.isPending} className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#df1f3d] px-5 py-3 text-xs font-bold text-white disabled:opacity-60">{isCatalogBusy && <LoaderCircle className="animate-spin" size={15} />}{productForm.id ? "Өөрчлөлт хадгалах" : "Бүтээгдэхүүн үүсгэх"}</button></form>}
+            </div></div>{productForm.id && <AdminProductVariantsPanel productId={productForm.id} />}{productForm.id && <div className="sm:col-span-2"><AdminHistoryPanel entityType="product" entityId={productForm.id} isFullAdmin={isFullAdmin} /></div>}<div className="sm:col-span-2"><p className="text-xs font-bold">Бүтээгдэхүүний зураг</p><div className="mt-2 flex flex-col gap-3 rounded-2xl border border-dashed border-[#df1f3d]/30 bg-white p-3 sm:flex-row sm:items-center"><label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-full bg-[#17181b] px-4 text-xs font-bold text-white transition hover:bg-[#df1f3d]"><ImageUp size={15} />{uploadProductImage.isPending ? "Байршуулж байна…" : "Зураг сонгох"}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={onImageSelected} disabled={uploadProductImage.isPending} className="sr-only" /></label>{productForm.imageUrl ? <><img src={productForm.imageUrl} alt="Selected product" className="size-12 rounded-xl object-cover" /><span className="min-w-0 truncate text-xs text-[#77787d]">{productForm.imageUrl}</span></> : <span className="text-xs text-[#77787d]">JPG, PNG эсвэл WEBP · 8 MB хүртэл</span>}</div></div><label className="flex items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold sm:col-span-2"><input type="checkbox" checked={productForm.isPublished} onChange={event => setProductForm(current => ({ ...current, isPublished: event.target.checked }))} className="size-4 accent-[#df1f3d]" />Нийтлэхэд бэлэн</label></div><button type="submit" disabled={isCatalogBusy || uploadProductImage.isPending} className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#df1f3d] px-5 py-3 text-xs font-bold text-white disabled:opacity-60">{isCatalogBusy && <LoaderCircle className="animate-spin" size={15} />}{productForm.id ? "Өөрчлөлт хадгалах" : "Бүтээгдэхүүн үүсгэх"}</button></form>}
 
             {composer === "category" && <form onSubmit={saveCategory} className="mt-7 rounded-3xl border border-[#3970a7]/25 bg-[#f1f6fb] p-5"><div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-extrabold tracking-[.14em] text-[#3970a7]">CATALOG CATEGORY</p><h3 className="mt-1 font-[var(--font-display)] text-xl font-semibold tracking-[-.05em]">{categoryForm.id ? "Ангилал засах" : "Шинэ ангилал үүсгэх"}</h3></div><div className="flex items-center gap-4">{liveCategoryRef?.isActive && <a href={`/shop?category=${encodeURIComponent(liveCategoryRef.name)}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-bold text-[#3970a7]"><ExternalLink size={13} />Амьд хуудсыг харах</a>}<button type="button" onClick={() => setComposer(null)} className="text-xs font-bold text-[#707176]">Хаах</button></div></div><div className="mt-5 grid gap-3 sm:grid-cols-2"><label className="grid gap-1.5 text-xs font-bold">Нэр<input required value={categoryForm.name} onChange={event => setCategoryForm(current => ({ ...current, name: event.target.value, slug: current.slug || slugify(event.target.value) }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#3970a7]" /></label><label className="grid gap-1.5 text-xs font-bold">URL slug<input required value={categoryForm.slug} onChange={event => setCategoryForm(current => ({ ...current, slug: slugify(event.target.value) }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#3970a7]" /><span className="mt-0.5 block text-[11px] font-normal text-[#8a8b8f]">Тайлбар/дотоод зорилгоор л ашиглагдана — /shop дээрх шүүлтүүр нэрээр (дээрх талбар) тохирдог, энэ slug-оор биш.</span></label><label className="grid gap-1.5 text-xs font-bold">Эрэмбэ<input required min="0" type="number" value={categoryForm.sortOrder} onChange={event => setCategoryForm(current => ({ ...current, sortOrder: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#3970a7]" /></label><label className="flex items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold"><input type="checkbox" checked={categoryForm.isActive} onChange={event => setCategoryForm(current => ({ ...current, isActive: event.target.checked }))} className="size-4 accent-[#3970a7]" />Идэвхтэй ангилал</label><label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Тайлбар<textarea value={categoryForm.description} onChange={event => setCategoryForm(current => ({ ...current, description: event.target.value }))} className="min-h-20 rounded-xl border border-black/10 bg-white p-3 text-sm font-normal outline-none focus:border-[#3970a7]" /></label></div><button type="submit" disabled={isCatalogBusy} className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#3970a7] px-5 py-3 text-xs font-bold text-white disabled:opacity-60">{isCatalogBusy && <LoaderCircle className="animate-spin" size={15} />}{categoryForm.id ? "Өөрчлөлт хадгалах" : "Ангилал үүсгэх"}</button></form>}
           </section>

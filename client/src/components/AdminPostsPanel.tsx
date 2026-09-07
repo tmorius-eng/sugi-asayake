@@ -1,5 +1,5 @@
 import { lazy, Suspense, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
-import { ChevronLeft, ChevronRight, ExternalLink, ImageUp, LoaderCircle, Pencil, PencilLine, Plus, RotateCcw, Send, Trash2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, ImageUp, LayoutGrid, List, LoaderCircle, Pencil, PencilLine, Plus, RotateCcw, Send, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -103,6 +103,11 @@ export default function AdminPostsPanel({ preview = false }: { preview?: boolean
   const [mediaModalOpen, setMediaModalOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"all" | PostStatus>("all");
   const [page, setPage] = useState(1);
+  // 2026-09-07 (Project "SUGI Desk"): same board/list toggle as
+  // AdminOperationsPanel.tsx's Orders section -- board mode shows every
+  // status as its own column (bypassing the pill filter, which is a
+  // list-mode-only concept) instead of one flat, filtered list.
+  const [viewMode, setViewMode] = useState<"list" | "board">("board");
   const mediaResolveRef = useRef<((url: string | null) => void) | null>(null);
 
   const posts = (preview ? [] : postsQuery.data ?? []) as AdminPost[];
@@ -247,8 +252,22 @@ export default function AdminPostsPanel({ preview = false }: { preview?: boolean
   const alreadyPublished = Boolean(editingPost?.isPublished);
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[1.4fr_.9fr]">
-      <div className="grid gap-4">
+    <div className="grid gap-5">
+      {/* 2026-09-07: the composer+sidebar stay a narrow 2-column block (the
+          sidebar cards genuinely belong right next to the form they edit),
+          but the post list/board below is now a SEPARATE, full-width child
+          of the outer grid instead of being nested inside the narrow 1.4fr
+          column -- the Kanban board added below needs real width to lay out
+          its columns; squeezed into ~58% of the page it was an unusable,
+          horizontally-scrolling mess. */}
+      <div className="grid gap-5 lg:grid-cols-[1.4fr_.9fr]">
+      {/* Without min-w-0, this column (a grid item with an fr track)
+          defaults to min-width:auto -- if TinyMCE's toolbar/editor ever
+          needs more room than its 1.4fr share, the grid refuses to shrink
+          and pushes the .9fr sidebar column out past the container instead.
+          Same bug class already found and fixed once in
+          AdminAnalyticsPanel.tsx (2026-08-27); this file just missed it. */}
+      <div className="grid min-w-0 gap-4">
         <div className="rounded-3xl bg-[#f8f5ef] p-5">
           <div className="flex items-center justify-between gap-3">
             <p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">{editingPost ? "НИЙТЛЭЛ ЗАСАХ" : "ШИНЭ НИЙТЛЭЛ"}</p>
@@ -299,58 +318,9 @@ export default function AdminPostsPanel({ preview = false }: { preview?: boolean
             </CollapsibleContent>
           </Collapsible>
         </div>
-
-        <section className="grid gap-3">
-          <div className="flex flex-wrap gap-2">
-            {(["all", "published", "scheduled", "draft", "trash"] as const).map(key => (
-              <button key={key} type="button" onClick={() => { setStatusFilter(key); setPage(1); }} className={`rounded-full px-3 py-1.5 text-[11px] font-bold transition ${statusFilter === key ? "bg-[#17181b] text-white" : "bg-[#f8f5ef] text-[#57585e] hover:bg-[#fff0f2]"}`}>
-                {key === "all" ? "Бүгд" : statusLabels[key]} ({counts[key]})
-              </button>
-            ))}
-          </div>
-          {postsQuery.isLoading && <p className="flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={15} />Нийтлэлүүдийг уншиж байна…</p>}
-          {pagedPosts.length === 0 && !postsQuery.isLoading ? (
-            <div className="rounded-3xl bg-[#eef3f1] p-7 text-center text-sm text-[#707176]"><PencilLine className="mx-auto mb-3 text-[#3970a7]" size={27} />Одоогоор нийтлэл алга.</div>
-          ) : pagedPosts.map(item => {
-            const status = statusOf(item);
-            return (
-              <div key={item.id} className="flex gap-3 rounded-2xl border border-black/7 p-4">
-                {item.coverImageUrl ? <img src={item.coverImageUrl} alt="" className="size-16 shrink-0 rounded-lg object-cover" /> : <div className="grid size-16 shrink-0 place-items-center rounded-lg bg-[#f8f5ef] text-[#c7c8cc]"><ImageUp size={20} /></div>}
-                <div className="flex flex-1 flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <strong className="block truncate text-sm">{item.title}</strong>
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${statusBadgeClass[status]}`}>{statusLabels[status]}</span>
-                      {item.categories.map(category => <span key={category.id} className="rounded-full bg-[#eef3f1] px-2 py-0.5 text-[10px] font-bold text-[#3970a7]">{category.name}</span>)}
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-3">
-                    {status !== "trash" && (status === "published" || status === "scheduled") && <a href={`/${item.slug}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-bold text-[#3970a7] hover:text-[#df1f3d]"><ExternalLink size={13} />Харах</a>}
-                    {status !== "trash" && <button type="button" onClick={() => startEditPost(item)} className="inline-flex items-center gap-1 text-xs font-bold text-[#3970a7] hover:text-[#df1f3d]"><Pencil size={12} />Засах</button>}
-                    {status !== "trash" ? (
-                      <button type="button" onClick={() => trashPost.mutate({ id: item.id })} className="text-xs font-bold text-[#a51630]">Хогийн сан</button>
-                    ) : (
-                      <>
-                        <button type="button" onClick={() => restorePost.mutate({ id: item.id })} className="inline-flex items-center gap-1 text-xs font-bold text-[#2c7650]"><RotateCcw size={12} />Сэргээх</button>
-                        <button type="button" onClick={() => { if (window.confirm(`"${item.title}" нийтлэлийг бүрмөсөн устгах уу? Энэ үйлдлийг буцаах боломжгүй.`)) permanentlyDeletePost.mutate({ id: item.id }); }} className="inline-flex items-center gap-1 text-xs font-bold text-[#a51630]"><Trash2 size={12} />Бүрмөсөн устгах</button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-          {filteredPosts.length > POSTS_PAGE_SIZE && (
-            <div className="flex items-center justify-center gap-3 text-xs text-[#77787d]">
-              <button type="button" onClick={() => setPage(current => Math.max(1, current - 1))} disabled={page === 1} className="grid size-8 place-items-center rounded-full border border-black/10 disabled:opacity-35"><ChevronLeft size={15} /></button>
-              <span>{page} / {totalPages}</span>
-              <button type="button" onClick={() => setPage(current => Math.min(totalPages, current + 1))} disabled={page === totalPages} className="grid size-8 place-items-center rounded-full border border-black/10 disabled:opacity-35"><ChevronRight size={15} /></button>
-            </div>
-          )}
-        </section>
       </div>
 
-      <div className="grid gap-4 lg:content-start">
+      <div className="grid min-w-0 gap-4 lg:content-start">
         <section className="rounded-2xl border border-black/10 bg-white p-4">
           <p className="text-[10px] font-extrabold tracking-[.14em] text-[#57585e]">НИЙТЛЭХ</p>
           <label className="mt-3 grid gap-1 text-xs font-bold">Огноо {isScheduling ? "(товлох)" : ""}
@@ -423,8 +393,134 @@ export default function AdminPostsPanel({ preview = false }: { preview?: boolean
           <input value={tagDraft} onChange={event => setTagDraft(event.target.value)} onKeyDown={onTagKeyDown} onBlur={addTagFromDraft} placeholder="Тег бичээд Enter дарна" className="mt-2 h-9 w-full rounded-lg border border-black/10 px-2 text-xs outline-none focus:border-[#df1f3d]" />
         </section>
       </div>
+      </div>
+
+      <section className="grid min-w-0 gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {viewMode === "list" ? (
+            <div className="flex flex-wrap gap-2">
+              {(["all", "published", "scheduled", "draft", "trash"] as const).map(key => (
+                <button key={key} type="button" onClick={() => { setStatusFilter(key); setPage(1); }} className={`rounded-full px-3 py-1.5 text-[11px] font-bold transition ${statusFilter === key ? "bg-[#17181b] text-white" : "bg-[#f8f5ef] text-[#57585e] hover:bg-[#fff0f2]"}`}>
+                  {key === "all" ? "Бүгд" : statusLabels[key]} ({counts[key]})
+                </button>
+              ))}
+            </div>
+          ) : <span />}
+          <div className="inline-flex rounded-full border border-black/10 bg-white p-1">
+            <button type="button" onClick={() => setViewMode("board")} aria-label="Самбар харагдац" title="Самбар (Kanban)" className={`grid size-8 place-items-center rounded-full transition ${viewMode === "board" ? "bg-[#17181b] text-white" : "text-[#8a8b8f] hover:text-[#17181b]"}`}><LayoutGrid size={14} /></button>
+            <button type="button" onClick={() => setViewMode("list")} aria-label="Жагсаалт харагдац" title="Жагсаалт" className={`grid size-8 place-items-center rounded-full transition ${viewMode === "list" ? "bg-[#17181b] text-white" : "text-[#8a8b8f] hover:text-[#17181b]"}`}><List size={14} /></button>
+          </div>
+        </div>
+        {postsQuery.isLoading && <p className="flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={15} />Нийтлэлүүдийг уншиж байна…</p>}
+        {!postsQuery.isLoading && viewMode === "board" && (
+          <PostsKanbanBoard
+            posts={posts}
+            onEdit={startEditPost}
+            onTrash={id => trashPost.mutate({ id })}
+            onRestore={id => restorePost.mutate({ id })}
+            onPermanentlyDelete={(id, title) => { if (window.confirm(`"${title}" нийтлэлийг бүрмөсөн устгах уу? Энэ үйлдлийг буцаах боломжгүй.`)) permanentlyDeletePost.mutate({ id }); }}
+          />
+        )}
+        {viewMode === "list" && (pagedPosts.length === 0 && !postsQuery.isLoading ? (
+          <div className="rounded-3xl bg-[#eef3f1] p-7 text-center text-sm text-[#707176]"><PencilLine className="mx-auto mb-3 text-[#3970a7]" size={27} />Одоогоор нийтлэл алга.</div>
+        ) : pagedPosts.map(item => {
+          const status = statusOf(item);
+          return (
+            <div key={item.id} className="flex min-w-0 gap-3 rounded-2xl border border-black/7 p-4">
+              {item.coverImageUrl ? <img src={item.coverImageUrl} alt="" className="size-16 shrink-0 rounded-lg object-cover" /> : <div className="grid size-16 shrink-0 place-items-center rounded-lg bg-[#f8f5ef] text-[#c7c8cc]"><ImageUp size={20} /></div>}
+              <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <strong className="block truncate text-sm">{item.title}</strong>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${statusBadgeClass[status]}`}>{statusLabels[status]}</span>
+                    {item.categories.map(category => <span key={category.id} className="rounded-full bg-[#eef3f1] px-2 py-0.5 text-[10px] font-bold text-[#3970a7]">{category.name}</span>)}
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  {status !== "trash" && (status === "published" || status === "scheduled") && <a href={`/${item.slug}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-bold text-[#3970a7] hover:text-[#df1f3d]"><ExternalLink size={13} />Харах</a>}
+                  {status !== "trash" && <button type="button" onClick={() => startEditPost(item)} className="inline-flex items-center gap-1 text-xs font-bold text-[#3970a7] hover:text-[#df1f3d]"><Pencil size={12} />Засах</button>}
+                  {status !== "trash" ? (
+                    <button type="button" onClick={() => trashPost.mutate({ id: item.id })} className="text-xs font-bold text-[#a51630]">Хогийн сан</button>
+                  ) : (
+                    <>
+                      <button type="button" onClick={() => restorePost.mutate({ id: item.id })} className="inline-flex items-center gap-1 text-xs font-bold text-[#2c7650]"><RotateCcw size={12} />Сэргээх</button>
+                      <button type="button" onClick={() => { if (window.confirm(`"${item.title}" нийтлэлийг бүрмөсөн устгах уу? Энэ үйлдлийг буцаах боломжгүй.`)) permanentlyDeletePost.mutate({ id: item.id }); }} className="inline-flex items-center gap-1 text-xs font-bold text-[#a51630]"><Trash2 size={12} />Бүрмөсөн устгах</button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        }))}
+        {viewMode === "list" && filteredPosts.length > POSTS_PAGE_SIZE && (
+          <div className="flex items-center justify-center gap-3 text-xs text-[#77787d]">
+            <button type="button" onClick={() => setPage(current => Math.max(1, current - 1))} disabled={page === 1} className="grid size-8 place-items-center rounded-full border border-black/10 disabled:opacity-35"><ChevronLeft size={15} /></button>
+            <span>{page} / {totalPages}</span>
+            <button type="button" onClick={() => setPage(current => Math.min(totalPages, current + 1))} disabled={page === totalPages} className="grid size-8 place-items-center rounded-full border border-black/10 disabled:opacity-35"><ChevronRight size={15} /></button>
+          </div>
+        )}
+      </section>
 
       <MediaLibraryModal open={mediaModalOpen} onOpenChange={handleMediaModalOpenChange} onSelect={handleMediaSelect} />
+    </div>
+  );
+}
+
+// 2026-09-07 (Project "SUGI Desk"): editorial-status Kanban -- one column per
+// PostStatus. Unlike Orders' board (a single `status` enum field any card can
+// be reassigned to), a post's status is DERIVED (statusOf) from isPublished/
+// publishedAt/deletedAt, so there's no single dropdown that moves a card
+// between all four columns -- each column gets the exact same status-specific
+// actions the list view already has (Засах/Хогийн сан for draft & scheduled,
+// +Харах for published, Сэргээх/Бүрмөсөн устгах for trash) instead of one
+// universal "move" control.
+function PostsKanbanBoard({
+  posts, onEdit, onTrash, onRestore, onPermanentlyDelete,
+}: {
+  posts: AdminPost[];
+  onEdit: (post: AdminPost) => void;
+  onTrash: (id: number) => void;
+  onRestore: (id: number) => void;
+  onPermanentlyDelete: (id: number, title: string) => void;
+}) {
+  const columns: PostStatus[] = ["draft", "scheduled", "published", "trash"];
+  if (posts.length === 0) return <div className="rounded-3xl bg-[#eef3f1] p-7 text-center text-sm text-[#707176]"><PencilLine className="mx-auto mb-3 text-[#3970a7]" size={27} />Одоогоор нийтлэл алга.</div>;
+  return (
+    <div className="flex gap-4 overflow-x-auto pb-2">
+      {columns.map(status => {
+        const columnPosts = posts.filter(post => statusOf(post) === status);
+        return (
+          <div key={status} className="w-72 shrink-0">
+            <div className="mb-3 flex items-center justify-between px-1">
+              <p className="text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]">{statusLabels[status].toUpperCase()}</p>
+              <span className="rounded-full bg-[#f8f5ef] px-2 py-0.5 text-[10px] font-extrabold text-[#57585e]">{columnPosts.length}</span>
+            </div>
+            <div className="grid min-w-0 gap-2.5 rounded-2xl bg-[#f8f5ef]/60 p-2.5">
+              {columnPosts.map(post => (
+                <div key={post.id} className="min-w-0 rounded-2xl border border-black/7 bg-white p-3.5">
+                  <strong className="block truncate text-sm">{post.title}</strong>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10px] text-[#3970a7]">
+                    {post.categories.map(category => <span key={category.id} className="rounded-full bg-[#eef3f1] px-2 py-0.5 font-bold">{category.name}</span>)}
+                  </div>
+                  <div className="mt-2.5 flex flex-wrap items-center gap-3">
+                    {status !== "trash" && (status === "published" || status === "scheduled") && <a href={`/${post.slug}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] font-bold text-[#3970a7] hover:text-[#df1f3d]"><ExternalLink size={12} />Харах</a>}
+                    {status !== "trash" && <button type="button" onClick={() => onEdit(post)} className="inline-flex items-center gap-1 text-[11px] font-bold text-[#3970a7] hover:text-[#df1f3d]"><Pencil size={11} />Засах</button>}
+                    {status !== "trash" ? (
+                      <button type="button" onClick={() => onTrash(post.id)} className="text-[11px] font-bold text-[#a51630]">Хогийн сан</button>
+                    ) : (
+                      <>
+                        <button type="button" onClick={() => onRestore(post.id)} className="inline-flex items-center gap-1 text-[11px] font-bold text-[#2c7650]"><RotateCcw size={11} />Сэргээх</button>
+                        <button type="button" onClick={() => onPermanentlyDelete(post.id, post.title)} className="inline-flex items-center gap-1 text-[11px] font-bold text-[#a51630]"><Trash2 size={11} />Устгах</button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {columnPosts.length === 0 && <p className="py-6 text-center text-[11px] text-[#b7b8bc]">Хоосон</p>}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

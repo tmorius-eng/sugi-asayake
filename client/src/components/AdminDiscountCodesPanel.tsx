@@ -2,6 +2,7 @@ import { useState } from "react";
 import { LoaderCircle, Pencil, Tag, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { GenericListView, type GenericListColumn } from "./admin/GenericListView";
 import { formatMnt } from "@shared/format";
 
 // Manually-entered checkout discount codes ("SALE10") -- distinct from the
@@ -101,6 +102,28 @@ export default function AdminDiscountCodesPanel() {
   };
 
   const codes = (codesQuery.data ?? []) as DiscountCodeRow[];
+  const headerCell = "border-b border-black/8 pb-2";
+  const bodyCell = "border-b border-black/6 py-3";
+  const columns: GenericListColumn<DiscountCodeRow>[] = [
+    {
+      id: "code", header: "КОД", headerClassName: headerCell, cellClassName: bodyCell,
+      render: code => {
+        const expired = code.expiresAt ? new Date(code.expiresAt) < new Date() : false;
+        return <><strong className="block font-mono">{code.code}</strong>{code.expiresAt ? <small className="mt-1 block text-[10px] font-bold tracking-[.06em] text-[#85868a]">{expired ? "Дууссан: " : "Хүчинтэй хүртэл: "}{new Date(code.expiresAt).toLocaleString("mn-MN")}</small> : null}</>;
+      },
+    },
+    { id: "discount", header: "ХЯМДРАЛ", headerClassName: headerCell, cellClassName: `${bodyCell} font-bold`, render: code => code.type === "percent" ? `-${code.percentValue}%` : `-${formatMnt(code.fixedAmountMnt ?? 0)}` },
+    { id: "minimum", header: "МИНИМУМ", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[#6f7075]`, render: code => code.minSubtotalMnt > 0 ? `${formatMnt(code.minSubtotalMnt)}-с дээш` : "—" },
+    { id: "uses", header: "АШИГЛАЛТ", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[#6f7075]`, render: code => `${code.usesCount}${code.maxUses !== null ? ` / ${code.maxUses}` : ""}` },
+    {
+      id: "status", header: "ТӨЛӨВ", headerClassName: headerCell, cellClassName: bodyCell,
+      render: code => {
+        const expired = code.expiresAt ? new Date(code.expiresAt) < new Date() : false;
+        const usedUp = code.maxUses !== null && code.usesCount >= code.maxUses;
+        return <span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${code.isActive && !expired && !usedUp ? "bg-[#e7f2ec] text-[#2c7650]" : "bg-[#f1f1f2] text-[#75767b]"}`}>{!code.isActive ? "Идэвхгүй" : expired ? "Хугацаа дууссан" : usedUp ? "Дууссан" : "Идэвхтэй"}</span>;
+      },
+    },
+  ];
 
   return (
     <div>
@@ -108,33 +131,25 @@ export default function AdminDiscountCodesPanel() {
 
       {codesQuery.isLoading && <p className="mt-5 flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>}
 
-      {!codesQuery.isLoading && !composerOpen && <div className="mt-5 overflow-x-auto">
-        <table className="min-w-[760px] w-full border-separate border-spacing-0 text-left">
-          <thead><tr className="text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]">
-            <th className="border-b border-black/8 pb-2">КОД</th>
-            <th className="border-b border-black/8 pb-2">ХЯМДРАЛ</th>
-            <th className="border-b border-black/8 pb-2">МИНИМУМ</th>
-            <th className="border-b border-black/8 pb-2">АШИГЛАЛТ</th>
-            <th className="border-b border-black/8 pb-2">ТӨЛӨВ</th>
-            <th className="border-b border-black/8 pb-2" />
-          </tr></thead>
-          <tbody>
-            {codes.map(code => {
-              const expired = code.expiresAt ? new Date(code.expiresAt) < new Date() : false;
-              const usedUp = code.maxUses !== null && code.usesCount >= code.maxUses;
-              return <tr key={code.id} className="text-sm">
-                <td className="border-b border-black/6 py-3"><strong className="block font-mono">{code.code}</strong>{code.expiresAt ? <small className="mt-1 block text-[10px] font-bold tracking-[.06em] text-[#85868a]">{expired ? "Дууссан: " : "Хүчинтэй хүртэл: "}{new Date(code.expiresAt).toLocaleString("mn-MN")}</small> : null}</td>
-                <td className="border-b border-black/6 py-3 font-bold">{code.type === "percent" ? `-${code.percentValue}%` : `-${formatMnt(code.fixedAmountMnt ?? 0)}`}</td>
-                <td className="border-b border-black/6 py-3 text-xs text-[#6f7075]">{code.minSubtotalMnt > 0 ? `${formatMnt(code.minSubtotalMnt)}-с дээш` : "—"}</td>
-                <td className="border-b border-black/6 py-3 text-xs text-[#6f7075]">{code.usesCount}{code.maxUses !== null ? ` / ${code.maxUses}` : ""}</td>
-                <td className="border-b border-black/6 py-3"><span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${code.isActive && !expired && !usedUp ? "bg-[#e7f2ec] text-[#2c7650]" : "bg-[#f1f1f2] text-[#75767b]"}`}>{!code.isActive ? "Идэвхгүй" : expired ? "Хугацаа дууссан" : usedUp ? "Дууссан" : "Идэвхтэй"}</span></td>
-                <td className="border-b border-black/6 py-3 text-right"><div className="flex justify-end gap-1"><button type="button" onClick={() => openComposer(code)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d]" aria-label={`${code.code} засах`}><Pencil size={15} /></button><button type="button" onClick={() => { if (window.confirm(`"${code.code}" кодыг бүрмөсөн устгах уу?`)) deleteCode.mutate({ id: code.id }); }} className="rounded-full p-2 text-[#707176] transition hover:bg-[#fff0f2] hover:text-[#df1f3d]" aria-label={`${code.code} устгах`}><Trash2 size={15} /></button></div></td>
-              </tr>;
-            })}
-            {codes.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-sm text-[#77787d]">Одоогоор хямдралын код алга. Дээрх товчоор эхнийхээ үүсгээрэй.</td></tr>}
-          </tbody>
-        </table>
-      </div>}
+      {!codesQuery.isLoading && !composerOpen && (
+        <div className="mt-5">
+          <GenericListView<DiscountCodeRow>
+            rows={codes}
+            getRowId={code => code.id}
+            columns={columns}
+            tableClassName="min-w-[760px] w-full border-separate border-spacing-0 text-left"
+            actionsHeaderClassName={headerCell}
+            actionsCellClassName={`${bodyCell} text-right`}
+            emptyMessage="Одоогоор хямдралын код алга. Дээрх товчоор эхнийхээ үүсгээрэй."
+            rowActions={code => (
+              <div className="flex justify-end gap-1">
+                <button type="button" onClick={() => openComposer(code)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d]" aria-label={`${code.code} засах`}><Pencil size={15} /></button>
+                <button type="button" onClick={() => { if (window.confirm(`"${code.code}" кодыг бүрмөсөн устгах уу?`)) deleteCode.mutate({ id: code.id }); }} className="rounded-full p-2 text-[#707176] transition hover:bg-[#fff0f2] hover:text-[#df1f3d]" aria-label={`${code.code} устгах`}><Trash2 size={15} /></button>
+              </div>
+            )}
+          />
+        </div>
+      )}
 
       {composerOpen && <form onSubmit={save} className="mt-2 rounded-3xl border border-[#df1f3d]/25 bg-[#fff5f6] p-5">
         <div className="flex items-center justify-between gap-3">

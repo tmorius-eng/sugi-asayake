@@ -2,6 +2,7 @@ import { useState, type ChangeEvent } from "react";
 import { ArrowDown, ArrowUp, ImageUp, LoaderCircle, Pencil, Tags, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { GenericListView } from "./admin/GenericListView";
 
 // NEWVISION.md §5 "Топ брэндүүд" -- Tom's explicit correction to the
 // original plan, which had omitted a Brands admin section entirely. Same
@@ -132,23 +133,35 @@ export default function AdminBrandsPanel() {
 
       {brandsQuery.isLoading && <p className="mt-5 flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>}
 
-      {!brandsQuery.isLoading && !composerOpen && <div className="mt-5 grid gap-2">
-        {brands.map((brand, index) => <div key={brand.id} className="flex items-center gap-3 rounded-2xl border border-black/8 bg-white p-3">
-          <img src={brand.photoUrl ?? "/product-placeholder.svg"} alt="" className="size-14 shrink-0 rounded-xl bg-[#f8f5ef] object-cover" />
-          <div className="min-w-0 flex-1">
-            <strong className="block truncate text-sm">{brand.brandName}</strong>
-            {brand.tagline ? <span className="mt-0.5 block truncate text-xs text-[#77787d]">{brand.tagline}</span> : null}
-          </div>
-          <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-extrabold ${brand.isActive ? "bg-[#e7f2ec] text-[#2c7650]" : "bg-[#f1f1f2] text-[#75767b]"}`}>{brand.isActive ? "Идэвхтэй" : "Идэвхгүй"}</span>
-          <div className="flex shrink-0 gap-1">
-            <button type="button" disabled={index === 0} onClick={() => move(brand, -1)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-30" aria-label="Дээш зөөх"><ArrowUp size={15} /></button>
-            <button type="button" disabled={index === brands.length - 1} onClick={() => move(brand, 1)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-30" aria-label="Доош зөөх"><ArrowDown size={15} /></button>
-            <button type="button" onClick={() => openComposer(brand)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d]" aria-label={`${brand.brandName} засах`}><Pencil size={15} /></button>
-            <button type="button" onClick={() => { if (window.confirm(`"${brand.brandName}"-г Топ брэндийн жагсаалтаас устгах уу?`)) deleteBrand.mutate({ id: brand.id }); }} className="rounded-full p-2 text-[#707176] transition hover:bg-[#fff0f2] hover:text-[#df1f3d]" aria-label={`${brand.brandName} устгах`}><Trash2 size={15} /></button>
-          </div>
-        </div>)}
-        {brands.length === 0 && <p className="rounded-2xl bg-[#f8f5ef] px-4 py-8 text-center text-xs text-[#77787d]">Одоогоор Топ брэнд алга. Дээрх товчоор эхнийхээ нэмээрэй.</p>}
-      </div>}
+      {!brandsQuery.isLoading && !composerOpen && (
+        <div className="mt-5">
+          <GenericListView
+            rows={brands}
+            getRowId={brand => brand.id}
+            cardListClassName="grid gap-2"
+            emptyMessage={<p className="rounded-2xl bg-[#f8f5ef] px-4 py-8 text-center text-xs text-[#77787d]">Одоогоор Топ брэнд алга. Дээрх товчоор эхнийхээ нэмээрэй.</p>}
+            renderRow={brand => {
+              const index = brands.findIndex(row => row.id === brand.id);
+              return (
+                <div className="flex items-center gap-3 rounded-2xl border border-black/8 bg-white p-3">
+                  <img src={brand.photoUrl ?? "/product-placeholder.svg"} alt="" className="size-14 shrink-0 rounded-xl bg-[#f8f5ef] object-cover" />
+                  <div className="min-w-0 flex-1">
+                    <strong className="block truncate text-sm">{brand.brandName}</strong>
+                    {brand.tagline ? <span className="mt-0.5 block truncate text-xs text-[#77787d]">{brand.tagline}</span> : null}
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-extrabold ${brand.isActive ? "bg-[#e7f2ec] text-[#2c7650]" : "bg-[#f1f1f2] text-[#75767b]"}`}>{brand.isActive ? "Идэвхтэй" : "Идэвхгүй"}</span>
+                  <div className="flex shrink-0 gap-1">
+                    <button type="button" disabled={index === 0} onClick={() => move(brand, -1)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-30" aria-label="Дээш зөөх"><ArrowUp size={15} /></button>
+                    <button type="button" disabled={index === brands.length - 1} onClick={() => move(brand, 1)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-30" aria-label="Доош зөөх"><ArrowDown size={15} /></button>
+                    <button type="button" onClick={() => openComposer(brand)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d]" aria-label={`${brand.brandName} засах`}><Pencil size={15} /></button>
+                    <button type="button" onClick={() => { if (window.confirm(`"${brand.brandName}"-г Топ брэндийн жагсаалтаас устгах уу?`)) deleteBrand.mutate({ id: brand.id }); }} className="rounded-full p-2 text-[#707176] transition hover:bg-[#fff0f2] hover:text-[#df1f3d]" aria-label={`${brand.brandName} устгах`}><Trash2 size={15} /></button>
+                  </div>
+                </div>
+              );
+            }}
+          />
+        </div>
+      )}
 
       {composerOpen && <form onSubmit={save} className="mt-2 rounded-3xl border border-[#df1f3d]/25 bg-[#fff5f6] p-5">
         <div className="flex items-center justify-between gap-3">

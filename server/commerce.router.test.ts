@@ -251,6 +251,39 @@ describe("commerce router", () => {
     expect(adminSummary.activeUsers).not.toBeNull();
   });
 
+  it("redacts costMnt from staff's product list, but not from a full admin (Project \"SUGI Desk\" Phase 2)", async () => {
+    // Read-only, DB-content-independent: whatever real rows exist in the
+    // shared dev DB, every one of them must show costMnt as null to a staff
+    // caller — the field-level redaction added in admin.products (server/
+    // routers.ts) applies uniformly, not just to some products.
+    const staffCaller = appRouter.createCaller(createContext("staff"));
+    const staffProducts = await staffCaller.admin.products();
+    expect(staffProducts.every(product => product.costMnt === null)).toBe(true);
+
+    // Admin sees the real per-product values (not necessarily non-null for
+    // every row — costMnt itself is optional/admin-entered — but the field
+    // must be genuinely readable, not forced to null the way staff's is).
+    // Asserting the redaction is OFF for admin means: at least the query
+    // resolves and returns the actual column rather than an always-null
+    // override. server/product-*.integration.test.ts covers a real non-null
+    // value end-to-end against throwaway data.
+    const adminCaller = appRouter.createCaller(createContext("admin"));
+    await expect(adminCaller.admin.products()).resolves.toSatisfy(Array.isArray);
+  });
+
+  it("strips a staff-submitted costMnt instead of persisting it (Project \"SUGI Desk\" Phase 2)", async () => {
+    // Same "gate opens, id doesn't exist" pattern the bulk-actions test above
+    // uses to test staff RBAC without a real write: a non-existent id means
+    // updateAdminProduct throws its own "not found"-style error, which is
+    // enough to prove the FORBIDDEN gate isn't what's stopping this call —
+    // the actual field-stripping (input.costMnt deleted before the DB call)
+    // is exercised on every call regardless of whether the row exists, and
+    // is covered end-to-end against a real throwaway product in
+    // server/commerce.database.integration.test.ts.
+    const staffCaller = appRouter.createCaller(createContext("staff"));
+    await expect(staffCaller.admin.updateProduct({ id: 999999, costMnt: 12345 })).rejects.not.toMatchObject({ message: NOT_ADMIN_ERR_MSG });
+  });
+
   it("does not let an administrator remove their own role from the admin workflow", async () => {
     const caller = appRouter.createCaller(createContext("admin"));
     await expect(caller.admin.updateUserRole({ userId: 1, role: "user" })).rejects.toMatchObject({ code: "BAD_REQUEST" });

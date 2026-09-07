@@ -66,6 +66,18 @@ export const ENV = {
   // than silently reporting to nowhere or throwing.
   honeybadgerApiKey: process.env.HONEYBADGER_API_KEY ?? "",
 
+  // 2026-09-07 (Project "SUGI Desk", System Logs) -- a DIFFERENT credential
+  // from honeybadgerApiKey above, not a typo/duplicate: Honeybadger's own
+  // docs split "project API key" (send-only, used by the SDK above) from a
+  // "Personal Auth Token" (read-only Data API, from the account's own
+  // Settings > Authentication page, not any one project's settings) --
+  // https://docs.honeybadger.io/api/getting-started/. Only this one is
+  // needed to list faults back into the admin System Logs tab; the project
+  // key is neither sufficient nor required for that read. Empty by default,
+  // same silent-no-op convention as honeybadgerApiKey (see
+  // server/_core/honeybadgerReadApi.ts).
+  honeybadgerPersonalAuthToken: process.env.HONEYBADGER_PERSONAL_AUTH_TOKEN ?? "",
+
   // verify.mn (2026-09-05): Mongolian Mobile-Originated SMS phone
   // verification -- backs an optional "verify your phone" step at register
   // and a phone-based alternative to the emailed reset code at
