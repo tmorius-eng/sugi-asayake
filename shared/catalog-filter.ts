@@ -15,6 +15,21 @@ export type CatalogDiscoveryItem = CatalogSearchItem & {
 // between the two places it's rendered.
 export const LOW_STOCK_THRESHOLD = 5;
 
+// 2026-09-07 (bsb.mn mobile-UX pass): ProductDetail previously showed nothing
+// at all once stock was healthy (only ever rendered a warning line below
+// LOW_STOCK_THRESHOLD) -- this gives every stock level an honest label
+// without ever inventing a number. Deliberately NOT the same convention as
+// Shop.tsx's grid cards (which already show the exact raw count on every
+// tile unconditionally, a different, already-working pattern for a
+// different, denser context) -- a precise "237 ширхэг үлдсэн" reads as
+// oddly fussy on a product's own page, so the healthy tier states
+// availability without a number at all.
+export function getStockStatusLabel(stockQuantity: number): { label: string; tone: "out" | "low" | "in" } {
+  if (stockQuantity <= 0) return { label: "Нөөц дууссан", tone: "out" };
+  if (stockQuantity <= LOW_STOCK_THRESHOLD) return { label: `Зөвхөн ${stockQuantity} ширхэг үлдсэн — удахгүй дуусна!`, tone: "low" };
+  return { label: "Нөөцөд бэлэн", tone: "in" };
+}
+
 // Sale badge (asahi.mn-style strikethrough price + "-X%"): compareAtPriceMnt
 // is the admin-entered "was" price. Only a real markdown counts — an equal
 // or lower compareAtPriceMnt is just bad data entry, not a sale.

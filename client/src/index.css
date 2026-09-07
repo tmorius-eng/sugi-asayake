@@ -158,6 +158,21 @@
      separate value (a broader shadcn-style semantic token used outside the
      homepage too, e.g. secondary buttons) rather than being repointed here. */
   --surface-tint: #eaf2f1;
+
+  /* 2026-09-07 (bsb.mn mobile-UX pass): shared height for BOTH mobile-only
+     sticky bottom bars (BottomNavBar.tsx site-wide, and ProductDetail.tsx's
+     own sticky add-to-cart bar which replaces it on that one page) -- they
+     never appear on screen at the same time (see each component's own
+     comment), but a shopper scrolling on either page needs the exact same
+     amount of bottom clearance, so both bars and the one footer-padding
+     rule that accounts for them all reference this single number instead
+     of three independent guesses that could quietly drift apart.
+     --safe-bottom uses the same var()-with-fallback trick as
+     --promo-banner-offset above: env(safe-area-inset-bottom) is 0 on every
+     non-notched device, so this is a no-op there and only adds real space
+     on an iPhone with a home indicator. */
+  --mobile-sticky-bar-h: 64px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 * { box-sizing: border-box; }
@@ -261,6 +276,17 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .location-note svg { color: var(--primary); }
 
 .site-footer { background: #17181b; color: #fff; }
+/* 2026-09-07 (bsb.mn mobile-UX pass): every real page ends with SiteFooter
+   (confirmed by grep -- 12/12, only AdminDashboard and the redirect-only
+   MyOrders don't render it), so this one unconditional rule is what keeps
+   the footer's own last row of links from ever sitting underneath either
+   mobile-only sticky bottom bar (BottomNavBar.tsx site-wide, or
+   ProductDetail's own sticky add-to-cart bar) -- deliberately NOT a
+   route-aware/JS-toggled padding, since both bars share one height
+   (--mobile-sticky-bar-h) and are never both on screen at once. */
+@media (max-width: 760px) {
+  .site-footer { padding-bottom: calc(var(--mobile-sticky-bar-h) + var(--safe-bottom) + 16px); }
+}
 /* 2026-09-06 (homepage consolidation): padding moved off .site-footer onto
    .footer-grid/.footer-bottom directly, so the optional .footer-cta-banner
    above them can bleed full-width instead of inheriting the footer's own
@@ -320,6 +346,18 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    linking away from this site to theirs. */
 #stcm-modal footer a.stcm-credit-link { display: none !important; }
 #stcm-banner a.stcm-logo { display: none !important; }
+/* 2026-09-07 (bsb.mn mobile-UX pass): real collision, found via direct
+   getBoundingClientRect() measurement, not a guess -- Silktide's own vendor
+   CSS fixes #stcm-icon at `bottom: 10px; left: 10px` (client/public/vendor/
+   silktide-consent-manager.css), which on mobile now sits almost exactly on
+   top of BottomNavBar.tsx's first ("Нүүр") tab (both fixed-position,
+   bottom-left). Same !important-override technique already established
+   above for this same vendor file -- shifts the icon to float just above
+   the new bar instead of overlapping it. Desktop (>760px, no bottom bar)
+   is untouched -- the icon keeps its original 10px position there. */
+@media (max-width: 760px) {
+  #stcm-icon { bottom: calc(var(--mobile-sticky-bar-h) + var(--safe-bottom) + 10px) !important; }
+}
 
 .footer-column a, .footer-column-button { color: rgba(255,255,255,.86); font-weight: 700; transition: color .18s var(--ease-out); }
 .footer-column a:hover, .footer-column-button:hover { color: #ffd27a; }
@@ -532,6 +570,28 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .commerce-header-actions button { position: relative; display: inline-flex; align-items: center; gap: 8px; padding: 11px 16px; border: 0; border-radius: 999px; background: #17181b; color: #fff; font-size: 12px; font-weight: 800; transition: transform .18s var(--ease-out), background .18s var(--ease-out); }
 .commerce-header-actions button:hover { background: var(--primary); transform: translateY(-2px); }.commerce-header-actions button:active { transform: scale(.97); }
 .commerce-header-actions button span { display: grid; width: 19px; height: 19px; place-items: center; border-radius: 50%; background: #f0b52d; color: #17181b; font-size: 10px; }
+
+/* --- Mobile bottom nav + ProductDetail's sticky add-to-cart bar ----------
+   2026-09-07 (bsb.mn mobile-UX pass, Tom's explicit reference). Two
+   DIFFERENT mobile-only sticky bottom bars that are never both on screen
+   at once -- BottomNavBar.tsx renders on every page except /product/*,
+   ProductDetail.tsx renders its own bar instead there (confirmed live on
+   bsb.mn: they never stack two sticky bottom bars on one screen either).
+   Both share --mobile-sticky-bar-h/z-40/the header's own sticky-chrome
+   treatment (rgba(255,249,242,.88) + blur, index.css's .commerce-header)
+   for visual consistency, and both stay hidden above 760px -- the same
+   breakpoint every other header/nav swap in this file already uses. */
+.mobile-sticky-bar { display: none; position: fixed; right: 0; bottom: 0; left: 0; z-index: 40; height: var(--mobile-sticky-bar-h); padding-bottom: var(--safe-bottom); border-top: 1px solid rgba(23,24,27,.1); background: rgba(255,249,242,.88); backdrop-filter: blur(16px) saturate(150%); }
+@media (max-width: 760px) { .mobile-sticky-bar { display: flex; } }
+
+.bottom-nav-bar { align-items: stretch; justify-content: space-around; }
+.bottom-nav-item { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border: 0; background: none; color: #77787d; font-size: 10px; font-weight: 700; }
+.bottom-nav-item.is-current { color: var(--primary); }
+.bottom-nav-item-icon { position: relative; }
+.bottom-nav-item-badge { position: absolute; top: -6px; right: -9px; display: grid; width: 16px; height: 16px; place-items: center; border-radius: 50%; background: #f0b52d; color: #17181b; font-size: 9px; font-weight: 800; }
+
+.pd-sticky-cart { align-items: center; gap: 12px; padding: 0 16px; }
+
 /* Design consistency audit (2026-09-02): mobile hamburger + slide-down
    drawer for CommerceHeader, restoring the "Дэлгүүр"/wishlist links the
    @media(max-width:760px) rule below hides from the top bar on mobile.
@@ -672,7 +732,21 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .shop-product-grid.is-compact { grid-template-columns: repeat(6,1fr); gap: 12px; }
 
 @media (max-width: 900px) { .hero-image { transform: none; outline-offset: 6px; }.shop-hero { grid-template-columns: 1fr; gap: 50px; }.shop-search-panel { max-width: 530px; }.shop-category-deck { grid-template-columns: repeat(2,1fr); }.shop-product-grid { grid-template-columns: repeat(3,1fr); }.shop-product-grid.is-compact { grid-template-columns: repeat(4,1fr); }.shop-discovery-heading { grid-template-columns: 1fr; gap: 24px; } }
-@media (max-width: 760px) { .hero-sunrise::before { top: 250px; left: 53%; width: 250px; height: 250px; }.hero-sunrise::after { top: 64px; width: 100%; height: 46%; }.hero-topline { align-items: flex-start; }.hero-time { padding-top: 2px; font-size: 8px; }.hero-signature { font-size: 8px; }.hero-image { border-radius: 24px 24px 0 24px; box-shadow: 12px 15px 0 rgba(57,112,167,.16), 0 25px 55px rgba(34,37,38,.14); }.hero-image-sun { top: 30%; right: 9%; width: 100px; height: 100px; }.hero-image-sun span { font-size: 27px; }.hero-image-marker { top: auto; bottom: 90px; font-size: 7px; }.sunrise-ribbon { padding: 12px 0; }.sunrise-ribbon span { font-size: 8px; }.story-section::after { top: 66px; right: -165px; width: 280px; height: 280px; }.collection-section::before { right: 20px; }.care-copy-panel::after { right: -114px; bottom: -111px; width: 250px; height: 250px; }.care-sun-stamp { top: 30px; right: 27px; width: 59px; height: 59px; font-size: 7px; }.final-cta { min-height: 250px; }.final-cta-sun { width: 66px; height: 66px; font-size: 7px; }.commerce-header { padding: 12px 18px; }.commerce-brand { gap: 8px; }.commerce-brand img { width: 130px; }.commerce-brand > span:last-child, .commerce-header-actions > a { display: none; }.commerce-header-actions { gap: 7px; }.commerce-header-actions button { padding: 10px 13px; }.commerce-header-actions .commerce-menu-toggle { display: inline-flex; }.commerce-mobile-menu { position: absolute; left: 0; right: 0; top: 100%; display: grid; max-height: 0; overflow: hidden; padding: 0 18px; background: rgba(255,249,242,.98); border-bottom: 1px solid transparent; transition: max-height .26s var(--ease-out), padding .26s var(--ease-out), border-color .26s var(--ease-out); }.commerce-mobile-menu.open { max-height: 220px; padding-top: 8px; padding-bottom: 10px; border-color: rgba(23,24,27,.1); }.commerce-mobile-menu a { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; border-bottom: 1px solid rgba(23,24,27,.1); color: #17181b; font-size: 13px; font-weight: 800; }.commerce-mobile-menu a:last-child { border-bottom: 0; color: var(--primary); }.shop-main { width: 100%; padding: 28px 0 70px; }.shop-hero { margin: 0 18px; padding: 46px 22px 38px; }.shop-hero h1 { font-size: clamp(51px,14vw,72px); }.shop-search-panel { padding: 40px 18px 22px; border-radius: 18px 0 18px 18px; box-shadow: 8px 9px 0 rgba(240,181,45,.72); }.shop-ribbon { margin-top: 26px; padding: 13px 18px; }.shop-filter { display: grid; gap: 19px; margin: 0 18px; padding-top: 31px; }.shop-filter-pills { max-width: 100%; }.shop-filter-facets { max-width: 100%; align-items: flex-start; }.shop-discovery { padding: 59px 22px 26px; }.shop-discovery h2 { font-size: clamp(45px,13vw,65px); }.shop-category-deck { grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 38px; }.shop-category-card { min-height: 190px; padding: 15px; }.shop-category-card h3 { font-size: 21px; }.shop-category-card p { font-size: 10px; }.shop-discovery-cta { align-items: flex-start; flex-direction: column; gap: 18px; margin-top: 32px; }.shop-discovery-cta > div:last-child { width: 100%; }.shop-discovery-cta a { flex: 1; justify-content: center; }.shop-product-grid { grid-template-columns: repeat(2,1fr); gap: 9px; padding: 26px 18px; }.shop-product-grid.is-compact { grid-template-columns: repeat(3,1fr); gap: 7px; }.shop-grid-toolbar { margin: -4px 0 10px; }.shop-product-copy { padding: 14px; }.shop-product-copy h2 { min-height: 42px; margin-top: 8px; font-size: 13px; }.shop-product-copy strong { font-size: 19px; }.shop-product-copy > div span { width: 30px; height: 30px; }.shop-pagination { flex-direction: column; gap: 12px; padding: 6px 18px 34px; }.shop-pagination button { width: 100%; justify-content: center; } }
+@media (max-width: 760px) { .hero-sunrise::before { top: 250px; left: 53%; width: 250px; height: 250px; }.hero-sunrise::after { top: 64px; width: 100%; height: 46%; }.hero-topline { align-items: flex-start; }.hero-time { padding-top: 2px; font-size: 8px; }.hero-signature { font-size: 8px; }.hero-image { border-radius: 24px 24px 0 24px; box-shadow: 12px 15px 0 rgba(57,112,167,.16), 0 25px 55px rgba(34,37,38,.14); }.hero-image-sun { top: 30%; right: 9%; width: 100px; height: 100px; }.hero-image-sun span { font-size: 27px; }.hero-image-marker { top: auto; bottom: 90px; font-size: 7px; }.sunrise-ribbon { padding: 12px 0; }.sunrise-ribbon span { font-size: 8px; }.story-section::after { top: 66px; right: -165px; width: 280px; height: 280px; }.collection-section::before { right: 20px; }.care-copy-panel::after { right: -114px; bottom: -111px; width: 250px; height: 250px; }.care-sun-stamp { top: 30px; right: 27px; width: 59px; height: 59px; font-size: 7px; }.final-cta { min-height: 250px; }.final-cta-sun { width: 66px; height: 66px; font-size: 7px; }.commerce-header { padding: 12px 18px; }.commerce-brand { gap: 8px; }.commerce-brand img { width: 130px; }.commerce-brand > span:last-child, .commerce-header-actions > a { display: none; }.commerce-header-actions { gap: 7px; }.commerce-header-actions button { padding: 10px 13px; }.commerce-header-actions .commerce-menu-toggle { display: inline-flex; }.commerce-mobile-menu { position: absolute; left: 0; right: 0; top: 100%; display: grid; max-height: 0; overflow: hidden; padding: 0 18px; background: rgba(255,249,242,.98); border-bottom: 1px solid transparent; transition: max-height .26s var(--ease-out), padding .26s var(--ease-out), border-color .26s var(--ease-out); }
+/* 2026-09-07 (bsb.mn mobile-UX pass): was a fixed 220px, sized for the old
+   3-5-row flat menu -- real content now (6 category rows + wishlist/profile
+   + a 3-link "about" section) genuinely overflows that and gets silently
+   clipped, not just theoretically. 70vh + its own scroll lets the drawer
+   grow with real content on any phone height without ever covering the
+   whole screen. */
+.commerce-mobile-menu.open { max-height: 70vh; overflow-y: auto; padding-top: 8px; padding-bottom: 10px; border-color: rgba(23,24,27,.1); }
+.commerce-mobile-menu a, .commerce-mobile-menu button.commerce-mobile-menu-row { display: flex; width: 100%; align-items: center; justify-content: space-between; padding: 14px 0; border: 0; border-bottom: 1px solid rgba(23,24,27,.1); background: none; color: #17181b; font-size: 13px; font-weight: 800; text-align: left; }
+.commerce-mobile-menu a:last-child, .commerce-mobile-menu button.commerce-mobile-menu-row:last-child { border-bottom: 0; }
+.commerce-mobile-menu a.is-muted { color: var(--primary); }
+/* Section labels ("АНГИЛАЛ" / "ТУХАЙ") splitting the drawer into groups --
+   new, matching the reference's own category-rows-then-about-links shape. */
+.commerce-mobile-menu-heading { margin: 14px 0 2px; color: #9a9b9f; font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.commerce-mobile-menu-heading:first-child { margin-top: 4px; }.shop-main { width: 100%; padding: 28px 0 70px; }.shop-hero { margin: 0 18px; padding: 46px 22px 38px; }.shop-hero h1 { font-size: clamp(51px,14vw,72px); }.shop-search-panel { padding: 40px 18px 22px; border-radius: 18px 0 18px 18px; box-shadow: 8px 9px 0 rgba(240,181,45,.72); }.shop-ribbon { margin-top: 26px; padding: 13px 18px; }.shop-filter { display: grid; gap: 19px; margin: 0 18px; padding-top: 31px; }.shop-filter-pills { max-width: 100%; }.shop-filter-facets { max-width: 100%; align-items: flex-start; }.shop-discovery { padding: 59px 22px 26px; }.shop-discovery h2 { font-size: clamp(45px,13vw,65px); }.shop-category-deck { grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 38px; }.shop-category-card { min-height: 190px; padding: 15px; }.shop-category-card h3 { font-size: 21px; }.shop-category-card p { font-size: 10px; }.shop-discovery-cta { align-items: flex-start; flex-direction: column; gap: 18px; margin-top: 32px; }.shop-discovery-cta > div:last-child { width: 100%; }.shop-discovery-cta a { flex: 1; justify-content: center; }.shop-product-grid { grid-template-columns: repeat(2,1fr); gap: 9px; padding: 26px 18px; }.shop-product-grid.is-compact { grid-template-columns: repeat(3,1fr); gap: 7px; }.shop-grid-toolbar { margin: -4px 0 10px; }.shop-product-copy { padding: 14px; }.shop-product-copy h2 { min-height: 42px; margin-top: 8px; font-size: 13px; }.shop-product-copy strong { font-size: 19px; }.shop-product-copy > div span { width: 30px; height: 30px; }.shop-pagination { flex-direction: column; gap: 12px; padding: 6px 18px 34px; }.shop-pagination button { width: 100%; justify-content: center; } }
 
 /* Auth pages (Login/ForgotPassword/VerifyEmail/AcceptInvitation) share one
    editorial shell — a decorative accent ring plus a stamped card — instead
