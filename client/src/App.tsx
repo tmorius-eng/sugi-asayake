@@ -2,6 +2,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { lazy, Suspense } from "react";
 import { Route, Switch } from "wouter";
+import AddedToCartToast from "./components/AddedToCartToast";
+import BottomNavBar from "./components/BottomNavBar";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SitePromo from "./components/SitePromo";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -63,6 +65,8 @@ function App() {
         <Toaster />
         <PageviewTracker />
         <SitePromo />
+        <BottomNavBar />
+        <AddedToCartToast />
         <Router />
       </TooltipProvider>
     </ThemeProvider>

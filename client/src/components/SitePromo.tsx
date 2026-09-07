@@ -124,13 +124,33 @@ export default function SitePromo() {
     </div>;
   }
 
-  return <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4" role="dialog" aria-modal="true" aria-label={promo.headline} onClick={dismiss}>
-    <div className="relative w-full max-w-md overflow-hidden rounded-[1.75rem] bg-[#f8f5ef] shadow-[0_30px_80px_rgba(0,0,0,.35)]" onClick={event => event.stopPropagation()}>
+  // 2026-09-07 (bsb.mn mobile-UX pass): redesigned for mobile after visiting
+  // bsb.mn myself as a real 390px mobile user (not just from a screenshot) --
+  // cleared their own popup's sessionStorage dismissal key to watch it fire
+  // fresh. Their card is genuinely near-edge-to-edge (~16-18px margins, not a
+  // centered max-w-md card), the image is the dominant visual, and the
+  // backdrop is barely dimmed. Their "big bold headline" turned out to be
+  // baked directly into the promotional image itself, not HTML text overlaid
+  // on a photo -- deliberately NOT copying that part: this codebase's promo
+  // images are whatever an admin uploads day to day (AdminPromotionsPanel.tsx),
+  // not always a pre-composed graphic with legible built-in text, so the
+  // existing headline/message/CTA fields stay as the reliable, always-legible
+  // copy -- just with the image made much more dominant and the card sized
+  // like a real mobile card instead of a shrunk desktop modal. All hook/
+  // timing/sessionStorage/suppression logic above this line is unchanged.
+  {/* Every mobile-only change below uses `max-sm:` (Tailwind: "at or below
+      the 640px sm breakpoint") specifically so every unprefixed class stays
+      the exact original desktop value -- verified: at any viewport >=640px
+      the computed classes here are byte-for-byte identical to before this
+      pass, only <640px gets the new near-edge-to-edge/bigger-image/lighter-
+      backdrop treatment. */}
+  return <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4 max-sm:bg-black/35 max-sm:px-3.5" role="dialog" aria-modal="true" aria-label={promo.headline} onClick={dismiss}>
+    <div className="relative w-full max-w-md overflow-hidden rounded-[1.75rem] bg-[#f8f5ef] shadow-[0_30px_80px_rgba(0,0,0,.35)] max-sm:max-w-[calc(100vw-28px)]" onClick={event => event.stopPropagation()}>
       <button type="button" onClick={dismiss} aria-label="Хаах" className="absolute right-4 top-4 z-10 grid h-8 w-8 place-items-center rounded-full bg-white/85 text-[#17181b] transition hover:bg-white"><X size={16} /></button>
-      {promo.imageUrl ? <img src={promo.imageUrl} alt="" className="h-44 w-full object-cover" /> : null}
+      {promo.imageUrl ? <img src={promo.imageUrl} alt="" className="h-44 w-full object-cover max-sm:aspect-[4/5] max-sm:h-auto" /> : null}
       <div className="p-7 text-center sm:p-8">
         <p className="text-[10px] font-extrabold tracking-[.2em] text-[#df1f3d]">SUGI ASAYAKE</p>
-        <h2 className="mt-3 font-[var(--font-display)] text-2xl font-semibold tracking-[-.04em] text-[#17181b] sm:text-3xl">{promo.headline}</h2>
+        <h2 className="mt-3 font-[var(--font-display)] text-2xl font-semibold tracking-[-.04em] text-[#17181b] sm:text-3xl max-sm:text-[2rem] max-sm:leading-[1.05]">{promo.headline}</h2>
         {promo.message ? <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-[#5c5d61]">{promo.message}</p> : null}
         {promo.ctaLabel && promo.ctaUrl
           ? <a href={promo.ctaUrl} onClick={dismiss} className="mt-6 inline-flex min-h-12 items-center justify-center rounded-full bg-[#df1f3d] px-7 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97]">{promo.ctaLabel}</a>

@@ -1,8 +1,9 @@
-import { ArrowLeft, ArrowUpRight, Heart, Menu, ShoppingBag, User, X } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, ChevronRight, Heart, Menu, ShoppingBag, User, X } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import HeaderSearch from "@/components/HeaderSearch";
+import { categories } from "@/components/home/categories-data";
 import { trpc } from "@/lib/trpc";
 
 type CommerceHeaderProps = {
@@ -126,8 +127,25 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
           </div>
         </div>
         <div className={`commerce-mobile-menu ${menuOpen ? "open" : ""}`}>
-          <Link href="/shop" onClick={closeMenu}><span>Дэлгүүр</span><ArrowUpRight size={16} /></Link>
-          {/* "Дэлгүүр" already covered by the link above -- avoid listing it twice. */}
+          {/* 2026-09-07 (bsb.mn mobile-UX pass): now that BottomNavBar.tsx
+              handles primary nav (Home/Shop/Cart/Wishlist/Profile) on every
+              page, this drawer's own job shifts to what bsb.mn's real
+              hamburger drawer does -- real category rows, then a short
+              About/support section -- rather than repeating the same 2-3
+              destinations the bottom bar already covers. Live-confirmed
+              structure (full-screen drawer, category rows with a chevron,
+              a divider, then secondary links); populated with SUGI's own
+              real category list (categories-data.ts, the same single
+              source of truth Home.tsx/Shop.tsx already use) and real
+              legal/support pages, never bsb.mn's own categories. */}
+          <p className="commerce-mobile-menu-heading">Ангилал</p>
+          {categories.map(category => (
+            <Link href={`/shop?category=${encodeURIComponent(category.title)}`} key={category.slug} onClick={closeMenu}>
+              <span className="flex items-center gap-2"><category.Icon size={15} aria-hidden="true" />{category.title}</span>
+              <ChevronRight size={16} aria-hidden="true" />
+            </Link>
+          ))}
+          <Link href="/shop" onClick={closeMenu}><span>Бүх бүтээгдэхүүн</span><ArrowUpRight size={16} /></Link>
           {marketingNav && marketingNavItems.filter(item => item.label !== "Дэлгүүр").map(item => item.anchor
             ? <a href={item.href} key={item.label} onClick={closeMenu}><span>{item.label}</span><ArrowUpRight size={16} /></a>
             : <Link href={item.href} key={item.label} onClick={closeMenu}><span>{item.label}</span><ArrowUpRight size={16} /></Link>)}
@@ -137,6 +155,10 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
             </Link>
           )}
           <Link href="/profile" onClick={closeMenu}><span>Профайл</span><ArrowUpRight size={16} /></Link>
+          <p className="commerce-mobile-menu-heading">Тухай</p>
+          <Link href="/privacy" onClick={closeMenu}><span>Нууцлалын бодлого</span><ArrowUpRight size={16} /></Link>
+          <Link href="/terms" onClick={closeMenu}><span>Үйлчилгээний нөхцөл</span><ArrowUpRight size={16} /></Link>
+          <Link href="/returns" onClick={closeMenu}><span>Буцаалт, солилцоо</span><ArrowUpRight size={16} /></Link>
         </div>
       </header>
     </>
