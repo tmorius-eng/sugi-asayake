@@ -4,17 +4,19 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
-  FACE_CHALLENGE_LABELS,
-  LivenessTracker,
-  getHeadYaw,
-  FLASH_COLORS,
-  evaluateFlashResponse,
-  type FaceColorSample,
-  type FlashColor,
   FACE_ENROLL_SAMPLES,
   FACE_VERIFY_SAMPLES,
+  FLASH_COLORS,
+  SignalSmoother,
+  YAW_TURN_RATIO,
+  FACE_CHALLENGE_LABELS,
+  LivenessTracker,
   averageFaceDescriptors,
+  evaluateFlashResponse,
+  getHeadYaw,
   type FaceChallengeAction,
+  type FaceColorSample,
+  type FlashColor,
 } from "@shared/face-auth";
 import {
   FaceCameraError,
@@ -109,6 +111,31 @@ const QUALITY_COPY: Record<QualityIssue, string> = {
 
 type Phase = "consent" | "camera" | "working" | "done";
 
+/**
+ * The visible steps of a verification, shown as a numbered list so the person
+ * can see what is happening and what is coming next.
+ *
+ * Added after live testing: without it the screen just showed a changing
+ * sentence, so a slow step was indistinguishable from a frozen one ("I held
+ * still for ages and nothing happened"). Knowing there are three steps and
+ * which one is running turns a mystery into a wait.
+ */
+const FLOW_STEPS = [
+  { key: "capture", label: "Царай тодорхойлох" },
+  { key: "turn", label: "Толгой эргүүлэх" },
+  { key: "flash", label: "Өнгөний шалгалт" },
+] as const;
+type FlowStep = (typeof FLOW_STEPS)[number]["key"];
+
+/** Practical advice, shown alongside the camera. These are the actual causes
+ *  of failure seen in testing, not generic filler. */
+const FACE_TIPS = [
+  "Гэрэл нүүр рүү тань тусаж байх ёстой — цонх эсвэл гэрлийг ард биш, урдаа байлга.",
+  "Дэлгэцээс 40-60 см зайд, царай дугуй хүрээг дүүргэж байрлана уу.",
+  "Малгай, нарны шил, амны хаалт зэргийг түр авна уу (энгийн нүдний шил зүгээр).",
+  "Өнгө анивчих үед дэлгэц рүү шууд харж, хөдөлгөөнгүй байна уу.",
+] as const;
+
 /** How long each colour stays on screen. Long enough for the webcam's
  *  auto-exposure to settle before the frame is sampled, short enough that the
  *  whole sequence stays under a couple of seconds. */
@@ -152,6 +179,7 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
    *  challenge, or null when not flashing. */
   const [flash, setFlash] = useState<FlashColor | null>(null);
   const [faceLocked, setFaceLocked] = useState(false);
+  const [step, setStep] = useState<FlowStep>("capture");
   // Guards against the capture loop continuing after unmount — without it,
   // an async frame that resolves post-unmount calls setState on a dead
   // component and, worse, keeps the camera light on.
@@ -272,6 +300,75 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
    * detection does not: the sequence is chosen at random per attempt, so it
    * cannot have been recorded in advance.
    */
+  /**
+   * Guided head-turn sequence: turn RIGHT, then turn LEFT, then hold still
+   * for the colour flash.
+   *
+   * A fixed, guided order rather than one randomly-chosen action. Two reasons
+   * it is better here: the person always knows what is coming next instead of
+   * reacting to a surprise instruction, and requiring movement in BOTH
+   * directions is stronger evidence of a real head than a single turn, which
+   * a slowly-panned photograph could imitate.
+   *
+   * Each step waits for the turn to actually register and gives live feedback
+   * ("keep turning") rather than silently timing out -- the failure mode that
+   * made the earlier single-action version so frustrating was that it gave up
+   * without ever telling the user whether it could see them.
+   */
+  const runTurnSequence = useCallback(async (video: HTMLVideoElement): Promise<boolean> => {
+    const steps: { dir: "right" | "left"; label: string }[] = [
+      { dir: "right", label: "Толгойгоо БАРУУН тийш эргүүлнэ үү" },
+      { dir: "left", label: "Толгойгоо ЗҮҮН тийш эргүүлнэ үү" },
+    ];
+
+    for (let index = 0; index < steps.length; index += 1) {
+      const step = steps[index];
+      const smoother = new SignalSmoother(2);
+      let done = false;
+      const deadline = Date.now() + 20_000;
+      setHint(step.label);
+      setProgress(Math.round((index / steps.length) * 100));
+
+      while (!done && Date.now() < deadline) {
+        if (abortRef.current) throw new Error("ABORTED");
+        const result = await captureFace(video);
+        if (!result.ok) {
+          setHint(QUALITY_COPY[result.issue]);
+          setFaceLocked(false);
+          if (meshRef.current) clearFaceMesh(meshRef.current);
+          continue;
+        }
+
+        setFaceLocked(true);
+        if (meshRef.current) drawFaceMesh(meshRef.current, video, result.sample.landmarks, result.sample.box);
+
+        // Sign convention: the camera frame is NOT mirrored, so turning to
+        // one's own RIGHT moves the nose towards the image's left (negative).
+        // See LivenessTracker for the full explanation -- getting this
+        // backwards inverted both directions on the first live run.
+        const yaw = smoother.push(getHeadYaw(result.sample.landmarks));
+        const reached = step.dir === "right" ? yaw < -YAW_TURN_RATIO : yaw > YAW_TURN_RATIO;
+
+        if (reached) {
+          done = true;
+          setProgress(Math.round(((index + 1) / steps.length) * 100));
+          setHint("Сайн байна");
+          await new Promise(resolve => setTimeout(resolve, 350));
+        } else {
+          // Live "how far have I turned" feedback, so the person can tell the
+          // system is watching and how much further to go.
+          const progressToTarget = Math.min(1, Math.abs(yaw) / YAW_TURN_RATIO);
+          const turningCorrectWay = step.dir === "right" ? yaw < 0 : yaw > 0;
+          setHint(turningCorrectWay && progressToTarget > 0.35 ? `${step.label} — цааш нь` : step.label);
+        }
+      }
+
+      if (!done) return false;
+    }
+
+    return true;
+  }, []);
+
   const runFlashChallenge = useCallback(async (video: HTMLVideoElement): Promise<boolean> => {
     const sequence = randomFlashSequence();
     const samples: { color: FlashColor; sample: FaceColorSample }[] = [];
@@ -370,9 +467,22 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
       // fails. Dropping it removes a whole class of "it says I didn't blink
       // when I did" failures. The tracker itself is kept (and tested) so a
       // movement step can be reinstated if it is ever wanted.
+      // Descriptor frames are captured FIRST, while the face is still
+      // squarely front-on. Capturing them during or after the turns would
+      // mix angled faces into the average and push it away from the frontal
+      // reference, causing false rejections.
+      setStep("capture");
       setHint("Царайгаа дугуй хүрээнд байрлуулна уу.");
       const samples = await collectSamples(video, FACE_VERIFY_SAMPLES, null, false, null);
 
+      // Then movement, then the colour flash -- two independent liveness
+      // signals. The turns prove a real head moving in 3D; the flash proves a
+      // real surface reflecting light. A photo fails both; a replayed video
+      // fails the flash, whose colour order it cannot have anticipated.
+      setStep("turn");
+      const turnsPassed = await runTurnSequence(video);
+
+      setStep("flash");
       setHint("Нүүрээ хөдөлгөөнгүй барина уу.");
       const flashPassed = await runFlashChallenge(video);
 
@@ -380,7 +490,7 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
       const result = await completeVerification.mutateAsync({
         challengeId,
         descriptor: averageFaceDescriptors(samples),
-        livenessPassed: flashPassed,
+        livenessPassed: turnsPassed && flashPassed,
       });
 
       cleanup();
@@ -511,6 +621,21 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
           <span style={{ width: `${progress}%` }} />
         </div>
 
+        {/* Where we are in the flow. Without this a slow step is
+            indistinguishable from a frozen one. */}
+        <ol className="face-gate-steps">
+          {FLOW_STEPS.map((s, i) => {
+            const activeIndex = FLOW_STEPS.findIndex(x => x.key === step);
+            const state = i < activeIndex ? "done" : i === activeIndex ? "active" : "todo";
+            return (
+              <li key={s.key} className={`face-gate-step face-gate-step--${state}`}>
+                <span className="face-gate-step-num">{state === "done" ? "✓" : i + 1}</span>
+                <span>{s.label}</span>
+              </li>
+            );
+          })}
+        </ol>
+
         {fatalError ? (
           <div className="face-gate-alert">
             <AlertTriangle size={16} aria-hidden="true" />
@@ -525,6 +650,19 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
             Дахин оролдох
           </button>
         )}
+
+        {/* Practical advice, always visible rather than hidden behind a
+            "why did this fail?" link -- these are the real causes of failure
+            seen in testing, and reading them BEFORE failing saves a retry. */}
+        <details className="face-gate-tips" open={!!fatalError}>
+          <summary>Заавар ба зөвлөмж</summary>
+          <ul>
+            {FACE_TIPS.map(tip => <li key={tip}>{tip}</li>)}
+          </ul>
+          <p className="face-gate-tips-note">
+            Хэд дахин оролдоод болохгүй бол админд хандаж царайн бүртгэлээ шинэчлүүлээрэй. Нууц үгэнд нөлөөлөхгүй.
+          </p>
+        </details>
       </div>
     </div>
   );

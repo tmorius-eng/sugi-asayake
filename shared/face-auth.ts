@@ -451,8 +451,16 @@ const BLINK_REOPEN_FACTOR = 0.88;
 /** How far the mouth must open beyond its own resting state. */
 const MOUTH_OPEN_FACTOR = 1.9;
 const MOUTH_CLOSE_FACTOR = 1.3;
-/** Head yaw is already a ratio of face width, so it needs no calibration. */
-const YAW_TURN_RATIO = 0.13;
+/**
+ * How far the head must turn to count, as a share of face width. Yaw is
+ * already a ratio, so it needs no per-person calibration.
+ *
+ * Lowered from 0.13 after live testing: 0.13 demanded an uncomfortably large
+ * turn, and a user who turns far enough that the detector starts losing
+ * landmarks gets no credit at all -- the check has to trigger while the face
+ * is still cleanly visible, not at the point it stops being trackable.
+ */
+export const YAW_TURN_RATIO = 0.10;
 /** Frames spent measuring the resting baseline before judging anything. */
 const CALIBRATION_FRAMES = 6;
 
