@@ -461,6 +461,10 @@ const MOUTH_CLOSE_FACTOR = 1.3;
  * is still cleanly visible, not at the point it stops being trackable.
  */
 export const YAW_TURN_RATIO = 0.10;
+
+/** Max length of the diagnostic string the client sends with a verification.
+ *  Keeps it inside face_attempts.detail's column width. */
+export const FACE_DIAGNOSTIC_MAX = 150;
 /** Frames spent measuring the resting baseline before judging anything. */
 const CALIBRATION_FRAMES = 6;
 

@@ -165,6 +165,9 @@ export async function completeFaceVerification(input: {
   challengeId: number;
   descriptor: number[];
   livenessPassed: boolean;
+  /** Client-measured values, for tuning only -- never trusted for the
+   *  pass/fail decision. See the router's own note. */
+  diagnostic?: string;
   req: Request;
   res: Response;
 }): Promise<FaceVerificationResult> {
@@ -199,9 +202,17 @@ export async function completeFaceVerification(input: {
     return { ok: false, reason: "bad_challenge" };
   }
 
+  // Liveness is ALWAYS evaluated and ALWAYS recorded, whether or not it
+  // blocks -- see ENV.adminFaceLivenessEnforced for why blocking is opt-in.
+  // The face match below is unconditional and is the real identity control.
   if (!input.livenessPassed) {
-    await recordFaceAttempt({ userId: input.userId, outcome: "liveness_failed", detail: challenge.action, ip });
-    return { ok: false, reason: "liveness_failed" };
+    await recordFaceAttempt({
+      userId: input.userId,
+      outcome: "liveness_failed",
+      detail: input.diagnostic ? `${challenge.action} ${input.diagnostic}`.slice(0, 160) : challenge.action,
+      ip,
+    });
+    if (ENV.adminFaceLivenessEnforced) return { ok: false, reason: "liveness_failed" };
   }
 
   let reference: number[];

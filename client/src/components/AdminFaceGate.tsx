@@ -315,11 +315,15 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
    * made the earlier single-action version so frustrating was that it gave up
    * without ever telling the user whether it could see them.
    */
-  const runTurnSequence = useCallback(async (video: HTMLVideoElement): Promise<boolean> => {
+  const runTurnSequence = useCallback(async (video: HTMLVideoElement): Promise<{ passed: boolean; maxYaw: number }> => {
     const steps: { dir: "right" | "left"; label: string }[] = [
       { dir: "right", label: "Толгойгоо БАРУУН тийш эргүүлнэ үү" },
       { dir: "left", label: "Толгойгоо ЗҮҮН тийш эргүүлнэ үү" },
     ];
+
+    // Track how far the head ACTUALLY turned, even on failure -- that number
+    // is what says whether the threshold is wrong or the turn never happened.
+    let maxYaw = 0;
 
     for (let index = 0; index < steps.length; index += 1) {
       const step = steps[index];
@@ -347,6 +351,7 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
         // See LivenessTracker for the full explanation -- getting this
         // backwards inverted both directions on the first live run.
         const yaw = smoother.push(getHeadYaw(result.sample.landmarks));
+        if (Math.abs(yaw) > Math.abs(maxYaw)) maxYaw = yaw;
         const reached = step.dir === "right" ? yaw < -YAW_TURN_RATIO : yaw > YAW_TURN_RATIO;
 
         if (reached) {
@@ -363,13 +368,44 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
         }
       }
 
-      if (!done) return false;
+      if (!done) return { passed: false, maxYaw };
     }
 
-    return true;
+    // RETURN TO CENTRE before anything else runs.
+    //
+    // Without this the colour flash began while the head was still turned
+    // away from the last step, and then asked the person to "hold still" --
+    // still facing sideways. Confusing to follow, and worse for the
+    // measurement: the flash reads reflected light off the face, and a face
+    // angled away from the screen catches far less of it.
+    {
+      const smoother = new SignalSmoother(2);
+      const deadline = Date.now() + 12_000;
+      let centred = false;
+      setHint("Камер руу шууд харна уу");
+
+      while (!centred && Date.now() < deadline) {
+        if (abortRef.current) throw new Error("ABORTED");
+        const result = await captureFace(video);
+        if (!result.ok) {
+          setHint(QUALITY_COPY[result.issue]);
+          continue;
+        }
+        if (meshRef.current) drawFaceMesh(meshRef.current, video, result.sample.landmarks, result.sample.box);
+        const yaw = smoother.push(getHeadYaw(result.sample.landmarks));
+        // Half the turn threshold: comfortably "facing forward again" without
+        // demanding a perfectly square head.
+        if (Math.abs(yaw) < YAW_TURN_RATIO / 2) centred = true;
+      }
+      // Not fatal if it times out -- the flash still runs and is still
+      // scored. Better to continue than to fail someone for sitting slightly
+      // off-axis.
+    }
+
+    return { passed: true, maxYaw };
   }, []);
 
-  const runFlashChallenge = useCallback(async (video: HTMLVideoElement): Promise<boolean> => {
+  const runFlashChallenge = useCallback(async (video: HTMLVideoElement): Promise<{ passed: boolean; score: number; brightened: boolean; samples: number }> => {
     const sequence = randomFlashSequence();
     const samples: { color: FlashColor; sample: FaceColorSample }[] = [];
 
@@ -409,8 +445,8 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
     }
 
     setFlash(null);
-    const { passed } = evaluateFlashResponse(samples, baseline);
-    return passed;
+    const { passed, score, brightened } = evaluateFlashResponse(samples, baseline);
+    return { passed, score, brightened, samples: samples.length };
   }, []);
 
   const run = useCallback(async () => {
@@ -480,17 +516,21 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
       // real surface reflecting light. A photo fails both; a replayed video
       // fails the flash, whose colour order it cannot have anticipated.
       setStep("turn");
-      const turnsPassed = await runTurnSequence(video);
+      const turns = await runTurnSequence(video);
 
       setStep("flash");
       setHint("Нүүрээ хөдөлгөөнгүй барина уу.");
-      const flashPassed = await runFlashChallenge(video);
+      const flash = await runFlashChallenge(video);
 
       setPhase("working");
       const result = await completeVerification.mutateAsync({
         challengeId,
         descriptor: averageFaceDescriptors(samples),
-        livenessPassed: turnsPassed && flashPassed,
+        livenessPassed: turns.passed && flash.passed,
+        // Recorded into face_attempts.detail so the thresholds can be set
+        // from what real staff on real cameras actually produce, instead of
+        // guessed at. Every value here is a measurement, not a verdict.
+        diagnostic: `turn=${turns.passed ? "ok" : "fail"} yaw=${turns.maxYaw.toFixed(3)} flash=${flash.passed ? "ok" : "fail"} score=${flash.score.toFixed(2)} bright=${flash.brightened ? 1 : 0} n=${flash.samples}`,
       });
 
       cleanup();

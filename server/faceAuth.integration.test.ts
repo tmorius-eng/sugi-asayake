@@ -211,20 +211,47 @@ describeWithDatabase("admin face gate (real DB)", () => {
     if (!result.ok) expect(result.reason).toBe("no_match");
   });
 
-  it("rejects a verification that failed the liveness challenge even with a matching face", async () => {
-    // Proves ordering: a correct face is not enough on its own, so holding a
-    // photo up to the camera does not pass.
+  it("records a failed liveness check but does not block on it by default", async () => {
+    // Liveness is measured and logged on every attempt, but whether it BLOCKS
+    // is opt-in via ADMIN_FACE_LIVENESS_ENFORCED -- see that flag's comment in
+    // server/_core/env.ts. It was made non-blocking by default after it
+    // rejected a legitimate user repeatedly on real hardware while the face
+    // match underneath was landing at 0.278 against a 0.6 threshold.
+    //
+    // The face MATCH is unaffected by that flag and always blocks; that is the
+    // actual identity control, and the test above covers it.
     await upsertFaceEnrollment({ userId: staffUserId, descriptor: descriptorOf(0), sampleCount: 5, modelVersion: FACE_MODEL_VERSION });
     const caller = callerFor(staffUserId, "staff");
     const { challengeId } = await caller.faceAuth.startVerification();
 
     const result = await caller.faceAuth.completeVerification({
       challengeId,
-      descriptor: descriptorOf(0),
+      descriptor: descriptorOf(0.005),
       livenessPassed: false,
     });
+
+    // Default configuration: the matching face gets in, and the liveness
+    // failure is still written to the audit trail.
+    expect(result.ok).toBe(true);
+    const db = await getDb();
+    const rows = await db!.select().from(faceAttempts).where(eq(faceAttempts.userId, staffUserId));
+    expect(rows.some(r => r.outcome === "liveness_failed")).toBe(true);
+  });
+
+  it("still refuses a face that does not match, regardless of liveness", async () => {
+    // The security property that must never depend on a flag: a different
+    // person cannot get in even if their client claims liveness passed.
+    await upsertFaceEnrollment({ userId: staffUserId, descriptor: descriptorOf(0), sampleCount: 5, modelVersion: FACE_MODEL_VERSION });
+    const caller = callerFor(staffUserId, "staff");
+    const { challengeId } = await caller.faceAuth.startVerification();
+
+    const result = await caller.faceAuth.completeVerification({
+      challengeId,
+      descriptor: descriptorOf(5),
+      livenessPassed: true,
+    });
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toBe("liveness_failed");
+    if (!result.ok) expect(result.reason).toBe("no_match");
   });
 
   it("accepts a matching face that passed liveness, and records the attempt", async () => {

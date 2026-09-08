@@ -185,7 +185,7 @@ import {
 } from "./db";
 // Admin face gate (2026-09-08) -- see server/faceAuth.ts.
 import { clearFaceProofCookie, completeFaceVerification, hasValidFaceProof, isFaceGateEnabled, startFaceVerification } from "./faceAuth";
-import { FACE_DESCRIPTOR_LENGTH, FACE_MODEL_VERSION, isAdminPanelRole, isValidFaceDescriptor } from "../shared/face-auth";
+import { FACE_DESCRIPTOR_LENGTH, FACE_DIAGNOSTIC_MAX, FACE_MODEL_VERSION, isAdminPanelRole, isValidFaceDescriptor } from "../shared/face-auth";
 import { adminProcedure, anyStaffProcedure, catalogReadProcedure, contentReadProcedure, financeProcedure, lenientRateLimitedProcedure, marketingProcedure, moderateRateLimitedProcedure, ordersReadProcedure, phoneVerifyRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure, usersReadProcedure, warehouseProcedure } from "./_core/trpc";
 import { storagePing, storagePut, storagePutImageVariants } from "./storage";
 import { IMAGE_MAX_DIMENSION, processUploadedImage, processUploadedImageVariants } from "./_core/imageProcessing";
@@ -1580,6 +1580,13 @@ export const appRouter = router({
         challengeId: z.number().int().positive(),
         descriptor: z.array(z.number()).length(FACE_DESCRIPTOR_LENGTH),
         livenessPassed: z.boolean(),
+        // What the browser actually measured. Recorded into
+        // face_attempts.detail so liveness thresholds can be tuned from real
+        // attempts by real staff instead of guessed at -- the same discipline
+        // already applied to FACE_MATCH_THRESHOLD via the distance column.
+        // Untrusted client-reported data: used for diagnostics only, never
+        // to make the pass/fail decision.
+        diagnostic: z.string().max(FACE_DIAGNOSTIC_MAX).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         if (!isAdminPanelRole(ctx.user.role)) {
@@ -1591,6 +1598,7 @@ export const appRouter = router({
           challengeId: input.challengeId,
           descriptor: input.descriptor,
           livenessPassed: input.livenessPassed,
+          diagnostic: input.diagnostic,
           req: ctx.req,
           res: ctx.res,
         });

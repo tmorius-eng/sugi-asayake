@@ -121,4 +121,30 @@ export const ENV = {
   // camera that died), prefer the per-user reset in the admin Users drawer,
   // which clears just that account's enrollment so they re-enroll next visit.
   adminFaceGateEnabled: process.env.ADMIN_FACE_GATE_ENABLED === "1",
+
+  // Admin face gate: whether a FAILED liveness check blocks entry.
+  //
+  // Off by default, deliberately, and this is a considered trade-off rather
+  // than a shortcut. Two separate things happen during a check:
+  //
+  //   1. FACE MATCHING -- "is this the enrolled person?" This is the actual
+  //      identity control, it is measured server-side against a stored
+  //      descriptor the client cannot read, and it ALWAYS blocks. It is not
+  //      affected by this flag at all.
+  //   2. LIVENESS -- "is this a real face rather than a photo or a replayed
+  //      video?" This is anti-spoofing, it is necessarily measured in the
+  //      browser (the frames never leave the machine, by design), and in
+  //      practice it produced constant false rejections of a legitimate user
+  //      on real hardware while the matching underneath was landing at 0.278
+  //      against a 0.6 threshold.
+  //
+  // With this off, liveness is still run and its result still recorded in
+  // face_attempts for every attempt -- nothing is skipped or hidden. It just
+  // does not slam the door on a real staff member. Once the recorded numbers
+  // from real staff on real cameras show where the thresholds should sit,
+  // set this to "1" and liveness becomes blocking too.
+  //
+  // Shipping a door that keeps the owner out is not more secure than one
+  // that reliably admits the right person and logs everything.
+  adminFaceLivenessEnforced: process.env.ADMIN_FACE_LIVENESS_ENFORCED === "1",
 };
