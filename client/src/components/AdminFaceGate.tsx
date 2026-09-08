@@ -8,6 +8,7 @@ import {
   FACE_ENROLL_POSE_YAW,
   FACE_ENROLL_SAMPLES_PER_POSE,
   FACE_VERIFY_SAMPLES,
+  FACE_VERIFY_MIN_DURATION_MS,
   FLASH_COLORS,
   SignalSmoother,
   YAW_TURN_RATIO,
@@ -223,9 +224,17 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
     tracker: LivenessTracker | null,
     requireFrontal: boolean,
     action: FaceChallengeAction | null,
+    /** Minimum wall-clock time the capture should span. Without this the loop
+     *  finishes in a fraction of a second and every frame is the same
+     *  instant, which is no more informative than a single snapshot. */
+    minDurationMs = 0,
   ): Promise<number[][]> => {
     const samples: number[][] = [];
-    const deadline = Date.now() + 45_000;
+    const startedAt = Date.now();
+    const deadline = startedAt + 45_000;
+    // Pace the frames so `count` of them fill `minDurationMs`, sampling real
+    // variation over time instead of one moment repeated.
+    const spacing = minDurationMs > 0 ? Math.floor(minDurationMs / count) : 0;
 
     // The loop must satisfy BOTH conditions, not just the sample count.
     //
@@ -235,7 +244,10 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
     // instruction, so the loop exited and reported "you didn't blink" before
     // they had a chance to. Liveness now keeps the loop alive until the
     // action is actually observed (or the deadline hits).
-    const done = () => samples.length >= count && (!tracker || tracker.passed);
+    const done = () =>
+      samples.length >= count
+      && Date.now() - startedAt >= minDurationMs
+      && (!tracker || tracker.passed);
 
     while (!done() && Date.now() < deadline) {
       if (abortRef.current) throw new Error("ABORTED");
@@ -267,6 +279,7 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
       const frontal = !requireFrontal || Math.abs(getHeadYaw(result.sample.landmarks)) <= 0.12;
       if (frontal && samples.length < count) {
         samples.push(result.sample.descriptor);
+        if (spacing > 0) await new Promise(resolve => setTimeout(resolve, spacing));
       }
 
       // Progress reflects the whole job (frames AND the action), so it never
@@ -548,10 +561,24 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
           poses,
           consented: true,
         });
-        // Enrollment alone does not open /admin -- a live check runs
-        // immediately after, otherwise enrolling would bypass the gate it
-        // feeds. Fall through to verification below.
+        // A genuinely SEPARATE verification follows, with a deliberate pause
+        // and its own fresh capture.
+        //
+        // Without that pause this was circular and therefore meaningless: the
+        // check ran milliseconds after enrollment, against frames from the
+        // same instant, same pose, same lighting -- so it always matched, no
+        // matter whose face it was. It looked like a verification and proved
+        // nothing, which is exactly how it felt to use ("it registered and
+        // went straight in").
+        //
+        // Asking the person to settle and be re-read gives the check a real
+        // capture to work with, which is the only way it tells us anything.
         setPhase("camera");
+        setStep("capture");
+        setProgress(0);
+        setHint("Бүртгэл амжилттай. Одоо баталгаажуулалт хийнэ — камер руу шууд харна уу.");
+        await new Promise(resolve => setTimeout(resolve, 1800));
+        if (abortRef.current) throw new Error("ABORTED");
       }
 
       setHint("Шалгаж байна…");
@@ -590,8 +617,8 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
       // small change (runTurnSequence / runFlashChallenge are still here and
       // still tested) if that trade ever stops being the right one.
       setStep("capture");
-      setHint("Камер руу шууд харна уу.");
-      const samples = await collectSamples(video, FACE_VERIFY_SAMPLES, null, false, null);
+      setHint("Камер руу шууд харна уу — царайг уншиж байна…");
+      const samples = await collectSamples(video, FACE_VERIFY_SAMPLES, null, false, null, FACE_VERIFY_MIN_DURATION_MS);
 
       setPhase("working");
       const result = await completeVerification.mutateAsync({

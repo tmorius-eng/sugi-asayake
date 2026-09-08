@@ -185,9 +185,21 @@ export function bestFaceDistance(
   return best;
 }
 
-/** How many frames a single verification attempt captures; the best (closest)
- *  match among them decides the outcome. */
-export const FACE_VERIFY_SAMPLES = 5;
+/**
+ * How many frames a single verification captures, and over how long.
+ *
+ * Raised from 5 frames to 12 spread across at least 2.5 seconds. Five frames
+ * at 720p complete in a fraction of a second, so they were five captures of
+ * the SAME instant -- averaging them added nothing over a single snapshot,
+ * and the check finished before the person had registered that it started.
+ *
+ * Spreading the capture over time samples real micro-variation in pose,
+ * expression and lighting, so the averaged descriptor represents the person
+ * rather than one arbitrary moment. It also makes the scan legible: a check
+ * that completes instantly does not look like it checked anything.
+ */
+export const FACE_VERIFY_SAMPLES = 12;
+export const FACE_VERIFY_MIN_DURATION_MS = 2500;
 
 /** Where the self-hosted model weights are served from. Same origin as the
  *  app — deliberately not a CDN, so no third party sees that a staff member is
