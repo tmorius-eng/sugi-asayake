@@ -50,9 +50,11 @@ import {
 } from "@shared/face-auth";
 
 /** Fixed on purpose — see the GPU-memory note in the file header. 320 is the
- *  standard tinyFaceDetector size: large enough for a webcam-distance face,
- *  small enough to stay real-time on integrated graphics. */
-const DETECTOR_INPUT_SIZE = 320;
+ *  a tinyFaceDetector size that keeps detection accurate on the 720p frames
+ *  now being captured -- 320 was tuned for VGA and located the face box less
+ *  precisely on a larger frame, which in turn shifts the alignment the
+ *  recognition crop depends on. Still real-time on integrated graphics. */
+const DETECTOR_INPUT_SIZE = 416;
 
 /**
  * TFJS's backend-control methods exist at runtime (face-api bundles the full
@@ -190,8 +192,14 @@ export async function startCamera(): Promise<MediaStream> {
         // "ideal", never "exact": an exact constraint is what produces
         // OverconstrainedError on webcams that cannot hit the requested mode,
         // and any reasonable resolution works fine for face recognition.
-        width: { ideal: 640 },
-        height: { ideal: 480 },
+        // 1280x720 rather than 640x480: the recognition network crops a
+        // 150x150 aligned face out of this frame, and at VGA a normally-
+        // seated face did not contain that much real detail, so the crop was
+        // upscaled and the resulting descriptors were too alike between
+        // different people. This is a request, not a demand ("ideal"), so a
+        // webcam that cannot do 720p still works at whatever it offers.
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
         facingMode: "user",
       },
     });

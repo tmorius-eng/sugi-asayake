@@ -17,12 +17,23 @@
  * route explicitly over paying for a commercial licence.
  */
 
-/** Identifies which model produced a stored descriptor. Descriptors from
- *  different models are NOT comparable — bump this whenever the model changes
- *  so existing enrollments are detected as stale and re-enrolled, instead of
- *  being silently compared against incompatible vectors (which would reject
- *  everybody and look like a mysterious outage). */
-export const FACE_MODEL_VERSION = "dlib-face-recognition-resnet-v1";
+/**
+ * Identifies which pipeline produced a stored descriptor. Descriptors from
+ * different pipelines are NOT comparable — bump this whenever the model or
+ * the capture conditions change, so existing enrollments are detected as
+ * stale and re-enrolled instead of being silently compared against
+ * incompatible vectors (which rejects everybody and looks like an outage).
+ *
+ * "-hq" marks the capture-quality fix that followed a real wrong-person
+ * admission: 720p capture and a much larger minimum face size. Enrollments
+ * made before it were recorded from small, upscaled crops, and comparing one
+ * of those against a sharp new capture is comparing two different things --
+ * it would reject the legitimate owner under the tightened 0.45 threshold.
+ * Bumping this forces everyone to re-enroll once, which is the correct
+ * outcome rather than an inconvenience: the old references are exactly what
+ * made a stranger's distance (0.688) sit so close to the owner's (0.553).
+ */
+export const FACE_MODEL_VERSION = "dlib-face-recognition-resnet-v1-hq";
 
 /** face-api.js descriptors are always 128 floats. Validated server-side so a
  *  malformed or hand-crafted payload is rejected before it reaches any math. */
@@ -30,17 +41,31 @@ export const FACE_DESCRIPTOR_LENGTH = 128;
 
 /**
  * Euclidean distance below which two descriptors are considered the same
- * person. 0.6 is the long-standing dlib/face-api.js convention and the value
- * their own accuracy figures are quoted at.
+ * person.
  *
- * TUNING NOTE: this is a starting point, not a proven value for these
- * particular staff. face_attempts.distance records the real distance of every
- * attempt precisely so the actual distribution can be inspected later. If
- * legitimate staff are being rejected, raise it toward 0.65; if it ever
- * accepted the wrong person, lower it toward 0.5. Do not change it blind —
- * look at the recorded distances first.
+ * TIGHTENED FROM 0.6 TO 0.45 after a real security failure: a different
+ * person was admitted to /admin. The recorded distances showed why, and they
+ * are the reason this is no longer the library's default:
+ *
+ *     enrolled user, 9 logins :  0.265 - 0.553
+ *     a different person      :  0.688
+ *
+ * Those ranges nearly touch. At 0.6 there was almost no separation left, so a
+ * second attempt by the wrong person landed under the line. The root cause
+ * was descriptor QUALITY, not this number (see FACE_MIN_BOX_RATIO and the
+ * capture resolution in client/src/lib/faceEngine.ts, both raised in the same
+ * change); for this model a same-person pair should sit around 0.2-0.4 and a
+ * different-person pair around 0.7-1.0, and reaching 0.553 for the enrolled
+ * user meant the network was being fed a small, upscaled, blurry crop.
+ *
+ * 0.45 is deliberately conservative. With sharper crops a genuine match
+ * should land well inside it; if legitimate staff are rejected, fix the
+ * capture conditions FIRST (lighting, distance) and only then reconsider this
+ * number. Never raise it past 0.55 -- that is where a stranger got in.
+ * face_attempts.distance records every real attempt so this stays a decision
+ * made from data.
  */
-export const FACE_MATCH_THRESHOLD = 0.6;
+export const FACE_MATCH_THRESHOLD = 0.45;
 
 /**
  * How long one successful face check stays valid on a device.
@@ -81,9 +106,22 @@ export const FACE_CHALLENGE_LABELS: Record<FaceChallengeAction, string> = {
  * false-rejection rate low.
  */
 export const FACE_MIN_DETECTION_SCORE = 0.5;
-/** Minimum share of the video frame's width the detected face box must span.
- *  Roughly "sit at normal laptop distance, not across the room." */
-export const FACE_MIN_BOX_RATIO = 0.18;
+/**
+ * Minimum share of the video frame's width the detected face box must span.
+ *
+ * RAISED FROM 0.18 to 0.30 as part of fixing the wrong-person admission. The
+ * recognition network works from a 150x150 aligned crop of the face. At 0.18
+ * of a 640px frame the face was only ~115px wide, so that crop was UPSCALED
+ * from less detail than it needs -- and a blurry input produces a mushy
+ * descriptor that sits too close to everyone else's. That is what collapsed
+ * the gap between the enrolled user (up to 0.553) and a stranger (0.688).
+ *
+ * At 0.30 of a 1280px frame the face is ~384px wide, comfortably more than
+ * the crop needs, so no upscaling occurs. The cost is that the person must
+ * sit properly close to the camera -- which the on-screen guidance already
+ * asks for and now genuinely enforces.
+ */
+export const FACE_MIN_BOX_RATIO = 0.30;
 /** How far the face's centre may sit from the frame's centre, as a share of
  *  frame width/height. Keeps the subject roughly framed. */
 export const FACE_MAX_CENTER_OFFSET_RATIO = 0.3;
