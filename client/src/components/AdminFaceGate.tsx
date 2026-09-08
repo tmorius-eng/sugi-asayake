@@ -23,9 +23,8 @@ import {
 } from "@shared/face-auth";
 import {
   FaceCameraError,
+  SmoothMeshRenderer,
   captureFace,
-  clearFaceMesh,
-  drawFaceMesh,
   loadFaceModels,
   sampleFaceColor,
   startCamera,
@@ -175,6 +174,10 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const meshRef = useRef<HTMLCanvasElement | null>(null);
+  /** Draws the wireframe at the display's refresh rate, interpolating between
+   *  detections. Detection itself only manages ~10-15fps, so drawing straight
+   *  from it made the mesh snap between positions. */
+  const rendererRef = useRef<SmoothMeshRenderer | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   /** The colour currently painted over the preview during the flash
    *  challenge, or null when not flashing. */
@@ -192,6 +195,8 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
 
   const cleanup = useCallback(() => {
     abortRef.current = true;
+    rendererRef.current?.stop();
+    rendererRef.current = null;
     stopCamera(streamRef.current);
     streamRef.current = null;
   }, []);
@@ -256,7 +261,7 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
       if (!result.ok) {
         setHint(QUALITY_COPY[result.issue]);
         setFaceLocked(false);
-        if (meshRef.current) clearFaceMesh(meshRef.current);
+        rendererRef.current?.clear();
         // No artificial delay here: detection itself already costs tens of
         // milliseconds, and a blink lasting 100-300ms is easy to miss if we
         // also sleep between frames -- the second half of the same bug.
@@ -266,7 +271,7 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
       // Draw the wireframe on every good frame, using the very landmarks the
       // recogniser is working from.
       setFaceLocked(true);
-      if (meshRef.current) drawFaceMesh(meshRef.current, video, result.sample.landmarks, result.sample.box);
+      rendererRef.current?.push(result.sample.landmarks, result.sample.box);
 
       // Liveness is observed on EVERY good frame, including the ones whose
       // descriptor is skipped below — the turn itself is exactly the frame
@@ -366,7 +371,7 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
           if (abortRef.current) throw new Error("ABORTED");
           const probe = await captureFace(video);
           if (!probe.ok) { setHint(QUALITY_COPY[probe.issue]); continue; }
-          if (meshRef.current) drawFaceMesh(meshRef.current, video, probe.sample.landmarks, probe.sample.box);
+          rendererRef.current?.push(probe.sample.landmarks, probe.sample.box);
           const yaw = smoother.push(getHeadYaw(probe.sample.landmarks));
           turned = pose.yaw > 0 ? yaw > FACE_ENROLL_POSE_YAW : yaw < -FACE_ENROLL_POSE_YAW;
           if (!turned) setHint(pose.label);
@@ -418,12 +423,12 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
         if (!result.ok) {
           setHint(QUALITY_COPY[result.issue]);
           setFaceLocked(false);
-          if (meshRef.current) clearFaceMesh(meshRef.current);
+          rendererRef.current?.clear();
           continue;
         }
 
         setFaceLocked(true);
-        if (meshRef.current) drawFaceMesh(meshRef.current, video, result.sample.landmarks, result.sample.box);
+        rendererRef.current?.push(result.sample.landmarks, result.sample.box);
 
         // Sign convention: the camera frame is NOT mirrored, so turning to
         // one's own RIGHT moves the nose towards the image's left (negative).
@@ -470,7 +475,7 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
           setHint(QUALITY_COPY[result.issue]);
           continue;
         }
-        if (meshRef.current) drawFaceMesh(meshRef.current, video, result.sample.landmarks, result.sample.box);
+        rendererRef.current?.push(result.sample.landmarks, result.sample.box);
         const yaw = smoother.push(getHeadYaw(result.sample.landmarks));
         // Half the turn threshold: comfortably "facing forward again" without
         // demanding a perfectly square head.
@@ -517,7 +522,7 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
       if (result.ok) {
         const sample = sampleFaceColor(video, result.sample.box);
         if (sample) samples.push({ color, sample });
-        if (meshRef.current) drawFaceMesh(meshRef.current, video, result.sample.landmarks, result.sample.box);
+        rendererRef.current?.push(result.sample.landmarks, result.sample.box);
       }
 
       await new Promise(resolve => setTimeout(resolve, Math.max(0, FLASH_HOLD_MS - FLASH_SETTLE_MS)));
@@ -544,6 +549,10 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
 
       const video = videoRef.current;
       if (!video) throw new Error("NO_VIDEO_ELEMENT");
+      if (meshRef.current) {
+        rendererRef.current?.stop();
+        rendererRef.current = new SmoothMeshRenderer(meshRef.current, video);
+      }
       video.srcObject = stream;
       // Some browsers reject play() if the element isn't ready; the
       // waitForVideo poll below is the real readiness gate, so a rejection

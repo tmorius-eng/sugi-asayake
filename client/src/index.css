@@ -1804,7 +1804,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    part of the admin panel it guards.
 --------------------------------------------------------------------------- */
 .face-gate-shell { display: grid; place-items: center; min-height: 100vh; padding: 24px; background: #f8f5ef; }
-.face-gate-card { width: 100%; max-width: 420px; padding: 28px; border-radius: var(--radius-lg, 18px); background: #fff; box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.08)); text-align: center; }
+.face-gate-card { animation: face-gate-card-in .42s cubic-bezier(.22,.61,.36,1) both; width: 100%; max-width: 420px; padding: 28px; border-radius: var(--radius-lg, 18px); background: #fff; box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.08)); text-align: center; }
 .face-gate-card--wide { max-width: 520px; text-align: left; }
 .face-gate-card h2 { margin: 0; font-family: var(--font-display); font-size: 22px; font-weight: 620; letter-spacing: -.04em; color: var(--foreground); }
 .face-gate-muted { margin: 6px 0 0; font-size: 13px; line-height: 1.6; color: #6f7076; }
@@ -1825,28 +1825,44 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 /* Progress ring around the rim. */
 .face-gate-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); pointer-events: none; }
 .face-gate-ring-track { fill: none; stroke: rgba(255,255,255,.10); stroke-width: 3; }
-.face-gate-ring-value { fill: none; stroke: #6fd0ff; stroke-width: 3; stroke-linecap: round; transition: stroke-dashoffset .35s ease; filter: drop-shadow(0 0 5px rgba(111,208,255,.55)); }
+.face-gate-ring-value { fill: none; stroke: #6fd0ff; stroke-width: 3; stroke-linecap: round; filter: drop-shadow(0 0 5px rgba(111,208,255,.55));
+  /* Long, gently-decelerating transition: progress arrives in discrete jumps
+     as each frame lands, and a fast linear tween makes those jumps visible.
+     This eases them into a continuous sweep. */
+  transition: stroke-dashoffset .55s cubic-bezier(.22,.61,.36,1), stroke .4s ease, filter .4s ease; }
 
 /* Gold rim + soft pulse once a face is actually being tracked -- immediate
    feedback that the system has locked on. */
 .face-gate-stage.is-locked .face-gate-ring-value { stroke: #ffd65c; filter: drop-shadow(0 0 6px rgba(255,214,92,.6)); }
-.face-gate-stage.is-locked { animation: face-gate-lock 1.8s ease-in-out infinite; }
-@keyframes face-gate-lock { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.012); } }
+.face-gate-stage.is-locked { animation: face-gate-lock 2.4s cubic-bezier(.37,0,.63,1) infinite; will-change: transform; }
+@keyframes face-gate-lock { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.008); } }
 
 /* Sweeping scan line, clipped to the circle. */
-.face-gate-scanline { position: absolute; left: 7%; right: 7%; height: 2px; pointer-events: none; background: linear-gradient(90deg, transparent, rgba(111,208,255,.85), transparent); animation: face-gate-scan 2.4s ease-in-out infinite; }
-@keyframes face-gate-scan { 0%, 100% { top: 20%; opacity: .3; } 50% { top: 78%; opacity: 1; } }
+.face-gate-scanline { position: absolute; left: 7%; right: 7%; height: 2px; pointer-events: none; background: linear-gradient(90deg, transparent, rgba(111,208,255,.9), transparent); will-change: transform, opacity; animation: face-gate-scan 3.2s cubic-bezier(.45,0,.55,1) infinite; }
+/* Animating transform rather than `top` keeps this on the compositor -- an
+   animated `top` relayouts every frame and visibly stutters next to a live
+   video. */
+@keyframes face-gate-scan {
+  0%   { transform: translateY(60px); opacity: 0; }
+  12%  { opacity: .9; }
+  50%  { transform: translateY(230px); opacity: 1; }
+  88%  { opacity: .9; }
+  100% { transform: translateY(60px); opacity: 0; }
+}
 
 /* The colour-flash liveness challenge covers the whole viewport (see the
    component), so nothing is scoped to the stage here. */
-.face-gate-fullflash { position: fixed; inset: 0; z-index: 9999; pointer-events: none; animation: face-gate-flash-in .1s ease-out; }
-@keyframes face-gate-flash-in { from { opacity: .55; } to { opacity: 1; } }
+.face-gate-fullflash { position: fixed; inset: 0; z-index: 9999; pointer-events: none; will-change: opacity; animation: face-gate-flash-in .14s cubic-bezier(.22,.61,.36,1); }
+/* Eased fade rather than an instant swap: a hard cut between saturated
+   full-screen colours is unpleasant to sit through, and the settle delay
+   before sampling means the ramp costs the measurement nothing. */
+@keyframes face-gate-flash-in { from { opacity: .35; } to { opacity: 1; } }
 
 .face-gate-video-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(13,27,51,.72); color: #fff; z-index: 2; }
 
 /* Instruction pill, matching the reference eKYC layout. */
-.face-gate-instruction { margin-top: 14px; padding: 13px 20px; border-radius: 999px; background: linear-gradient(93deg, #4338ca, #2563eb); color: #fff; font-size: 14px; font-weight: 700; letter-spacing: -.01em; text-align: center; box-shadow: 0 6px 18px rgba(37,99,235,.28); animation: face-gate-pill 2.6s ease-in-out infinite; }
-@keyframes face-gate-pill { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+.face-gate-instruction { margin-top: 14px; will-change: transform; padding: 13px 20px; border-radius: 999px; background: linear-gradient(93deg, #4338ca, #2563eb); color: #fff; font-size: 14px; font-weight: 700; letter-spacing: -.01em; text-align: center; box-shadow: 0 6px 18px rgba(37,99,235,.28); animation: face-gate-pill 3.4s cubic-bezier(.37,0,.63,1) infinite; transition: background .3s ease; }
+@keyframes face-gate-pill { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
 .face-gate-instruction--flash { background: linear-gradient(93deg, #0f172a, #334155); animation: none; }
 
 .face-gate-progress { margin-top: 12px; height: 4px; border-radius: 999px; background: #ece7de; overflow: hidden; }
@@ -1957,3 +1973,26 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .face-gate-card--scan .face-gate-alert { background: rgba(255,90,110,.12); color: #ff9fae; }
 .face-gate-card--scan .face-gate-instruction { box-shadow: none; }
 .face-gate-shell--dark { background: #070c16; }
+
+
+/* Entrance + state transitions. Everything below animates transform/opacity
+   only, which the compositor can handle without relayout -- important next to
+   a live video, where a layout-animating property stutters visibly. */
+@keyframes face-gate-card-in {
+  from { opacity: 0; transform: translateY(12px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+.face-gate-hint { transition: color .3s ease; }
+.face-gate-step { transition: background .35s cubic-bezier(.22,.61,.36,1), color .35s ease; }
+.face-gate-step-num { transition: background .35s cubic-bezier(.22,.61,.36,1), color .35s ease; }
+.face-gate-video { transition: opacity .4s ease; }
+.face-gate-ok { animation: face-gate-pop .5s cubic-bezier(.34,1.56,.64,1) both; }
+@keyframes face-gate-pop {
+  from { opacity: 0; transform: scale(.6); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .face-gate-card, .face-gate-ok { animation: none; }
+  .face-gate-ring-value { transition: none; }
+}

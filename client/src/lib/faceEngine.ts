@@ -358,10 +358,12 @@ const MESH_BRIDGES: [number, number][] = [
  * moving left on screen matches moving left in reality) -- without this the
  * mesh would slide the opposite way to the face under it.
  */
+export type LandmarkSet = readonly { x: number; y: number }[];
+
 export function drawFaceMesh(
   canvas: HTMLCanvasElement,
   video: HTMLVideoElement,
-  landmarks: readonly { x: number; y: number }[] | null,
+  landmarks: LandmarkSet | null,
   box: FaceApi.Box | null,
 ): void {
   const ctx = canvas.getContext("2d");
@@ -444,6 +446,94 @@ export function drawFaceMesh(
   }
 
   ctx.restore();
+}
+
+/**
+ * Smooth 60fps mesh renderer.
+ *
+ * Detection runs at roughly 10-15fps -- it is a neural network, not a cheap
+ * operation -- so drawing the mesh only when a detection lands makes it snap
+ * between positions and look broken even though the tracking is fine.
+ *
+ * This decouples the two: detections are fed in as they arrive, and a
+ * requestAnimationFrame loop draws continuously at the display's refresh
+ * rate, interpolating between the previous and latest landmark sets. The
+ * mesh then glides with the face instead of stuttering behind it.
+ *
+ * Interpolation is per-point and eased, so a fast head movement still tracks
+ * closely rather than lagging noticeably behind.
+ */
+export class SmoothMeshRenderer {
+  private previous: { points: LandmarkSet; box: FaceApi.Box } | null = null;
+  private latest: { points: LandmarkSet; box: FaceApi.Box } | null = null;
+  private receivedAt = 0;
+  private frame: number | null = null;
+  /** Expected gap between detections, used to pace the interpolation. Adapts
+   *  to the machine: a slow laptop detects less often and should interpolate
+   *  over a correspondingly longer window. */
+  private interval = 90;
+
+  constructor(
+    private readonly canvas: HTMLCanvasElement,
+    private readonly video: HTMLVideoElement,
+  ) {}
+
+  /** Feed a new detection. Cheap: it only stores state, never draws. */
+  push(points: LandmarkSet, box: FaceApi.Box): void {
+    const now = performance.now();
+    if (this.latest) {
+      const gap = now - this.receivedAt;
+      // Exponential moving average, clamped: one slow frame should nudge the
+      // pacing, not redefine it.
+      if (gap > 16 && gap < 500) this.interval = this.interval * 0.7 + gap * 0.3;
+      this.previous = this.latest;
+    }
+    this.latest = { points, box };
+    this.receivedAt = now;
+    this.start();
+  }
+
+  /** Face lost: fade the mesh out rather than leaving it frozen mid-air. */
+  clear(): void {
+    this.previous = null;
+    this.latest = null;
+    clearFaceMesh(this.canvas);
+  }
+
+  start(): void {
+    if (this.frame !== null) return;
+    const tick = () => {
+      this.frame = requestAnimationFrame(tick);
+      if (!this.latest) return;
+
+      const elapsed = performance.now() - this.receivedAt;
+      // 0..1 through the expected inter-detection gap.
+      const raw = Math.min(1, elapsed / Math.max(32, this.interval));
+      // easeOutCubic: moves promptly toward the new position, settles gently.
+      const t = 1 - Math.pow(1 - raw, 3);
+
+      const from = this.previous ?? this.latest;
+      const points = this.latest.points.map((p, i) => {
+        const q = from.points[i] ?? p;
+        return { x: q.x + (p.x - q.x) * t, y: q.y + (p.y - q.y) * t };
+      });
+      const box = {
+        ...this.latest.box,
+        x: from.box.x + (this.latest.box.x - from.box.x) * t,
+        y: from.box.y + (this.latest.box.y - from.box.y) * t,
+        width: from.box.width + (this.latest.box.width - from.box.width) * t,
+        height: from.box.height + (this.latest.box.height - from.box.height) * t,
+      } as FaceApi.Box;
+
+      drawFaceMesh(this.canvas, this.video, points, box);
+    };
+    this.frame = requestAnimationFrame(tick);
+  }
+
+  stop(): void {
+    if (this.frame !== null) cancelAnimationFrame(this.frame);
+    this.frame = null;
+  }
 }
 
 /** Clears the overlay without needing a landmark set — used when the face is
