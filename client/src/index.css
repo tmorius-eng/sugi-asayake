@@ -462,35 +462,6 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 [data-reveal] { filter: saturate(.88); transform: translate3d(0, 18px, 0); transition: filter .62s var(--ease-out), transform .62s var(--ease-out); }
 [data-reveal].is-revealed { filter: saturate(1); transform: translate3d(0, 0, 0); }
 
-/* A seasonal edit creates a lively break between the permanent collection and family-care chapters. */
-.seasonal-section { width: 100%; padding: 102px max(34px, 7vw); overflow: hidden; background: #1d2832; color: #fff; }
-.seasonal-section.tone-sun { background: linear-gradient(121deg, #f0b52d 0%, #f0b52d 46%, #f4e7d7 46%, #f4e7d7 100%); color: #17181b; }
-.seasonal-section.tone-coral { background: linear-gradient(121deg, #df1f3d 0%, #df1f3d 46%, #f4e7d7 46%, #f4e7d7 100%); color: #17181b; }
-.seasonal-section.tone-sky { background: linear-gradient(121deg, #3970a7 0%, #3970a7 46%, var(--surface-tint) 46%, var(--surface-tint) 100%); color: #17181b; }
-.seasonal-topline { display: flex; width: min(1380px, 100%); align-items: center; gap: 13px; margin: 0 auto 30px; color: currentColor; font-size: 9px; font-weight: 800; letter-spacing: .16em; }
-.seasonal-topline > span:first-child { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid currentColor; border-radius: 50%; }
-.seasonal-topline i { width: 36px; height: 1px; background: currentColor; opacity: .5; }
-.seasonal-carousel { display: grid; grid-template-columns: .78fr 1.22fr; position: relative; width: min(1380px, 100%); min-height: 500px; margin: 0 auto; background: rgba(255, 253, 249, .96); box-shadow: 16px 18px 0 rgba(23,24,27,.14); }
-.seasonal-copy { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; padding: clamp(34px, 5vw, 74px); color: #17181b; animation: seasonal-copy-in .42s var(--ease-out); }
-.seasonal-copy .eyebrow { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--primary-text); font-size: 9px; font-weight: 800; letter-spacing: .16em; }
-.seasonal-copy h2 { margin: 21px 0 0; font-family: var(--font-display); font-size: clamp(44px, 5.15vw, 76px); font-weight: 650; letter-spacing: -.08em; line-height: .9; }
-.seasonal-copy h2 em { color: var(--primary); font-style: normal; }
-.seasonal-copy > p:last-of-type { max-width: 390px; margin: 26px 0 0; color: #66676b; font-size: 14px; line-height: 1.8; }
-.seasonal-link { display: inline-flex; align-items: center; gap: 10px; margin-top: 31px; padding: 13px 17px; border-radius: 999px; background: #17181b; color: #fff; font-size: 11px; font-weight: 800; transition: transform .18s var(--ease-out), background .18s var(--ease-out); }
-.seasonal-link:hover { background: var(--primary); transform: translateY(-3px); }.seasonal-link:active { transform: scale(.97); }
-.seasonal-image { position: relative; overflow: hidden; background: linear-gradient(135deg, #f8f5ef 0%, #fce7eb 100%); background-position: center; background-size: cover; animation: seasonal-image-in .52s var(--ease-out); }
-.seasonal-image::before { content: ""; position: absolute; inset: 0; background: linear-gradient(145deg, transparent 30%, rgba(23,24,27,.32)); }
-.seasonal-image-shade { position: absolute; right: -66px; bottom: -72px; width: 250px; height: 250px; border: 1px solid rgba(255,255,255,.76); border-radius: 50%; box-shadow: 0 0 0 30px rgba(255,255,255,.15), 0 0 0 60px rgba(255,255,255,.07); }
-.seasonal-image span { position: absolute; top: 21px; left: 22px; padding: 9px 10px; background: #17181b; color: #f7d17a; font-size: 8px; font-weight: 800; letter-spacing: .14em; }
-.seasonal-image strong { position: absolute; right: 28px; bottom: 20px; color: #fff; font-family: var(--font-display); font-size: 79px; letter-spacing: -.11em; line-height: 1; }
-.seasonal-controls { position: absolute; z-index: 1; right: 22px; bottom: 22px; left: 22px; display: flex; align-items: center; justify-content: space-between; }
-.seasonal-controls > button { display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid rgba(23,24,27,.15); border-radius: 50%; background: #fff; color: #17181b; transition: transform .18s var(--ease-out), background .18s var(--ease-out), color .18s var(--ease-out); }
-.seasonal-controls > button:hover { background: var(--primary); color: #fff; transform: translateY(-2px); }.seasonal-controls > button:active { transform: scale(.97); }
-.seasonal-controls div { display: flex; align-items: center; gap: 7px; }
-.seasonal-controls div button { width: 19px; height: 6px; padding: 0; border: 0; border-radius: 99px; background: rgba(23,24,27,.2); transition: width .22s var(--ease-out), background .22s var(--ease-out); }.seasonal-controls div button.active { width: 36px; background: var(--primary); }
-@keyframes seasonal-copy-in { from { opacity: 0; transform: translate3d(-18px,0,0); } to { opacity: 1; transform: translate3d(0,0,0); } }
-@keyframes seasonal-image-in { from { opacity: .65; transform: scale(1.04); } to { opacity: 1; transform: scale(1); } }
-
 /* Catalog controls are concise but fully usable on touch and keyboard. */
 .shop-filter { flex-wrap: wrap; }
 .shop-control-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; margin-left: auto; }
@@ -516,8 +487,8 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .shop-product-image i { position: absolute; right: 12px; bottom: 12px; display: grid; width: 45px; height: 45px; place-items: center; border-radius: 50%; background: var(--primary); color: #fff; font-size: 8px; font-style: normal; font-weight: 800; letter-spacing: .05em; opacity: 0; transform: translate3d(0,8px,0) scale(.9); transition: opacity .22s var(--ease-out), transform .22s var(--ease-out); }.shop-product-card:hover .shop-product-image i, .shop-product-card:focus-visible .shop-product-image i { opacity: 1; transform: translate3d(0,0,0) scale(1); }.shop-product-card:focus-visible { outline: 3px solid #3970a7; outline-offset: 4px; }
 .shop-status-card button { display: inline-flex; align-items: center; gap: 8px; }.shop-status-card button:hover { background: var(--primary); transform: translateY(-2px); }
 
-@media (max-width: 900px) { .seasonal-carousel { grid-template-columns: 1fr; min-height: 0; }.seasonal-copy { min-height: 350px; }.seasonal-image { min-height: 330px; }.seasonal-controls { bottom: 17px; }.shop-filter-facets { max-width: 100%; order: 3; width: 100%; align-items: flex-start; }.shop-control-row { margin-left: 0; } }
-@media (max-width: 620px) { .seasonal-section { padding: 72px 18px; }.seasonal-topline { gap: 8px; font-size: 8px; }.seasonal-topline > span:last-child { display: none; }.seasonal-carousel { box-shadow: 9px 10px 0 rgba(23,24,27,.14); }.seasonal-copy { min-height: 330px; padding: 35px 26px 68px; }.seasonal-copy h2 { font-size: clamp(42px, 13vw, 59px); }.seasonal-image { min-height: 280px; }.seasonal-image strong { font-size: 61px; }.seasonal-controls { right: 15px; bottom: 14px; left: 15px; }.shop-control-row { width: 100%; justify-content: space-between; }.stock-toggle span, .sort-control { min-height: 36px; }.sort-control > span { display: none; }.shop-product-card:hover { transform: translateY(-4px); } }
+@media (max-width: 900px) { .shop-filter-facets { max-width: 100%; order: 3; width: 100%; align-items: flex-start; }.shop-control-row { margin-left: 0; } }
+@media (max-width: 620px) { .shop-control-row { width: 100%; justify-content: space-between; }.stock-toggle span, .sort-control { min-height: 36px; }.sort-control > span { display: none; }.shop-product-card:hover { transform: translateY(-4px); } }
 
 /* Quick View and local product memory extend shopping flow without sacrificing the editorial catalogue pace. */
 .shop-product-card { display: flex; flex-direction: column; }.shop-product-link { display: block; color: inherit; }.quick-view-trigger { display: inline-flex; align-items: center; justify-content: center; gap: 7px; width: calc(100% - 18px); min-height: 39px; margin: -6px 9px 9px; border: 1px solid rgba(23,24,27,.13); background: #fffdf9; color: #17181b; font-size: 10px; font-weight: 800; letter-spacing: .04em; transition: transform .18s var(--ease-out), background .18s var(--ease-out), color .18s var(--ease-out); }.quick-view-trigger:hover { background: #17181b; color: #fff; transform: translateY(-2px); }.quick-view-trigger:focus-visible, .recently-viewed-card button:focus-visible { outline: 3px solid #3970a7; outline-offset: 3px; }.quick-view-trigger:active { transform: scale(.98); }

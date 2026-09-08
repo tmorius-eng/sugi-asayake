@@ -59,24 +59,13 @@ export const siteMediaSlots = [
     description: "Салбар, байршлын editorial зураг.",
     fallbackUrl: "/cdn/sugi-care-retail_e5616f81.jpg",
   },
-  {
-    key: "summer-slide-1",
-    label: "Зуны banner 01",
-    description: "ASAYAKE SUMMER carousel-ийн эхний зураг.",
-    fallbackUrl: "/cdn/sugi-sunrise-editorial-hero_463a81c8.jpg",
-  },
-  {
-    key: "summer-slide-2",
-    label: "Зуны banner 02",
-    description: "ASAYAKE SUMMER carousel-ийн хоёр дахь зураг.",
-    fallbackUrl: "/cdn/sugi-professional-assortment_74fa4e31.jpg",
-  },
-  {
-    key: "summer-slide-3",
-    label: "Зуны banner 03",
-    description: "ASAYAKE SUMMER carousel-ийн гурав дахь зураг.",
-    fallbackUrl: "/cdn/sugi-professional-family_07753755.jpg",
-  },
+  // 2026-09-08 (Tom, direct): SeasonalCampaignCarousel hasn't rendered on
+  // the homepage since 2026-09-06 (see shared/site-text.ts's matching
+  // home-text-summer-* retirement comment) -- these 3 image slots were
+  // missed at the time and kept showing in admin Content & Media as if
+  // still live/editable, which is exactly what Tom flagged. Retired here
+  // the same way; the component itself (SeasonalCampaignCarousel.tsx)
+  // stays in the repo, unrendered, in case it's ever reused.
 ] as const;
 
 export type SiteMediaSlotKey = (typeof siteMediaSlots)[number]["key"];
