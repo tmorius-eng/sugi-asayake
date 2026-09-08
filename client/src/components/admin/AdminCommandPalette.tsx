@@ -24,9 +24,9 @@ import type { AdminSection } from "../AdminWorkspace";
  * async results would fight cmdk's internal state instead of just rendering
  * what we already computed.
  */
-export default function AdminCommandPalette({ preview, isFullAdmin, onNavigate, onSelectProduct, onSelectOrder, onSelectUser }: {
+export default function AdminCommandPalette({ preview, role, onNavigate, onSelectProduct, onSelectOrder, onSelectUser }: {
   preview: boolean;
-  isFullAdmin: boolean;
+  role: string;
   onNavigate: (section: AdminSection) => void;
   onSelectProduct: (skuOrName: string) => void;
   onSelectOrder: (orderNumber: string) => void;
@@ -60,7 +60,7 @@ export default function AdminCommandPalette({ preview, isFullAdmin, onNavigate, 
   const results = searchQuery.data;
 
   const needle = query.trim().toLowerCase();
-  const matchingSections = getVisibleSections(isFullAdmin).filter(item => !needle || item.label.toLowerCase().includes(needle));
+  const matchingSections = getVisibleSections(role).filter(item => !needle || item.label.toLowerCase().includes(needle));
   const isSearching = !preview && debounced.length >= 2;
   const hasSearchResults = Boolean(results && results.products.length + results.orders.length + results.users.length + results.discountCodes.length + results.promotions.length + results.posts.length > 0);
   // 2026-09-07 real bug, found live: this used to be `!results` (i.e. "the

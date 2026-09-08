@@ -40,13 +40,13 @@ function formatDurationShort(seconds: number): string {
   return minutes > 0 ? `${minutes}мин ${remainderSec}с` : `${remainderSec}с`;
 }
 
-export default function AdminDashboardHome({ preview = false, isFullAdmin, onNavigate }: { preview?: boolean; isFullAdmin: boolean; onNavigate: (section: "orders" | "products") => void }) {
+export default function AdminDashboardHome({ preview = false, canSeeFinancials, canSeeAuditTrail, onNavigate }: { preview?: boolean; canSeeFinancials: boolean; canSeeAuditTrail: boolean; onNavigate: (section: "orders" | "products") => void }) {
   const summaryQuery = trpc.admin.dashboardSummary.useQuery(undefined, { enabled: !preview });
   // Fixed 7-day window, independent of AdminNetworkActivitiesCard's own
   // separately-toggleable 7/30/90 range -- these stat cards always report
   // "this week", matching the Orders card's own 7-day figures above them.
   const weekInput = useMemo(() => ({ dateFrom: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), dateTo: new Date().toISOString() }), []);
-  const analyticsQuery = trpc.admin.analyticsReport.useQuery(weekInput, { enabled: !preview && isFullAdmin });
+  const analyticsQuery = trpc.admin.analyticsReport.useQuery(weekInput, { enabled: !preview && canSeeFinancials });
 
   const data = preview ? previewSummary : summaryQuery.data;
 
@@ -67,7 +67,7 @@ export default function AdminDashboardHome({ preview = false, isFullAdmin, onNav
     conversionRatePercent: periodComparison?.deltaPercent.conversionRatePercent ?? null,
     totalPageViews: periodComparison?.deltaPercent.totalPageViews ?? null,
   };
-  const stillLoadingAnalytics = !preview && isFullAdmin && analyticsQuery.isLoading;
+  const stillLoadingAnalytics = !preview && canSeeFinancials && analyticsQuery.isLoading;
   const revenueMnt = preview ? 6_420_000 : periodComparison?.current.revenueMnt;
   const pageViewSeries = preview ? previewPageViewSeries : analyticsQuery.data?.visitorSessionTimeseries.map(row => row.pageViewCount) ?? [];
 
@@ -87,9 +87,10 @@ export default function AdminDashboardHome({ preview = false, isFullAdmin, onNav
           icon={Clock}
           iconBg="#fff4e5" iconColor="#c67c1f"
           label="Дундаж сессийн хугацаа"
-          value={!isFullAdmin ? "locked" : stillLoadingAnalytics ? "…" : conversion?.avgSessionDurationSec != null ? formatDurationShort(conversion.avgSessionDurationSec) : "—"}
-          deltaPercent={!isFullAdmin ? undefined : deltas.avgSessionDurationSec}
+          value={!canSeeFinancials ? "locked" : stillLoadingAnalytics ? "…" : conversion?.avgSessionDurationSec != null ? formatDurationShort(conversion.avgSessionDurationSec) : "—"}
+          deltaPercent={!canSeeFinancials ? undefined : deltas.avgSessionDurationSec}
           caption="сүүлийн 7 хоногт"
+          lockLabel="Зөвхөн санхүү/админд"
         />
         <AdminStatCard
           icon={ReceiptText}
@@ -104,34 +105,37 @@ export default function AdminDashboardHome({ preview = false, isFullAdmin, onNav
           icon={Wallet}
           iconBg="#fdeaea" iconColor="#df1f3d"
           label="Орлого"
-          value={!isFullAdmin ? "locked" : stillLoadingAnalytics ? "…" : revenueMnt != null ? formatMnt(revenueMnt) : "—"}
-          deltaPercent={!isFullAdmin ? undefined : deltas.revenueMnt}
+          value={!canSeeFinancials ? "locked" : stillLoadingAnalytics ? "…" : revenueMnt != null ? formatMnt(revenueMnt) : "—"}
+          deltaPercent={!canSeeFinancials ? undefined : deltas.revenueMnt}
           caption="сүүлийн 7 хоногт (төлөгдсөн)"
-          progressBar={!isFullAdmin || profit == null ? undefined : { percent: profit.marginPercent, barClassName: "bg-[#2c7650]", caption: `Ашгийн маржин: ${profit.marginPercent}%` }}
+          progressBar={!canSeeFinancials || profit == null ? undefined : { percent: profit.marginPercent, barClassName: "bg-[#2c7650]", caption: `Ашгийн маржин: ${profit.marginPercent}%` }}
+          lockLabel="Зөвхөн санхүү/админд"
         />
         <AdminStatCard
           icon={Percent}
           iconBg="#f5eefb" iconColor="#6b4fa0"
           label="Хөрвүүлэлт"
-          value={!isFullAdmin ? "locked" : stillLoadingAnalytics ? "…" : conversion?.conversionRatePercent != null ? `${conversion.conversionRatePercent}%` : "—"}
-          deltaPercent={!isFullAdmin ? undefined : deltas.conversionRatePercent}
+          value={!canSeeFinancials ? "locked" : stillLoadingAnalytics ? "…" : conversion?.conversionRatePercent != null ? `${conversion.conversionRatePercent}%` : "—"}
+          deltaPercent={!canSeeFinancials ? undefined : deltas.conversionRatePercent}
           caption={conversion && conversion.sessionsCount === 0 ? "хараахан сесс алга" : "захиалга ÷ сесс"}
-          progressBar={!isFullAdmin || conversion?.conversionRatePercent == null ? undefined : { percent: conversion.conversionRatePercent, barClassName: "bg-[#a51630]", caption: `${conversion.sessionsCount} сесснээс` }}
+          progressBar={!canSeeFinancials || conversion?.conversionRatePercent == null ? undefined : { percent: conversion.conversionRatePercent, barClassName: "bg-[#a51630]", caption: `${conversion.sessionsCount} сесснээс` }}
+          lockLabel="Зөвхөн санхүү/админд"
         />
         <AdminStatCard
           icon={Eye}
           iconBg="#e8f3fb" iconColor="#2f7ab8"
           label="Хуудас үзэлт"
-          value={!isFullAdmin ? "locked" : stillLoadingAnalytics ? "…" : conversion ? conversion.totalPageViews.toLocaleString("mn-MN") : "—"}
-          deltaPercent={!isFullAdmin ? undefined : deltas.totalPageViews}
+          value={!canSeeFinancials ? "locked" : stillLoadingAnalytics ? "…" : conversion ? conversion.totalPageViews.toLocaleString("mn-MN") : "—"}
+          deltaPercent={!canSeeFinancials ? undefined : deltas.totalPageViews}
           caption="сүүлийн 7 хоногт"
           sparkline={pageViewSeries.length > 0 ? <AdminMiniSparkline values={pageViewSeries} color="#2f7ab8" /> : undefined}
+          lockLabel="Зөвхөн санхүү/админд"
         />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
-        <AdminNetworkActivitiesCard preview={preview} isFullAdmin={isFullAdmin} />
-        <AdminRecentActivityFeed preview={preview} isFullAdmin={isFullAdmin} recentOrders={data.recentOrders} failedPayments={data.failedPayments} />
+        <AdminNetworkActivitiesCard preview={preview} canSeeFinancials={canSeeFinancials} />
+        <AdminRecentActivityFeed preview={preview} canSeeAuditTrail={canSeeAuditTrail} recentOrders={data.recentOrders} failedPayments={data.failedPayments} />
       </div>
 
       {!preview && <SystemHealthWidget />}

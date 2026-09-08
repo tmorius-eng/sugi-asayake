@@ -27,13 +27,13 @@ const relativeTime = (date: Date) => {
 // simply an empty array for staff -- the feed degrades to orders+payments
 // only rather than showing a separate locked state, since this is an
 // additive merge, not a single gated value.
-export default function AdminRecentActivityFeed({ preview = false, isFullAdmin, recentOrders, failedPayments }: {
+export default function AdminRecentActivityFeed({ preview = false, canSeeAuditTrail, recentOrders, failedPayments }: {
   preview?: boolean;
-  isFullAdmin: boolean;
+  canSeeAuditTrail: boolean;
   recentOrders: OrderRow[];
   failedPayments: FailedPaymentRow[];
 }) {
-  const auditQuery = trpc.admin.auditLogs.useQuery({ limit: 8 }, { enabled: !preview && isFullAdmin });
+  const auditQuery = trpc.admin.auditLogs.useQuery({ limit: 8 }, { enabled: !preview && canSeeAuditTrail });
 
   const rows: FeedRow[] = [
     ...recentOrders.map((order): FeedRow => ({
@@ -68,7 +68,7 @@ export default function AdminRecentActivityFeed({ preview = false, isFullAdmin, 
   return (
     <div className="rounded-xl border border-black/7 bg-card p-5 shadow-sm sm:p-6">
       <p className="text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]">RECENT ACTIVITY</p>
-      {!preview && isFullAdmin && auditQuery.isLoading && <p className="mt-4 flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={14} />Ачаалж байна…</p>}
+      {!preview && canSeeAuditTrail && auditQuery.isLoading && <p className="mt-4 flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={14} />Ачаалж байна…</p>}
       <div className="mt-4 grid gap-3">
         {rows.map(row => (
           <div key={row.id} className="flex items-start gap-3">

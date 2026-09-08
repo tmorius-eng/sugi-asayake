@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { AlertTriangle, CheckCircle2, ListFilter, LoaderCircle, LogIn, ShieldCheck, ShieldQuestion, XCircle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { AlertTriangle, CheckCircle2, Database, ListFilter, LoaderCircle, LogIn, ShieldCheck, ShieldQuestion, XCircle } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { actionLabel, actionLabels } from "@/lib/adminAuditLabels";
 import { GenericListView, type GenericListColumn } from "./admin/GenericListView";
@@ -18,16 +18,17 @@ const formatDateTime = (date: Date) => new Date(date).toLocaleString("mn-MN", { 
 // genuinely new data source (Honeybadger's error feed) rather than a
 // relabeling of the first two.
 export default function AdminSecurityCenter() {
-  const [tab, setTab] = useState<"audit" | "logins" | "errors">("audit");
+  const [tab, setTab] = useState<"audit" | "logins" | "errors" | "sql">("audit");
 
   return (
     <div className="grid gap-5">
-      <div className="inline-flex w-fit gap-1 rounded-full bg-[#f8f5ef] p-1">
+      <div className="inline-flex w-fit flex-wrap gap-1 rounded-full bg-[#f8f5ef] p-1">
         <button type="button" onClick={() => setTab("audit")} className={`rounded-full px-4 py-2 text-xs font-bold transition ${tab === "audit" ? "bg-white shadow-sm" : "text-[#77787d]"}`}>Аудит лог</button>
         <button type="button" onClick={() => setTab("logins")} className={`rounded-full px-4 py-2 text-xs font-bold transition ${tab === "logins" ? "bg-white shadow-sm" : "text-[#77787d]"}`}>Нэвтрэлтийн түүх</button>
         <button type="button" onClick={() => setTab("errors")} className={`rounded-full px-4 py-2 text-xs font-bold transition ${tab === "errors" ? "bg-white shadow-sm" : "text-[#77787d]"}`}>Алдааны хяналт</button>
+        <button type="button" onClick={() => setTab("sql")} className={`rounded-full px-4 py-2 text-xs font-bold transition ${tab === "sql" ? "bg-white shadow-sm" : "text-[#77787d]"}`}>SQL лог</button>
       </div>
-      {tab === "audit" ? <AuditLogTab /> : tab === "logins" ? <LoginHistoryTab /> : <ErrorMonitoringTab />}
+      {tab === "audit" ? <AuditLogTab /> : tab === "logins" ? <LoginHistoryTab /> : tab === "errors" ? <ErrorMonitoringTab /> : <SqlQueryLogTab />}
     </div>
   );
 }
@@ -94,12 +95,23 @@ function AuditLogTab() {
   );
 }
 
+const LOGIN_HISTORY_PAGE_SIZE = 50;
+
 function LoginHistoryTab() {
   const [email, setEmail] = useState("");
   const [outcome, setOutcome] = useState<"all" | "success" | "failed">("all");
+  const [page, setPage] = useState(1);
 
-  const query = trpc.admin.loginHistory.useQuery({ email: email.trim() || undefined, outcome });
-  const attempts = query.data ?? [];
+  // Server owns the current page now (Phase M) -- GenericListView's own
+  // "reset to page 1 on search change" effect only applies to its
+  // client-side searchQuery, which this tab doesn't use, so this filter
+  // panel needs the same reset done here instead.
+  useEffect(() => {
+    setPage(1);
+  }, [email, outcome]);
+
+  const query = trpc.admin.loginHistory.useQuery({ email: email.trim() || undefined, outcome, page, pageSize: LOGIN_HISTORY_PAGE_SIZE });
+  const attempts = query.data?.rows ?? [];
   type LoginAttemptRow = (typeof attempts)[number];
   const headerCell = "border-b border-black/8 pb-2";
   const bodyCell = "border-b border-black/6 py-3";
@@ -141,10 +153,11 @@ function LoginHistoryTab() {
             columns={columns}
             tableClassName="min-w-[640px] w-full border-separate border-spacing-0 text-left"
             emptyMessage={<><LogIn className="mx-auto mb-2 text-[#a9a49a]" size={22} />Нэвтрэлтийн түүх алга.</>}
+            itemLabel="бичлэг"
+            serverPagination={{ page, pageSize: LOGIN_HISTORY_PAGE_SIZE, total: query.data?.totalCount ?? 0, onPageChange: setPage }}
           />
         </div>
       )}
-      <p className="mt-4 flex items-center gap-1.5 text-[11px] text-[#a9a49a]"><ShieldQuestion size={13} aria-hidden="true" />Хамгийн сүүлийн 200 бичлэг харагдана.</p>
     </div>
   );
 }
@@ -210,6 +223,40 @@ function ErrorMonitoringTab() {
         emptyMessage={<><ShieldCheck className="mx-auto mb-2 text-[#2c7650]" size={22} />Сүүлийн үед бүртгэгдсэн алдаа алга.</>}
       />
       <p className="mt-4 flex items-center gap-1.5 text-[11px] text-[#a9a49a]"><ShieldQuestion size={13} aria-hidden="true" />Honeybadger-с хамгийн сүүлийн 25 алдаа харагдана.</p>
+    </div>
+  );
+}
+
+// Admin overhaul (2026-09-08, Phase K): the 4th Security Center tab -- an
+// in-process ring buffer (server/_core/sqlQueryLog.ts), not a real
+// server-side query log. No "duration" column: Drizzle's own logging hook
+// fires at issue-time, not completion, so that number can't be known here.
+function SqlQueryLogTab() {
+  const query = trpc.admin.recentSqlQueries.useQuery();
+  const rows = query.data ?? [];
+  type SqlQueryRow = (typeof rows)[number];
+  const headerCell = "border-b border-black/8 pb-2";
+  const bodyCell = "border-b border-black/6 py-3 align-top";
+  const columns: GenericListColumn<SqlQueryRow>[] = [
+    { id: "date", header: "ОГНОО", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[#6f7075] whitespace-nowrap`, render: row => formatDateTime(new Date(row.loggedAt)) },
+    { id: "query", header: "QUERY", headerClassName: headerCell, cellClassName: `${bodyCell} font-mono text-[11px] leading-5`, render: row => <code className="block max-w-2xl whitespace-pre-wrap break-all">{row.query}</code> },
+    { id: "params", header: "PARAMS", headerClassName: headerCell, cellClassName: `${bodyCell} font-mono text-[11px] text-[#77787d]`, render: row => row.params.length > 0 ? <code className="block max-w-xs whitespace-pre-wrap break-all">[{row.params.join(", ")}]</code> : "—" },
+  ];
+
+  return (
+    <div>
+      {query.isLoading && <p className="flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>}
+      {query.error && <p className="rounded-2xl bg-[#fff0f2] p-4 text-xs text-[#a51630]">{query.error.message}</p>}
+      {!query.isLoading && !query.error && (
+        <GenericListView<SqlQueryRow>
+          rows={rows}
+          getRowId={row => row.id}
+          columns={columns}
+          tableClassName="min-w-[720px] w-full border-separate border-spacing-0 text-left"
+          emptyMessage={<><Database className="mx-auto mb-2 text-[#a9a49a]" size={22} />Одоогоор бүртгэгдсэн query алга.</>}
+        />
+      )}
+      <p className="mt-4 flex items-center gap-1.5 text-[11px] text-[#a9a49a]"><ShieldQuestion size={13} aria-hidden="true" />Зөвхөн энэ серверийн процессийн санах ойд хадгалагдана (сүүлийн 200) — restart хийвэл цэвэрлэгдэнэ, Aiven-ийн бодит query log биш.</p>
     </div>
   );
 }

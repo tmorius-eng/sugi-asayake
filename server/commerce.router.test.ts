@@ -3,7 +3,7 @@ import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from "../shared/const";
 
-function createContext(role: "user" | "staff" | "admin" | null): TrpcContext {
+function createContext(role: "user" | "staff" | "finance" | "marketing" | "warehouse" | "admin" | null): TrpcContext {
   const user = role ? {
     id: 1,
     email: "test@example.com",
@@ -89,11 +89,17 @@ describe("commerce router", () => {
     await expect(caller.admin.deleteReview({ id: 1 })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
   });
 
-  it("lets staff (not just admin) moderate reviews", async () => {
-    const caller = appRouter.createCaller(createContext("staff"));
+  it("lets marketing (not just admin) moderate reviews, but no longer staff (Admin overhaul, Phase B)", async () => {
     // No DB in this suite by default (see catalog.list comment above) — this
-    // only asserts staff clears the role gate, not that a row exists.
-    await expect(caller.admin.reviews()).resolves.toBeInstanceOf(Array);
+    // only asserts marketing clears the role gate, not that a row exists.
+    const marketingCaller = appRouter.createCaller(createContext("marketing"));
+    await expect(marketingCaller.admin.reviews()).resolves.toBeInstanceOf(Array);
+
+    // Reviews moderation moved from staffProcedure to marketingProcedure in
+    // the Admin overhaul (2026-09-08) — staff's remaining scope is posts/
+    // media only, so this must now reject.
+    const staffCaller = appRouter.createCaller(createContext("staff"));
+    await expect(staffCaller.admin.reviews()).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
   });
 
   it("does not expose Content & Media administration or uploads to a standard user", async () => {
@@ -144,20 +150,26 @@ describe("commerce router", () => {
     await expect(caller.admin.createPost({ title: "New Japanese care", slug: "new-japanese-care", content: "A sufficiently long post body for authorization testing.", isPublished: false })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
   });
 
-  it("does not expose bulk product/order status changes to a standard user, but does allow staff (TIER 5)", async () => {
+  it("does not expose bulk product/order status changes to a standard user or staff, but does allow warehouse (TIER 5 / Admin overhaul Phase B)", async () => {
     const userCaller = appRouter.createCaller(createContext("user"));
     await expect(userCaller.admin.bulkUpdateProductPublishStatus({ ids: [1], isPublished: true })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
     await expect(userCaller.admin.bulkUpdateOrderStatus({ ids: [1], status: "confirmed" })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
 
-    // Staff is allowed through the gate — without a DB, updateAdminProduct/
+    // These moved from staffProcedure to warehouseProcedure in the Admin
+    // overhaul (2026-09-08) — staff's remaining scope is posts/media only.
+    const staffCaller = appRouter.createCaller(createContext("staff"));
+    await expect(staffCaller.admin.bulkUpdateProductPublishStatus({ ids: [1], isPublished: true })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+    await expect(staffCaller.admin.bulkUpdateOrderStatus({ ids: [1], status: "confirmed" })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+
+    // Warehouse is allowed through the gate — without a DB, updateAdminProduct/
     // updateAdminOrder resolve to undefined/throw "not found" per id, which
     // the bulk handler reports as a failed id rather than a FORBIDDEN
     // rejection. That's the behavior under test here: the RBAC gate opens
-    // for staff; server/admin.bulk-actions.integration.test.ts covers the
+    // for warehouse; server/admin.bulk-actions.integration.test.ts covers the
     // actual partial-success bookkeeping against a real DB.
-    const staffCaller = appRouter.createCaller(createContext("staff"));
-    await expect(staffCaller.admin.bulkUpdateProductPublishStatus({ ids: [999999], isPublished: true })).resolves.toMatchObject({ succeeded: [], failed: [{ id: 999999 }] });
-    await expect(staffCaller.admin.bulkUpdateOrderStatus({ ids: [999999], status: "confirmed" })).resolves.toMatchObject({ succeeded: [], failed: [{ id: 999999 }] });
+    const warehouseCaller = appRouter.createCaller(createContext("warehouse"));
+    await expect(warehouseCaller.admin.bulkUpdateProductPublishStatus({ ids: [999999], isPublished: true })).resolves.toMatchObject({ succeeded: [], failed: [{ id: 999999 }] });
+    await expect(warehouseCaller.admin.bulkUpdateOrderStatus({ ids: [999999], status: "confirmed" })).resolves.toMatchObject({ succeeded: [], failed: [{ id: 999999 }] });
   });
 
   it("gives an anonymous shopper an empty cart instead of requiring an account (guest checkout)", async () => {
@@ -197,25 +209,48 @@ describe("commerce router", () => {
     })).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 
-  it("lets staff manage products, orders, posts, and media, but not user accounts, roles, or the phone-recovery tool (TIER 3)", async () => {
+  // TIER 3 originally covered staff's full catalog/orders/posts/media scope
+  // in one test. The Admin overhaul (2026-09-08, Phase B) split that scope
+  // three ways — staff narrows to posts/media only, warehouse gets products/
+  // orders, marketing gets site media/text — so this is now three tests, one
+  // per department, plus the still-admin-only user/role management checks.
+  it("narrows staff to posts + media only — no longer products, orders, or site media (TIER 3 / Admin overhaul Phase B)", async () => {
     const caller = appRouter.createCaller(createContext("staff"));
 
-    // Storefront operations: allowed — resolves to an array (empty without a
-    // DB, real rows when this suite runs against the shared dev DB
-    // alongside the other integration suites — see the "keeps the public
-    // catalog query available" test above for why this doesn't assert on
-    // contents), rather than a FORBIDDEN rejection.
-    await expect(caller.admin.products()).resolves.toSatisfy(Array.isArray);
-    await expect(caller.admin.orders()).resolves.toSatisfy(Array.isArray);
+    // Still allowed — posts (contentReadProcedure includes staff) and media,
+    // staff's whole remaining scope.
     await expect(caller.admin.posts()).resolves.toSatisfy(Array.isArray);
-    await expect(caller.admin.siteMedia()).resolves.toSatisfy(Array.isArray);
+    await expect(caller.admin.mediaLibrary({ page: 1 })).resolves.toBeTruthy();
 
-    // User/role management: still admin-only.
+    // No longer allowed — moved to warehouse/marketing respectively.
+    await expect(caller.admin.products()).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+    await expect(caller.admin.orders()).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+    await expect(caller.admin.siteMedia()).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+
+    // User/role management: still admin-only, unaffected by the overhaul.
     await expect(caller.admin.users()).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
     await expect(caller.admin.updateUserRole({ userId: 2, role: "admin" })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
     await expect(caller.admin.updateUserPhone({ userId: 2, phone: "99001122" })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
     await expect(caller.admin.suspendUser({ userId: 2 })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
     await expect(caller.admin.forceLogoutUser({ userId: 2 })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+  });
+
+  it("lets warehouse manage products/orders/categories, but not posts or site media (Admin overhaul Phase B)", async () => {
+    const caller = appRouter.createCaller(createContext("warehouse"));
+    await expect(caller.admin.products()).resolves.toSatisfy(Array.isArray);
+    await expect(caller.admin.orders()).resolves.toSatisfy(Array.isArray);
+    await expect(caller.admin.categories()).resolves.toSatisfy(Array.isArray);
+    await expect(caller.admin.createPost({ title: "New Japanese care", slug: "warehouse-should-not-post", content: "A sufficiently long post body for authorization testing.", isPublished: false })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+    await expect(caller.admin.siteMedia()).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+  });
+
+  it("lets marketing manage site media/text and read (not write) the catalog, but not touch orders (Admin overhaul Phase B)", async () => {
+    const caller = appRouter.createCaller(createContext("marketing"));
+    await expect(caller.admin.siteMedia()).resolves.toSatisfy(Array.isArray);
+    // catalogReadProcedure includes marketing — reading is fine, writing isn't.
+    await expect(caller.admin.products()).resolves.toSatisfy(Array.isArray);
+    await expect(caller.admin.createProduct({ categoryId: 1, name: "Test product", slug: "marketing-should-not-create", priceMnt: 1000, sku: "TEST-002", stockQuantity: 1, isPublished: false })).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
+    await expect(caller.admin.orders()).rejects.toMatchObject({ message: NOT_ADMIN_ERR_MSG, code: "FORBIDDEN" });
   });
 
   it("keeps the audit log and login history admin-only, off limits to staff (TIER 4)", async () => {
@@ -225,7 +260,11 @@ describe("commerce router", () => {
 
     const adminCaller = appRouter.createCaller(createContext("admin"));
     await expect(adminCaller.admin.auditLogs({})).resolves.toSatisfy(Array.isArray);
-    await expect(adminCaller.admin.loginHistory({ outcome: "all" })).resolves.toSatisfy(Array.isArray);
+    // Phase M: { rows, totalCount }, not a plain array (real server-side
+    // pagination).
+    const history = await adminCaller.admin.loginHistory({ outcome: "all" });
+    expect(Array.isArray(history.rows)).toBe(true);
+    expect(typeof history.totalCount).toBe("number");
   });
 
   it("exposes the basic DB/storage health widget to staff, but not to a standard user (TIER 6)", async () => {
@@ -251,14 +290,16 @@ describe("commerce router", () => {
     expect(adminSummary.activeUsers).not.toBeNull();
   });
 
-  it("redacts costMnt from staff's product list, but not from a full admin (Project \"SUGI Desk\" Phase 2)", async () => {
+  it("redacts costMnt from warehouse's product list, but not from a full admin (Project \"SUGI Desk\" Phase 2 / Admin overhaul Phase B)", async () => {
     // Read-only, DB-content-independent: whatever real rows exist in the
-    // shared dev DB, every one of them must show costMnt as null to a staff
-    // caller — the field-level redaction added in admin.products (server/
-    // routers.ts) applies uniformly, not just to some products.
-    const staffCaller = appRouter.createCaller(createContext("staff"));
-    const staffProducts = await staffCaller.admin.products();
-    expect(staffProducts.every(product => product.costMnt === null)).toBe(true);
+    // shared dev DB, every one of them must show costMnt as null to a
+    // warehouse caller — the field-level redaction added in admin.products
+    // (server/routers.ts) applies uniformly, not just to some products.
+    // admin.products moved from staffProcedure to catalogReadProcedure
+    // (admin/warehouse/marketing) in the Admin overhaul (2026-09-08).
+    const warehouseCaller = appRouter.createCaller(createContext("warehouse"));
+    const warehouseProducts = await warehouseCaller.admin.products();
+    expect(warehouseProducts.every(product => product.costMnt === null)).toBe(true);
 
     // Admin sees the real per-product values (not necessarily non-null for
     // every row — costMnt itself is optional/admin-entered — but the field
@@ -271,17 +312,19 @@ describe("commerce router", () => {
     await expect(adminCaller.admin.products()).resolves.toSatisfy(Array.isArray);
   });
 
-  it("strips a staff-submitted costMnt instead of persisting it (Project \"SUGI Desk\" Phase 2)", async () => {
+  it("strips a warehouse-submitted costMnt instead of persisting it (Project \"SUGI Desk\" Phase 2 / Admin overhaul Phase B)", async () => {
     // Same "gate opens, id doesn't exist" pattern the bulk-actions test above
-    // uses to test staff RBAC without a real write: a non-existent id means
+    // uses to test RBAC without a real write: a non-existent id means
     // updateAdminProduct throws its own "not found"-style error, which is
     // enough to prove the FORBIDDEN gate isn't what's stopping this call —
     // the actual field-stripping (input.costMnt deleted before the DB call)
     // is exercised on every call regardless of whether the row exists, and
     // is covered end-to-end against a real throwaway product in
-    // server/commerce.database.integration.test.ts.
-    const staffCaller = appRouter.createCaller(createContext("staff"));
-    await expect(staffCaller.admin.updateProduct({ id: 999999, costMnt: 12345 })).rejects.not.toMatchObject({ message: NOT_ADMIN_ERR_MSG });
+    // server/commerce.database.integration.test.ts. admin.updateProduct
+    // moved from staffProcedure to warehouseProcedure in the Admin overhaul
+    // (2026-09-08).
+    const warehouseCaller = appRouter.createCaller(createContext("warehouse"));
+    await expect(warehouseCaller.admin.updateProduct({ id: 999999, costMnt: 12345 })).rejects.not.toMatchObject({ message: NOT_ADMIN_ERR_MSG });
   });
 
   it("does not let an administrator remove their own role from the admin workflow", async () => {

@@ -22,7 +22,13 @@ export default function OrderConfirmation({ order, isAuthenticated }: { order: C
         <div className="order-confirm-check"><Check size={34} strokeWidth={3} /></div>
         <p className="eyebrow"><span /> ЗАХИАЛГА БАТАЛГААЖЛАА</p>
         <h1>Баярлалаа, <em>{firstName}!</em></h1>
-        <p className="order-confirm-lede">Таны захиалгыг хүлээн авлаа. Явцыг доорх дугаараар “Миний захиалга” хэсгээс хэдийч хянаж болно.</p>
+        {/* Admin overhaul (2026-09-08, Phase F): this used to unconditionally
+            point every shopper at "Миний захиалга" -- a real bug for a guest
+            checkout, since that link only ever rendered for isAuthenticated
+            (line below), so a guest was told a way to check status that
+            didn't exist for them. Guests now get the real path: /track-order
+            (orders.lookup), added in this same phase. */}
+        <p className="order-confirm-lede">{isAuthenticated ? "Таны захиалгыг хүлээн авлаа. Явцыг доорх дугаараар “Миний захиалга” хэсгээс хэдийч хянаж болно." : "Таны захиалгыг хүлээн авлаа. Явцыг доорх дугаар болон утасны дугаараараа “Захиалгаа хянах” хуудаснаас хэдийч шалгаж болно."}</p>
         <div className="order-confirm-number"><ClipboardList size={16} aria-hidden="true" /> {order.orderNumber}</div>
 
         <div className="order-confirm-summary">
@@ -47,8 +53,8 @@ export default function OrderConfirmation({ order, isAuthenticated }: { order: C
         </div>
 
         <div className="order-confirm-actions">
-          {isAuthenticated ? <Link href="/profile?tab=orders" className="button button-primary">Захиалгуудаа харах</Link> : null}
-          <Link href="/shop" className={isAuthenticated ? "quiet-link" : "button button-primary"}>Дэлгүүр рүү буцах</Link>
+          {isAuthenticated ? <Link href="/profile?tab=orders" className="button button-primary">Захиалгуудаа харах</Link> : <Link href="/track-order" className="button button-primary">Захиалгаа хянах</Link>}
+          <Link href="/shop" className="quiet-link">Дэлгүүр рүү буцах</Link>
         </div>
       </div>
     </div>

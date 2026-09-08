@@ -23,16 +23,19 @@ function callerFor(user: TrpcContext["user"]): ReturnType<typeof appRouter.creat
   return appRouter.createCaller(ctx);
 }
 
-function userRecord(id: number, email: string, name: string, role: "user" | "staff"): NonNullable<TrpcContext["user"]> {
+function userRecord(id: number, email: string, name: string, role: "user" | "marketing"): NonNullable<TrpcContext["user"]> {
   return { id, email, name, role, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
 }
 
 describeWithDatabase("product reviews integration", () => {
   const marker = `reviews-test-${Date.now()}`;
   const shopperEmail = `${marker}-shopper@example.invalid`;
-  const staffEmail = `${marker}-staff@example.invalid`;
+  // Admin overhaul (2026-09-08, Phase B): review moderation moved from
+  // staffProcedure to marketingProcedure -- this fixture was "staff" when
+  // staff still owned it; renamed to match.
+  const marketingEmail = `${marker}-marketing@example.invalid`;
   let shopperId = 0;
-  let staffId = 0;
+  let marketingId = 0;
   let productId = 0;
   let orderId = 0;
 
@@ -42,8 +45,8 @@ describeWithDatabase("product reviews integration", () => {
 
     const shopperInsert = await db.insert(users).values({ email: shopperEmail, passwordHash: await hashPassword("ShopperPassw0rd!"), name: "Reviews Test Shopper", role: "user", emailVerifiedAt: new Date() });
     shopperId = Number(shopperInsert[0].insertId);
-    const staffInsert = await db.insert(users).values({ email: staffEmail, passwordHash: await hashPassword("StaffPassw0rd!"), name: "Reviews Test Staff", role: "staff", emailVerifiedAt: new Date() });
-    staffId = Number(staffInsert[0].insertId);
+    const marketingInsert = await db.insert(users).values({ email: marketingEmail, passwordHash: await hashPassword("MarketingPassw0rd!"), name: "Reviews Test Marketing", role: "marketing", emailVerifiedAt: new Date() });
+    marketingId = Number(marketingInsert[0].insertId);
 
     const categoryRows = await db.select({ id: productCategories.id }).from(productCategories).limit(1);
     if (!categoryRows[0]) throw new Error("No product category exists to attach the reviews test product to.");
@@ -85,16 +88,16 @@ describeWithDatabase("product reviews integration", () => {
     await db.delete(orderItems).where(eq(orderItems.orderId, orderId));
     await db.delete(orders).where(eq(orders.id, orderId));
     await db.delete(products).where(eq(products.id, productId));
-    // Staff's admin.updateReviewApproval/deleteReview calls above wrote
+    // Marketing's admin.updateReviewApproval/deleteReview calls above wrote
     // admin_audit_logs rows (RESTRICT on actorUserId) — must go before the user.
-    await db.delete(adminAuditLogs).where(eq(adminAuditLogs.actorUserId, staffId));
+    await db.delete(adminAuditLogs).where(eq(adminAuditLogs.actorUserId, marketingId));
     await db.delete(users).where(eq(users.id, shopperId));
-    await db.delete(users).where(eq(users.id, staffId));
+    await db.delete(users).where(eq(users.id, marketingId));
   });
 
   it("lets a verified purchaser leave exactly one review, updates the catalog rating, and moderation controls visibility", async () => {
     const shopper = callerFor(userRecord(shopperId, shopperEmail, "Reviews Test Shopper", "user"));
-    const staff = callerFor(userRecord(staffId, staffEmail, "Reviews Test Staff", "staff"));
+    const marketing = callerFor(userRecord(marketingId, marketingEmail, "Reviews Test Marketing", "marketing"));
 
     const eligibility = await shopper.reviews.eligibility({ productId });
     expect(eligibility).toEqual({ canReview: true, alreadyReviewed: false });
@@ -126,17 +129,17 @@ describeWithDatabase("product reviews integration", () => {
     const bySlug = await shopper.catalog.bySlug({ slug: `${marker}-product` });
     expect(bySlug?.avgRating).toBe(4);
 
-    // Staff (not just admin) can moderate.
-    await staff.admin.updateReviewApproval({ id: review.id, isApproved: false });
+    // Marketing (not just admin) can moderate.
+    await marketing.admin.updateReviewApproval({ id: review.id, isApproved: false });
     expect(await shopper.reviews.list({ productId })).toHaveLength(0);
     const catalogAfterHide = (await shopper.catalog.byIds({ ids: [productId] }))[0];
     expect(catalogAfterHide?.avgRating).toBeNull();
     expect(catalogAfterHide?.reviewCount).toBe(0);
 
-    await staff.admin.updateReviewApproval({ id: review.id, isApproved: true });
+    await marketing.admin.updateReviewApproval({ id: review.id, isApproved: true });
     expect(await shopper.reviews.list({ productId })).toHaveLength(1);
 
-    await staff.admin.deleteReview({ id: review.id });
+    await marketing.admin.deleteReview({ id: review.id });
     expect(await shopper.reviews.list({ productId })).toHaveLength(0);
     // Deleting the review frees the shopper to review again.
     expect(await shopper.reviews.eligibility({ productId })).toEqual({ canReview: true, alreadyReviewed: false });

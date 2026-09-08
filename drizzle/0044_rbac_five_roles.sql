@@ -1,0 +1,17 @@
+-- 2026-09-08 (Admin overhaul, Phase A): widen users.role from 3 values
+-- ("user","staff","admin") to 6, splitting today's broad "staff" (products,
+-- categories, orders, posts, media) into real departments: "staff" narrows
+-- to posts/media only, "warehouse" gets products/categories/orders,
+-- "marketing" gets reviews/routines/promotions/discount codes/featured
+-- brands/site media+text, "finance" gets analytics/P&L/marketing-spend.
+-- "admin" is unchanged -- still the superset covering all of the above plus
+-- user accounts/roles/integrations/security. Purely additive: every
+-- existing row's value ('user'/'staff'/'admin') remains valid under the
+-- widened enum, so no data migration/backfill is needed. See
+-- server/_core/trpc.ts for the new middleware and server/routers.ts for the
+-- per-endpoint role reassignment (Phase B).
+--
+-- staff_invitations.role is intentionally left untouched -- that table is
+-- dead code (no live invite flow reads/writes it, see CLAUDE.md), so
+-- widening its enum too would have no functional upside.
+ALTER TABLE `users` MODIFY `role` enum('user','staff','finance','marketing','warehouse','admin') NOT NULL DEFAULT 'user';

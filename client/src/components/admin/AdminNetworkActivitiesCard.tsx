@@ -20,19 +20,19 @@ const networkRangeOptions = rangeOptions.filter(option => option.key === "7d" ||
 const previewSeries = [420, 380, 512, 498, 561, 402, 389];
 const previewPreviousSeries = [360, 340, 470, 440, 500, 370, 350];
 
-export default function AdminNetworkActivitiesCard({ preview = false, isFullAdmin }: { preview?: boolean; isFullAdmin: boolean }) {
+export default function AdminNetworkActivitiesCard({ preview = false, canSeeFinancials }: { preview?: boolean; canSeeFinancials: boolean }) {
   const [range, setRange] = useState<RangeKey>("7d");
   const dates = useMemo(() => rangeToDates(range), [range]);
   const input = useMemo(() => ({ dateFrom: dates.dateFrom?.toISOString(), dateTo: dates.dateTo?.toISOString() }), [dates]);
   const periodDays = range === "7d" ? 7 : range === "30d" ? 30 : 90;
 
-  const reportQuery = trpc.admin.analyticsReport.useQuery(input, { enabled: !preview && isFullAdmin });
+  const reportQuery = trpc.admin.analyticsReport.useQuery(input, { enabled: !preview && canSeeFinancials });
 
-  if (!isFullAdmin) {
+  if (!canSeeFinancials) {
     return (
       <div className="rounded-xl border border-black/7 bg-card p-5 shadow-sm">
         <p className="text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]">NETWORK ACTIVITIES</p>
-        <p className="mt-3 flex items-center gap-1.5 text-sm font-bold text-[#a9a49a]"><Lock size={13} aria-hidden="true" />Зөвхөн админд</p>
+        <p className="mt-3 flex items-center gap-1.5 text-sm font-bold text-[#a9a49a]"><Lock size={13} aria-hidden="true" />Зөвхөн санхүү/админд</p>
       </div>
     );
   }

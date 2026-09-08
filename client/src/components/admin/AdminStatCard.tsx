@@ -28,9 +28,15 @@ export type AdminStatCardProps = {
    *  "bg-[#2c7650]"), not a runtime-computed value -- Tailwind's build-time
    *  scanner only picks up class names that appear literally in source. */
   progressBar?: { percent: number; barClassName: string; caption: string };
+  /** Admin overhaul (2026-09-08, Phase C): most locked cards here are
+   *  finance-or-admin now, not strictly admin-only (e.g. Идэвхтэй хэрэглэгч
+   *  genuinely is admin-only, but Орлого/Хөрвүүлэлт/etc. are canSeeFinancials
+   *  -- finance sees them too) -- defaults to the original copy so the one
+   *  actually-admin-only call site needs no change. */
+  lockLabel?: string;
 };
 
-export default function AdminStatCard({ icon: Icon, iconBg, iconColor, label, value, deltaPercent, caption, sparkline, progressBar }: AdminStatCardProps) {
+export default function AdminStatCard({ icon: Icon, iconBg, iconColor, label, value, deltaPercent, caption, sparkline, progressBar, lockLabel = "Зөвхөн админд" }: AdminStatCardProps) {
   const isLocked = value === "locked";
   return (
     <div className="flex flex-col justify-between rounded-xl border border-black/7 bg-card p-5 shadow-sm">
@@ -39,7 +45,7 @@ export default function AdminStatCard({ icon: Icon, iconBg, iconColor, label, va
           <span className="grid size-9 place-items-center rounded-xl" style={{ backgroundColor: iconBg, color: iconColor }}><Icon size={17} aria-hidden="true" /></span>
           <p className="mt-3 text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]">{label.toUpperCase()}</p>
           {isLocked ? (
-            <p className="mt-1 flex items-center gap-1.5 text-sm font-bold text-[#a9a49a]"><Lock size={13} aria-hidden="true" />Зөвхөн админд</p>
+            <p className="mt-1 flex items-center gap-1.5 text-sm font-bold text-[#a9a49a]"><Lock size={13} aria-hidden="true" />{lockLabel}</p>
           ) : (
             <div className="mt-1 flex flex-wrap items-baseline gap-2">
               <span className="font-[var(--font-display)] text-2xl font-semibold tracking-[-.05em]">{value}</span>

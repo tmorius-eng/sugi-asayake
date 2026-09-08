@@ -3,7 +3,7 @@ import { Link, useLocation, useSearch } from "wouter";
 import {
   Bell, Camera, ChevronDown, ClipboardList, CreditCard, Heart, HelpCircle, Home, LayoutDashboard,
   Loader2, LoaderCircle, LogIn, LogOut, Mail, MapPin, Pencil, Phone, Plus, RotateCcw,
-  ShieldCheck, ShieldOff, ShoppingBag, Sparkles, Star, Trash2, User as UserIcon,
+  ShieldCheck, ShieldOff, ShoppingBag, Sparkles, Star, Trash2, User as UserIcon, X,
 } from "lucide-react";
 import { LOYALTY_TIERS } from "@shared/loyalty";
 import { ubDistricts, ubDistrictLabels, type UbDistrict } from "@shared/districts";
@@ -263,6 +263,16 @@ function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
   const utils = trpc.useUtils();
   const addItem = trpc.cart.addItem.useMutation();
   const [buyingAgainId, setBuyingAgainId] = useState<number | null>(null);
+  // Admin overhaul (2026-09-08, Phase G): a customer's first way to cancel
+  // their own order without contacting support -- window.confirm matches
+  // the weight this codebase already gives a reversible-in-spirit
+  // destructive action (see the address-delete/logout-all-devices confirms
+  // just below in this same file), not the heavier password-reentry flow
+  // full account deletion uses.
+  const cancelOrder = trpc.orders.cancel.useMutation({
+    onSuccess: () => { utils.orders.mine.invalidate(); toast.success("Захиалгыг цуцаллаа."); },
+    onError: error => toast.error(error instanceof Error ? error.message : "Захиалгыг цуцлах боломжгүй боллоо."),
+  });
 
   const buyAgain = async (order: NonNullable<typeof orders.data>[number]) => {
     const available = order.items.filter((item): item is typeof item & { productId: number } => item.productId != null);
@@ -322,9 +332,16 @@ function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
                 <strong>Нийт {formatMnt(order.totalMnt)}</strong>
               </div>
               {order.deliveryTrackingRef && <p className="order-tracking">Хүргэлтийн дугаар: {order.deliveryTrackingRef}</p>}
-              <button type="button" className="order-buy-again" disabled={buyingAgainId === order.id} onClick={() => buyAgain(order)}>
-                {buyingAgainId === order.id ? <Loader2 className="animate-spin" size={14} /> : <RotateCcw size={14} />} Дахин захиалах
-              </button>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                <button type="button" className="order-buy-again" disabled={buyingAgainId === order.id} onClick={() => buyAgain(order)}>
+                  {buyingAgainId === order.id ? <Loader2 className="animate-spin" size={14} /> : <RotateCcw size={14} />} Дахин захиалах
+                </button>
+                {(order.status === "pending" || order.status === "confirmed") && (
+                  <button type="button" className="order-buy-again" disabled={cancelOrder.isPending} onClick={() => { if (window.confirm("Энэ захиалгыг цуцлах уу? Энэ үйлдлийг буцаах боломжгүй.")) cancelOrder.mutate({ id: order.id }); }}>
+                    {cancelOrder.isPending ? <Loader2 className="animate-spin" size={14} /> : <X size={14} />} Захиалга цуцлах
+                  </button>
+                )}
+              </div>
             </article>
           ))}
         </div>

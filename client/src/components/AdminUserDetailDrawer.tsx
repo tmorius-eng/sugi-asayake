@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { CreditCard, LoaderCircle, LogOut, Phone, ShieldAlert, ShieldCheck, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { roleBadgeClass, roleLabel } from "@/lib/adminRoles";
 import { formatMnt } from "@shared/format";
 
 const statusLabels: Record<string, string> = { pending: "Хүлээгдэж байна", confirmed: "Баталгаажсан", packed: "Бэлтгэсэн", out_for_delivery: "Хүргэлтэд гарсан", completed: "Дууссан", cancelled: "Цуцалсан" };
@@ -105,7 +106,7 @@ export default function AdminUserDetailDrawer({ userId, onClose }: { userId: num
           <h2 className="mt-3 font-[var(--font-display)] text-2xl font-semibold tracking-[-.05em]">{detail.name ?? "Нэр оруулаагүй"}</h2>
           <p className="mt-1 text-xs text-[#707176]">{detail.phone ?? "Утасгүй"}{detail.email ? ` · ${detail.email}` : ""}</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${detail.role === "admin" ? "bg-[#fff0d2] text-[#9b6417]" : detail.role === "staff" ? "bg-[#e6f0fb] text-[#2c5a91]" : "bg-[#edf0f5] text-[#505d70]"}`}>{detail.role === "admin" ? "Admin" : detail.role === "staff" ? "Staff" : "User"}</span>
+            <span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${roleBadgeClass(detail.role)}`}>{roleLabel(detail.role)}</span>
             {detail.suspendedAt ? <span className="rounded-full bg-[#fff0f2] px-2.5 py-1 text-[10px] font-extrabold text-[#a51630]">Түр хаагдсан</span> : <span className="rounded-full bg-[#e7f2ec] px-2.5 py-1 text-[10px] font-extrabold text-[#2c7650]">Идэвхтэй</span>}
           </div>
 

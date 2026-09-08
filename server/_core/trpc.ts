@@ -29,11 +29,99 @@ export const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
   return next({ ctx });
 });
 
-// Admin or staff — day-to-day storefront operations (products, categories,
-// orders, posts, media). Staff cannot touch user accounts/roles or see
-// financial figures; those stay behind adminProcedure.
+// 2026-09-08 (Admin overhaul, Phase A): "staff" narrows to posts/media only
+// (see server/routers.ts for the per-endpoint reassignment, Phase B) — it is
+// no longer the catch-all "anyone but admin" role. Its middleware LOGIC is
+// unchanged (still exactly "admin or staff"); what changes is which router
+// procedures use it.
 export const staffProcedure = protectedProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== "admin" && ctx.user.role !== "staff") {
+    throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+  }
+  return next({ ctx });
+});
+
+// Admin or finance — analytics/P&L/COGS/margin/CAC/conversion, marketing
+// spend input, and refund authorization (recording a refund amount, flipping
+// paymentStatus to "refunded"). Deliberately separate from warehouseProcedure
+// below: moving an order through its fulfillment ladder is not the same
+// trust boundary as actually sending money back out.
+export const financeProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role !== "admin" && ctx.user.role !== "finance") {
+    throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+  }
+  return next({ ctx });
+});
+
+// Admin or marketing — reviews, routines, promotions, discount codes,
+// featured brands, homepage site media/text, customer segments, campaigns.
+// Anything that's a customer-facing content/merchandising lever, but not
+// money (financeProcedure) or stock-keeping (warehouseProcedure).
+export const marketingProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role !== "admin" && ctx.user.role !== "marketing") {
+    throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+  }
+  return next({ ctx });
+});
+
+// Admin or warehouse — products, variants, categories, order
+// status/fulfillment, CSV import. The old staffProcedure's catalog/order
+// scope, minus posts/media (now staff-only) and minus financial figures
+// (never in scope for staff and still isn't here).
+export const warehouseProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role !== "admin" && ctx.user.role !== "warehouse") {
+    throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+  }
+  return next({ ctx });
+});
+
+// Any non-"user" role — the shared admin dashboard shell every department
+// lands on (dashboardSummary/systemHealth/search). These already redact
+// financial/user figures per-role internally (ctx.user.role === "admin" ?
+// full : null, see server/routers.ts) — this middleware only gates entry,
+// not what's inside the response.
+export const anyStaffProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role === "user") {
+    throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+  }
+  return next({ ctx });
+});
+
+// Read-only catalog access shared across two departments: warehouse (owns
+// products/categories) and marketing (whose Routines composer needs the
+// product picker, and whose homepage category tiles reference categories).
+// Writes stay warehouseProcedure-only — this never grants marketing a way to
+// create/edit/delete a product or category, only to read the list.
+export const catalogReadProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role !== "admin" && ctx.user.role !== "warehouse" && ctx.user.role !== "marketing") {
+    throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+  }
+  return next({ ctx });
+});
+
+// Read-only content access shared across two departments: staff (owns posts)
+// and marketing (whose shared Content Calendar reads both posts and
+// promotions, and whose homepage-content editing needs post context). Writes
+// stay staffProcedure-only for posts, marketingProcedure-only for
+// promotions — this never grants marketing a way to create/edit/delete a
+// post, only to read the list.
+export const contentReadProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role !== "admin" && ctx.user.role !== "staff" && ctx.user.role !== "marketing") {
+    throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+  }
+  return next({ ctx });
+});
+
+// Read-only order access shared across two departments: warehouse (owns
+// fulfillment) and finance (Phase E's refund authority needs to find a
+// returned-but-unrefunded order before it can act on it -- the plan that
+// added admin.refundOrder as financeProcedure-only didn't also widen the
+// read side, which would have left finance able to call refundOrder but
+// never able to see which order to call it on). Writes (updateOrder/
+// bulkUpdateOrderStatus) stay warehouseProcedure-only -- this never grants
+// finance a way to change fulfillment status, only to read the list.
+export const ordersReadProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role !== "admin" && ctx.user.role !== "warehouse" && ctx.user.role !== "finance") {
     throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
   }
   return next({ ctx });

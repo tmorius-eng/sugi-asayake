@@ -6,6 +6,7 @@ import { UB_DELIVERY_FEE_MNT } from "../shared/const";
 import { slugify } from "../shared/slugify";
 import { guessDistrictFromAddress, type UbDistrict } from "../shared/districts";
 import { decryptJson, encryptJson } from "./_core/crypto";
+import { sqlQueryLogger } from "./_core/sqlQueryLog";
 import { ENV } from './_core/env';
 import { sanitizePostContent } from "./_core/sanitizeHtml";
 import { getInventoryReservationFailure, shouldRestoreStock } from "./commerce-lifecycle";
@@ -36,7 +37,11 @@ export async function getDb() {
       // mysql2 Pool by hand) so drizzle creates the pool with its own
       // resolved copy of mysql2 -- avoids a cross-package Pool type clash
       // when pnpm hoists a different mysql2 version at the workspace root.
-      _db = drizzle({ connection: { uri: process.env.DATABASE_URL, connectTimeout: 10_000, enableKeepAlive: true } });
+      // Phase K: every query Drizzle issues also passes through the
+      // in-process ring buffer that backs the admin "SQL лог" tab (see
+      // server/_core/sqlQueryLog.ts for why this can't just read Aiven's
+      // own slow-query log instead).
+      _db = drizzle({ connection: { uri: process.env.DATABASE_URL, connectTimeout: 10_000, enableKeepAlive: true }, logger: sqlQueryLogger });
       // drizzle-orm's mysql `timestamp` column hard-assumes the DB session
       // is UTC: it reads a raw wire value and appends "+0000" (see
       // node_modules/drizzle-orm/mysql-core/columns/timestamp.js), and
@@ -1740,6 +1745,24 @@ export async function getOrdersForUser(userId: number) {
   return orderRows.map(order => ({ ...order, items: lineItems.filter(item => item.orderId === order.id) }));
 }
 
+// Admin overhaul (2026-09-08, Phase G): customer self-service cancellation.
+// This is deliberately a thin ownership+status check that then hands off to
+// the *existing* updateAdminOrder for the actual state change -- reusing its
+// forward-only-ladder guard and stock-restore logic rather than
+// reimplementing them, so there is exactly one place that knows how order
+// status transitions and restocking work. A customer can only cancel their
+// own order (never someone else's, even by guessing an id), and only while
+// it's still pending/confirmed -- once it's been packed, undoing it is a
+// warehouse/admin decision (admin.updateOrder), not a self-service one.
+export async function cancelOwnOrder(orderId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const current = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  if (!current[0] || current[0].userId !== userId) throw new Error("Order not found.");
+  if (current[0].status !== "pending" && current[0].status !== "confirmed") throw new Error("This order can no longer be cancelled -- it has already been packed or closed.");
+  return updateAdminOrder({ id: orderId, status: "cancelled" });
+}
+
 /**
  * PREMIUM-FEATURES.md TIER 2 verified-purchase gate: the shopper must have
  * at least one non-cancelled order that actually contains this product. Not
@@ -2103,6 +2126,28 @@ export async function adminGlobalSearch(queryText: string) {
 const orderStatusRank = { pending: 0, confirmed: 1, packed: 2, out_for_delivery: 3, completed: 4 } as const;
 export type FulfilmentStatus = keyof typeof orderStatusRank | "cancelled" | "returned";
 
+// Admin overhaul (2026-09-08, Phase E): the tx type a `db.transaction(async
+// tx => ...)` callback receives, derived structurally (no direct import of
+// drizzle-orm/mysql2's transaction type exists elsewhere in this file) so
+// restoreStockForOrder below can be extracted out of updateAdminOrder's
+// inline transaction body and reused by refundOrder's own transaction.
+type OrderTx = Parameters<Parameters<NonNullable<Awaited<ReturnType<typeof getDb>>>["transaction"]>[0]>[0];
+
+// Extracted from updateAdminOrder's inline loop (Phase E) so refundOrder can
+// reuse the exact same restock logic when an admin chooses to restock a
+// refunded order's items, rather than re-deriving it. PHASE 2 of product
+// variants: restores the specific variant's stock, not the parent product's
+// -- a historical order placed before variants existed has variantId null
+// (best-effort migration backfill couldn't find one), in which case there's
+// nothing to safely restore.
+async function restoreStockForOrder(tx: OrderTx, orderId: number) {
+  const lineItems = await tx.select({ variantId: orderItems.variantId, quantity: orderItems.quantity }).from(orderItems).where(eq(orderItems.orderId, orderId));
+  for (const item of lineItems) {
+    if (item.variantId === null) continue;
+    await tx.update(productVariants).set({ stockQuantity: sql`${productVariants.stockQuantity} + ${item.quantity}`, updatedAt: new Date() }).where(eq(productVariants.id, item.variantId));
+  }
+}
+
 export async function updateAdminOrder(input: { id: number; status?: FulfilmentStatus; deliveryTrackingRef?: string | null; adminNote?: string | null }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
@@ -2123,15 +2168,7 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
   }
   await db.transaction(async tx => {
     if (shouldRestoreStock(current[0].status as FulfilmentStatus, input.status)) {
-      // PHASE 2 of product variants: restores the specific variant's stock,
-      // not the parent product's — a historical order placed before variants
-      // existed has variantId null (best-effort migration backfill couldn't
-      // find one), in which case there's nothing to safely restore.
-      const lineItems = await tx.select({ variantId: orderItems.variantId, quantity: orderItems.quantity }).from(orderItems).where(eq(orderItems.orderId, input.id));
-      for (const item of lineItems) {
-        if (item.variantId === null) continue;
-        await tx.update(productVariants).set({ stockQuantity: sql`${productVariants.stockQuantity} + ${item.quantity}`, updatedAt: new Date() }).where(eq(productVariants.id, item.variantId));
-      }
+      await restoreStockForOrder(tx, input.id);
     }
     await tx.update(orders).set({
       ...(input.status ? { status: input.status } : {}),
@@ -2153,6 +2190,73 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
   });
   const updated = await db.select().from(orders).where(eq(orders.id, input.id)).limit(1);
   return updated[0];
+}
+
+// Admin overhaul (2026-09-08, Phase E): the refund/credit flow updateAdminOrder's
+// own "returned" handling always deferred as separate, unscoped work.
+// Deliberately its own function, not a branch of updateAdminOrder -- this is
+// financeProcedure-gated (recording a refund is a money decision), while
+// updateAdminOrder stays warehouseProcedure (moving an order through
+// fulfilment). Guards enforce: only a "returned" order can be refunded, never
+// twice, and the refund can never exceed what the customer actually paid.
+export async function refundOrder(input: { id: number; refundAmountMnt: number; refundNote: string | null; restockItems: boolean }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const current = await db.select().from(orders).where(eq(orders.id, input.id)).limit(1);
+  if (!current[0]) throw new Error("Order not found.");
+  if (current[0].status !== "returned") throw new Error("Only a returned order can be refunded.");
+  if (current[0].paymentStatus === "refunded") throw new Error("This order has already been refunded.");
+  if (input.refundAmountMnt > current[0].totalMnt) throw new Error("Refund amount cannot exceed the order total.");
+  await db.transaction(async tx => {
+    if (input.restockItems) {
+      await restoreStockForOrder(tx, input.id);
+    }
+    await tx.update(orders).set({
+      paymentStatus: "refunded",
+      refundAmountMnt: input.refundAmountMnt,
+      refundedAt: new Date(),
+      refundNote: input.refundNote,
+      updatedAt: new Date(),
+    }).where(eq(orders.id, input.id));
+  });
+  const updated = await db.select().from(orders).where(eq(orders.id, input.id)).limit(1);
+  return updated[0];
+}
+
+// Admin overhaul (2026-09-08, Phase F): guest checkout customers have never
+// had any way to check their order status after leaving the confirmation
+// page -- this is the first one. Phone-first (not email) to match this
+// project's own phone-first identity model: customerPhone is NOT NULL,
+// customerEmail isn't, so phone is the only field guaranteed present for
+// every order including the common cash-on-delivery/bank-transfer checkout.
+// Single combined query (order number AND phone match together, same
+// tolerant right-8-digits comparison findUserByPhone's own fallback uses,
+// since customerPhone is checkout-collected free text, not guaranteed to
+// already be in a normalized form) so a wrong order number and a right
+// order number with a wrong phone produce the exact same "not found" --
+// this is a public, anti-enumeration lookup, not a login.
+export async function getOrderForTracking(orderNumber: string, phone: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const digitsOnlyPhone = phone.replace(/\D/g, "");
+  if (digitsOnlyPhone.length < 8) return null;
+  const localPhone = digitsOnlyPhone.slice(-8);
+  const rows = await db.select().from(orders).where(and(eq(orders.orderNumber, orderNumber.trim()), sql`RIGHT(REGEXP_REPLACE(${orders.customerPhone}, '[^0-9]', ''), 8) = ${localPhone}`)).limit(1);
+  const order = rows[0];
+  if (!order) return null;
+  const items = await db.select({ productName: orderItems.productName, sku: orderItems.sku, quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt }).from(orderItems).where(eq(orderItems.orderId, order.id));
+  return {
+    orderNumber: order.orderNumber,
+    status: order.status,
+    paymentStatus: order.paymentStatus,
+    deliveryMethod: order.deliveryMethod,
+    pickupBranch: order.pickupBranch,
+    deliveryAddress: order.deliveryAddress,
+    deliveryTrackingRef: order.deliveryTrackingRef,
+    totalMnt: order.totalMnt,
+    createdAt: order.createdAt,
+    items,
+  };
 }
 
 // 2026-09-07 (WordPress-parity admin editor rebuild): categoryIds/tagNames
@@ -2682,18 +2786,32 @@ export async function recordLoginAttempt(input: { email: string; userId: number 
 }
 
 // TIER 4: admin-only Login History viewer.
-export async function getLoginHistory(filters: { email?: string; success?: boolean; limit?: number }) {
+// Admin overhaul (2026-09-08, Phase M): real server-side pagination.
+// login_attempts is a permanent table with no retention/cleanup job -- the
+// actual gap this closes isn't rows disappearing, it's the UI hard-capping
+// at 200 and making everything older invisible even though it's still
+// sitting right there in the table.
+export async function getLoginHistory(filters: { email?: string; success?: boolean; page?: number; pageSize?: number }) {
   const db = await getDb();
-  if (!db) return [];
+  if (!db) return { rows: [], totalCount: 0 };
   const conditions = [
     filters.email ? like(loginAttempts.email, `%${filters.email}%`) : undefined,
     filters.success !== undefined ? eq(loginAttempts.success, filters.success) : undefined,
   ].filter(condition => condition !== undefined);
+  const where = conditions.length ? and(...conditions) : undefined;
 
-  return db.select().from(loginAttempts)
-    .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(desc(loginAttempts.createdAt))
-    .limit(Math.min(filters.limit ?? 100, 200));
+  const pageSize = Math.min(Math.max(filters.pageSize ?? 50, 1), 200);
+  const page = Math.max(filters.page ?? 1, 1);
+
+  const [rows, [{ count: totalCount }]] = await Promise.all([
+    db.select().from(loginAttempts)
+      .where(where)
+      .orderBy(desc(loginAttempts.createdAt))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize),
+    db.select({ count: sql<number>`count(*)` }).from(loginAttempts).where(where),
+  ]);
+  return { rows, totalCount: Number(totalCount) };
 }
 
 export async function getAdminCategories() {
@@ -2774,6 +2892,17 @@ export type ProductWriteInput = {
   fragrancePreference?: "unscented" | "light" | "floral" | "citrus" | null;
   wellnessInterests?: string | null;
 };
+
+// Admin overhaul (2026-09-08, Phase H): bulk CSV import's create-vs-update
+// decision per row -- a bare id/sku lookup, not the full getAdminProducts()
+// list, since a 500-row import shouldn't fetch and scan the whole 900+ row
+// catalog per row.
+export async function findProductBySku(sku: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select({ id: products.id }).from(products).where(eq(products.sku, sku)).limit(1);
+  return result[0] ?? null;
+}
 
 export async function createAdminProduct(input: ProductWriteInput) {
   const db = await getDb();
@@ -2962,6 +3091,17 @@ export async function getAdminUsers() {
     })
     .from(users)
     .orderBy(desc(users.lastSignedIn));
+}
+
+// Admin overhaul (2026-09-08, Phase J): the campaign composer always sends
+// to an explicit, already-resolved userIds[] (never a server-side "resolve
+// this filter at send time") -- this is the one place that list gets turned
+// back into real contact info + opt-in flags, right before actually
+// sending, so what was previewed is exactly who gets messaged.
+export async function getUsersForCampaignSend(userIds: number[]) {
+  const db = await getDb();
+  if (!db || userIds.length === 0) return [];
+  return db.select({ id: users.id, name: users.name, email: users.email, phone: users.phone, emailOptIn: users.emailOptIn, smsOptIn: users.smsOptIn }).from(users).where(inArray(users.id, userIds));
 }
 
 export async function getAdminUserDetail(userId: number) {
@@ -3190,7 +3330,7 @@ export async function unsuspendUser(userId: number) {
 // is left in place, unused -- same call as the old password/email-code
 // tables made during the Brevo removal (dropping a live table is a
 // separate, riskier migration with no functional upside here).
-export async function updateAdminUserRole(input: { userId: number; role: "user" | "staff" | "admin" }) {
+export async function updateAdminUserRole(input: { userId: number; role: "user" | "staff" | "finance" | "marketing" | "warehouse" | "admin" }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const user = await db.select({ id: users.id, name: users.name, email: users.email, role: users.role }).from(users).where(eq(users.id, input.userId)).limit(1);

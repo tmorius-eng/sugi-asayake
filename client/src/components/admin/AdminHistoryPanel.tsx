@@ -21,14 +21,14 @@ const formatDateTime = (date: Date | string) => new Date(date).toLocaleString("m
  * view would be fabricating precision this data doesn't have. This shows
  * exactly what's real: who did what, and when.
  */
-export default function AdminHistoryPanel({ entityType, entityId, isFullAdmin }: { entityType: string; entityId: number; isFullAdmin: boolean }) {
-  const query = trpc.admin.entityHistory.useQuery({ entityType, entityId }, { enabled: isFullAdmin });
+export default function AdminHistoryPanel({ entityType, entityId, canSeeAuditTrail }: { entityType: string; entityId: number; canSeeAuditTrail: boolean }) {
+  const query = trpc.admin.entityHistory.useQuery({ entityType, entityId }, { enabled: canSeeAuditTrail });
   const entries = query.data ?? [];
 
   return (
     <div className="rounded-2xl border border-black/10 bg-white p-4">
       <p className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-[.14em] text-[#57585e]"><History size={12} />ТҮҮХ (ACTIVITY)</p>
-      {!isFullAdmin ? (
+      {!canSeeAuditTrail ? (
         <p className="mt-3 text-xs text-[#8b8c90]">🔒 Зөвхөн админд харагдана</p>
       ) : query.isLoading ? (
         <p className="mt-3 flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={14} />Уншиж байна…</p>

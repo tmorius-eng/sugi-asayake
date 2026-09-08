@@ -60,17 +60,26 @@ describeWithDatabase("admin security center integration", () => {
     await anon.auth.login({ phone: targetPhone, password: "TargetPassw0rd!" });
 
     const admin = callerFor({ id: adminUserId, email: adminEmail, name: "Security Center Admin", role: "admin", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+    // Phase M: admin.loginHistory now returns { rows, totalCount } (real
+    // server-side pagination) instead of a plain array.
     const history = await admin.admin.loginHistory({ email: targetPhone, outcome: "all" });
-    expect(history.length).toBeGreaterThanOrEqual(2);
-    const failed = history.find(entry => !entry.success);
-    const succeeded = history.find(entry => entry.success);
+    expect(history.totalCount).toBeGreaterThanOrEqual(2);
+    expect(history.rows.length).toBeGreaterThanOrEqual(2);
+    const failed = history.rows.find(entry => !entry.success);
+    const succeeded = history.rows.find(entry => entry.success);
     expect(failed?.reason).toBe("invalid_credentials");
     expect(succeeded?.userId).toBe(targetUserId);
 
     const failedOnly = await admin.admin.loginHistory({ email: targetPhone, outcome: "failed" });
-    expect(failedOnly.every(entry => !entry.success)).toBe(true);
+    expect(failedOnly.rows.every(entry => !entry.success)).toBe(true);
     const successOnly = await admin.admin.loginHistory({ email: targetPhone, outcome: "success" });
-    expect(successOnly.every(entry => entry.success)).toBe(true);
+    expect(successOnly.rows.every(entry => entry.success)).toBe(true);
+
+    // A page past the end of the (2-row) result set comes back empty, not
+    // an error, with totalCount still reflecting the real total.
+    const secondPage = await admin.admin.loginHistory({ email: targetPhone, outcome: "all", page: 2, pageSize: 50 });
+    expect(secondPage.rows).toHaveLength(0);
+    expect(secondPage.totalCount).toBe(history.totalCount);
   });
 
   it("surfaces a real admin action via admin.auditLogs, filterable by action/actor/date", async () => {

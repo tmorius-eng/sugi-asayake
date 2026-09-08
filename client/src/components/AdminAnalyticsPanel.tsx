@@ -7,16 +7,9 @@ import { downloadBase64File } from "@/lib/fileDownload";
 import { downloadCsv } from "@/lib/csv";
 import { arcPath, polarPoint } from "@/lib/svg-arc";
 import type { RouterOutputs } from "@/lib/trpc";
-import { genderLabels, skinTypeLabels as customerSkinTypeLabels, hairTypeLabels, skinConcernOptions } from "@shared/catalog-filter";
 import { formatMnt } from "@shared/format";
 import { buildDaySeries, rangeOptions, rangeToDates, type RangeKey } from "@/lib/analyticsRange";
-
-const preferenceSegmentLabelFor = (field: "gender" | "skinType" | "hairType" | "concern", value: string): string => {
-  if (field === "gender") return genderLabels[value as keyof typeof genderLabels] ?? value;
-  if (field === "skinType") return customerSkinTypeLabels[value as keyof typeof customerSkinTypeLabels] ?? value;
-  if (field === "hairType") return hairTypeLabels[value as keyof typeof hairTypeLabels] ?? value;
-  return skinConcernOptions.find(option => option.value === value)?.label ?? value;
-};
+import AdminCustomerSegmentsPanel from "./admin/AdminCustomerSegmentsPanel";
 
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Тайлан ачаалж чадсангүй.";
 type AnalyticsReport = RouterOutputs["admin"]["analyticsReport"];
@@ -256,50 +249,13 @@ export default function AdminAnalyticsPanel() {
           unique to this build (nothing off-the-shelf gives you this) --
           reuses the same "N of M told us" ranked-list pattern as the age/
           occupation grid above, since the customers-by-preference-segment
-          data has the exact same honesty requirement. */}
+          data has the exact same honesty requirement. Extracted into
+          AdminCustomerSegmentsPanel (Admin overhaul, 2026-09-08, Phase I) so
+          marketing's new Campaigns surface (Phase J) can reuse this exact
+          markup with drill-down enabled -- read-only here, unchanged from
+          before that extraction (no onSelectSegment passed). */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <section className="min-w-0 rounded-3xl border border-black/7 p-5">
-          <h3 className="font-[var(--font-display)] text-lg font-semibold tracking-[-.04em]">Тохиргооны сегмент</h3>
-          <p className="mt-1 text-xs text-[#8a8b8f]">Профайл дээрээ гоо сайхны/гэрийн тохиргоо бөглөсөн харилцагчид.</p>
-          {report.preferenceSegments.totalCustomerCount === 0 ? (
-            <p className="mt-4 text-sm text-[#77787d]">Одоогоор бүртгэлтэй харилцагч алга.</p>
-          ) : (
-            <div className="mt-4 grid gap-4">
-              {([
-                { title: "Хүйс", field: "gender" as const, provided: report.preferenceSegments.genderProvidedCount, rows: report.preferenceSegments.genderBreakdown },
-                { title: "Арьсны төрөл", field: "skinType" as const, provided: report.preferenceSegments.skinTypeProvidedCount, rows: report.preferenceSegments.skinTypeBreakdown },
-                { title: "Санаа зовдог асуудал (эхний 10)", field: "concern" as const, provided: report.preferenceSegments.topSkinConcerns.reduce((sum, row) => sum + row.count, 0), rows: report.preferenceSegments.topSkinConcerns },
-                { title: "Үсний төрөл", field: "hairType" as const, provided: report.preferenceSegments.hairTypeProvidedCount, rows: report.preferenceSegments.hairTypeBreakdown },
-              ]).map(group => group.rows.length > 0 && (
-                <div key={group.title}>
-                  <p className="text-[11px] font-bold text-[#55565b]">{group.title} <span className="font-normal text-[#8a8b8f]">({group.provided} / {report.preferenceSegments.totalCustomerCount})</span></p>
-                  <ul className="mt-1.5 grid gap-1">
-                    {group.rows.map(row => (
-                      <li key={row.value} className="flex items-center justify-between border-b border-black/6 py-1 text-sm">
-                        <span>{preferenceSegmentLabelFor(group.field, row.value)}</span><strong className="text-[#17181b]">{row.count}</strong>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-              {report.preferenceSegments.districtBreakdown.length > 0 && (
-                <div>
-                  <p className="text-[11px] font-bold text-[#55565b]">Дүүрэг <span className="font-normal text-[#8a8b8f]">({report.preferenceSegments.districtProvidedCount} / {report.preferenceSegments.totalCustomerCount})</span></p>
-                  <ul className="mt-1.5 grid gap-1">
-                    {report.preferenceSegments.districtBreakdown.map(row => (
-                      <li key={row.district} className="flex items-center justify-between border-b border-black/6 py-1 text-sm">
-                        <span>{row.label}</span><strong className="text-[#17181b]">{row.count}</strong>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {report.preferenceSegments.hasYoungChildrenCount > 0 && (
-                <p className="text-sm">Бага насны хүүхэдтэй: <strong>{report.preferenceSegments.hasYoungChildrenCount}</strong></p>
-              )}
-            </div>
-          )}
-        </section>
+        <AdminCustomerSegmentsPanel preferenceSegments={report.preferenceSegments} />
         <section className="min-w-0 rounded-3xl border border-black/7 p-5">
           <h3 className="font-[var(--font-display)] text-lg font-semibold tracking-[-.04em]">Санал болгох системийн хамрах хүрээ</h3>
           <p className="mt-1 text-xs text-[#8a8b8f]">Нийтлэгдсэн барааны хэдэн хувь нь "Танд санал болгож байна" системд ашиглагдах шошготой вэ.</p>

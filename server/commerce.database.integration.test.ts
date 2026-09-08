@@ -5,10 +5,13 @@ import { createOrderFromActiveCart, getAdminProducts, getDb, getPublishedCatalog
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 
-function staffContext(): TrpcContext {
+// Admin overhaul (2026-09-08, Phase B): admin.products/admin.updateProduct
+// moved from staffProcedure to warehouseProcedure -- this was named
+// staffContext when staff still owned the catalog; renamed to match.
+function warehouseContext(): TrpcContext {
   return {
     user: {
-      id: 1, email: "staff-test@example.com", name: "Phase 2 Test Staff", role: "staff",
+      id: 1, email: "warehouse-test@example.com", name: "Phase 2 Test Warehouse", role: "warehouse",
       emailVerifiedAt: null, sessionVersion: 0, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date(),
     },
     req: { protocol: "https", headers: {}, ip: "198.51.100.9", socket: { remoteAddress: "198.51.100.9" } } as unknown as TrpcContext["req"],
@@ -202,7 +205,7 @@ describeWithDatabase("commerce database integration", () => {
   // against a throwaway product, proving the router's `delete
   // input.costMnt` for non-admin callers actually preserves the DB value
   // rather than just type-checking.
-  it("preserves a product's admin-set costMnt when a staff session edits the product without permission to touch that field", async () => {
+  it("preserves a product's admin-set costMnt when a warehouse session edits the product without permission to touch that field", async () => {
     const db = await getDb();
     if (!db) throw new Error("Database unavailable");
 
@@ -219,18 +222,18 @@ describeWithDatabase("commerce database integration", () => {
     const productId = Number(productResult[0].insertId);
 
     try {
-      // Staff never sees the real value (admin.products redacts it)...
-      const staffCaller = appRouter.createCaller(staffContext());
-      const staffView = await staffCaller.admin.products();
-      const staffRow = staffView.find(product => product.id === productId);
-      expect(staffRow?.costMnt).toBeNull();
+      // Warehouse never sees the real value (admin.products redacts it)...
+      const warehouseCaller = appRouter.createCaller(warehouseContext());
+      const warehouseView = await warehouseCaller.admin.products();
+      const warehouseRow = warehouseView.find(product => product.id === productId);
+      expect(warehouseRow?.costMnt).toBeNull();
 
       // ...and even an explicit attempt to set one is silently ignored,
       // rather than overwriting the real number admin already entered.
-      await staffCaller.admin.updateProduct({ id: productId, costMnt: 999999, name: "Cost-permission integration product (edited)" });
+      await warehouseCaller.admin.updateProduct({ id: productId, costMnt: 999999, name: "Cost-permission integration product (edited)" });
 
-      const afterStaffEdit = await getAdminProducts();
-      const persistedRow = afterStaffEdit.find(product => product.id === productId);
+      const afterWarehouseEdit = await getAdminProducts();
+      const persistedRow = afterWarehouseEdit.find(product => product.id === productId);
       expect(persistedRow?.name).toBe("Cost-permission integration product (edited)"); // the legitimate field DID save
       expect(persistedRow?.costMnt).toBe(3000); // the admin-only field did NOT change
     } finally {

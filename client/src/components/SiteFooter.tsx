@@ -65,6 +65,7 @@ export default function SiteFooter({ logoUrl, socials, ctaBanner }: { logoUrl: s
           <Link href="/privacy">Хувийн нууцлал</Link>
           <Link href="/terms">Үйлчилгээний нөхцөл</Link>
           <Link href="/returns">Буцаалт, солилцоо</Link>
+          <Link href="/track-order">Захиалгаа хянах</Link>
           {/* 2026-09-06: resetConsent() is Silktide Consent Manager's own
               documented public method (client/public/vendor/silktide-consent-
               manager.js) -- re-shows the initial Accept/Reject/Preferences

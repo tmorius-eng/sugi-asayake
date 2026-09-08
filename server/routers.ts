@@ -2,13 +2,17 @@ import { COOKIE_NAME, GUEST_CART_COOKIE_NAME, VISITOR_SESSION_COOKIE_NAME } from
 import { formatVariantAttributes } from "@shared/catalog-filter";
 import { ubDistricts } from "@shared/districts";
 import { parseDeviceType, isLikelyBot } from "@shared/deviceType";
+import { slugify } from "@shared/slugify";
 import { TRPCError } from "@trpc/server";
 import { parse as parseCookieHeader } from "cookie";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { getGuestCartCookieOptions, getSessionCookieOptions, getVisitorSessionCookieOptions } from "./_core/cookies";
 import { listRecentHoneybadgerFaults } from "./_core/honeybadgerReadApi";
-import { sendAccountEmail } from "./_core/notification";
+import { getRecentSqlQueries } from "./_core/sqlQueryLog";
+import { getOrSetCached } from "./_core/ttlCache";
+import { sendAccountEmail, sendAccountSms } from "./_core/notification";
+import { ENV } from "./_core/env";
 import { systemRouter } from "./_core/systemRouter";
 import { signSessionToken, type TrpcContext } from "./_core/context";
 import { hashPassword, verifyPassword } from "./_core/password";
@@ -63,6 +67,7 @@ import {
   getAdminDiscountCodes,
   getAdminIntegrations,
   getAdminSitePromotions,
+  findProductBySku,
   getAdminCategories,
   getAdminDashboardSummary,
   getAdminOrders,
@@ -135,6 +140,10 @@ import {
   upsertSiteText,
   upsertMarketingSpend,
   updateAdminCategory,
+  cancelOwnOrder,
+  getOrderForTracking,
+  getUsersForCampaignSend,
+  refundOrder,
   updateAdminOrder,
   updateAdminPost,
   updateAdminProduct,
@@ -153,13 +162,13 @@ import {
   updateUserPreferences,
   updateUserProfile,
 } from "./db";
-import { adminProcedure, lenientRateLimitedProcedure, moderateRateLimitedProcedure, phoneVerifyRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure } from "./_core/trpc";
+import { adminProcedure, anyStaffProcedure, catalogReadProcedure, contentReadProcedure, financeProcedure, lenientRateLimitedProcedure, marketingProcedure, moderateRateLimitedProcedure, ordersReadProcedure, phoneVerifyRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure, warehouseProcedure } from "./_core/trpc";
 import { storagePing, storagePut, storagePutImageVariants } from "./storage";
 import { IMAGE_MAX_DIMENSION, processUploadedImage, processUploadedImageVariants } from "./_core/imageProcessing";
 import { createQPayInvoice, getQPayAvailability } from "./qpay";
 import { createNoOpVerificationSession, createVerificationSession, getSessionStatus, isNoOpSessionExpired, normalizePhoneForVerifyMn } from "./verifyMn";
 import { getCategoryWriteViolation, getProductWriteViolation } from "./catalog-validation";
-import { getAnalyticsReport, exportAnalyticsExcel, exportAnalyticsPdf } from "./analytics";
+import { getAnalyticsReport, exportAnalyticsExcel, exportAnalyticsPdf, getAllCustomersForCampaign, getPreferenceSegmentBreakdown, getRecommendationCoverage, getUsersByLoyaltyTier, getUsersBySegment, type PreferenceSegmentField } from "./analytics";
 import { siteMediaSlotKeys } from "../shared/site-media";
 import { siteTextSlotKeys } from "../shared/site-text";
 import { formatMnt } from "@shared/format";
@@ -377,7 +386,9 @@ const orderUpdateSchema = z.object({
 );
 
 const imageContentTypes = ["image/jpeg", "image/png", "image/webp"] as const;
-const staffRoleSchema = z.enum(["user", "staff", "admin"]);
+// 2026-09-08 (Admin overhaul, Phase A): 3 -> 6 roles, see drizzle/schema.ts's
+// `role` column comment and server/_core/trpc.ts for what each one can do.
+const staffRoleSchema = z.enum(["user", "staff", "finance", "marketing", "warehouse", "admin"]);
 const siteMediaSlotSchema = z.enum(siteMediaSlotKeys);
 const siteTextSlotSchema = z.enum(siteTextSlotKeys);
 // A syntactically valid but unusable scrypt hash (correct salt/hash lengths,
@@ -510,6 +521,127 @@ async function validateProductWrite(input: { categoryId?: number; slug?: string;
   const conflicts = input.slug !== undefined || input.sku !== undefined ? await getProductWriteConflicts({ slug: input.slug, sku: input.sku, excludeId: input.id }) : [];
   const violation = getProductWriteViolation(input, categoryFound, conflicts);
   if (violation) throw new TRPCError(violation);
+}
+
+// Admin overhaul (2026-09-08, Phase H): bulk CSV import. "" (present but
+// blank) vs undefined (column not in this row at all) matter differently on
+// an UPDATE row -- undefined means "leave the existing value alone" (same
+// partial-update semantics productUpdateSchema already has), while "" means
+// "clear this field to null." Never conflated.
+function csvCellToNullable(value: string | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
+}
+function csvCellToInt(value: string, fieldName: string): number {
+  const parsed = Number(value.trim());
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) throw new Error(`${fieldName}: "${value}" бүхэл тоо биш байна.`);
+  return parsed;
+}
+const CSV_TRUTHY = new Set(["true", "1", "yes", "тийм", "нийтлэгдсэн", "нийтэлсэн"]);
+function csvCellToBoolean(value: string): boolean {
+  return CSV_TRUTHY.has(value.trim().toLowerCase());
+}
+
+export type CsvImportRowOutcome = { row: number; sku: string; outcome: "created" | "updated" | "skipped" | "error"; message: string | null };
+
+// Every row runs through the exact same productWriteSchema/
+// productUpdateSchema + validateProductWrite pipeline the single-product
+// composer's createProduct/updateProduct above already use -- not a second,
+// parallel copy of that validation -- so a CSV-imported product can never
+// end up in a state the one-at-a-time editor wouldn't also allow. Category
+// is resolved by case-insensitive name match against the live category
+// list (an admin/warehouse user types a real category name, not an
+// internal numeric id); an unmatched name is a row error, never a silent
+// default category. Every row is wrapped in its own try/catch so one bad
+// row (an unknown category, an out-of-range price, a duplicate SKU) never
+// aborts the rest of the batch. dryRun runs this exact same function --
+// the only difference is whether createAdminProduct/updateAdminProduct are
+// actually called at the end -- so a preview can never disagree with what
+// committing it actually does.
+async function importProductsCsvRows(
+  rows: Record<string, string>[],
+  options: { allowUpdateExisting: boolean; dryRun: boolean; actorUserId: number; actorRole: string },
+): Promise<CsvImportRowOutcome[]> {
+  const categories = await getAdminCategories();
+  const categoryIdByName = new Map(categories.map(category => [category.name.trim().toLowerCase(), category.id]));
+  const seenSkusInBatch = new Set<string>();
+  const results: CsvImportRowOutcome[] = [];
+
+  for (let index = 0; index < rows.length; index++) {
+    const row = rows[index];
+    const sku = (row.sku ?? "").trim();
+    try {
+      if (!sku) throw new Error("SKU шаардлагатай.");
+      if (seenSkusInBatch.has(sku)) throw new Error("Энэ SKU файлын дотор давхардсан байна.");
+      seenSkusInBatch.add(sku);
+
+      const existing = await findProductBySku(sku);
+      if (existing && !options.allowUpdateExisting) {
+        results.push({ row: index, sku, outcome: "skipped", message: "Энэ SKU-тай бараа аль хэдийн байна (шинэчлэхийг энэ импортод зөвшөөрөөгүй)." });
+        continue;
+      }
+
+      const categoryNameCell = row.category?.trim();
+      let categoryId: number | undefined;
+      if (categoryNameCell) {
+        const matched = categoryIdByName.get(categoryNameCell.toLowerCase());
+        if (matched === undefined) throw new Error(`Ангилал олдсонгүй: "${categoryNameCell}"`);
+        categoryId = matched;
+      }
+
+      const nameCell = row.name?.trim();
+      const candidate: Record<string, unknown> = {
+        ...(categoryId !== undefined ? { categoryId } : {}),
+        ...(nameCell ? { name: nameCell } : {}),
+        sku,
+        slug: row.slug?.trim() || (nameCell ? slugify(nameCell) : undefined),
+        brand: csvCellToNullable(row.brand),
+        shortDescription: csvCellToNullable(row.shortDescription),
+        description: csvCellToNullable(row.description),
+        imageUrl: csvCellToNullable(row.imageUrl),
+        skinType: csvCellToNullable(row.skinType),
+        skinConcerns: csvCellToNullable(row.skinConcerns),
+        interiorStyle: csvCellToNullable(row.interiorStyle),
+        hairType: csvCellToNullable(row.hairType),
+        hairConcerns: csvCellToNullable(row.hairConcerns),
+        fragrancePreference: csvCellToNullable(row.fragrancePreference),
+        wellnessInterests: csvCellToNullable(row.wellnessInterests),
+      };
+      if (row.priceMnt?.trim()) candidate.priceMnt = csvCellToInt(row.priceMnt, "priceMnt");
+      if (row.compareAtPriceMnt !== undefined) candidate.compareAtPriceMnt = row.compareAtPriceMnt.trim() === "" ? null : csvCellToInt(row.compareAtPriceMnt, "compareAtPriceMnt");
+      if (row.costMnt !== undefined) candidate.costMnt = row.costMnt.trim() === "" ? null : csvCellToInt(row.costMnt, "costMnt");
+      if (row.stockQuantity?.trim()) candidate.stockQuantity = csvCellToInt(row.stockQuantity, "stockQuantity");
+      if (row.isPublished?.trim()) candidate.isPublished = csvCellToBoolean(row.isPublished);
+      // costMnt is admin-only, same rule as the single-product composer.
+      if (options.actorRole !== "admin") delete candidate.costMnt;
+
+      if (existing) {
+        const parsed = productUpdateSchema.parse({ id: existing.id, ...candidate });
+        await validateProductWrite(parsed);
+        if (!options.dryRun) {
+          const product = await updateAdminProduct(parsed);
+          await logAdminAction({ actorUserId: options.actorUserId, action: "product.updated", entityType: "product", entityId: product.id, metadata: { slug: product.slug, source: "csv_import" } });
+        }
+        results.push({ row: index, sku, outcome: "updated", message: null });
+      } else {
+        if (candidate.isPublished === undefined) candidate.isPublished = false;
+        const parsed = productWriteSchema.parse(candidate);
+        await validateProductWrite(parsed);
+        if (!options.dryRun) {
+          const product = await createAdminProduct(parsed);
+          await logAdminAction({ actorUserId: options.actorUserId, action: "product.created", entityType: "product", entityId: product.id, metadata: { slug: product.slug, source: "csv_import" } });
+        }
+        results.push({ row: index, sku, outcome: "created", message: null });
+      }
+    } catch (error) {
+      const message = error instanceof z.ZodError
+        ? error.issues.map(issue => `${issue.path.join(".")}: ${issue.message}`).join("; ")
+        : error instanceof Error ? error.message : "Тодорхойгүй алдаа.";
+      results.push({ row: index, sku: sku || `${index + 1}-р мөр`, outcome: "error", message });
+    }
+  }
+  return results;
 }
 
 async function validateCategoryWrite(input: { slug?: string; id?: number }) {
@@ -1035,6 +1167,38 @@ export const appRouter = router({
   }),
   orders: router({
     mine: protectedProcedure.query(({ ctx }) => getOrdersForUser(ctx.user.id)),
+    // Admin overhaul (2026-09-08, Phase F): a guest checkout customer's only
+    // way to check status until now. A mutation (not a query) so the phone
+    // number stays out of a GET query string, matching auth.login/
+    // checkout.createOrder's own choice for sensitive input. strictRateLimit
+    // (8/15min/IP) since this is exactly the enumeration-risk shape those
+    // other public identity-lookup endpoints share.
+    lookup: strictRateLimitedProcedure.input(z.object({ orderNumber: z.string().trim().min(1).max(32), phone: phoneSchema })).mutation(async ({ input }) => {
+      const order = await getOrderForTracking(input.orderNumber, input.phone);
+      if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "Захиалга олдсонгүй. Захиалгын дугаар болон утасны дугаараа шалгана уу." });
+      return order;
+    }),
+    // Admin overhaul (2026-09-08, Phase G): the first way a logged-in
+    // customer can cancel their own order without contacting support --
+    // ownership + status guards live in cancelOwnOrder (server/db.ts), which
+    // then reuses the existing updateAdminOrder for the actual transition
+    // (same forward-only ladder, same stock-restore logic). Not an admin
+    // action, so no logAdminAction -- this is the customer acting on their
+    // own record, the same trust tier as profile.update.
+    cancel: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      let order;
+      try {
+        order = await cancelOwnOrder(input.id, ctx.user.id);
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to cancel order." });
+      }
+      try {
+        await sendOrderStatusUpdateEmail(order);
+      } catch (error) {
+        console.error("[orders.cancel] Failed to send status update email", error);
+      }
+      return order;
+    }),
   }),
   // Customer account page: editable name/phone, an avatar photo, and a
   // saved-address book (checkout can prefill from the default address so
@@ -1243,7 +1407,7 @@ export const appRouter = router({
     // new admin dashboard) pass through the `...summary` spread untouched —
     // deliberately, not an oversight: order *counts* are operational, same
     // tier as totalOrders/recentOrders above.
-    dashboardSummary: staffProcedure.query(async ({ ctx }) => {
+    dashboardSummary: anyStaffProcedure.query(async ({ ctx }) => {
       const summary = await getAdminDashboardSummary();
       if (ctx.user.role === "admin") return summary;
       return { ...summary, totalRevenueMnt: null, activeUsers: null };
@@ -1252,14 +1416,14 @@ export const appRouter = router({
     // a small dashboard widget. Non-sensitive (no data, just up/down + a
     // terse error string), so staff can see it too — the same audience as
     // the rest of the dashboard.
-    systemHealth: staffProcedure.query(async () => {
+    systemHealth: anyStaffProcedure.query(async () => {
       const [db, storage] = await Promise.all([dbPing(), storagePing()]);
       return { db, storage };
     }),
     // Same idea for search: staff can look up products/orders, but user
     // records (and thus any way to reach user management from a search hit)
     // are admin-only.
-    search: staffProcedure.input(z.object({ query: z.string().trim().min(1).max(120) })).query(async ({ ctx, input }) => {
+    search: anyStaffProcedure.input(z.object({ query: z.string().trim().min(1).max(120) })).query(async ({ ctx, input }) => {
       const result = await adminGlobalSearch(input.query);
       if (ctx.user.role === "admin") return result;
       return { ...result, users: [] };
@@ -1271,18 +1435,18 @@ export const appRouter = router({
     // shape as dashboardSummary/search above (full object for admin, nulled
     // field for staff), mirrored on the write side below so a stale/blank
     // form value from a staff session can never overwrite the real number.
-    products: staffProcedure.query(async ({ ctx }) => {
+    products: catalogReadProcedure.query(async ({ ctx }) => {
       const products = await getAdminProducts();
       if (ctx.user.role === "admin") return products;
       return products.map(product => ({ ...product, costMnt: null }));
     }),
-    categories: staffProcedure.query(() => getAdminCategories()),
-    orders: staffProcedure.query(() => getAdminOrders()),
-    posts: staffProcedure.query(() => getAdminPosts()),
+    categories: catalogReadProcedure.query(() => getAdminCategories()),
+    orders: ordersReadProcedure.query(() => getAdminOrders()),
+    posts: contentReadProcedure.query(() => getAdminPosts()),
     postCategories: staffProcedure.query(() => getAdminPostCategories()),
     mediaLibrary: staffProcedure.input(z.object({ search: z.string().trim().max(120).optional(), page: z.number().int().positive().default(1) })).query(({ input }) => getAdminMediaLibrary(input)),
-    siteMedia: staffProcedure.query(() => getSiteMedia()),
-    siteText: staffProcedure.query(() => getSiteText()),
+    siteMedia: marketingProcedure.query(() => getSiteMedia()),
+    siteText: marketingProcedure.query(() => getSiteText()),
     users: adminProcedure.query(() => getAdminUsers()),
     // 2026-09-05 ("admin invite staff section just change it to manually
     // only admin give staff role to default users" -- Tom, explicit): the
@@ -1351,11 +1515,11 @@ export const appRouter = router({
     // order-based ("who bought"), not website-traffic-based ("who
     // browsed") -- the app has no page-view/visit tracking infrastructure
     // today, see the comment on getDistrictBreakdown in server/analytics.ts.
-    analyticsReport: adminProcedure.input(z.object({
+    analyticsReport: financeProcedure.input(z.object({
       dateFrom: z.string().datetime().optional(),
       dateTo: z.string().datetime().optional(),
     })).query(({ input }) => getAnalyticsReport({ dateFrom: input.dateFrom ? new Date(input.dateFrom) : undefined, dateTo: input.dateTo ? new Date(input.dateTo) : undefined })),
-    analyticsExport: adminProcedure.input(z.object({
+    analyticsExport: financeProcedure.input(z.object({
       dateFrom: z.string().datetime().optional(),
       dateTo: z.string().datetime().optional(),
       format: z.enum(["xlsx", "pdf"]),
@@ -1369,10 +1533,10 @@ export const appRouter = router({
     }),
     // Tier F: CAC's one input, entered per calendar month. A financial
     // figure -- adminProcedure, same tier as analyticsReport.
-    marketingSpend: adminProcedure.input(z.object({
+    marketingSpend: financeProcedure.input(z.object({
       monthKeys: z.array(z.string().regex(/^\d{4}-\d{2}$/)).min(1).max(24),
     })).query(({ input }) => getMarketingSpendRows(input.monthKeys)),
-    updateMarketingSpend: adminProcedure.input(z.object({
+    updateMarketingSpend: financeProcedure.input(z.object({
       monthKey: z.string().regex(/^\d{4}-\d{2}$/),
       spendMnt: z.number().int().min(0).max(1_000_000_000),
     })).mutation(async ({ ctx, input }) => {
@@ -1380,6 +1544,78 @@ export const appRouter = router({
       await logAdminAction({ actorUserId: ctx.user.id, action: "marketing_spend.updated", entityType: "marketing_spend", metadata: { monthKey: input.monthKey, spendMnt: input.spendMnt } });
       return result;
     }),
+    // Admin overhaul (2026-09-08, Phase I): analyticsReport above (now
+    // finance-only) already bundles preferenceSegments/recommendationCoverage
+    // into its one big response -- marketing needs just this slice, not the
+    // rest of the financial report, so this is a standalone procedure
+    // calling the same two underlying functions again (a cheap, harmless
+    // duplication) rather than redacting ~15 unrelated fields out of the
+    // shared response.
+    customerSegments: marketingProcedure.query(async () => {
+      const [preferenceSegments, recommendationCoverage] = await Promise.all([getPreferenceSegmentBreakdown(), getRecommendationCoverage()]);
+      return { preferenceSegments, recommendationCoverage };
+    }),
+    // The drill-down behind one of customerSegments' aggregate counts --
+    // real customer PII (name/phone/email), a deliberate, Tom-confirmed
+    // scope expansion for marketing (needed to actually target a campaign,
+    // see Phase J) that this role didn't have before this overhaul.
+    usersBySegment: marketingProcedure.input(z.object({
+      field: z.enum(["gender", "skinType", "skinConcerns", "hairType", "primaryDistrict", "hasYoungChildren"]),
+      value: z.string().trim().max(60),
+    })).query(({ input }) => getUsersBySegment(input.field as PreferenceSegmentField, input.value)),
+    // Admin overhaul (2026-09-08, Phase J): the campaign composer's other two
+    // targeting sources (the third, segment drill-down, is usersBySegment
+    // just above).
+    campaignAllUsers: marketingProcedure.query(() => getAllCustomersForCampaign()),
+    campaignUsersByLoyaltyTier: marketingProcedure.input(z.object({ tierName: z.string().trim().min(1).max(40) })).query(({ input }) => getUsersByLoyaltyTier(input.tierName)),
+    // The actual send. Always an explicit, already-resolved userIds[] (never
+    // a server-side "resolve this filter at send time") -- what the composer
+    // previewed is exactly who gets messaged, no race between preview and
+    // send. Filters by emailOptIn/smsOptIn before sending -- these columns
+    // exist but (per their own schema comment) were only ever enforced for
+    // the back-in-stock alert until now; this is the first real enforcement
+    // point beyond that one case. SMS is gated behind ENV.smsCampaignsEnabled
+    // (a separate flag from the Brevo key sendAccountSms already technically
+    // works with) since Tom has not confirmed SMS credits/route are set up.
+    sendCampaign: marketingProcedure.input(z.object({
+      userIds: z.array(z.number().int().positive()).min(1).max(2_000),
+      channel: z.enum(["email", "sms"]),
+      subject: z.string().trim().min(1).max(200),
+      body: z.string().trim().min(1).max(5_000),
+      sourceLabel: z.string().trim().max(120).optional(),
+    })).mutation(async ({ ctx, input }) => {
+      if (input.channel === "sms" && !ENV.smsCampaignsEnabled) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "SMS кампанит ажил идэвхжээгүй байна. Тохиргоог админтай холбогдоно уу." });
+      }
+      const recipients = await getUsersForCampaignSend(input.userIds);
+      const eligible = recipients.filter(user => input.channel === "email" ? user.emailOptIn && Boolean(user.email) : user.smsOptIn && Boolean(user.phone));
+
+      let sentCount = 0;
+      let failedCount = 0;
+      const BATCH_SIZE = 20;
+      for (let i = 0; i < eligible.length; i += BATCH_SIZE) {
+        const batch = eligible.slice(i, i + BATCH_SIZE);
+        const outcomes = await Promise.all(batch.map(user => input.channel === "email"
+          ? sendAccountEmail({ to: user.email!, subject: input.subject, content: input.body })
+          : sendAccountSms({ to: user.phone!, content: input.body })));
+        sentCount += outcomes.filter(Boolean).length;
+        failedCount += outcomes.filter(ok => !ok).length;
+      }
+
+      const skippedOptOutCount = recipients.length - eligible.length;
+      await logAdminAction({
+        actorUserId: ctx.user.id,
+        action: "campaign.sent",
+        entityType: "campaign",
+        metadata: { source: input.sourceLabel ?? null, channel: input.channel, recipientCount: input.userIds.length, eligibleCount: eligible.length, skippedOptOutCount, subject: input.subject, sentCount, failedCount },
+      });
+      return { recipientCount: input.userIds.length, eligibleCount: eligible.length, skippedOptOutCount, sentCount, failedCount };
+    }),
+    // Lets the composer disable/explain the SMS channel client-side instead
+    // of only failing after the admin has already filled out a message --
+    // ENV.smsCampaignsEnabled itself is server-only config, not something
+    // the client can read directly.
+    campaignConfig: marketingProcedure.query(() => ({ smsCampaignsEnabled: ENV.smsCampaignsEnabled })),
     suspendUser: adminProcedure.input(z.object({ userId: z.number().int().positive(), reason: z.string().trim().max(300).optional() })).mutation(async ({ ctx, input }) => {
       if (ctx.user.id === input.userId) throw new TRPCError({ code: "BAD_REQUEST", message: "You cannot suspend your own account." });
       try {
@@ -1407,19 +1643,28 @@ export const appRouter = router({
     // TIER 4, admin-only (same tier as user management — this is exactly the
     // kind of data staff shouldn't see): who did what, and who's been
     // trying to log in.
+    // Phase L: cached 30s per distinct filter combination -- this tab is
+    // read far more often than admin actions actually happen, and a 30s-old
+    // audit log is never urgent (nothing here is a live-incident view). The
+    // cache key includes every filter param so switching filters can never
+    // return a different filter's stale result.
     auditLogs: adminProcedure.input(z.object({
       action: z.string().trim().max(100).optional(),
       actorEmail: z.string().trim().max(320).optional(),
       dateFrom: z.coerce.date().optional(),
       dateTo: z.coerce.date().optional(),
       limit: z.number().int().positive().max(200).optional(),
-    })).query(({ input }) => getAdminAuditLogs({
-      action: input.action || undefined,
-      actorEmail: input.actorEmail || undefined,
-      dateFrom: input.dateFrom,
-      dateTo: input.dateTo,
-      limit: input.limit,
-    })),
+    })).query(({ input }) => getOrSetCached(
+      `auditLogs:${input.action ?? ""}|${input.actorEmail ?? ""}|${input.dateFrom?.toISOString() ?? ""}|${input.dateTo?.toISOString() ?? ""}|${input.limit ?? ""}`,
+      30_000,
+      () => getAdminAuditLogs({
+        action: input.action || undefined,
+        actorEmail: input.actorEmail || undefined,
+        dateFrom: input.dateFrom,
+        dateTo: input.dateTo,
+        limit: input.limit,
+      }),
+    )),
     // Project "SUGI Desk" Phase 4 (2026-09-07): per-record Activity/History
     // -- Frappe's Timeline concept, built on the exact same audit log the
     // global viewer above already reads, just scoped to one record. Same
@@ -1430,22 +1675,37 @@ export const appRouter = router({
       entityType: z.string().trim().min(1).max(60),
       entityId: z.number().int().positive(),
     })).query(({ input }) => getAdminAuditLogs({ entityType: input.entityType, entityId: input.entityId, limit: 50 })),
+    // Phase M: real server-side pagination -- login_attempts keeps every
+    // attempt forever (no retention job), so a flat limit made everything
+    // past it permanently invisible in the UI even though it still exists.
     loginHistory: adminProcedure.input(z.object({
       email: z.string().trim().max(320).optional(),
       outcome: z.enum(["all", "success", "failed"]).default("all"),
-      limit: z.number().int().positive().max(200).optional(),
-    })).query(({ input }) => getLoginHistory({
-      email: input.email || undefined,
-      success: input.outcome === "success" ? true : input.outcome === "failed" ? false : undefined,
-      limit: input.limit,
-    })),
+      page: z.number().int().positive().default(1),
+      pageSize: z.number().int().positive().max(200).default(50),
+    })).query(({ input }) => getOrSetCached(
+      `loginHistory:${input.email ?? ""}|${input.outcome}|${input.page}|${input.pageSize}`,
+      30_000,
+      () => getLoginHistory({
+        email: input.email || undefined,
+        success: input.outcome === "success" ? true : input.outcome === "failed" ? false : undefined,
+        page: input.page,
+        pageSize: input.pageSize,
+      }),
+    )),
     // Project "SUGI Desk" Phase 7 (2026-09-07): the third tab of "unified
     // System Logs" -- Honeybadger's own error feed, read back into the admin
     // panel via server/_core/honeybadgerReadApi.ts. Same admin-only tier as
     // the two tabs above (`configured: false` when no personal auth token is
     // set, never an error -- see that file's own doc comment).
-    honeybadgerFaults: adminProcedure.query(() => listRecentHoneybadgerFaults()),
-    updateOrder: staffProcedure.input(orderUpdateSchema).mutation(async ({ ctx, input }) => {
+    // Phase L: 60s TTL, longer than the other 3 tabs -- this is the one
+    // that leaves the process (a real Honeybadger API call), not just a
+    // local DB/memory read.
+    honeybadgerFaults: adminProcedure.query(() => getOrSetCached("honeybadgerFaults", 60_000, () => listRecentHoneybadgerFaults())),
+    // Phase K: the 4th Security Center tab -- an in-process ring buffer, not
+    // a real DB-side query log (see server/_core/sqlQueryLog.ts).
+    recentSqlQueries: adminProcedure.query(() => getOrSetCached("recentSqlQueries", 30_000, () => Promise.resolve(getRecentSqlQueries()))),
+    updateOrder: warehouseProcedure.input(orderUpdateSchema).mutation(async ({ ctx, input }) => {
       let order;
       try {
         order = await updateAdminOrder(input);
@@ -1469,7 +1729,7 @@ export const appRouter = router({
     // updateOrder (can't move backward, can't touch a closed order) for each
     // id individually — one bad id in the batch (e.g. already completed)
     // fails only that one and doesn't block the rest.
-    bulkUpdateOrderStatus: staffProcedure.input(z.object({
+    bulkUpdateOrderStatus: warehouseProcedure.input(z.object({
       ids: z.array(z.number().int().positive()).min(1).max(200),
       status: orderStatusSchema,
     })).mutation(async ({ ctx, input }) => {
@@ -1490,6 +1750,24 @@ export const appRouter = router({
         }
       }
       return { succeeded, failed };
+    }),
+    // Admin overhaul (2026-09-08, Phase E): financeProcedure, not
+    // warehouseProcedure like updateOrder above -- recording a refund is a
+    // money decision, distinct from moving an order through fulfilment.
+    refundOrder: financeProcedure.input(z.object({
+      id: z.number().int().positive(),
+      refundAmountMnt: z.number().int().min(0),
+      refundNote: z.string().trim().max(300).optional(),
+      restockItems: z.boolean(),
+    })).mutation(async ({ ctx, input }) => {
+      let order;
+      try {
+        order = await refundOrder({ id: input.id, refundAmountMnt: input.refundAmountMnt, refundNote: input.refundNote ?? null, restockItems: input.restockItems });
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to refund order." });
+      }
+      await logAdminAction({ actorUserId: ctx.user.id, action: "order.refunded", entityType: "order", entityId: order.id, metadata: { refundAmountMnt: order.refundAmountMnt, restockItems: input.restockItems } });
+      return order;
     }),
     createPost: staffProcedure.input(postWriteSchema).mutation(async ({ ctx, input }) => {
       await validatePostSlug(input.slug);
@@ -1529,24 +1807,24 @@ export const appRouter = router({
     // NEWVISION.md §5 "Топ брэндүүд" -- same staffProcedure weight as
     // Posts/Discount Codes (Tom's explicit correction to the original plan,
     // which had omitted a Brands admin section entirely).
-    featuredBrands: staffProcedure.query(() => getAdminFeaturedBrands()),
-    distinctRealBrands: staffProcedure.query(() => getDistinctRealBrands()),
-    createFeaturedBrand: staffProcedure.input(featuredBrandWriteSchema).mutation(async ({ ctx, input }) => {
+    featuredBrands: marketingProcedure.query(() => getAdminFeaturedBrands()),
+    distinctRealBrands: marketingProcedure.query(() => getDistinctRealBrands()),
+    createFeaturedBrand: marketingProcedure.input(featuredBrandWriteSchema).mutation(async ({ ctx, input }) => {
       const brand = await createFeaturedBrand(input);
       await logAdminAction({ actorUserId: ctx.user.id, action: "featuredBrand.created", entityType: "featuredBrand", entityId: brand.id, metadata: { brandName: brand.brandName } });
       return brand;
     }),
-    updateFeaturedBrand: staffProcedure.input(featuredBrandUpdateSchema).mutation(async ({ ctx, input }) => {
+    updateFeaturedBrand: marketingProcedure.input(featuredBrandUpdateSchema).mutation(async ({ ctx, input }) => {
       const brand = await updateFeaturedBrand(input);
       await logAdminAction({ actorUserId: ctx.user.id, action: "featuredBrand.updated", entityType: "featuredBrand", entityId: brand.id, metadata: { brandName: brand.brandName } });
       return brand;
     }),
-    deleteFeaturedBrand: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    deleteFeaturedBrand: marketingProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const result = await deleteFeaturedBrand(input.id);
       await logAdminAction({ actorUserId: ctx.user.id, action: "featuredBrand.deleted", entityType: "featuredBrand", entityId: input.id });
       return result;
     }),
-    createProduct: staffProcedure.input(productWriteSchema).mutation(async ({ ctx, input }) => {
+    createProduct: warehouseProcedure.input(productWriteSchema).mutation(async ({ ctx, input }) => {
       // costMnt is admin-only (see the schema comment above) -- a staff
       // session never even sees the real value (products query redacts it
       // to null above), so it can never legitimately submit one either.
@@ -1557,7 +1835,7 @@ export const appRouter = router({
       await logAdminAction({ actorUserId: ctx.user.id, action: "product.created", entityType: "product", entityId: product.id, metadata: { slug: product.slug, published: product.isPublished } });
       return product;
     }),
-    updateProduct: staffProcedure.input(productUpdateSchema).mutation(async ({ ctx, input }) => {
+    updateProduct: warehouseProcedure.input(productUpdateSchema).mutation(async ({ ctx, input }) => {
       // This is a PARTIAL update -- `delete`, not `= null`, so an omitted
       // costMnt means "leave the existing value alone" rather than "wipe
       // it to null." A staff session's product form always has costMnt
@@ -1591,7 +1869,7 @@ export const appRouter = router({
       }
       return product;
     }),
-    deleteProduct: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    deleteProduct: warehouseProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const result = await deleteAdminProduct(input.id);
       await logAdminAction({ actorUserId: ctx.user.id, action: "product.deleted", entityType: "product", entityId: input.id });
       return result;
@@ -1599,21 +1877,21 @@ export const appRouter = router({
     // Product variants -- PHASE 1 (additive only, see the long comment on
     // productVariants in drizzle/schema.ts). Nothing in cart/checkout/orders
     // reads this table yet.
-    productVariants: staffProcedure.input(z.object({ productId: z.number().int().positive() })).query(({ input }) => getAdminProductVariants(input.productId)),
-    createProductVariant: staffProcedure.input(productVariantWriteSchema).mutation(async ({ ctx, input }) => {
+    productVariants: warehouseProcedure.input(z.object({ productId: z.number().int().positive() })).query(({ input }) => getAdminProductVariants(input.productId)),
+    createProductVariant: warehouseProcedure.input(productVariantWriteSchema).mutation(async ({ ctx, input }) => {
       if (await variantSkuExists(input.sku)) throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ SKU/баркод өмнө нь ашиглагдсан байна." });
       const variants = await createAdminProductVariant(input);
       await logAdminAction({ actorUserId: ctx.user.id, action: "product_variant.created", entityType: "product", entityId: input.productId, metadata: { sku: input.sku } });
       return variants;
     }),
-    updateProductVariant: staffProcedure.input(productVariantUpdateSchema).mutation(async ({ ctx, input }) => {
+    updateProductVariant: warehouseProcedure.input(productVariantUpdateSchema).mutation(async ({ ctx, input }) => {
       const { id, ...changes } = input;
       if (changes.sku && await variantSkuExists(changes.sku, id)) throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ SKU/баркод өмнө нь ашиглагдсан байна." });
       const variants = await updateAdminProductVariant({ id, ...changes });
       await logAdminAction({ actorUserId: ctx.user.id, action: "product_variant.updated", entityType: "product", entityId: id });
       return variants;
     }),
-    deleteProductVariant: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    deleteProductVariant: warehouseProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       try {
         const result = await deleteAdminProductVariant(input.id);
         await logAdminAction({ actorUserId: ctx.user.id, action: "product_variant.deleted", entityType: "product", entityId: input.id });
@@ -1625,39 +1903,39 @@ export const appRouter = router({
     // PREMIUM-FEATURES.md TIER 2: lightweight moderation — a flat list an
     // admin/staff can filter through, not a pre-publish approval queue
     // (reviews are already gated by verified purchase before this).
-    reviews: staffProcedure.query(() => getAdminReviews()),
-    updateReviewApproval: staffProcedure.input(z.object({ id: z.number().int().positive(), isApproved: z.boolean() })).mutation(async ({ ctx, input }) => {
+    reviews: marketingProcedure.query(() => getAdminReviews()),
+    updateReviewApproval: marketingProcedure.input(z.object({ id: z.number().int().positive(), isApproved: z.boolean() })).mutation(async ({ ctx, input }) => {
       const result = await setReviewApproval(input.id, input.isApproved);
       await logAdminAction({ actorUserId: ctx.user.id, action: input.isApproved ? "review.approved" : "review.hidden", entityType: "review", entityId: input.id });
       return result;
     }),
-    deleteReview: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    deleteReview: marketingProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const result = await deleteAdminReview(input.id);
       await logAdminAction({ actorUserId: ctx.user.id, action: "review.deleted", entityType: "review", entityId: input.id });
       return result;
     }),
     // PREMIUM-FEATURES.md TIER 4.
-    routines: staffProcedure.query(() => getAdminRoutines()),
-    routineDetail: staffProcedure.input(z.object({ id: z.number().int().positive() })).query(({ input }) => getAdminRoutineDetail(input.id)),
-    createRoutine: staffProcedure.input(routineWriteSchema).mutation(async ({ ctx, input }) => {
+    routines: marketingProcedure.query(() => getAdminRoutines()),
+    routineDetail: marketingProcedure.input(z.object({ id: z.number().int().positive() })).query(({ input }) => getAdminRoutineDetail(input.id)),
+    createRoutine: marketingProcedure.input(routineWriteSchema).mutation(async ({ ctx, input }) => {
       if (await routineSlugExists(input.slug)) throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ slug өмнө нь ашиглагдсан байна." });
       const routine = await createAdminRoutine(input);
       await logAdminAction({ actorUserId: ctx.user.id, action: "routine.created", entityType: "routine", entityId: routine.id, metadata: { slug: routine.slug } });
       return routine;
     }),
-    updateRoutine: staffProcedure.input(routineUpdateSchema).mutation(async ({ ctx, input }) => {
+    updateRoutine: marketingProcedure.input(routineUpdateSchema).mutation(async ({ ctx, input }) => {
       const { id, ...changes } = input;
       if (changes.slug && await routineSlugExists(changes.slug, id)) throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ slug өмнө нь ашиглагдсан байна." });
       const routine = await updateAdminRoutine({ id, ...changes });
       await logAdminAction({ actorUserId: ctx.user.id, action: "routine.updated", entityType: "routine", entityId: id });
       return routine;
     }),
-    deleteRoutine: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    deleteRoutine: marketingProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const result = await deleteAdminRoutine(input.id);
       await logAdminAction({ actorUserId: ctx.user.id, action: "routine.deleted", entityType: "routine", entityId: input.id });
       return result;
     }),
-    setRoutineSteps: staffProcedure.input(z.object({ routineId: z.number().int().positive(), steps: z.array(routineStepInputSchema).min(1).max(20) })).mutation(async ({ ctx, input }) => {
+    setRoutineSteps: marketingProcedure.input(z.object({ routineId: z.number().int().positive(), steps: z.array(routineStepInputSchema).min(1).max(20) })).mutation(async ({ ctx, input }) => {
       try {
         const result = await setRoutineSteps(input.routineId, input.steps);
         await logAdminAction({ actorUserId: ctx.user.id, action: "routine.steps_updated", entityType: "routine", entityId: input.routineId, metadata: { stepCount: input.steps.length } });
@@ -1667,39 +1945,39 @@ export const appRouter = router({
       }
     }),
     // Marketing popup/banner (new-arrival, sale, store event announcement).
-    promotions: staffProcedure.query(() => getAdminSitePromotions()),
-    createPromotion: staffProcedure.input(promotionWriteSchema).mutation(async ({ ctx, input }) => {
+    promotions: contentReadProcedure.query(() => getAdminSitePromotions()),
+    createPromotion: marketingProcedure.input(promotionWriteSchema).mutation(async ({ ctx, input }) => {
       const promotion = await createAdminSitePromotion({ ...input, message: input.message ?? null, imageUrl: input.imageUrl ?? null, ctaLabel: input.ctaLabel ?? null, ctaUrl: input.ctaUrl ?? null, startsAt: input.startsAt ?? null, endsAt: input.endsAt ?? null }, ctx.user.id);
       await logAdminAction({ actorUserId: ctx.user.id, action: "promotion.created", entityType: "promotion", entityId: promotion.id, metadata: { headline: promotion.headline, isActive: promotion.isActive } });
       return promotion;
     }),
-    updatePromotion: staffProcedure.input(promotionUpdateSchema).mutation(async ({ ctx, input }) => {
+    updatePromotion: marketingProcedure.input(promotionUpdateSchema).mutation(async ({ ctx, input }) => {
       const { id, ...changes } = input;
       const promotion = await updateAdminSitePromotion({ id, ...changes }, ctx.user.id);
       await logAdminAction({ actorUserId: ctx.user.id, action: "promotion.updated", entityType: "promotion", entityId: id, metadata: { isActive: promotion.isActive } });
       return promotion;
     }),
-    deletePromotion: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    deletePromotion: marketingProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const result = await deleteAdminSitePromotion(input.id);
       await logAdminAction({ actorUserId: ctx.user.id, action: "promotion.deleted", entityType: "promotion", entityId: input.id });
       return result;
     }),
     // Manually-entered checkout discount codes ("SALE10").
-    discountCodes: staffProcedure.query(() => getAdminDiscountCodes()),
-    createDiscountCode: staffProcedure.input(discountCodeWriteSchema).mutation(async ({ ctx, input }) => {
+    discountCodes: marketingProcedure.query(() => getAdminDiscountCodes()),
+    createDiscountCode: marketingProcedure.input(discountCodeWriteSchema).mutation(async ({ ctx, input }) => {
       if (await discountCodeExists(input.code)) throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ код өмнө нь ашиглагдсан байна." });
       const code = await createAdminDiscountCode(input, ctx.user.id);
       await logAdminAction({ actorUserId: ctx.user.id, action: "discount_code.created", entityType: "discount_code", entityId: code.id, metadata: { code: code.code } });
       return code;
     }),
-    updateDiscountCode: staffProcedure.input(discountCodeUpdateSchema).mutation(async ({ ctx, input }) => {
+    updateDiscountCode: marketingProcedure.input(discountCodeUpdateSchema).mutation(async ({ ctx, input }) => {
       const { id, ...changes } = input;
       if (changes.code && await discountCodeExists(changes.code, id)) throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ код өмнө нь ашиглагдсан байна." });
       const code = await updateAdminDiscountCode({ id, ...changes });
       await logAdminAction({ actorUserId: ctx.user.id, action: "discount_code.updated", entityType: "discount_code", entityId: id });
       return code;
     }),
-    deleteDiscountCode: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    deleteDiscountCode: marketingProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const result = await deleteAdminDiscountCode(input.id);
       await logAdminAction({ actorUserId: ctx.user.id, action: "discount_code.deleted", entityType: "discount_code", entityId: input.id });
       return result;
@@ -1707,7 +1985,7 @@ export const appRouter = router({
     // TIER 5: bulk publish/unpublish. Only touches isPublished, so none of
     // the slug/sku/category conflict checks in validateProductWrite apply —
     // this can't collide with another product the way a full edit could.
-    bulkUpdateProductPublishStatus: staffProcedure.input(z.object({
+    bulkUpdateProductPublishStatus: warehouseProcedure.input(z.object({
       ids: z.array(z.number().int().positive()).min(1).max(200),
       isPublished: z.boolean(),
     })).mutation(async ({ ctx, input }) => {
@@ -1725,19 +2003,38 @@ export const appRouter = router({
       }
       return { succeeded, failed };
     }),
-    createCategory: staffProcedure.input(categoryWriteSchema).mutation(async ({ ctx, input }) => {
+    // Admin overhaul (2026-09-08, Phase H): bulk CSV product import. Capped
+    // at 500 rows/call -- CSV parsing itself happens client-side
+    // (client/src/lib/csv.ts's parseCsv), this only ever receives already-
+    // structured rows, never raw file bytes. dryRun:true runs the identical
+    // row-processing function (importProductsCsvRows above) without the
+    // final create/update DB call, so the mandatory preview step the modal
+    // shows before committing can never disagree with what committing
+    // actually does.
+    importProductsCsv: warehouseProcedure.input(z.object({
+      rows: z.array(z.record(z.string(), z.string())).min(1).max(500),
+      allowUpdateExisting: z.boolean(),
+      dryRun: z.boolean(),
+    })).mutation(async ({ ctx, input }) => {
+      const results = await importProductsCsvRows(input.rows, { allowUpdateExisting: input.allowUpdateExisting, dryRun: input.dryRun, actorUserId: ctx.user.id, actorRole: ctx.user.role });
+      if (!input.dryRun) {
+        await logAdminAction({ actorUserId: ctx.user.id, action: "product.csv_imported", entityType: "product", metadata: { rowCount: input.rows.length, created: results.filter(r => r.outcome === "created").length, updated: results.filter(r => r.outcome === "updated").length, skipped: results.filter(r => r.outcome === "skipped").length, errored: results.filter(r => r.outcome === "error").length } });
+      }
+      return { results };
+    }),
+    createCategory: warehouseProcedure.input(categoryWriteSchema).mutation(async ({ ctx, input }) => {
       await validateCategoryWrite(input);
       const category = await createAdminCategory(input);
       await logAdminAction({ actorUserId: ctx.user.id, action: "category.created", entityType: "category", entityId: category.id, metadata: { slug: category.slug } });
       return category;
     }),
-    updateCategory: staffProcedure.input(categoryUpdateSchema).mutation(async ({ ctx, input }) => {
+    updateCategory: warehouseProcedure.input(categoryUpdateSchema).mutation(async ({ ctx, input }) => {
       await validateCategoryWrite(input);
       const category = await updateAdminCategory(input);
       await logAdminAction({ actorUserId: ctx.user.id, action: "category.updated", entityType: "category", entityId: category.id, metadata: { slug: category.slug } });
       return category;
     }),
-    updateSiteMedia: staffProcedure.input(z.object({
+    updateSiteMedia: marketingProcedure.input(z.object({
       slotKey: siteMediaSlotSchema,
       imageUrl: z.string().trim().min(1).max(1_000),
       altText: nullableText(240),
@@ -1746,12 +2043,12 @@ export const appRouter = router({
       await logAdminAction({ actorUserId: ctx.user.id, action: "site_media.updated", entityType: "site_media", entityId: media.id, metadata: { slotKey: input.slotKey } });
       return media;
     }),
-    clearSiteMedia: staffProcedure.input(z.object({ slotKey: siteMediaSlotSchema })).mutation(async ({ ctx, input }) => {
+    clearSiteMedia: marketingProcedure.input(z.object({ slotKey: siteMediaSlotSchema })).mutation(async ({ ctx, input }) => {
       await deleteSiteMedia(input.slotKey);
       await logAdminAction({ actorUserId: ctx.user.id, action: "site_media.cleared", entityType: "site_media", metadata: { slotKey: input.slotKey } });
       return { slotKey: input.slotKey };
     }),
-    updateSiteText: staffProcedure.input(z.object({
+    updateSiteText: marketingProcedure.input(z.object({
       slotKey: siteTextSlotSchema,
       textValue: z.string().trim().min(1).max(4_000),
     })).mutation(async ({ ctx, input }) => {
@@ -1759,12 +2056,12 @@ export const appRouter = router({
       await logAdminAction({ actorUserId: ctx.user.id, action: "site_text.updated", entityType: "site_text", entityId: text.id, metadata: { slotKey: input.slotKey } });
       return text;
     }),
-    clearSiteText: staffProcedure.input(z.object({ slotKey: siteTextSlotSchema })).mutation(async ({ ctx, input }) => {
+    clearSiteText: marketingProcedure.input(z.object({ slotKey: siteTextSlotSchema })).mutation(async ({ ctx, input }) => {
       await deleteSiteText(input.slotKey);
       await logAdminAction({ actorUserId: ctx.user.id, action: "site_text.cleared", entityType: "site_text", metadata: { slotKey: input.slotKey } });
       return { slotKey: input.slotKey };
     }),
-    uploadProductImage: staffProcedure
+    uploadProductImage: warehouseProcedure
       .input(z.object({
         fileName: z.string().trim().min(1).max(120),
         contentType: z.enum(imageContentTypes),
@@ -1787,7 +2084,7 @@ export const appRouter = router({
         const stored = await storagePutImageVariants(`catalog/products/${ctx.user.id}/${safeStem}.webp`, variants);
         return { url: stored.url, key: stored.key };
       }),
-    uploadSiteMediaImage: staffProcedure
+    uploadSiteMediaImage: marketingProcedure
       .input(z.object({
         fileName: z.string().trim().min(1).max(120),
         contentType: z.enum(imageContentTypes),

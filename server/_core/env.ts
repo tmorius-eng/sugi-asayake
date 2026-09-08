@@ -50,6 +50,19 @@ export const ENV = {
   // reaches the recipient's phone unchanged.
   brevoSmsSender: process.env.BREVO_SMS_SENDER ?? "SUGI",
 
+  // Admin overhaul (2026-09-08, Phase J): sendAccountSms already technically
+  // works the moment brevoApiKey above is set (same Brevo account covers
+  // both channels) -- but Tom has explicitly not yet confirmed SMS credits
+  // are purchased or that Mongolia's route/pricing is set up (see CLAUDE.md).
+  // A blanket "if the email key exists, allow SMS campaigns too" default
+  // would be wrong specifically because of that non-confirmation, so mass
+  // SMS campaigns need this separate, deliberately-off-by-default flag --
+  // the campaign composer disables the SMS channel with an explanatory note
+  // until this is set to "1", independent of whether brevoApiKey is
+  // configured. Transactional SMS (order updates, phone verification via
+  // verify.mn) is unaffected either way.
+  smsCampaignsEnabled: process.env.SMS_CAMPAIGNS_ENABLED === "1",
+
   isProduction: process.env.NODE_ENV === "production",
 
   // Encrypts admin-entered third-party provider credentials at rest (see

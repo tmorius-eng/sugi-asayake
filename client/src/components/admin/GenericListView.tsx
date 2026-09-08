@@ -78,6 +78,17 @@ export type GenericListViewProps<T> = {
   pageSize?: number;
   /** Used in the "{a}–{b} / {n} {itemLabel}" pagination summary, e.g. "бүтээгдэхүүн". */
   itemLabel?: string;
+  /**
+   * Admin overhaul (2026-09-08, Phase M): opt-in server-side pagination, for
+   * a section (Login History today) whose backend returns one page at a
+   * time instead of every row up front. When set, `rows` is assumed to
+   * already BE exactly the current page (no further client-side slicing or
+   * search-text filtering happens here -- `searchQuery`/`getSearchText`
+   * only make sense when this component owns the full result set). Every
+   * other section that omits this keeps today's client-side-pageSize
+   * behavior byte-for-byte.
+   */
+  serverPagination?: { page: number; pageSize: number; total: number; onPageChange: (page: number) => void };
   /** Table mode only: right-aligned, unlabeled actions column. Omit to not render one. */
   rowActions?: (row: T) => ReactNode;
   emptyMessage?: ReactNode | ((hasQuery: boolean) => ReactNode);
@@ -108,6 +119,7 @@ export function GenericListView<T>({
   bulkActions,
   pageSize,
   itemLabel = "мөр",
+  serverPagination,
   rowActions,
   emptyMessage,
   tableClassName = "min-w-[740px] w-full border-separate border-spacing-0 text-left",
@@ -121,27 +133,34 @@ export function GenericListView<T>({
   const selectedIds = controlledSelectedIds ?? internalSelectedIds;
   const setSelectedIds = onSelectedIdsChange ?? setInternalSelectedIds;
 
+  // Server-paginated mode: rows already ARE the current page, so client-side
+  // search-text filtering (which only sees this one page) would be
+  // misleading -- skip it entirely rather than silently filtering a page at
+  // a time.
   const filtered = useMemo(() => {
-    if (!searchQuery || !getSearchText) return rows;
+    if (serverPagination || !searchQuery || !getSearchText) return rows;
     const needle = searchQuery.toLowerCase();
     return rows.filter(row => getSearchText(row).toLowerCase().includes(needle));
-  }, [rows, searchQuery, getSearchText]);
+  }, [rows, searchQuery, getSearchText, serverPagination]);
 
   // Reset to page 1 whenever the search narrows/widens the result set --
-  // matches every current admin list's identical useEffect.
+  // matches every current admin list's identical useEffect. Not applicable
+  // when the parent owns the current page (serverPagination.page).
   useEffect(() => {
-    setPage(1);
-  }, [searchQuery]);
+    if (!serverPagination) setPage(1);
+  }, [searchQuery, serverPagination]);
 
-  const totalPages = pageSize ? Math.max(1, Math.ceil(filtered.length / pageSize)) : 1;
+  const totalPages = serverPagination
+    ? Math.max(1, Math.ceil(serverPagination.total / serverPagination.pageSize))
+    : pageSize ? Math.max(1, Math.ceil(filtered.length / pageSize)) : 1;
 
   // Clamp down if the underlying data shrank (e.g. after a delete) past the
-  // current page.
+  // current page. Not applicable server-side -- the parent owns that page.
   useEffect(() => {
-    setPage(current => Math.min(current, totalPages));
-  }, [totalPages]);
+    if (!serverPagination) setPage(current => Math.min(current, totalPages));
+  }, [totalPages, serverPagination]);
 
-  const paged = pageSize ? filtered.slice((page - 1) * pageSize, page * pageSize) : filtered;
+  const paged = serverPagination ? filtered : pageSize ? filtered.slice((page - 1) * pageSize, page * pageSize) : filtered;
 
   // Computed directly off the current (possibly externally-owned) selectedIds
   // rather than via a `useState` updater callback, so this works identically
@@ -180,8 +199,10 @@ export function GenericListView<T>({
             })}
           </div>
         )}
-        {Boolean(pageSize) && filtered.length > 0 && (
-          <PaginationFooter page={page} setPage={setPage} totalPages={totalPages} pageSize={pageSize as number} total={filtered.length} itemLabel={itemLabel} />
+        {(Boolean(serverPagination) || Boolean(pageSize)) && filtered.length > 0 && (
+          serverPagination
+            ? <PaginationFooter page={serverPagination.page} setPage={updater => serverPagination.onPageChange(updater(serverPagination.page))} totalPages={totalPages} pageSize={serverPagination.pageSize} total={serverPagination.total} itemLabel={itemLabel} />
+            : <PaginationFooter page={page} setPage={setPage} totalPages={totalPages} pageSize={pageSize as number} total={filtered.length} itemLabel={itemLabel} />
         )}
       </>
     );
@@ -251,8 +272,10 @@ export function GenericListView<T>({
           </tbody>
         </table>
       </div>
-      {Boolean(pageSize) && filtered.length > 0 && (
-        <PaginationFooter page={page} setPage={setPage} totalPages={totalPages} pageSize={pageSize as number} total={filtered.length} itemLabel={itemLabel} />
+      {(Boolean(serverPagination) || Boolean(pageSize)) && filtered.length > 0 && (
+        serverPagination
+          ? <PaginationFooter page={serverPagination.page} setPage={updater => serverPagination.onPageChange(updater(serverPagination.page))} totalPages={totalPages} pageSize={serverPagination.pageSize} total={serverPagination.total} itemLabel={itemLabel} />
+          : <PaginationFooter page={page} setPage={setPage} totalPages={totalPages} pageSize={pageSize as number} total={filtered.length} itemLabel={itemLabel} />
       )}
     </>
   );

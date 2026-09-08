@@ -18,9 +18,19 @@ import AdminWorkspace from "@/components/AdminWorkspace";
  * gate on (loading / not signed in / signed in without access), which
  * AdminWorkspace itself never handled.
  */
+// Admin overhaul (2026-09-08, Phase C): widened from 2 roles to 6 -- found
+// via actual Playwright login as a throwaway "finance" account, which hit
+// this exact gate and got bounced to the "Админ эрх шаардлагатай" screen
+// even though finance is a legitimate admin-panel role now. This route
+// guard is upstream of AdminWorkspace's own much finer-grained per-section
+// visibility (client/src/components/admin/AdminSidebar.tsx's SECTION_ROLES)
+// -- it only needs to answer "does this role belong in the admin panel at
+// all", which is just "not a plain customer".
+const ADMIN_PANEL_ROLES = new Set(["staff", "finance", "marketing", "warehouse", "admin"]);
+
 export default function AdminDashboard() {
   const { user, loading } = useAuth();
-  const hasAccess = user?.role === "admin" || user?.role === "staff";
+  const hasAccess = Boolean(user?.role && ADMIN_PANEL_ROLES.has(user.role));
 
   if (loading) {
     return <div className="grid min-h-screen place-items-center bg-[#f8f5ef]"><LoaderCircle className="animate-spin text-[#df1f3d]" size={28} aria-label="Ачаалж байна" /></div>;
@@ -42,7 +52,7 @@ export default function AdminDashboard() {
       <div>
         <p className="text-[10px] font-extrabold tracking-[.16em] text-[#df1f3d]">ADMIN ONLY</p>
         <h1 className="mt-3 font-[var(--font-display)] text-4xl font-semibold tracking-[-.08em]">Админ эрх шаардлагатай.</h1>
-        <p className="mx-auto mt-4 max-w-md text-sm leading-6 text-[#707176]">Нэвтэрсэн хэрэглэгчид default байдлаар customer эрхтэй. Owner эсвэл одоогийн админ user хүснэгтээс role-ийг admin эсвэл staff болгож шинэчилнэ.</p>
+        <p className="mx-auto mt-4 max-w-md text-sm leading-6 text-[#707176]">Нэвтэрсэн хэрэглэгчид default байдлаар customer эрхтэй. Owner эсвэл одоогийн админ Хэрэглэгч хэсгээс role-ийг ажилтны эрх (staff/finance/marketing/warehouse) эсвэл admin болгож шинэчилнэ.</p>
       </div>
     </div>;
   }

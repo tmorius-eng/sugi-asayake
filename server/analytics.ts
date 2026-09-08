@@ -280,6 +280,52 @@ export async function getPreferenceSegmentBreakdown() {
   };
 }
 
+// Admin overhaul (2026-09-08, Phase I): the drill-down behind
+// getPreferenceSegmentBreakdown's aggregate counts above -- reuses the
+// *exact same* base query (`eq(users.role, "user")`) and the *exact same*
+// per-field matching (including skinConcerns' comma-list split/trim/filter/
+// includes) as the loop just above, rather than a second, separately-
+// maintained copy of that logic. This is what makes "click 25, get 25" a
+// guarantee rather than a hope: if this ever drifted from the aggregate
+// above, the two would silently disagree.
+export type PreferenceSegmentField = "gender" | "skinType" | "skinConcerns" | "hairType" | "primaryDistrict" | "hasYoungChildren";
+
+export async function getUsersBySegment(field: PreferenceSegmentField, value: string) {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select({
+    id: users.id, name: users.name, phone: users.phone, email: users.email,
+    gender: users.gender, skinType: users.skinType, skinConcerns: users.skinConcerns,
+    hairType: users.hairType, primaryDistrict: users.primaryDistrict, hasYoungChildren: users.hasYoungChildren,
+  }).from(users).where(eq(users.role, "user"));
+
+  const matches = (row: (typeof rows)[number]): boolean => {
+    switch (field) {
+      case "gender": return row.gender === value;
+      case "skinType": return row.skinType === value;
+      case "hairType": return row.hairType === value;
+      case "primaryDistrict": return row.primaryDistrict === value;
+      // hasYoungChildren's breakdown above is a single boolean count, not a
+      // value-keyed bucket -- value is ignored, matching that shape.
+      case "hasYoungChildren": return row.hasYoungChildren === true;
+      case "skinConcerns": return Boolean(row.skinConcerns) && row.skinConcerns!.split(",").map(v => v.trim()).filter(Boolean).includes(value);
+      default: return false;
+    }
+  };
+
+  return rows.filter(matches).map(row => ({ id: row.id, name: row.name, phone: row.phone, email: row.email }));
+}
+
+// Admin overhaul (2026-09-08, Phase J): the campaign composer's "бүх
+// хэрэглэгч" (all users) targeting source -- real customers only (role
+// "user"), same scope every other segment/tier query on this page already
+// uses, never staff/marketing/etc. accounts.
+export async function getAllCustomersForCampaign() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({ id: users.id, name: users.name, phone: users.phone, email: users.email }).from(users).where(eq(users.role, "user"));
+}
+
 /**
  * Preference Profile v2 (2026-09-01): answers the exact gap a live read of
  * the catalog found (4/937 products tagged) directly in the dashboard --
@@ -343,6 +389,32 @@ export async function getLoyaltyTierBreakdown() {
     tierCounts.set(tier.name, (tierCounts.get(tier.name) ?? 0) + 1);
   }
   return LOYALTY_TIERS.map(tier => ({ tierName: tier.name, customerCount: tierCounts.get(tier.name) ?? 0 }));
+}
+
+// Admin overhaul (2026-09-08, Phase J): the campaign composer's loyalty-tier
+// targeting source -- reuses the exact same aggregate query and
+// getLoyaltyTier classification as getLoyaltyTierBreakdown just above (same
+// "click a tier, get exactly that tier's customers" guarantee Phase I's
+// getUsersBySegment already established for preference segments), just
+// returning rows instead of a count.
+export async function getUsersByLoyaltyTier(tierName: string) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = await db
+    .select({
+      id: users.id, name: users.name, phone: users.phone, email: users.email,
+      loyaltyManualAdjustmentMnt: users.loyaltyManualAdjustmentMnt,
+      totalSpendMnt: sql<number>`coalesce(sum(case when ${orders.paymentStatus} = 'paid' then ${orders.totalMnt} else 0 end), 0)`,
+    })
+    .from(users)
+    .leftJoin(orders, eq(orders.userId, users.id))
+    .where(eq(users.role, "user"))
+    .groupBy(users.id, users.name, users.phone, users.email, users.loyaltyManualAdjustmentMnt);
+
+  return rows
+    .filter(row => getLoyaltyTier(Number(row.totalSpendMnt) + row.loyaltyManualAdjustmentMnt).name === tierName)
+    .map(row => ({ id: row.id, name: row.name, phone: row.phone, email: row.email }));
 }
 
 const CHANNEL_LABELS: Record<string, string> = { ub_delivery: "УБ хүргэлт", store_pickup: "Салбараас авах", qpay: "QPay", bank_transfer: "Банкны шилжүүлэг", card: "Карт", cash_on_delivery: "Бэлэн мөнгө" };

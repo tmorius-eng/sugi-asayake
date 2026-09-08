@@ -22,3 +22,41 @@ export function downloadCsv(filename: string, headers: string[], rows: (string |
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
+
+// Admin overhaul (2026-09-08, Phase H): bulk CSV product import's counterpart
+// to downloadCsv above -- same RFC 4180 rules (quoted fields may contain
+// commas/newlines, "" is an escaped quote), plus stripping a leading BOM
+// (Excel, this project's own primary export target per downloadCsv's own
+// comment, writes one by default when saving a .csv). A hand-rolled parser,
+// not a new dependency, for a format this constrained -- CSV row/field
+// splitting has no meaningful edge case a small state machine doesn't cover.
+export function parseCsv(text: string): { headers: string[]; rows: Record<string, string>[] } {
+  const withoutBom = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+  const table: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < withoutBom.length; i++) {
+    const char = withoutBom[i];
+    if (inQuotes) {
+      if (char === '"') {
+        if (withoutBom[i + 1] === '"') { field += '"'; i++; } else { inQuotes = false; }
+      } else {
+        field += char;
+      }
+      continue;
+    }
+    if (char === '"') { inQuotes = true; continue; }
+    if (char === ",") { row.push(field); field = ""; continue; }
+    if (char === "\r") continue;
+    if (char === "\n") { row.push(field); table.push(row); row = []; field = ""; continue; }
+    field += char;
+  }
+  // Last field/row (files don't always end with a trailing newline).
+  if (field.length > 0 || row.length > 0) { row.push(field); table.push(row); }
+
+  const [headerRow, ...dataRows] = table.filter(cells => !(cells.length === 1 && cells[0] === ""));
+  const headers = (headerRow ?? []).map(header => header.trim());
+  const rows = dataRows.map(cells => Object.fromEntries(headers.map((header, index) => [header, (cells[index] ?? "").trim()])));
+  return { headers, rows };
+}

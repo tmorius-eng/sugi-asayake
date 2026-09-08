@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, CircleUserRound, LayoutDashboard, PackagePlus, CheckCircle2, FilePenLine, Star, ListChecks, Megaphone, Tag, Tags, ImageUp, UsersRound, ChartColumnIncreasing, ShieldAlert, Plug, CalendarDays, type LucideIcon } from "lucide-react";
+import { ChevronDown, ChevronRight, CircleUserRound, LayoutDashboard, PackagePlus, CheckCircle2, FilePenLine, Star, ListChecks, Megaphone, Tag, Tags, ImageUp, UsersRound, ChartColumnIncreasing, ShieldAlert, Plug, CalendarDays, Send, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import type { AdminSection } from "../AdminWorkspace";
@@ -26,19 +26,55 @@ const flatGroup: NavItem[] = [
   { key: "discountCodes", label: "Хямдралын код", Icon: Tag },
   { key: "brands", label: "Брэндүүд", Icon: Tags },
   { key: "media", label: "Content & Media", Icon: ImageUp },
+  { key: "campaigns", label: "Кампанит ажил", Icon: Send },
 ];
 const adminOnlyFlatGroup: NavItem[] = [
   { key: "users", label: "Хэрэглэгч", Icon: UsersRound },
   { key: "integrations", label: "Интеграцууд", Icon: Plug },
 ];
 
+// Admin overhaul (2026-09-08, Phase C): section visibility per role, derived
+// directly from server/routers.ts's Phase B procedure reassignment (see
+// server/_core/trpc.ts's financeProcedure/marketingProcedure/
+// warehouseProcedure/staffProcedure/adminProcedure). "media" here is the
+// Content & Media CMS (site banner images/homepage copy -- ContentMediaPanel/
+// ContentTextPanel, marketingProcedure), NOT staff's blog Media Library
+// (that's a modal embedded inside the Posts composer, not its own nav
+// section). "calendar" is the shared Content Calendar reading both posts and
+// promotions (contentReadProcedure), open to staff AND marketing even though
+// neither can write both halves of what it displays.
+const SECTION_ROLES: Record<AdminSection, ReadonlySet<string>> = {
+  dashboard: new Set(["staff", "finance", "marketing", "warehouse", "admin"]),
+  analytics: new Set(["finance", "admin"]),
+  security: new Set(["admin"]),
+  products: new Set(["warehouse", "admin"]),
+  // Phase E: finance needs to find a returned-but-unrefunded order before it
+  // can call admin.refundOrder on it (see ordersReadProcedure in
+  // server/_core/trpc.ts) -- fulfillment writes (status/tracking) stay
+  // warehouse/admin-only, enforced server-side and mirrored client-side in
+  // AdminOperationsPanel.tsx.
+  orders: new Set(["warehouse", "finance", "admin"]),
+  posts: new Set(["staff", "admin"]),
+  reviews: new Set(["marketing", "admin"]),
+  routines: new Set(["marketing", "admin"]),
+  promotions: new Set(["marketing", "admin"]),
+  calendar: new Set(["staff", "marketing", "admin"]),
+  discountCodes: new Set(["marketing", "admin"]),
+  brands: new Set(["marketing", "admin"]),
+  media: new Set(["marketing", "admin"]),
+  campaigns: new Set(["marketing", "admin"]),
+  users: new Set(["admin"]),
+  integrations: new Set(["admin"]),
+};
+
 // Exported so the command palette (AdminCommandPalette.tsx) lists exactly
-// the same sections, in the same order, with the same staff/admin
-// visibility this sidebar itself enforces -- reuses these same three arrays
-// rather than a second, hand-copied list that could drift out of sync.
-export function getVisibleSections(isFullAdmin: boolean): NavItem[] {
-  const visibleNested = isFullAdmin ? nestedGroup : nestedGroup.filter(item => item.key === "dashboard");
-  return [...visibleNested, ...flatGroup, ...(isFullAdmin ? adminOnlyFlatGroup : [])];
+// the same sections, in the same order, with the same per-role visibility
+// this sidebar itself enforces -- reuses these same three arrays plus
+// SECTION_ROLES rather than a second, hand-copied list that could drift out
+// of sync.
+export function getVisibleSections(role: string): NavItem[] {
+  const isVisible = (item: NavItem) => SECTION_ROLES[item.key].has(role);
+  return [...nestedGroup.filter(isVisible), ...flatGroup.filter(isVisible), ...adminOnlyFlatGroup.filter(isVisible)];
 }
 
 function NavButton({ item, active, onSelect, nested = false }: { item: NavItem; active: boolean; onSelect: (section: AdminSection) => void; nested?: boolean }) {
@@ -54,15 +90,17 @@ function NavButton({ item, active, onSelect, nested = false }: { item: NavItem; 
   );
 }
 
-function SidebarNavContent({ section, isFullAdmin, onSelect, userName, userRoleLabel, userAvatarUrl }: {
+function SidebarNavContent({ section, role, onSelect, userName, userRoleLabel, userAvatarUrl }: {
   section: AdminSection;
-  isFullAdmin: boolean;
+  role: string;
   onSelect: (section: AdminSection) => void;
   userName: string;
   userRoleLabel: string;
   userAvatarUrl: string | null;
 }) {
-  const visibleNested = isFullAdmin ? nestedGroup : nestedGroup.filter(item => item.key === "dashboard");
+  const visibleNested = nestedGroup.filter(item => SECTION_ROLES[item.key].has(role));
+  const visibleFlat = flatGroup.filter(item => SECTION_ROLES[item.key].has(role));
+  const visibleAdminOnly = adminOnlyFlatGroup.filter(item => SECTION_ROLES[item.key].has(role));
   const [expanded, setExpanded] = useState(true);
   const nestedActive = visibleNested.some(item => item.key === section);
 
@@ -82,11 +120,11 @@ function SidebarNavContent({ section, isFullAdmin, onSelect, userName, userRoleL
         ) : (
           visibleNested.map(item => <NavButton key={item.key} item={item} active={section === item.key} onSelect={onSelect} />)
         )}
-        {flatGroup.map(item => <NavButton key={item.key} item={item} active={section === item.key} onSelect={onSelect} />)}
-        {isFullAdmin && (
+        {visibleFlat.map(item => <NavButton key={item.key} item={item} active={section === item.key} onSelect={onSelect} />)}
+        {visibleAdminOnly.length > 0 && (
           <>
             <p className="px-3 pt-4 pb-1 text-[10px] font-extrabold tracking-[.15em] text-white/35">УДИРДЛАГА</p>
-            {adminOnlyFlatGroup.map(item => <NavButton key={item.key} item={item} active={section === item.key} onSelect={onSelect} />)}
+            {visibleAdminOnly.map(item => <NavButton key={item.key} item={item} active={section === item.key} onSelect={onSelect} />)}
           </>
         )}
       </nav>
@@ -115,9 +153,9 @@ function SidebarNavContent({ section, isFullAdmin, onSelect, userName, userRoleL
 // "second competing sidebar orchestration layer" that got the old
 // DashboardLayout.tsx (double-sidebar bug) deleted. This is the ONE
 // sidebar, just rendered in two containers.
-export default function AdminSidebar({ section, isFullAdmin, onSelect, userName, userRoleLabel, userAvatarUrl, mobileOpen, onMobileOpenChange }: {
+export default function AdminSidebar({ section, role, onSelect, userName, userRoleLabel, userAvatarUrl, mobileOpen, onMobileOpenChange }: {
   section: AdminSection;
-  isFullAdmin: boolean;
+  role: string;
   onSelect: (section: AdminSection) => void;
   userName: string;
   userRoleLabel: string;
@@ -135,7 +173,7 @@ export default function AdminSidebar({ section, isFullAdmin, onSelect, userName,
           grid's default align-content:stretch -- exactly the "broken
           padding" (huge gaps between menu items) this was. */}
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 self-start lg:block">
-        <SidebarNavContent section={section} isFullAdmin={isFullAdmin} onSelect={onSelect} userName={userName} userRoleLabel={userRoleLabel} userAvatarUrl={userAvatarUrl} />
+        <SidebarNavContent section={section} role={role} onSelect={onSelect} userName={userName} userRoleLabel={userRoleLabel} userAvatarUrl={userAvatarUrl} />
       </aside>
       <Sheet open={mobileOpen} onOpenChange={onMobileOpenChange}>
         <SheetContent side="left" className="w-72 border-none bg-[#17181b] p-0 [&_[data-slot=sheet-close]]:text-white">
@@ -143,7 +181,7 @@ export default function AdminSidebar({ section, isFullAdmin, onSelect, userName,
           {/* Selecting a section on mobile also dismisses the drawer -- the
               desktop instance above doesn't need this, there's nothing to
               close. */}
-          <SidebarNavContent section={section} isFullAdmin={isFullAdmin} onSelect={target => { onSelect(target); onMobileOpenChange(false); }} userName={userName} userRoleLabel={userRoleLabel} userAvatarUrl={userAvatarUrl} />
+          <SidebarNavContent section={section} role={role} onSelect={target => { onSelect(target); onMobileOpenChange(false); }} userName={userName} userRoleLabel={userRoleLabel} userAvatarUrl={userAvatarUrl} />
         </SheetContent>
       </Sheet>
     </>

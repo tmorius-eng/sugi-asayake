@@ -98,10 +98,15 @@ export const users = mysqlTable("users", {
   email: varchar("email", { length: 320 }).unique(),
   /** scrypt("<saltHex>:<hashHex>") — see server/_core/password.ts. Never sent to the client. */
   passwordHash: varchar("passwordHash", { length: 200 }).notNull(),
-  // "staff" (TIER 3): can manage products/categories/orders/posts/media but
-  // not user accounts, roles, or financial figures — see staffProcedure in
-  // server/_core/trpc.ts for the enforcement.
-  role: mysqlEnum("role", ["user", "staff", "admin"]).default("user").notNull(),
+  // 2026-09-08 (Admin overhaul, Phase A): widened from 3 values ("user",
+  // "staff", "admin") to 6 -- "staff" narrows to posts/media only, and
+  // "finance"/"marketing"/"warehouse" are new department roles, each scoped
+  // to its own slice of the admin panel. None of them can touch user
+  // accounts/roles/integrations/security -- that stays "admin"-only. See
+  // adminProcedure/staffProcedure/financeProcedure/marketingProcedure/
+  // warehouseProcedure in server/_core/trpc.ts for the enforcement, and
+  // server/routers.ts for which endpoint uses which.
+  role: mysqlEnum("role", ["user", "staff", "finance", "marketing", "warehouse", "admin"]).default("user").notNull(),
   /** Set the moment the user completes the email verification link. Null means unverified. */
   emailVerifiedAt: timestamp("emailVerifiedAt"),
   /**
@@ -456,6 +461,20 @@ export const orders = mysqlTable("orders", {
   // could exceed 100%, or read near-zero purely because recent orders
   // haven't had time to be returned yet).
   returnedAt: timestamp("returnedAt"),
+  /**
+   * Admin overhaul (2026-09-08, Phase E): the refund/credit flow the
+   * returnedAt comment above flagged as "separate, unscoped work" -- now
+   * scoped. Single-column, matching returnedAt's own precedent (one
+   * terminal event per order, not a separate refunds table) because Tom's
+   * flow is "mark returned, then record one refund," not multi-tranche
+   * partial refunds. Set exactly once, by financeProcedure's admin.refundOrder
+   * (server/db.ts's refundOrder), the only place paymentStatus ever becomes
+   * "refunded" -- see refundOrder's own guards (must be status="returned",
+   * must not already be paymentStatus="refunded", amount capped at totalMnt).
+   */
+  refundAmountMnt: int("refundAmountMnt"),
+  refundedAt: timestamp("refundedAt"),
+  refundNote: varchar("refundNote", { length: 300 }),
   /**
    * Marketing-analytics snapshot, captured automatically at checkout (see
    * checkout.createOrder in server/routers.ts) — never asked of the

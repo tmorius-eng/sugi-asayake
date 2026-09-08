@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Download, LayoutGrid, List, LoaderCircle, PackageCheck } from "lucide-react";
+import { Banknote, Download, LayoutGrid, List, LoaderCircle, PackageCheck } from "lucide-react";
 import { toast } from "sonner";
 import { downloadCsv } from "@/lib/csv";
 import { trpc } from "@/lib/trpc";
@@ -21,11 +21,21 @@ type KanbanOrder = { id: number; orderNumber: string; customerName: string; tota
 // own AdminPostsPanel.tsx (WordPress-parity rebuild -- a much larger surface
 // now: TinyMCE, media library, categories/tags, SEO, trash) so this file is
 // orders-only.
-export default function AdminOperationsPanel({ preview = false, query = "" }: { preview?: boolean; query?: string }) {
+export default function AdminOperationsPanel({ preview = false, query = "", role = "admin" }: { preview?: boolean; query?: string; role?: string }) {
   const utils = trpc.useUtils();
   const ordersQuery = trpc.admin.orders.useQuery(undefined, { enabled: !preview });
   const updateOrder = trpc.admin.updateOrder.useMutation({ onSuccess: () => utils.admin.orders.invalidate(), onError: error => toast.error(messageFrom(error)) });
   const bulkUpdateOrderStatus = trpc.admin.bulkUpdateOrderStatus.useMutation({ onSuccess: () => utils.admin.orders.invalidate(), onError: error => toast.error(messageFrom(error)) });
+  // Admin overhaul (2026-09-08, Phase E): this section is now visible to
+  // finance too (ordersReadProcedure, server/_core/trpc.ts), since finance
+  // needs to find a returned-but-unrefunded order before it can act on it --
+  // but finance never gets fulfillment write access (updateOrder stays
+  // warehouseProcedure-only, enforced server-side regardless of this client
+  // check), and warehouse never gets refund authority (financeProcedure).
+  const canManageFulfilment = role === "admin" || role === "warehouse";
+  const canRefund = role === "admin" || role === "finance";
+  const refundOrder = trpc.admin.refundOrder.useMutation({ onSuccess: () => { utils.admin.orders.invalidate(); toast.success("Буцаан олголт бүртгэгдлээ."); setRefundForm(null); }, onError: error => toast.error(messageFrom(error)) });
+  const [refundForm, setRefundForm] = useState<{ orderId: number; amountMnt: string; note: string; restock: boolean } | null>(null);
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<number>>(new Set());
   const [bulkStatus, setBulkStatus] = useState<OrderStatus>("confirmed");
   // 2026-09-07 (Project "SUGI Desk" Phase 3): a real, visible Kanban board --
@@ -100,7 +110,7 @@ export default function AdminOperationsPanel({ preview = false, query = "" }: { 
       <OrdersKanbanBoard
         orders={orders}
         onStatusChange={(id, status) => updateOrder.mutate({ id, status })}
-        disabled={preview || updateOrder.isPending}
+        disabled={preview || !canManageFulfilment || updateOrder.isPending}
         emptyMessage={<div className="rounded-3xl bg-[#f8f5ef] p-8 text-center text-sm text-[#707176]"><PackageCheck className="mx-auto mb-3 text-[#df1f3d]" size={28} />Одоогоор бодит захиалга алга.</div>}
       />
     )}
@@ -124,14 +134,35 @@ export default function AdminOperationsPanel({ preview = false, query = "" }: { 
                   <p className="mt-1 text-xs text-[#707176]">{order.customerPhone} · {order.deliveryMethod === "store_pickup" ? "Салбараас авах" : order.deliveryAddress ?? "УБ хүргэлт"}</p>
                 </div>
               </div>
-              <span className="rounded-full bg-[#f8f5ef] px-3 py-1 text-xs font-bold">{order.paymentStatus === "paid" ? "Төлөгдсөн" : "Төлбөр хүлээж буй"}</span>
+              <span className="rounded-full bg-[#f8f5ef] px-3 py-1 text-xs font-bold">{order.paymentStatus === "paid" ? "Төлөгдсөн" : order.paymentStatus === "refunded" ? "Буцаан олгосон" : "Төлбөр хүлээж буй"}</span>
             </div>
             <p className="mt-4 text-xs text-[#55565b]">{order.items.map(item => `${item.productName} × ${item.quantity}`).join(" · ")}</p>
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-              <select value={order.status} disabled={preview || updateOrder.isPending} onChange={event => updateOrder.mutate({ id: order.id, status: event.target.value as OrderStatus })} className="h-10 rounded-xl border border-black/10 bg-white px-3 text-xs font-bold">{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-              <input defaultValue={order.deliveryTrackingRef ?? ""} onBlur={event => { if (!preview && event.target.value !== (order.deliveryTrackingRef ?? "")) updateOrder.mutate({ id: order.id, deliveryTrackingRef: event.target.value || null }); }} placeholder="Хүргэлтийн дугаар" className="h-10 flex-1 rounded-xl border border-black/10 px-3 text-xs outline-none focus:border-[#df1f3d]" />
+              <select value={order.status} disabled={preview || !canManageFulfilment || updateOrder.isPending} onChange={event => updateOrder.mutate({ id: order.id, status: event.target.value as OrderStatus })} className="h-10 rounded-xl border border-black/10 bg-white px-3 text-xs font-bold disabled:opacity-60">{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+              <input defaultValue={order.deliveryTrackingRef ?? ""} disabled={preview || !canManageFulfilment} onBlur={event => { if (!preview && event.target.value !== (order.deliveryTrackingRef ?? "")) updateOrder.mutate({ id: order.id, deliveryTrackingRef: event.target.value || null }); }} placeholder="Хүргэлтийн дугаар" className="h-10 flex-1 rounded-xl border border-black/10 px-3 text-xs outline-none focus:border-[#df1f3d] disabled:opacity-60" />
             </div>
             <p className="mt-2 text-[11px] text-[#8b8c90]">И-баримт: {order.ebarimtStatus === "issued" ? order.ebarimtReceiptId : order.ebarimtStatus === "failed" ? <span className="font-bold text-[#df1f3d]">Алдаа гарсан</span> : "—"}</p>
+            {/* Admin overhaul (2026-09-08, Phase E): refund is deliberately its
+                own action, not a 3rd option folded into the status <select>
+                above -- it's a money decision (financeProcedure server-side),
+                distinct from the fulfilment ladder that select controls. */}
+            {canRefund && order.status === "returned" && order.paymentStatus !== "refunded" && (
+              refundForm?.orderId === order.id ? (
+                <div className="mt-3 grid gap-2 rounded-2xl bg-[#fff5f6] p-4">
+                  <div className="flex flex-wrap gap-2">
+                    <label className="grid gap-1 text-xs font-bold">Буцаах дүн (₮)<input type="number" min="0" max={order.totalMnt} value={refundForm.amountMnt} onChange={event => setRefundForm(current => current && { ...current, amountMnt: event.target.value })} className="h-10 w-36 rounded-xl border border-black/10 bg-white px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" /></label>
+                    <label className="grid gap-1 text-xs font-bold">Тэмдэглэл (сонголтоор)<input value={refundForm.note} onChange={event => setRefundForm(current => current && { ...current, note: event.target.value })} className="h-10 w-56 rounded-xl border border-black/10 bg-white px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" /></label>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={refundForm.restock} onChange={event => setRefundForm(current => current && { ...current, restock: event.target.checked })} className="size-4 accent-[#df1f3d]" />Барааг нөөцөд буцаах</label>
+                  <div className="flex gap-2">
+                    <button type="button" disabled={refundOrder.isPending} onClick={() => refundOrder.mutate({ id: order.id, refundAmountMnt: Number(refundForm.amountMnt) || 0, refundNote: refundForm.note || undefined, restockItems: refundForm.restock })} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#df1f3d] px-4 text-xs font-bold text-white disabled:opacity-60">{refundOrder.isPending && <LoaderCircle className="animate-spin" size={13} />}Баталгаажуулах</button>
+                    <button type="button" onClick={() => setRefundForm(null)} className="h-9 rounded-full border border-black/10 px-4 text-xs font-bold text-[#57585e]">Цуцлах</button>
+                  </div>
+                </div>
+              ) : (
+                <button type="button" disabled={preview} onClick={() => setRefundForm({ orderId: order.id, amountMnt: String(order.totalMnt), note: "", restock: false })} className="mt-3 inline-flex h-10 items-center gap-2 rounded-full border border-[#df1f3d]/30 px-4 text-xs font-bold text-[#df1f3d] transition hover:bg-[#fff0f2]"><Banknote size={14} />Буцаан олгох</button>
+              )
+            )}
           </article>
         )}
       />

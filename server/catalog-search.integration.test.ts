@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { productCategories, products } from "../drizzle/schema";
 import { appRouter } from "./routers";
 import { getDb } from "./db";
@@ -58,6 +58,19 @@ describeWithDatabase("catalog full-text search integration", () => {
       priceMnt: 20_000, stockQuantity: 3, isPublished: false, shortDescription: "Нийтлэгдээгүй туршилтын бараа",
     });
     unpublishedId = Number(unpublished[0].insertId);
+
+    // InnoDB caches FULLTEXT index changes in memory (innodb_ft_cache_size)
+    // and only periodically flushes them to the on-disk auxiliary index --
+    // confirmed by direct diagnostic against this DB: a row inserted moments
+    // ago is invisible to MATCH()...AGAINST() (0 results, even for its own
+    // exact brand/name terms) until something flushes the cache, and
+    // OPTIMIZE TABLE forces exactly that flush. Without this, these tests
+    // are racing an internal MySQL cache-flush timer -- sometimes winning
+    // (row already flushed), sometimes not, which is exactly what made this
+    // suite intermittently fail. Real product creates hit the same lag in
+    // production (a brand-new product may not be searchable for a little
+    // while) -- that's a separate, larger discussion than this test fix.
+    await db.execute(sql`OPTIMIZE TABLE products`);
   });
 
   afterAll(async () => {

@@ -23,6 +23,7 @@ const ProductDetail = lazy(() => import("./pages/ProductDetail"));
 const Profile = lazy(() => import("./pages/Profile"));
 const RoutineDetail = lazy(() => import("./pages/RoutineDetail"));
 const Shop = lazy(() => import("./pages/Shop"));
+const TrackOrder = lazy(() => import("./pages/TrackOrder"));
 
 function RouteLoadingFallback() {
   return <main className="min-h-screen bg-[#f6f3ee] grid place-items-center px-6 text-center">
@@ -45,6 +46,7 @@ function Router() {
     <Route path={"/admin"} component={AdminDashboard} />
     <Route path={"/login"} component={Login} />
     <Route path={"/forgot-password"} component={ForgotPassword} />
+    <Route path={"/track-order"} component={TrackOrder} />
     <Route path={"/privacy"} component={Legal} />
     <Route path={"/terms"} component={Legal} />
     <Route path={"/returns"} component={Legal} />
