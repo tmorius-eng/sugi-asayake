@@ -3,6 +3,7 @@ import {
   FACE_DESCRIPTOR_LENGTH,
   FACE_MATCH_THRESHOLD,
   averageFaceDescriptors,
+  bestFaceDistance,
   evaluateFlashResponse,
   faceDescriptorDistance,
   isAdminPanelRole,
@@ -132,6 +133,44 @@ describe("isValidFaceDescriptor", () => {
     const huge = makeDescriptor(1.1);
     huge[0] = 1e9;
     expect(isValidFaceDescriptor(huge)).toBe(false);
+  });
+});
+
+describe("bestFaceDistance (multi-pose matching)", () => {
+  it("returns the distance to the CLOSEST enrolled view", () => {
+    // The point of enrolling several angles: a person sitting turned should
+    // be matched against the angled view captured for exactly that, not
+    // forced through a frontal-only reference.
+    const frontal = makeDescriptor(1.7);
+    const turned = makeDescriptor(2.9);
+    const nowSittingTurned = turned.map(v => v + 0.02);
+
+    const frontalOnly = faceDescriptorDistance(nowSittingTurned, frontal);
+    const withPoses = bestFaceDistance(nowSittingTurned, [frontal, turned]);
+
+    expect(withPoses).not.toBeNull();
+    expect(withPoses!).toBeLessThan(frontalOnly);
+    expect(withPoses!).toBeLessThan(FACE_MATCH_THRESHOLD);
+  });
+
+  it("does not let extra poses admit a different person", () => {
+    // Adding reference views must widen tolerance for the SAME face, never
+    // create a back door for a different one.
+    const stranger = makeDescriptor(9.4);
+    const best = bestFaceDistance(stranger, [makeDescriptor(1.7), makeDescriptor(2.9), makeDescriptor(3.3)]);
+    expect(best).not.toBeNull();
+    expect(best!).toBeGreaterThan(FACE_MATCH_THRESHOLD);
+  });
+
+  it("ignores references of the wrong length rather than throwing", () => {
+    const candidate = makeDescriptor(1.7);
+    const best = bestFaceDistance(candidate, [[1, 2, 3], candidate]);
+    expect(best).toBe(0);
+  });
+
+  it("returns null when there is nothing usable to compare against", () => {
+    expect(bestFaceDistance(makeDescriptor(1.7), [])).toBeNull();
+    expect(bestFaceDistance(makeDescriptor(1.7), [[1, 2, 3]])).toBeNull();
   });
 });
 

@@ -1537,6 +1537,13 @@ export const appRouter = router({
       .input(z.object({
         descriptor: z.array(z.number()).length(FACE_DESCRIPTOR_LENGTH),
         sampleCount: z.number().int().min(1).max(20),
+        // Per-pose descriptors from the guided enrollment (centre/left/
+        // right). Optional so an older client, or an enrollment where the
+        // side poses were skipped, still works off the frontal vector alone.
+        poses: z.array(z.object({
+          pose: z.string().max(20),
+          descriptor: z.array(z.number()).length(FACE_DESCRIPTOR_LENGTH),
+        })).max(8).optional(),
         consented: z.literal(true),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -1546,16 +1553,21 @@ export const appRouter = router({
         if (!isValidFaceDescriptor(input.descriptor)) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Царайн өгөгдөл буруу байна." });
         }
+        // Every pose is validated the same way the primary descriptor is --
+        // a malformed or hand-crafted vector must never reach the distance
+        // math, and poses are just as much an input as the main one.
+        const poses = (input.poses ?? []).filter(p => isValidFaceDescriptor(p.descriptor));
         await upsertFaceEnrollment({
           userId: ctx.user.id,
           descriptor: input.descriptor,
           sampleCount: input.sampleCount,
+          poses,
           modelVersion: FACE_MODEL_VERSION,
         });
         await recordFaceAttempt({
           userId: ctx.user.id,
           outcome: "enrolled",
-          detail: `samples=${input.sampleCount}`,
+          detail: `samples=${input.sampleCount} poses=${(input.poses ?? []).length}`,
           ip: ctx.req.ip ?? null,
         });
         // Enrolling does NOT by itself open /admin: the user still performs a

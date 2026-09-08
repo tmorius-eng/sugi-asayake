@@ -4195,20 +4195,25 @@ export async function upsertFaceEnrollment(input: {
   descriptor: number[];
   sampleCount: number;
   modelVersion: string;
+  /** Per-pose descriptors from the guided enrollment (centre/left/right).
+   *  Optional so older callers and older enrollments keep working. */
+  poses?: { pose: string; descriptor: number[] }[];
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const descriptorJson = JSON.stringify(input.descriptor);
+  const posesJson = input.poses?.length ? JSON.stringify(input.poses) : null;
   const existing = await getFaceEnrollment(input.userId);
   if (existing) {
     await db.update(faceEnrollments)
-      .set({ descriptorJson, sampleCount: input.sampleCount, modelVersion: input.modelVersion })
+      .set({ descriptorJson, posesJson, sampleCount: input.sampleCount, modelVersion: input.modelVersion })
       .where(eq(faceEnrollments.userId, input.userId));
     return;
   }
   await db.insert(faceEnrollments).values({
     userId: input.userId,
     descriptorJson,
+    posesJson,
     sampleCount: input.sampleCount,
     modelVersion: input.modelVersion,
     consentedAt: new Date(),

@@ -4,7 +4,9 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
-  FACE_ENROLL_SAMPLES,
+  FACE_ENROLL_POSES,
+  FACE_ENROLL_POSE_YAW,
+  FACE_ENROLL_SAMPLES_PER_POSE,
   FACE_VERIFY_SAMPLES,
   FLASH_COLORS,
   SignalSmoother,
@@ -315,6 +317,68 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
    * made the earlier single-action version so frustrating was that it gave up
    * without ever telling the user whether it could see them.
    */
+  /**
+   * Guided multi-pose enrollment: capture the face from several angles, not
+   * just straight on.
+   *
+   * The original enrollment took five frames in about a second, all frontal,
+   * and averaged them into one vector. That is a single viewpoint. Matching a
+   * person who is sitting even slightly turned then compares two genuinely
+   * different views of the same face, which inflates the distance and rejects
+   * them. Capturing centre, left and right and keeping each separately means
+   * verification can match against whichever view is closest to how they are
+   * actually sitting.
+   *
+   * The averaged frontal descriptor is still produced and stored alongside,
+   * so nothing about existing enrollments or the match logic breaks.
+   */
+  const runGuidedEnrollment = useCallback(async (video: HTMLVideoElement): Promise<{
+    poses: { pose: string; descriptor: number[] }[];
+    frontal: number[][];
+  }> => {
+    const poses: { pose: string; descriptor: number[] }[] = [];
+    let frontal: number[][] = [];
+
+    for (let i = 0; i < FACE_ENROLL_POSES.length; i += 1) {
+      const pose = FACE_ENROLL_POSES[i];
+      setProgress(Math.round((i / FACE_ENROLL_POSES.length) * 100));
+      setHint(pose.label);
+
+      // For the side poses, wait until the head is ACTUALLY turned before
+      // capturing -- otherwise all three "poses" are just the frontal view
+      // recorded three times, which would add nothing.
+      if (pose.yaw !== 0) {
+        const smoother = new SignalSmoother(2);
+        const deadline = Date.now() + 15_000;
+        let turned = false;
+        while (!turned && Date.now() < deadline) {
+          if (abortRef.current) throw new Error("ABORTED");
+          const probe = await captureFace(video);
+          if (!probe.ok) { setHint(QUALITY_COPY[probe.issue]); continue; }
+          if (meshRef.current) drawFaceMesh(meshRef.current, video, probe.sample.landmarks, probe.sample.box);
+          const yaw = smoother.push(getHeadYaw(probe.sample.landmarks));
+          turned = pose.yaw > 0 ? yaw > FACE_ENROLL_POSE_YAW : yaw < -FACE_ENROLL_POSE_YAW;
+          if (!turned) setHint(pose.label);
+        }
+        // A pose that never happened is simply skipped rather than failing
+        // the whole enrollment -- three good views are better than none.
+        if (!turned) continue;
+      }
+
+      setHint(`${pose.label} — хөдөлгөөнгүй`);
+      const samples = await collectSamples(video, FACE_ENROLL_SAMPLES_PER_POSE, null, false, null);
+      poses.push({ pose: pose.key, descriptor: averageFaceDescriptors(samples) });
+      if (pose.key === "center") frontal = samples;
+    }
+
+    if (poses.length === 0) throw new Error("CAPTURE_TIMEOUT");
+    // If the centre pose was somehow skipped, fall back to whatever was
+    // captured so the averaged reference is never empty.
+    if (frontal.length === 0) frontal = [poses[0].descriptor];
+    setProgress(100);
+    return { poses, frontal };
+  }, [collectSamples]);
+
   const runTurnSequence = useCallback(async (video: HTMLVideoElement): Promise<{ passed: boolean; maxYaw: number }> => {
     const steps: { dir: "right" | "left"; label: string }[] = [
       { dir: "right", label: "Толгойгоо БАРУУН тийш эргүүлнэ үү" },
@@ -473,12 +537,13 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
       await waitForVideo(video);
 
       if (needsEnrollment) {
-        setHint("Царайгаа бүртгэж байна — камер руу харна уу.");
-        const samples = await collectSamples(video, FACE_ENROLL_SAMPLES, null, false, null);
+        setHint("Царайгаа бүртгэж байна.");
+        const { poses, frontal } = await runGuidedEnrollment(video);
         setPhase("working");
         await enroll.mutateAsync({
-          descriptor: averageFaceDescriptors(samples),
-          sampleCount: samples.length,
+          descriptor: averageFaceDescriptors(frontal),
+          sampleCount: frontal.length,
+          poses,
           consented: true,
         });
         // Enrollment alone does not open /admin -- a live check runs

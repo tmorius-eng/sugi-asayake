@@ -26,7 +26,7 @@ import {
   FACE_MATCH_THRESHOLD,
   FACE_MODEL_VERSION,
   FACE_VERIFICATION_TTL_MS,
-  faceDescriptorDistance,
+  bestFaceDistance,
   isValidFaceDescriptor,
   type FaceChallengeAction,
 } from "../shared/face-auth";
@@ -215,19 +215,41 @@ export async function completeFaceVerification(input: {
     if (ENV.adminFaceLivenessEnforced) return { ok: false, reason: "liveness_failed" };
   }
 
-  let reference: number[];
+  // Build the set of stored views of this face: the averaged frontal
+  // descriptor, plus every per-pose descriptor captured during the guided
+  // enrollment. Verification compares against ALL of them and keeps the
+  // closest -- a person sitting slightly turned should be matched against
+  // the angled view that was enrolled for exactly that, not forced through a
+  // frontal-only reference that inflates the distance and rejects them.
+  const references: number[][] = [];
   try {
-    reference = JSON.parse(enrollment.descriptorJson) as number[];
+    const primary = JSON.parse(enrollment.descriptorJson) as number[];
+    if (isValidFaceDescriptor(primary)) references.push(primary);
   } catch {
-    await recordFaceAttempt({ userId: input.userId, outcome: "error", detail: "corrupt_enrollment", ip });
-    return { ok: false, reason: "no_enrollment" };
+    // Fall through -- poses below may still provide a usable reference.
   }
-  if (!isValidFaceDescriptor(reference)) {
+  if (enrollment.posesJson) {
+    try {
+      const poses = JSON.parse(enrollment.posesJson) as { pose: string; descriptor: number[] }[];
+      for (const p of poses) {
+        if (Array.isArray(p?.descriptor) && isValidFaceDescriptor(p.descriptor)) references.push(p.descriptor);
+      }
+    } catch {
+      // A corrupt poses blob must not break an otherwise valid enrollment.
+    }
+  }
+
+  if (references.length === 0) {
     await recordFaceAttempt({ userId: input.userId, outcome: "error", detail: "corrupt_enrollment", ip });
     return { ok: false, reason: "no_enrollment" };
   }
 
-  const distance = faceDescriptorDistance(input.descriptor, reference);
+  const best = bestFaceDistance(input.descriptor, references);
+  if (best === null) {
+    await recordFaceAttempt({ userId: input.userId, outcome: "error", detail: "corrupt_enrollment", ip });
+    return { ok: false, reason: "no_enrollment" };
+  }
+  const distance = best;
   // Stored as thousandths so the audit trail keeps useful precision in a
   // plain int column (0.583 -> 583) without a float column's comparison
   // quirks. The threshold decision itself is made on the real float above.

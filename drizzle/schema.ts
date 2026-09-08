@@ -1320,6 +1320,21 @@ export const faceEnrollments = mysqlTable("face_enrollments", {
   /** How many frames were averaged into descriptorJson. Shown in the admin UI
    *  so a poor-quality enrollment (1-2 frames) is visible rather than silent. */
   sampleCount: int("sampleCount").notNull().default(1),
+  /**
+   * Descriptors captured from several guided head positions during
+   * enrollment, as [{ pose, descriptor }].
+   *
+   * WHY: descriptorJson alone is a single frontal viewpoint. Enrolling from
+   * one angle and then matching a person who happens to be sitting slightly
+   * turned compares two genuinely different views of the same face, which
+   * inflates the distance and causes false rejections. Storing the face from
+   * several angles and taking the CLOSEST match at verification is how the
+   * reference stays valid across normal, everyday sitting positions.
+   *
+   * Nullable: enrollments made before this existed keep working off
+   * descriptorJson alone, so nobody is forced to re-enroll.
+   */
+  posesJson: text("posesJson"),
   /** Which model produced this vector. Descriptors from different models are
    *  NOT comparable, so a future model upgrade must re-enroll everyone -- this
    *  column is what makes that detectable instead of silently comparing

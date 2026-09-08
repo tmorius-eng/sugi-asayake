@@ -96,6 +96,57 @@ export const FACE_MAX_CENTER_OFFSET_RATIO = 0.3;
  */
 export const FACE_ENROLL_SAMPLES = 5;
 
+/**
+ * The head positions captured during enrollment, in order.
+ *
+ * Enrolling from one angle only is the difference between "it recognises me
+ * when I sit exactly like I did that day" and "it recognises me". Each pose
+ * is stored separately and verification takes the closest match, so sitting
+ * slightly turned no longer inflates the distance.
+ *
+ * Kept to modest angles on purpose: at a strong profile the detector starts
+ * losing landmarks and the descriptor quality collapses, so an extreme pose
+ * would add a bad reference rather than a useful one.
+ */
+export const FACE_ENROLL_POSES = [
+  { key: "center", label: "Камер руу шууд харна уу", yaw: 0 },
+  { key: "left", label: "Толгойгоо ЗҮҮН тийш бага зэрэг эргүүлнэ үү", yaw: 1 },
+  { key: "right", label: "Толгойгоо БАРУУН тийш бага зэрэг эргүүлнэ үү", yaw: -1 },
+] as const;
+export type FaceEnrollPose = (typeof FACE_ENROLL_POSES)[number]["key"];
+
+/** How far the head must be turned for a side pose to count. Lower than the
+ *  liveness turn threshold: enrollment wants a usable angled view, not a
+ *  dramatic one. */
+export const FACE_ENROLL_POSE_YAW = 0.06;
+
+/** Frames averaged per pose. Fewer than the single-pose count because there
+ *  are now several poses; the total captured is higher than before. */
+export const FACE_ENROLL_SAMPLES_PER_POSE = 4;
+
+export type StoredFacePose = { pose: string; descriptor: number[] };
+
+/**
+ * Distance to the CLOSEST stored view of this face.
+ *
+ * Verification compares against every enrolled pose and keeps the best,
+ * rather than against one averaged frontal vector. Averaging across angles
+ * would be actively wrong -- the mean of a left-facing and a right-facing
+ * descriptor is not a better frontal face, it is a blur of both.
+ */
+export function bestFaceDistance(
+  candidate: readonly number[],
+  references: readonly (readonly number[])[],
+): number | null {
+  let best: number | null = null;
+  for (const reference of references) {
+    if (reference.length !== candidate.length) continue;
+    const d = faceDescriptorDistance(candidate, reference);
+    if (best === null || d < best) best = d;
+  }
+  return best;
+}
+
 /** How many frames a single verification attempt captures; the best (closest)
  *  match among them decides the outcome. */
 export const FACE_VERIFY_SAMPLES = 5;
