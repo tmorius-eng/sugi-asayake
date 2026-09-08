@@ -14,6 +14,7 @@ export const actionLabels: Record<string, string> = {
   "staff_invitation.revoked": "Урилга цуцалсан",
   "user.role_updated": "Хэрэглэгчийн эрх өөрчилсөн",
   "user.phone_updated": "Хэрэглэгчийн утас засварласан",
+  "user.face_enrollment_reset": "Царайн бүртгэлийг цуцалсан",
   "user.loyalty_adjustment_updated": "Гишүүнчлэлийн урьдчилсан дүн шинэчилсэн",
   "user.suspended": "Хэрэглэгчийг түр хаасан",
   "user.unsuspended": "Хандалт сэргээсэн",

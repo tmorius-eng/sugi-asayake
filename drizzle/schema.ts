@@ -149,6 +149,19 @@ export const users = mysqlTable("users", {
    * computation elsewhere in this file.
    */
   storeCreditMnt: int("storeCreditMnt").notNull().default(0),
+  /**
+   * Admin face gate (2026-09-08): the moment this account last passed the
+   * face check in front of /admin.
+   *
+   * INFORMATIONAL ONLY -- this is not what the gate actually tests, and must
+   * never become that. The gate has to be per-DEVICE: passing the check on
+   * the shop computer must not silently open /admin on someone's personal
+   * laptop, which is exactly what a shared account-level timestamp would do.
+   * The real proof is a short-lived signed cookie on the device that passed
+   * (ADMIN_FACE_COOKIE_NAME in shared/const.ts). This column exists so the
+   * admin UI can show "last verified ..." per account.
+   */
+  faceVerifiedAt: timestamp("faceVerifiedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -1263,3 +1276,116 @@ export const storeCreditLedger = mysqlTable("store_credit_ledger", {
   index("store_credit_ledger_user_idx").on(table.userId),
 ]);
 export type StoreCreditLedgerEntry = typeof storeCreditLedger.$inferSelect;
+
+/**
+ * Admin face gate (2026-09-08) -- one enrolled face reference per staff
+ * account, used as a second factor in front of /admin on top of the existing
+ * phone+password login. Covers all 5 panel roles, not just admin.
+ *
+ * WHAT IS STORED, AND WHAT DELIBERATELY IS NOT: `descriptorJson` is a
+ * 128-number vector, not a photo. It is the output of the face-recognition
+ * model (dlib's `face_recognition_resnet_model_v1`, released by its author
+ * into the public domain -- deliberately chosen over the more accurate
+ * ArcFace/InsightFace models, whose pretrained weights are licensed for
+ * non-commercial research only and would have meant either buying a
+ * commercial licence or shipping legal exposure into a real business).
+ * No enrollment photograph is ever written to the database or to R2. The
+ * vector is not reversible into a recognisable face, and on its own it
+ * cannot be used to search for this person anywhere else.
+ *
+ * WHERE THE MATH RUNS: the model runs in the staff member's own browser
+ * (client/public/face-models/, served from this site, no CDN and no third
+ * party). The browser sends only the resulting 128 numbers; camera frames
+ * never leave the machine. This is why there is no image column here and no
+ * upload endpoint in the flow.
+ *
+ * HONEST LIMITATION, recorded so nobody later mistakes this for more than it
+ * is: because the descriptor is computed client-side, a technically capable
+ * attacker who ALREADY has the account's password could call the verify
+ * endpoint directly with a descriptor of their choosing. That does not get
+ * them in -- they would have to supply a vector within matching distance of
+ * this enrolled one, which they cannot read and cannot guess -- but it does
+ * mean the liveness challenge is a deterrent against a casual attacker
+ * holding up a photo, not a defence against a determined one. This is a
+ * second factor behind a password, and is documented as such in the UI.
+ */
+export const faceEnrollments = mysqlTable("face_enrollments", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** JSON array of 128 floats -- the averaged reference descriptor. Averaged
+   *  across several capture frames at enrollment rather than taken from one
+   *  shot, which measurably reduces false rejections later (one bad frame at
+   *  enrollment otherwise poisons every future comparison). */
+  descriptorJson: text("descriptorJson").notNull(),
+  /** How many frames were averaged into descriptorJson. Shown in the admin UI
+   *  so a poor-quality enrollment (1-2 frames) is visible rather than silent. */
+  sampleCount: int("sampleCount").notNull().default(1),
+  /** Which model produced this vector. Descriptors from different models are
+   *  NOT comparable, so a future model upgrade must re-enroll everyone -- this
+   *  column is what makes that detectable instead of silently comparing
+   *  incompatible vectors and rejecting everyone. */
+  modelVersion: varchar("modelVersion", { length: 60 }).notNull(),
+  /** When the staff member accepted the dedicated biometric-consent screen.
+   *  Separate from any general terms acceptance on purpose: face data is
+   *  sensitive personal data under Mongolia's Personal Data Protection Law,
+   *  and bundled consent does not satisfy it. */
+  consentedAt: timestamp("consentedAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  uniqueIndex("face_enrollments_user_idx").on(table.userId),
+]);
+export type FaceEnrollment = typeof faceEnrollments.$inferSelect;
+
+/**
+ * Admin face gate (2026-09-08): the short-lived liveness challenge issued
+ * between "start a check" and "submit the result". Mirrors
+ * phone_verification_sessions above, including its consumedAt single-use
+ * guard, which is claimed atomically (UPDATE ... WHERE consumedAt IS NULL,
+ * checking affectedRows) rather than read-then-write -- the same TOCTOU fix
+ * applied to the phone sessions in the 2026-09-06 audit (BUG-003).
+ *
+ * A DB row rather than a signed cookie because a challenge MUST be usable
+ * exactly once and must be revocable server-side, which a stateless value
+ * cannot guarantee on its own.
+ */
+export const faceChallenges = mysqlTable("face_challenges", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** Which action the user must perform on camera. Randomised per attempt so a
+   *  static photo held up to the lens cannot satisfy it, and so a replayed
+   *  recording of a previous successful attempt is unlikely to match. */
+  action: mysqlEnum("action", ["blink", "turn_left", "turn_right", "open_mouth"]).notNull(),
+  consumedAt: timestamp("consumedAt"),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  index("face_challenges_user_idx").on(table.userId),
+]);
+export type FaceChallenge = typeof faceChallenges.$inferSelect;
+
+/**
+ * Admin face gate (2026-09-08): append-only audit trail of every gate event,
+ * feeding its own tab in the admin Security Center. Same role login_attempts
+ * plays for password logins -- an admin needs to be able to see "someone
+ * failed the face check on this account six times last night."
+ *
+ * `distance` is the computed Euclidean distance to the enrolled descriptor
+ * (null when the attempt failed before it got that far). Recorded on purpose:
+ * the match threshold needs empirical tuning against real staff faces rather
+ * than blind trust in a library default, and this column is the only way to
+ * see the actual distribution of real successes and failures.
+ */
+export const faceAttempts = mysqlTable("face_attempts", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").references(() => users.id, { onDelete: "cascade" }),
+  outcome: mysqlEnum("outcome", ["enrolled", "verified", "no_match", "liveness_failed", "error"]).notNull(),
+  distance: int("distance"),
+  detail: varchar("detail", { length: 160 }),
+  ip: varchar("ip", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  index("face_attempts_user_idx").on(table.userId),
+  index("face_attempts_created_idx").on(table.createdAt),
+]);
+export type FaceAttempt = typeof faceAttempts.$inferSelect;

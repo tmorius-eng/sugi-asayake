@@ -1796,3 +1796,89 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
   .ig-value { width: 100px; }
   .ig-value span { font-size: 9px; }
 }
+
+/* ---------------------------------------------------------------------------
+   Admin face gate (2026-09-08) — the camera check in front of /admin.
+   Scoped entirely to that gate; nothing here renders on a storefront page.
+   Uses the app's own tokens rather than new colours so the gate looks like
+   part of the admin panel it guards.
+--------------------------------------------------------------------------- */
+.face-gate-shell { display: grid; place-items: center; min-height: 100vh; padding: 24px; background: #f8f5ef; }
+.face-gate-card { width: 100%; max-width: 420px; padding: 28px; border-radius: var(--radius-lg, 18px); background: #fff; box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.08)); text-align: center; }
+.face-gate-card--wide { max-width: 520px; text-align: left; }
+.face-gate-card h2 { margin: 0; font-family: var(--font-display); font-size: 22px; font-weight: 620; letter-spacing: -.04em; color: var(--foreground); }
+.face-gate-muted { margin: 6px 0 0; font-size: 13px; line-height: 1.6; color: #6f7076; }
+.face-gate-ok { color: #1a7f4b; }
+.face-gate-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 18px; color: var(--primary-text, #c11a35); }
+.face-gate-head h2 { margin: 0; }
+
+.face-gate-stage { position: relative; overflow: hidden; border-radius: 18px; background: #0d1b33; aspect-ratio: 4 / 3; box-shadow: inset 0 0 0 1px rgba(150,210,255,.18); }
+/* Mirrored so "turn left" on screen matches the instruction the person was
+   given -- an unmirrored preview makes head-turn challenges confusing. The
+   mesh canvas mirrors itself in its own draw call, not here. */
+.face-gate-video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+.face-gate-mesh { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+/* Oval vignette: focuses attention on the face and matches the framing real
+   eKYC flows use, without cropping the video (the detector still sees the
+   full frame). */
+.face-gate-stage::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse 42% 58% at 50% 48%, transparent 60%, rgba(13,27,51,.82) 100%); }
+
+/* Sweeping scan line while capturing. */
+.face-gate-scanline { position: absolute; left: 0; right: 0; height: 2px; pointer-events: none; background: linear-gradient(90deg, transparent, rgba(150,210,255,.9), transparent); box-shadow: 0 0 14px rgba(150,210,255,.75); animation: face-gate-scan 2.4s ease-in-out infinite; }
+@keyframes face-gate-scan { 0%, 100% { top: 12%; opacity: .35; } 50% { top: 86%; opacity: 1; } }
+
+/* Soft pulse on the frame once a face is actually being tracked -- immediate
+   feedback that the system has locked on. */
+.face-gate-stage.is-locked { box-shadow: inset 0 0 0 1px rgba(255,214,92,.55), 0 0 0 3px rgba(255,214,92,.12); animation: face-gate-lock 1.8s ease-in-out infinite; }
+@keyframes face-gate-lock { 0%, 100% { box-shadow: inset 0 0 0 1px rgba(255,214,92,.5), 0 0 0 3px rgba(255,214,92,.10); } 50% { box-shadow: inset 0 0 0 1px rgba(255,214,92,.85), 0 0 0 6px rgba(255,214,92,.16); } }
+
+/* The colour-flash liveness challenge. Opacity below 1 so the person can
+   still see themselves while the colour washes the frame -- and so the
+   camera still has a usable image of the lit face to measure. */
+.face-gate-flash { position: absolute; inset: 0; pointer-events: none; opacity: .82; mix-blend-mode: screen; animation: face-gate-flash-in .12s ease-out; }
+@keyframes face-gate-flash-in { from { opacity: 0; } to { opacity: .82; } }
+
+.face-gate-video-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(13,27,51,.72); color: #fff; z-index: 2; }
+
+/* Instruction pill, matching the reference eKYC layout. */
+.face-gate-instruction { margin-top: 14px; padding: 13px 20px; border-radius: 999px; background: linear-gradient(93deg, #4338ca, #2563eb); color: #fff; font-size: 14px; font-weight: 700; letter-spacing: -.01em; text-align: center; box-shadow: 0 6px 18px rgba(37,99,235,.28); animation: face-gate-pill 2.6s ease-in-out infinite; }
+@keyframes face-gate-pill { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+.face-gate-instruction--flash { background: linear-gradient(93deg, #0f172a, #334155); animation: none; }
+
+.face-gate-progress { margin-top: 12px; height: 4px; border-radius: 999px; background: #ece7de; overflow: hidden; }
+.face-gate-progress span { display: block; height: 100%; background: var(--primary, #df1f3d); transition: width .2s ease; }
+
+.face-gate-hint { margin: 14px 0 0; font-size: 13px; line-height: 1.6; color: #52535a; text-align: center; }
+.face-gate-alert { display: flex; align-items: flex-start; gap: 9px; margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: #fdf3f4; color: #93132b; font-size: 13px; line-height: 1.6; }
+
+.face-gate-facts { margin: 0 0 16px; padding: 0; list-style: none; display: grid; gap: 10px; }
+.face-gate-facts li { padding-left: 14px; position: relative; font-size: 13px; line-height: 1.6; color: #52535a; }
+.face-gate-facts li::before { content: ""; position: absolute; left: 0; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--primary, #df1f3d); }
+.face-gate-facts strong { color: var(--foreground); }
+.face-gate-limit { margin: 0 0 18px; padding: 12px 14px; border-radius: 12px; background: #faf7f1; font-size: 12px; line-height: 1.65; color: #6f7076; }
+
+.face-gate-consent { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px; font-size: 13px; line-height: 1.6; color: #52535a; cursor: pointer; }
+.face-gate-consent input { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--primary, #df1f3d); flex: none; }
+
+.face-gate-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 46px; margin-top: 16px; padding: 0 20px; border: 0; border-radius: 999px; background: var(--primary, #df1f3d); color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; transition: background .18s ease, transform .18s ease; }
+.face-gate-btn:hover:not(:disabled) { background: #bc1732; transform: translateY(-1px); }
+.face-gate-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.face-gate-footnote { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 14px; font-size: 12px; }
+
+@media (max-width: 520px) {
+  .face-gate-card { padding: 22px; }
+}
+
+/* Admin face gate: the decorative motion (scan sweep, pill bob, lock pulse)
+   respects a reduced-motion preference like everything else on the site. The
+   colour FLASH is deliberately exempt -- it is not decoration, it is the
+   liveness measurement itself, and disabling it would silently break the
+   security check. Its cadence (~420ms per colour, ~2.4Hz) sits below the 3Hz
+   threshold associated with photosensitive seizures. */
+@media (prefers-reduced-motion: reduce) {
+  .face-gate-scanline { animation: none; top: 50%; opacity: .5; }
+  .face-gate-instruction { animation: none; }
+  .face-gate-stage.is-locked { animation: none; }
+}

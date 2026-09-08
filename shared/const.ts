@@ -7,6 +7,19 @@ export const GUEST_CART_COOKIE_NAME = "guest_cart_token";
  *  from both the auth session and the guest-cart token above (own concern,
  *  own lifetime). */
 export const VISITOR_SESSION_COOKIE_NAME = "sugi_visitor_session";
+/**
+ * Admin face gate (2026-09-08): proof that THIS browser, on THIS device, has
+ * passed a face check for the currently signed-in staff account.
+ *
+ * Deliberately a separate, short-lived cookie rather than a column on `users`
+ * alone: the gate has to be per-device. An account-level "verified at"
+ * timestamp would mean passing the check on the shop computer silently opened
+ * /admin on someone else's laptop too, defeating the point of a second
+ * factor. Signed with the same secret as the session token and carrying the
+ * account's sessionVersion, so "sign out everywhere" and password resets
+ * invalidate it exactly like a session.
+ */
+export const ADMIN_FACE_COOKIE_NAME = "sugi_admin_face";
 export const ONE_YEAR_MS = 1000 * 60 * 60 * 24 * 365;
 export const NINETY_DAYS_MS = 1000 * 60 * 60 * 24 * 90;
 export const AXIOS_TIMEOUT_MS = 30_000;

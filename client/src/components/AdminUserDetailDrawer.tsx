@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CreditCard, LoaderCircle, LogOut, Phone, ShieldAlert, ShieldCheck, Wallet, X } from "lucide-react";
+import { CreditCard, LoaderCircle, LogOut, Phone, ScanFace, ShieldAlert, ShieldCheck, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { roleBadgeClass, roleLabel } from "@/lib/adminRoles";
@@ -39,6 +39,21 @@ export default function AdminUserDetailDrawer({ userId, role, onClose }: { userI
   // own comment in server/routers.ts for the full reasoning.
   const updatePhone = trpc.admin.updateUserPhone.useMutation({ onSuccess: refresh });
   const [phoneDraft, setPhoneDraft] = useState("");
+
+  // Admin face gate (2026-09-08): the per-user break-glass. See
+  // admin.resetUserFaceEnrollment in server/routers.ts -- this is the fix for
+  // the gate refusing ONE person (new glasses, a beard, a replaced webcam),
+  // as opposed to the ADMIN_FACE_GATE_ENABLED env switch, which is the fix
+  // for it misbehaving for everyone.
+  const resetFace = trpc.admin.resetUserFaceEnrollment.useMutation({ onSuccess: refresh });
+  const onResetFace = async () => {
+    try {
+      await resetFace.mutateAsync({ userId });
+      toast.success("Царайн бүртгэлийг цуцаллаа. Тухайн хэрэглэгч дараагийн удаа /admin руу орохдоо дахин бүртгүүлнэ.");
+    } catch (error) {
+      toast.error(messageFrom(error));
+    }
+  };
 
   // "Controls everything" admin overhaul (2026-09-08, Phase H): the ledger
   // query is finance/admin-only server-side (financeProcedure) too, so it's
@@ -218,6 +233,18 @@ export default function AdminUserDetailDrawer({ userId, role, onClose }: { userI
               <button type="button" disabled={forceLogoutUser.isPending} onClick={onForceLogout} className="inline-flex items-center gap-1.5 rounded-full border border-black/10 px-3 py-2 text-xs font-bold text-[#57585e] disabled:opacity-60">{forceLogoutUser.isPending ? <LoaderCircle className="animate-spin" size={14} /> : <LogOut size={14} />}Бүх төхөөрөмжөөс гаргах</button>
             </div>
             {!detail.suspendedAt && <label className="mt-3 grid gap-1.5 text-xs font-bold">Түр хаах шалтгаан (сонголтоор)<input value={reason} onChange={event => setReason(event.target.value)} placeholder="ж: төлбөрийн маргаан" className="h-10 rounded-xl border border-black/10 px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" /></label>}
+          </div>}
+
+          {/* Admin face gate (2026-09-08): only shown for accounts the gate
+              actually applies to -- a plain customer has no /admin access and
+              therefore never enrolls a face, so the control would be
+              meaningless noise on their drawer. */}
+          {isAdmin && detail.role !== "user" && <div className="mt-4 rounded-2xl border border-black/8 p-4">
+            <p className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]"><ScanFace size={13} /> ЦАРАЙН БҮРТГЭЛ</p>
+            <p className="mt-1 text-[11px] leading-4 text-[#a9a49a]">Админ хэсэгт нэвтрэхэд царайгаар нэмэлт баталгаажуулалт хийгддэг. Хэрэв тухайн хүнийг таньж чадахгүй болсон бол (нүдний шил, сахал, камер солигдсон гэх мэт) бүртгэлийг нь цуцлаад дахин бүртгүүлж болно. Нууц үгэнд нөлөөлөхгүй.</p>
+            <button type="button" disabled={resetFace.isPending} onClick={onResetFace} className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-black/10 px-3 py-2 text-xs font-bold text-[#57585e] disabled:opacity-60">
+              {resetFace.isPending ? <LoaderCircle className="animate-spin" size={14} /> : <ScanFace size={14} />}Царайн бүртгэлийг цуцлах
+            </button>
           </div>}
 
           <div className="mt-6">

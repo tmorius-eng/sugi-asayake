@@ -2,6 +2,7 @@ import { LoaderCircle, LogIn } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import AdminWorkspace from "@/components/AdminWorkspace";
+import AdminFaceGate from "@/components/AdminFaceGate";
 
 /**
  * Tom, 2026-09-05 (explicit): this page used to wrap AdminWorkspace (the
@@ -57,5 +58,15 @@ export default function AdminDashboard() {
     </div>;
   }
 
-  return <AdminWorkspace />;
+  // Admin face gate (2026-09-08, Tom explicit: "only users that has access to
+  // ./admin page"): the second factor sits HERE, after the role check and
+  // before the panel mounts, so it covers all five panel roles and nothing
+  // else in the app. When ADMIN_FACE_GATE_ENABLED is off, AdminFaceGate
+  // renders its children immediately and this line behaves exactly as it did
+  // before the gate existed.
+  return (
+    <AdminFaceGate>
+      <AdminWorkspace />
+    </AdminFaceGate>
+  );
 }

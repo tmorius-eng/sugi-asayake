@@ -101,4 +101,24 @@ export const ENV = {
   // instead of silently falling back to a console.log -- a deliberate,
   // explicit exception to this file's usual convention, not an oversight.
   verifyMnApiKey: process.env.VERIFY_MN_API_KEY ?? "",
+
+  // Admin face gate (2026-09-08): requires every /admin user (all 5 panel
+  // roles -- staff/finance/marketing/warehouse/admin) to pass a browser
+  // camera face check on top of their phone+password login. Customer-facing
+  // pages are completely unaffected. Off unless explicitly set to "1", same
+  // opt-in shape as smsCampaignsEnabled above.
+  //
+  // THIS FLAG IS THE ESCAPE HATCH, and that is its most important job. The
+  // gate stands in front of the admin panel -- including the account that
+  // would have to fix it if it misbehaved -- so there must be a way out that
+  // does not itself require getting into /admin. Setting this to anything but
+  // "1" (or removing it) and restarting returns /admin to exactly its
+  // pre-gate behaviour, with no code change and no database edit. Enrolled
+  // faces are left intact, so switching it back on later resumes where it
+  // left off.
+  //
+  // To unblock ONE person rather than everyone (new glasses, a beard, a
+  // camera that died), prefer the per-user reset in the admin Users drawer,
+  // which clears just that account's enrollment so they re-enroll next visit.
+  adminFaceGateEnabled: process.env.ADMIN_FACE_GATE_ENABLED === "1",
 };
