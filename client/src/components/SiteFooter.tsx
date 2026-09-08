@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { Phone } from "lucide-react";
 import { Link } from "wouter";
 import { categories } from "@/components/home/categories-data";
-import { locations } from "@/components/home/locations-data";
+import { trpc } from "@/lib/trpc";
 
 // NEWVISION.md §9: replaces Home.tsx's old single-row footer (logo + one
 // "Шуурхай холбоос" column mixing an about-anchor, a category-anchor, and a
@@ -33,6 +33,12 @@ export type FooterSocial = { label: string; href: string; Icon: LucideIcon };
 export type FooterCtaBanner = { eyebrow: string; headingLine1: string; headingLine2: string; phoneLabel: string };
 
 export default function SiteFooter({ logoUrl, socials, ctaBanner }: { logoUrl: string; socials: FooterSocial[]; ctaBanner?: FooterCtaBanner }) {
+  // "Controls everything" admin overhaul (2026-09-08, Phase J): replaces
+  // locations-data.ts's hardcoded array -- react-query dedupes this against
+  // the identical call StoreLocatorSection/Checkout already make on pages
+  // that render both, so this is never a second real network request there.
+  const branchesQuery = trpc.content.branches.useQuery();
+  const branches = branchesQuery.data ?? [];
   return (
     <footer className="site-footer">
       {ctaBanner && (
@@ -58,7 +64,7 @@ export default function SiteFooter({ logoUrl, socials, ctaBanner }: { logoUrl: s
         </div>
         <div className="footer-column">
           <span>Салбарууд</span>
-          {locations.map(location => <a href={location.mapUrl} target="_blank" rel="noreferrer" key={location.number}>{location.name}</a>)}
+          {branches.map(branch => <a href={branch.mapUrl ?? "#"} target="_blank" rel="noreferrer" key={branch.id}>{branch.name}</a>)}
         </div>
         <div className="footer-column">
           <span>Нөхцөл ба бодлого</span>

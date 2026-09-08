@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, CircleUserRound, LayoutDashboard, PackagePlus, CheckCircle2, FilePenLine, Star, ListChecks, Megaphone, Tag, Tags, ImageUp, UsersRound, ChartColumnIncreasing, ShieldAlert, Plug, CalendarDays, Send, type LucideIcon } from "lucide-react";
+import { ChevronDown, ChevronRight, CircleUserRound, LayoutDashboard, PackagePlus, CheckCircle2, FilePenLine, Star, ListChecks, Megaphone, Tag, Tags, ImageUp, UsersRound, ChartColumnIncreasing, ShieldAlert, Plug, CalendarDays, Send, Settings, MapPin, ShoppingBag, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import type { AdminSection } from "../AdminWorkspace";
@@ -27,6 +27,9 @@ const flatGroup: NavItem[] = [
   { key: "brands", label: "Брэндүүд", Icon: Tags },
   { key: "media", label: "Content & Media", Icon: ImageUp },
   { key: "campaigns", label: "Кампанит ажил", Icon: Send },
+  { key: "storeSettings", label: "Дэлгүүрийн тохиргоо", Icon: Settings },
+  { key: "branches", label: "Салбарууд", Icon: MapPin },
+  { key: "pos", label: "Дэлгүүрийн худалдаа", Icon: ShoppingBag },
 ];
 const adminOnlyFlatGroup: NavItem[] = [
   { key: "users", label: "Хэрэглэгч", Icon: UsersRound },
@@ -63,7 +66,19 @@ const SECTION_ROLES: Record<AdminSection, ReadonlySet<string>> = {
   brands: new Set(["marketing", "admin"]),
   media: new Set(["marketing", "admin"]),
   campaigns: new Set(["marketing", "admin"]),
-  users: new Set(["admin"]),
+  storeSettings: new Set(["marketing", "admin"]),
+  // Phase J: same marketingProcedure weight/CRUD shape as `brands` above.
+  branches: new Set(["marketing", "admin"]),
+  // Phase M: same warehouseProcedure weight as the stock-editing endpoints
+  // (recording a sale is stock-adjacent, not a merchandising/finance call).
+  pos: new Set(["warehouse", "admin"]),
+  // Phase H: same gap-fix shape as `orders` above -- finance needs to find
+  // a customer before it can call admin.adjustStoreCredit on them.
+  // Account-changing writes (suspend, role, phone, loyalty adjustment)
+  // stay admin-only, enforced server-side (usersReadProcedure vs.
+  // adminProcedure in server/_core/trpc.ts) and mirrored client-side in
+  // AdminWorkspace.tsx/AdminUserDetailDrawer.tsx.
+  users: new Set(["finance", "admin"]),
   integrations: new Set(["admin"]),
 };
 

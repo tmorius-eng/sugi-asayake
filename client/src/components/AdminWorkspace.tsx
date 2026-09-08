@@ -22,7 +22,10 @@ import AdminProductImportModal from "./admin/AdminProductImportModal";
 import AdminPostsPanel from "./AdminPostsPanel";
 import AdminReviewsPanel from "./AdminReviewsPanel";
 import AdminBrandsPanel from "./AdminBrandsPanel";
+import AdminBranchesPanel from "./AdminBranchesPanel";
+import AdminPosPanel from "./AdminPosPanel";
 import AdminCampaignsPanel from "./admin/AdminCampaignsPanel";
+import AdminStoreSettingsPanel from "./AdminStoreSettingsPanel";
 import AdminDiscountCodesPanel from "./AdminDiscountCodesPanel";
 import AdminIntegrationsPanel from "./AdminIntegrationsPanel";
 import AdminProductVariantsPanel from "./AdminProductVariantsPanel";
@@ -138,7 +141,7 @@ function TagSuggestionChips({ suggestions, current, labelFor, onApply }: { sugge
   ))}</div>;
 }
 
-export type AdminSection = "dashboard" | "analytics" | "products" | "orders" | "posts" | "reviews" | "routines" | "promotions" | "calendar" | "discountCodes" | "brands" | "campaigns" | "users" | "media" | "security" | "integrations";
+export type AdminSection = "dashboard" | "analytics" | "products" | "orders" | "posts" | "reviews" | "routines" | "promotions" | "calendar" | "discountCodes" | "brands" | "branches" | "pos" | "campaigns" | "storeSettings" | "users" | "media" | "security" | "integrations";
 
 
 export default function AdminWorkspace({ preview = false }: { preview?: boolean }) {
@@ -154,7 +157,13 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
   const visibleSections = new Set(getVisibleSections(role).map(item => item.key));
   const canSeeFinancials = role === "admin" || role === "finance";
   const canSeeAuditTrail = role === "admin";
-  const adminSectionKeys: AdminSection[] = ["dashboard", "products", "orders", "posts", "reviews", "routines", "promotions", "calendar", "discountCodes", "brands", "media", "users", "analytics", "security", "integrations"];
+  // Phase J (2026-09-08): also folds in `storeSettings`/`campaigns`/
+  // `branches` -- storeSettings and campaigns were added in later work than
+  // the URL-state fix below and were never added to this list, so (like
+  // every OTHER section before that fix) a direct link or refresh to
+  // ?adminSection=storeSettings or campaigns silently fell back to the
+  // dashboard -- the exact bug class this array exists to prevent.
+  const adminSectionKeys: AdminSection[] = ["dashboard", "products", "orders", "posts", "reviews", "routines", "promotions", "calendar", "discountCodes", "brands", "branches", "pos", "media", "campaigns", "storeSettings", "users", "analytics", "security", "integrations"];
   // 2026-09-04 (Tom, "does admin panel really work 100% functional?" audit):
   // section switching only ever lived in React state, never the URL --
   // only ?adminSection=media (the one pre-existing special case) survived a
@@ -531,7 +540,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
     }
   };
 
-  const sectionLabel = section === "dashboard" ? "Хянах самбар" : section === "products" ? "Бүтээгдэхүүн" : section === "orders" ? "Захиалга" : section === "posts" ? "Шинэ мэдээ" : section === "reviews" ? "Сэтгэгдэл" : section === "routines" ? "Routine" : section === "promotions" ? "Урамшуулал" : section === "calendar" ? "Хуанли" : section === "discountCodes" ? "Хямдралын код" : section === "brands" ? "Топ брэндүүд" : section === "media" ? "Content & Media" : section === "campaigns" ? "Кампанит ажил" : section === "analytics" ? "Аналитик" : section === "security" ? "Аюулгүй байдал" : section === "integrations" ? "Интеграцууд" : "Хэрэглэгч";
+  const sectionLabel = section === "dashboard" ? "Хянах самбар" : section === "products" ? "Бүтээгдэхүүн" : section === "orders" ? "Захиалга" : section === "posts" ? "Шинэ мэдээ" : section === "reviews" ? "Сэтгэгдэл" : section === "routines" ? "Routine" : section === "promotions" ? "Урамшуулал" : section === "calendar" ? "Хуанли" : section === "discountCodes" ? "Хямдралын код" : section === "brands" ? "Топ брэндүүд" : section === "branches" ? "Салбарууд" : section === "pos" ? "Дэлгүүрийн худалдаа" : section === "media" ? "Content & Media" : section === "campaigns" ? "Кампанит ажил" : section === "storeSettings" ? "Дэлгүүрийн тохиргоо" : section === "analytics" ? "Аналитик" : section === "security" ? "Аюулгүй байдал" : section === "integrations" ? "Интеграцууд" : "Хэрэглэгч";
   // Same query AdminDashboardHome makes (undefined input) -- React Query
   // dedupes identical query keys, so this is a free cache read whenever
   // the dashboard section already fetched it, and a real (still cheap)
@@ -581,7 +590,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
           {preview && <div className="mb-6 flex gap-3 rounded-2xl border border-[#e9ba62] bg-[#fff5dd] p-4 text-xs leading-5 text-[#6c531f]"><ShieldCheck className="mt-0.5 shrink-0" size={17} /><p><strong>Preview only.</strong> Энэ дэлгэц нь удирдлагын интерфэйсийн загвар юм. Бодит <code>/admin</code> зам нь нэвтэрсэн, <code>admin</code> эрхтэй хэрэглэгчдэд хамгаалагдсан.</p></div>}
           <section className="min-w-0 rounded-3xl bg-white p-5 shadow-[0_16px_34px_rgba(20,22,24,.05)] sm:p-7">
             <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div><h2 className="font-[var(--font-display)] text-2xl font-semibold tracking-[-.06em]">{section === "dashboard" ? "Хянах самбар" : section === "products" ? "Бүтээгдэхүүний сан" : section === "orders" ? "Захиалгын гүйцэтгэл" : section === "posts" ? "Шинэ бүтээгдэхүүний пост" : section === "reviews" ? "Сэтгэгдэл ба үнэлгээ" : section === "routines" ? "Routine (арчилгааны дараалал)" : section === "promotions" ? "Урамшуулал (попап/banner)" : section === "calendar" ? "Контентийн хуанли" : section === "discountCodes" ? "Хямдралын код" : section === "brands" ? "Топ брэндүүд" : section === "media" ? "Content & Media" : section === "campaigns" ? "Кампанит ажил" : section === "analytics" ? "Аналитик ба тайлан" : section === "security" ? "Аюулгүй байдал" : section === "integrations" ? "Интеграцууд" : "Хэрэглэгч ба эрх"}</h2><p className="mt-1 text-xs text-[#77787d]">{section === "dashboard" ? "Дэлгүүрийн ерөнхий байдал нэг дэлгэцэд" : section === "products" ? "SKU, үнэ, үлдэгдэл, нийтлэх төлөв" : section === "orders" ? "Төлбөрийн төлөв, хүргэлтийн явц, захиалгын мэдээлэл" : section === "posts" ? "Бодитоор хадгалагдах шинэ бүтээгдэхүүний мэдээ" : section === "reviews" ? "Баталгаажсан худалдан авалтын сэтгэгдэл, жижиг moderation" : section === "routines" ? "Алхам дараалалтай бүтээгдэхүүний багц, идэвхтэй хямдралтай" : section === "promotions" ? "Шинэ бүтээгдэхүүн, хямдрал зарлах попап/banner мессеж" : section === "calendar" ? "Товлогдсон пост, урамшууллын хугацааг нэг дэлгэцэд" : section === "discountCodes" ? "Захиалгын үед оруулах хямдралын код (жишээ нь SALE10)" : section === "brands" ? "Нүүр хуудасны 'Топ брэндүүд' хэсэгт харагдах бодит брэндүүд" : section === "media" ? "Нүүр хуудасны зураг болон текстийг кодгүйгээр солих" : section === "campaigns" ? "Сегмент болон гишүүнчлэлийн зэрэглэлээр имэйл/SMS илгээх" : section === "analytics" ? "Борлуулалт, ашиг, харилцагчийн бодит дата нэг дэлгэцэд" : section === "security" ? "Admin аудит лог, нэвтрэлтийн түүх, Honeybadger алдааны хяналт" : section === "integrations" ? "QPay, И-баримт, StorePay, карт, хүргэлтийн үйлчилгээ тохируулах" : "Шинэ хэрэглэгчийг урих болон staff/admin эрх удирдах"}</p></div>
+              <div><h2 className="font-[var(--font-display)] text-2xl font-semibold tracking-[-.06em]">{section === "dashboard" ? "Хянах самбар" : section === "products" ? "Бүтээгдэхүүний сан" : section === "orders" ? "Захиалгын гүйцэтгэл" : section === "posts" ? "Шинэ бүтээгдэхүүний пост" : section === "reviews" ? "Сэтгэгдэл ба үнэлгээ" : section === "routines" ? "Routine (арчилгааны дараалал)" : section === "promotions" ? "Урамшуулал (попап/banner)" : section === "calendar" ? "Контентийн хуанли" : section === "discountCodes" ? "Хямдралын код" : section === "brands" ? "Топ брэндүүд" : section === "branches" ? "Салбарууд" : section === "pos" ? "Дэлгүүрийн худалдаа" : section === "media" ? "Content & Media" : section === "campaigns" ? "Кампанит ажил" : section === "storeSettings" ? "Дэлгүүрийн тохиргоо" : section === "analytics" ? "Аналитик ба тайлан" : section === "security" ? "Аюулгүй байдал" : section === "integrations" ? "Интеграцууд" : "Хэрэглэгч ба эрх"}</h2><p className="mt-1 text-xs text-[#77787d]">{section === "dashboard" ? "Дэлгүүрийн ерөнхий байдал нэг дэлгэцэд" : section === "products" ? "SKU, үнэ, үлдэгдэл, нийтлэх төлөв" : section === "orders" ? "Төлбөрийн төлөв, хүргэлтийн явц, захиалгын мэдээлэл" : section === "posts" ? "Бодитоор хадгалагдах шинэ бүтээгдэхүүний мэдээ" : section === "reviews" ? "Баталгаажсан худалдан авалтын сэтгэгдэл, жижиг moderation" : section === "routines" ? "Алхам дараалалтай бүтээгдэхүүний багц, идэвхтэй хямдралтай" : section === "promotions" ? "Шинэ бүтээгдэхүүн, хямдрал зарлах попап/banner мессеж" : section === "calendar" ? "Товлогдсон пост, урамшууллын хугацааг нэг дэлгэцэд" : section === "discountCodes" ? "Захиалгын үед оруулах хямдралын код (жишээ нь SALE10)" : section === "brands" ? "Нүүр хуудасны 'Топ брэндүүд' хэсэгт харагдах бодит брэндүүд" : section === "branches" ? "Дэлгүүрийн бодит салбарууд — хаяг, утас, зураг, захиалгын дэлгэрэнгүй" : section === "pos" ? "Дэлгүүрт биечлэн ирж худалдан авсан борлуулалтыг бүртгэх" : section === "media" ? "Нүүр хуудасны зураг болон текстийг кодгүйгээр солих" : section === "campaigns" ? "Сегмент болон гишүүнчлэлийн зэрэглэлээр имэйл/SMS илгээх" : section === "storeSettings" ? "Хүргэлтийн үнэ, хямдралын доод дүн, захиалгын имэйл мессежийг кодгүйгээр удирдах" : section === "analytics" ? "Борлуулалт, ашиг, харилцагчийн бодит дата нэг дэлгэцэд" : section === "security" ? "Admin аудит лог, нэвтрэлтийн түүх, Honeybadger алдааны хяналт" : section === "integrations" ? "QPay, И-баримт, StorePay, карт, хүргэлтийн үйлчилгээ тохируулах" : "Шинэ хэрэглэгчийг урих болон staff/admin эрх удирдах"}</p></div>
               <div className="flex flex-wrap items-center gap-2">
                 {section === "products" && <>
                   <button type="button" onClick={() => setShowProductExport(current => !current)} className="inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-4 py-3 text-xs font-bold text-[#57585e] transition hover:-translate-y-0.5 hover:border-[#df1f3d] hover:text-[#df1f3d] active:scale-[.97]"><Download size={15} />Экспорт</button>
@@ -590,7 +599,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
                   <button type="button" onClick={() => openProductComposer()} className="inline-flex items-center justify-center gap-2 rounded-full bg-[#df1f3d] px-5 py-3 text-xs font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97]"><PackagePlus size={16} />Бүтээгдэхүүн нэмэх</button>
                   <AdminProductImportModal open={showProductImport} onOpenChange={setShowProductImport} />
                 </>}
-                {section !== "dashboard" && section !== "posts" && section !== "reviews" && section !== "routines" && section !== "promotions" && section !== "calendar" && section !== "discountCodes" && section !== "brands" && section !== "media" && section !== "campaigns" && section !== "security" && section !== "integrations" && <label className="flex h-10 items-center gap-2 rounded-full border border-black/10 bg-[#fffdf9] px-4"><Search size={15} className="text-[#85868a]" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={section === "users" ? "Нэр эсвэл имэйл хайх" : section === "orders" ? "Дугаар, хэрэглэгч, утас хайх" : "Нэр, SKU хайх"} className="w-full bg-transparent text-xs outline-none" /></label>}
+                {section !== "dashboard" && section !== "posts" && section !== "reviews" && section !== "routines" && section !== "promotions" && section !== "calendar" && section !== "discountCodes" && section !== "brands" && section !== "branches" && section !== "pos" && section !== "media" && section !== "campaigns" && section !== "storeSettings" && section !== "security" && section !== "integrations" && <label className="flex h-10 items-center gap-2 rounded-full border border-black/10 bg-[#fffdf9] px-4"><Search size={15} className="text-[#85868a]" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={section === "users" ? "Нэр эсвэл имэйл хайх" : section === "orders" ? "Дугаар, хэрэглэгч, утас хайх" : "Нэр, SKU хайх"} className="w-full bg-transparent text-xs outline-none" /></label>}
               </div>
             </div>
             {section === "dashboard" && <AdminDashboardHome preview={preview} canSeeFinancials={canSeeFinancials} canSeeAuditTrail={canSeeAuditTrail} onNavigate={target => { setSection(target); setQuery(""); }} />}
@@ -608,8 +617,13 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
             {section === "discountCodes" && preview && <div className="rounded-3xl bg-[#f8f5ef] p-8 text-center text-sm text-[#707176]">Preview горимд хямдралын код удирдлага харагдахгүй.</div>}
             {section === "brands" && !preview && <AdminBrandsPanel />}
             {section === "brands" && preview && <div className="rounded-3xl bg-[#f8f5ef] p-8 text-center text-sm text-[#707176]">Preview горимд Топ брэнд удирдлага харагдахгүй.</div>}
+            {section === "branches" && !preview && <AdminBranchesPanel />}
+            {section === "branches" && preview && <div className="rounded-3xl bg-[#f8f5ef] p-8 text-center text-sm text-[#707176]">Preview горимд салбарын удирдлага харагдахгүй.</div>}
+            {section === "pos" && !preview && <AdminPosPanel />}
+            {section === "pos" && preview && <div className="rounded-3xl bg-[#f8f5ef] p-8 text-center text-sm text-[#707176]">Preview горимд дэлгүүрийн худалдаа харагдахгүй.</div>}
             {section === "campaigns" && !preview && <AdminCampaignsPanel />}
             {section === "campaigns" && preview && <div className="rounded-3xl bg-[#f8f5ef] p-8 text-center text-sm text-[#707176]">Preview горимд кампанит ажил харагдахгүй.</div>}
+            {section === "storeSettings" && <AdminStoreSettingsPanel preview={preview} />}
             {section === "integrations" && !preview && <AdminIntegrationsPanel />}
             {section === "integrations" && preview && <div className="rounded-3xl bg-[#f8f5ef] p-8 text-center text-sm text-[#707176]">Preview горимд интеграцийн тохиргоо харагдахгүй.</div>}
             {section === "analytics" && !preview && <AdminAnalyticsPanel />}
@@ -678,7 +692,13 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
                 only staff-access control, full width. Утас олдохгүй бол
                 "Дэлгэрэнгүй" цонхны (AdminUserDetailDrawer) шинэ утас засах
                 хэрэгслээр (recovery path) нэмнэ. */}
-            {section === "users" && <section className="mt-7 rounded-3xl bg-[#f8f5ef] p-5">
+            {/* "Controls everything" admin overhaul (2026-09-08, Phase H):
+                Users is now finance-reachable too (usersReadProcedure), but
+                admin.updateUserRole stays adminProcedure-only -- gated here
+                so finance never sees an interactive role dropdown that
+                would just 403 on click (same class of bug as the Kanban
+                board's fulfilment dropdown earlier in this overhaul). */}
+            {section === "users" && role === "admin" && <section className="mt-7 rounded-3xl bg-[#f8f5ef] p-5">
               <p className="text-[10px] font-extrabold tracking-[.14em] text-[#3970a7]">ROLE MANAGEMENT</p>
               <p className="mt-2 text-xs leading-5 text-[#707176]">Одоо бүртгэлтэй хэрэглэгчийн эрхийг эндээс шууд өөрчилнө — шинэ ажилтныг урих шаардлагагүй, тухайн хүн эхлээд өөрөө утасны дугаараа ашиглан бүртгүүлсэн байх ёстой. Админ эрх нь каталог, захиалга, хэрэглэгчийн эрхийг удирдах боломж олгоно. Өөрийн эрхийг энэ дэлгэцээс бууруулахгүй.</p>
               <div className="mt-4 grid gap-2">{filteredUsers.map(user => <div key={user.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white px-3 py-3"><div className="min-w-0"><strong className="block truncate text-xs">{user.name ?? user.phone ?? user.email ?? "Хэрэглэгч"}</strong><span className="block truncate text-[11px] text-[#77787d]">{user.phone ?? "Утасгүй"}</span></div>{preview ? <span className="text-xs font-bold">{roleLabel(user.role)}</span> : <select value={user.role} disabled={isUserBusy} onChange={event => changeUserRole(user.id, event.target.value as "user" | "staff" | "finance" | "marketing" | "warehouse" | "admin")} className="h-9 rounded-lg border border-black/10 bg-white px-2 text-xs font-bold outline-none focus:border-[#df1f3d]"><option value="user">User</option><option value="staff">Staff</option><option value="finance">Finance</option><option value="marketing">Marketing</option><option value="warehouse">Warehouse</option><option value="admin">Admin</option></select>}</div>)}</div>
@@ -719,7 +739,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
           </section>
         </div>
       </div>
-      {selectedUserId !== null && <AdminUserDetailDrawer userId={selectedUserId} onClose={() => setSelectedUserId(null)} />}
+      {selectedUserId !== null && <AdminUserDetailDrawer userId={selectedUserId} role={role} onClose={() => setSelectedUserId(null)} />}
     </div>
   );
 }

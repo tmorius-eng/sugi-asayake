@@ -127,6 +127,23 @@ export const ordersReadProcedure = protectedProcedure.use(({ ctx, next }) => {
   return next({ ctx });
 });
 
+// "Controls everything" admin overhaul (2026-09-08, Phase H): the exact
+// same shape of gap ordersReadProcedure above documents and fixes --
+// adjustStoreCredit was scoped financeProcedure (a real money decision,
+// same tier as refundOrder), but the Users list/detail reads it depends on
+// (to find the customer to credit in the first place) were adminProcedure-
+// only, which would have left finance able to call adjustStoreCredit but
+// never able to reach a user to call it on. Writes (suspend/unsuspend,
+// role changes, phone edits, the loyalty-adjustment bridge) stay
+// adminProcedure-only -- this never grants finance a way to change a user
+// account, only to read it.
+export const usersReadProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role !== "admin" && ctx.user.role !== "finance") {
+    throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+  }
+  return next({ ctx });
+});
+
 function requestKey(ctx: TrpcContext): string {
   return ctx.req.ip || ctx.req.socket.remoteAddress || "unknown";
 }

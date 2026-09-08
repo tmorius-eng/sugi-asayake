@@ -1,10 +1,10 @@
 import { randomBytes } from "node:crypto";
-import { and, asc, desc, eq, gte, inArray, isNull, like, lt, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lt, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { adminAuditLogs, cartItems, carts, discountCodes, featuredBrands, InsertProduct, InsertProductCategory, InsertUser, integrationConfigs, loginAttempts, marketingSpend, mediaLibrary, orderItems, orders, paymentAttempts, phoneVerificationSessions, postCategories, postCategoryLinks, posts, postTagLinks, postTags, productCategories, productReviews, productVariants, products, routines, routineSteps, siteMedia, siteText, sitePromotions, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
-import { UB_DELIVERY_FEE_MNT } from "../shared/const";
+import { adminAuditLogs, branches, branchStock, cartItems, carts, discountCodes, featuredBrands, InsertProduct, InsertProductCategory, InsertUser, integrationConfigs, loginAttempts, marketingSpend, mediaLibrary, orderItems, orders, paymentAttempts, phoneVerificationSessions, postCategories, postCategoryLinks, posts, postTagLinks, postTags, productCategories, productReviews, productVariants, products, routines, routineSteps, scheduledJobRuns, siteMedia, siteText, sitePromotions, storeCreditLedger, storeSettings, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
 import { slugify } from "../shared/slugify";
 import { guessDistrictFromAddress, type UbDistrict } from "../shared/districts";
+import { getStoreSettingSlot, type StoreSettingKey } from "../shared/store-settings";
 import { decryptJson, encryptJson } from "./_core/crypto";
 import { sqlQueryLogger } from "./_core/sqlQueryLog";
 import { ENV } from './_core/env';
@@ -1385,6 +1385,13 @@ export async function createOrderFromActiveCart(input: {
   trafficSource?: string | null;
   deviceType?: "mobile" | "tablet" | "desktop" | "unknown";
   visitorSessionId?: number | null;
+  // "Controls everything" admin overhaul (2026-09-08, Phase I): how much of
+  // the customer's own store credit balance they opted to apply, requested
+  // by the client -- re-validated against their REAL balance below, never
+  // trusted as-is (same "never trust a client-supplied amount" discipline
+  // as couponCode above). Guests (no owner.userId) can never have a
+  // balance, so this is silently ignored for them rather than erroring.
+  applyStoreCreditMnt?: number | null;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
@@ -1392,9 +1399,48 @@ export async function createOrderFromActiveCart(input: {
   if (!cart?.items.length) throw new Error("Your cart is empty.");
   const availabilityFailure = getInventoryReservationFailure(cart.items);
   if (availabilityFailure) throw new Error(availabilityFailure);
+  // "Controls everything" admin overhaul (2026-09-08, Phase J/L): validated
+  // against the real, live branches table here (the actual authority),
+  // rather than a hardcoded zod enum in the router -- the exact class of
+  // bug that used to make branch 04 unselectable (it existed in
+  // locations-data.ts's array but not in the router's separate, stale
+  // 3-branch enum). Same "never trust a client string, check it against
+  // real DB state" discipline as couponCode above. Also resolves WHICH
+  // branch's shelf this order actually draws from (Phase L: per-branch
+  // stock, not one shared global pool) -- store_pickup draws from the
+  // customer's chosen branch, ub_delivery from whichever branch is
+  // isFulfillmentDefault right now. Captured as a real id (fulfillingBranchId,
+  // set on the order below) rather than re-derived later, so a future
+  // change to which branch is the default never misattributes an already-
+  // placed order's stock effect.
+  const activeBranchesForOrder = await getActiveBranches();
+  let fulfillingBranchId: number | null = null;
+  if (input.deliveryMethod === "store_pickup") {
+    const matchedBranch = input.pickupBranch ? activeBranchesForOrder.find(branch => branch.name === input.pickupBranch) : undefined;
+    if (!matchedBranch) throw new Error("Select a valid SUGI branch for store pickup.");
+    fulfillingBranchId = matchedBranch.id;
+  } else {
+    const fulfillmentBranch = activeBranchesForOrder.find(branch => branch.isFulfillmentDefault);
+    if (!fulfillmentBranch) throw new Error("No fulfilment branch is configured. Please contact support.");
+    fulfillingBranchId = fulfillmentBranch.id;
+  }
 
   const subtotalMnt = cart.items.reduce((sum, item) => sum + item.priceMnt * item.quantity, 0);
-  const deliveryFeeMnt = input.deliveryMethod === "ub_delivery" ? UB_DELIVERY_FEE_MNT : 0;
+  // "Controls everything" admin overhaul (2026-09-08, Phase B): both numbers
+  // now come from store_settings (admin-editable), falling back to today's
+  // hardcoded UB_DELIVERY_FEE_MNT/no-threshold behavior when unset -- this
+  // is the one authoritative place the actual charge is computed (Checkout.tsx
+  // only ever displays a preview of this same logic, never the source of
+  // truth). Free-shipping threshold checks the pre-discount subtotal, the
+  // conventional "order amount" a shopper compares against a free-shipping
+  // banner -- not the post-discount payable total.
+  const [deliveryFeeUbMnt, freeShippingThresholdMnt] = await Promise.all([
+    getStoreSettingNumber("delivery-fee-ub-mnt"),
+    getStoreSettingNumber("free-shipping-threshold-mnt"),
+  ]);
+  const deliveryFeeMnt = input.deliveryMethod === "ub_delivery"
+    ? (freeShippingThresholdMnt > 0 && subtotalMnt >= freeShippingThresholdMnt ? 0 : deliveryFeeUbMnt)
+    : 0;
   // PREMIUM-FEATURES.md TIER 4: computed from the cart's real contents right
   // now, not a client-supplied amount — see getApplicableRoutineDiscount.
   const routineDiscount = await getApplicableRoutineDiscount(cart.items);
@@ -1418,35 +1464,27 @@ export async function createOrderFromActiveCart(input: {
   // one — see shared/districts.ts and scripts/backfill-order-districts.ts.
   const deliveryDistrict = input.deliveryMethod === "ub_delivery" ? (input.district ?? guessDistrictFromAddress(input.deliveryAddress)) : null;
   const orderNumber = `SA${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+  const payableBeforeCreditMnt = subtotalMnt + deliveryFeeMnt - discountMnt - couponDiscountMnt - loyaltyDiscountMnt;
+  // Phase I: credit is cash-equivalent, so it's applied LAST against the
+  // already-discounted total, never stacked into the routine/coupon/loyalty
+  // percentage math above. Capped at both the real balance (read fresh here,
+  // not trusted from the client) and the payable total (can never make
+  // totalMnt negative). The atomic guarded UPDATE inside the transaction
+  // below is the actual race-proof enforcement, matching every other
+  // decrement in this function -- this is only an optimistic pre-check.
+  let storeCreditAppliedMnt = 0;
+  if (input.owner.userId && input.applyStoreCreditMnt && input.applyStoreCreditMnt > 0) {
+    const [creditRow] = await db.select({ storeCreditMnt: users.storeCreditMnt }).from(users).where(eq(users.id, input.owner.userId)).limit(1);
+    storeCreditAppliedMnt = Math.max(0, Math.min(input.applyStoreCreditMnt, creditRow?.storeCreditMnt ?? 0, payableBeforeCreditMnt));
+  }
   let orderId = 0;
   await db.transaction(async tx => {
     for (const item of cart.items) {
-      // PHASE 2 of product variants: stock lives on the variant row now, not
-      // the product row -- same atomic WHERE-guard technique as before, just
-      // keyed by variantId so two different options of the same product
-      // decrement independently.
-      //
-      // Audit finding BUG-004 (2026-09-06): this guard used to only check
-      // stockQuantity. addCartItem checks products.isPublished at
-      // add-to-cart time, but nothing re-checked it here at the actual
-      // moment of purchase -- so a product an admin unpublished (recalled,
-      // mispriced, discontinued) AFTER a shopper already added it to their
-      // cart could still be bought successfully, defeating the entire point
-      // of unpublishing it. The EXISTS subquery below folds that check into
-      // the same atomic UPDATE, so an unpublish takes effect immediately for
-      // any pending cart, without a second round trip or losing the
-      // race-proof affectedRows guard.
-      const update = await tx.update(productVariants).set({
-        stockQuantity: sql`${productVariants.stockQuantity} - ${item.quantity}`,
-        updatedAt: new Date(),
-      }).where(and(
-        eq(productVariants.id, item.variantId),
-        gte(productVariants.stockQuantity, item.quantity),
-        sql`EXISTS (SELECT 1 FROM ${products} WHERE ${products.id} = ${productVariants.productId} AND ${products.isPublished} = TRUE)`,
-      ));
-      if (Number(update[0].affectedRows ?? 0) !== 1) {
-        throw new Error(`${item.name} is no longer available in the requested quantity. Please refresh your cart.`);
-      }
+      // "Controls everything" admin overhaul (2026-09-08, Phase L): decrements
+      // the SPECIFIC fulfilling branch's shelf now, not one shared global
+      // pool -- see decrementBranchStock's own doc-comment for the full
+      // reasoning (race-proof guard, legacy fallback, isPublished check).
+      await decrementBranchStock(tx, fulfillingBranchId, item.variantId, item.quantity, { requirePublished: true, itemLabel: item.name });
     }
     if (couponResult) {
       // Same WHERE-guard technique as the stock decrement above: atomic, so
@@ -1468,6 +1506,7 @@ export async function createOrderFromActiveCart(input: {
       deliveryAddress: input.deliveryAddress ?? null,
       deliveryDistrict,
       pickupBranch: input.pickupBranch ?? null,
+      fulfillingBranchId,
       customerName: input.customerName,
       customerPhone: input.customerPhone,
       customerEmail: input.customerEmail ?? null,
@@ -1485,7 +1524,8 @@ export async function createOrderFromActiveCart(input: {
       couponDiscountMnt,
       loyaltyDiscountMnt,
       appliedLoyaltyTierName: loyaltyDiscount?.tierName ?? null,
-      totalMnt: subtotalMnt + deliveryFeeMnt - discountMnt - couponDiscountMnt - loyaltyDiscountMnt,
+      storeCreditAppliedMnt,
+      totalMnt: payableBeforeCreditMnt - storeCreditAppliedMnt,
     });
     orderId = Number(inserted[0].insertId);
     await tx.insert(orderItems).values(cart.items.map(item => ({
@@ -1500,6 +1540,23 @@ export async function createOrderFromActiveCart(input: {
       unitPriceMnt: item.priceMnt,
       quantity: item.quantity,
     })));
+    if (storeCreditAppliedMnt > 0) {
+      // Same WHERE-guard + affectedRows race-proof idiom as the stock/coupon
+      // decrements above -- if a concurrent spend already ate into this
+      // balance since the optimistic pre-check, the whole order (stock
+      // included) rolls back via the thrown error, same as losing the
+      // coupon race above.
+      const creditUpdate = await tx.update(users)
+        .set({ storeCreditMnt: sql`${users.storeCreditMnt} - ${storeCreditAppliedMnt}`, updatedAt: new Date() })
+        .where(and(eq(users.id, input.owner.userId!), gte(users.storeCreditMnt, storeCreditAppliedMnt)));
+      if (Number(creditUpdate[0].affectedRows ?? 0) !== 1) {
+        throw new Error("Дэлгүүрийн зээлийн үлдэгдэл өөрчлөгдсөн байна. Захиалгаа дахин баталгаажуулна уу.");
+      }
+      await tx.insert(storeCreditLedger).values({
+        userId: input.owner.userId!, deltaMnt: -storeCreditAppliedMnt,
+        reason: `Захиалга ${orderNumber}-д зарцуулсан`, actorUserId: null, orderId,
+      });
+    }
     await tx.update(carts).set({ status: "converted", updatedAt: new Date() }).where(eq(carts.id, cart.id));
   });
 
@@ -1509,6 +1566,129 @@ export async function createOrderFromActiveCart(input: {
   // so the caller (checkout.createOrder) can build a confirmation email
   // without a second round trip.
   return { ...order[0], items: cart.items.map(item => ({ name: item.name, quantity: item.quantity, priceMnt: item.priceMnt, attributesJson: item.attributesJson })), routineName: routineDiscount?.routineName ?? null };
+}
+
+/**
+ * "Controls everything" admin overhaul (2026-09-08, Phase M): the POS
+ * in-person-sale tool -- creates a REAL, queryable order (paymentStatus
+ * "paid" the instant it's recorded, no separate confirmation step; a
+ * physical sale is already complete by the time a staff member enters it)
+ * and decrements the exact branch's stock via the same shared
+ * decrementBranchStock helper checkout uses, just with requirePublished:
+ * false (a shelf item's online-publish flag is irrelevant to an in-store
+ * sale -- a staff member scanning a real barcode off a real shelf is its
+ * own proof the item exists and is for sale). Unlike the old
+ * `users.loyaltyManualAdjustmentMnt` bridge (PREMIUM-FEATURES.md:65 -- a
+ * single lump-sum number with no line items, no SKUs, no stock effect),
+ * this creates real order/order_items rows with real SKUs and a real
+ * stock effect, going forward superseding the need for that bridge for
+ * NEW in-store purchases -- it stays untouched for existing/historical
+ * data. No manual price override in v1 -- always the variant's real, current
+ * priceMnt (never a client-supplied number), same "never trust a client
+ * amount" discipline as checkout's own discounts/credit.
+ */
+export type InStoreSaleInput = {
+  branchId: number;
+  items: { variantId: number; quantity: number }[];
+  userId?: number | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+};
+
+export async function recordInStoreSale(input: InStoreSaleInput) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  if (!input.items.length) throw new Error("Add at least one item to record a sale.");
+  for (const item of input.items) {
+    if (item.quantity < 1) throw new Error("Quantity must be at least 1 for every item.");
+  }
+
+  const branchRows = await db.select().from(branches).where(and(eq(branches.id, input.branchId), eq(branches.isActive, true))).limit(1);
+  if (!branchRows[0]) throw new Error("Select a valid, active branch for this sale.");
+
+  // Real, current price/name/sku -- never trusts a client-supplied amount.
+  const variantIds = input.items.map(item => item.variantId);
+  const variantRows = await db.select({
+    id: productVariants.id, priceMnt: productVariants.priceMnt, sku: productVariants.sku,
+    productId: productVariants.productId, productName: products.name,
+  }).from(productVariants).innerJoin(products, eq(products.id, productVariants.productId))
+    .where(inArray(productVariants.id, variantIds));
+  const variantsById = new Map(variantRows.map(row => [row.id, row]));
+  for (const item of input.items) {
+    if (!variantsById.has(item.variantId)) throw new Error("One of the selected products no longer exists.");
+  }
+
+  const subtotalMnt = input.items.reduce((sum, item) => sum + variantsById.get(item.variantId)!.priceMnt * item.quantity, 0);
+  const orderNumber = `SA${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+
+  let orderId = 0;
+  await db.transaction(async tx => {
+    for (const item of input.items) {
+      const variant = variantsById.get(item.variantId)!;
+      await decrementBranchStock(tx, input.branchId, item.variantId, item.quantity, { requirePublished: false, itemLabel: variant.productName });
+    }
+    const inserted = await tx.insert(orders).values({
+      userId: input.userId ?? null,
+      orderNumber,
+      status: "completed",
+      paymentMethod: "in_store",
+      paymentStatus: "paid",
+      deliveryMethod: "store_pickup",
+      salesChannel: "in_store",
+      pickupBranch: branchRows[0].name,
+      fulfillingBranchId: input.branchId,
+      // A register sale often has no captured contact info at all -- these
+      // placeholders keep the NOT NULL columns honest without inventing a
+      // fake person; a real name/phone (or userId) is used whenever given.
+      customerName: input.customerName?.trim() || "Дэлгүүрийн худалдан авагч",
+      customerPhone: input.customerPhone?.trim() || "-",
+      subtotalMnt,
+      totalMnt: subtotalMnt,
+    });
+    orderId = Number(inserted[0].insertId);
+    await tx.insert(orderItems).values(input.items.map(item => {
+      const variant = variantsById.get(item.variantId)!;
+      return {
+        orderId, productId: variant.productId, variantId: item.variantId,
+        productName: variant.productName, sku: variant.sku,
+        unitPriceMnt: variant.priceMnt, quantity: item.quantity,
+      };
+    }));
+  });
+
+  const order = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  return order[0];
+}
+
+/**
+ * "Controls everything" admin overhaul (2026-09-08, Phase M): the POS
+ * line-item composer's search -- reuses the same name/SKU LIKE-search
+ * shape this codebase already uses elsewhere (admin.search's product
+ * lookup), scoped to variants (not products) since a POS sale is rung up
+ * by real SKU, and joined against the SPECIFIC branch being sold from so a
+ * cashier can see real shelf stock there while adding items (0 for a
+ * variant this branch has no branch_stock row for, same LEFT JOIN
+ * discipline as getBranchStockForVariant).
+ */
+export async function searchVariantsForBranch(branchId: number, search: string) {
+  const db = await getDb();
+  if (!db) return [];
+  const trimmed = search.trim();
+  const term = `%${trimmed}%`;
+  return db.select({
+    variantId: productVariants.id,
+    productId: productVariants.productId,
+    productName: products.name,
+    sku: productVariants.sku,
+    priceMnt: productVariants.priceMnt,
+    attributesJson: productVariants.attributesJson,
+    stockAtBranch: sql<number>`COALESCE(${branchStock.stockQuantity}, 0)`,
+  }).from(productVariants)
+    .innerJoin(products, eq(products.id, productVariants.productId))
+    .leftJoin(branchStock, and(eq(branchStock.branchId, branchId), eq(branchStock.variantId, productVariants.id)))
+    .where(trimmed ? or(like(products.name, term), like(productVariants.sku, term)) : undefined)
+    .orderBy(asc(products.name))
+    .limit(30);
 }
 
 /**
@@ -2008,6 +2188,25 @@ export async function getAdminOrders(limit = 200) {
 
 const LOW_STOCK_THRESHOLD = 5;
 
+/**
+ * "Controls everything" admin overhaul (2026-09-08, Phase F): extracted out
+ * of getAdminDashboardSummary's own inline query so the dashboard's
+ * "НӨӨЦ ДУУСЧ БАЙНА" widget and the new low-stock owner-digest job
+ * (server/automation.ts) read the exact same canonical query -- no risk of
+ * the two silently drifting apart (e.g. a future edit to one's threshold or
+ * published-only filter not being mirrored in the other).
+ */
+export async function getLowStockProducts() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    id: products.id,
+    name: products.name,
+    sku: products.sku,
+    stockQuantity: products.stockQuantity,
+  }).from(products).where(and(eq(products.isPublished, true), sql`${products.stockQuantity} <= ${LOW_STOCK_THRESHOLD}`)).orderBy(asc(products.stockQuantity)).limit(10);
+}
+
 export async function getAdminDashboardSummary() {
   const db = await getDb();
   if (!db) {
@@ -2040,12 +2239,7 @@ export async function getAdminDashboardSummary() {
       paymentStatus: orders.paymentStatus,
       createdAt: orders.createdAt,
     }).from(orders).orderBy(desc(orders.createdAt)).limit(10),
-    db.select({
-      id: products.id,
-      name: products.name,
-      sku: products.sku,
-      stockQuantity: products.stockQuantity,
-    }).from(products).where(and(eq(products.isPublished, true), sql`${products.stockQuantity} <= ${LOW_STOCK_THRESHOLD}`)).orderBy(asc(products.stockQuantity)).limit(10),
+    getLowStockProducts(),
     db.select({
       id: paymentAttempts.id,
       orderId: paymentAttempts.orderId,
@@ -2132,6 +2326,88 @@ export type FulfilmentStatus = keyof typeof orderStatusRank | "cancelled" | "ret
 // restoreStockForOrder below can be extracted out of updateAdminOrder's
 // inline transaction body and reused by refundOrder's own transaction.
 type OrderTx = Parameters<Parameters<NonNullable<Awaited<ReturnType<typeof getDb>>>["transaction"]>[0]>[0];
+// Accepted by every branch-stock helper below so they work identically
+// standalone (a plain getDb() connection) or inside an existing
+// db.transaction callback (OrderTx) -- both expose the same query-builder
+// shape, so one implementation covers both without duplicating it.
+type DbOrTx = OrderTx | NonNullable<Awaited<ReturnType<typeof getDb>>>;
+
+/**
+ * "Controls everything" admin overhaul (2026-09-08, Phase K/L): the one
+ * place that keeps 3 numbers honest after ANY branch_stock write --
+ * productVariants.stockQuantity (a derived, cached SUM across every
+ * branch -- every existing reader keeps working off this one column
+ * unmodified) and, when this variant is its product's ONLY one,
+ * products.stockQuantity too (mirrors syncSoleVariantFromProduct's own
+ * established scope -- catalog list/ProductDetail/recommendation-candidate
+ * queries read THAT column directly, never joining to variants, so it must
+ * reflect the real post-sale number just as promptly). Every write path
+ * that touches branch_stock (checkout's decrement, cancellation's restore,
+ * the admin per-branch editor, POS) calls this immediately after.
+ */
+async function recomputeVariantStockTotal(db: DbOrTx, variantId: number) {
+  const [totalRow] = await db.select({ total: sql<number>`COALESCE(SUM(${branchStock.stockQuantity}), 0)` }).from(branchStock).where(eq(branchStock.variantId, variantId));
+  const total = Number(totalRow?.total ?? 0);
+  await db.update(productVariants).set({ stockQuantity: total, updatedAt: new Date() }).where(eq(productVariants.id, variantId));
+  const [variantRow] = await db.select({ productId: productVariants.productId }).from(productVariants).where(eq(productVariants.id, variantId)).limit(1);
+  if (variantRow) {
+    const siblings = await db.select({ id: productVariants.id }).from(productVariants).where(eq(productVariants.productId, variantRow.productId));
+    if (siblings.length === 1) {
+      await db.update(products).set({ stockQuantity: total, updatedAt: new Date() }).where(eq(products.id, variantRow.productId));
+    }
+  }
+  return total;
+}
+
+/**
+ * "Controls everything" admin overhaul (2026-09-08, Phase L/M): the one
+ * atomic, race-proof branch-stock decrement -- shared by checkout
+ * (createOrderFromActiveCart, requirePublished: true -- see BUG-004) and
+ * the POS in-person-sale tool (recordInStoreSale, requirePublished: false
+ * -- a physical shelf item's online-publish flag is irrelevant to a
+ * register sale; a staff member scanning a real barcode off a real shelf
+ * is its own proof the item exists and is for sale).
+ *
+ * A variant only has branch_stock rows once it's gone through the admin
+ * write path (createAdminProductVariant/backfill-branch-stock.ts) -- one
+ * inserted directly (a test fixture, or a not-yet-migrated environment
+ * with no branches configured at all) has none. hasPerBranchTracking below
+ * falls back to the pre-Phase-L aggregate decrement for exactly that case,
+ * so this never breaks a variant that was never enrolled in per-branch
+ * stock. MySQL forbids "UPDATE x ... WHERE EXISTS (SELECT ... FROM x ...)"
+ * -- you can't target a table for update while also selecting FROM that
+ * same table in a subquery (error 1093) -- so the two branches below need
+ * their own EXISTS shape: the branch_stock UPDATE can safely subquery
+ * productVariants (a different table); the legacy productVariants UPDATE
+ * has to subquery only `products`.
+ */
+async function decrementBranchStock(tx: OrderTx, branchId: number, variantId: number, quantity: number, options: { requirePublished: boolean; itemLabel: string }) {
+  const hasPerBranchTracking = (await tx.select({ id: branchStock.id }).from(branchStock).where(eq(branchStock.variantId, variantId)).limit(1)).length > 0;
+  const update = hasPerBranchTracking
+    ? await tx.update(branchStock).set({
+        stockQuantity: sql`${branchStock.stockQuantity} - ${quantity}`,
+        updatedAt: new Date(),
+      }).where(and(
+        eq(branchStock.branchId, branchId),
+        eq(branchStock.variantId, variantId),
+        gte(branchStock.stockQuantity, quantity),
+        options.requirePublished ? sql`EXISTS (SELECT 1 FROM ${productVariants} JOIN ${products} ON ${products.id} = ${productVariants.productId} WHERE ${productVariants.id} = ${branchStock.variantId} AND ${products.isPublished} = TRUE)` : undefined,
+      ))
+    : await tx.update(productVariants).set({
+        stockQuantity: sql`${productVariants.stockQuantity} - ${quantity}`,
+        updatedAt: new Date(),
+      }).where(and(
+        eq(productVariants.id, variantId),
+        gte(productVariants.stockQuantity, quantity),
+        options.requirePublished ? sql`EXISTS (SELECT 1 FROM ${products} WHERE ${products.id} = ${productVariants.productId} AND ${products.isPublished} = TRUE)` : undefined,
+      ));
+  if (Number(update[0].affectedRows ?? 0) !== 1) {
+    throw new Error(hasPerBranchTracking
+      ? `${options.itemLabel} is no longer available in the requested quantity at the selected branch. Please refresh your cart or choose a different branch.`
+      : `${options.itemLabel} is no longer available in the requested quantity. Please refresh your cart.`);
+  }
+  if (hasPerBranchTracking) await recomputeVariantStockTotal(tx, variantId);
+}
 
 // Extracted from updateAdminOrder's inline loop (Phase E) so refundOrder can
 // reuse the exact same restock logic when an admin chooses to restock a
@@ -2140,12 +2416,44 @@ type OrderTx = Parameters<Parameters<NonNullable<Awaited<ReturnType<typeof getDb
 // -- a historical order placed before variants existed has variantId null
 // (best-effort migration backfill couldn't find one), in which case there's
 // nothing to safely restore.
+//
+// Phase L: restores to the SPECIFIC branch this order actually drew from
+// (orders.fulfillingBranchId, captured once at order-creation time) rather
+// than re-deriving "whichever branch is currently the default" -- an admin
+// could reassign the fulfillment-default branch between this order's
+// placement and its later cancellation, and re-deriving at cancel-time
+// would then credit back the wrong branch's shelf. Falls back to crediting
+// the aggregate directly when EITHER there's no real branch to credit
+// (fulfillingBranchId null -- an order placed before this column existed,
+// or whose branch was since deleted, FK sets it null via onDelete: "set
+// null") OR this variant was never enrolled in per-branch tracking in the
+// first place (symmetric with createOrderFromActiveCart's own
+// hasPerBranchTracking check -- if the ORIGINAL decrement fell back to the
+// legacy aggregate path because no branch_stock rows existed for this
+// variant, restoring via branch_stock here would credit a row that was
+// never actually debited, inflating stock).
 async function restoreStockForOrder(tx: OrderTx, orderId: number) {
+  const [orderRow] = await tx.select({ fulfillingBranchId: orders.fulfillingBranchId }).from(orders).where(eq(orders.id, orderId)).limit(1);
   const lineItems = await tx.select({ variantId: orderItems.variantId, quantity: orderItems.quantity }).from(orderItems).where(eq(orderItems.orderId, orderId));
+  const affectedVariantIds = new Set<number>();
   for (const item of lineItems) {
     if (item.variantId === null) continue;
-    await tx.update(productVariants).set({ stockQuantity: sql`${productVariants.stockQuantity} + ${item.quantity}`, updatedAt: new Date() }).where(eq(productVariants.id, item.variantId));
+    const hasPerBranchTracking = (await tx.select({ id: branchStock.id }).from(branchStock).where(eq(branchStock.variantId, item.variantId)).limit(1)).length > 0;
+    if (orderRow?.fulfillingBranchId && hasPerBranchTracking) {
+      const updated = await tx.update(branchStock).set({ stockQuantity: sql`${branchStock.stockQuantity} + ${item.quantity}`, updatedAt: new Date() }).where(and(eq(branchStock.branchId, orderRow.fulfillingBranchId), eq(branchStock.variantId, item.variantId)));
+      if (Number(updated[0].affectedRows ?? 0) === 0) {
+        // No branch_stock row exists yet for this specific (branch, variant)
+        // pair (e.g. this branch was created after the variant already had
+        // rows at other branches) -- insert one rather than silently losing
+        // the restored quantity.
+        await tx.insert(branchStock).values({ branchId: orderRow.fulfillingBranchId, variantId: item.variantId, stockQuantity: item.quantity });
+      }
+      affectedVariantIds.add(item.variantId);
+    } else {
+      await tx.update(productVariants).set({ stockQuantity: sql`${productVariants.stockQuantity} + ${item.quantity}`, updatedAt: new Date() }).where(eq(productVariants.id, item.variantId));
+    }
   }
+  for (const variantId of Array.from(affectedVariantIds)) await recomputeVariantStockTotal(tx, variantId);
 }
 
 export async function updateAdminOrder(input: { id: number; status?: FulfilmentStatus; deliveryTrackingRef?: string | null; adminNote?: string | null }) {
@@ -2594,6 +2902,79 @@ export async function deleteFeaturedBrand(id: number) {
   return { id };
 }
 
+/**
+ * "Controls everything" admin overhaul (2026-09-08, Phase J). Same
+ * active-only/sortOrder-ordered shape as getFeaturedBrands, minus that
+ * function's photo-fallback step (a branch's photo is optional decoration,
+ * not the point of the record -- StoreLocatorSection already renders fine
+ * with no photo at all).
+ */
+export async function getActiveBranches() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(branches).where(eq(branches.isActive, true)).orderBy(asc(branches.sortOrder));
+}
+
+export async function getAdminBranches() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(branches).orderBy(asc(branches.sortOrder));
+}
+
+export type BranchWriteInput = {
+  name: string;
+  slug: string;
+  address: string;
+  phone?: string | null;
+  mapUrl?: string | null;
+  photoUrl?: string | null;
+  sortOrder?: number;
+  isActive?: boolean;
+  isFulfillmentDefault?: boolean;
+};
+
+/** At most one branch can be the fulfillment default (Phase L reads exactly
+ *  one row for UB-delivery stock decrements) -- setting one on clears it
+ *  from every other row in the same write, so the admin toggle behaves like
+ *  a radio button, not an independent checkbox per row. */
+async function clearOtherFulfillmentDefaults(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, exceptId?: number) {
+  const condition = exceptId ? and(eq(branches.isFulfillmentDefault, true), sql`${branches.id} <> ${exceptId}`) : eq(branches.isFulfillmentDefault, true);
+  await db.update(branches).set({ isFulfillmentDefault: false, updatedAt: new Date() }).where(condition);
+}
+
+export async function createBranch(input: BranchWriteInput) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const inserted = await db.insert(branches).values({
+    name: input.name, slug: input.slug, address: input.address,
+    phone: input.phone ?? null, mapUrl: input.mapUrl ?? null, photoUrl: input.photoUrl ?? null,
+    sortOrder: input.sortOrder ?? 0, isActive: input.isActive ?? true, isFulfillmentDefault: input.isFulfillmentDefault ?? false,
+  });
+  const id = Number(inserted[0].insertId);
+  if (input.isFulfillmentDefault) await clearOtherFulfillmentDefaults(db, id);
+  const created = await db.select().from(branches).where(eq(branches.id, id)).limit(1);
+  return created[0];
+}
+
+export async function updateBranch(input: { id: number } & Partial<BranchWriteInput>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const existing = await db.select().from(branches).where(eq(branches.id, input.id)).limit(1);
+  if (!existing[0]) throw new Error("Branch not found.");
+  const { id, ...changes } = input;
+  await db.update(branches).set({ ...changes, updatedAt: new Date() }).where(eq(branches.id, id));
+  if (changes.isFulfillmentDefault) await clearOtherFulfillmentDefaults(db, id);
+  const updated = await db.select().from(branches).where(eq(branches.id, id)).limit(1);
+  return updated[0];
+}
+
+export async function deleteBranch(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.delete(branches).where(eq(branches.id, id));
+  return { id };
+}
+
 export async function getSiteMedia() {
   const db = await getDb();
   if (!db) return [];
@@ -2656,6 +3037,171 @@ export async function deleteSiteText(slotKey: string) {
   if (!db) throw new Error("Database is not available");
   await db.delete(siteText).where(eq(siteText.slotKey, slotKey));
   return { slotKey };
+}
+
+/**
+ * "Controls everything" admin overhaul (2026-09-08, Phase A): store_settings
+ * -- same upsert-by-unique-key shape as site_media/site_text above, see
+ * shared/store-settings.ts for the slot registry and drizzle/schema.ts for
+ * the table. `getStoreSettingValue`/`getStoreSettingNumber` are the actual
+ * "DB override, code fallback" read path every consumer (checkout, order
+ * emails) calls -- a row absent for a key is never an error, just the
+ * signal to use that slot's own fallbackValue, identical contract to
+ * site_media/site_text's imageFor()/textFor().
+ */
+export async function getStoreSettings() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({ settingKey: storeSettings.settingKey, settingValue: storeSettings.settingValue, updatedAt: storeSettings.updatedAt })
+    .from(storeSettings)
+    .orderBy(asc(storeSettings.settingKey));
+}
+
+export async function getStoreSettingValue(key: StoreSettingKey): Promise<string> {
+  const db = await getDb();
+  const fallback = getStoreSettingSlot(key).fallbackValue;
+  if (!db) return fallback;
+  const row = await db.select({ settingValue: storeSettings.settingValue }).from(storeSettings).where(eq(storeSettings.settingKey, key)).limit(1);
+  return row[0]?.settingValue ?? fallback;
+}
+
+export async function getStoreSettingNumber(key: StoreSettingKey): Promise<number> {
+  return Number(await getStoreSettingValue(key));
+}
+
+export async function upsertStoreSetting(input: { settingKey: string; settingValue: string; updatedByUserId: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.insert(storeSettings).values({
+    settingKey: input.settingKey,
+    settingValue: input.settingValue,
+    updatedByUserId: input.updatedByUserId,
+  }).onDuplicateKeyUpdate({
+    set: { settingValue: input.settingValue, updatedByUserId: input.updatedByUserId, updatedAt: new Date() },
+  });
+  const updated = await db.select().from(storeSettings).where(eq(storeSettings.settingKey, input.settingKey)).limit(1);
+  return updated[0];
+}
+
+export async function deleteStoreSetting(settingKey: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.delete(storeSettings).where(eq(storeSettings.settingKey, settingKey));
+  return { settingKey };
+}
+
+/**
+ * "Controls everything" admin overhaul (2026-09-08, Phase D): the read/write
+ * pair server/_core/scheduler.ts calls -- kept here rather than having the
+ * scheduler import getDb directly, matching this codebase's own convention
+ * of routing all DB access through named functions in this file (see e.g.
+ * server/_core/index.ts's `dbPing` import).
+ */
+export async function getScheduledJobLastRun(jobName: string): Promise<Date | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const row = await db.select({ lastRunAt: scheduledJobRuns.lastRunAt }).from(scheduledJobRuns).where(eq(scheduledJobRuns.jobName, jobName)).limit(1);
+  return row[0]?.lastRunAt ?? null;
+}
+
+export async function markScheduledJobRun(jobName: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(scheduledJobRuns).values({ jobName, lastRunAt: new Date() }).onDuplicateKeyUpdate({ set: { lastRunAt: new Date() } });
+}
+
+/**
+ * "Controls everything" admin overhaul (2026-09-08, Phase E): the
+ * abandoned-cart reminder job's own query -- reuses the EXACT same
+ * staleness definition server/analytics.ts's getCartAbandonment already
+ * established (item present, 24h+ inactive, not converted), so the
+ * dashboard's abandonment number and what this job actually acts on can
+ * never drift apart. Scoped, honestly, to carts belonging to a REGISTERED,
+ * opted-in user with a real email on file -- a guest cart's `userId` is
+ * null (guest identity is a cookie token, see CartOwner), so the inner join
+ * on `users` already excludes every guest cart without a separate
+ * condition; `reminderSentAt IS NULL` is what keeps a still-abandoned cart
+ * from being reminded twice.
+ */
+export async function getAbandonedCartsNeedingReminder() {
+  const db = await getDb();
+  if (!db) return [];
+  const staleCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  return db
+    .selectDistinct({ cartId: carts.id, userId: users.id, email: users.email, name: users.name })
+    .from(carts)
+    .innerJoin(cartItems, eq(cartItems.cartId, carts.id))
+    .innerJoin(users, eq(users.id, carts.userId))
+    .where(and(
+      eq(carts.status, "active"),
+      lt(carts.updatedAt, staleCutoff),
+      isNull(carts.reminderSentAt),
+      eq(users.emailOptIn, true),
+      isNotNull(users.email),
+    ));
+}
+
+export async function markCartReminderSent(cartId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(carts).set({ reminderSentAt: new Date() }).where(eq(carts.id, cartId));
+}
+
+/**
+ * "Controls everything" admin overhaul (2026-09-08, Phase H/I): the one
+ * write path for store credit -- an admin issuing/adjusting it (Phase H,
+ * `actorUserId` set) and a checkout consuming it (Phase I, `actorUserId`
+ * null, `orderId` set) both call this, so the ledger row and the cached
+ * `users.storeCreditMnt` balance can never drift apart. `deltaMnt` is
+ * signed: positive to add, negative to spend. The atomic `gte` guard below
+ * is the same WHERE-guard + affectedRows race-proof idiom this file already
+ * uses for stock decrements -- `storeCreditMnt >= -deltaMnt` is exactly
+ * `storeCreditMnt + deltaMnt >= 0` rearranged, so a negative delta can never
+ * push the balance below zero even under concurrent spends, and a positive
+ * delta's guard is trivially always true (a balance is never negative to
+ * begin with).
+ */
+export async function adjustStoreCredit(input: { userId: number; deltaMnt: number; reason: string; actorUserId: number | null; orderId?: number | null }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  if (input.deltaMnt === 0) throw new Error("Adjustment amount must not be zero.");
+  return db.transaction(async tx => {
+    const update = await tx.update(users)
+      .set({ storeCreditMnt: sql`${users.storeCreditMnt} + ${input.deltaMnt}`, updatedAt: new Date() })
+      .where(and(eq(users.id, input.userId), gte(users.storeCreditMnt, -input.deltaMnt)));
+    if (Number(update[0].affectedRows ?? 0) !== 1) {
+      throw new Error("Insufficient store credit balance for this adjustment.");
+    }
+    await tx.insert(storeCreditLedger).values({
+      userId: input.userId, deltaMnt: input.deltaMnt, reason: input.reason,
+      actorUserId: input.actorUserId, orderId: input.orderId ?? null,
+    });
+    const [updatedUser] = await tx.select({ storeCreditMnt: users.storeCreditMnt }).from(users).where(eq(users.id, input.userId)).limit(1);
+    return { userId: input.userId, storeCreditMnt: updatedUser?.storeCreditMnt ?? 0 };
+  });
+}
+
+/** Checkout's own "apply my store credit" toggle -- the customer-facing
+ *  read, distinct from getAdminUserDetail's admin-facing one above. */
+export async function getUserStoreCreditBalance(userId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const [row] = await db.select({ storeCreditMnt: users.storeCreditMnt }).from(users).where(eq(users.id, userId)).limit(1);
+  return row?.storeCreditMnt ?? 0;
+}
+
+export async function getStoreCreditLedger(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    id: storeCreditLedger.id, deltaMnt: storeCreditLedger.deltaMnt, reason: storeCreditLedger.reason,
+    actorUserId: storeCreditLedger.actorUserId, actorEmail: users.email, orderId: storeCreditLedger.orderId,
+    createdAt: storeCreditLedger.createdAt,
+  }).from(storeCreditLedger)
+    .leftJoin(users, eq(users.id, storeCreditLedger.actorUserId))
+    .where(eq(storeCreditLedger.userId, userId))
+    .orderBy(desc(storeCreditLedger.createdAt));
 }
 
 /** Tier F: CAC's one input. Same upsert-by-unique-key shape as
@@ -2939,15 +3485,19 @@ export async function createAdminProduct(input: ProductWriteInput) {
     });
     const row = await tx.select().from(products).where(eq(products.slug, input.slug)).limit(1);
     if (row[0]) {
-      await tx.insert(productVariants).values({
+      const insertedVariant = await tx.insert(productVariants).values({
         productId: row[0].id,
         sku: input.sku,
         priceMnt: input.priceMnt,
         compareAtPriceMnt: input.compareAtPriceMnt ?? null,
-        stockQuantity: input.stockQuantity,
+        // Placeholder -- recomputed immediately below from branch_stock
+        // (Phase K/L: seedBranchStockForNewVariant enrolls it there instead
+        // of writing this field directly, same as createAdminProductVariant).
+        stockQuantity: 0,
         imageUrl: input.imageUrl ?? null,
         isDefault: true,
       });
+      await seedBranchStockForNewVariant(tx, Number(insertedVariant[0].insertId), input.stockQuantity);
     }
     return row;
   });
@@ -2972,6 +3522,32 @@ export async function getProductStockQuantity(id: number): Promise<number | null
  * a product-level edit should apply to; the admin manages variants directly
  * at that point via updateAdminProductVariant).
  */
+/**
+ * "Controls everything" admin overhaul (2026-09-08, Phase K/L): the one
+ * write path for "set this variant's stock at the fulfillment-default
+ * branch to exactly N" -- what every pre-existing single-number stock
+ * field (the product form, the variant composer) now means, sugar over the
+ * real per-branch table rather than a competing direct write. Upserts the
+ * branch_stock row (a variant may not have one yet -- e.g. created before
+ * this branch existed) then recomputes the cached total/product mirror.
+ * Falls back to writing the variant's aggregate directly only when NO
+ * branch is marked isFulfillmentDefault at all (broken config -- there's
+ * nowhere real to attribute the number to), matching pre-Phase-K behavior
+ * for that edge case.
+ */
+async function setFulfillmentBranchStock(db: DbOrTx, variantId: number, quantity: number) {
+  const [fulfillmentBranch] = await db.select({ id: branches.id }).from(branches).where(eq(branches.isFulfillmentDefault, true)).limit(1);
+  if (!fulfillmentBranch) {
+    await db.update(productVariants).set({ stockQuantity: quantity, updatedAt: new Date() }).where(eq(productVariants.id, variantId));
+    return;
+  }
+  const updated = await db.update(branchStock).set({ stockQuantity: quantity, updatedAt: new Date() }).where(and(eq(branchStock.branchId, fulfillmentBranch.id), eq(branchStock.variantId, variantId)));
+  if (Number(updated[0].affectedRows ?? 0) === 0) {
+    await db.insert(branchStock).values({ branchId: fulfillmentBranch.id, variantId, stockQuantity: quantity });
+  }
+  await recomputeVariantStockTotal(db, variantId);
+}
+
 async function syncSoleVariantFromProduct(productId: number, changes: { priceMnt?: number; compareAtPriceMnt?: number | null; sku?: string; stockQuantity?: number; imageUrl?: string | null }) {
   const db = await getDb();
   if (!db) return;
@@ -2979,14 +3555,19 @@ async function syncSoleVariantFromProduct(productId: number, changes: { priceMnt
   if (changes.priceMnt !== undefined) patch.priceMnt = changes.priceMnt;
   if (changes.compareAtPriceMnt !== undefined) patch.compareAtPriceMnt = changes.compareAtPriceMnt;
   if (changes.sku !== undefined) patch.sku = changes.sku;
-  if (changes.stockQuantity !== undefined) patch.stockQuantity = changes.stockQuantity;
   if (changes.imageUrl !== undefined) patch.imageUrl = changes.imageUrl;
-  if (Object.keys(patch).length === 0) return;
+  // stockQuantity is handled separately below (Phase K: routes through
+  // branch_stock via setFulfillmentBranchStock, not a direct field write).
 
   const variants = await db.select({ id: productVariants.id }).from(productVariants).where(eq(productVariants.productId, productId));
   if (variants.length !== 1) return;
-  patch.updatedAt = new Date();
-  await db.update(productVariants).set(patch).where(eq(productVariants.id, variants[0].id));
+  const soleVariantId = variants[0].id;
+
+  if (Object.keys(patch).length > 0) {
+    patch.updatedAt = new Date();
+    await db.update(productVariants).set(patch).where(eq(productVariants.id, soleVariantId));
+  }
+  if (changes.stockQuantity !== undefined) await setFulfillmentBranchStock(db, soleVariantId, changes.stockQuantity);
 }
 
 export async function updateAdminProduct(input: { id: number } & Partial<ProductWriteInput>) {
@@ -3119,6 +3700,7 @@ export async function getAdminUserDetail(userId: number) {
     suspendedAt: users.suspendedAt,
     suspendedReason: users.suspendedReason,
     loyaltyManualAdjustmentMnt: users.loyaltyManualAdjustmentMnt,
+    storeCreditMnt: users.storeCreditMnt,
   }).from(users).where(eq(users.id, userId)).limit(1);
   const user = rows[0];
   if (!user) return null;
@@ -3470,6 +4052,47 @@ export async function variantSkuExists(sku: string, excludeVariantId?: number) {
   return Boolean(variantConflict[0] && variantConflict[0].id !== excludeVariantId);
 }
 
+/**
+ * "Controls everything" admin overhaul (2026-09-08, Phase L): the admin
+ * per-branch stock editor's data source -- one row per ACTIVE branch (a
+ * deactivated branch's shelf isn't sellable, so it's not shown here either),
+ * LEFT JOINed so a branch that never got a branch_stock row for this
+ * variant (e.g. a branch created after this variant already existed) shows
+ * as 0 rather than being silently missing from the list.
+ */
+export async function getBranchStockForVariant(variantId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    branchId: branches.id,
+    branchName: branches.name,
+    isFulfillmentDefault: branches.isFulfillmentDefault,
+    stockQuantity: sql<number>`COALESCE(${branchStock.stockQuantity}, 0)`,
+  }).from(branches)
+    .leftJoin(branchStock, and(eq(branchStock.branchId, branches.id), eq(branchStock.variantId, variantId)))
+    .where(eq(branches.isActive, true))
+    .orderBy(asc(branches.sortOrder));
+}
+
+/** Sets one specific branch's stock for one specific variant to an exact
+ *  number (not a delta) -- the admin per-branch editor's one write
+ *  operation, distinct from setFulfillmentBranchStock (which always targets
+ *  whichever branch is the fulfillment default) since this lets an admin
+ *  edit ANY branch, not just the default one. */
+export async function setBranchStock(branchId: number, variantId: number, quantity: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  if (quantity < 0) throw new Error("Stock quantity cannot be negative.");
+  await db.transaction(async tx => {
+    const updated = await tx.update(branchStock).set({ stockQuantity: quantity, updatedAt: new Date() }).where(and(eq(branchStock.branchId, branchId), eq(branchStock.variantId, variantId)));
+    if (Number(updated[0].affectedRows ?? 0) === 0) {
+      await tx.insert(branchStock).values({ branchId, variantId, stockQuantity: quantity });
+    }
+    await recomputeVariantStockTotal(tx, variantId);
+  });
+  return getBranchStockForVariant(variantId);
+}
+
 export type ProductVariantWriteInput = {
   productId: number;
   sku: string;
@@ -3481,21 +4104,49 @@ export type ProductVariantWriteInput = {
   isDefault?: boolean;
 };
 
+/**
+ * "Controls everything" admin overhaul (2026-09-08, Phase K/L): the one
+ * place a BRAND-NEW variant gets enrolled into per-branch stock -- called
+ * by every path that can create one (createAdminProduct's default variant,
+ * createAdminProductVariant's additional ones). Same honest starting split
+ * scripts/backfill-branch-stock.ts uses for every pre-existing variant: all
+ * of the typed stock at the fulfillment-default branch, 0 everywhere else
+ * (no real per-branch data exists for a brand-new variant either). Falls
+ * back to writing the aggregate directly only if no active branches exist
+ * at all (broken config) -- there's nowhere real to seed rows into.
+ */
+async function seedBranchStockForNewVariant(tx: OrderTx, variantId: number, initialStockQuantity: number) {
+  const activeBranches = await tx.select().from(branches).where(eq(branches.isActive, true));
+  if (!activeBranches.length) {
+    await tx.update(productVariants).set({ stockQuantity: initialStockQuantity }).where(eq(productVariants.id, variantId));
+    return;
+  }
+  const fulfillmentBranchId = activeBranches.find(b => b.isFulfillmentDefault)?.id;
+  await tx.insert(branchStock).values(activeBranches.map(branch => ({
+    branchId: branch.id, variantId,
+    stockQuantity: branch.id === fulfillmentBranchId ? initialStockQuantity : 0,
+  })));
+  await recomputeVariantStockTotal(tx, variantId);
+}
+
 export async function createAdminProductVariant(input: ProductVariantWriteInput) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.transaction(async tx => {
     if (input.isDefault) await tx.update(productVariants).set({ isDefault: false }).where(eq(productVariants.productId, input.productId));
-    await tx.insert(productVariants).values({
+    const inserted = await tx.insert(productVariants).values({
       productId: input.productId,
       sku: input.sku,
       attributesJson: input.attributes ? JSON.stringify(input.attributes) : null,
       priceMnt: input.priceMnt,
       compareAtPriceMnt: input.compareAtPriceMnt ?? null,
-      stockQuantity: input.stockQuantity,
+      // Placeholder -- recomputed immediately below from branch_stock, the
+      // real source of truth now (Phase K).
+      stockQuantity: 0,
       imageUrl: input.imageUrl ?? null,
       isDefault: input.isDefault ?? false,
     });
+    await seedBranchStockForNewVariant(tx, Number(inserted[0].insertId), input.stockQuantity);
   });
   return getAdminProductVariants(input.productId);
 }
@@ -3513,10 +4164,12 @@ export async function updateAdminProductVariant(input: { id: number } & Partial<
     if (input.attributes !== undefined) patch.attributesJson = input.attributes ? JSON.stringify(input.attributes) : null;
     if (input.priceMnt !== undefined) patch.priceMnt = input.priceMnt;
     if (input.compareAtPriceMnt !== undefined) patch.compareAtPriceMnt = input.compareAtPriceMnt;
-    if (input.stockQuantity !== undefined) patch.stockQuantity = input.stockQuantity;
     if (input.imageUrl !== undefined) patch.imageUrl = input.imageUrl;
     if (input.isDefault !== undefined) patch.isDefault = input.isDefault;
-    await tx.update(productVariants).set(patch).where(eq(productVariants.id, input.id));
+    // stockQuantity is handled separately below (Phase K: routes through
+    // branch_stock via setFulfillmentBranchStock, not a direct field write).
+    if (Object.keys(patch).length > 1) await tx.update(productVariants).set(patch).where(eq(productVariants.id, input.id));
+    if (input.stockQuantity !== undefined) await setFulfillmentBranchStock(tx, input.id, input.stockQuantity);
   });
   return getAdminProductVariants(productId);
 }
