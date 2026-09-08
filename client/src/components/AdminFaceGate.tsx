@@ -123,9 +123,7 @@ type Phase = "consent" | "camera" | "working" | "done";
  * which one is running turns a mystery into a wait.
  */
 const FLOW_STEPS = [
-  { key: "capture", label: "Царай тодорхойлох" },
-  { key: "turn", label: "Толгой эргүүлэх" },
-  { key: "flash", label: "Өнгөний шалгалт" },
+  { key: "capture", label: "Царай уншиж байна" },
 ] as const;
 type FlowStep = (typeof FLOW_STEPS)[number]["key"];
 
@@ -360,9 +358,13 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
           turned = pose.yaw > 0 ? yaw > FACE_ENROLL_POSE_YAW : yaw < -FACE_ENROLL_POSE_YAW;
           if (!turned) setHint(pose.label);
         }
-        // A pose that never happened is simply skipped rather than failing
-        // the whole enrollment -- three good views are better than none.
-        if (!turned) continue;
+        // If the instruction was not followed, START THE WHOLE ENROLLMENT
+        // AGAIN rather than quietly recording fewer angles (Tom, explicit:
+        // "if you don't follow the instruction, do it again from the
+        // beginning"). Silently accepting a partial enrollment would store a
+        // weaker reference and then show up much later as unexplained login
+        // failures -- far worse than asking for another 20 seconds now.
+        if (!turned) throw new Error("POSE_NOT_FOLLOWED");
       }
 
       setHint(`${pose.label} — хөдөлгөөнгүй`);
@@ -568,34 +570,39 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
       // fails. Dropping it removes a whole class of "it says I didn't blink
       // when I did" failures. The tracker itself is kept (and tested) so a
       // movement step can be reinstated if it is ever wanted.
-      // Descriptor frames are captured FIRST, while the face is still
-      // squarely front-on. Capturing them during or after the turns would
-      // mix angled faces into the average and push it away from the frontal
-      // reference, causing false rejections.
+      // LOGIN IS DELIBERATELY FRICTIONLESS: look at the camera, get matched,
+      // get in. No head turns, no colour flash, no instructions to follow.
+      //
+      // That split is the whole design (Tom, repeatedly and emphatically):
+      // the GUIDED, instruction-driven capture belongs to first-time
+      // ENROLLMENT, where the point is to record the face thoroughly from
+      // several angles. Repeating those hoops on every single login was pure
+      // friction -- it rejected a legitimate user again and again while the
+      // underlying match was landing comfortably inside the threshold.
+      //
+      // The security consequence, stated plainly rather than hidden: without
+      // a liveness challenge at login, someone holding a photograph of an
+      // enrolled staff member to the camera could pass this step. What stops
+      // them is that they must ALREADY have that person's phone number and
+      // password to get here at all -- this is the second factor, not the
+      // first. For a five-person shop admin panel that is a sensible place to
+      // land; a bank would choose differently. Re-enabling the challenge is a
+      // small change (runTurnSequence / runFlashChallenge are still here and
+      // still tested) if that trade ever stops being the right one.
       setStep("capture");
-      setHint("Царайгаа дугуй хүрээнд байрлуулна уу.");
+      setHint("Камер руу шууд харна уу.");
       const samples = await collectSamples(video, FACE_VERIFY_SAMPLES, null, false, null);
-
-      // Then movement, then the colour flash -- two independent liveness
-      // signals. The turns prove a real head moving in 3D; the flash proves a
-      // real surface reflecting light. A photo fails both; a replayed video
-      // fails the flash, whose colour order it cannot have anticipated.
-      setStep("turn");
-      const turns = await runTurnSequence(video);
-
-      setStep("flash");
-      setHint("Нүүрээ хөдөлгөөнгүй барина уу.");
-      const flash = await runFlashChallenge(video);
 
       setPhase("working");
       const result = await completeVerification.mutateAsync({
         challengeId,
         descriptor: averageFaceDescriptors(samples),
-        livenessPassed: turns.passed && flash.passed,
-        // Recorded into face_attempts.detail so the thresholds can be set
-        // from what real staff on real cameras actually produce, instead of
-        // guessed at. Every value here is a measurement, not a verdict.
-        diagnostic: `turn=${turns.passed ? "ok" : "fail"} yaw=${turns.maxYaw.toFixed(3)} flash=${flash.passed ? "ok" : "fail"} score=${flash.score.toFixed(2)} bright=${flash.brightened ? 1 : 0} n=${flash.samples}`,
+        // No challenge is performed at login, so nothing is claimed about
+        // liveness -- honestly reported as not passed rather than asserting
+        // a check that never ran. It is recorded, never enforced (see
+        // ADMIN_FACE_LIVENESS_ENFORCED in server/_core/env.ts).
+        livenessPassed: false,
+        diagnostic: "login=simple no-challenge",
       });
 
       cleanup();
@@ -608,7 +615,7 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
 
       switch (result.reason) {
         case "no_match":
-          setFatalError("Царай таарсангүй. Гэрэлтэй газар, камер руу шууд харж дахин оролдоно уу. Асуудал давтагдвал админд хандаж бүртгэлээ шинэчлүүлнэ үү.");
+          setFatalError("Царайг тань таньсангүй. Дахин уншуулна уу — гэрэлтэй газар, камер руу шууд харна уу. Хэд дахин болохгүй бол админд хандаж царайн бүртгэлээ шинэчлүүлээрэй.");
           break;
         case "liveness_failed":
           setFatalError("Хөдөлгөөн баталгаажсангүй. Дэлгэц дээрх зааврыг гүйцэтгэнэ үү.");
@@ -632,6 +639,8 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
         setFatalError("Царай таних загвар ачаалагдсангүй. Сүлжээгээ шалгаад дахин оролдоно уу.");
       } else if (error instanceof Error && error.message === "MODEL_BACKEND") {
         setFatalError("Энэ хөтөч дээр царай таних боломжгүй байна. Chrome эсвэл Edge-ээр орно уу.");
+      } else if (error instanceof Error && error.message === "POSE_NOT_FOLLOWED") {
+        setFatalError("Зааврыг дагаж толгойгоо эргүүлээгүй тул бүртгэл дуусаагүй. Эхнээс нь дахин эхлүүлнэ үү — дэлгэц дээрх заавар бүрийг дагана уу.");
       } else if (error instanceof Error && (error.message === "CAPTURE_TIMEOUT" || error.message === "VIDEO_TIMEOUT")) {
         setFatalError("Царайг тодорхойлж чадсангүй. Гэрэлтэй газар, камерт ойртож дахин оролдоно уу.");
       } else {
