@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, CameraOff, CheckCircle2, LoaderCircle, ScanFace, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CameraOff, CheckCircle2, KeyRound, LoaderCircle, ScanFace, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import {
   FACE_CHALLENGE_LABELS,
+  LivenessTracker,
+  getHeadYaw,
   FLASH_COLORS,
   evaluateFlashResponse,
   type FaceColorSample,
@@ -15,11 +18,9 @@ import {
 } from "@shared/face-auth";
 import {
   FaceCameraError,
-  LivenessTracker,
   captureFace,
   clearFaceMesh,
   drawFaceMesh,
-  getHeadYaw,
   loadFaceModels,
   sampleFaceColor,
   startCamera,
@@ -115,19 +116,26 @@ const FLASH_HOLD_MS = 420;
 /** Frames are sampled only after this much of the hold has elapsed, so the
  *  reading is taken once the camera has adjusted rather than mid-transition. */
 const FLASH_SETTLE_MS = 240;
-/** How many colours are flashed per attempt. Randomised order each time — that
- *  randomness is what a pre-recorded video cannot anticipate. */
-const FLASH_SEQUENCE_LENGTH = 4;
+/** How many times the four colours cycle. Two passes = 8 flashes, giving the
+ *  scorer twice the evidence and the person a clearly visible sequence rather
+ *  than a single blip. */
+const FLASH_CYCLES = 2;
 
 function randomFlashSequence(): FlashColor[] {
-  const colors = Object.keys(FLASH_COLORS) as FlashColor[];
-  // Fisher-Yates, then take the first N. Every attempt gets a different
-  // order, which is the entire anti-replay property of this check.
-  for (let i = colors.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [colors[i], colors[j]] = [colors[j], colors[i]];
+  const all = Object.keys(FLASH_COLORS) as FlashColor[];
+  const out: FlashColor[] = [];
+  for (let cycle = 0; cycle < FLASH_CYCLES; cycle += 1) {
+    const colors = [...all];
+    // Fisher-Yates per cycle. Every attempt gets a different order, which is
+    // the entire anti-replay property of this check -- a recording made
+    // earlier cannot have reacted to an order chosen just now.
+    for (let i = colors.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [colors[i], colors[j]] = [colors[j], colors[i]];
+    }
+    out.push(...colors);
   }
-  return colors.slice(0, FLASH_SEQUENCE_LENGTH);
+  return out;
 }
 
 function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollment: boolean; modelStale: boolean; onPassed: () => void }) {
@@ -268,7 +276,22 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
     const sequence = randomFlashSequence();
     const samples: { color: FlashColor; sample: FaceColorSample }[] = [];
 
-    setHint("Дэлгэц рүү шууд харна уу — өнгө анивчина.");
+    setHint("Нүүрээ хөдөлгөөнгүй барина уу.");
+
+    // Capture the face UNLIT first, before any colour is shown.
+    //
+    // Follows IEEE "Face Liveness Detection Using a Flash Against 2D Spoofing
+    // Attack", which compares an image taken with flash against one taken
+    // without. The unlit frame is a much better reference than the average of
+    // the lit ones: it anchors what this face looks like under the room's own
+    // light, and it makes the "did the face brighten at all?" test possible —
+    // a screen replaying a video emits its own light and barely responds to
+    // ours, which is invisible without a baseline.
+    let baseline: FaceColorSample | null = null;
+    {
+      const result = await captureFace(video);
+      if (result.ok) baseline = sampleFaceColor(video, result.sample.box);
+    }
 
     for (const color of sequence) {
       if (abortRef.current) throw new Error("ABORTED");
@@ -289,7 +312,7 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
     }
 
     setFlash(null);
-    const { passed } = evaluateFlashResponse(samples);
+    const { passed } = evaluateFlashResponse(samples, baseline);
     return passed;
   }, []);
 
@@ -299,7 +322,6 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
     abortRef.current = false;
     setPhase("camera");
 
-    let activeChallenge: FaceChallengeAction | null = null;
     try {
       setHint("Загвар ачааллаж байна…");
       await loadFaceModels();
@@ -333,26 +355,32 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
       }
 
       setHint("Шалгаж байна…");
-      const { challengeId, action } = await startVerification.mutateAsync();
-      activeChallenge = action;
-      setChallenge(action);
+      const { challengeId } = await startVerification.mutateAsync();
       setProgress(0);
-      setHint(FACE_CHALLENGE_LABELS[action]);
 
-      const tracker = new LivenessTracker(action);
-      const samples = await collectSamples(video, FACE_VERIFY_SAMPLES, tracker, true, action);
+      // FLOW, matching how production eKYC actually sequences this (verified
+      // against collect.ekyc.mn's own flow): position the face first with
+      // live feedback, THEN hold still for the colour challenge.
+      //
+      // Notably the reference does NOT ask for a blink or a head turn at all,
+      // and neither does this any more. Scripted-movement liveness was the
+      // single biggest source of false rejections here in live testing --
+      // it repeatedly failed a legitimate user -- while adding little on top
+      // of the flash, which is the check a photo or a replayed video actually
+      // fails. Dropping it removes a whole class of "it says I didn't blink
+      // when I did" failures. The tracker itself is kept (and tested) so a
+      // movement step can be reinstated if it is ever wanted.
+      setHint("Царайгаа дугуй хүрээнд байрлуулна уу.");
+      const samples = await collectSamples(video, FACE_VERIFY_SAMPLES, null, false, null);
 
-      // Two independent liveness signals, both required. The movement proves
-      // a live person is following an instruction; the colour flash proves
-      // the thing in front of the camera is a real 3D surface reflecting
-      // light rather than a photo or a replayed video.
+      setHint("Нүүрээ хөдөлгөөнгүй барина уу.");
       const flashPassed = await runFlashChallenge(video);
 
       setPhase("working");
       const result = await completeVerification.mutateAsync({
         challengeId,
         descriptor: averageFaceDescriptors(samples),
-        livenessPassed: tracker.passed && flashPassed,
+        livenessPassed: flashPassed,
       });
 
       cleanup();
@@ -396,7 +424,7 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
       }
       setPhase("camera");
     } finally {
-      if (activeChallenge) setChallenge(null);
+      setChallenge(null);
     }
   }, [needsEnrollment, waitForVideo, collectSamples, enroll, startVerification, completeVerification, cleanup, onPassed]);
 
@@ -428,6 +456,22 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
 
   return (
     <div className="face-gate-shell">
+      {/* The colour-flash liveness challenge covers the WHOLE SCREEN, not just
+          the video box: the monitor is the light source, so the larger the lit
+          area the stronger and more measurable the reflection off the face.
+          Rendered outside the card for that reason.
+
+          aria-hidden with a static announcement below rather than live
+          updates: rapidly changing colours must not be read out on every step.
+          Cadence is ~420ms per colour (~2.4Hz), deliberately under the 3Hz
+          threshold associated with photosensitive seizures. */}
+      {flash && (
+        <div
+          className="face-gate-fullflash"
+          aria-hidden="true"
+          style={{ background: `rgb(${FLASH_COLORS[flash].join(",")})` }}
+        />
+      )}
       <div className="face-gate-card face-gate-card--wide">
         <div className="face-gate-head">
           <ScanFace size={20} aria-hidden="true" />
@@ -448,17 +492,6 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
 
           {/* Sweeping scan line, running only while actively capturing. */}
           {!busy && !flash && <div className="face-gate-scanline" aria-hidden="true" />}
-
-          {/* The colour-flash liveness challenge. aria-hidden + a static
-              announcement elsewhere: rapidly changing colours must not be
-              announced to a screen reader on every step. */}
-          {flash && (
-            <div
-              className="face-gate-flash"
-              aria-hidden="true"
-              style={{ background: `rgb(${FLASH_COLORS[flash].join(",")})` }}
-            />
-          )}
 
           {busy && (
             <div className="face-gate-video-overlay">
@@ -506,19 +539,42 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
  * enforces this too (faceAuth.enroll requires `consented: true` as a literal
  * in its schema), so a client that skipped this screen still cannot enroll.
  */
+/**
+ * Dedicated biometric-consent screen.
+ *
+ * Deliberately its own step rather than a line buried in general terms: a
+ * face descriptor is sensitive personal data under Mongolia's Personal Data
+ * Protection Law, and bundled consent does not satisfy it. The server
+ * enforces this too (faceAuth.enroll requires `consented: true` as a literal
+ * in its schema), so a client that skipped this screen still cannot enroll.
+ *
+ * LAYOUT, adapted from the enterprise sign-in pattern Tom pointed at (Oracle
+ * Cloud's "Enable Secure Verification" screen) rather than copied from it:
+ * a branded strip, the identity being enrolled, then a three-part diagram of
+ * the security model, then the action. The diagram earns its place — it says
+ * "password + face = access" in one glance, which is precisely the honest
+ * framing this feature needs and which prose keeps having to repeat: the
+ * face is a SECOND factor, never a replacement for the password.
+ */
 function ConsentScreen({ modelStale, onAccept }: { modelStale: boolean; onAccept: () => void }) {
   const [agreed, setAgreed] = useState(false);
+  const { user } = useAuth();
 
   return (
     <div className="face-gate-shell">
-      <div className="face-gate-card face-gate-card--wide">
-        <div className="face-gate-head">
-          <ShieldCheck size={20} aria-hidden="true" />
-          <div>
-            <h2>Царайгаар баталгаажуулах</h2>
-            <p className="face-gate-muted">Админ хэсэгт нэвтрэх нэмэлт хамгаалалт</p>
-          </div>
-        </div>
+      <div className="face-gate-card face-gate-card--wide face-gate-card--consent">
+        <div className="face-gate-brandstrip" aria-hidden="true" />
+
+        <p className="face-gate-brand">SUGI ASAYAKE ADMIN</p>
+        {/* Who is being enrolled. Shown because enrolling a face is tied to a
+            specific account, and someone left signed in as a colleague should
+            notice before their face is bound to the wrong one. */}
+        {user && <p className="face-gate-identity">{user.name || user.phone || `#${user.id}`}</p>}
+
+        <h2 className="face-gate-title">Царайгаар баталгаажуулах</h2>
+        <p className="face-gate-lede">
+          Админ хэсэгт нэвтрэхийн тулд нууц үгийн дараа царайгаар нэмэлт баталгаажуулалт хийнэ. Энэ нь таны бүртгэлийг өөр хүн нууц үгийг тань мэдсэн ч ашиглахаас хамгаална.
+        </p>
 
         {modelStale && (
           <div className="face-gate-alert">
@@ -527,6 +583,25 @@ function ConsentScreen({ modelStale, onAccept }: { modelStale: boolean; onAccept
           </div>
         )}
 
+        {/* The security model in one line. Not decoration: "password AND
+            face", never "face instead of password". */}
+        <div className="face-gate-diagram" role="img" aria-label="Нууц үг нэмэх царай тэнцүү админ хандалт">
+          <div className="face-gate-diagram-item">
+            <span className="face-gate-diagram-icon"><KeyRound size={22} aria-hidden="true" /></span>
+            <span>Нууц үг</span>
+          </div>
+          <span className="face-gate-diagram-op" aria-hidden="true">+</span>
+          <div className="face-gate-diagram-item">
+            <span className="face-gate-diagram-icon face-gate-diagram-icon--accent"><ScanFace size={22} aria-hidden="true" /></span>
+            <span>Царай</span>
+          </div>
+          <span className="face-gate-diagram-op" aria-hidden="true">=</span>
+          <div className="face-gate-diagram-item">
+            <span className="face-gate-diagram-icon face-gate-diagram-icon--ok"><ShieldCheck size={22} aria-hidden="true" /></span>
+            <span>Админ хандалт</span>
+          </div>
+        </div>
+
         {/* Every claim below is literally true of the implementation. If the
             architecture ever changes, this copy must change with it. */}
         <ul className="face-gate-facts">
@@ -534,7 +609,6 @@ function ConsentScreen({ modelStale, onAccept }: { modelStale: boolean; onAccept
           <li><strong>Зөвхөн 128 тоо.</strong> Царайг тань таних математик утга (128 тоо) л хадгалагдана. Үүнээс таны зургийг сэргээх боломжгүй.</li>
           <li><strong>Таны компьютер дээр боловсруулагдана.</strong> Камерын дүрс энэ компьютероос гарахгүй. Гадны ямар ч үйлчилгээ рүү илгээгдэхгүй.</li>
           <li><strong>Зөвхөн админ хэсэгт.</strong> Худалдан авагчид энэ шалгалтыг хэзээ ч харахгүй.</li>
-          <li><strong>Нууц үгээ орлохгүй.</strong> Энэ нь нууц үгийн дараах нэмэлт шалгалт бөгөөд түүнийг орлохгүй.</li>
         </ul>
 
         <p className="face-gate-limit">

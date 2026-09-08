@@ -773,6 +773,12 @@ export const appRouter = router({
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      // Admin face gate (2026-09-08): the face-proof cookie MUST die with the
+      // session. Without this it outlives logout for its full 8-hour window,
+      // so signing out and straight back in walked into /admin with no face
+      // check at all -- exactly the "every time someone logs in" requirement
+      // this gate exists to enforce. Found by Tom testing precisely that.
+      clearFaceProofCookie(ctx.req, ctx.res);
       return {
         success: true,
       } as const;

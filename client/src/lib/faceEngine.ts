@@ -231,7 +231,7 @@ export type QualityIssue = "NO_FACE" | "MULTIPLE_FACES" | "TOO_FAR" | "OFF_CENTE
 
 export type FaceSample = {
   descriptor: number[];
-  landmarks: FaceApi.FaceLandmarks68;
+  landmarks: readonly { x: number; y: number }[];
   box: FaceApi.Box;
   score: number;
 };
@@ -298,7 +298,7 @@ export async function captureFace(video: HTMLVideoElement): Promise<CaptureResul
     ok: true,
     sample: {
       descriptor: Array.from(detection.descriptor),
-      landmarks: detection.landmarks,
+      landmarks: detection.landmarks.positions,
       box,
       score,
     },
@@ -353,7 +353,7 @@ const MESH_BRIDGES: [number, number][] = [
 export function drawFaceMesh(
   canvas: HTMLCanvasElement,
   video: HTMLVideoElement,
-  landmarks: FaceApi.FaceLandmarks68 | null,
+  landmarks: readonly { x: number; y: number }[] | null,
   box: FaceApi.Box | null,
 ): void {
   const ctx = canvas.getContext("2d");
@@ -374,7 +374,7 @@ export function drawFaceMesh(
   ctx.translate(canvas.width, 0);
   ctx.scale(-1, 1);
 
-  const points = landmarks.positions;
+  const points = landmarks;
   const scale = Math.max(canvas.width, canvas.height) / 640;
 
   // --- corner brackets around the detected face -------------------------
@@ -527,143 +527,3 @@ export function sampleFaceColor(video: HTMLVideoElement, box: FaceApi.Box): Face
 // "turn your head slowly" AND flashes colours).
 // ---------------------------------------------------------------------------
 
-function distance(a: FaceApi.Point, b: FaceApi.Point): number {
-  return Math.hypot(a.x - b.x, a.y - b.y);
-}
-
-/**
- * Eye aspect ratio — the standard blink measure (Soukupová & Čech).
- * Height-over-width of the eye polygon: roughly 0.3 open, under ~0.2 closed.
- * Using a RATIO rather than raw pixels is what makes it independent of how
- * close the person is sitting.
- */
-function eyeAspectRatio(eye: FaceApi.Point[]): number {
-  if (eye.length < 6) return 1;
-  const vertical = distance(eye[1], eye[5]) + distance(eye[2], eye[4]);
-  const horizontal = distance(eye[0], eye[3]) * 2;
-  if (horizontal === 0) return 1;
-  return vertical / horizontal;
-}
-
-export function getEyeOpenness(landmarks: FaceApi.FaceLandmarks68): number {
-  return (eyeAspectRatio(landmarks.getLeftEye()) + eyeAspectRatio(landmarks.getRightEye())) / 2;
-}
-
-/**
- * Mouth openness, same ratio trick as the eyes: inner lip gap over mouth
- * width, so it does not change with how close the person is sitting.
- *
- * getMouth() returns the 68-point model's points 48–67 in order, so within
- * that array: 0 = left corner (48), 6 = right corner (54), 14 = inner upper
- * lip (62), 18 = inner lower lip (66). The INNER lip pair is used rather than
- * the outer one because the outer points barely separate on a small mouth
- * opening, which made the threshold unreliable.
- */
-const MOUTH_LEFT_CORNER = 0;
-const MOUTH_RIGHT_CORNER = 6;
-const MOUTH_INNER_TOP = 14;
-const MOUTH_INNER_BOTTOM = 18;
-
-export function getMouthOpenness(landmarks: FaceApi.FaceLandmarks68): number {
-  const mouth = landmarks.getMouth();
-  if (mouth.length <= MOUTH_INNER_BOTTOM) return 0;
-  const width = distance(mouth[MOUTH_LEFT_CORNER], mouth[MOUTH_RIGHT_CORNER]);
-  if (width === 0) return 0;
-  return distance(mouth[MOUTH_INNER_TOP], mouth[MOUTH_INNER_BOTTOM]) / width;
-}
-
-/**
- * Head yaw, as a signed ratio: negative when the face turns to the subject's
- * left, positive to their right, ~0 facing forward.
- *
- * Measured by how far the nose sits between the two jaw edges rather than by
- * solving a full 3D pose — far fewer moving parts, and precise enough to tell
- * a deliberate head turn from noise, which is all the challenge needs.
- */
-export function getHeadYaw(landmarks: FaceApi.FaceLandmarks68): number {
-  const jaw = landmarks.getJawOutline();
-  const nose = landmarks.getNose();
-  if (jaw.length < 17 || nose.length === 0) return 0;
-  const left = jaw[0];
-  const right = jaw[16];
-  const noseTip = nose[nose.length - 1] ?? nose[0];
-  const span = distance(left, right);
-  if (span === 0) return 0;
-  const mid = (left.x + right.x) / 2;
-  return (noseTip.x - mid) / span;
-}
-
-/** Thresholds, kept together so they are tunable in one place if a real
- *  camera turns out to be noisier than expected. */
-const BLINK_CLOSED_EAR = 0.21;
-const BLINK_OPEN_EAR = 0.27;
-const YAW_TURN_RATIO = 0.13;
-const MOUTH_OPEN_RATIO = 0.35;
-
-/**
- * Tracks whether the challenged action actually happened across a sequence of
- * frames.
- *
- * Stateful on purpose. A blink is not "eyes are closed right now" — it is
- * open, then closed, then open again, and only checking the current frame
- * would accept a photo of someone with their eyes shut. The same reasoning
- * applies to the head turns (must return toward centre) and the mouth.
- */
-export class LivenessTracker {
-  private sawClosed = false;
-  private sawOpenAfterClosed = false;
-  private sawTurn = false;
-  private sawReturnAfterTurn = false;
-  private sawMouthOpen = false;
-  private sawMouthClosedAfterOpen = false;
-
-  constructor(private readonly action: FaceChallengeAction) {}
-
-  observe(landmarks: FaceApi.FaceLandmarks68): void {
-    switch (this.action) {
-      case "blink": {
-        const ear = getEyeOpenness(landmarks);
-        if (ear < BLINK_CLOSED_EAR) this.sawClosed = true;
-        else if (this.sawClosed && ear > BLINK_OPEN_EAR) this.sawOpenAfterClosed = true;
-        break;
-      }
-      case "turn_left":
-      case "turn_right": {
-        const yaw = getHeadYaw(landmarks);
-        // The subject's left is mirrored in the video they see, so the sign
-        // here follows the instruction they were given, not screen space.
-        const turned = this.action === "turn_left" ? yaw < -YAW_TURN_RATIO : yaw > YAW_TURN_RATIO;
-        if (turned) this.sawTurn = true;
-        else if (this.sawTurn && Math.abs(yaw) < YAW_TURN_RATIO / 2) this.sawReturnAfterTurn = true;
-        break;
-      }
-      case "open_mouth": {
-        const openness = getMouthOpenness(landmarks);
-        if (openness > MOUTH_OPEN_RATIO) this.sawMouthOpen = true;
-        else if (this.sawMouthOpen && openness < MOUTH_OPEN_RATIO / 2) this.sawMouthClosedAfterOpen = true;
-        break;
-      }
-    }
-  }
-
-  get passed(): boolean {
-    switch (this.action) {
-      case "blink": return this.sawClosed && this.sawOpenAfterClosed;
-      case "turn_left":
-      case "turn_right": return this.sawTurn && this.sawReturnAfterTurn;
-      case "open_mouth": return this.sawMouthOpen && this.sawMouthClosedAfterOpen;
-    }
-  }
-
-  /** Drives the on-screen progress hint so the user can tell the system is
-   *  seeing them, instead of staring at a static instruction wondering
-   *  whether it registered. */
-  get halfway(): boolean {
-    switch (this.action) {
-      case "blink": return this.sawClosed;
-      case "turn_left":
-      case "turn_right": return this.sawTurn;
-      case "open_mouth": return this.sawMouthOpen;
-    }
-  }
-}

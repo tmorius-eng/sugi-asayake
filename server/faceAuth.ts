@@ -17,6 +17,7 @@
  */
 
 import { SignJWT, jwtVerify } from "jose";
+import { parse as parseCookieHeader } from "cookie";
 import { TRPCError } from "@trpc/server";
 import type { Request, Response } from "express";
 import {
@@ -85,7 +86,13 @@ async function signFaceProof(userId: number, sessionVersion: number): Promise<st
  * bad cookie simply means "verify again", not a broken admin panel.
  */
 export async function hasValidFaceProof(req: Request, userId: number, sessionVersion: number): Promise<boolean> {
-  const raw = req.cookies?.[ADMIN_FACE_COOKIE_NAME] as string | undefined;
+  // Parse the raw header rather than reading `req.cookies`: this app has no
+  // cookie-parser middleware, so `req.cookies` is ALWAYS undefined. Using it
+  // meant this function silently returned false for everyone -- a successful
+  // face check set the cookie, the very next status query failed to see it,
+  // and the gate looped on "verified, entering admin..." forever. Same
+  // approach server/_core/context.ts already uses for the session cookie.
+  const raw = parseCookieHeader(req.headers.cookie ?? "")[ADMIN_FACE_COOKIE_NAME];
   if (!raw) return false;
   try {
     const { payload } = await jwtVerify(raw, secretKey());

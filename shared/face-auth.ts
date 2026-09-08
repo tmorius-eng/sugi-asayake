@@ -169,10 +169,12 @@ export function averageFaceDescriptors(samples: readonly (readonly number[])[]):
  *  reflections are easy to tell apart, plus one (yellow) that mostly raises
  *  brightness rather than a single channel. */
 export const FLASH_COLORS = {
-  red: [255, 40, 40],
-  green: [40, 255, 40],
-  blue: [40, 80, 255],
-  yellow: [255, 230, 40],
+  red: [255, 45, 45],
+  green: [90, 240, 105],
+  blue: [70, 140, 255],
+  yellow: [250, 235, 60],
+  orange: [245, 150, 45],
+  violet: [150, 70, 240],
 } as const;
 
 export type FlashColor = keyof typeof FLASH_COLORS;
@@ -205,11 +207,18 @@ export const FLASH_PASS_RATIO = 0.6;
  * which matters a great deal here, given the documented history of face
  * models performing worse on non-white faces.
  */
-export function evaluateFlashResponse(samples: { color: FlashColor; sample: FaceColorSample }[]): {
+export function evaluateFlashResponse(
+  samples: { color: FlashColor; sample: FaceColorSample }[],
+  /** The face measured with NO flash, captured immediately before the
+   *  sequence. Optional so existing callers keep working, but supplying it
+   *  materially strengthens the check — see below. */
+  baseline?: FaceColorSample | null,
+): {
   passed: boolean;
   score: number;
+  brightened: boolean;
 } {
-  if (samples.length < 3) return { passed: false, score: 0 };
+  if (samples.length < 3) return { passed: false, score: 0, brightened: false };
 
   // Normalise each reading to channel SHARES, which removes overall
   // brightness. A flash makes the face brighter too, and brightness alone
@@ -219,11 +228,34 @@ export function evaluateFlashResponse(samples: { color: FlashColor; sample: Face
     return { color, r: sample.r / total, g: sample.g / total, b: sample.b / total };
   });
 
-  const mean = {
-    r: shares.reduce((sum, s) => sum + s.r, 0) / shares.length,
-    g: shares.reduce((sum, s) => sum + s.g, 0) / shares.length,
-    b: shares.reduce((sum, s) => sum + s.b, 0) / shares.length,
-  };
+  // Reference point for "what does this face look like unlit".
+  //
+  // Following IEEE "Face Liveness Detection Using a Flash Against 2D Spoofing
+  // Attack", which captures one image WITH flash and one WITHOUT and compares
+  // them: an unlit baseline is a far better anchor than the mean of the lit
+  // frames, and the paper notes the flash comparison also suppresses the
+  // influence of ambient lighting. When no baseline is supplied this falls
+  // back to the mean across the flashes, which still works but is weaker.
+  const mean = baseline
+    ? (() => {
+        const total = baseline.r + baseline.g + baseline.b || 1;
+        return { r: baseline.r / total, g: baseline.g / total, b: baseline.b / total };
+      })()
+    : {
+        r: shares.reduce((sum, s) => sum + s.r, 0) / shares.length,
+        g: shares.reduce((sum, s) => sum + s.g, 0) / shares.length,
+        b: shares.reduce((sum, s) => sum + s.b, 0) / shares.length,
+      };
+
+  // Did the face actually get brighter when lit at all? A screen replaying a
+  // video emits its own light and barely responds to ours; a real face in
+  // front of a bright monitor clearly does. Only checkable with a baseline.
+  let brightened = true;
+  if (baseline) {
+    const baseLuma = baseline.r + baseline.g + baseline.b;
+    const litLuma = samples.reduce((sum, s) => sum + s.sample.r + s.sample.g + s.sample.b, 0) / samples.length;
+    brightened = litLuma > baseLuma * 1.02;
+  }
 
   let correct = 0;
   for (const s of shares) {
@@ -232,15 +264,18 @@ export function evaluateFlashResponse(samples: { color: FlashColor; sample: Face
       case "red": shift = s.r - mean.r; break;
       case "green": shift = s.g - mean.g; break;
       case "blue": shift = s.b - mean.b; break;
-      // Yellow is red+green together, so it is scored on that pair rising
-      // while blue falls — scoring it on one channel would double-count red.
+      // Yellow, orange and violet are channel COMBINATIONS, so each is scored
+      // on its own mix rather than a single channel -- scoring yellow on red
+      // alone, for instance, would double-count the red flash.
       case "yellow": shift = ((s.r - mean.r) + (s.g - mean.g)) / 2 - (s.b - mean.b); break;
+      case "orange": shift = (s.r - mean.r) - (s.b - mean.b); break;
+      case "violet": shift = ((s.r - mean.r) + (s.b - mean.b)) / 2 - (s.g - mean.g); break;
     }
     if (shift > FLASH_MIN_SHIFT) correct += 1;
   }
 
   const score = correct / shares.length;
-  return { passed: score >= FLASH_PASS_RATIO, score };
+  return { passed: score >= FLASH_PASS_RATIO && brightened, score, brightened };
 }
 
 /** Guards every descriptor arriving from a browser before it is stored or
@@ -250,4 +285,281 @@ export function evaluateFlashResponse(samples: { color: FlashColor; sample: Face
 export function isValidFaceDescriptor(value: unknown): value is number[] {
   if (!Array.isArray(value) || value.length !== FACE_DESCRIPTOR_LENGTH) return false;
   return value.every(n => typeof n === "number" && Number.isFinite(n) && Math.abs(n) <= 10);
+}
+
+// ---------------------------------------------------------------------------
+// Motion liveness, derived from the 68-point landmark model. Runs alongside
+// the colour-flash challenge above; real eKYC flows ask for both.
+//
+// Lives here rather than beside the camera code so it can be unit-tested
+// without loading a 1.4MB ML library. That matters more than usual for this
+// particular code: three separate real bugs were found in it by hand-testing
+// (fixed thresholds that failed narrower eye shapes, an inverted head-turn
+// direction, and a capture loop that gave up before the user could act), none
+// of which a type-checker could catch and all of which a test would have.
+// ---------------------------------------------------------------------------
+
+/** Just the shape the geometry needs — deliberately not face-api's own type,
+ *  so shared/ carries no dependency on the model library. `positions` from a
+ *  face-api landmark set satisfies this directly. */
+export type LandmarkPoint = { x: number; y: number };
+/** The standard 68 points, in their conventional order. */
+export type FaceLandmarks = readonly LandmarkPoint[];
+
+function distance(a: LandmarkPoint, b: LandmarkPoint): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+/**
+ * Eye aspect ratio — the standard blink measure (Soukupová & Čech).
+ * Height-over-width of the eye polygon: roughly 0.3 open, under ~0.2 closed.
+ * Using a RATIO rather than raw pixels is what makes it independent of how
+ * close the person is sitting.
+ */
+function eyeAspectRatio(eye: readonly LandmarkPoint[]): number {
+  if (eye.length < 6) return 1;
+  const vertical = distance(eye[1], eye[5]) + distance(eye[2], eye[4]);
+  const horizontal = distance(eye[0], eye[3]) * 2;
+  if (horizontal === 0) return 1;
+  return vertical / horizontal;
+}
+
+export function getEyeOpenness(landmarks: FaceLandmarks): number {
+  return (eyeAspectRatio(landmarks.slice(36, 42)) + eyeAspectRatio(landmarks.slice(42, 48))) / 2;
+}
+
+/**
+ * Mouth openness, same ratio trick as the eyes: inner lip gap over mouth
+ * width, so it does not change with how close the person is sitting.
+ *
+ * getMouth() returns the 68-point model's points 48–67 in order, so within
+ * that array: 0 = left corner (48), 6 = right corner (54), 14 = inner upper
+ * lip (62), 18 = inner lower lip (66). The INNER lip pair is used rather than
+ * the outer one because the outer points barely separate on a small mouth
+ * opening, which made the threshold unreliable.
+ */
+const MOUTH_LEFT_CORNER = 0;
+const MOUTH_RIGHT_CORNER = 6;
+const MOUTH_INNER_TOP = 14;
+const MOUTH_INNER_BOTTOM = 18;
+
+export function getMouthOpenness(landmarks: FaceLandmarks): number {
+  const mouth = landmarks.slice(48, 68);
+  if (mouth.length <= MOUTH_INNER_BOTTOM) return 0;
+  const width = distance(mouth[MOUTH_LEFT_CORNER], mouth[MOUTH_RIGHT_CORNER]);
+  if (width === 0) return 0;
+  return distance(mouth[MOUTH_INNER_TOP], mouth[MOUTH_INNER_BOTTOM]) / width;
+}
+
+/**
+ * Head yaw, as a signed ratio: negative when the face turns to the subject's
+ * left, positive to their right, ~0 facing forward.
+ *
+ * Measured by how far the nose sits between the two jaw edges rather than by
+ * solving a full 3D pose — far fewer moving parts, and precise enough to tell
+ * a deliberate head turn from noise, which is all the challenge needs.
+ */
+export function getHeadYaw(landmarks: FaceLandmarks): number {
+  const jaw = landmarks.slice(0, 17);
+  const nose = landmarks.slice(27, 36);
+  if (jaw.length < 17 || nose.length === 0) return 0;
+  const left = jaw[0];
+  const right = jaw[16];
+  const noseTip = nose[nose.length - 1] ?? nose[0];
+
+  // Normalised left/right ASYMMETRY, not a raw x-offset from the midpoint.
+  //
+  // Both measure the same thing when the head is upright, but this version
+  // uses true 2D distances, which makes it invariant to head ROLL (tilt).
+  // The x-only version silently reported a yaw for someone who merely
+  // tilted their head, because tilting moves the nose's x-coordinate away
+  // from the midpoint of the two jaw x-coordinates without any actual turn.
+  //
+  // The literature does this properly with solvePnP over six anatomical
+  // points (nose tip, chin, eye corners, mouth corners) against a 3D model.
+  // That is more accurate, but needs a camera intrinsic matrix, and the
+  // sources note a guessed focal length makes extreme yaw unreliable anyway.
+  // For "did this person deliberately turn their head?" the asymmetry ratio
+  // is sufficient and has far fewer ways to go wrong.
+  const toLeft = distance(noseTip, left);
+  const toRight = distance(noseTip, right);
+  const total = toLeft + toRight;
+  if (total === 0) return 0;
+  // Positive = nose closer to the image's right edge = the person turned to
+  // THEIR left (the camera frame is not mirrored). See LivenessTracker.
+  return (toLeft - toRight) / total;
+}
+
+/**
+ * Rolling average over the last few frames.
+ *
+ * The head-pose literature is explicit that "landmark noise causes pose
+ * jitter, requiring careful filtering" — the detector's points wobble by a
+ * pixel or two every frame even on a perfectly still face, and on a
+ * ratio-based measure that wobble is enough to cross a threshold on its own.
+ * Without smoothing, a still face can register a phantom blink or turn (a
+ * false PASS, which is the dangerous direction), and a real slow movement can
+ * be missed.
+ */
+export class SignalSmoother {
+  private readonly window: number[] = [];
+
+  /**
+   * Window size is a real trade-off, not a free improvement, and it is set to
+   * 2 deliberately.
+   *
+   * Larger windows suppress more landmark jitter (fewer false PASSes, the
+   * dangerous direction) but also average away short real events (more false
+   * REJECTs, the infuriating direction). A blink lasts roughly 100-300ms,
+   * which is only 2-4 frames at this capture rate, so a 3-frame mean can
+   * dilute a genuine quick blink below the threshold entirely -- caught by
+   * the unit tests when the window was 3. Two frames removes single-frame
+   * spikes, which is what jitter actually looks like, while leaving a real
+   * blink clearly visible.
+   */
+  constructor(private readonly size = 2) {}
+
+  push(value: number): number {
+    this.window.push(value);
+    if (this.window.length > this.size) this.window.shift();
+    return this.window.reduce((sum, v) => sum + v, 0) / this.window.length;
+  }
+
+  get ready(): boolean {
+    return this.window.length >= this.size;
+  }
+}
+
+/**
+ * Liveness thresholds.
+ *
+ * The blink and mouth checks are RELATIVE to each person's own measured
+ * baseline, not absolute numbers. That is not a refinement, it is a
+ * correctness fix: eye aperture varies enormously between people, and a fixed
+ * eye-aspect-ratio cutoff silently fails anyone whose eyes are naturally
+ * narrower than whoever the constant was tuned on -- it either reads them as
+ * permanently "closed" or never sees them re-open. This bit real users on the
+ * first live run. Calibrating against the person in front of the camera is
+ * the same self-normalising principle evaluateFlashResponse uses, and for the
+ * same reason: fixed thresholds encode the assumption that everyone looks
+ * like the developer.
+ */
+/** Fraction of the person's own resting eye openness that counts as closed. */
+const BLINK_CLOSE_FACTOR = 0.72;
+/** Fraction of their own resting openness that counts as open again. */
+const BLINK_REOPEN_FACTOR = 0.88;
+/** How far the mouth must open beyond its own resting state. */
+const MOUTH_OPEN_FACTOR = 1.9;
+const MOUTH_CLOSE_FACTOR = 1.3;
+/** Head yaw is already a ratio of face width, so it needs no calibration. */
+const YAW_TURN_RATIO = 0.13;
+/** Frames spent measuring the resting baseline before judging anything. */
+const CALIBRATION_FRAMES = 6;
+
+/**
+ * Tracks whether the challenged action actually happened across a sequence of
+ * frames.
+ *
+ * Stateful on purpose. A blink is not "eyes are closed right now" — it is
+ * open, then closed, then open again, and only checking the current frame
+ * would accept a photo of someone with their eyes shut. The same reasoning
+ * applies to the head turns (must return toward centre) and the mouth.
+ */
+export class LivenessTracker {
+  private sawClosed = false;
+  private sawOpenAfterClosed = false;
+  private sawTurn = false;
+  private sawReturnAfterTurn = false;
+  private sawMouthOpen = false;
+  private sawMouthClosedAfterOpen = false;
+
+  /** Resting measurements for THIS person, collected over the first few
+   *  frames before any judgement is made. */
+  private baselineSamples: number[] = [];
+  private baseline: number | null = null;
+
+  /** Smooths the raw per-frame measurement before any threshold is applied.
+   *  See SignalSmoother: unfiltered landmark jitter can cross a threshold on
+   *  a completely still face, which would be a false PASS. */
+  private readonly smoother = new SignalSmoother(2);
+
+  constructor(private readonly action: FaceChallengeAction) {}
+
+  /** True until enough frames have been seen to know this person's resting
+   *  state. The UI uses it to say "hold still" rather than issuing the
+   *  instruction before it can even be judged. */
+  get calibrating(): boolean {
+    return this.action !== "turn_left" && this.action !== "turn_right" && this.baseline === null;
+  }
+
+  private calibrate(value: number): boolean {
+    if (this.baseline !== null) return true;
+    this.baselineSamples.push(value);
+    if (this.baselineSamples.length < CALIBRATION_FRAMES) return false;
+    // Median, not mean: if the person happens to blink during calibration,
+    // a mean would be dragged down and corrupt every later comparison.
+    const sorted = [...this.baselineSamples].sort((a, b) => a - b);
+    this.baseline = sorted[Math.floor(sorted.length / 2)];
+    return true;
+  }
+
+  observe(landmarks: FaceLandmarks): void {
+    switch (this.action) {
+      case "blink": {
+        const ear = this.smoother.push(getEyeOpenness(landmarks));
+        if (!this.calibrate(ear)) return;
+        const rest = this.baseline!;
+        if (ear < rest * BLINK_CLOSE_FACTOR) this.sawClosed = true;
+        else if (this.sawClosed && ear > rest * BLINK_REOPEN_FACTOR) this.sawOpenAfterClosed = true;
+        break;
+      }
+      case "turn_left":
+      case "turn_right": {
+        const yaw = this.smoother.push(getHeadYaw(landmarks));
+        // DIRECTION, and why it is this way round: getHeadYaw measures the
+        // RAW camera frame, which is not mirrored (only the on-screen preview
+        // is, via CSS). In the raw frame the camera faces the person, so the
+        // person's own left-hand side appears on the RIGHT of the image --
+        // turning their head to their left moves the nose towards the image's
+        // right, i.e. yaw goes POSITIVE. Coding it the intuitive way round
+        // inverts both challenges, which is exactly what happened on the
+        // first live run: "turn left" only passed when turning right.
+        const turned = this.action === "turn_left" ? yaw > YAW_TURN_RATIO : yaw < -YAW_TURN_RATIO;
+        if (turned) this.sawTurn = true;
+        else if (this.sawTurn && Math.abs(yaw) < YAW_TURN_RATIO / 2) this.sawReturnAfterTurn = true;
+        break;
+      }
+      case "open_mouth": {
+        const openness = this.smoother.push(getMouthOpenness(landmarks));
+        if (!this.calibrate(openness)) return;
+        // A closed mouth can measure near zero, so a pure ratio would be
+        // unstable -- the floor keeps it meaningful for everyone.
+        const rest = Math.max(this.baseline!, 0.04);
+        if (openness > rest * MOUTH_OPEN_FACTOR) this.sawMouthOpen = true;
+        else if (this.sawMouthOpen && openness < rest * MOUTH_CLOSE_FACTOR) this.sawMouthClosedAfterOpen = true;
+        break;
+      }
+    }
+  }
+
+  get passed(): boolean {
+    switch (this.action) {
+      case "blink": return this.sawClosed && this.sawOpenAfterClosed;
+      case "turn_left":
+      case "turn_right": return this.sawTurn && this.sawReturnAfterTurn;
+      case "open_mouth": return this.sawMouthOpen && this.sawMouthClosedAfterOpen;
+    }
+  }
+
+  /** Drives the on-screen progress hint so the user can tell the system is
+   *  seeing them, instead of staring at a static instruction wondering
+   *  whether it registered. */
+  get halfway(): boolean {
+    switch (this.action) {
+      case "blink": return this.sawClosed;
+      case "turn_left":
+      case "turn_right": return this.sawTurn;
+      case "open_mouth": return this.sawMouthOpen;
+    }
+  }
 }

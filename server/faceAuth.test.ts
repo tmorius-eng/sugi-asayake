@@ -7,6 +7,7 @@ import {
   faceDescriptorDistance,
   isAdminPanelRole,
   isValidFaceDescriptor,
+  LivenessTracker,
   type FaceColorSample,
   type FlashColor,
 } from "../shared/face-auth";
@@ -148,6 +149,8 @@ describe("evaluateFlashResponse (colour-flash liveness)", () => {
   }
 
   const ALL: FlashColor[] = ["red", "green", "blue", "yellow"];
+  /** Unlit skin, as captured before the sequence starts. */
+  const UNLIT: FaceColorSample = { r: 150, g: 120, b: 110 };
 
   it("passes a real face that reflects each colour", () => {
     const samples = ALL.map(color => ({ color, sample: litFace(color) }));
@@ -162,6 +165,27 @@ describe("evaluateFlashResponse (colour-flash liveness)", () => {
     const flat: FaceColorSample = { r: 150, g: 120, b: 110 };
     const samples = ALL.map(color => ({ color, sample: { ...flat } }));
     expect(evaluateFlashResponse(samples).passed).toBe(false);
+  });
+
+  it("uses an unlit baseline when one is supplied (IEEE flash-comparison method)", () => {
+    // Comparing lit frames against a genuinely unlit reference is stronger
+    // than comparing them only against each other, and it is what the IEEE
+    // "flash vs no-flash" method does.
+    const samples = ALL.map(color => ({ color, sample: litFace(color) }));
+    expect(evaluateFlashResponse(samples, UNLIT).passed).toBe(true);
+  });
+
+  it("rejects a screen replay that never brightens under our light", () => {
+    // A monitor emits its own light, so lighting the room barely changes what
+    // the camera sees. Only detectable with a baseline to compare against --
+    // this test is the reason the baseline was added.
+    const dim = ALL.map(color => ({
+      color,
+      sample: { r: UNLIT.r * 0.99, g: UNLIT.g * 0.99, b: UNLIT.b * 0.99 },
+    }));
+    const result = evaluateFlashResponse(dim, UNLIT);
+    expect(result.brightened).toBe(false);
+    expect(result.passed).toBe(false);
   });
 
   it("rejects a surface that only gets BRIGHTER without shifting hue", () => {
@@ -208,6 +232,172 @@ describe("evaluateFlashResponse (colour-flash liveness)", () => {
     const darker: FaceColorSample = { r: 70, g: 55, b: 50 };
     const samples = ALL.map(color => ({ color, sample: litFace(color, darker) }));
     expect(evaluateFlashResponse(samples).passed).toBe(true);
+  });
+});
+
+describe("LivenessTracker (motion challenges)", () => {
+  /**
+   * Builds a 68-point landmark set. Only the points the geometry actually
+   * reads are positioned meaningfully:
+   *   36-41 / 42-47  eyes      (eyeOpen scales the vertical aperture)
+   *   48-67          mouth     (mouthOpen scales the inner-lip gap)
+   *   0-16           jaw       (noseShift slides the nose between the edges)
+   *   27-35          nose
+   */
+  function face({ eyeOpen = 1, mouthOpen = 0, noseShift = 0 } = {}): { x: number; y: number }[] {
+    const points: { x: number; y: number }[] = Array.from({ length: 68 }, () => ({ x: 0, y: 0 }));
+
+    // Jaw: a straight span from x=100 to x=300.
+    for (let i = 0; i <= 16; i += 1) points[i] = { x: 100 + i * 12.5, y: 200 };
+
+    // Eyes: a hexagon whose height is scaled by eyeOpen. The aperture at
+    // eyeOpen=1 is a normal open eye; 0.3 is a blink.
+    const eye = (start: number, cx: number) => {
+      const h = 6 * eyeOpen;
+      points[start] = { x: cx - 15, y: 100 };
+      points[start + 1] = { x: cx - 7, y: 100 - h };
+      points[start + 2] = { x: cx + 7, y: 100 - h };
+      points[start + 3] = { x: cx + 15, y: 100 };
+      points[start + 4] = { x: cx + 7, y: 100 + h };
+      points[start + 5] = { x: cx - 7, y: 100 + h };
+    };
+    eye(36, 150);
+    eye(42, 250);
+
+    // Nose: tip is the LAST point (index 35), which is what getHeadYaw reads.
+    for (let i = 27; i <= 35; i += 1) points[i] = { x: 200, y: 130 };
+    points[35] = { x: 200 + noseShift, y: 150 };
+
+    // Mouth: corners at 48/54 (indices 0 and 6 of the slice), inner lips at
+    // 62/66 (indices 14 and 18) separated by mouthOpen.
+    for (let i = 48; i <= 67; i += 1) points[i] = { x: 200, y: 170 };
+    points[48] = { x: 170, y: 170 };
+    points[54] = { x: 230, y: 170 };
+    points[48 + 14] = { x: 200, y: 170 - mouthOpen * 30 };
+    points[48 + 18] = { x: 200, y: 170 + mouthOpen * 30 };
+
+    return points;
+  }
+
+  /** Feeds enough resting frames for the tracker to learn this face's
+   *  baseline before the action happens. */
+  function calibrate(tracker: LivenessTracker, resting = face()) {
+    for (let i = 0; i < 8; i += 1) tracker.observe(resting);
+  }
+
+  it("detects a blink: open, closed, open again", () => {
+    const tracker = new LivenessTracker("blink");
+    calibrate(tracker);
+    expect(tracker.passed).toBe(false);
+
+    // A real blink spans several frames (~100-300ms), so feed it as one --
+    // a single-frame event is not something a camera ever actually produces.
+    tracker.observe(face({ eyeOpen: 0.25 }));
+    tracker.observe(face({ eyeOpen: 0.2 }));
+    expect(tracker.halfway).toBe(true);
+    expect(tracker.passed).toBe(false); // eyes still shut — not a blink yet
+
+    tracker.observe(face({ eyeOpen: 1 }));
+    tracker.observe(face({ eyeOpen: 1 }));
+    expect(tracker.passed).toBe(true);
+  });
+
+  it("does not accept eyes that are simply held shut", () => {
+    // A photo of someone with their eyes closed must not pass.
+    const tracker = new LivenessTracker("blink");
+    calibrate(tracker, face({ eyeOpen: 0.25 }));
+    for (let i = 0; i < 10; i += 1) tracker.observe(face({ eyeOpen: 0.25 }));
+    expect(tracker.passed).toBe(false);
+  });
+
+  it("detects a blink for someone whose eyes are naturally much narrower", () => {
+    // THE bug Tom hit on the first live run: with a fixed eye-aspect-ratio
+    // cutoff, a person whose resting aperture sits below that constant can
+    // never pass -- the system reads them as permanently closed. Calibrating
+    // against their own baseline is what fixes it, and this is the test that
+    // keeps it fixed.
+    const narrowResting = face({ eyeOpen: 0.45 });
+    const tracker = new LivenessTracker("blink");
+    calibrate(tracker, narrowResting);
+
+    tracker.observe(face({ eyeOpen: 0.1 }));
+    tracker.observe(face({ eyeOpen: 0.1 }));
+    tracker.observe(narrowResting);
+    tracker.observe(narrowResting);
+    expect(tracker.passed).toBe(true);
+  });
+
+  it("turns LEFT are read as left, not right", () => {
+    // The camera frame is NOT mirrored (only the on-screen preview is), so a
+    // person turning to their own left moves the nose towards the image's
+    // right: yaw goes positive. Coding it the intuitive way inverted both
+    // challenges -- "turn left" only passed when turning right, which is
+    // exactly what Tom reported.
+    const tracker = new LivenessTracker("turn_left");
+    tracker.observe(face());
+    tracker.observe(face());
+    tracker.observe(face({ noseShift: 40 }));
+    tracker.observe(face({ noseShift: 40 }));
+    tracker.observe(face());
+    tracker.observe(face());
+    expect(tracker.passed).toBe(true);
+  });
+
+  it("turning the wrong way does not satisfy a left challenge", () => {
+    const tracker = new LivenessTracker("turn_left");
+    tracker.observe(face());
+    tracker.observe(face());
+    tracker.observe(face({ noseShift: -40 }));
+    tracker.observe(face({ noseShift: -40 }));
+    tracker.observe(face());
+    tracker.observe(face());
+    expect(tracker.passed).toBe(false);
+  });
+
+  it("turns RIGHT are read as right", () => {
+    const tracker = new LivenessTracker("turn_right");
+    tracker.observe(face());
+    tracker.observe(face());
+    tracker.observe(face({ noseShift: -40 }));
+    tracker.observe(face({ noseShift: -40 }));
+    tracker.observe(face());
+    tracker.observe(face());
+    expect(tracker.passed).toBe(true);
+  });
+
+  it("requires the head to come back to centre, not just turn away", () => {
+    const tracker = new LivenessTracker("turn_left");
+    tracker.observe(face());
+    tracker.observe(face());
+    tracker.observe(face({ noseShift: 40 }));
+    tracker.observe(face({ noseShift: 40 }));
+    expect(tracker.passed).toBe(false);
+  });
+
+  it("detects an open mouth relative to that person's resting mouth", () => {
+    const tracker = new LivenessTracker("open_mouth");
+    calibrate(tracker);
+    tracker.observe(face({ mouthOpen: 1 }));
+    tracker.observe(face({ mouthOpen: 1 }));
+    expect(tracker.halfway).toBe(true);
+    tracker.observe(face({ mouthOpen: 0 }));
+    tracker.observe(face({ mouthOpen: 0 }));
+    expect(tracker.passed).toBe(true);
+  });
+
+  it("reports it is still calibrating before it has a baseline", () => {
+    // The UI uses this to say "hold still" instead of issuing an instruction
+    // it cannot yet judge — the other half of the "it gave up before I could
+    // act" problem.
+    const tracker = new LivenessTracker("blink");
+    expect(tracker.calibrating).toBe(true);
+    calibrate(tracker);
+    expect(tracker.calibrating).toBe(false);
+  });
+
+  it("needs no calibration for head turns", () => {
+    // Yaw is already a ratio of face width, so it is scale-free.
+    expect(new LivenessTracker("turn_left").calibrating).toBe(false);
   });
 });
 

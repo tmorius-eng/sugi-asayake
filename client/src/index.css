@@ -1836,8 +1836,12 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 /* The colour-flash liveness challenge. Opacity below 1 so the person can
    still see themselves while the colour washes the frame -- and so the
    camera still has a usable image of the lit face to measure. */
-.face-gate-flash { position: absolute; inset: 0; pointer-events: none; opacity: .82; mix-blend-mode: screen; animation: face-gate-flash-in .12s ease-out; }
-@keyframes face-gate-flash-in { from { opacity: 0; } to { opacity: .82; } }
+/* Full-viewport, not just the video box: the monitor is the light source for
+   this check, so lighting the entire screen produces a far stronger and more
+   measurable reflection off the face than a small panel would. Sits above
+   everything, ignores pointer events so nothing is blocked. */
+.face-gate-fullflash { position: fixed; inset: 0; z-index: 9999; pointer-events: none; animation: face-gate-flash-in .1s ease-out; }
+@keyframes face-gate-flash-in { from { opacity: .55; } to { opacity: 1; } }
 
 .face-gate-video-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(13,27,51,.72); color: #fff; z-index: 2; }
 
@@ -1881,4 +1885,30 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
   .face-gate-scanline { animation: none; top: 50%; opacity: .5; }
   .face-gate-instruction { animation: none; }
   .face-gate-stage.is-locked { animation: none; }
+}
+
+/* Consent screen, adapted from the enterprise "enable secure verification"
+   sign-in pattern Tom referenced — branded strip, identity, security-model
+   diagram, action — rendered in SUGI's own palette rather than copied. */
+.face-gate-card--consent { position: relative; overflow: hidden; padding-top: 34px; }
+/* Brand strip: SUGI's sunrise gradient, standing in for the reference's
+   decorative banner without borrowing its artwork. */
+.face-gate-brandstrip { position: absolute; inset: 0 0 auto 0; height: 6px; background: linear-gradient(90deg, var(--primary, #df1f3d), #f0842f 55%, #f5c451); }
+.face-gate-brand { margin: 0; font-size: 10px; font-weight: 800; letter-spacing: .18em; color: var(--primary-text, #c11a35); }
+.face-gate-identity { margin: 6px 0 0; font-size: 13px; font-weight: 600; color: #52535a; }
+.face-gate-title { margin: 16px 0 0; font-family: var(--font-display); font-size: 24px; font-weight: 620; letter-spacing: -.045em; color: var(--foreground); }
+.face-gate-lede { margin: 8px 0 20px; font-size: 13px; line-height: 1.7; color: #6f7076; }
+
+/* "password + face = access" — the security model at a glance. */
+.face-gate-diagram { display: flex; align-items: flex-start; justify-content: center; gap: 10px; margin: 0 0 20px; padding: 18px 12px; border-radius: 14px; background: #faf7f1; }
+.face-gate-diagram-item { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1; text-align: center; font-size: 11px; font-weight: 700; color: #52535a; line-height: 1.35; }
+.face-gate-diagram-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; background: #fff; box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.08)); color: #6f7076; }
+.face-gate-diagram-icon--accent { color: var(--primary-text, #c11a35); box-shadow: 0 0 0 2px rgba(223,31,61,.16), var(--shadow-sm, 0 1px 3px rgba(0,0,0,.08)); }
+.face-gate-diagram-icon--ok { color: #1a7f4b; }
+.face-gate-diagram-op { align-self: center; margin-top: -14px; font-size: 17px; font-weight: 700; color: #a9a49a; }
+
+@media (max-width: 520px) {
+  .face-gate-diagram { gap: 6px; padding: 14px 8px; }
+  .face-gate-diagram-icon { width: 40px; height: 40px; }
+  .face-gate-diagram-item { font-size: 10px; }
 }
