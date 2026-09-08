@@ -50,7 +50,6 @@ import CarouselShelf from "@/components/home/CarouselShelf";
 import { BestsellerCardSkeleton } from "@/components/Skeleton";
 import { imageSrcSet } from "@shared/image-variants";
 import { getSalePercent } from "@shared/catalog-filter";
-import { locations } from "@/components/home/locations-data";
 import { categories } from "@/components/home/categories-data";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { useSiteText } from "@/hooks/useSiteText";
@@ -143,6 +142,13 @@ export default function Home() {
   // fetching" conventions.
   const publishedCountQuery = trpc.catalog.publishedCount.useQuery();
   const productCountLabel = publishedCountQuery.data === undefined ? "…+" : `${Math.floor(publishedCountQuery.data / 100) * 100}+`;
+  // "Controls everything" admin overhaul (2026-09-08, Phase J): replaces
+  // locations-data.ts's hardcoded array length. Falls back to 4 (today's
+  // real, live count) only for the brief instant before this loads, so it
+  // never flashes a wrong/zero number -- corrected to the real live count
+  // within one render either way.
+  const branchesQuery = trpc.content.branches.useQuery();
+  const branchCount = branchesQuery.data?.length ?? 4;
   // NEWVISION.md §6: real reviews only, hidden entirely (in BrandStorySection)
   // rather than padding itself with lower-rated/commentless reviews.
   const featuredReviewsQuery = trpc.reviews.featured.useQuery();
@@ -202,7 +208,7 @@ export default function Home() {
             client/src/components/home/QuickStatsSection.tsx. */}
         <QuickStatsSection />
 
-        <BrandStorySection branchCount={locations.length} productCountLabel={productCountLabel} featuredReviews={featuredReviews} />
+        <BrandStorySection branchCount={branchCount} productCountLabel={productCountLabel} featuredReviews={featuredReviews} />
 
         {/* Restored 2026-09-06 (Tom: "we need Top Brands, must have!!") --
             same CarouselShelf horizontal-scroll primitive as the bestseller/

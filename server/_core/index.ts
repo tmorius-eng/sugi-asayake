@@ -18,6 +18,8 @@ import { assertProductionSecrets, createContext } from "./context";
 import { registerQPayCallbackRoute } from "../qpay";
 import { registerVerifyMnCallbackRoute } from "../verifyMn";
 import { dbPing } from "../db";
+import { startScheduler } from "./scheduler";
+import { registerAbandonedCartReminderJob, registerLowStockDigestJob } from "../automation";
 import { notifyError, registerHoneybadgerErrorMiddleware, registerHoneybadgerMiddleware } from "./honeybadger";
 import { limitApiTraffic, protectStateChangingApiRequests, setSecurityHeaders } from "./security";
 import { serveStatic, setupVite } from "./vite";
@@ -125,6 +127,13 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
+
+  // "Controls everything" admin overhaul (2026-09-08, Phases D-F): the one
+  // in-process scheduler this app has -- see server/_core/scheduler.ts and
+  // server/automation.ts for the two real jobs registered on it.
+  registerAbandonedCartReminderJob();
+  registerLowStockDigestJob();
+  startScheduler();
 }
 
 // Backend audit (2026-09-02): neither handler existed anywhere -- an

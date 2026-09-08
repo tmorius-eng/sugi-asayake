@@ -36,6 +36,15 @@ import {
   updateFeaturedBrand,
   deleteFeaturedBrand,
   getAdminFeaturedBrands,
+  getActiveBranches,
+  getAdminBranches,
+  createBranch,
+  updateBranch,
+  deleteBranch,
+  getBranchStockForVariant,
+  setBranchStock,
+  recordInStoreSale,
+  searchVariantsForBranch,
   getDistinctRealBrands,
   getFeaturedBrands,
   getFeaturedReviews,
@@ -107,6 +116,13 @@ import {
   getRoutineForProduct,
   getSiteMedia,
   getSiteText,
+  getStoreSettings,
+  getStoreSettingValue,
+  upsertStoreSetting,
+  deleteStoreSetting,
+  adjustStoreCredit,
+  getStoreCreditLedger,
+  getUserStoreCreditBalance,
   getUserById,
   getVisitorSessionIdByToken,
   getWishlistForUser,
@@ -162,7 +178,7 @@ import {
   updateUserPreferences,
   updateUserProfile,
 } from "./db";
-import { adminProcedure, anyStaffProcedure, catalogReadProcedure, contentReadProcedure, financeProcedure, lenientRateLimitedProcedure, marketingProcedure, moderateRateLimitedProcedure, ordersReadProcedure, phoneVerifyRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure, warehouseProcedure } from "./_core/trpc";
+import { adminProcedure, anyStaffProcedure, catalogReadProcedure, contentReadProcedure, financeProcedure, lenientRateLimitedProcedure, marketingProcedure, moderateRateLimitedProcedure, ordersReadProcedure, phoneVerifyRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure, usersReadProcedure, warehouseProcedure } from "./_core/trpc";
 import { storagePing, storagePut, storagePutImageVariants } from "./storage";
 import { IMAGE_MAX_DIMENSION, processUploadedImage, processUploadedImageVariants } from "./_core/imageProcessing";
 import { createQPayInvoice, getQPayAvailability } from "./qpay";
@@ -171,6 +187,7 @@ import { getCategoryWriteViolation, getProductWriteViolation } from "./catalog-v
 import { getAnalyticsReport, exportAnalyticsExcel, exportAnalyticsPdf, getAllCustomersForCampaign, getPreferenceSegmentBreakdown, getRecommendationCoverage, getUsersByLoyaltyTier, getUsersBySegment, type PreferenceSegmentField } from "./analytics";
 import { siteMediaSlotKeys } from "../shared/site-media";
 import { siteTextSlotKeys } from "../shared/site-text";
+import { storeSettingKeys, getStoreSettingSlot, type StoreSettingKey } from "../shared/store-settings";
 import { formatMnt } from "@shared/format";
 
 const slugSchema = z.string().trim().min(2).max(200).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens only.");
@@ -326,6 +343,25 @@ const featuredBrandUpdateSchema = featuredBrandWriteSchema.partial().extend({ id
   value => Object.keys(value).some(key => key !== "id"),
   { message: "Provide at least one brand field to update." },
 );
+// "Controls everything" admin overhaul (2026-09-08, Phase J): `name` is
+// what orders.pickupBranch stores verbatim (unchanged, free varchar) --
+// see the schema comment on `branches` for why this stays a name, not an
+// id, at the order-record level.
+const branchWriteSchema = z.object({
+  name: z.string().trim().min(2).max(160),
+  slug: slugSchema,
+  address: z.string().trim().min(4).max(2_000),
+  phone: nullableText(40),
+  mapUrl: nullableText(1_000),
+  photoUrl: nullableText(1_000),
+  sortOrder: z.number().int().default(0),
+  isActive: z.boolean().default(true),
+  isFulfillmentDefault: z.boolean().default(false),
+});
+const branchUpdateSchema = branchWriteSchema.partial().extend({ id: z.number().int().positive() }).refine(
+  value => Object.keys(value).some(key => key !== "id"),
+  { message: "Provide at least one branch field to update." },
+);
 // PREMIUM-FEATURES.md TIER 4.
 const routineWriteSchema = z.object({
   name: z.string().trim().min(2).max(180),
@@ -391,6 +427,7 @@ const imageContentTypes = ["image/jpeg", "image/png", "image/webp"] as const;
 const staffRoleSchema = z.enum(["user", "staff", "finance", "marketing", "warehouse", "admin"]);
 const siteMediaSlotSchema = z.enum(siteMediaSlotKeys);
 const siteTextSlotSchema = z.enum(siteTextSlotKeys);
+const storeSettingKeySchema = z.enum(storeSettingKeys);
 // A syntactically valid but unusable scrypt hash (correct salt/hash lengths,
 // see server/_core/password.ts), used to run `verifyPassword` through its
 // full computation even when no account matches the submitted phone number.
@@ -444,16 +481,25 @@ function resolveCartOwnerForWrite(ctx: TrpcContext): CartOwner {
 // ROADMAP.md TIER 2: order confirmation + status-change notifications.
 // Both are best-effort (see the try/catch at each call site) — a Brevo
 // hiccup should never fail or roll back a real order.
-const orderStatusMessages: Record<string, string> = {
-  confirmed: "Таны захиалгыг баталгаажууллаа.",
-  packed: "Таны захиалгыг бэлтгэж дууслаа.",
-  out_for_delivery: "Таны захиалга хүргэлтэд гарлаа.",
-  completed: "Таны захиалга амжилттай хүргэгдлээ. Худалдан авалт хийсэнд баярлалаа!",
-  cancelled: "Таны захиалгыг цуцаллаа. Асуух зүйл байвал бидэнтэй холбогдоно уу.",
-  returned: "Таны захиалгыг буцаагдсан гэж тэмдэглэлээ. Асуух зүйл байвал бидэнтэй холбогдоно уу.",
+//
+// "Controls everything" admin overhaul (2026-09-08, Phase C): the prose
+// itself now comes from store_settings (admin-editable via "Дэлгүүрийн
+// тохиргоо" > "Мессежийн загвар"), via getStoreSettingValue's usual DB-
+// override-with-code-fallback contract -- shared/store-settings.ts's
+// fallbackValue for each key IS today's exact wording, so an unconfigured
+// key sends byte-for-byte what this file used to hardcode. Only mapped
+// here: which settingKey backs which order status -- "pending" has
+// deliberately no entry (no transition to announce for the initial state).
+const orderStatusMessageKeys: Partial<Record<string, StoreSettingKey>> = {
+  confirmed: "email-order-status-confirmed",
+  packed: "email-order-status-packed",
+  out_for_delivery: "email-order-status-out_for_delivery",
+  completed: "email-order-status-completed",
+  cancelled: "email-order-status-cancelled",
+  returned: "email-order-status-returned",
 };
 
-async function sendOrderConfirmationEmail(order: { orderNumber: string; customerEmail: string | null; customerName: string; totalMnt: number; deliveryMethod: string; deliveryAddress: string | null; pickupBranch: string | null; items: { name: string; quantity: number; priceMnt: number; attributesJson?: string | null }[]; discountMnt?: number; routineName?: string | null; couponCode?: string | null; couponDiscountMnt?: number; loyaltyDiscountMnt?: number; appliedLoyaltyTierName?: string | null }) {
+async function sendOrderConfirmationEmail(order: { orderNumber: string; customerEmail: string | null; customerName: string; totalMnt: number; deliveryMethod: string; deliveryAddress: string | null; pickupBranch: string | null; items: { name: string; quantity: number; priceMnt: number; attributesJson?: string | null }[]; discountMnt?: number; routineName?: string | null; couponCode?: string | null; couponDiscountMnt?: number; loyaltyDiscountMnt?: number; appliedLoyaltyTierName?: string | null; storeCreditAppliedMnt?: number }) {
   if (!order.customerEmail) return;
   const itemLines = order.items.map(item => {
     const attributes = formatVariantAttributes(item.attributesJson);
@@ -464,17 +510,23 @@ async function sendOrderConfirmationEmail(order: { orderNumber: string; customer
   const routineDiscountLine = order.discountMnt && order.discountMnt > 0 ? `\n"${order.routineName}" routine хямдрал: -${formatMnt(order.discountMnt)}` : "";
   const couponDiscountLine = order.couponDiscountMnt && order.couponDiscountMnt > 0 ? `\n"${order.couponCode}" хямдралын код: -${formatMnt(order.couponDiscountMnt)}` : "";
   const loyaltyDiscountLine = order.loyaltyDiscountMnt && order.loyaltyDiscountMnt > 0 ? `\n"${order.appliedLoyaltyTierName}" гишүүнчлэлийн хямдрал: -${formatMnt(order.loyaltyDiscountMnt)}` : "";
+  // "Controls everything" admin overhaul (2026-09-08, Phase I): same
+  // "only mentioned when actually applied" pattern as the 3 discount lines
+  // above -- cash-equivalent, so labeled distinctly from a percentage discount.
+  const storeCreditLine = order.storeCreditAppliedMnt && order.storeCreditAppliedMnt > 0 ? `\nДэлгүүрийн зээл ашигласан: -${formatMnt(order.storeCreditAppliedMnt)}` : "";
+  const closingLine = await getStoreSettingValue("email-order-confirmation-closing");
   await sendAccountEmail({
     to: order.customerEmail,
     subject: `SUGI ASAYAKE — Захиалга баталгаажлаа (${order.orderNumber})`,
-    content: `Сайн байна уу, ${order.customerName}!\n\nТаны ${order.orderNumber} дугаартай захиалгыг хүлээн авлаа:\n\n${itemLines}${routineDiscountLine}${couponDiscountLine}${loyaltyDiscountLine}\n\nНийт дүн: ${formatMnt(order.totalMnt)}\n${deliveryLine}\n\nЗахиалгынхаа явцыг веб сайтаас харах боломжтой. Худалдан авалт хийсэнд баярлалаа!`,
+    content: `Сайн байна уу, ${order.customerName}!\n\nТаны ${order.orderNumber} дугаартай захиалгыг хүлээн авлаа:\n\n${itemLines}${routineDiscountLine}${couponDiscountLine}${loyaltyDiscountLine}${storeCreditLine}\n\nНийт дүн: ${formatMnt(order.totalMnt)}\n${deliveryLine}\n\n${closingLine}`,
   });
 }
 
 async function sendOrderStatusUpdateEmail(order: { orderNumber: string; customerEmail: string | null; customerName: string; status: string; deliveryTrackingRef: string | null }) {
   if (!order.customerEmail) return;
-  const message = orderStatusMessages[order.status];
-  if (!message) return; // "pending" (initial state) has no transition to announce.
+  const messageKey = orderStatusMessageKeys[order.status];
+  if (!messageKey) return; // "pending" (initial state) has no transition to announce.
+  const message = await getStoreSettingValue(messageKey);
   const trackingLine = order.deliveryTrackingRef ? `\nХүргэлтийн дугаар: ${order.deliveryTrackingRef}` : "";
   await sendAccountEmail({
     to: order.customerEmail,
@@ -1004,6 +1056,15 @@ export const appRouter = router({
     }),
     siteMedia: publicProcedure.query(() => getSiteMedia()),
     siteText: publicProcedure.query(() => getSiteText()),
+    // "Controls everything" admin overhaul (2026-09-08, Phase A): public so
+    // the checkout page (delivery fee/free-shipping threshold) can read it
+    // without an account, same public tier as siteText/siteMedia above.
+    storeSettings: publicProcedure.query(() => getStoreSettings()),
+    // "Controls everything" admin overhaul (2026-09-08, Phase J): replaces
+    // client/src/components/home/locations-data.ts's pure hardcoded array
+    // -- StoreLocatorSection/SiteFooter/Checkout's pickup-branch picker all
+    // read this live query now instead of importing that file.
+    branches: publicProcedure.query(() => getActiveBranches()),
   }),
   cart: router({
     // publicProcedure, not protectedProcedure: UX-RESEARCH.md priority #1 is
@@ -1072,6 +1133,10 @@ export const appRouter = router({
       }
       return getApplicableLoyaltyDiscount(ctx.user.id, afterCouponMnt);
     }),
+    // "Controls everything" admin overhaul (2026-09-08, Phase I): Checkout's
+    // own "apply my store credit" toggle -- protectedProcedure (only a
+    // registered customer has a balance at all; a guest never sees this).
+    myStoreCreditBalance: protectedProcedure.query(({ ctx }) => getUserStoreCreditBalance(ctx.user.id)),
     // PHASE 2 of product variants: exactly one of productId/variantId.
     // productId resolves to that product's default variant server-side —
     // every existing caller (Shop quick-add, routine bulk-add, Profile
@@ -1111,10 +1176,22 @@ export const appRouter = router({
       deliveryMethod: z.enum(["ub_delivery", "store_pickup"]),
       deliveryAddress: z.string().trim().min(8).max(2_000).nullable().optional(),
       district: districtSchema,
-      pickupBranch: z.enum(["Орос элчингийн салбар", "Их наяд плаза салбар", "Яармаг FOOD CITY салбар"]).or(z.literal("")).nullable().optional(),
+      // "Controls everything" admin overhaul (2026-09-08, Phase J): used to
+      // be a hardcoded z.enum of 3 branch names, silently out of sync with
+      // the real 4-branch locations-data.ts array (branch 04 was never
+      // selectable). The real check against the live branches table now
+      // happens in createOrderFromActiveCart, the actual authority -- same
+      // "validate against real DB state in the resolver, not a static zod
+      // enum" pattern as couponCode.
+      pickupBranch: z.string().trim().max(160).or(z.literal("")).nullable().optional(),
       paymentMethod: z.enum(["qpay", "bank_transfer", "card", "cash_on_delivery"]),
       couponCode: z.string().trim().min(1).max(40).nullable().optional(),
       trafficSource: z.string().trim().min(1).max(200).nullable().optional(),
+      // "Controls everything" admin overhaul (2026-09-08, Phase I): re-
+      // validated against the shopper's real balance server-side
+      // (createOrderFromActiveCart), never trusted as the actual amount
+      // applied -- same discipline as couponCode above.
+      applyStoreCreditMnt: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
     }).superRefine((value, context) => {
       if (value.deliveryMethod === "ub_delivery" && !value.deliveryAddress) {
         context.addIssue({ code: z.ZodIssueCode.custom, message: "A delivery address is required for Ulaanbaatar delivery.", path: ["deliveryAddress"] });
@@ -1447,7 +1524,8 @@ export const appRouter = router({
     mediaLibrary: staffProcedure.input(z.object({ search: z.string().trim().max(120).optional(), page: z.number().int().positive().default(1) })).query(({ input }) => getAdminMediaLibrary(input)),
     siteMedia: marketingProcedure.query(() => getSiteMedia()),
     siteText: marketingProcedure.query(() => getSiteText()),
-    users: adminProcedure.query(() => getAdminUsers()),
+    storeSettings: marketingProcedure.query(() => getStoreSettings()),
+    users: usersReadProcedure.query(() => getAdminUsers()),
     // 2026-09-05 ("admin invite staff section just change it to manually
     // only admin give staff role to default users" -- Tom, explicit): the
     // email-invitation flow (staffInvitations/inviteStaff/
@@ -1481,7 +1559,7 @@ export const appRouter = router({
         throw new TRPCError({ code: "CONFLICT", message: error instanceof Error ? error.message : "Утасны дугаарыг шинэчилж чадсангүй." });
       }
     }),
-    userDetail: adminProcedure.input(z.object({ userId: z.number().int().positive() })).query(async ({ input }) => {
+    userDetail: usersReadProcedure.input(z.object({ userId: z.number().int().positive() })).query(async ({ input }) => {
       const detail = await getAdminUserDetail(input.userId);
       if (!detail) throw new TRPCError({ code: "NOT_FOUND", message: "User not found." });
       return detail;
@@ -1495,6 +1573,28 @@ export const appRouter = router({
       await logAdminAction({ actorUserId: ctx.user.id, action: "user.loyalty_adjustment_updated", entityType: "user", entityId: input.userId, metadata: { adjustmentMnt: input.adjustmentMnt } });
       return detail;
     }),
+    // "Controls everything" admin overhaul (2026-09-08, Phase H): real money
+    // (a customer-service credit, not a percentage discount), same
+    // financeProcedure tier as refundOrder -- unlike the loyalty-adjustment
+    // bridge above (adminProcedure), issuing store credit is a financial
+    // authorization decision, not a catalog/fulfilment one. Negative deltas
+    // are allowed too (reversing a mistaken credit); adjustStoreCredit
+    // itself rejects a delta that would take the balance below zero.
+    adjustStoreCredit: financeProcedure.input(z.object({
+      userId: z.number().int().positive(),
+      deltaMnt: z.number().int().min(-1_000_000_000).max(1_000_000_000).refine(value => value !== 0, "Adjustment amount must not be zero."),
+      reason: z.string().trim().min(1).max(300),
+    })).mutation(async ({ ctx, input }) => {
+      let result;
+      try {
+        result = await adjustStoreCredit({ userId: input.userId, deltaMnt: input.deltaMnt, reason: input.reason, actorUserId: ctx.user.id });
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to adjust store credit." });
+      }
+      await logAdminAction({ actorUserId: ctx.user.id, action: "user.store_credit_adjusted", entityType: "user", entityId: input.userId, metadata: { deltaMnt: input.deltaMnt, reason: input.reason } });
+      return result;
+    }),
+    storeCreditLedger: financeProcedure.input(z.object({ userId: z.number().int().positive() })).query(({ input }) => getStoreCreditLedger(input.userId)),
     // Admin-manageable third-party provider config (eBarimt/StorePay/Golomt
     // card/eBuuhia courier) -- adminProcedure, not staffProcedure, since
     // these are financial/security-sensitive credentials. QPay isn't part
@@ -1824,6 +1924,27 @@ export const appRouter = router({
       await logAdminAction({ actorUserId: ctx.user.id, action: "featuredBrand.deleted", entityType: "featuredBrand", entityId: input.id });
       return result;
     }),
+    // "Controls everything" admin overhaul (2026-09-08, Phase J). Same
+    // marketingProcedure weight and CRUD shape as featuredBrands above --
+    // branches are storefront-facing merchandising/logistics data, not a
+    // financial or fulfilment-write decision (Phase L's actual stock
+    // decrements stay warehouseProcedure-gated separately).
+    branches: marketingProcedure.query(() => getAdminBranches()),
+    createBranch: marketingProcedure.input(branchWriteSchema).mutation(async ({ ctx, input }) => {
+      const branch = await createBranch(input);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "branch.created", entityType: "branch", entityId: branch.id, metadata: { name: branch.name } });
+      return branch;
+    }),
+    updateBranch: marketingProcedure.input(branchUpdateSchema).mutation(async ({ ctx, input }) => {
+      const branch = await updateBranch(input);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "branch.updated", entityType: "branch", entityId: branch.id, metadata: { name: branch.name } });
+      return branch;
+    }),
+    deleteBranch: marketingProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const result = await deleteBranch(input.id);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "branch.deleted", entityType: "branch", entityId: input.id });
+      return result;
+    }),
     createProduct: warehouseProcedure.input(productWriteSchema).mutation(async ({ ctx, input }) => {
       // costMnt is admin-only (see the schema comment above) -- a staff
       // session never even sees the real value (products query redacts it
@@ -1899,6 +2020,37 @@ export const appRouter = router({
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Variant устгаж чадсангүй." });
       }
+    }),
+    // "Controls everything" admin overhaul (2026-09-08, Phase L): the
+    // per-branch stock editor -- same warehouseProcedure weight as the
+    // variant endpoints above (stock-keeping, not a merchandising or
+    // financial decision).
+    branchStock: warehouseProcedure.input(z.object({ variantId: z.number().int().positive() })).query(({ input }) => getBranchStockForVariant(input.variantId)),
+    setBranchStock: warehouseProcedure.input(z.object({ branchId: z.number().int().positive(), variantId: z.number().int().positive(), quantity: z.number().int().min(0) })).mutation(async ({ ctx, input }) => {
+      const result = await setBranchStock(input.branchId, input.variantId, input.quantity);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "branchStock.updated", entityType: "product_variant", entityId: input.variantId, metadata: { branchId: input.branchId, quantity: input.quantity } });
+      return result;
+    }),
+    // "Controls everything" admin overhaul (2026-09-08, Phase M): the POS
+    // in-person-sale tool. Same warehouseProcedure weight as the stock
+    // endpoints above -- recording a sale is stock-adjacent, not a
+    // merchandising or financial-policy decision (admin can too).
+    posSearchVariants: warehouseProcedure.input(z.object({ branchId: z.number().int().positive(), search: z.string().trim().max(120).default("") })).query(({ input }) => searchVariantsForBranch(input.branchId, input.search)),
+    recordInStoreSale: warehouseProcedure.input(z.object({
+      branchId: z.number().int().positive(),
+      items: z.array(z.object({ variantId: z.number().int().positive(), quantity: z.number().int().min(1).max(1_000) })).min(1).max(50),
+      userId: z.number().int().positive().nullable().optional(),
+      customerName: nullableText(160),
+      customerPhone: nullableText(40),
+    })).mutation(async ({ ctx, input }) => {
+      let order;
+      try {
+        order = await recordInStoreSale(input);
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to record this sale." });
+      }
+      await logAdminAction({ actorUserId: ctx.user.id, action: "pos.sale_recorded", entityType: "order", entityId: order.id, metadata: { branchId: input.branchId, totalMnt: order.totalMnt, itemCount: input.items.length } });
+      return order;
     }),
     // PREMIUM-FEATURES.md TIER 2: lightweight moderation — a flat list an
     // admin/staff can filter through, not a pre-publish approval queue
@@ -2060,6 +2212,31 @@ export const appRouter = router({
       await deleteSiteText(input.slotKey);
       await logAdminAction({ actorUserId: ctx.user.id, action: "site_text.cleared", entityType: "site_text", metadata: { slotKey: input.slotKey } });
       return { slotKey: input.slotKey };
+    }),
+    // "Controls everything" admin overhaul (2026-09-08, Phase A): same
+    // marketingProcedure tier as siteText/siteMedia above -- these are
+    // storefront-facing business rules (delivery fee, email wording), not a
+    // financial-authorization decision like refundOrder/adjustStoreCredit.
+    updateStoreSetting: marketingProcedure.input(z.object({
+      settingKey: storeSettingKeySchema,
+      settingValue: z.string().trim().min(1).max(2_000),
+    })).mutation(async ({ ctx, input }) => {
+      // A "number"-typed slot feeds straight into a price calculation
+      // (checkout's delivery fee) -- a non-numeric value here wouldn't just
+      // look wrong, it would silently turn every order total into NaN. Caught
+      // at write time, not left for the read side to discover.
+      const slot = getStoreSettingSlot(input.settingKey);
+      if (slot.type === "number" && !Number.isFinite(Number(input.settingValue))) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ тохиргоо зөвхөн тоо байх ёстой." });
+      }
+      const setting = await upsertStoreSetting({ ...input, updatedByUserId: ctx.user.id });
+      await logAdminAction({ actorUserId: ctx.user.id, action: "store_settings.updated", entityType: "store_settings", entityId: setting.id, metadata: { settingKey: input.settingKey } });
+      return setting;
+    }),
+    clearStoreSetting: marketingProcedure.input(z.object({ settingKey: storeSettingKeySchema })).mutation(async ({ ctx, input }) => {
+      await deleteStoreSetting(input.settingKey);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "store_settings.cleared", entityType: "store_settings", metadata: { settingKey: input.settingKey } });
+      return { settingKey: input.settingKey };
     }),
     uploadProductImage: warehouseProcedure
       .input(z.object({

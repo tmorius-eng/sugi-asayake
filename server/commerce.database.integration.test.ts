@@ -118,8 +118,12 @@ describeWithDatabase("commerce database integration", () => {
       owner: { userId },
       customerName: "Integration test",
       customerPhone: "00000000",
-      deliveryMethod: "store_pickup",
-      pickupBranch: "Integration test branch",
+      // Phase J: pickup now validates the branch name against the real,
+      // live branches table -- this test only cares about stock-decrement
+      // behavior, not branch validity, so it uses ub_delivery (no branch
+      // involved at all) rather than coupling itself to real branch data.
+      deliveryMethod: "ub_delivery",
+      deliveryAddress: "Integration test address 1",
       paymentMethod: "cash_on_delivery",
     });
     createdOrderId = order!.id;
@@ -182,8 +186,12 @@ describeWithDatabase("commerce database integration", () => {
         owner: { userId },
         customerName: "Integration test",
         customerPhone: "00000000",
-        deliveryMethod: "store_pickup",
-        pickupBranch: "Integration test branch",
+        // Phase J: same reasoning as the test above -- ub_delivery sidesteps
+        // the new real-branch validation entirely, keeping this test
+        // isolated to the one thing it actually checks (unpublish-at-
+        // checkout-time enforcement, BUG-004).
+        deliveryMethod: "ub_delivery",
+        deliveryAddress: "Integration test address 1",
         paymentMethod: "cash_on_delivery",
       })).rejects.toThrow("no longer available");
 

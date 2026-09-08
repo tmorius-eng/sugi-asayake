@@ -136,6 +136,19 @@ export const users = mysqlTable("users", {
    * when computing their tier — see getUserLoyaltyStatus in server/db.ts.
    */
   loyaltyManualAdjustmentMnt: int("loyaltyManualAdjustmentMnt").notNull().default(0),
+  /**
+   * "Controls everything" admin overhaul (2026-09-08, Phase G): a real
+   * store-credit balance -- unrelated to the loyalty tier system above
+   * (that's a percentage discount computed from spend history; this is
+   * cash-equivalent value a finance/admin user can add for a customer-
+   * service situation, e.g. "sorry about that, here's ₮10,000 credit").
+   * A fast-read cache, not the source of truth -- store_credit_ledger below
+   * is the actual audit trail; this column is kept in sync with it on every
+   * write (see server/db.ts's adjustStoreCredit), same "cache + ledger"
+   * shape as the loyalty tier's own real-order-sum-plus-manual-adjustment
+   * computation elsewhere in this file.
+   */
+  storeCreditMnt: int("storeCreditMnt").notNull().default(0),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -232,6 +245,39 @@ export const featuredBrands = mysqlTable("featured_brands", {
 });
 export type FeaturedBrand = typeof featuredBrands.$inferSelect;
 export type InsertFeaturedBrand = typeof featuredBrands.$inferInsert;
+
+/**
+ * "Controls everything" admin overhaul (2026-09-08, Phase J): replaces
+ * client/src/components/home/locations-data.ts's pure hardcoded array (no
+ * backing table at all until now) -- fixes a real, previously-undiscovered
+ * bug as a direct side effect: branch 04 ("Japan Town C6...") existed in
+ * that array but wasn't in checkout's old hardcoded pickupBranch enum, so it
+ * was never actually selectable for pickup. Same shape/CRUD precedent as
+ * featuredBrands above (name/photo/sortOrder/isActive, admin-managed via
+ * marketingProcedure). `name` stays what orders.pickupBranch stores (a
+ * free varchar, not a foreign key -- unchanged by this phase) so existing
+ * historical orders' pickupBranch strings keep meaning what they already
+ * mean. `isFulfillmentDefault`: exactly one branch is the designated
+ * warehouse UB-delivery orders draw stock from once per-branch stock lands
+ * (Phase K/L) -- store-pickup orders draw from whichever branch the
+ * customer picked instead.
+ */
+export const branches = mysqlTable("branches", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 160 }).notNull(),
+  slug: varchar("slug", { length: 160 }).notNull().unique(),
+  address: text("address").notNull(),
+  phone: varchar("phone", { length: 40 }),
+  mapUrl: text("mapUrl"),
+  photoUrl: text("photoUrl"),
+  sortOrder: int("sortOrder").notNull().default(0),
+  isActive: boolean("isActive").notNull().default(true),
+  isFulfillmentDefault: boolean("isFulfillmentDefault").notNull().default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type Branch = typeof branches.$inferSelect;
+export type InsertBranch = typeof branches.$inferInsert;
 
 /**
  * `products` also carries a FULLTEXT index over (name, brand,
@@ -337,6 +383,17 @@ export const productVariants = mysqlTable("product_variants", {
   attributesJson: text("attributesJson"),
   priceMnt: int("priceMnt").notNull(),
   compareAtPriceMnt: int("compareAtPriceMnt"),
+  // "Controls everything" admin overhaul (2026-09-08, Phase K): once
+  // per-branch stock exists (branchStock below), this becomes a DERIVED,
+  // CACHED total -- sum(branch_stock.stockQuantity) for this variant, kept
+  // in sync on every branch-stock write (recomputeVariantStockTotal in
+  // server/db.ts), same "two copies kept in sync on write" convention
+  // syncSoleVariantFromProduct above already established one level up
+  // (products <-> its sole variant). Every existing reader (catalog list,
+  // ProductDetail, cart, the old single global-pool checkout decrement)
+  // keeps working unmodified off this one column; only the checkout write
+  // path (Phase L) changes to decrement a specific branch's row instead of
+  // this aggregate directly.
   stockQuantity: int("stockQuantity").notNull().default(0),
   imageUrl: text("imageUrl"),
   isDefault: boolean("isDefault").notNull().default(false),
@@ -348,6 +405,30 @@ export const productVariants = mysqlTable("product_variants", {
 export type ProductVariant = typeof productVariants.$inferSelect;
 export type InsertProductVariant = typeof productVariants.$inferInsert;
 
+/**
+ * "Controls everything" admin overhaul (2026-09-08, Phase K): the real
+ * per-location stock split that used to not exist at all -- every branch
+ * shared one global `productVariants.stockQuantity` number. One row per
+ * (branch, variant) that actually stocks it; a variant with no row at a
+ * given branch is treated as 0 there (never backfilled with a guessed
+ * number -- see scripts/backfill-branch-stock.ts's own comment on why the
+ * one-time seed puts 100% of existing stock at the fulfillment-default
+ * branch and 0 everywhere else, the only honest starting split since no
+ * real historical per-branch data exists).
+ */
+export const branchStock = mysqlTable("branch_stock", {
+  id: int("id").autoincrement().primaryKey(),
+  branchId: int("branchId").notNull().references(() => branches.id, { onDelete: "cascade" }),
+  variantId: int("variantId").notNull().references(() => productVariants.id, { onDelete: "cascade" }),
+  stockQuantity: int("stockQuantity").notNull().default(0),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  uniqueIndex("branch_stock_unique").on(table.branchId, table.variantId),
+  index("branch_stock_variant_idx").on(table.variantId),
+]);
+export type BranchStock = typeof branchStock.$inferSelect;
+export type InsertBranchStock = typeof branchStock.$inferInsert;
+
 export const carts = mysqlTable("carts", {
   id: int("id").autoincrement().primaryKey(),
   // Exactly one of userId / guestToken is set. Nullable (guest checkout):
@@ -356,6 +437,12 @@ export const carts = mysqlTable("carts", {
   userId: int("userId").references(() => users.id, { onDelete: "cascade" }),
   guestToken: varchar("guestToken", { length: 64 }),
   status: mysqlEnum("status", ["active", "converted", "abandoned"]).notNull().default("active"),
+  // "Controls everything" admin overhaul (2026-09-08, Phase E): set the
+  // first time the abandoned-cart reminder job (server/_core/scheduler.ts)
+  // emails this cart's owner, so a still-abandoned cart is never reminded
+  // twice. Nullable/unset for every cart that hasn't (yet, or ever) crossed
+  // getCartAbandonment's staleness definition.
+  reminderSentAt: timestamp("reminderSentAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => [
@@ -398,9 +485,19 @@ export const orders = mysqlTable("orders", {
   // (a refund/credit flow is separate, unscoped work) -- see the schema
   // comment on returnedAt and getReturnRateOverview in server/analytics.ts.
   status: mysqlEnum("status", ["pending", "confirmed", "packed", "out_for_delivery", "completed", "cancelled", "returned"]).notNull().default("pending"),
-  paymentMethod: mysqlEnum("paymentMethod", ["qpay", "bank_transfer", "card", "cash_on_delivery"]).notNull(),
+  // "Controls everything" admin overhaul (2026-09-08, Phase M): "in_store"
+  // added for the POS tool (recordInStoreSale) -- a real register sale
+  // collected in person, distinct from every online method above.
+  paymentMethod: mysqlEnum("paymentMethod", ["qpay", "bank_transfer", "card", "cash_on_delivery", "in_store"]).notNull(),
   paymentStatus: mysqlEnum("paymentStatus", ["unpaid", "paid", "refunded"]).notNull().default("unpaid"),
   deliveryMethod: mysqlEnum("deliveryMethod", ["ub_delivery", "store_pickup"]).notNull(),
+  // Phase M: a genuine online-vs-physical channel signal -- today's channel
+  // breakdown in analytics only ever distinguished delivery-vs-pickup/
+  // payment-method, never "did this actually happen on the website."
+  // in_store orders always use deliveryMethod:"store_pickup" too (a
+  // register sale IS picked up on the spot), so this is the one column
+  // that actually separates the two.
+  salesChannel: mysqlEnum("salesChannel", ["online", "in_store"]).notNull().default("online"),
   deliveryAddress: text("deliveryAddress"),
   /** Snapshotted at order time from the chosen address's district (same
    *  denormalization discipline as customerName/customerPhone below — a
@@ -412,6 +509,17 @@ export const orders = mysqlTable("orders", {
    *  shared/districts.ts and server/analytics.ts's district breakdown. */
   deliveryDistrict: mysqlEnum("deliveryDistrict", ubDistricts),
   pickupBranch: varchar("pickupBranch", { length: 120 }),
+  // "Controls everything" admin overhaul (2026-09-08, Phase L): which
+  // branch's branch_stock rows this order's items were actually decremented
+  // from -- captured once, at order-creation time (store_pickup: the
+  // customer's chosen branch; ub_delivery: whichever branch was
+  // isFulfillmentDefault at that moment). Restoring stock on cancellation
+  // reads THIS column, never "whichever branch is currently marked
+  // default" -- an admin could reassign the fulfillment-default branch
+  // between order placement and a later cancellation, and re-deriving at
+  // cancel-time would then credit back the wrong branch's shelf. Nullable
+  // only for orders placed before this column existed.
+  fulfillingBranchId: int("fulfillingBranchId").references(() => branches.id, { onDelete: "set null" }),
   customerName: varchar("customerName", { length: 160 }).notNull(),
   customerPhone: varchar("customerPhone", { length: 40 }).notNull(),
   customerEmail: varchar("customerEmail", { length: 320 }),
@@ -440,6 +548,15 @@ export const orders = mysqlTable("orders", {
    */
   loyaltyDiscountMnt: int("loyaltyDiscountMnt").notNull().default(0),
   appliedLoyaltyTierName: varchar("appliedLoyaltyTierName", { length: 40 }),
+  /**
+   * "Controls everything" admin overhaul (2026-09-08, Phase I): how much of
+   * this order's final total was paid with store credit (users.storeCreditMnt),
+   * applied LAST against the already-discounted total -- credit is
+   * cash-equivalent, not a percentage promo, so it never stacks with or
+   * changes the routine/coupon/loyalty discount math above, it just reduces
+   * what's actually owed after those are all resolved.
+   */
+  storeCreditAppliedMnt: int("storeCreditAppliedMnt").notNull().default(0),
   /**
    * Manually-entered coupon ("SALE10"), computed on (subtotal - routine
    * discount) and itself subtracted before the loyalty tier discount is
@@ -752,6 +869,30 @@ export const siteText = mysqlTable("site_text", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => [
   index("site_text_updated_by_idx").on(table.updatedByUserId),
+]);
+
+/**
+ * "Controls everything" admin overhaul (2026-09-08, Phase A): a NEW table,
+ * not a reuse of site_text above -- that table's own doc-comment scopes it
+ * to homepage marketing copy, and these are business-rule values (delivery
+ * fee, free-shipping threshold, transactional email prose), a different
+ * semantic category deliberately kept in its own narrow table (same
+ * precedent as site_promotions/marketing_spend each getting their own table
+ * instead of being folded into a do-everything config blob). Same
+ * upsert-by-unique-settingKey shape as site_media/site_text; every reader
+ * of a settingKey falls back to a hardcoded code constant when the row is
+ * absent (see server/db.ts's getStoreSetting), so an unconfigured setting
+ * never breaks anything -- identical contract to the other two tables.
+ */
+export const storeSettings = mysqlTable("store_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  settingKey: varchar("settingKey", { length: 80 }).notNull().unique(),
+  settingValue: varchar("settingValue", { length: 2000 }).notNull(),
+  updatedByUserId: int("updatedByUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  index("store_settings_updated_by_idx").on(table.updatedByUserId),
 ]);
 
 /**
@@ -1072,3 +1213,53 @@ export const integrationConfigs = mysqlTable("integration_configs", {
 });
 export type IntegrationConfig = typeof integrationConfigs.$inferSelect;
 export type InsertIntegrationConfig = typeof integrationConfigs.$inferInsert;
+
+/**
+ * "Controls everything" admin overhaul (2026-09-08, Phase D): the only
+ * piece of scheduled/background-job infrastructure in this app (see
+ * server/_core/scheduler.ts) -- before this, nothing here was genuinely
+ * time-based; "scheduled" posts were a lazy `publishedAt <= NOW()` filter
+ * checked at read time, not a real timer. `jobName` is the primary key
+ * (not a separate autoincrement id) -- there's exactly one row per
+ * registered job, upserted every time it runs, so the job's own name IS
+ * its natural identity. DB-backed rather than an in-memory timestamp so a
+ * `tsx watch` restart (dev) or a real deploy doesn't make an overdue job
+ * fire again immediately, or a just-run job fire a second time moments
+ * after a restart.
+ */
+export const scheduledJobRuns = mysqlTable("scheduled_job_runs", {
+  jobName: varchar("jobName", { length: 80 }).primaryKey(),
+  lastRunAt: timestamp("lastRunAt").defaultNow().notNull(),
+});
+export type ScheduledJobRun = typeof scheduledJobRuns.$inferSelect;
+
+/**
+ * "Controls everything" admin overhaul (2026-09-08, Phase G): the actual
+ * audit trail behind users.storeCreditMnt's cache column -- an append-only
+ * ledger (never updated/deleted in place) rather than just a mutable
+ * balance, so a customer-service credit adjustment has visible history
+ * (who did it, why, and -- when it was spent -- which order it paid for).
+ * `deltaMnt` is signed: positive when an admin issues/increases credit,
+ * negative when a checkout consumes it.
+ * `actorUserId` is null when a customer consumes their own credit at
+ * checkout (no admin involved) and set when an admin issues/adjusts it;
+ * `orderId` is null until the moment this row represents credit actually
+ * being spent on a specific order. `userId` cascades (a ledger row has no
+ * meaning without the customer it belongs to, same as wishlist_items);
+ * `actorUserId`/`orderId` use "set null" instead -- they're references to
+ * OTHER entities the row can safely outlive without losing its own meaning
+ * (a customer's credit history shouldn't vanish because the admin who once
+ * adjusted it, or an unrelated order, was later deleted).
+ */
+export const storeCreditLedger = mysqlTable("store_credit_ledger", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  deltaMnt: int("deltaMnt").notNull(),
+  reason: varchar("reason", { length: 300 }).notNull(),
+  actorUserId: int("actorUserId").references(() => users.id, { onDelete: "set null" }),
+  orderId: int("orderId").references(() => orders.id, { onDelete: "set null" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  index("store_credit_ledger_user_idx").on(table.userId),
+]);
+export type StoreCreditLedgerEntry = typeof storeCreditLedger.$inferSelect;

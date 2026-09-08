@@ -82,6 +82,10 @@ const cases: Case[] = [
   // scope and not a money decision (that's financeProcedure's refund action,
   // Phase E).
   { name: "productVariants read (warehouseProcedure)", allowed: ["warehouse", "admin"], call: c => c.admin.productVariants({ productId: 1 }) },
+  // Phase M: the POS tool -- same warehouseProcedure weight as the stock
+  // endpoints above.
+  { name: "posSearchVariants (warehouseProcedure)", allowed: ["warehouse", "admin"], call: c => c.admin.posSearchVariants({ branchId: 999999, search: "" }) },
+  { name: "recordInStoreSale (warehouseProcedure)", allowed: ["warehouse", "admin"], allowedAssertion: "rejects-not-forbidden", call: c => c.admin.recordInStoreSale({ branchId: 999999, items: [{ variantId: 999999, quantity: 1 }] }) },
 
   // ordersReadProcedure (Phase E) — shared read between warehouse (owns
   // fulfillment) and finance (needs to find a returned-but-unrefunded order
@@ -101,17 +105,27 @@ const cases: Case[] = [
   { name: "routines read (marketingProcedure)", allowed: ["marketing", "admin"], call: c => c.admin.routines() },
   { name: "discountCodes read (marketingProcedure)", allowed: ["marketing", "admin"], call: c => c.admin.discountCodes() },
   { name: "featuredBrands read (marketingProcedure)", allowed: ["marketing", "admin"], call: c => c.admin.featuredBrands() },
+  // Phase J: same weight/shape as featuredBrands above.
+  { name: "branches read (marketingProcedure)", allowed: ["marketing", "admin"], call: c => c.admin.branches() },
   { name: "siteMedia read (marketingProcedure)", allowed: ["marketing", "admin"], call: c => c.admin.siteMedia() },
   { name: "siteText read (marketingProcedure)", allowed: ["marketing", "admin"], call: c => c.admin.siteText() },
 
-  // financeProcedure — money/analytics, plus refund authority (Phase E).
+  // financeProcedure — money/analytics, plus refund authority (Phase E) and
+  // store-credit authority (Phase H).
   { name: "analyticsReport (financeProcedure)", allowed: ["finance", "admin"], call: c => c.admin.analyticsReport({}) },
   { name: "marketingSpend (financeProcedure)", allowed: ["finance", "admin"], call: c => c.admin.marketingSpend({ monthKeys: ["2026-09"] }) },
+  { name: "storeCreditLedger (financeProcedure)", allowed: ["finance", "admin"], call: c => c.admin.storeCreditLedger({ userId: 999999 }) },
+  { name: "adjustStoreCredit (financeProcedure)", allowed: ["finance", "admin"], allowedAssertion: "rejects-not-forbidden", call: c => c.admin.adjustStoreCredit({ userId: 999999, deltaMnt: 1000, reason: "rbac test" }) },
+
+  // "Controls everything" admin overhaul (2026-09-08, Phase H): the shared
+  // users-read exception -- finance needs to find a customer before it can
+  // call adjustStoreCredit on them (same shape as ordersReadProcedure).
+  { name: "users read (usersReadProcedure)", allowed: ["finance", "admin"], call: c => c.admin.users() },
+  { name: "userDetail (usersReadProcedure)", allowed: ["finance", "admin"], allowedAssertion: "rejects-not-forbidden", call: c => c.admin.userDetail({ userId: 999999 }) },
 
   // adminProcedure, unchanged by this overhaul — confirms none of the 4 NEW
   // roles accidentally inherited any admin-only access (the thing a copy-
   // paste mistake across ~50 reassignments would most plausibly produce).
-  { name: "users (adminProcedure, unchanged)", allowed: ["admin"], call: c => c.admin.users() },
   { name: "integrations (adminProcedure, unchanged)", allowed: ["admin"], call: c => c.admin.integrations() },
   { name: "auditLogs (adminProcedure, unchanged)", allowed: ["admin"], call: c => c.admin.auditLogs({}) },
   { name: "loginHistory (adminProcedure, unchanged)", allowed: ["admin"], call: c => c.admin.loginHistory({ outcome: "all" }) },

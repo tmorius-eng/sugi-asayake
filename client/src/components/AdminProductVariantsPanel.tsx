@@ -1,13 +1,16 @@
 import { useState } from "react";
-import { LoaderCircle, Plus, Star, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, LoaderCircle, Plus, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
+import AdminBranchStockEditor from "./AdminBranchStockEditor";
 
-// Product variants -- PHASE 1 (additive only). See the long comment on
-// productVariants in drizzle/schema.ts: nothing in cart/checkout/orders
-// reads this table yet, so creating variants here is safe prep work, not
-// yet something a shopper can pick between when buying.
+// Product variants -- shoppers pick between these at checkout once a
+// product has more than one (see the long comment on productVariants in
+// drizzle/schema.ts). The "Үлдэгдэл" field below is now sugar over
+// per-branch stock (Phase L, 2026-09-08): it always means "set stock at
+// the fulfillment-default branch" -- expand "Салбараар" on a row to edit a
+// SPECIFIC branch's shelf via AdminBranchStockEditor instead.
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Үйлдэл амжилтгүй боллоо.";
 
 type VariantRow = {
@@ -45,6 +48,7 @@ export default function AdminProductVariantsPanel({ productId }: { productId: nu
 
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<VariantForm>(emptyForm());
+  const [expandedBranchStockId, setExpandedBranchStockId] = useState<number | null>(null);
   const isSaving = createVariant.isPending || updateVariant.isPending;
 
   const openForm = (variant?: VariantRow) => {
@@ -91,7 +95,7 @@ export default function AdminProductVariantsPanel({ productId }: { productId: nu
   return (
     <div className="sm:col-span-2 rounded-2xl bg-white/60 p-3">
       <div className="flex items-center justify-between gap-3">
-        <div><p className="text-[10px] font-extrabold tracking-[.12em] text-[#3970a7]">ХУВИЛБАРУУД (VARIANTS) — PHASE 1</p><p className="mt-1 text-[11px] text-[#77787d]">Одоогоор зөвхөн бэлтгэл: сагс/захиалга үргэлжлүүлж барааны үндсэн үнэ/үлдэгдлээр л ажиллана, шинэ variant худалдан авагчид харагдахгүй.</p></div>
+        <div><p className="text-[10px] font-extrabold tracking-[.12em] text-[#3970a7]">ХУВИЛБАРУУД (VARIANTS)</p><p className="mt-1 text-[11px] text-[#77787d]">2+ variant-тай бол худалдан авагч бүтээгдэхүүний хуудсан дээр сонголт хийж, тухайн variant-ийн үнэ/үлдэгдлээр захиална.</p></div>
         {!formOpen && <button type="button" onClick={() => openForm()} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-2 text-[10px] font-extrabold text-[#57585e] hover:border-[#3970a7] hover:text-[#3970a7]"><Plus size={12} />Variant нэмэх</button>}
       </div>
 
@@ -100,13 +104,20 @@ export default function AdminProductVariantsPanel({ productId }: { productId: nu
       {!variantsQuery.isLoading && !formOpen && <div className="mt-3 grid gap-2">
         {variants.map(variant => {
           const attrs = parseAttributes(variant.attributesJson);
-          return <div key={variant.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-black/8 bg-white p-3">
-            {variant.isDefault && <Star size={13} className="shrink-0 text-[#f0b52d]" fill="#f0b52d" />}
-            <div className="min-w-0 flex-1"><strong className="block truncate text-xs">{variant.sku}</strong>{attrs.length > 0 && <span className="mt-0.5 block text-[11px] text-[#77787d]">{attrs.map(a => `${a.key}: ${a.value}`).join(", ")}</span>}</div>
-            <span className="shrink-0 text-xs font-bold">{formatMnt(variant.priceMnt)}</span>
-            <span className="shrink-0 text-[11px] text-[#77787d]">{variant.stockQuantity} ш</span>
-            <button type="button" onClick={() => openForm(variant)} className="shrink-0 text-[11px] font-bold text-[#3970a7] hover:underline">Засах</button>
-            <button type="button" onClick={() => { if (window.confirm(`"${variant.sku}" variant-ыг устгах уу?`)) deleteVariant.mutate({ id: variant.id }); }} className="shrink-0 rounded-full p-1.5 text-[#707176] hover:bg-[#fff0f2] hover:text-[#df1f3d]" aria-label={`${variant.sku} устгах`}><Trash2 size={13} /></button>
+          const isExpanded = expandedBranchStockId === variant.id;
+          return <div key={variant.id} className="rounded-xl border border-black/8 bg-white p-3">
+            <div className="flex flex-wrap items-center gap-3">
+              {variant.isDefault && <Star size={13} className="shrink-0 text-[#f0b52d]" fill="#f0b52d" />}
+              <div className="min-w-0 flex-1"><strong className="block truncate text-xs">{variant.sku}</strong>{attrs.length > 0 && <span className="mt-0.5 block text-[11px] text-[#77787d]">{attrs.map(a => `${a.key}: ${a.value}`).join(", ")}</span>}</div>
+              <span className="shrink-0 text-xs font-bold">{formatMnt(variant.priceMnt)}</span>
+              <span className="shrink-0 text-[11px] text-[#77787d]">{variant.stockQuantity} ш</span>
+              <button type="button" onClick={() => setExpandedBranchStockId(isExpanded ? null : variant.id)} className="flex shrink-0 items-center gap-1 text-[11px] font-bold text-[#57585e] hover:text-[#3970a7]">
+                {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}Салбараар
+              </button>
+              <button type="button" onClick={() => openForm(variant)} className="shrink-0 text-[11px] font-bold text-[#3970a7] hover:underline">Засах</button>
+              <button type="button" onClick={() => { if (window.confirm(`"${variant.sku}" variant-ыг устгах уу?`)) deleteVariant.mutate({ id: variant.id }); }} className="shrink-0 rounded-full p-1.5 text-[#707176] hover:bg-[#fff0f2] hover:text-[#df1f3d]" aria-label={`${variant.sku} устгах`}><Trash2 size={13} /></button>
+            </div>
+            {isExpanded && <AdminBranchStockEditor variantId={variant.id} />}
           </div>;
         })}
         {variants.length === 0 && <p className="py-3 text-center text-xs text-[#9a9ba0]">Variant алга.</p>}
@@ -117,7 +128,7 @@ export default function AdminProductVariantsPanel({ productId }: { productId: nu
           <label className="grid gap-1 text-xs font-bold">SKU/баркод<input required value={form.sku} onChange={event => setForm(current => ({ ...current, sku: event.target.value }))} className="h-10 rounded-lg border border-black/10 px-2.5 text-xs outline-none focus:border-[#3970a7]" /></label>
           <label className="grid gap-1 text-xs font-bold">Үнэ (₮)<input required min="0" type="number" value={form.priceMnt} onChange={event => setForm(current => ({ ...current, priceMnt: event.target.value }))} className="h-10 rounded-lg border border-black/10 px-2.5 text-xs outline-none focus:border-[#3970a7]" /></label>
           <label className="grid gap-1 text-xs font-bold">Хуучин үнэ (сонголтоор)<input min="0" type="number" value={form.compareAtPriceMnt} onChange={event => setForm(current => ({ ...current, compareAtPriceMnt: event.target.value }))} className="h-10 rounded-lg border border-black/10 px-2.5 text-xs outline-none focus:border-[#3970a7]" /></label>
-          <label className="grid gap-1 text-xs font-bold">Үлдэгдэл<input required min="0" type="number" value={form.stockQuantity} onChange={event => setForm(current => ({ ...current, stockQuantity: event.target.value }))} className="h-10 rounded-lg border border-black/10 px-2.5 text-xs outline-none focus:border-[#3970a7]" /></label>
+          <label className="grid gap-1 text-xs font-bold">Үлдэгдэл (үндсэн салбарт)<input required min="0" type="number" value={form.stockQuantity} onChange={event => setForm(current => ({ ...current, stockQuantity: event.target.value }))} className="h-10 rounded-lg border border-black/10 px-2.5 text-xs outline-none focus:border-[#3970a7]" /></label>
         </div>
         <div className="mt-2 grid gap-1.5">
           <p className="text-[10px] font-extrabold tracking-[.06em] text-[#77787d]">ШИНЖ ЧАНАР (жишээ: Хэмжээ / 400мл)</p>

@@ -1,8 +1,9 @@
 import { ArrowUpRight, Clock3, MapPin, Navigation, Phone } from "lucide-react";
+import { trpc } from "@/lib/trpc";
 import { useSiteText } from "@/hooks/useSiteText";
 import SectionEyebrow from "./SectionEyebrow";
 import SectionHeading from "./SectionHeading";
-import { locations, BRANCH_HOURS } from "./locations-data";
+import { BRANCH_HOURS } from "./locations-data";
 
 // Rough, deliberately non-geographic placement for each pin on the
 // abstract map illustration -- this is an editorial graphic, not a real
@@ -26,10 +27,27 @@ const PIN_POSITIONS: Record<string, { x: number; y: number }> = {
  * changed here, not the underlying data. See index.css's .locator-section
  * comment for why this doesn't wire the orphaned Map.tsx (no API key
  * exists in this repo).
+ *
+ * "Controls everything" admin overhaul (2026-09-08, Phase J): branch
+ * records now come from the live `content.branches` query (backed by a
+ * real `branches` table) instead of locations-data.ts's hardcoded array --
+ * an admin can add/edit/deactivate a branch and it appears here without a
+ * deploy. `number` (the "01".."04" display badge / pin key) is derived
+ * from each branch's position in the already-sortOrder-sorted list, since
+ * the table itself has no separate "display number" column.
  */
 export default function StoreLocatorSection() {
   const textFor = useSiteText();
+  const branchesQuery = trpc.content.branches.useQuery();
+  const locations = (branchesQuery.data ?? []).map((branch, index) => ({
+    number: String(index + 1).padStart(2, "0"),
+    name: branch.name,
+    detail: branch.address,
+    phone: branch.phone ?? "",
+    mapUrl: branch.mapUrl ?? "#",
+  }));
   const [headingLine1, headingLine2] = textFor("home-text-locator-heading", "Танд ойрхон\nсалбар дээр.").split("\n");
+  if (!locations.length) return null;
   return (
     <section className="locator-section page-section" id="stores" data-reveal>
       <div className="locator-grid">

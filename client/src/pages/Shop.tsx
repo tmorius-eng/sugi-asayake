@@ -18,6 +18,7 @@ import { rememberRecentlyViewed, resolveRecentlyViewed } from "@shared/recently-
 import { UB_DELIVERY_FEE_MNT } from "@shared/const";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { useSiteText } from "@/hooks/useSiteText";
+import { useStoreSetting } from "@/hooks/useStoreSetting";
 import { formatMnt } from "@shared/format";
 // 2026-09-04 cohesion audit: this used to be a locally hardcoded 4-of-6-category
 // list with its own copy/ordering, independent of (and already drifted from)
@@ -60,6 +61,8 @@ export default function Shop() {
   const qaHistoryMode = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("historyQa") : null;
   const initialParams = new URLSearchParams(window.location.search);
   const textFor = useSiteText();
+  const valueForSetting = useStoreSetting();
+  const deliveryFeeUbMnt = Number(valueForSetting("delivery-fee-ub-mnt", String(UB_DELIVERY_FEE_MNT)));
   // Variable-count phrase list (one per line), unlike Home.tsx's sunrise
   // ribbon which has exactly 3 fixed home-text-ribbon-phraseN slots -- Tom
   // asked to be able to add/remove however many phrases he wants here, so
@@ -232,7 +235,7 @@ export default function Shop() {
     <CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="" />
     <main className="shop-main">
       <section className="shop-hero" data-reveal>
-        <div className="shop-hero-copy"><p className="shop-kicker"><span /> 02 / SUGI MARKET</p><h1>Өдөр тутмын<br /><em>сонголтууд.</em></h1><p>Японоос албан ёсоор нийлүүлсэн арьс арчилгаа, эрүүл мэнд, гэр бүлийн хэрэгцээний бүтээгдэхүүнээ өөртөө тохируулан олоорой.</p><div className="shop-hero-badges"><div className="shop-hero-signature"><Sparkles size={17} /><span>ТАНЫ ӨДӨР БҮРТ / ЯПОН ЧАНАР</span></div><div className="shop-hero-delivery"><Truck size={17} /><span>УБ ХҮРГЭЛТ {formatMnt(UB_DELIVERY_FEE_MNT)} / САЛБАРААС ҮНЭГҮЙ АВАХ</span></div></div></div>
+        <div className="shop-hero-copy"><p className="shop-kicker"><span /> 02 / SUGI MARKET</p><h1>Өдөр тутмын<br /><em>сонголтууд.</em></h1><p>Японоос албан ёсоор нийлүүлсэн арьс арчилгаа, эрүүл мэнд, гэр бүлийн хэрэгцээний бүтээгдэхүүнээ өөртөө тохируулан олоорой.</p><div className="shop-hero-badges"><div className="shop-hero-signature"><Sparkles size={17} /><span>ТАНЫ ӨДӨР БҮРТ / ЯПОН ЧАНАР</span></div><div className="shop-hero-delivery"><Truck size={17} /><span>УБ ХҮРГЭЛТ {formatMnt(deliveryFeeUbMnt)} / САЛБАРААС ҮНЭГҮЙ АВАХ</span></div></div></div>
         <div className="shop-search-panel"><div className="shop-search-stamp" aria-hidden="true">CARE<br />IS<br />COLOR</div><label><Search size={19} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Бүтээгдэхүүн, брэндээр хайх" /></label><p><strong>{resultCount}</strong> үр дүн / <span>{sourceCount} бүтээгдэхүүн</span></p></div>
       </section>
       <div className="shop-ribbon" aria-label="SUGI ASAYAKE брэндийн мессеж">
