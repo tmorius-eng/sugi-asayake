@@ -157,6 +157,20 @@ describeWithDatabase("admin face gate (real DB)", () => {
     expect(user?.faceVerifiedAt ?? null).toBeNull();
   });
 
+  it("treats a reset enrollment as unverified even if a proof cookie survives", async () => {
+    // A real hole found while wiping data for a clean test: the proof cookie
+    // and the enrollment were checked independently, so clearing someone's
+    // enrollment left their existing proof valid for its full 8-hour window.
+    // An admin revoking access would not actually revoke anything until that
+    // cookie expired. status() now requires BOTH.
+    await deleteFaceEnrollment(staffUserId);
+    const status = await callerFor(staffUserId, "staff").faceAuth.status();
+    if (status.gateEnabled) {
+      expect(status.enrolled).toBe(false);
+      expect(status.verified).toBe(false);
+    }
+  });
+
   it("reports the gate as satisfied for a plain customer, so no shopper is ever prompted", async () => {
     const status = await callerFor(customerUserId, "user").faceAuth.status();
     expect(status.verified).toBe(true);

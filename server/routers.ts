@@ -1512,7 +1512,16 @@ export const appRouter = router({
         return { gateEnabled, enrolled: true, verified: true, modelStale: false };
       }
       const enrollment = await getFaceEnrollment(ctx.user.id);
-      const verified = await hasValidFaceProof(ctx.req, ctx.user.id, ctx.user.sessionVersion);
+      const hasProof = await hasValidFaceProof(ctx.req, ctx.user.id, ctx.user.sessionVersion);
+      // A proof cookie only counts while an enrollment actually exists.
+      //
+      // Without this the two were independent, so clearing someone's
+      // enrollment left their existing proof valid for its full 8-hour
+      // window: an admin revoking access (the person left, or their face
+      // stopped matching) would not actually revoke anything until that
+      // cookie expired. Requiring both means a reset takes effect on the
+      // next request, which is what "reset" has to mean.
+      const verified = hasProof && !!enrollment;
       return {
         gateEnabled,
         enrolled: !!enrollment,
