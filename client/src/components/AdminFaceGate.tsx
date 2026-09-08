@@ -670,7 +670,7 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
   const busy = phase === "working";
 
   return (
-    <div className="face-gate-shell">
+    <div className="face-gate-shell face-gate-shell--dark">
       {/* The colour-flash liveness challenge covers the WHOLE SCREEN, not just
           the video box: the monitor is the light source, so the larger the lit
           area the stronger and more measurable the reflection off the face.
@@ -687,7 +687,7 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
           style={{ background: `rgb(${FLASH_COLORS[flash].join(",")})` }}
         />
       )}
-      <div className="face-gate-card face-gate-card--wide">
+      <div className="face-gate-card face-gate-card--wide face-gate-card--scan">
         <div className="face-gate-head">
           <ScanFace size={20} aria-hidden="true" />
           <div>
@@ -696,7 +696,23 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
           </div>
         </div>
 
+        {/* Circular scanner with a progress ring around the rim, on a dark
+            ground -- Tom's chosen concept. The ring is the primary progress
+            indicator: it surrounds the face rather than sitting apart from
+            it, so the person watching their own image can see advancement
+            without looking away. */}
         <div className={`face-gate-stage${faceLocked ? " is-locked" : ""}`}>
+          <svg className="face-gate-ring" viewBox="0 0 100 100" aria-hidden="true">
+            <circle className="face-gate-ring-track" cx="50" cy="50" r="47" />
+            <circle
+              className="face-gate-ring-value"
+              cx="50" cy="50" r="47"
+              /* 2*pi*r = 295.3. Offsetting the dash by the remaining share
+                 draws exactly `progress` percent of the rim. */
+              strokeDasharray="295.3"
+              strokeDashoffset={295.3 * (1 - Math.min(100, Math.max(0, progress)) / 100)}
+            />
+          </svg>
           {/* muted + playsInline are required for autoplay to be allowed at
               all in Chrome/Safari; mirrored so turning left on screen matches
               turning left in reality, which is what the instruction says. */}

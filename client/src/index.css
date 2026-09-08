@@ -1812,34 +1812,33 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .face-gate-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 18px; color: var(--primary-text, #c11a35); }
 .face-gate-head h2 { margin: 0; }
 
-.face-gate-stage { position: relative; overflow: hidden; border-radius: 18px; background: #0d1b33; aspect-ratio: 4 / 3; box-shadow: inset 0 0 0 1px rgba(150,210,255,.18); }
-/* Mirrored so "turn left" on screen matches the instruction the person was
-   given -- an unmirrored preview makes head-turn challenges confusing. The
-   mesh canvas mirrors itself in its own draw call, not here. */
-.face-gate-video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
-.face-gate-mesh { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+/* Circular scanner on a dark ground (Tom's chosen concept). Square box so
+   the circle stays a circle at any width; the ring lives just outside the
+   video's edge. */
+.face-gate-stage { position: relative; width: min(300px, 78vw); aspect-ratio: 1; margin: 0 auto; }
+/* Mirrored so turning left on screen matches turning left in reality -- the
+   instructions say "left" and must mean the user's left. The mesh canvas
+   mirrors itself in its own draw call, not here. */
+.face-gate-video { position: absolute; inset: 7%; width: 86%; height: 86%; object-fit: cover; border-radius: 50%; transform: scaleX(-1); background: #0b1220; }
+.face-gate-mesh { position: absolute; inset: 7%; width: 86%; height: 86%; border-radius: 50%; pointer-events: none; }
 
-/* Oval vignette: focuses attention on the face and matches the framing real
-   eKYC flows use, without cropping the video (the detector still sees the
-   full frame). */
-.face-gate-stage::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse 42% 58% at 50% 48%, transparent 60%, rgba(13,27,51,.82) 100%); }
+/* Progress ring around the rim. */
+.face-gate-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); pointer-events: none; }
+.face-gate-ring-track { fill: none; stroke: rgba(255,255,255,.10); stroke-width: 3; }
+.face-gate-ring-value { fill: none; stroke: url(#none); stroke: #6fd0ff; stroke-width: 3; stroke-linecap: round; transition: stroke-dashoffset .35s ease; filter: drop-shadow(0 0 5px rgba(111,208,255,.55)); }
 
-/* Sweeping scan line while capturing. */
-.face-gate-scanline { position: absolute; left: 0; right: 0; height: 2px; pointer-events: none; background: linear-gradient(90deg, transparent, rgba(150,210,255,.9), transparent); box-shadow: 0 0 14px rgba(150,210,255,.75); animation: face-gate-scan 2.4s ease-in-out infinite; }
-@keyframes face-gate-scan { 0%, 100% { top: 12%; opacity: .35; } 50% { top: 86%; opacity: 1; } }
-
-/* Soft pulse on the frame once a face is actually being tracked -- immediate
+/* Gold rim + soft pulse once a face is actually being tracked -- immediate
    feedback that the system has locked on. */
-.face-gate-stage.is-locked { box-shadow: inset 0 0 0 1px rgba(255,214,92,.55), 0 0 0 3px rgba(255,214,92,.12); animation: face-gate-lock 1.8s ease-in-out infinite; }
-@keyframes face-gate-lock { 0%, 100% { box-shadow: inset 0 0 0 1px rgba(255,214,92,.5), 0 0 0 3px rgba(255,214,92,.10); } 50% { box-shadow: inset 0 0 0 1px rgba(255,214,92,.85), 0 0 0 6px rgba(255,214,92,.16); } }
+.face-gate-stage.is-locked .face-gate-ring-value { stroke: #ffd65c; filter: drop-shadow(0 0 6px rgba(255,214,92,.6)); }
+.face-gate-stage.is-locked { animation: face-gate-lock 1.8s ease-in-out infinite; }
+@keyframes face-gate-lock { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.012); } }
 
-/* The colour-flash liveness challenge. Opacity below 1 so the person can
-   still see themselves while the colour washes the frame -- and so the
-   camera still has a usable image of the lit face to measure. */
-/* Full-viewport, not just the video box: the monitor is the light source for
-   this check, so lighting the entire screen produces a far stronger and more
-   measurable reflection off the face than a small panel would. Sits above
-   everything, ignores pointer events so nothing is blocked. */
+/* Sweeping scan line, clipped to the circle. */
+.face-gate-scanline { position: absolute; left: 7%; right: 7%; height: 2px; pointer-events: none; background: linear-gradient(90deg, transparent, rgba(111,208,255,.85), transparent); animation: face-gate-scan 2.4s ease-in-out infinite; }
+@keyframes face-gate-scan { 0%, 100% { top: 20%; opacity: .3; } 50% { top: 78%; opacity: 1; } }
+
+/* The colour-flash liveness challenge covers the whole viewport (see the
+   component), so nothing is scoped to the stage here. */
 .face-gate-fullflash { position: fixed; inset: 0; z-index: 9999; pointer-events: none; animation: face-gate-flash-in .1s ease-out; }
 @keyframes face-gate-flash-in { from { opacity: .55; } to { opacity: 1; } }
 
@@ -1933,3 +1932,28 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 @media (max-width: 520px) {
   .face-gate-steps { flex-direction: column; }
 }
+
+
+/* Dark scanning card. The consent screen deliberately stays light -- it is a
+   document to read, not a camera view -- while the scanner itself is dark so
+   the face is the brightest thing on screen and the colour flash reads
+   cleanly against it. */
+.face-gate-card--scan { background: #0d1526; color: #e8eef7; box-shadow: 0 18px 50px rgba(0,0,0,.4); }
+.face-gate-card--scan h2 { color: #f4f8ff; }
+.face-gate-card--scan .face-gate-muted { color: #93a3bb; }
+.face-gate-card--scan .face-gate-head { color: #6fd0ff; }
+.face-gate-card--scan .face-gate-hint { color: #cdd9ea; font-size: 14px; font-weight: 600; }
+.face-gate-card--scan .face-gate-progress { background: rgba(255,255,255,.10); }
+.face-gate-card--scan .face-gate-step { background: rgba(255,255,255,.05); color: #7f8ea6; }
+.face-gate-card--scan .face-gate-step-num { background: rgba(255,255,255,.10); color: #93a3bb; }
+.face-gate-card--scan .face-gate-step--active { background: rgba(111,208,255,.12); color: #6fd0ff; }
+.face-gate-card--scan .face-gate-step--active .face-gate-step-num { background: #6fd0ff; color: #0d1526; }
+.face-gate-card--scan .face-gate-step--done { color: #64d99a; }
+.face-gate-card--scan .face-gate-step--done .face-gate-step-num { background: rgba(100,217,154,.18); color: #64d99a; }
+.face-gate-card--scan .face-gate-tips { background: rgba(255,255,255,.05); }
+.face-gate-card--scan .face-gate-tips summary { color: #cdd9ea; }
+.face-gate-card--scan .face-gate-tips li,
+.face-gate-card--scan .face-gate-tips-note { color: #93a3bb; }
+.face-gate-card--scan .face-gate-alert { background: rgba(255,90,110,.12); color: #ff9fae; }
+.face-gate-card--scan .face-gate-instruction { box-shadow: none; }
+.face-gate-shell--dark { background: #070c16; }
