@@ -1825,7 +1825,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 /* Progress ring around the rim. */
 .face-gate-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); pointer-events: none; }
 .face-gate-ring-track { fill: none; stroke: rgba(255,255,255,.10); stroke-width: 3; }
-.face-gate-ring-value { fill: none; stroke: url(#none); stroke: #6fd0ff; stroke-width: 3; stroke-linecap: round; transition: stroke-dashoffset .35s ease; filter: drop-shadow(0 0 5px rgba(111,208,255,.55)); }
+.face-gate-ring-value { fill: none; stroke: #6fd0ff; stroke-width: 3; stroke-linecap: round; transition: stroke-dashoffset .35s ease; filter: drop-shadow(0 0 5px rgba(111,208,255,.55)); }
 
 /* Gold rim + soft pulse once a face is actually being tracked -- immediate
    feedback that the system has locked on. */
