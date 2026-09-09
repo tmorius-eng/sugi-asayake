@@ -114,3 +114,6 @@ backups/
 .webdev/
 
 .project-config.json
+
+# Playwright MCP screenshot/snapshot output (QA only, never committed)
+.playwright-mcp/
