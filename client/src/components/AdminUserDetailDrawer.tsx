@@ -141,41 +141,41 @@ export default function AdminUserDetailDrawer({ userId, role, onClose }: { userI
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={onClose}>
-      <div className="h-full w-full max-w-md overflow-y-auto bg-white p-6" onClick={event => event.stopPropagation()}>
+      <div className="h-full w-full max-w-md overflow-y-auto bg-[var(--a-card)] p-6" onClick={event => event.stopPropagation()}>
         <div className="flex items-center justify-between">
           <p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">USER DETAIL</p>
-          <button type="button" onClick={onClose} aria-label="Хаах" className="rounded-full p-1.5 text-[#707176] transition hover:bg-[#f8f5ef]"><X size={16} /></button>
+          <button type="button" onClick={onClose} aria-label="Хаах" className="rounded-full p-1.5 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)]"><X size={16} /></button>
         </div>
 
-        {detailQuery.isLoading && <p className="mt-6 flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={15} />Ачаалж байна…</p>}
-        {detailQuery.error && <p className="mt-6 rounded-2xl bg-[#fff0f2] p-4 text-xs text-[#a51630]">{detailQuery.error.message}</p>}
+        {detailQuery.isLoading && <p className="mt-6 flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={15} />Ачаалж байна…</p>}
+        {detailQuery.error && <p className="mt-6 rounded-2xl bg-[var(--a-neg-soft)] p-4 text-xs text-[var(--a-neg)]">{detailQuery.error.message}</p>}
 
         {detail && <>
           <h2 className="mt-3 font-[var(--font-display)] text-2xl font-semibold tracking-[-.05em]">{detail.name ?? "Нэр оруулаагүй"}</h2>
-          <p className="mt-1 text-xs text-[#707176]">{detail.phone ?? "Утасгүй"}{detail.email ? ` · ${detail.email}` : ""}</p>
+          <p className="mt-1 text-xs text-[var(--a-muted)]">{detail.phone ?? "Утасгүй"}{detail.email ? ` · ${detail.email}` : ""}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${roleBadgeClass(detail.role)}`}>{roleLabel(detail.role)}</span>
-            {detail.suspendedAt ? <span className="rounded-full bg-[#fff0f2] px-2.5 py-1 text-[10px] font-extrabold text-[#a51630]">Түр хаагдсан</span> : <span className="rounded-full bg-[#e7f2ec] px-2.5 py-1 text-[10px] font-extrabold text-[#2c7650]">Идэвхтэй</span>}
+            {detail.suspendedAt ? <span className="rounded-full bg-[var(--a-neg-soft)] px-2.5 py-1 text-[10px] font-extrabold text-[var(--a-neg)]">Түр хаагдсан</span> : <span className="rounded-full bg-[var(--a-pos-soft)] px-2.5 py-1 text-[10px] font-extrabold text-[var(--a-pos)]">Идэвхтэй</span>}
           </div>
 
           <div className="mt-6 grid grid-cols-2 gap-3">
-            <div className="rounded-2xl bg-[#f8f5ef] p-4"><p className="text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]">НИЙТ ЗАХИАЛГА</p><p className="mt-1 font-[var(--font-display)] text-xl font-semibold">{detail.orders.length}</p></div>
-            <div className="rounded-2xl bg-[#f8f5ef] p-4"><p className="text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]">НИЙТ ЗАРЦУУЛАЛТ</p><p className="mt-1 font-[var(--font-display)] text-xl font-semibold">{formatMnt(detail.totalSpentMnt)}</p></div>
+            <div className="rounded-2xl bg-[var(--a-soft)] p-4"><p className="text-[10px] font-extrabold tracking-[.13em] text-[var(--a-faint)]">НИЙТ ЗАХИАЛГА</p><p className="mt-1 font-[var(--font-display)] text-xl font-semibold">{detail.orders.length}</p></div>
+            <div className="rounded-2xl bg-[var(--a-soft)] p-4"><p className="text-[10px] font-extrabold tracking-[.13em] text-[var(--a-faint)]">НИЙТ ЗАРЦУУЛАЛТ</p><p className="mt-1 font-[var(--font-display)] text-xl font-semibold">{formatMnt(detail.totalSpentMnt)}</p></div>
           </div>
 
           {/* PREMIUM-FEATURES.md TIER 5 */}
-          <div className="mt-4 rounded-2xl border border-black/8 p-4">
-            <p className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]"><CreditCard size={13} /> ГИШҮҮНЧЛЭЛИЙН КАРТ</p>
+          <div className="mt-4 rounded-2xl border border-[var(--a-border)] p-4">
+            <p className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-[.13em] text-[var(--a-faint)]"><CreditCard size={13} /> ГИШҮҮНЧЛЭЛИЙН КАРТ</p>
             <div className="mt-2 flex items-center justify-between"><span className="font-[var(--font-display)] text-lg font-semibold">{detail.loyalty.currentTier.name}</span><span className="text-xs font-bold text-[#df1f3d]">{detail.loyalty.currentTier.discountPercent > 0 ? `-${detail.loyalty.currentTier.discountPercent}%` : "Хямдралгүй"}</span></div>
-            <p className="mt-1 text-[11px] text-[#77787d]">Онлайн: {formatMnt(detail.loyalty.onlineSpendMnt)} + Гараар: {formatMnt(detail.loyalty.manualAdjustmentMnt)} = Нийт {formatMnt(detail.loyalty.totalSpendMnt)}</p>
+            <p className="mt-1 text-[11px] text-[var(--a-muted)]">Онлайн: {formatMnt(detail.loyalty.onlineSpendMnt)} + Гараар: {formatMnt(detail.loyalty.manualAdjustmentMnt)} = Нийт {formatMnt(detail.loyalty.totalSpendMnt)}</p>
             {isAdmin ? <>
               <label className="mt-3 grid gap-1.5 text-xs font-bold">Дэлгүүрт биечлэн худалдан авсан урьдчилсан дүн (₮)
                 <div className="flex gap-2">
-                  <input type="number" min="0" value={loyaltyAdjustment} onChange={event => setLoyaltyAdjustment(event.target.value)} className="h-10 flex-1 rounded-xl border border-black/10 px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" />
-                  <button type="button" disabled={updateLoyaltyAdjustment.isPending} onClick={onSaveLoyaltyAdjustment} className="shrink-0 rounded-xl bg-[#17181b] px-4 text-xs font-bold text-white disabled:opacity-60">{updateLoyaltyAdjustment.isPending ? <LoaderCircle className="animate-spin" size={14} /> : "Хадгалах"}</button>
+                  <input type="number" min="0" value={loyaltyAdjustment} onChange={event => setLoyaltyAdjustment(event.target.value)} className="h-10 flex-1 rounded-xl border border-[var(--a-border)] px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" />
+                  <button type="button" disabled={updateLoyaltyAdjustment.isPending} onClick={onSaveLoyaltyAdjustment} className="shrink-0 rounded-xl bg-[var(--a-btn-dark)] px-4 text-xs font-bold text-white disabled:opacity-60">{updateLoyaltyAdjustment.isPending ? <LoaderCircle className="animate-spin" size={14} /> : "Хадгалах"}</button>
                 </div>
               </label>
-              <p className="mt-2 text-[10px] leading-4 text-[#a9a49a]">Smart POS-той API холбоогүй тул үйлчлүүлэгчийн дэлгүүрт биечлэн худалдан авсан түүхийг эндээс гараар нэмж, тохирох шатанд шилжүүлж болно.</p>
+              <p className="mt-2 text-[10px] leading-4 text-[var(--a-faint)]">Smart POS-той API холбоогүй тул үйлчлүүлэгчийн дэлгүүрт биечлэн худалдан авсан түүхийг эндээс гараар нэмж, тохирох шатанд шилжүүлж болно.</p>
             </> : null}
           </div>
 
@@ -185,23 +185,23 @@ export default function AdminUserDetailDrawer({ userId, role, onClose }: { userI
               drawer at all (usersReadProcedure is admin+finance) -- no
               isAdmin gate needed here, unlike the account-changing cards
               below. */}
-          <div className="mt-4 rounded-2xl border border-black/8 p-4">
-            <p className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]"><Wallet size={13} /> ДЭЛГҮҮРИЙН ЗЭЭЛ</p>
+          <div className="mt-4 rounded-2xl border border-[var(--a-border)] p-4">
+            <p className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-[.13em] text-[var(--a-faint)]"><Wallet size={13} /> ДЭЛГҮҮРИЙН ЗЭЭЛ</p>
             <p className="mt-2 font-[var(--font-display)] text-lg font-semibold">{formatMnt(detail.storeCreditMnt)}</p>
             <div className="mt-3 grid gap-2">
-              <input type="number" min="1" value={creditAmount} onChange={event => setCreditAmount(event.target.value)} placeholder="Дүн (₮)" className="h-10 rounded-xl border border-black/10 px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" />
-              <input value={creditReason} onChange={event => setCreditReason(event.target.value)} placeholder="Шалтгаан (жишээ нь: үйлчилгээний нөхөн олговор)" className="h-10 rounded-xl border border-black/10 px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" />
+              <input type="number" min="1" value={creditAmount} onChange={event => setCreditAmount(event.target.value)} placeholder="Дүн (₮)" className="h-10 rounded-xl border border-[var(--a-border)] px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" />
+              <input value={creditReason} onChange={event => setCreditReason(event.target.value)} placeholder="Шалтгаан (жишээ нь: үйлчилгээний нөхөн олговор)" className="h-10 rounded-xl border border-[var(--a-border)] px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" />
               <div className="flex gap-2">
                 <button type="button" disabled={adjustStoreCredit.isPending} onClick={() => onAdjustStoreCredit(1)} className="flex-1 rounded-xl bg-[#2c7650] px-4 py-2.5 text-xs font-bold text-white disabled:opacity-60">{adjustStoreCredit.isPending ? <LoaderCircle className="mx-auto animate-spin" size={14} /> : "Нэмэх"}</button>
-                <button type="button" disabled={adjustStoreCredit.isPending} onClick={() => onAdjustStoreCredit(-1)} className="flex-1 rounded-xl border border-black/10 px-4 py-2.5 text-xs font-bold text-[#57585e] disabled:opacity-60">{adjustStoreCredit.isPending ? <LoaderCircle className="mx-auto animate-spin" size={14} /> : "Хасах"}</button>
+                <button type="button" disabled={adjustStoreCredit.isPending} onClick={() => onAdjustStoreCredit(-1)} className="flex-1 rounded-xl border border-[var(--a-border)] px-4 py-2.5 text-xs font-bold text-[var(--a-text-soft)] disabled:opacity-60">{adjustStoreCredit.isPending ? <LoaderCircle className="mx-auto animate-spin" size={14} /> : "Хасах"}</button>
               </div>
             </div>
             {ledgerQuery.data && ledgerQuery.data.length > 0 && (
-              <div className="mt-3 grid gap-1.5 border-t border-black/6 pt-3">
+              <div className="mt-3 grid gap-1.5 border-t border-[var(--a-border)] pt-3">
                 {ledgerQuery.data.slice(0, 5).map(entry => (
-                  <div key={entry.id} className="flex items-center justify-between gap-2 text-[11px] text-[#77787d]">
+                  <div key={entry.id} className="flex items-center justify-between gap-2 text-[11px] text-[var(--a-muted)]">
                     <span className="truncate">{entry.reason}{entry.actorEmail ? ` — ${entry.actorEmail}` : ""}</span>
-                    <span className={`shrink-0 font-bold ${entry.deltaMnt > 0 ? "text-[#2c7650]" : "text-[#a51630]"}`}>{entry.deltaMnt > 0 ? "+" : ""}{formatMnt(entry.deltaMnt)}</span>
+                    <span className={`shrink-0 font-bold ${entry.deltaMnt > 0 ? "text-[var(--a-pos)]" : "text-[var(--a-neg)]"}`}>{entry.deltaMnt > 0 ? "+" : ""}{formatMnt(entry.deltaMnt)}</span>
                   </div>
                 ))}
               </div>
@@ -215,54 +215,54 @@ export default function AdminUserDetailDrawer({ userId, role, onClose }: { userI
               the password: once it's right, the account's existing password
               keeps working immediately (login just needed the right phone
               to find the row). */}
-          {isAdmin && <div className="mt-4 rounded-2xl border border-black/8 p-4">
-            <p className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]"><Phone size={13} /> УТАСНЫ ДУГААР</p>
-            <p className="mt-1 text-[11px] leading-4 text-[#a9a49a]">Нэвтрэх нь одоо зөвхөн утасны дугаар + нууц үгээр хийгддэг. Хэрэглэгч утасгүй эсвэл буруу дугаартай бол (нэвтэрч чадахгүй) эндээс шууд засаж болно.</p>
+          {isAdmin && <div className="mt-4 rounded-2xl border border-[var(--a-border)] p-4">
+            <p className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-[.13em] text-[var(--a-faint)]"><Phone size={13} /> УТАСНЫ ДУГААР</p>
+            <p className="mt-1 text-[11px] leading-4 text-[var(--a-faint)]">Нэвтрэх нь одоо зөвхөн утасны дугаар + нууц үгээр хийгддэг. Хэрэглэгч утасгүй эсвэл буруу дугаартай бол (нэвтэрч чадахгүй) эндээс шууд засаж болно.</p>
             <div className="mt-3 flex gap-2">
-              <input value={phoneDraft} onChange={event => setPhoneDraft(event.target.value)} placeholder="9911 2233" inputMode="tel" className="h-10 flex-1 rounded-xl border border-black/10 px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" />
-              <button type="button" disabled={updatePhone.isPending} onClick={onSavePhone} className="shrink-0 rounded-xl bg-[#17181b] px-4 text-xs font-bold text-white disabled:opacity-60">{updatePhone.isPending ? <LoaderCircle className="animate-spin" size={14} /> : "Хадгалах"}</button>
+              <input value={phoneDraft} onChange={event => setPhoneDraft(event.target.value)} placeholder="9911 2233" inputMode="tel" className="h-10 flex-1 rounded-xl border border-[var(--a-border)] px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" />
+              <button type="button" disabled={updatePhone.isPending} onClick={onSavePhone} className="shrink-0 rounded-xl bg-[var(--a-btn-dark)] px-4 text-xs font-bold text-white disabled:opacity-60">{updatePhone.isPending ? <LoaderCircle className="animate-spin" size={14} /> : "Хадгалах"}</button>
             </div>
           </div>}
 
-          {isAdmin && <div className="mt-4 rounded-2xl border border-black/8 p-4">
-            {detail.suspendedReason && <p className="mb-3 rounded-xl bg-[#fff0f2] px-3 py-2 text-xs leading-5 text-[#a51630]">Шалтгаан: {detail.suspendedReason}</p>}
+          {isAdmin && <div className="mt-4 rounded-2xl border border-[var(--a-border)] p-4">
+            {detail.suspendedReason && <p className="mb-3 rounded-xl bg-[var(--a-neg-soft)] px-3 py-2 text-xs leading-5 text-[var(--a-neg)]">Шалтгаан: {detail.suspendedReason}</p>}
             <div className="flex flex-wrap gap-2">
               {detail.suspendedAt
                 ? <button type="button" disabled={isBusy} onClick={onUnsuspend} className="inline-flex items-center gap-1.5 rounded-full bg-[#2c7650] px-3 py-2 text-xs font-bold text-white disabled:opacity-60">{unsuspendUser.isPending ? <LoaderCircle className="animate-spin" size={14} /> : <ShieldCheck size={14} />}Хандалт сэргээх</button>
                 : <button type="button" disabled={isBusy} onClick={onSuspend} className="inline-flex items-center gap-1.5 rounded-full bg-[#df1f3d] px-3 py-2 text-xs font-bold text-white disabled:opacity-60">{suspendUser.isPending ? <LoaderCircle className="animate-spin" size={14} /> : <ShieldAlert size={14} />}Түр хаах</button>}
-              <button type="button" disabled={forceLogoutUser.isPending} onClick={onForceLogout} className="inline-flex items-center gap-1.5 rounded-full border border-black/10 px-3 py-2 text-xs font-bold text-[#57585e] disabled:opacity-60">{forceLogoutUser.isPending ? <LoaderCircle className="animate-spin" size={14} /> : <LogOut size={14} />}Бүх төхөөрөмжөөс гаргах</button>
+              <button type="button" disabled={forceLogoutUser.isPending} onClick={onForceLogout} className="inline-flex items-center gap-1.5 rounded-full border border-[var(--a-border)] px-3 py-2 text-xs font-bold text-[var(--a-text-soft)] disabled:opacity-60">{forceLogoutUser.isPending ? <LoaderCircle className="animate-spin" size={14} /> : <LogOut size={14} />}Бүх төхөөрөмжөөс гаргах</button>
             </div>
-            {!detail.suspendedAt && <label className="mt-3 grid gap-1.5 text-xs font-bold">Түр хаах шалтгаан (сонголтоор)<input value={reason} onChange={event => setReason(event.target.value)} placeholder="ж: төлбөрийн маргаан" className="h-10 rounded-xl border border-black/10 px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" /></label>}
+            {!detail.suspendedAt && <label className="mt-3 grid gap-1.5 text-xs font-bold">Түр хаах шалтгаан (сонголтоор)<input value={reason} onChange={event => setReason(event.target.value)} placeholder="ж: төлбөрийн маргаан" className="h-10 rounded-xl border border-[var(--a-border)] px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" /></label>}
           </div>}
 
           {/* Admin face gate (2026-09-08): only shown for accounts the gate
               actually applies to -- a plain customer has no /admin access and
               therefore never enrolls a face, so the control would be
               meaningless noise on their drawer. */}
-          {isAdmin && detail.role !== "user" && <div className="mt-4 rounded-2xl border border-black/8 p-4">
-            <p className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]"><ScanFace size={13} /> ЦАРАЙН БҮРТГЭЛ</p>
-            <p className="mt-1 text-[11px] leading-4 text-[#a9a49a]">Админ хэсэгт нэвтрэхэд царайгаар нэмэлт баталгаажуулалт хийгддэг. Хэрэв тухайн хүнийг таньж чадахгүй болсон бол (нүдний шил, сахал, камер солигдсон гэх мэт) бүртгэлийг нь цуцлаад дахин бүртгүүлж болно. Нууц үгэнд нөлөөлөхгүй.</p>
-            <button type="button" disabled={resetFace.isPending} onClick={onResetFace} className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-black/10 px-3 py-2 text-xs font-bold text-[#57585e] disabled:opacity-60">
+          {isAdmin && detail.role !== "user" && <div className="mt-4 rounded-2xl border border-[var(--a-border)] p-4">
+            <p className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-[.13em] text-[var(--a-faint)]"><ScanFace size={13} /> ЦАРАЙН БҮРТГЭЛ</p>
+            <p className="mt-1 text-[11px] leading-4 text-[var(--a-faint)]">Админ хэсэгт нэвтрэхэд царайгаар нэмэлт баталгаажуулалт хийгддэг. Хэрэв тухайн хүнийг таньж чадахгүй болсон бол (нүдний шил, сахал, камер солигдсон гэх мэт) бүртгэлийг нь цуцлаад дахин бүртгүүлж болно. Нууц үгэнд нөлөөлөхгүй.</p>
+            <button type="button" disabled={resetFace.isPending} onClick={onResetFace} className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-[var(--a-border)] px-3 py-2 text-xs font-bold text-[var(--a-text-soft)] disabled:opacity-60">
               {resetFace.isPending ? <LoaderCircle className="animate-spin" size={14} /> : <ScanFace size={14} />}Царайн бүртгэлийг цуцлах
             </button>
           </div>}
 
           <div className="mt-6">
-            <p className="text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]">ЗАХИАЛГЫН ТҮҮХ</p>
+            <p className="text-[10px] font-extrabold tracking-[.13em] text-[var(--a-faint)]">ЗАХИАЛГЫН ТҮҮХ</p>
             <div className="mt-3 grid gap-2">
               {detail.orders.map(order => (
-                <div key={order.id} className="rounded-2xl border border-black/7 px-3 py-3">
+                <div key={order.id} className="rounded-2xl border border-[var(--a-border)] px-3 py-3">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-bold text-[#df1f3d]">{order.orderNumber}</span>
                     <span className="text-xs font-bold">{formatMnt(order.totalMnt)}</span>
                   </div>
-                  <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-[#77787d]">
+                  <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-[var(--a-muted)]">
                     <span>{statusLabels[order.status] ?? order.status}</span>
                     <span>{new Date(order.createdAt).toLocaleDateString("mn-MN")}</span>
                   </div>
                 </div>
               ))}
-              {detail.orders.length === 0 && <p className="rounded-2xl bg-[#f8f5ef] px-3 py-6 text-center text-xs text-[#707176]">Захиалгын түүх алга.</p>}
+              {detail.orders.length === 0 && <p className="rounded-2xl bg-[var(--a-soft)] px-3 py-6 text-center text-xs text-[var(--a-muted)]">Захиалгын түүх алга.</p>}
             </div>
           </div>
         </>}

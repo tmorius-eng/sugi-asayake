@@ -1996,3 +1996,269 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
   .face-gate-card, .face-gate-ok { animation: none; }
   .face-gate-ring-value { transition: none; }
 }
+
+/* ===========================================================================
+ * ADMIN DESIGN SYSTEM (2026-09-08) — reference-driven rebuild
+ *
+ * Tom supplied a dashboard reference (84abf4184403667.6551a930b3b2b.jpg, a
+ * "subcom" e-commerce admin by wily.agency) and asked for the admin panel to
+ * match it: neutral light canvas, near-black rail, pastel-tinted KPI row,
+ * outlined white content cards, pill controls, and motion throughout.
+ *
+ * Every color the admin renders now comes from one of these tokens, so the
+ * whole panel flips to dark by swapping the token block — no per-component
+ * dark: variants, and no risk of one panel staying light while the shell
+ * goes dark. Scoped to .admin-shell so the storefront (which has its own
+ * warm cream/vermilion identity) is untouched by any of it.
+ * ======================================================================== */
+.admin-shell,
+html[data-admin-theme] {
+  /* Surfaces */
+  --a-canvas: #ffffff;
+  --a-card: #ffffff;
+  --a-card-raised: #fafbfc;
+  --a-soft: #f5f6f8;
+  --a-soft-hover: #eceef1;
+  --a-border: #ebecef;
+  --a-border-strong: #d9dbe0;
+  /* Rail (the near-black sidebar) */
+  --a-rail: #111114;
+  --a-rail-active: #26262b;
+  --a-rail-text: #9d9ea4;
+  --a-rail-text-strong: #ffffff;
+  --a-rail-border: rgba(255, 255, 255, .08);
+  /* Type */
+  --a-text: #16181c;
+  --a-text-soft: #4c4e54;
+  --a-muted: #74767c;
+  --a-faint: #9a9ca2;
+  /* Inverse (the reference's black pill button) */
+  --a-invert-bg: #16181c;
+  --a-invert-bg-hover: #2b2d33;
+  --a-invert-text: #ffffff;
+  /* Semantics */
+  --a-pos: #1f8a53;
+  --a-pos-soft: #e6f4ec;
+  --a-neg: #cf2440;
+  --a-neg-soft: #fdecef;
+  --a-warn: #b07207;
+  --a-warn-soft: #fdf3e0;
+  --a-info: #2f6fb5;
+  --a-info-soft: #e9f1fb;
+  /* Chart */
+  --a-chart-1: #1c7a4c;
+  --a-chart-2: #4fc262;
+  --a-chart-grid: #eceef1;
+  --a-chart-band: #e9f1fb;
+  /* KPI tints (the reference's five pastel cards, left to right) */
+  --a-kpi-1: #fdf2e8;
+  --a-kpi-2: #edf7f1;
+  --a-kpi-3: #e9f1fb;
+  --a-kpi-4: #f0f8ea;
+  --a-kpi-5: #fdeef1;
+  --a-btn-dark: #16181c;
+  --a-btn-dark-hover: #2b2d33;
+  --a-surface-dark: #1f2126;
+  --a-shadow-card: 0 1px 2px rgba(16, 18, 22, .04);
+  --a-shadow-pop: 0 18px 44px rgba(16, 18, 22, .14);
+  color-scheme: light;
+}
+
+html[data-admin-theme="dark"],
+html[data-admin-theme="dark"] .admin-shell {
+  --a-canvas: #0d0e11;
+  --a-card: #16181d;
+  --a-card-raised: #1b1e24;
+  --a-soft: #1e2128;
+  --a-soft-hover: #262a32;
+  --a-border: #262930;
+  --a-border-strong: #333740;
+  --a-rail: #08090b;
+  --a-rail-active: #23262d;
+  --a-rail-text: #8e9198;
+  --a-rail-text-strong: #ffffff;
+  --a-rail-border: rgba(255, 255, 255, .07);
+  --a-text: #eef0f3;
+  --a-text-soft: #c3c6cc;
+  --a-muted: #9296a0;
+  --a-faint: #74787f;
+  --a-invert-bg: #eef0f3;
+  --a-invert-bg-hover: #ffffff;
+  --a-invert-text: #16181c;
+  --a-pos: #43c07f;
+  --a-pos-soft: rgba(67, 192, 127, .14);
+  --a-neg: #ff6b81;
+  --a-neg-soft: rgba(255, 107, 129, .14);
+  --a-warn: #e0a63c;
+  --a-warn-soft: rgba(224, 166, 60, .14);
+  --a-info: #6aa8e8;
+  --a-info-soft: rgba(106, 168, 232, .14);
+  --a-chart-1: #2fa96a;
+  --a-chart-2: #6fdc85;
+  --a-chart-grid: #23262c;
+  --a-chart-band: rgba(106, 168, 232, .12);
+  --a-kpi-1: #241d16;
+  --a-kpi-2: #14241b;
+  --a-kpi-3: #151f2c;
+  --a-kpi-4: #1a2417;
+  --a-kpi-5: #271820;
+  --a-btn-dark: #2c3038;
+  --a-btn-dark-hover: #383d47;
+  --a-surface-dark: #22262e;
+  --a-shadow-card: 0 1px 2px rgba(0, 0, 0, .5);
+  --a-shadow-pop: 0 18px 44px rgba(0, 0, 0, .6);
+  color-scheme: dark;
+
+  /* The shadcn/Tailwind theme tokens every ui/* primitive reads. Dropdowns,
+     dialogs, sheets, popovers, selects, tooltips and the command palette all
+     render into <body> through a Radix portal, so scoping these to
+     .admin-shell would miss every one of them -- they'd stay cream on a dark
+     panel. Only remapped while an admin page has stamped this attribute on
+     <html>; the storefront never sees it. */
+  --background: #0d0e11;
+  --foreground: #eef0f3;
+  --card: #16181d;
+  --card-foreground: #eef0f3;
+  --popover: #16181d;
+  --popover-foreground: #eef0f3;
+  --secondary: #1e2128;
+  --secondary-foreground: #eef0f3;
+  --muted: #1e2128;
+  --muted-foreground: #9296a0;
+  --accent: #262a32;
+  --accent-foreground: #eef0f3;
+  --border: #262930;
+  --input: #333740;
+  --ring: #6aa8e8;
+}
+
+/* The admin panel owns the whole viewport, so the theme has to reach the
+   document background too — otherwise overscroll and the area under a short
+   page flash the storefront's cream. */
+html[data-admin-theme="dark"], html[data-admin-theme="dark"] body { background: #0d0e11; }
+
+.admin-shell { background: var(--a-canvas); color: var(--a-text); }
+
+/* Everything below is wrapped in @layer components on purpose. Unlayered
+   rules beat ALL Tailwind v4 utilities (utilities live in their own layer),
+   which silently broke `lg:hidden` on .admin-icon-btn -- the mobile menu
+   button stayed visible on desktop because this file's `display: grid` won.
+   Same cascade-layer trap as the `a { color: inherit }` bug noted in
+   CLAUDE.md. Inside @layer components, a utility on the element always wins,
+   which is the behaviour every one of these classes actually wants. */
+@layer components {
+
+/* --- Motion ---------------------------------------------------------------
+   Tom asked for animation throughout ("animation edr bugd"). Everything here
+   is short (<= 520ms), transform/opacity-only (compositor-friendly), and
+   fully disabled under prefers-reduced-motion at the bottom of this block. */
+@keyframes admin-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes admin-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes admin-pop { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: none; } }
+@keyframes admin-slide-right { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+@keyframes admin-sheen { from { transform: translateX(-120%); } to { transform: translateX(220%); } }
+@keyframes admin-ping-soft { 0% { transform: scale(1); opacity: .85; } 70%, 100% { transform: scale(2.6); opacity: 0; } }
+
+.admin-rise { animation: admin-rise .52s var(--ease-out) both; }
+.admin-fade { animation: admin-fade .4s var(--ease-out) both; }
+.admin-pop { animation: admin-pop .38s var(--ease-out) both; }
+.admin-slide-right { animation: admin-slide-right .34s var(--ease-out) both; }
+/* Stagger: children animate in sequence rather than all at once. Capped at
+   10 so a long list never leaves the last rows visibly late. */
+.admin-stagger > * { animation: admin-rise .5s var(--ease-out) both; }
+.admin-stagger > *:nth-child(1) { animation-delay: .02s; }
+.admin-stagger > *:nth-child(2) { animation-delay: .07s; }
+.admin-stagger > *:nth-child(3) { animation-delay: .12s; }
+.admin-stagger > *:nth-child(4) { animation-delay: .17s; }
+.admin-stagger > *:nth-child(5) { animation-delay: .22s; }
+.admin-stagger > *:nth-child(6) { animation-delay: .27s; }
+.admin-stagger > *:nth-child(7) { animation-delay: .32s; }
+.admin-stagger > *:nth-child(8) { animation-delay: .37s; }
+.admin-stagger > *:nth-child(9) { animation-delay: .42s; }
+.admin-stagger > *:nth-child(n + 10) { animation-delay: .47s; }
+
+/* Card lift on hover — the reference's cards are static, but Tom explicitly
+   asked for motion; this is the restrained version (2px, no scale). */
+.admin-card {
+  background: var(--a-card);
+  border: 1px solid var(--a-border);
+  border-radius: 16px;
+  box-shadow: var(--a-shadow-card);
+  transition: transform .28s var(--ease-out), box-shadow .28s var(--ease-out), border-color .28s var(--ease-out);
+}
+.admin-card-hover:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(16, 18, 22, .09); border-color: var(--a-border-strong); }
+html[data-admin-theme="dark"] .admin-card-hover:hover { box-shadow: 0 12px 26px rgba(0, 0, 0, .55); }
+
+/* KPI card: tinted, borderless, with a slow sheen sweep on hover. */
+.admin-kpi {
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+  transition: transform .3s var(--ease-out), box-shadow .3s var(--ease-out);
+}
+.admin-kpi:hover { transform: translateY(-3px); box-shadow: 0 14px 30px rgba(16, 18, 22, .1); }
+html[data-admin-theme="dark"] .admin-kpi:hover { box-shadow: 0 14px 30px rgba(0, 0, 0, .5); }
+.admin-kpi::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 42%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .55), transparent);
+  transform: translateX(-120%);
+  pointer-events: none;
+}
+html[data-admin-theme="dark"] .admin-kpi::after { background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .07), transparent); }
+.admin-kpi:hover::after { animation: admin-sheen .9s var(--ease-out); }
+
+/* Rail nav item: the active pill slides its icon, inactive items nudge. */
+.admin-nav-item { transition: background-color .22s var(--ease-out), color .22s var(--ease-out), transform .22s var(--ease-out); }
+.admin-nav-item:hover { transform: translateX(2px); }
+.admin-nav-item svg { transition: transform .3s var(--ease-out); }
+.admin-nav-item:hover svg { transform: scale(1.12); }
+
+/* Circular top-bar buttons (the reference's translate/moon/bell row). */
+.admin-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  background: var(--a-card);
+  border: 1px solid var(--a-border);
+  color: var(--a-text-soft);
+  transition: background-color .22s var(--ease-out), color .22s var(--ease-out), transform .22s var(--ease-out), border-color .22s var(--ease-out);
+}
+.admin-icon-btn:hover { background: var(--a-soft-hover); color: var(--a-text); transform: translateY(-1px); }
+.admin-icon-btn:active { transform: scale(.94); }
+
+/* Notification dot's outward pulse — a real signal (count > 0), never
+   decorative: it only renders when there is something to look at. */
+.admin-ping { position: absolute; inset: 0; border-radius: 999px; background: var(--a-neg); animation: admin-ping-soft 2.2s var(--ease-out) infinite; }
+
+/* Number roll-in used by the KPI values (see AdminCountUp.tsx — the digits
+   themselves are interpolated in JS; this only handles the entrance). */
+.admin-metric { animation: admin-rise .55s var(--ease-out) both; }
+
+.admin-scroll-none { scrollbar-width: none; }
+.admin-scroll-none::-webkit-scrollbar { display: none; }
+
+/* Recharts inherits page fonts but not our tokens — these selectors are the
+   only way to theme its DOM without forking the library. */
+.admin-shell .recharts-cartesian-axis-tick text { fill: var(--a-faint); }
+.admin-shell .recharts-tooltip-wrapper { outline: none; }
+
+/* TinyMCE paints its editable iframe white from an inline/skin rule that our
+   injected dark skin doesn't reach -- the last white slab the dark-mode audit
+   found (Шинэ мэдээ). The editor's own content_style handles the text inside;
+   this is the frame around it. */
+html[data-admin-theme="dark"] .tox-edit-area__iframe,
+html[data-admin-theme="dark"] .tox .tox-edit-area__iframe { background-color: #16181d !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-rise, .admin-fade, .admin-pop, .admin-slide-right, .admin-metric,
+  .admin-stagger > *, .admin-kpi:hover::after, .admin-ping { animation: none !important; }
+  .admin-card, .admin-kpi, .admin-nav-item, .admin-icon-btn, .admin-nav-item svg { transition: none !important; }
+  .admin-card-hover:hover, .admin-kpi:hover, .admin-nav-item:hover, .admin-icon-btn:hover { transform: none !important; }
+}
+
+}

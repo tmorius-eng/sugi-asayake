@@ -24,15 +24,27 @@ import type { AdminSection } from "../AdminWorkspace";
  * async results would fight cmdk's internal state instead of just rendering
  * what we already computed.
  */
-export default function AdminCommandPalette({ preview, role, onNavigate, onSelectProduct, onSelectOrder, onSelectUser }: {
+export default function AdminCommandPalette({ preview, role, open: controlledOpen, onOpenChange, onNavigate, onSelectProduct, onSelectOrder, onSelectUser }: {
   preview: boolean;
   role: string;
+  /** Optional controlled mode (2026-09-08): the redesigned top bar has a real
+   *  button for this, so the palette can be opened by something other than
+   *  its own Ctrl+K listener. Uncontrolled (both props omitted) keeps the
+   *  original self-managed behavior. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   onNavigate: (section: AdminSection) => void;
   onSelectProduct: (skuOrName: string) => void;
   onSelectOrder: (orderNumber: string) => void;
   onSelectUser: (emailOrName: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
+  const setOpen = (next: boolean | ((current: boolean) => boolean)) => {
+    const value = typeof next === "function" ? next(open) : next;
+    if (onOpenChange) onOpenChange(value);
+    else setUncontrolledOpen(value);
+  };
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
 
@@ -96,7 +108,7 @@ export default function AdminCommandPalette({ preview, role, onNavigate, onSelec
           <>
             <CommandSeparator />
             {searchQuery.isLoading && (
-              <div className="flex items-center gap-2 px-4 py-3 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={13} />Хайж байна…</div>
+              <div className="flex items-center gap-2 px-4 py-3 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={13} />Хайж байна…</div>
             )}
             {results && results.products.length > 0 && (
               <CommandGroup heading="БҮТЭЭГДЭХҮҮН">
@@ -104,7 +116,7 @@ export default function AdminCommandPalette({ preview, role, onNavigate, onSelec
                   <CommandItem key={`product-${product.id}`} value={`product-${product.id}`} onSelect={() => select(() => onSelectProduct(product.sku))}>
                     <Package size={15} />
                     <span className="truncate">{product.name}</span>
-                    <span className="ml-auto shrink-0 text-[#85868a]">{product.sku}</span>
+                    <span className="ml-auto shrink-0 text-[var(--a-faint)]">{product.sku}</span>
                   </CommandItem>
                 ))}
               </CommandGroup>
@@ -115,7 +127,7 @@ export default function AdminCommandPalette({ preview, role, onNavigate, onSelec
                   <CommandItem key={`order-${order.id}`} value={`order-${order.id}`} onSelect={() => select(() => onSelectOrder(order.orderNumber))}>
                     <Receipt size={15} />
                     <span className="truncate">{order.orderNumber} · {order.customerName}</span>
-                    <span className="ml-auto shrink-0 text-[#85868a]">{formatMnt(order.totalMnt)}</span>
+                    <span className="ml-auto shrink-0 text-[var(--a-faint)]">{formatMnt(order.totalMnt)}</span>
                   </CommandItem>
                 ))}
               </CommandGroup>
@@ -126,7 +138,7 @@ export default function AdminCommandPalette({ preview, role, onNavigate, onSelec
                   <CommandItem key={`user-${user.id}`} value={`user-${user.id}`} onSelect={() => select(() => onSelectUser(user.phone ?? user.email ?? user.name ?? ""))}>
                     <UserRound size={15} />
                     <span className="truncate">{user.name ?? "Нэргүй хэрэглэгч"}</span>
-                    <span className="ml-auto shrink-0 text-[#85868a]">{user.phone ?? user.email ?? "—"}</span>
+                    <span className="ml-auto shrink-0 text-[var(--a-faint)]">{user.phone ?? user.email ?? "—"}</span>
                   </CommandItem>
                 ))}
               </CommandGroup>
@@ -137,7 +149,7 @@ export default function AdminCommandPalette({ preview, role, onNavigate, onSelec
                   <CommandItem key={`discount-${discountCode.id}`} value={`discount-${discountCode.id}`} onSelect={() => select(() => onNavigate("discountCodes"))}>
                     <Tag size={15} />
                     <span className="truncate">{discountCode.code}</span>
-                    <span className="ml-auto shrink-0 text-[#85868a]">{discountCode.isActive ? "Идэвхтэй" : "Идэвхгүй"}</span>
+                    <span className="ml-auto shrink-0 text-[var(--a-faint)]">{discountCode.isActive ? "Идэвхтэй" : "Идэвхгүй"}</span>
                   </CommandItem>
                 ))}
               </CommandGroup>
@@ -148,7 +160,7 @@ export default function AdminCommandPalette({ preview, role, onNavigate, onSelec
                   <CommandItem key={`promotion-${promotion.id}`} value={`promotion-${promotion.id}`} onSelect={() => select(() => onNavigate("promotions"))}>
                     <Megaphone size={15} />
                     <span className="truncate">{promotion.headline}</span>
-                    <span className="ml-auto shrink-0 text-[#85868a]">{promotion.isActive ? "Идэвхтэй" : "Идэвхгүй"}</span>
+                    <span className="ml-auto shrink-0 text-[var(--a-faint)]">{promotion.isActive ? "Идэвхтэй" : "Идэвхгүй"}</span>
                   </CommandItem>
                 ))}
               </CommandGroup>
@@ -159,7 +171,7 @@ export default function AdminCommandPalette({ preview, role, onNavigate, onSelec
                   <CommandItem key={`post-${post.id}`} value={`post-${post.id}`} onSelect={() => select(() => onNavigate("posts"))}>
                     <FilePenLine size={15} />
                     <span className="truncate">{post.title}</span>
-                    <span className="ml-auto shrink-0 text-[#85868a]">{post.isPublished ? "Нийтэлсэн" : "Ноорог"}</span>
+                    <span className="ml-auto shrink-0 text-[var(--a-faint)]">{post.isPublished ? "Нийтэлсэн" : "Ноорог"}</span>
                   </CommandItem>
                 ))}
               </CommandGroup>

@@ -192,7 +192,7 @@ import { IMAGE_MAX_DIMENSION, processUploadedImage, processUploadedImageVariants
 import { createQPayInvoice, getQPayAvailability } from "./qpay";
 import { createNoOpVerificationSession, createVerificationSession, getSessionStatus, isNoOpSessionExpired, normalizePhoneForVerifyMn } from "./verifyMn";
 import { getCategoryWriteViolation, getProductWriteViolation } from "./catalog-validation";
-import { getAnalyticsReport, exportAnalyticsExcel, exportAnalyticsPdf, getAllCustomersForCampaign, getPreferenceSegmentBreakdown, getRecommendationCoverage, getUsersByLoyaltyTier, getUsersBySegment, type PreferenceSegmentField } from "./analytics";
+import { getAnalyticsReport, exportAnalyticsExcel, exportAnalyticsPdf, getAllCustomersForCampaign, getDashboardHighlights, getPreferenceSegmentBreakdown, getRecommendationCoverage, getUsersByLoyaltyTier, getUsersBySegment, type PreferenceSegmentField } from "./analytics";
 import { siteMediaSlotKeys } from "../shared/site-media";
 import { siteTextSlotKeys } from "../shared/site-text";
 import { storeSettingKeys, getStoreSettingSlot, type StoreSettingKey } from "../shared/store-settings";
@@ -1804,6 +1804,15 @@ export const appRouter = router({
       dateFrom: z.string().datetime().optional(),
       dateTo: z.string().datetime().optional(),
     })).query(({ input }) => getAnalyticsReport({ dateFrom: input.dateFrom ? new Date(input.dateFrom) : undefined, dateTo: input.dateTo ? new Date(input.dateTo) : undefined })),
+    // 2026-09-08 (reference-driven admin redesign): the dashboard's two
+    // ranked cards. financeProcedure, same tier as analyticsReport below --
+    // it's revenue-ranked product data plus named customers, not
+    // operational staff data, so staff sees the locked-card treatment
+    // rather than a network 403.
+    dashboardHighlights: financeProcedure.input(z.object({
+      dateFrom: z.string().datetime().optional(),
+      dateTo: z.string().datetime().optional(),
+    })).query(({ input }) => getDashboardHighlights({ dateFrom: input.dateFrom ? new Date(input.dateFrom) : undefined, dateTo: input.dateTo ? new Date(input.dateTo) : undefined })),
     analyticsExport: financeProcedure.input(z.object({
       dateFrom: z.string().datetime().optional(),
       dateTo: z.string().datetime().optional(),

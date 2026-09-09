@@ -87,6 +87,33 @@ pnpm exec vitest run --no-file-parallelism
 - **Product Variants — PHASE 1 болон PHASE 2 хоёулаа дууссан (2026-08-26)** — худалдан авагч ProductDetail/QuickView дээр 2+ variant-тай бараанаас сонголт хийж, тухайн variant-ийн үнэ/нөөц/sku-гоор бодитоор захиалж болно. Ганц variant-тай (одоогийн 936/937) бараанд ямар ч харагдах өөрчлөлт алга. **Бодит Playwright screenshot баталгаажуулалт хараахан хийгдээгүй** (зөвхөн 149 автомат тест + `pnpm build` + throwaway DB probe script-ээр баталгаажсан) — дэлгэрэнгүй [HISTORY.md](HISTORY.md)-ийн "Product Variants PHASE 2" хэсэгт.
 - Хэрэглэгчийн удирдлага (`/admin` → Хэрэглэгч хэсэг)
 
+## ✅ (2026-09-08) /admin бүхэлдээ reference дизайнаар дахин бүтээгдэв + харанхуй горим + хүссэн огноогоор шүүх
+
+Tom `84abf4184403667.6551a930b3b2b.jpg` (wily.agency-ийн "subcom" админ дашбоард) илгээж, /admin-ыг **яг тэр шиг** болгохыг шаардав ("zaawal!!! bur!!!!"), мөн (а) бүх хэсэгт **animation**, (б) байхгүй байсан feature — **dark mode**, (в) 7/30/90 preset дээр нэмээд **хүссэн огноогоо сонгох** боломж шаардав. Хэд хэдэн удаа "still doesn't look like the image" гэж буцаасны эцэст бодит шалтгаанууд олдож заслаа (доор).
+
+**🔴 Хамгийн чухал олдвор — Tom-ийн дэлгэц дээр дизайн задарч байсан жинхэнэ шалтгаан**: түүний browser-ийн CSS viewport ~1233px (лаптоп + zoom) байсан бол миний KPI мөр `xl:grid-cols-5` (≥1280px) байсан тул **5 карт 2 багана болж задардаг**, хоёр баганат мөрүүд нь бүрэн доош унадаг байв — өөрөөр хэлбэл код зөв, breakpoint буруу. `grid-cols-[repeat(auto-fit,minmax(140px,1fr))]` болон `min-[880px]:` болгож зассаны дараа л reference шиг харагдав. **Сургамж: reference-тэй тааруулах ажлыг 1440px дээр биш, Tom-ийн бодит ~1233px дээр шалгах.**
+
+**🔴 Cascade-layer bug (CLAUDE.md-д аль хэдийн тэмдэглэсэн `a { color: inherit }`-тэй яг ижил төрөл)**: index.css-д нэмсэн `.admin-icon-btn { display: grid }` зэрэг дүрмүүд **@layer-гүй** байсан тул Tailwind-ийн бүх utility-г дийлж, `lg:hidden` ажиллахгүй болж **гар утасны ☰ товч desktop дээр давхар харагдаж** байв (Tom өөрөө олж заасан). Бүх admin CSS-ийг `@layer components`-д боосноор шийдэгдсэн.
+
+**🔴 Dark mode ажиллахгүй байсан 3 үе шаттай шалтгаан** (Tom "not rendering correctly!!" гэж 3 удаа буцаасан):
+1. Панелууд бүгд hardcode-лэгдсэн hex өнгөтэй байсан (240×`#df1f3d`, 92×`#77787d`, 86×`#f8f5ef` г.м.) — shell харанхуй болсон ч дотор нь цагаан карт, цайвар текст хэвээр. **34 файлд codemod** ажиллуулж `--a-*` token руу шилжүүлэв (гэрэл горимд утга нь яг ижил тул визуал өөрчлөлтгүй).
+2. Radix-ийн бүх portal (dropdown/dialog/sheet/popover/command palette) `<body>`-д, өөрөөр хэлбэл `.admin-shell`-ээс **гадна** render хийгддэг тул shell-д scoped хийсэн token хүрдэггүй байв → token-уудыг `<html>`-ийн `data-admin-theme` дээр тавьж, shadcn-ий `--background/--card/--popover/--border/...`-ийг мөн дахин зурав.
+3. **Гол алдаа**: `.admin-shell` өөр дээрээ ГЭРЭЛ token-уудыг дахин зарладаг байсан ба CSS-д элемент дээрээ тодорхойлогдсон custom property нь `<html>`-ээс удамшсанаас **үргэлж давуу** тул shell харанхуй утгыг хэзээ ч аваагүй. `html[data-admin-theme="dark"] .admin-shell`-ийг мөн зорилтод оруулснаар шийдэгдэв.
+
+**Баталгаажуулалт — нүдээр биш, хэмжилтээр**: Playwright-ээр **19 хэсэг тус бүрийг дараалан дарж**, DOM бүхэлд нь (rail/topbar/панел/portal) сканнердаж (а) харанхуй горимд үлдсэн цайвар гадаргуу, (б) 3:1-ээс доош контрасттай текстийг автоматаар илрүүлэв. Эхний гарц: бүх 19 хэсэг асуудалтай → засварын дараа: **зөвхөн 1 (зориудаар урвуулсан "Бүх цаг үе" товч)**. Явцад олдож заслаа: TinyMCE-ийн бүх chrome цагаан хэвээр (oxide-dark skin-г theme-ээр сольдог болгов), POS-ийн "Худалдаа баталгаажуулах" алтан товчны текст 1.62:1 (codemod алтан дэвсгэр дээрх бэхийг `--a-text` болгосноос — тогтмол бараан бэх болгов), Users хэсгийн 6 role badge цайвар хэвээр (`adminRoles.ts` token болов).
+
+**Шинэ бүрдэл** (`client/src/components/admin/`): `AdminKpiCard` (reference-ийн 5 пастел tile), `AdminCountUp` (тоо 0-ээс өсөх animation, эцсийн утга ҮРГЭЛЖ бодит тоо), `AdminSummaryChart` (2 шугам + dot legend + өөрийн range dropdown), `AdminTopProductsCard`, `AdminRecentOrdersCard`, `AdminTopCustomersCard`, `AdminDateRangePicker`; `client/src/lib/adminTheme.ts` (useSyncExternalStore, дэлгүүрийн ThemeContext-ээс **тусдаа key** тул admin-ыг харанхуй болгоход дэлгүүр хэзээ ч харанхуй болохгүй).
+
+**Огноо**: `analyticsRange.ts` — `10d` preset нэмэгдэж, `custom` (yyyy-mm-dd 2 талбар) бодитоор ажиллана; `resolveRange()` бол цорын ганц "range → цонх" функц. UTC биш **локал** огноо ашигладаг (UB нь UTC+8 тул `toISOString().slice(0,10)` нэг өдрөөр ухраадаг).
+
+**Явцад олдсон 2 бодит дата bug**: (1) `getAdminDashboardSummary`-ийн recentOrders нь захиалгын дугаараас өөр юу ч буцаадаггүй байсан тул reference шиг "юу зарагдсан" харуулах боломжгүй байв → `firstItemName`/`firstItemImageUrl`/`itemCount` нэмэв; (2) `AdminSummaryChart`-ийн өдрийн тэнхлэг `dateFrom`-оос **урагш** 7 нүд барьдаг байсан тул "7 хоног" цонх 8 хуанлийн өдөрт хүрдэг ба **өнөөдрийн орлого графикт огт ороогүй** атал дээрх KPI-д ордог зөрүү үүсгэж байв → тэнхлэгийг цонхны сүүлчийн өдрөөр анкорлов.
+
+**Шинэ backend**: `getTopProductsWithMedia`/`getTopCustomers`/`getDashboardHighlights` (`server/analytics.ts`) + `admin.dashboardHighlights` (financeProcedure — орлогоор эрэмбэлсэн бараа + нэрлэсэн харилцагч тул staff-д түгжээтэй). `getAnalyticsReport`-д ЗОРИУДААР нэмээгүй — тэр нь Excel/PDF export-ийн эх сурвалж бөгөөд эдгээр нь зөвхөн харагдацын нэмэлт (зураг/аватар) агуулдаг.
+
+**Баталгаажуулалт**: `pnpm check`/`pnpm build` цэвэр, **бүрэн `pnpm exec vitest run --no-file-parallelism` 542/542 ✅ (59/59 файл)**. QA-г **тусдаа порт (3100) дээр `ADMIN_FACE_GATE_ENABLED=0`-оор** ажиллуулж хийсэн — Tom-ийн 3000 порт дээрх сервер болон `.env` огт хөндөгдөөгүй (face gate `=1` хэвээр). Throwaway admin хэрэглэгч (99001188) ашиглаад **устгасан**, түр script устгасан.
+
+**⚠️ Үлдсэн, дараагийн session**: (1) `--a-faint` (жижиг uppercase шошго) гэрэл горимд 2.74:1 — WCAG AA-д хүрэхгүй, гэхдээ энэ нь codemod-оос ӨМНӨ ч ижил байсан (өмнөх `#8a8b8f` 2.9:1) тул регресс биш, тусад нь засах; (2) `AdminAnalyticsPanel`-ийн Geckoboard маягийн харанхуй tile-ууд харанхуй горимд бага зэрэг "хавтгай" харагдана (`--a-btn-dark`/`--a-surface-dark` нь хоёр горимд ч бараан хэвээр байхаар зориудаар үлдээсэн, учир нь дотор нь цагаан текст байгаа).
+
 ## ✅ (2026-09-08) /admin-д царайгаар нэвтрэх шалгалт (browser camera face recognition) — `admin-face-auth` branch
 
 Tom `collect.ekyc.mn`-ийн холбоос илгээж, `/admin` хандах эрхтэй **бүх 5 role**-д царай таних шалгалт нэмэхийг шаардав. Худалдан авагчид **хэзээ ч** хамаарахгүй (олон удаа тодотгосон).

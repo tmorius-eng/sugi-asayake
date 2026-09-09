@@ -30,9 +30,9 @@ export default function AdminNetworkActivitiesCard({ preview = false, canSeeFina
 
   if (!canSeeFinancials) {
     return (
-      <div className="rounded-xl border border-black/7 bg-card p-5 shadow-sm">
-        <p className="text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]">NETWORK ACTIVITIES</p>
-        <p className="mt-3 flex items-center gap-1.5 text-sm font-bold text-[#a9a49a]"><Lock size={13} aria-hidden="true" />Зөвхөн санхүү/админд</p>
+      <div className="rounded-xl border border-[var(--a-border)] bg-card p-5 shadow-sm">
+        <p className="text-[10px] font-extrabold tracking-[.13em] text-[var(--a-faint)]">NETWORK ACTIVITIES</p>
+        <p className="mt-3 flex items-center gap-1.5 text-sm font-bold text-[var(--a-faint)]"><Lock size={13} aria-hidden="true" />Зөвхөн санхүү/админд</p>
       </div>
     );
   }
@@ -47,8 +47,8 @@ export default function AdminNetworkActivitiesCard({ preview = false, canSeeFina
     });
   }
 
-  if (reportQuery.isLoading) return <div className="flex items-center gap-2 rounded-xl border border-black/7 bg-card p-5 text-xs text-[#77787d] shadow-sm"><LoaderCircle className="animate-spin" size={15} />Ачаалж байна…</div>;
-  if (reportQuery.error) return <div className="rounded-xl border border-black/7 bg-card p-5 text-xs text-[#a51630] shadow-sm">{reportQuery.error.message}</div>;
+  if (reportQuery.isLoading) return <div className="flex items-center gap-2 rounded-xl border border-[var(--a-border)] bg-card p-5 text-xs text-[var(--a-muted)] shadow-sm"><LoaderCircle className="animate-spin" size={15} />Ачаалж байна…</div>;
+  if (reportQuery.error) return <div className="rounded-xl border border-[var(--a-border)] bg-card p-5 text-xs text-[var(--a-neg)] shadow-sm">{reportQuery.error.message}</div>;
   const report = reportQuery.data;
   if (!report || !dates.dateFrom) return null;
 
@@ -78,19 +78,19 @@ function renderCard({ chartData, headline, deltaPercent, range, setRange }: {
   setRange: (range: RangeKey) => void;
 }) {
   return (
-    <div className="rounded-xl border border-black/7 bg-card p-5 shadow-sm sm:p-6">
+    <div className="rounded-xl border border-[var(--a-border)] bg-card p-5 shadow-sm sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]">NETWORK ACTIVITIES</p>
+          <p className="text-[10px] font-extrabold tracking-[.13em] text-[var(--a-faint)]">NETWORK ACTIVITIES</p>
           <div className="mt-1 flex items-baseline gap-2">
             <span className="font-[var(--font-display)] text-2xl font-semibold tracking-[-.05em]">{headline.toLocaleString("mn-MN")}</span>
             <AdminDeltaPill percent={deltaPercent} />
           </div>
-          <p className="mt-1 text-[11px] text-[#8a8b8f]">Нийт сессийн тоо (энэ хугацаанд)</p>
+          <p className="mt-1 text-[11px] text-[var(--a-faint)]">Нийт сессийн тоо (энэ хугацаанд)</p>
         </div>
-        <div className="flex gap-1 rounded-full bg-[#f1ede6] p-1">
+        <div className="flex gap-1 rounded-full bg-[var(--a-soft)] p-1">
           {networkRangeOptions.map(option => (
-            <button key={option.key} type="button" onClick={() => setRange(option.key)} className={`rounded-full px-3 py-1.5 text-[11px] font-bold transition ${range === option.key ? "bg-[#17181b] text-white" : "text-[#57585e]"}`}>
+            <button key={option.key} type="button" onClick={() => setRange(option.key)} className={`rounded-full px-3 py-1.5 text-[11px] font-bold transition ${range === option.key ? "bg-[var(--a-btn-dark)] text-white" : "text-[var(--a-text-soft)]"}`}>
               {option.label}
             </button>
           ))}

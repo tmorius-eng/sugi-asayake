@@ -2210,7 +2210,7 @@ export async function getLowStockProducts() {
 export async function getAdminDashboardSummary() {
   const db = await getDb();
   if (!db) {
-    return { totalOrders: 0, totalRevenueMnt: 0, activeUsers: 0, recentOrders: [], lowStockProducts: [], failedPayments: [], ordersLast7d: 0, ordersPrevious7d: 0, ordersDailySeries: [] as { date: string; orderCount: number }[] };
+    return { totalOrders: 0, totalRevenueMnt: 0, activeUsers: 0, recentOrders: [] as { id: number; orderNumber: string; customerName: string; totalMnt: number; status: string; paymentStatus: string; createdAt: Date; firstItemName: string | null; firstItemImageUrl: string | null; itemCount: number }[], lowStockProducts: [], failedPayments: [], ordersLast7d: 0, ordersPrevious7d: 0, ordersDailySeries: [] as { date: string; orderCount: number }[] };
   }
 
   const activeSince = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -2250,6 +2250,33 @@ export async function getAdminDashboardSummary() {
     db.select({ date: dailyOrderDateExpr, count: sql<number>`count(*)` }).from(orders).where(gte(orders.createdAt, fourteenDaysAgo)).groupBy(dailyOrderDateExpr),
   ]);
 
+  // 2026-09-08 (reference-driven admin redesign): the new dashboard's
+  // "Сүүлийн захиалгууд" table shows what was actually bought (thumbnail +
+  // product name), not just an order number -- one extra query over exactly
+  // the 10 orders already fetched above, keyed by orderId. Reads
+  // order_items' denormalized productName (durable across product deletion,
+  // same discipline as getTopProducts) but LEFT JOINs products purely for
+  // the photo, which is presentation-only and may legitimately be missing.
+  const recentOrderIds = recentOrders.map(order => order.id);
+  const recentOrderItemRows = recentOrderIds.length === 0 ? [] : await db.select({
+    id: orderItems.id,
+    orderId: orderItems.orderId,
+    productName: orderItems.productName,
+    imageUrl: products.imageUrl,
+  }).from(orderItems).leftJoin(products, eq(orderItems.productId, products.id)).where(inArray(orderItems.orderId, recentOrderIds)).orderBy(asc(orderItems.id));
+  const firstItemByOrderId = new Map<number, { productName: string; imageUrl: string | null }>();
+  const itemCountByOrderId = new Map<number, number>();
+  for (const row of recentOrderItemRows) {
+    itemCountByOrderId.set(row.orderId, (itemCountByOrderId.get(row.orderId) ?? 0) + 1);
+    if (!firstItemByOrderId.has(row.orderId)) firstItemByOrderId.set(row.orderId, { productName: row.productName, imageUrl: row.imageUrl ?? null });
+  }
+  const recentOrdersWithItems = recentOrders.map(order => ({
+    ...order,
+    firstItemName: firstItemByOrderId.get(order.id)?.productName ?? null,
+    firstItemImageUrl: firstItemByOrderId.get(order.id)?.imageUrl ?? null,
+    itemCount: itemCountByOrderId.get(order.id) ?? 0,
+  }));
+
   const countsByDate = new Map(dailyOrderRows.map(row => [row.date, Number(row.count)]));
   const dayString = (daysAgo: number) => new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const ordersDailySeries: { date: string; orderCount: number }[] = [];
@@ -2266,7 +2293,7 @@ export async function getAdminDashboardSummary() {
     totalOrders: Number(orderCountRow?.count ?? 0),
     totalRevenueMnt: Number(revenueRow?.total ?? 0),
     activeUsers: Number(activeUserRow?.count ?? 0),
-    recentOrders,
+    recentOrders: recentOrdersWithItems,
     lowStockProducts,
     failedPayments,
     ordersLast7d,

@@ -85,19 +85,19 @@ export default function AdminOperationsPanel({ preview = false, query = "", role
   return <div className="grid gap-4">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div className="flex items-center gap-3">
-        {viewMode === "list" && <label className="flex items-center gap-2 text-xs font-bold text-[#57585e]"><input type="checkbox" checked={orders.length > 0 && selectedOrderIds.size === orders.length} onChange={() => setSelectedOrderIds(selectedOrderIds.size === orders.length ? new Set() : new Set(orders.map(order => order.id)))} className="size-4 accent-[#df1f3d]" />Бүгдийг сонгох</label>}
-        <div className="inline-flex rounded-full border border-black/10 bg-white p-1">
-          <button type="button" onClick={() => setViewMode("board")} aria-label="Самбар харагдац" title="Самбар (Kanban)" className={`grid size-8 place-items-center rounded-full transition ${viewMode === "board" ? "bg-[#17181b] text-white" : "text-[#8a8b8f] hover:text-[#17181b]"}`}><LayoutGrid size={14} /></button>
-          <button type="button" onClick={() => setViewMode("list")} aria-label="Жагсаалт харагдац" title="Жагсаалт" className={`grid size-8 place-items-center rounded-full transition ${viewMode === "list" ? "bg-[#17181b] text-white" : "text-[#8a8b8f] hover:text-[#17181b]"}`}><List size={14} /></button>
+        {viewMode === "list" && <label className="flex items-center gap-2 text-xs font-bold text-[var(--a-text-soft)]"><input type="checkbox" checked={orders.length > 0 && selectedOrderIds.size === orders.length} onChange={() => setSelectedOrderIds(selectedOrderIds.size === orders.length ? new Set() : new Set(orders.map(order => order.id)))} className="size-4 accent-[#df1f3d]" />Бүгдийг сонгох</label>}
+        <div className="inline-flex rounded-full border border-[var(--a-border)] bg-[var(--a-card)] p-1">
+          <button type="button" onClick={() => setViewMode("board")} aria-label="Самбар харагдац" title="Самбар (Kanban)" className={`grid size-8 place-items-center rounded-full transition ${viewMode === "board" ? "bg-[var(--a-btn-dark)] text-white" : "text-[var(--a-faint)] hover:text-[var(--a-text)]"}`}><LayoutGrid size={14} /></button>
+          <button type="button" onClick={() => setViewMode("list")} aria-label="Жагсаалт харагдац" title="Жагсаалт" className={`grid size-8 place-items-center rounded-full transition ${viewMode === "list" ? "bg-[var(--a-btn-dark)] text-white" : "text-[var(--a-faint)] hover:text-[var(--a-text)]"}`}><List size={14} /></button>
         </div>
       </div>
-      <button type="button" onClick={() => setShowExport(current => !current)} className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2.5 text-xs font-bold text-[#57585e] transition hover:border-[#df1f3d] hover:text-[#df1f3d]"><Download size={14} />Экспорт</button>
+      <button type="button" onClick={() => setShowExport(current => !current)} className="inline-flex items-center gap-2 rounded-full border border-[var(--a-border)] bg-[var(--a-card)] px-4 py-2.5 text-xs font-bold text-[var(--a-text-soft)] transition hover:border-[#df1f3d] hover:text-[#df1f3d]"><Download size={14} />Экспорт</button>
     </div>
-    {showExport && <div className="flex flex-wrap items-end gap-3 rounded-2xl bg-[#f8f5ef] p-4">
-      <label className="grid gap-1.5 text-xs font-bold">Төлөв<select value={exportStatusFilter} onChange={event => setExportStatusFilter(event.target.value as typeof exportStatusFilter)} className="h-10 rounded-lg border border-black/10 bg-white px-2 text-xs font-normal outline-none focus:border-[#df1f3d]"><option value="all">Бүгд</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-      <label className="grid gap-1.5 text-xs font-bold">Эхлэх огноо<input type="date" value={exportDateFrom} onChange={event => setExportDateFrom(event.target.value)} className="h-10 rounded-lg border border-black/10 bg-white px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" /></label>
-      <label className="grid gap-1.5 text-xs font-bold">Дуусах огноо<input type="date" value={exportDateTo} onChange={event => setExportDateTo(event.target.value)} className="h-10 rounded-lg border border-black/10 bg-white px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" /></label>
-      <button type="button" onClick={exportOrdersCsv} className="inline-flex h-10 items-center gap-2 rounded-full bg-[#17181b] px-4 text-xs font-bold text-white transition hover:bg-[#df1f3d]"><Download size={14} />CSV татах</button>
+    {showExport && <div className="flex flex-wrap items-end gap-3 rounded-2xl bg-[var(--a-soft)] p-4">
+      <label className="grid gap-1.5 text-xs font-bold">Төлөв<select value={exportStatusFilter} onChange={event => setExportStatusFilter(event.target.value as typeof exportStatusFilter)} className="h-10 rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] px-2 text-xs font-normal outline-none focus:border-[#df1f3d]"><option value="all">Бүгд</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+      <label className="grid gap-1.5 text-xs font-bold">Эхлэх огноо<input type="date" value={exportDateFrom} onChange={event => setExportDateFrom(event.target.value)} className="h-10 rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" /></label>
+      <label className="grid gap-1.5 text-xs font-bold">Дуусах огноо<input type="date" value={exportDateTo} onChange={event => setExportDateTo(event.target.value)} className="h-10 rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" /></label>
+      <button type="button" onClick={exportOrdersCsv} className="inline-flex h-10 items-center gap-2 rounded-full bg-[var(--a-btn-dark)] px-4 text-xs font-bold text-white transition hover:bg-[#df1f3d]"><Download size={14} />CSV татах</button>
     </div>}
     {viewMode === "list" && (
       <AdminBulkActionBar count={selectedOrderIds.size} onClear={() => setSelectedOrderIds(new Set())}>
@@ -105,13 +105,13 @@ export default function AdminOperationsPanel({ preview = false, query = "", role
         <button type="button" disabled={bulkUpdateOrderStatus.isPending} onClick={applyBulkStatus} className="rounded-full bg-white/15 px-3 py-1.5 text-[11px] font-bold text-white transition hover:bg-white/25 disabled:opacity-50">Төлөв тохируулах</button>
       </AdminBulkActionBar>
     )}
-    {ordersQuery.isLoading && <p className="flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={15} />Захиалгуудыг уншиж байна…</p>}
+    {ordersQuery.isLoading && <p className="flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={15} />Захиалгуудыг уншиж байна…</p>}
     {!ordersQuery.isLoading && viewMode === "board" && (
       <OrdersKanbanBoard
         orders={orders}
         onStatusChange={(id, status) => updateOrder.mutate({ id, status })}
         disabled={preview || !canManageFulfilment || updateOrder.isPending}
-        emptyMessage={<div className="rounded-3xl bg-[#f8f5ef] p-8 text-center text-sm text-[#707176]"><PackageCheck className="mx-auto mb-3 text-[#df1f3d]" size={28} />Одоогоор бодит захиалга алга.</div>}
+        emptyMessage={<div className="rounded-3xl bg-[var(--a-soft)] p-8 text-center text-sm text-[var(--a-muted)]"><PackageCheck className="mx-auto mb-3 text-[#df1f3d]" size={28} />Одоогоор бодит захиалга алга.</div>}
       />
     )}
     {!ordersQuery.isLoading && viewMode === "list" && (
@@ -122,45 +122,45 @@ export default function AdminOperationsPanel({ preview = false, query = "", role
         selectedIds={selectedOrderIds}
         onSelectedIdsChange={next => setSelectedOrderIds(next as Set<number>)}
         cardListClassName="grid gap-4"
-        emptyMessage={<div className="rounded-3xl bg-[#f8f5ef] p-8 text-center text-sm text-[#707176]"><PackageCheck className="mx-auto mb-3 text-[#df1f3d]" size={28} />Одоогоор бодит захиалга алга.</div>}
+        emptyMessage={<div className="rounded-3xl bg-[var(--a-soft)] p-8 text-center text-sm text-[var(--a-muted)]"><PackageCheck className="mx-auto mb-3 text-[#df1f3d]" size={28} />Одоогоор бодит захиалга алга.</div>}
         renderRow={(order, { selected, toggleSelected }) => (
-          <article className="rounded-3xl border border-black/7 p-5">
+          <article className="rounded-3xl border border-[var(--a-border)] p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex items-start gap-3">
                 <input type="checkbox" checked={selected} onChange={toggleSelected} aria-label={`${order.orderNumber} сонгох`} className="mt-1 size-4 accent-[#df1f3d]" />
                 <div>
                   <p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">{order.orderNumber}</p>
                   <h3 className="mt-1 font-bold">{order.customerName} · {formatMnt(order.totalMnt)}</h3>
-                  <p className="mt-1 text-xs text-[#707176]">{order.customerPhone} · {order.deliveryMethod === "store_pickup" ? "Салбараас авах" : order.deliveryAddress ?? "УБ хүргэлт"}</p>
+                  <p className="mt-1 text-xs text-[var(--a-muted)]">{order.customerPhone} · {order.deliveryMethod === "store_pickup" ? "Салбараас авах" : order.deliveryAddress ?? "УБ хүргэлт"}</p>
                 </div>
               </div>
-              <span className="rounded-full bg-[#f8f5ef] px-3 py-1 text-xs font-bold">{order.paymentStatus === "paid" ? "Төлөгдсөн" : order.paymentStatus === "refunded" ? "Буцаан олгосон" : "Төлбөр хүлээж буй"}</span>
+              <span className="rounded-full bg-[var(--a-soft)] px-3 py-1 text-xs font-bold">{order.paymentStatus === "paid" ? "Төлөгдсөн" : order.paymentStatus === "refunded" ? "Буцаан олгосон" : "Төлбөр хүлээж буй"}</span>
             </div>
-            <p className="mt-4 text-xs text-[#55565b]">{order.items.map(item => `${item.productName} × ${item.quantity}`).join(" · ")}</p>
+            <p className="mt-4 text-xs text-[var(--a-text-soft)]">{order.items.map(item => `${item.productName} × ${item.quantity}`).join(" · ")}</p>
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-              <select value={order.status} disabled={preview || !canManageFulfilment || updateOrder.isPending} onChange={event => updateOrder.mutate({ id: order.id, status: event.target.value as OrderStatus })} className="h-10 rounded-xl border border-black/10 bg-white px-3 text-xs font-bold disabled:opacity-60">{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-              <input defaultValue={order.deliveryTrackingRef ?? ""} disabled={preview || !canManageFulfilment} onBlur={event => { if (!preview && event.target.value !== (order.deliveryTrackingRef ?? "")) updateOrder.mutate({ id: order.id, deliveryTrackingRef: event.target.value || null }); }} placeholder="Хүргэлтийн дугаар" className="h-10 flex-1 rounded-xl border border-black/10 px-3 text-xs outline-none focus:border-[#df1f3d] disabled:opacity-60" />
+              <select value={order.status} disabled={preview || !canManageFulfilment || updateOrder.isPending} onChange={event => updateOrder.mutate({ id: order.id, status: event.target.value as OrderStatus })} className="h-10 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-xs font-bold disabled:opacity-60">{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+              <input defaultValue={order.deliveryTrackingRef ?? ""} disabled={preview || !canManageFulfilment} onBlur={event => { if (!preview && event.target.value !== (order.deliveryTrackingRef ?? "")) updateOrder.mutate({ id: order.id, deliveryTrackingRef: event.target.value || null }); }} placeholder="Хүргэлтийн дугаар" className="h-10 flex-1 rounded-xl border border-[var(--a-border)] px-3 text-xs outline-none focus:border-[#df1f3d] disabled:opacity-60" />
             </div>
-            <p className="mt-2 text-[11px] text-[#8b8c90]">И-баримт: {order.ebarimtStatus === "issued" ? order.ebarimtReceiptId : order.ebarimtStatus === "failed" ? <span className="font-bold text-[#df1f3d]">Алдаа гарсан</span> : "—"}</p>
+            <p className="mt-2 text-[11px] text-[var(--a-faint)]">И-баримт: {order.ebarimtStatus === "issued" ? order.ebarimtReceiptId : order.ebarimtStatus === "failed" ? <span className="font-bold text-[#df1f3d]">Алдаа гарсан</span> : "—"}</p>
             {/* Admin overhaul (2026-09-08, Phase E): refund is deliberately its
                 own action, not a 3rd option folded into the status <select>
                 above -- it's a money decision (financeProcedure server-side),
                 distinct from the fulfilment ladder that select controls. */}
             {canRefund && order.status === "returned" && order.paymentStatus !== "refunded" && (
               refundForm?.orderId === order.id ? (
-                <div className="mt-3 grid gap-2 rounded-2xl bg-[#fff5f6] p-4">
+                <div className="mt-3 grid gap-2 rounded-2xl bg-[var(--a-neg-soft)] p-4">
                   <div className="flex flex-wrap gap-2">
-                    <label className="grid gap-1 text-xs font-bold">Буцаах дүн (₮)<input type="number" min="0" max={order.totalMnt} value={refundForm.amountMnt} onChange={event => setRefundForm(current => current && { ...current, amountMnt: event.target.value })} className="h-10 w-36 rounded-xl border border-black/10 bg-white px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" /></label>
-                    <label className="grid gap-1 text-xs font-bold">Тэмдэглэл (сонголтоор)<input value={refundForm.note} onChange={event => setRefundForm(current => current && { ...current, note: event.target.value })} className="h-10 w-56 rounded-xl border border-black/10 bg-white px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" /></label>
+                    <label className="grid gap-1 text-xs font-bold">Буцаах дүн (₮)<input type="number" min="0" max={order.totalMnt} value={refundForm.amountMnt} onChange={event => setRefundForm(current => current && { ...current, amountMnt: event.target.value })} className="h-10 w-36 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" /></label>
+                    <label className="grid gap-1 text-xs font-bold">Тэмдэглэл (сонголтоор)<input value={refundForm.note} onChange={event => setRefundForm(current => current && { ...current, note: event.target.value })} className="h-10 w-56 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" /></label>
                   </div>
                   <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={refundForm.restock} onChange={event => setRefundForm(current => current && { ...current, restock: event.target.checked })} className="size-4 accent-[#df1f3d]" />Барааг нөөцөд буцаах</label>
                   <div className="flex gap-2">
                     <button type="button" disabled={refundOrder.isPending} onClick={() => refundOrder.mutate({ id: order.id, refundAmountMnt: Number(refundForm.amountMnt) || 0, refundNote: refundForm.note || undefined, restockItems: refundForm.restock })} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#df1f3d] px-4 text-xs font-bold text-white disabled:opacity-60">{refundOrder.isPending && <LoaderCircle className="animate-spin" size={13} />}Баталгаажуулах</button>
-                    <button type="button" onClick={() => setRefundForm(null)} className="h-9 rounded-full border border-black/10 px-4 text-xs font-bold text-[#57585e]">Цуцлах</button>
+                    <button type="button" onClick={() => setRefundForm(null)} className="h-9 rounded-full border border-[var(--a-border)] px-4 text-xs font-bold text-[var(--a-text-soft)]">Цуцлах</button>
                   </div>
                 </div>
               ) : (
-                <button type="button" disabled={preview} onClick={() => setRefundForm({ orderId: order.id, amountMnt: String(order.totalMnt), note: "", restock: false })} className="mt-3 inline-flex h-10 items-center gap-2 rounded-full border border-[#df1f3d]/30 px-4 text-xs font-bold text-[#df1f3d] transition hover:bg-[#fff0f2]"><Banknote size={14} />Буцаан олгох</button>
+                <button type="button" disabled={preview} onClick={() => setRefundForm({ orderId: order.id, amountMnt: String(order.totalMnt), note: "", restock: false })} className="mt-3 inline-flex h-10 items-center gap-2 rounded-full border border-[#df1f3d]/30 px-4 text-xs font-bold text-[#df1f3d] transition hover:bg-[var(--a-neg-soft)]"><Banknote size={14} />Буцаан олгох</button>
               )
             )}
           </article>
@@ -193,27 +193,27 @@ function OrdersKanbanBoard({
         return (
           <div key={status} className="w-72 shrink-0">
             <div className="mb-3 flex items-center justify-between px-1">
-              <p className="text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]">{statusLabels[status].toUpperCase()}</p>
-              <span className="rounded-full bg-[#f8f5ef] px-2 py-0.5 text-[10px] font-extrabold text-[#57585e]">{columnOrders.length}</span>
+              <p className="text-[10px] font-extrabold tracking-[.13em] text-[var(--a-faint)]">{statusLabels[status].toUpperCase()}</p>
+              <span className="rounded-full bg-[var(--a-soft)] px-2 py-0.5 text-[10px] font-extrabold text-[var(--a-text-soft)]">{columnOrders.length}</span>
             </div>
-            <div className="grid min-w-0 gap-2.5 rounded-2xl bg-[#f8f5ef]/60 p-2.5">
+            <div className="grid min-w-0 gap-2.5 rounded-2xl bg-[var(--a-soft)] p-2.5">
               {columnOrders.map(order => (
-                <div key={order.id} className="min-w-0 rounded-2xl border border-black/7 bg-white p-3.5">
+                <div key={order.id} className="min-w-0 rounded-2xl border border-[var(--a-border)] bg-[var(--a-card)] p-3.5">
                   <p className="text-[10px] font-extrabold tracking-[.1em] text-[#df1f3d]">{order.orderNumber}</p>
                   <h4 className="mt-1 text-sm font-bold">{order.customerName}</h4>
-                  <p className="mt-0.5 text-xs text-[#707176]">{formatMnt(order.totalMnt)}</p>
+                  <p className="mt-0.5 text-xs text-[var(--a-muted)]">{formatMnt(order.totalMnt)}</p>
                   <select
                     value={order.status}
                     disabled={disabled}
                     onChange={event => onStatusChange(order.id, event.target.value as OrderStatus)}
-                    className="mt-2.5 h-8 w-full rounded-lg border border-black/10 bg-white px-2 text-[11px] font-bold outline-none focus:border-[#df1f3d]"
+                    className="mt-2.5 h-8 w-full rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] px-2 text-[11px] font-bold outline-none focus:border-[#df1f3d]"
                     aria-label={`${order.orderNumber}-ийн төлөв`}
                   >
                     {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                   </select>
                 </div>
               ))}
-              {columnOrders.length === 0 && <p className="py-6 text-center text-[11px] text-[#b7b8bc]">Хоосон</p>}
+              {columnOrders.length === 0 && <p className="py-6 text-center text-[11px] text-[var(--a-faint)]">Хоосон</p>}
             </div>
           </div>
         );

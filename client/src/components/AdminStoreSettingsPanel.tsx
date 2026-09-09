@@ -63,47 +63,47 @@ export default function AdminStoreSettingsPanel({ preview = false }: { preview?:
   };
 
   return <div>
-    <div className="rounded-3xl border border-[#3970a7]/15 bg-[#eef5ff] p-5 text-sm text-[#385878]">
-      <div className="flex gap-3"><ShieldCheck className="mt-0.5 shrink-0 text-[#3970a7]" size={19} /><p><strong>Таны өөрчлөлт шинэ захиалга/имэйлд шууд нөлөөлнэ.</strong> Хүргэлтийн үнэ, хямдралын доод дүн, захиалгын статус мессежийн текстийг доор бүлгээр эмхэтгэсэн. "Анхны утга руу буцаах" нь кодонд бичигдсэн анхны утгыг сэргээнэ.</p></div>
+    <div className="rounded-3xl border border-[#3970a7]/15 bg-[var(--a-info-soft)] p-5 text-sm text-[var(--a-info)]">
+      <div className="flex gap-3"><ShieldCheck className="mt-0.5 shrink-0 text-[var(--a-info)]" size={19} /><p><strong>Таны өөрчлөлт шинэ захиалга/имэйлд шууд нөлөөлнэ.</strong> Хүргэлтийн үнэ, хямдралын доод дүн, захиалгын статус мессежийн текстийг доор бүлгээр эмхэтгэсэн. "Анхны утга руу буцаах" нь кодонд бичигдсэн анхны утгыг сэргээнэ.</p></div>
     </div>
-    {!preview && settingsQuery.isLoading && <div className="mt-5 flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={15} />Тохиргоог уншиж байна…</div>}
-    {!preview && settingsQuery.error && <div className="mt-5 rounded-2xl bg-[#fff0f2] p-4 text-xs text-[#a51630]">{messageFrom(settingsQuery.error)}</div>}
+    {!preview && settingsQuery.isLoading && <div className="mt-5 flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={15} />Тохиргоог уншиж байна…</div>}
+    {!preview && settingsQuery.error && <div className="mt-5 rounded-2xl bg-[var(--a-neg-soft)] p-4 text-xs text-[var(--a-neg)]">{messageFrom(settingsQuery.error)}</div>}
 
     <div className="mt-6 grid gap-3">
       {GROUPS.map(group => {
         const slots = storeSettingSlots.filter(slot => slot.group === group);
         const isOpen = openGroup === group;
         return (
-          <div key={group} className="overflow-hidden rounded-3xl border border-black/8 bg-[#fffdf9]">
+          <div key={group} className="overflow-hidden rounded-3xl border border-[var(--a-border)] bg-[var(--a-card)]">
             <button
               type="button"
               onClick={() => setOpenGroup(current => (current === group ? null : group))}
               className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
             >
               <span className="font-[var(--font-display)] text-base font-semibold tracking-[-.03em]">{group}</span>
-              <span className="text-[10px] font-extrabold tracking-[.12em] text-[#8a8b8f]">{slots.length} ТОХИРГОО {isOpen ? "▲" : "▼"}</span>
+              <span className="text-[10px] font-extrabold tracking-[.12em] text-[var(--a-faint)]">{slots.length} ТОХИРГОО {isOpen ? "▲" : "▼"}</span>
             </button>
             {isOpen && (
-              <div className="grid gap-4 border-t border-black/6 p-5">
+              <div className="grid gap-4 border-t border-[var(--a-border)] p-5">
                 {slots.map(slot => {
                   const saved = settingByKey.get(slot.key) as SettingRow | undefined;
                   const value = drafts[slot.key] ?? saved?.settingValue ?? slot.fallbackValue;
                   const isCustom = Boolean(saved);
                   const isActive = activeKey === slot.key;
                   return (
-                    <div key={slot.key} className="rounded-2xl border border-black/8 bg-white p-4">
+                    <div key={slot.key} className="rounded-2xl border border-[var(--a-border)] bg-[var(--a-card)] p-4">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <h3 className="font-[var(--font-display)] text-sm font-semibold tracking-[-.02em]">{slot.label}</h3>
-                        <span className={`rounded-full px-2.5 py-1 text-[9px] font-extrabold tracking-[.12em] ${isCustom ? "bg-[#e7f2ec] text-[#2c7650]" : "bg-[#edf0f5] text-[#606a78]"}`}>{isCustom ? "ЗАСВАРЛАСАН" : "АНХНЫ УТГА"}</span>
+                        <span className={`rounded-full px-2.5 py-1 text-[9px] font-extrabold tracking-[.12em] ${isCustom ? "bg-[var(--a-pos-soft)] text-[var(--a-pos)]" : "bg-[var(--a-info-soft)] text-[var(--a-muted)]"}`}>{isCustom ? "ЗАСВАРЛАСАН" : "АНХНЫ УТГА"}</span>
                       </div>
-                      {slot.description && <p className="mt-1 text-xs leading-5 text-[#707176]">{slot.description}</p>}
+                      {slot.description && <p className="mt-1 text-xs leading-5 text-[var(--a-muted)]">{slot.description}</p>}
                       {slot.type === "number" ? (
                         <input
                           type="number"
                           min={0}
                           value={value}
                           onChange={event => setDrafts(current => ({ ...current, [slot.key]: event.target.value }))}
-                          className="mt-3 h-11 w-full max-w-xs rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#3970a7]"
+                          className="mt-3 h-11 w-full max-w-xs rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#3970a7]"
                         />
                       ) : (
                         <textarea
@@ -111,7 +111,7 @@ export default function AdminStoreSettingsPanel({ preview = false }: { preview?:
                           onChange={event => setDrafts(current => ({ ...current, [slot.key]: event.target.value }))}
                           rows={2}
                           maxLength={2_000}
-                          className="mt-3 w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-normal leading-5 outline-none focus:border-[#3970a7]"
+                          className="mt-3 w-full rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 py-2 text-xs font-normal leading-5 outline-none focus:border-[#3970a7]"
                         />
                       )}
                       <div className="mt-3 flex flex-wrap gap-2">
@@ -119,7 +119,7 @@ export default function AdminStoreSettingsPanel({ preview = false }: { preview?:
                           <Save size={14} />{isActive && updateSetting.isPending ? "Хадгалж байна…" : "Хадгалах"}
                         </button>
                         {isCustom && (
-                          <button type="button" disabled={busy} onClick={() => resetSetting(slot.key)} className="inline-flex items-center gap-1.5 rounded-full px-2 py-2.5 text-[11px] font-bold text-[#69717b] transition hover:text-[#df1f3d] disabled:opacity-50">
+                          <button type="button" disabled={busy} onClick={() => resetSetting(slot.key)} className="inline-flex items-center gap-1.5 rounded-full px-2 py-2.5 text-[11px] font-bold text-[var(--a-muted)] transition hover:text-[#df1f3d] disabled:opacity-50">
                             <RotateCcw size={14} />Анхны утга руу буцаах
                           </button>
                         )}

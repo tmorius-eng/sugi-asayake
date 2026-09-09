@@ -26,21 +26,21 @@ export default function AdminHistoryPanel({ entityType, entityId, canSeeAuditTra
   const entries = query.data ?? [];
 
   return (
-    <div className="rounded-2xl border border-black/10 bg-white p-4">
-      <p className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-[.14em] text-[#57585e]"><History size={12} />ТҮҮХ (ACTIVITY)</p>
+    <div className="rounded-2xl border border-[var(--a-border)] bg-[var(--a-card)] p-4">
+      <p className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-[.14em] text-[var(--a-text-soft)]"><History size={12} />ТҮҮХ (ACTIVITY)</p>
       {!canSeeAuditTrail ? (
-        <p className="mt-3 text-xs text-[#8b8c90]">🔒 Зөвхөн админд харагдана</p>
+        <p className="mt-3 text-xs text-[var(--a-faint)]">🔒 Зөвхөн админд харагдана</p>
       ) : query.isLoading ? (
-        <p className="mt-3 flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={14} />Уншиж байна…</p>
+        <p className="mt-3 flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={14} />Уншиж байна…</p>
       ) : entries.length === 0 ? (
-        <p className="mt-3 text-xs text-[#8b8c90]">Түүх алга.</p>
+        <p className="mt-3 text-xs text-[var(--a-faint)]">Түүх алга.</p>
       ) : (
         <ol className="mt-3 grid gap-3">
           {entries.map(entry => (
-            <li key={entry.id} className="relative border-l-2 border-black/8 pl-3">
+            <li key={entry.id} className="relative border-l-2 border-[var(--a-border)] pl-3">
               <span className="absolute -left-[5px] top-1 size-2 rounded-full bg-[#df1f3d]" />
               <p className="text-xs font-bold">{actionLabel(entry.action)}</p>
-              <p className="mt-0.5 text-[11px] text-[#8b8c90]">{entry.actorName ?? entry.actorEmail ?? `#${entry.actorUserId}`} · {formatDateTime(entry.createdAt)}</p>
+              <p className="mt-0.5 text-[11px] text-[var(--a-faint)]">{entry.actorName ?? entry.actorEmail ?? `#${entry.actorUserId}`} · {formatDateTime(entry.createdAt)}</p>
             </li>
           ))}
         </ol>

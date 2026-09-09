@@ -136,20 +136,20 @@ export default function AdminPromotionsPanel() {
   };
 
   const promotions = (promotionsQuery.data ?? []) as PromotionRow[];
-  const headerCell = "border-b border-black/8 pb-2";
-  const bodyCell = "border-b border-black/6 py-3";
+  const headerCell = "border-b border-[var(--a-border)] pb-2";
+  const bodyCell = "border-b border-[var(--a-border)] py-3";
   const promotionColumns: GenericListColumn<PromotionRow>[] = [
-    { id: "headline", header: "ГАРЧИГ", headerClassName: headerCell, cellClassName: bodyCell, render: promotion => <><strong className="block max-w-[220px] truncate">{promotion.headline}</strong>{promotion.message && <small className="mt-1 block max-w-[220px] truncate text-[11px] text-[#85868a]">{promotion.message}</small>}</> },
-    { id: "type", header: "ТӨРӨЛ", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[#6f7075]`, render: promotion => promotion.displayMode === "popup" ? "Попап" : "Хэсэг (banner)" },
+    { id: "headline", header: "ГАРЧИГ", headerClassName: headerCell, cellClassName: bodyCell, render: promotion => <><strong className="block max-w-[220px] truncate">{promotion.headline}</strong>{promotion.message && <small className="mt-1 block max-w-[220px] truncate text-[11px] text-[var(--a-faint)]">{promotion.message}</small>}</> },
+    { id: "type", header: "ТӨРӨЛ", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[var(--a-muted)]`, render: promotion => promotion.displayMode === "popup" ? "Попап" : "Хэсэг (banner)" },
     {
-      id: "window", header: "ХУГАЦАА", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[#6f7075]`,
+      id: "window", header: "ХУГАЦАА", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[var(--a-muted)]`,
       render: promotion => promotion.startsAt || promotion.endsAt
         ? <>{promotion.startsAt ? new Date(promotion.startsAt).toLocaleDateString("mn-MN") : "—"} → {promotion.endsAt ? new Date(promotion.endsAt).toLocaleDateString("mn-MN") : "—"}</>
-        : <span className="text-[#b7b8bc]">Хугацаагүй</span>,
+        : <span className="text-[var(--a-faint)]">Хугацаагүй</span>,
     },
     {
       id: "active", header: "ИДЭВХТЭЙ", headerClassName: headerCell, cellClassName: bodyCell,
-      render: promotion => <button type="button" onClick={() => toggleActive(promotion)} className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold transition ${promotion.isActive ? "bg-[#e7f2ec] text-[#2c7650]" : "bg-[#f1f1f2] text-[#75767b]"}`}>{promotion.isActive ? "Идэвхтэй" : "Идэвхгүй"}</button>,
+      render: promotion => <button type="button" onClick={() => toggleActive(promotion)} className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold transition ${promotion.isActive ? "bg-[var(--a-pos-soft)] text-[var(--a-pos)]" : "bg-[var(--a-soft)] text-[var(--a-muted)]"}`}>{promotion.isActive ? "Идэвхтэй" : "Идэвхгүй"}</button>,
     },
   ];
 
@@ -157,7 +157,7 @@ export default function AdminPromotionsPanel() {
     <div>
       {!composerOpen && <button type="button" onClick={() => openComposer()} className="inline-flex items-center gap-2 rounded-full bg-[#df1f3d] px-5 py-3 text-xs font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97]"><Megaphone size={15} /> Шинэ урамшуулал үүсгэх</button>}
 
-      {promotionsQuery.isLoading && <p className="mt-5 flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>}
+      {promotionsQuery.isLoading && <p className="mt-5 flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>}
 
       {!promotionsQuery.isLoading && !composerOpen && (
         <div className="mt-5">
@@ -171,36 +171,36 @@ export default function AdminPromotionsPanel() {
             emptyMessage="Одоогоор урамшуулал алга. Дээрх товчоор эхнийхээ үүсгээрэй."
             rowActions={promotion => (
               <div className="flex justify-end gap-1">
-                <button type="button" onClick={() => openComposer(promotion)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d]" aria-label={`${promotion.headline} засах`}><Pencil size={15} /></button>
-                <button type="button" onClick={() => { if (window.confirm(`"${promotion.headline}" урамшууллыг бүрмөсөн устгах уу?`)) deletePromotion.mutate({ id: promotion.id }); }} className="rounded-full p-2 text-[#707176] transition hover:bg-[#fff0f2] hover:text-[#df1f3d]" aria-label={`${promotion.headline} устгах`}><Trash2 size={15} /></button>
+                <button type="button" onClick={() => openComposer(promotion)} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)] hover:text-[#df1f3d]" aria-label={`${promotion.headline} засах`}><Pencil size={15} /></button>
+                <button type="button" onClick={() => { if (window.confirm(`"${promotion.headline}" урамшууллыг бүрмөсөн устгах уу?`)) deletePromotion.mutate({ id: promotion.id }); }} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${promotion.headline} устгах`}><Trash2 size={15} /></button>
               </div>
             )}
           />
         </div>
       )}
 
-      {composerOpen && <form onSubmit={save} className="mt-2 rounded-3xl border border-[#df1f3d]/25 bg-[#fff5f6] p-5">
+      {composerOpen && <form onSubmit={save} className="mt-2 rounded-3xl border border-[#df1f3d]/25 bg-[var(--a-neg-soft)] p-5">
         <div className="flex items-center justify-between gap-3">
           <div><p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">PROMOTION {form.id ? "EDIT" : "CREATION"}</p><h3 className="mt-1 font-[var(--font-display)] text-xl font-semibold tracking-[-.05em]">{form.id ? "Урамшуулал засах" : "Шинэ урамшуулал үүсгэх"}</h3></div>
-          <button type="button" onClick={closeComposer} className="text-xs font-bold text-[#707176]">Хаах</button>
+          <button type="button" onClick={closeComposer} className="text-xs font-bold text-[var(--a-muted)]">Хаах</button>
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Гарчиг<input required value={form.headline} onChange={event => setForm(current => ({ ...current, headline: event.target.value }))} placeholder="Жишээ: Шинэ бүтээгдэхүүн ирлээ!" className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
-          <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Дэлгэрэнгүй мессеж<textarea value={form.message} onChange={event => setForm(current => ({ ...current, message: event.target.value }))} className="min-h-16 rounded-xl border border-black/10 bg-white p-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
-          <label className="grid gap-1.5 text-xs font-bold">Харагдах хэлбэр<select value={form.displayMode} onChange={event => setForm(current => ({ ...current, displayMode: event.target.value as "popup" | "banner" }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]"><option value="popup">Попап (том, зураг+дундаа гарна)</option><option value="banner">Хэсэг (нимгэн, дээд талд байнга харагдана)</option></select></label>
-          <label className="flex items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold"><input type="checkbox" checked={form.isActive} onChange={event => setForm(current => ({ ...current, isActive: event.target.checked }))} className="size-4 accent-[#df1f3d]" />Одоо идэвхжүүлэх</label>
-          <label className="grid gap-1.5 text-xs font-bold">Товчны бичвэр<input value={form.ctaLabel} onChange={event => setForm(current => ({ ...current, ctaLabel: event.target.value }))} placeholder="Жишээ: Дэлгүүр рүү очих" className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
-          <label className="grid gap-1.5 text-xs font-bold">Товчны холбоос<input value={form.ctaUrl} onChange={event => setForm(current => ({ ...current, ctaUrl: event.target.value }))} placeholder="/shop" className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
-          <label className="grid gap-1.5 text-xs font-bold">Эхлэх огноо (заавал биш)<input type="datetime-local" value={form.startsAt} onChange={event => setForm(current => ({ ...current, startsAt: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
-          <label className="grid gap-1.5 text-xs font-bold">Дуусах огноо (заавал биш)<input type="datetime-local" value={form.endsAt} onChange={event => setForm(current => ({ ...current, endsAt: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+          <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Гарчиг<input required value={form.headline} onChange={event => setForm(current => ({ ...current, headline: event.target.value }))} placeholder="Жишээ: Шинэ бүтээгдэхүүн ирлээ!" className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+          <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Дэлгэрэнгүй мессеж<textarea value={form.message} onChange={event => setForm(current => ({ ...current, message: event.target.value }))} className="min-h-16 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] p-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+          <label className="grid gap-1.5 text-xs font-bold">Харагдах хэлбэр<select value={form.displayMode} onChange={event => setForm(current => ({ ...current, displayMode: event.target.value as "popup" | "banner" }))} className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]"><option value="popup">Попап (том, зураг+дундаа гарна)</option><option value="banner">Хэсэг (нимгэн, дээд талд байнга харагдана)</option></select></label>
+          <label className="flex items-center gap-3 rounded-xl bg-[var(--a-card)] px-3 py-3 text-sm font-bold"><input type="checkbox" checked={form.isActive} onChange={event => setForm(current => ({ ...current, isActive: event.target.checked }))} className="size-4 accent-[#df1f3d]" />Одоо идэвхжүүлэх</label>
+          <label className="grid gap-1.5 text-xs font-bold">Товчны бичвэр<input value={form.ctaLabel} onChange={event => setForm(current => ({ ...current, ctaLabel: event.target.value }))} placeholder="Жишээ: Дэлгүүр рүү очих" className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+          <label className="grid gap-1.5 text-xs font-bold">Товчны холбоос<input value={form.ctaUrl} onChange={event => setForm(current => ({ ...current, ctaUrl: event.target.value }))} placeholder="/shop" className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+          <label className="grid gap-1.5 text-xs font-bold">Эхлэх огноо (заавал биш)<input type="datetime-local" value={form.startsAt} onChange={event => setForm(current => ({ ...current, startsAt: event.target.value }))} className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+          <label className="grid gap-1.5 text-xs font-bold">Дуусах огноо (заавал биш)<input type="datetime-local" value={form.endsAt} onChange={event => setForm(current => ({ ...current, endsAt: event.target.value }))} className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
         </div>
 
-        {form.displayMode === "popup" && <div className="mt-4 rounded-2xl bg-white p-4">
-          <p className="text-xs font-extrabold tracking-[.08em] text-[#3970a7]">ЗУРАГ (заавал биш, попапад л ашиглагдана)</p>
+        {form.displayMode === "popup" && <div className="mt-4 rounded-2xl bg-[var(--a-card)] p-4">
+          <p className="text-xs font-extrabold tracking-[.08em] text-[var(--a-info)]">ЗУРАГ (заавал биш, попапад л ашиглагдана)</p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             {form.imageUrl && <img src={form.imageUrl} alt="" className="h-16 w-28 rounded-lg object-cover" />}
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-black/10 px-4 py-2.5 text-xs font-bold text-[#17181b] transition hover:bg-black/5">
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--a-border)] px-4 py-2.5 text-xs font-bold text-[var(--a-text)] transition hover:bg-black/5">
               <UploadCloud size={14} />{uploadImage.isPending ? "Байршуулж байна…" : "Зураг сонгох"}
               <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={onImageSelected} disabled={uploadImage.isPending} />
             </label>

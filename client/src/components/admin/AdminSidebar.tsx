@@ -1,17 +1,29 @@
-import { ChevronDown, ChevronRight, CircleUserRound, LayoutDashboard, PackagePlus, CheckCircle2, FilePenLine, Star, ListChecks, Megaphone, Tag, Tags, ImageUp, UsersRound, ChartColumnIncreasing, ShieldAlert, Plug, CalendarDays, Send, Settings, MapPin, ShoppingBag, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, PackagePlus, CheckCircle2, FilePenLine, Star, ListChecks, Megaphone, Tag, Tags, ImageUp, UsersRound, ChartColumnIncreasing, ShieldAlert, Plug, CalendarDays, Send, Settings, MapPin, ShoppingBag, LogOut, Menu, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import type { AdminSection } from "../AdminWorkspace";
+import { footerLogoUrl } from "../site-footer-data";
+
+// One logo asset for the entire site -- reusing the storefront's own constant
+// rather than a second hardcoded path that could drift when the file changes.
+const ADMIN_LOGO_URL = footerLogoUrl;
+// Square lockup for the collapsed rail (Home.tsx serves this same file).
+const ADMIN_SYMBOL_URL = "/cdn/sugi-symbol_0a534a76.png";
 
 export type NavItem = { key: AdminSection; label: string; Icon: LucideIcon };
 
-// Real sections only -- Gentelella's own demo nav (Forms/Tables/Charts/
-// Calendar/Map/Chat/Inbox/Kanban) has no equivalent here and none of that
-// is invented. Regrouped, not label-swapped: "Хянах самбар" nests
-// Тойм/Аналитик/Аюулгүй байдал (mirrors the reference's expandable
-// "Dashboards" > Operations/Analytics/System health), the rest are flat.
+// Real sections only -- the reference's own nav (Dashboard/Product/Inventory/
+// Customers/Review/Payment/Integration + an ACCOUNT group) is mirrored in
+// *structure* (two labelled groups, icon + label rows, an active pill, a
+// count badge, a footer action) but never in content: nothing here is a
+// section this admin doesn't actually have.
+// Flat, like the reference (Dashboard / Product / Inventory / Customers /
+// Review / Payment / Integration -- one level, no expandable parent). The
+// previous build nested these three under a "Хянах самбар" toggle; Tom
+// compared the two screens side by side and the extra level was the
+// difference, so it's gone.
 const nestedGroup: NavItem[] = [
-  { key: "dashboard", label: "Тойм", Icon: LayoutDashboard },
+  { key: "dashboard", label: "Хянах самбар", Icon: LayoutDashboard },
   { key: "analytics", label: "Аналитик", Icon: ChartColumnIncreasing },
   { key: "security", label: "Аюулгүй байдал", Icon: ShieldAlert },
 ];
@@ -92,68 +104,104 @@ export function getVisibleSections(role: string): NavItem[] {
   return [...nestedGroup.filter(isVisible), ...flatGroup.filter(isVisible), ...adminOnlyFlatGroup.filter(isVisible)];
 }
 
-function NavButton({ item, active, onSelect, nested = false }: { item: NavItem; active: boolean; onSelect: (section: AdminSection) => void; nested?: boolean }) {
+/** Counts shown as pills on nav rows, mirroring the reference's green "02" on
+ *  Review. Every one is a real, actionable number (out-of-stock products,
+ *  failed payments) -- a badge that isn't worth clicking is worse than none. */
+export type NavBadges = Partial<Record<AdminSection, number>>;
+
+function NavButton({ item, active, badge, collapsed = false, onSelect }: { item: NavItem; active: boolean; badge?: number; collapsed?: boolean; onSelect: (section: AdminSection) => void }) {
   const Icon = item.Icon;
   return (
     <button
       type="button"
       onClick={() => onSelect(item.key)}
-      className={`flex items-center gap-3 rounded-2xl py-3 text-left text-sm font-bold transition ${nested ? "pl-11 pr-3" : "px-3"} ${active ? "bg-white text-[#17181b]" : "text-white/70 hover:bg-white/10 hover:text-white"}`}
+      aria-current={active ? "page" : undefined}
+      title={collapsed ? item.label : undefined}
+      className={`admin-nav-item relative flex items-center rounded-[10px] py-2.5 text-left text-[13.5px] font-semibold ${collapsed ? "justify-center px-0" : "gap-3 px-3"} ${active ? "bg-[var(--a-rail-active)] text-[var(--a-rail-text-strong)]" : "text-[var(--a-rail-text)] hover:bg-white/[.06] hover:text-[var(--a-rail-text-strong)]"}`}
     >
-      <Icon size={17} />{item.label}
+      <Icon size={17} aria-hidden="true" />
+      {!collapsed && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
+      {badge != null && badge > 0 && (collapsed ? (
+        <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full" style={{ background: "var(--a-pos)" }} aria-hidden="true" />
+      ) : (
+        <span className="admin-pop shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold" style={{ background: "var(--a-pos-soft)", color: "var(--a-pos)" }}>
+          {String(badge).padStart(2, "0")}
+        </span>
+      ))}
     </button>
   );
 }
 
-function SidebarNavContent({ section, role, onSelect, userName, userRoleLabel, userAvatarUrl }: {
+function SidebarNavContent({ section, role, badges, collapsed = false, onSelect, onLogout, onToggleCollapse }: {
   section: AdminSection;
   role: string;
+  badges: NavBadges;
+  collapsed?: boolean;
   onSelect: (section: AdminSection) => void;
-  userName: string;
-  userRoleLabel: string;
-  userAvatarUrl: string | null;
+  onLogout: () => void;
+  /** The hamburger. On desktop it collapses the rail to icons; inside the
+   *  mobile drawer it closes the drawer. Same button, same place as the
+   *  reference (top-right of the rail, beside the wordmark) either way. */
+  onToggleCollapse: () => void;
 }) {
   const visibleNested = nestedGroup.filter(item => SECTION_ROLES[item.key].has(role));
   const visibleFlat = flatGroup.filter(item => SECTION_ROLES[item.key].has(role));
   const visibleAdminOnly = adminOnlyFlatGroup.filter(item => SECTION_ROLES[item.key].has(role));
-  const [expanded, setExpanded] = useState(true);
-  const nestedActive = visibleNested.some(item => item.key === section);
 
   return (
-    <div className="flex h-full flex-col bg-[#17181b] p-3 text-white">
-      <div className="border-b border-white/12 px-3 py-4"><p className="text-[10px] font-extrabold tracking-[.15em] text-[#f0b52d]">SUGI ADMIN</p><p className="mt-1 text-sm text-white/65">Дэлгүүрийн удирдлага</p></div>
-      <nav className="admin-sidebar-nav mt-3 grid flex-1 content-start gap-1 overflow-y-auto">
-        <p className="px-3 pt-2 pb-1 text-[10px] font-extrabold tracking-[.15em] text-white/35">ЕРӨНХИЙ</p>
-        {visibleNested.length > 1 ? (
-          <>
-            <button type="button" onClick={() => setExpanded(current => !current)} className={`flex items-center justify-between gap-3 rounded-2xl px-3 py-3 text-left text-sm font-bold transition ${nestedActive && !expanded ? "bg-white text-[#17181b]" : "text-white/70 hover:bg-white/10 hover:text-white"}`}>
-              <span className="flex items-center gap-3"><LayoutDashboard size={17} />Хянах самбар</span>
-              {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-            </button>
-            {expanded && visibleNested.map(item => <NavButton key={item.key} item={item} active={section === item.key} onSelect={onSelect} nested />)}
-          </>
-        ) : (
-          visibleNested.map(item => <NavButton key={item.key} item={item} active={section === item.key} onSelect={onSelect} />)
+    <div className={`flex h-full flex-col bg-[var(--a-rail)] text-white ${collapsed ? "px-2 py-3" : "p-3"}`}>
+      {/* Brand lockup + hamburger — the reference puts both here, in the rail,
+          not in the top bar. */}
+      <div className={`flex items-center py-2 ${collapsed ? "justify-center" : "gap-2.5 px-2"}`}>
+        {/* The real SUGI ASAYAKE logo, not a stand-in icon (Tom, explicit) --
+            the same two assets the storefront already serves, so the site has
+            one logo file, not a second admin copy.
+
+            On a white plate because the logo is dark ink on transparent
+            (measured: average ink luminance 67/255) and the rail is near-black
+            -- placed directly on it, "ASAYAKE" disappeared entirely. The
+            collapsed rail swaps the wide wordmark for the square symbol, which
+            is the only form that stays legible at 40px. */}
+        <span className={`grid shrink-0 place-items-center rounded-xl bg-white ${collapsed ? "size-10 p-1" : "h-10 px-2.5"}`}>
+          <img
+            src={collapsed ? ADMIN_SYMBOL_URL : ADMIN_LOGO_URL}
+            alt="SUGI ASAYAKE"
+            className={collapsed ? "size-full object-contain" : "h-6 w-auto max-w-[124px] object-contain"}
+          />
+        </span>
+        {!collapsed && (
+          <button type="button" onClick={onToggleCollapse} className="shrink-0 rounded-lg p-1.5 text-[var(--a-rail-text)] transition hover:bg-white/10 hover:text-white" aria-label="Цэсийг хураах">
+            <Menu size={18} />
+          </button>
         )}
-        {visibleFlat.map(item => <NavButton key={item.key} item={item} active={section === item.key} onSelect={onSelect} />)}
+      </div>
+      {collapsed && (
+        <button type="button" onClick={onToggleCollapse} className="mt-2 grid place-items-center rounded-[10px] py-2.5 text-[var(--a-rail-text)] transition hover:bg-white/10 hover:text-white" aria-label="Цэсийг дэлгэх">
+          <Menu size={18} />
+        </button>
+      )}
+
+      <nav className="admin-sidebar-nav mt-2 grid flex-1 content-start gap-0.5 overflow-y-auto">
+        {collapsed ? <span className="h-3" /> : <p className="px-3 pb-1.5 pt-3 text-[10px] font-bold uppercase tracking-[.16em] text-white/35">Ерөнхий</p>}
+        {visibleNested.map(item => <NavButton key={item.key} item={item} active={section === item.key} badge={badges[item.key]} collapsed={collapsed} onSelect={onSelect} />)}
+        {visibleFlat.map(item => <NavButton key={item.key} item={item} active={section === item.key} badge={badges[item.key]} collapsed={collapsed} onSelect={onSelect} />)}
         {visibleAdminOnly.length > 0 && (
           <>
-            <p className="px-3 pt-4 pb-1 text-[10px] font-extrabold tracking-[.15em] text-white/35">УДИРДЛАГА</p>
-            {visibleAdminOnly.map(item => <NavButton key={item.key} item={item} active={section === item.key} onSelect={onSelect} />)}
+            {collapsed ? <span className="my-1 h-px bg-[var(--a-rail-border)]" /> : <p className="px-3 pb-1.5 pt-4 text-[10px] font-bold uppercase tracking-[.16em] text-white/35">Удирдлага</p>}
+            {visibleAdminOnly.map(item => <NavButton key={item.key} item={item} active={section === item.key} badge={badges[item.key]} collapsed={collapsed} onSelect={onSelect} />)}
           </>
         )}
       </nav>
-      <div className="mt-3 flex items-center gap-3 border-t border-white/12 px-1 pt-3">
-        {userAvatarUrl ? (
-          <img src={userAvatarUrl} alt="" className="size-9 shrink-0 rounded-full object-cover" />
-        ) : (
-          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white/10"><CircleUserRound size={19} className="text-white/70" /></span>
-        )}
-        <div className="min-w-0">
-          <p className="truncate text-xs font-bold">{userName}</p>
-          <p className="text-[11px] text-white/50">{userRoleLabel}</p>
-        </div>
-      </div>
+
+      {/* The reference's footer Logout row. */}
+      <button
+        type="button"
+        onClick={onLogout}
+        title={collapsed ? "Гарах" : undefined}
+        className={`admin-nav-item mt-3 flex items-center rounded-[10px] border-t border-[var(--a-rail-border)] pb-1 pt-4 text-left text-[13.5px] font-semibold text-[var(--a-rail-text)] hover:text-white ${collapsed ? "justify-center px-0" : "gap-3 px-3"}`}
+      >
+        <LogOut size={17} aria-hidden="true" />{!collapsed && "Гарах"}
+      </button>
     </div>
   );
 }
@@ -168,16 +216,19 @@ function SidebarNavContent({ section, role, onSelect, userName, userRoleLabel, u
 // "second competing sidebar orchestration layer" that got the old
 // DashboardLayout.tsx (double-sidebar bug) deleted. This is the ONE
 // sidebar, just rendered in two containers.
-export default function AdminSidebar({ section, role, onSelect, userName, userRoleLabel, userAvatarUrl, mobileOpen, onMobileOpenChange }: {
+export default function AdminSidebar({ section, role, badges = {}, onSelect, onLogout, mobileOpen, onMobileOpenChange }: {
   section: AdminSection;
   role: string;
+  badges?: NavBadges;
   onSelect: (section: AdminSection) => void;
-  userName: string;
-  userRoleLabel: string;
-  userAvatarUrl: string | null;
+  onLogout: () => void;
   mobileOpen: boolean;
   onMobileOpenChange: (open: boolean) => void;
 }) {
+  // Collapse is desktop-only and local to the rail -- nothing else in the
+  // admin needs to know the width, the content column is just flex-1.
+  const [collapsed, setCollapsed] = useState(false);
+
   return (
     <>
       {/* sticky + h-screen -- without this the aside is just a natural-
@@ -187,16 +238,25 @@ export default function AdminSidebar({ section, role, onSelect, userName, userRo
           vertical space then gets distributed BETWEEN the nav buttons via
           grid's default align-content:stretch -- exactly the "broken
           padding" (huge gaps between menu items) this was. */}
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 self-start lg:block">
-        <SidebarNavContent section={section} role={role} onSelect={onSelect} userName={userName} userRoleLabel={userRoleLabel} userAvatarUrl={userAvatarUrl} />
+      <aside
+        className={`sticky top-0 hidden h-screen shrink-0 self-start transition-[width] duration-300 ease-[var(--ease-out)] lg:block ${collapsed ? "w-[72px]" : "w-[236px]"}`}
+      >
+        <SidebarNavContent section={section} role={role} badges={badges} collapsed={collapsed} onSelect={onSelect} onLogout={onLogout} onToggleCollapse={() => setCollapsed(current => !current)} />
       </aside>
       <Sheet open={mobileOpen} onOpenChange={onMobileOpenChange}>
-        <SheetContent side="left" className="w-72 border-none bg-[#17181b] p-0 [&_[data-slot=sheet-close]]:text-white">
+        <SheetContent side="left" className="w-[262px] border-none bg-[var(--a-rail)] p-0 [&_[data-slot=sheet-close]]:hidden">
           <SheetTitle className="sr-only">Удирдлагын цэс</SheetTitle>
           {/* Selecting a section on mobile also dismisses the drawer -- the
               desktop instance above doesn't need this, there's nothing to
               close. */}
-          <SidebarNavContent section={section} role={role} onSelect={target => { onSelect(target); onMobileOpenChange(false); }} userName={userName} userRoleLabel={userRoleLabel} userAvatarUrl={userAvatarUrl} />
+          <SidebarNavContent
+            section={section}
+            role={role}
+            badges={badges}
+            onSelect={target => { onSelect(target); onMobileOpenChange(false); }}
+            onLogout={onLogout}
+            onToggleCollapse={() => onMobileOpenChange(false)}
+          />
         </SheetContent>
       </Sheet>
     </>

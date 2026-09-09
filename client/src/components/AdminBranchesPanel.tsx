@@ -126,7 +126,7 @@ export default function AdminBranchesPanel() {
     <div>
       {!composerOpen && <button type="button" onClick={() => openComposer()} className="inline-flex items-center gap-2 rounded-full bg-[#df1f3d] px-5 py-3 text-xs font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97]"><MapPin size={15} /> Шинэ салбар нэмэх</button>}
 
-      {branchesQuery.isLoading && <p className="mt-5 flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>}
+      {branchesQuery.isLoading && <p className="mt-5 flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>}
 
       {!branchesQuery.isLoading && !composerOpen && (
         <div className="mt-5">
@@ -134,25 +134,25 @@ export default function AdminBranchesPanel() {
             rows={branches}
             getRowId={branch => branch.id}
             cardListClassName="grid gap-2"
-            emptyMessage={<p className="rounded-2xl bg-[#f8f5ef] px-4 py-8 text-center text-xs text-[#77787d]">Одоогоор салбар алга. Дээрх товчоор эхнийхээ нэмээрэй.</p>}
+            emptyMessage={<p className="rounded-2xl bg-[var(--a-soft)] px-4 py-8 text-center text-xs text-[var(--a-muted)]">Одоогоор салбар алга. Дээрх товчоор эхнийхээ нэмээрэй.</p>}
             renderRow={branch => {
               const index = branches.findIndex(row => row.id === branch.id);
               return (
-                <div className="flex items-center gap-3 rounded-2xl border border-black/8 bg-white p-3">
-                  <img src={branch.photoUrl ?? "/product-placeholder.svg"} alt="" className="size-14 shrink-0 rounded-xl bg-[#f8f5ef] object-cover" />
+                <div className="flex items-center gap-3 rounded-2xl border border-[var(--a-border)] bg-[var(--a-card)] p-3">
+                  <img src={branch.photoUrl ?? "/product-placeholder.svg"} alt="" className="size-14 shrink-0 rounded-xl bg-[var(--a-soft)] object-cover" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       <strong className="block truncate text-sm">{branch.name}</strong>
                       {branch.isFulfillmentDefault && <Star size={13} className="shrink-0 fill-[#f0b52d] text-[#f0b52d]" aria-label="Хүргэлтийн үндсэн салбар" />}
                     </div>
-                    <span className="mt-0.5 block truncate text-xs text-[#77787d]">{branch.address}</span>
+                    <span className="mt-0.5 block truncate text-xs text-[var(--a-muted)]">{branch.address}</span>
                   </div>
-                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-extrabold ${branch.isActive ? "bg-[#e7f2ec] text-[#2c7650]" : "bg-[#f1f1f2] text-[#75767b]"}`}>{branch.isActive ? "Идэвхтэй" : "Идэвхгүй"}</span>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-extrabold ${branch.isActive ? "bg-[var(--a-pos-soft)] text-[var(--a-pos)]" : "bg-[var(--a-soft)] text-[var(--a-muted)]"}`}>{branch.isActive ? "Идэвхтэй" : "Идэвхгүй"}</span>
                   <div className="flex shrink-0 gap-1">
-                    <button type="button" disabled={index === 0} onClick={() => move(branch, -1)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-30" aria-label="Дээш зөөх"><ArrowUp size={15} /></button>
-                    <button type="button" disabled={index === branches.length - 1} onClick={() => move(branch, 1)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-30" aria-label="Доош зөөх"><ArrowDown size={15} /></button>
-                    <button type="button" onClick={() => openComposer(branch)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d]" aria-label={`${branch.name} засах`}><Pencil size={15} /></button>
-                    <button type="button" onClick={() => { if (window.confirm(`"${branch.name}"-г устгах уу?`)) deleteBranch.mutate({ id: branch.id }); }} className="rounded-full p-2 text-[#707176] transition hover:bg-[#fff0f2] hover:text-[#df1f3d]" aria-label={`${branch.name} устгах`}><Trash2 size={15} /></button>
+                    <button type="button" disabled={index === 0} onClick={() => move(branch, -1)} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)] hover:text-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-30" aria-label="Дээш зөөх"><ArrowUp size={15} /></button>
+                    <button type="button" disabled={index === branches.length - 1} onClick={() => move(branch, 1)} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)] hover:text-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-30" aria-label="Доош зөөх"><ArrowDown size={15} /></button>
+                    <button type="button" onClick={() => openComposer(branch)} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)] hover:text-[#df1f3d]" aria-label={`${branch.name} засах`}><Pencil size={15} /></button>
+                    <button type="button" onClick={() => { if (window.confirm(`"${branch.name}"-г устгах уу?`)) deleteBranch.mutate({ id: branch.id }); }} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${branch.name} устгах`}><Trash2 size={15} /></button>
                   </div>
                 </div>
               );
@@ -161,32 +161,32 @@ export default function AdminBranchesPanel() {
         </div>
       )}
 
-      {composerOpen && <form onSubmit={save} className="mt-2 rounded-3xl border border-[#df1f3d]/25 bg-[#fff5f6] p-5">
+      {composerOpen && <form onSubmit={save} className="mt-2 rounded-3xl border border-[#df1f3d]/25 bg-[var(--a-neg-soft)] p-5">
         <div className="flex items-center justify-between gap-3">
           <div><p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">BRANCH {form.id ? "EDIT" : "CREATION"}</p><h3 className="mt-1 font-[var(--font-display)] text-xl font-semibold tracking-[-.05em]">{form.id ? "Салбар засах" : "Шинэ салбар нэмэх"}</h3></div>
-          <button type="button" onClick={closeComposer} className="text-xs font-bold text-[#707176]">Хаах</button>
+          <button type="button" onClick={closeComposer} className="text-xs font-bold text-[var(--a-muted)]">Хаах</button>
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <label className="grid gap-1.5 text-xs font-bold">Нэр<input required value={form.name} onChange={event => setForm(current => ({ ...current, name: event.target.value, slug: current.slug || slugify(event.target.value) }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
-          <label className="grid gap-1.5 text-xs font-bold">Дотоод slug<input required value={form.slug} onChange={event => setForm(current => ({ ...current, slug: slugify(event.target.value) }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
-          <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Хаяг<textarea required value={form.address} onChange={event => setForm(current => ({ ...current, address: event.target.value }))} className="min-h-20 rounded-xl border border-black/10 bg-white p-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
-          <label className="grid gap-1.5 text-xs font-bold">Утас (заавал биш)<input value={form.phone} onChange={event => setForm(current => ({ ...current, phone: event.target.value }))} placeholder="9450-9911" className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
-          <label className="grid gap-1.5 text-xs font-bold">Google Maps холбоос (заавал биш)<input value={form.mapUrl} onChange={event => setForm(current => ({ ...current, mapUrl: event.target.value }))} placeholder="https://www.google.com/maps/..." className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+          <label className="grid gap-1.5 text-xs font-bold">Нэр<input required value={form.name} onChange={event => setForm(current => ({ ...current, name: event.target.value, slug: current.slug || slugify(event.target.value) }))} className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+          <label className="grid gap-1.5 text-xs font-bold">Дотоод slug<input required value={form.slug} onChange={event => setForm(current => ({ ...current, slug: slugify(event.target.value) }))} className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+          <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Хаяг<textarea required value={form.address} onChange={event => setForm(current => ({ ...current, address: event.target.value }))} className="min-h-20 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] p-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+          <label className="grid gap-1.5 text-xs font-bold">Утас (заавал биш)<input value={form.phone} onChange={event => setForm(current => ({ ...current, phone: event.target.value }))} placeholder="9450-9911" className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+          <label className="grid gap-1.5 text-xs font-bold">Google Maps холбоос (заавал биш)<input value={form.mapUrl} onChange={event => setForm(current => ({ ...current, mapUrl: event.target.value }))} placeholder="https://www.google.com/maps/..." className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
           <div className="grid gap-1.5 text-xs font-bold sm:col-span-2">
             <span>Зураг (заавал биш)</span>
             <div className="flex items-center gap-3">
-              <img src={form.photoUrl || "/product-placeholder.svg"} alt="" className="size-14 shrink-0 rounded-xl border border-black/10 bg-[#f8f5ef] object-cover" />
-              <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-black/10 bg-white px-4 text-xs font-bold text-[#57585e] transition hover:border-[#df1f3d] hover:text-[#df1f3d]">
+              <img src={form.photoUrl || "/product-placeholder.svg"} alt="" className="size-14 shrink-0 rounded-xl border border-[var(--a-border)] bg-[var(--a-soft)] object-cover" />
+              <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-4 text-xs font-bold text-[var(--a-text-soft)] transition hover:border-[#df1f3d] hover:text-[#df1f3d]">
                 {isUploadingPhoto ? <LoaderCircle className="animate-spin" size={15} /> : <ImageUp size={15} />}
                 {isUploadingPhoto ? "Байршуулж байна…" : "Зураг байршуулах"}
                 <input type="file" accept="image/jpeg,image/png,image/webp" onChange={onPhotoFileSelected} disabled={isUploadingPhoto} className="hidden" />
               </label>
-              {form.photoUrl && <button type="button" onClick={() => setForm(current => ({ ...current, photoUrl: "" }))} className="text-xs font-bold text-[#8b8c90] transition hover:text-[#df1f3d]">Арилгах</button>}
+              {form.photoUrl && <button type="button" onClick={() => setForm(current => ({ ...current, photoUrl: "" }))} className="text-xs font-bold text-[var(--a-faint)] transition hover:text-[#df1f3d]">Арилгах</button>}
             </div>
           </div>
-          <label className="flex items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold"><input type="checkbox" checked={form.isActive} onChange={event => setForm(current => ({ ...current, isActive: event.target.checked }))} className="size-4 accent-[#df1f3d]" />Идэвхтэй (сайт дээр харагдана)</label>
-          <label className="flex items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold"><input type="checkbox" checked={form.isFulfillmentDefault} onChange={event => setForm(current => ({ ...current, isFulfillmentDefault: event.target.checked }))} className="size-4 accent-[#df1f3d]" />Хүргэлтийн үндсэн салбар (зөвхөн 1 байх ёстой)</label>
+          <label className="flex items-center gap-3 rounded-xl bg-[var(--a-card)] px-3 py-3 text-sm font-bold"><input type="checkbox" checked={form.isActive} onChange={event => setForm(current => ({ ...current, isActive: event.target.checked }))} className="size-4 accent-[#df1f3d]" />Идэвхтэй (сайт дээр харагдана)</label>
+          <label className="flex items-center gap-3 rounded-xl bg-[var(--a-card)] px-3 py-3 text-sm font-bold"><input type="checkbox" checked={form.isFulfillmentDefault} onChange={event => setForm(current => ({ ...current, isFulfillmentDefault: event.target.checked }))} className="size-4 accent-[#df1f3d]" />Хүргэлтийн үндсэн салбар (зөвхөн 1 байх ёстой)</label>
         </div>
 
         <button type="submit" disabled={isSaving} className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#df1f3d] px-5 py-3 text-xs font-bold text-white disabled:opacity-60">{isSaving && <LoaderCircle className="animate-spin" size={15} />}{form.id ? "Өөрчлөлт хадгалах" : "Салбар нэмэх"}</button>
