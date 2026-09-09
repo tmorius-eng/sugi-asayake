@@ -101,4 +101,50 @@ export const ENV = {
   // instead of silently falling back to a console.log -- a deliberate,
   // explicit exception to this file's usual convention, not an oversight.
   verifyMnApiKey: process.env.VERIFY_MN_API_KEY ?? "",
+
+  // Admin face gate (2026-09-08): requires every /admin user (all 5 panel
+  // roles -- staff/finance/marketing/warehouse/admin) to pass a browser
+  // camera face check on top of their phone+password login. Customer-facing
+  // pages are completely unaffected. Off unless explicitly set to "1", same
+  // opt-in shape as smsCampaignsEnabled above.
+  //
+  // THIS FLAG IS THE ESCAPE HATCH, and that is its most important job. The
+  // gate stands in front of the admin panel -- including the account that
+  // would have to fix it if it misbehaved -- so there must be a way out that
+  // does not itself require getting into /admin. Setting this to anything but
+  // "1" (or removing it) and restarting returns /admin to exactly its
+  // pre-gate behaviour, with no code change and no database edit. Enrolled
+  // faces are left intact, so switching it back on later resumes where it
+  // left off.
+  //
+  // To unblock ONE person rather than everyone (new glasses, a beard, a
+  // camera that died), prefer the per-user reset in the admin Users drawer,
+  // which clears just that account's enrollment so they re-enroll next visit.
+  adminFaceGateEnabled: process.env.ADMIN_FACE_GATE_ENABLED === "1",
+
+  // Admin face gate: whether a FAILED liveness check blocks entry.
+  //
+  // Off by default, deliberately, and this is a considered trade-off rather
+  // than a shortcut. Two separate things happen during a check:
+  //
+  //   1. FACE MATCHING -- "is this the enrolled person?" This is the actual
+  //      identity control, it is measured server-side against a stored
+  //      descriptor the client cannot read, and it ALWAYS blocks. It is not
+  //      affected by this flag at all.
+  //   2. LIVENESS -- "is this a real face rather than a photo or a replayed
+  //      video?" This is anti-spoofing, it is necessarily measured in the
+  //      browser (the frames never leave the machine, by design), and in
+  //      practice it produced constant false rejections of a legitimate user
+  //      on real hardware while the matching underneath was landing at 0.278
+  //      against a 0.6 threshold.
+  //
+  // With this off, liveness is still run and its result still recorded in
+  // face_attempts for every attempt -- nothing is skipped or hidden. It just
+  // does not slam the door on a real staff member. Once the recorded numbers
+  // from real staff on real cameras show where the thresholds should sit,
+  // set this to "1" and liveness becomes blocking too.
+  //
+  // Shipping a door that keeps the owner out is not more secure than one
+  // that reliably admits the right person and logs everything.
+  adminFaceLivenessEnforced: process.env.ADMIN_FACE_LIVENESS_ENFORCED === "1",
 };

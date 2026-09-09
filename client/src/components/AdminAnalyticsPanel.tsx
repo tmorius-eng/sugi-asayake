@@ -77,10 +77,10 @@ export default function AdminAnalyticsPanel() {
   });
 
   if (reportQuery.isLoading) {
-    return <div className="flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={15} />Аналитикийг ачаалж байна…</div>;
+    return <div className="flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={15} />Аналитикийг ачаалж байна…</div>;
   }
   if (reportQuery.error) {
-    return <div className="rounded-2xl bg-[#fff0f2] p-4 text-xs text-[#a51630]">{messageFrom(reportQuery.error)}</div>;
+    return <div className="rounded-2xl bg-[var(--a-neg-soft)] p-4 text-xs text-[var(--a-neg)]">{messageFrom(reportQuery.error)}</div>;
   }
   const report = reportQuery.data;
   if (!report) return null;
@@ -102,21 +102,21 @@ export default function AdminAnalyticsPanel() {
   return (
     <div className="grid gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex flex-wrap gap-1.5 rounded-2xl bg-[#f8f5ef] p-1.5">
+        <div className="inline-flex flex-wrap gap-1.5 rounded-2xl bg-[var(--a-soft)] p-1.5">
           {rangeOptions.map(option => (
             <button key={option.key} type="button" onClick={() => setRange(option.key)}
-              className={`rounded-xl px-3.5 py-2 text-xs font-bold transition ${range === option.key ? "bg-[#17181b] text-white" : "text-[#57585e] hover:bg-white"}`}>
+              className={`rounded-xl px-3.5 py-2 text-xs font-bold transition ${range === option.key ? "bg-[var(--a-btn-dark)] text-white" : "text-[var(--a-text-soft)] hover:bg-[var(--a-card)]"}`}>
               {option.label}
             </button>
           ))}
         </div>
         <div className="flex gap-2">
           <button type="button" disabled={exportReport.isPending} onClick={() => exportReport.mutate({ ...input, format: "xlsx" })}
-            className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2.5 text-xs font-bold text-[#57585e] transition hover:-translate-y-0.5 hover:border-[#2c7650] hover:text-[#2c7650] disabled:opacity-50">
+            className="inline-flex items-center gap-2 rounded-full border border-[var(--a-border)] bg-[var(--a-card)] px-4 py-2.5 text-xs font-bold text-[var(--a-text-soft)] transition hover:-translate-y-0.5 hover:border-[#2c7650] hover:text-[var(--a-pos)] disabled:opacity-50">
             <FileSpreadsheet size={15} />Excel татах
           </button>
           <button type="button" disabled={exportReport.isPending} onClick={() => exportReport.mutate({ ...input, format: "pdf" })}
-            className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2.5 text-xs font-bold text-[#57585e] transition hover:-translate-y-0.5 hover:border-[#df1f3d] hover:text-[#df1f3d] disabled:opacity-50">
+            className="inline-flex items-center gap-2 rounded-full border border-[var(--a-border)] bg-[var(--a-card)] px-4 py-2.5 text-xs font-bold text-[var(--a-text-soft)] transition hover:-translate-y-0.5 hover:border-[#df1f3d] hover:text-[#df1f3d] disabled:opacity-50">
             {exportReport.isPending ? <LoaderCircle className="animate-spin" size={15} /> : <FileText size={15} />}PDF татах
           </button>
         </div>
@@ -126,7 +126,7 @@ export default function AdminAnalyticsPanel() {
           component's own hardcoded dark palette, not a global dark-mode
           toggle; see the file-level comment above). Everything below this
           band stays on the site's normal light theme. */}
-      <section className="rounded-3xl bg-[#17181b] p-5 sm:p-7">
+      <section className="rounded-3xl bg-[var(--a-btn-dark)] p-5 sm:p-7">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <DarkSparkTile icon={Wallet} label="Нийт борлуулалт" value={formatMnt(report.overview.revenueMnt)}
             deltaPercent={report.periodComparison.deltaPercent.revenueMnt} currentSeries={currentRevenueSeries} previousSeries={previousRevenueSeries} accent="#df1f3d" />
@@ -134,7 +134,7 @@ export default function AdminAnalyticsPanel() {
             deltaPercent={report.periodComparison.deltaPercent.orderCount} currentSeries={currentOrderSeries} previousSeries={previousOrderSeries} accent="#3970a7" />
           <NetProfitTile netProfitMnt={report.pnl.netProfitMnt} marginPercent={report.profit.marginPercent} deltaPercent={report.periodComparison.deltaPercent.profitMnt}
             itemsWithCostCount={report.profit.itemsWithCostCount} totalItemsSold={report.profit.totalItemsSold} />
-          <div className="min-w-0 rounded-2xl bg-[#1f2126] p-5">
+          <div className="min-w-0 rounded-2xl bg-[var(--a-surface-dark)] p-5">
             <p className="text-[10px] font-extrabold uppercase tracking-[.13em] text-white/45">Дундаж захиалгын дүн</p>
             <AovGauge current={report.overview.aovMnt} previous={previousAov} accent="#f0b52d" />
           </div>
@@ -175,10 +175,10 @@ export default function AdminAnalyticsPanel() {
         </div>
       </section>
 
-      <section className="rounded-3xl border border-black/7 p-5">
+      <section className="rounded-3xl border border-[var(--a-border)] p-5">
         <h3 className="font-[var(--font-display)] text-lg font-semibold tracking-[-.04em]">Өдөр тутмын орлого</h3>
         {report.revenueTimeseries.length === 0 ? (
-          <p className="mt-4 text-sm text-[#77787d]">Сонгосон хугацаанд төлөгдсөн захиалга алга.</p>
+          <p className="mt-4 text-sm text-[var(--a-muted)]">Сонгосон хугацаанд төлөгдсөн захиалга алга.</p>
         ) : (
           <div className="mt-4 h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -195,25 +195,25 @@ export default function AdminAnalyticsPanel() {
       </section>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <section className="min-w-0 rounded-3xl border border-black/7 p-5">
+        <section className="min-w-0 rounded-3xl border border-[var(--a-border)] p-5">
           <div className="flex items-center justify-between gap-3">
             <h3 className="font-[var(--font-display)] text-lg font-semibold tracking-[-.04em]">Их зарагдсан бараа</h3>
-            <button type="button" onClick={exportCsvTables} className="inline-flex shrink-0 items-center gap-1.5 text-xs font-bold text-[#3970a7]"><Download size={13} />CSV</button>
+            <button type="button" onClick={exportCsvTables} className="inline-flex shrink-0 items-center gap-1.5 text-xs font-bold text-[var(--a-info)]"><Download size={13} />CSV</button>
           </div>
           <RankedTable rows={report.topProducts.map(row => ({ label: row.productName, quantity: row.soldQuantity, revenueMnt: row.revenueMnt }))} emptyLabel="Төлөгдсөн захиалга алга." />
         </section>
-        <section className="min-w-0 rounded-3xl border border-black/7 p-5">
+        <section className="min-w-0 rounded-3xl border border-[var(--a-border)] p-5">
           <h3 className="font-[var(--font-display)] text-lg font-semibold tracking-[-.04em]">Ангиллаар</h3>
           <RankedTable rows={report.topCategories.map(row => ({ label: row.categoryName, quantity: row.soldQuantity, revenueMnt: row.revenueMnt }))} emptyLabel="Төлөгдсөн захиалга алга." />
         </section>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <section className="min-w-0 rounded-3xl border border-black/7 p-5">
+        <section className="min-w-0 rounded-3xl border border-[var(--a-border)] p-5">
           <h3 className="font-[var(--font-display)] text-lg font-semibold tracking-[-.04em]">Насны бүлэг</h3>
-          <p className="mt-1 text-xs text-[#8a8b8f]">{report.demographics.ageProvidedCount} / {report.demographics.totalCustomerCount} харилцагч профайл дээрээ нас мэдээлсэн (заавал биш) — доорх зөвхөн тэдгээрийг тусгасан.</p>
+          <p className="mt-1 text-xs text-[var(--a-faint)]">{report.demographics.ageProvidedCount} / {report.demographics.totalCustomerCount} харилцагч профайл дээрээ нас мэдээлсэн (заавал биш) — доорх зөвхөн тэдгээрийг тусгасан.</p>
           {report.demographics.ageBuckets.length === 0 ? (
-            <p className="mt-4 text-sm text-[#77787d]">Одоогоор нас мэдээлсэн харилцагч алга.</p>
+            <p className="mt-4 text-sm text-[var(--a-muted)]">Одоогоор нас мэдээлсэн харилцагч алга.</p>
           ) : (
             <div className="mt-4 h-52 w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -228,16 +228,16 @@ export default function AdminAnalyticsPanel() {
             </div>
           )}
         </section>
-        <section className="min-w-0 rounded-3xl border border-black/7 p-5">
+        <section className="min-w-0 rounded-3xl border border-[var(--a-border)] p-5">
           <h3 className="font-[var(--font-display)] text-lg font-semibold tracking-[-.04em]">Мэргэжил (эхний 10)</h3>
-          <p className="mt-1 text-xs text-[#8a8b8f]">{report.demographics.occupationProvidedCount} / {report.demographics.totalCustomerCount} харилцагч мэдээлсэн.</p>
+          <p className="mt-1 text-xs text-[var(--a-faint)]">{report.demographics.occupationProvidedCount} / {report.demographics.totalCustomerCount} харилцагч мэдээлсэн.</p>
           {report.demographics.topOccupations.length === 0 ? (
-            <p className="mt-4 text-sm text-[#77787d]">Одоогоор мэргэжил мэдээлсэн харилцагч алга.</p>
+            <p className="mt-4 text-sm text-[var(--a-muted)]">Одоогоор мэргэжил мэдээлсэн харилцагч алга.</p>
           ) : (
             <ul className="mt-4 grid gap-2">
               {report.demographics.topOccupations.map(row => (
-                <li key={row.occupation} className="flex items-center justify-between border-b border-black/6 pb-2 text-sm">
-                  <span>{row.occupation}</span><strong className="text-[#17181b]">{row.count}</strong>
+                <li key={row.occupation} className="flex items-center justify-between border-b border-[var(--a-border)] pb-2 text-sm">
+                  <span>{row.occupation}</span><strong className="text-[var(--a-text)]">{row.count}</strong>
                 </li>
               ))}
             </ul>
@@ -256,19 +256,19 @@ export default function AdminAnalyticsPanel() {
           before that extraction (no onSelectSegment passed). */}
       <div className="grid gap-4 lg:grid-cols-2">
         <AdminCustomerSegmentsPanel preferenceSegments={report.preferenceSegments} />
-        <section className="min-w-0 rounded-3xl border border-black/7 p-5">
+        <section className="min-w-0 rounded-3xl border border-[var(--a-border)] p-5">
           <h3 className="font-[var(--font-display)] text-lg font-semibold tracking-[-.04em]">Санал болгох системийн хамрах хүрээ</h3>
-          <p className="mt-1 text-xs text-[#8a8b8f]">Нийтлэгдсэн барааны хэдэн хувь нь "Танд санал болгож байна" системд ашиглагдах шошготой вэ.</p>
+          <p className="mt-1 text-xs text-[var(--a-faint)]">Нийтлэгдсэн барааны хэдэн хувь нь "Танд санал болгож байна" системд ашиглагдах шошготой вэ.</p>
           <div className="mt-4 flex items-baseline gap-2">
             <strong className="font-[var(--font-display)] text-4xl tracking-[-.04em]">{report.recommendationCoverage.taggedPercent}%</strong>
-            <span className="text-xs text-[#8a8b8f]">{report.recommendationCoverage.taggedProductCount} / {report.recommendationCoverage.totalPublishedProductCount} бараа</span>
+            <span className="text-xs text-[var(--a-faint)]">{report.recommendationCoverage.taggedProductCount} / {report.recommendationCoverage.totalPublishedProductCount} бараа</span>
           </div>
           <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-black/6"><div className="h-full rounded-full bg-[#f0b52d]" style={{ width: `${report.recommendationCoverage.taggedPercent}%` }} /></div>
           {report.recommendationCoverage.byCategory.length > 0 && (
             <ul className="mt-4 grid gap-1.5">
               {report.recommendationCoverage.byCategory.map(row => (
-                <li key={row.categoryName} className="flex items-center justify-between border-b border-black/6 py-1 text-sm">
-                  <span>{row.categoryName}</span><strong className="text-[#17181b]">{row.tagged} / {row.total}</strong>
+                <li key={row.categoryName} className="flex items-center justify-between border-b border-[var(--a-border)] py-1 text-sm">
+                  <span>{row.categoryName}</span><strong className="text-[var(--a-text)]">{row.tagged} / {row.total}</strong>
                 </li>
               ))}
             </ul>
@@ -277,27 +277,27 @@ export default function AdminAnalyticsPanel() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <section className="rounded-3xl border border-black/7 p-5">
+        <section className="rounded-3xl border border-[var(--a-border)] p-5">
           <h3 className="font-[var(--font-display)] text-lg font-semibold tracking-[-.04em]">Гишүүнчлэлийн түвшин</h3>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {report.loyaltyTiers.map(tier => (
-              <div key={tier.tierName} className="rounded-2xl bg-[#f8f5ef] p-4 text-center">
+              <div key={tier.tierName} className="rounded-2xl bg-[var(--a-soft)] p-4 text-center">
                 <p className="font-[var(--font-display)] text-2xl font-semibold tracking-[-.05em]">{tier.customerCount}</p>
-                <p className="mt-1 text-[10px] font-extrabold tracking-[.12em] text-[#8a8b8f]">{tier.tierName.toUpperCase()}</p>
+                <p className="mt-1 text-[10px] font-extrabold tracking-[.12em] text-[var(--a-faint)]">{tier.tierName.toUpperCase()}</p>
               </div>
             ))}
           </div>
         </section>
-        <section className="rounded-3xl border border-black/7 p-5">
-          <div className="flex items-center gap-2"><Smartphone size={16} className="text-[#3970a7]" /><h3 className="font-[var(--font-display)] text-lg font-semibold tracking-[-.04em]">Төхөөрөмж</h3></div>
-          <p className="mt-1 text-xs text-[#8a8b8f]">Захиалга хийсэн үеийн төхөөрөмж — шинээр бичигдэж эхэлсэн систем тул зөвхөн шинэ захиалгуудад л мэдээлэлтэй.</p>
+        <section className="rounded-3xl border border-[var(--a-border)] p-5">
+          <div className="flex items-center gap-2"><Smartphone size={16} className="text-[var(--a-info)]" /><h3 className="font-[var(--font-display)] text-lg font-semibold tracking-[-.04em]">Төхөөрөмж</h3></div>
+          <p className="mt-1 text-xs text-[var(--a-faint)]">Захиалга хийсэн үеийн төхөөрөмж — шинээр бичигдэж эхэлсэн систем тул зөвхөн шинэ захиалгуудад л мэдээлэлтэй.</p>
           {report.traffic.deviceTypes.length === 0 ? (
-            <p className="mt-4 text-sm text-[#77787d]">Мэдээлэл алга.</p>
+            <p className="mt-4 text-sm text-[var(--a-muted)]">Мэдээлэл алга.</p>
           ) : (
             <ul className="mt-4 grid gap-2">
               {report.traffic.deviceTypes.map(row => (
-                <li key={row.device} className="flex items-center justify-between border-b border-black/6 pb-2 text-sm">
-                  <span>{row.device}</span><strong className="text-[#17181b]">{row.orderCount}</strong>
+                <li key={row.device} className="flex items-center justify-between border-b border-[var(--a-border)] pb-2 text-sm">
+                  <span>{row.device}</span><strong className="text-[var(--a-text)]">{row.orderCount}</strong>
                 </li>
               ))}
             </ul>
@@ -366,7 +366,7 @@ function AovGauge({ current, previous, accent }: { current: number; previous: nu
 
 function NetProfitTile({ netProfitMnt, marginPercent, deltaPercent, itemsWithCostCount, totalItemsSold }: { netProfitMnt: number; marginPercent: number; deltaPercent: number | null; itemsWithCostCount: number; totalItemsSold: number }) {
   return (
-    <div className="min-w-0 rounded-2xl bg-[#1f2126] p-5">
+    <div className="min-w-0 rounded-2xl bg-[var(--a-surface-dark)] p-5">
       <div className="flex items-center justify-between">
         <span className="grid size-8 place-items-center rounded-xl" style={{ backgroundColor: "#2c765026", color: "#2c7650" }}><Percent size={15} /></span>
         <DeltaBadge percent={deltaPercent} />
@@ -390,7 +390,7 @@ function NetProfitTile({ netProfitMnt, marginPercent, deltaPercent, itemsWithCos
 
 function DarkStatTile({ icon: Icon, label, value, caption, accent }: { icon: typeof Wallet; label: string; value: string; caption?: string; accent: string }) {
   return (
-    <div className="min-w-0 rounded-2xl bg-[#1f2126] p-5">
+    <div className="min-w-0 rounded-2xl bg-[var(--a-surface-dark)] p-5">
       <span className="grid size-8 place-items-center rounded-xl" style={{ backgroundColor: `${accent}26`, color: accent }}><Icon size={15} /></span>
       <p className="mt-3 text-[10px] font-extrabold uppercase tracking-[.13em] text-white/45">{label}</p>
       <p className="mt-1 font-[var(--font-display)] text-xl font-semibold text-white">{value}</p>
@@ -404,7 +404,7 @@ function DarkSparkTile({ icon: Icon, label, value, deltaPercent, currentSeries, 
   currentSeries: number[]; previousSeries: number[] | null; accent: string;
 }) {
   return (
-    <div className="min-w-0 rounded-2xl bg-[#1f2126] p-5">
+    <div className="min-w-0 rounded-2xl bg-[var(--a-surface-dark)] p-5">
       <div className="flex items-center justify-between">
         <span className="grid size-8 place-items-center rounded-xl" style={{ backgroundColor: `${accent}26`, color: accent }}><Icon size={15} /></span>
         <DeltaBadge percent={deltaPercent} />
@@ -432,7 +432,7 @@ function PnlRow({ label, value, note }: { label: string; value: number; note?: s
  *  subtraction is netRevenueMnt - costOfGoodsMnt (see getPnlOverview). */
 function PnlCard({ pnl }: { pnl: AnalyticsReport["pnl"] }) {
   return (
-    <div className="min-w-0 rounded-2xl bg-[#1f2126] p-5">
+    <div className="min-w-0 rounded-2xl bg-[var(--a-surface-dark)] p-5">
       <p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-white/45">P&L тойм</p>
       <div className="mt-3 grid gap-2 text-sm">
         <PnlRow label="Захиалгын дүн" value={pnl.subtotalMnt} />
@@ -450,7 +450,7 @@ function PnlCard({ pnl }: { pnl: AnalyticsReport["pnl"] }) {
 function RankedDollarCard({ title, icon: Icon, rows, emptyLabel }: { title: string; icon: typeof MapPin; rows: { label: string; revenueMnt: number }[]; emptyLabel: string }) {
   const top = [...rows].sort((a, b) => b.revenueMnt - a.revenueMnt).slice(0, 5);
   return (
-    <div className="min-w-0 rounded-2xl bg-[#1f2126] p-5">
+    <div className="min-w-0 rounded-2xl bg-[var(--a-surface-dark)] p-5">
       <div className="flex items-center gap-1.5 text-white/45"><Icon size={13} /><p className="text-[10px] font-extrabold uppercase tracking-[.14em]">{title}</p></div>
       {top.length === 0 ? (
         <p className="mt-3 text-sm text-white/35">{emptyLabel}</p>
@@ -484,7 +484,7 @@ function ChannelBarList({ rows }: { rows: { label: string; orderCount: number }[
 
 function ChannelBarsCard({ title, icon: Icon, groups }: { title: string; icon: typeof Truck; groups: { label: string; rows: { label: string; orderCount: number }[] }[] }) {
   return (
-    <div className="min-w-0 rounded-2xl bg-[#1f2126] p-5">
+    <div className="min-w-0 rounded-2xl bg-[var(--a-surface-dark)] p-5">
       <div className="flex items-center gap-1.5 text-white/45"><Icon size={13} /><p className="text-[10px] font-extrabold uppercase tracking-[.14em]">{title}</p></div>
       {groups.map(group => (
         <div key={group.label} className="mt-3">
@@ -516,7 +516,7 @@ function CacCard({ cac }: { cac: AnalyticsReport["cac"] }) {
   };
 
   return (
-    <div className="min-w-0 rounded-2xl bg-[#1f2126] p-5 sm:flex sm:items-center sm:justify-between sm:gap-6">
+    <div className="min-w-0 rounded-2xl bg-[var(--a-surface-dark)] p-5 sm:flex sm:items-center sm:justify-between sm:gap-6">
       <div className="min-w-0">
         <p className="text-[10px] font-extrabold uppercase tracking-[.13em] text-white/45">CAC (Нэг харилцагч татах зардал)</p>
         <p className="mt-1 font-[var(--font-display)] text-2xl font-semibold text-white">{cac.cacMnt !== null ? formatMnt(cac.cacMnt) : "Тодорхойгүй"}</p>
@@ -526,10 +526,10 @@ function CacCard({ cac }: { cac: AnalyticsReport["cac"] }) {
       </div>
       <form onSubmit={submit} className="mt-4 flex flex-wrap items-end gap-2 sm:mt-0 sm:shrink-0">
         <label className="grid gap-1 text-[10px] font-bold text-white/50">Сар
-          <input type="month" value={month} onChange={event => setMonth(event.target.value)} className="h-9 rounded-lg border border-white/15 bg-[#17181b] px-2 text-xs text-white outline-none focus:border-[#df1f3d]" />
+          <input type="month" value={month} onChange={event => setMonth(event.target.value)} className="h-9 rounded-lg border border-white/15 bg-[var(--a-btn-dark)] px-2 text-xs text-white outline-none focus:border-[#df1f3d]" />
         </label>
         <label className="grid gap-1 text-[10px] font-bold text-white/50">Зардал (₮)
-          <input type="number" min="0" value={spend} onChange={event => setSpend(event.target.value)} placeholder="0" className="h-9 w-28 rounded-lg border border-white/15 bg-[#17181b] px-2 text-xs text-white outline-none focus:border-[#df1f3d]" />
+          <input type="number" min="0" value={spend} onChange={event => setSpend(event.target.value)} placeholder="0" className="h-9 w-28 rounded-lg border border-white/15 bg-[var(--a-btn-dark)] px-2 text-xs text-white outline-none focus:border-[#df1f3d]" />
         </label>
         <button type="submit" disabled={updateSpend.isPending} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#df1f3d] px-3 text-xs font-bold text-white disabled:opacity-50">
           {updateSpend.isPending ? <LoaderCircle className="animate-spin" size={13} /> : "Хадгалах"}
@@ -540,23 +540,23 @@ function CacCard({ cac }: { cac: AnalyticsReport["cac"] }) {
 }
 
 function RankedTable({ rows, emptyLabel }: { rows: { label: string; quantity: number; revenueMnt: number }[]; emptyLabel: string }) {
-  if (!rows.length) return <p className="mt-4 text-sm text-[#77787d]">{emptyLabel}</p>;
+  if (!rows.length) return <p className="mt-4 text-sm text-[var(--a-muted)]">{emptyLabel}</p>;
   return (
     <div className="mt-4 overflow-x-auto">
       <table className="w-full min-w-[380px] border-separate border-spacing-0 text-left">
         <thead>
-          <tr className="text-[10px] font-extrabold tracking-[.12em] text-[#8a8b8f]">
-            <th className="border-b border-black/8 pb-2">НЭР</th>
-            <th className="border-b border-black/8 pb-2 text-right">ТОО</th>
-            <th className="border-b border-black/8 pb-2 text-right">ОРЛОГО</th>
+          <tr className="text-[10px] font-extrabold tracking-[.12em] text-[var(--a-faint)]">
+            <th className="border-b border-[var(--a-border)] pb-2">НЭР</th>
+            <th className="border-b border-[var(--a-border)] pb-2 text-right">ТОО</th>
+            <th className="border-b border-[var(--a-border)] pb-2 text-right">ОРЛОГО</th>
           </tr>
         </thead>
         <tbody>
           {rows.map(row => (
             <tr key={row.label} className="text-sm">
-              <td className="max-w-[220px] truncate border-b border-black/6 py-2.5" title={row.label}>{row.label}</td>
-              <td className="border-b border-black/6 py-2.5 text-right font-bold">{row.quantity}</td>
-              <td className="border-b border-black/6 py-2.5 text-right text-[#77787d]">{formatMnt(row.revenueMnt)}</td>
+              <td className="max-w-[220px] truncate border-b border-[var(--a-border)] py-2.5" title={row.label}>{row.label}</td>
+              <td className="border-b border-[var(--a-border)] py-2.5 text-right font-bold">{row.quantity}</td>
+              <td className="border-b border-[var(--a-border)] py-2.5 text-right text-[var(--a-muted)]">{formatMnt(row.revenueMnt)}</td>
             </tr>
           ))}
         </tbody>

@@ -1144,3 +1144,92 @@ export async function exportAnalyticsPdf(report: AnalyticsReport, input: DateRan
     doc.end();
   });
 }
+
+/* ---------------------------------------------------------------------------
+ * Dashboard highlights (2026-09-08, reference-driven admin redesign)
+ *
+ * Two ranked lists the new dashboard's "Их зарагдсан бүтээгдэхүүн" /
+ * "Шилдэг харилцагчид" cards render. Deliberately NOT folded into
+ * getAnalyticsReport: that report is also the Excel/PDF export's data
+ * source, and these two carry presentation-only extras (an image URL, an
+ * avatar) that have no place in a spreadsheet. Separate procedure, separate
+ * query -- the dashboard pays for exactly what it shows.
+ * ------------------------------------------------------------------------ */
+
+/** getTopProducts + the product's own photo/SKU, for the dashboard's
+ *  thumbnail list. LEFT JOIN (not inner) so a since-deleted product still
+ *  reports its historical sales, exactly like getTopProducts -- it just
+ *  renders with the placeholder image instead of a photo. */
+export async function getTopProductsWithMedia(input: DateRangeInput & { limit?: number } = {}) {
+  const db = await getDb();
+  if (!db) return [];
+  const soldQtyExpr = sql<number>`sum(${orderItems.quantity})`;
+  const rows = await db
+    .select({
+      productId: orderItems.productId,
+      productName: orderItems.productName,
+      sku: sql<string>`min(${orderItems.sku})`,
+      imageUrl: sql<string | null>`min(${products.imageUrl})`,
+      slug: sql<string | null>`min(${products.slug})`,
+      soldQuantity: soldQtyExpr,
+      revenueMnt: sql<number>`coalesce(sum(${orderItems.unitPriceMnt} * ${orderItems.quantity}), 0)`,
+    })
+    .from(orderItems)
+    .innerJoin(orders, eq(orderItems.orderId, orders.id))
+    .leftJoin(products, eq(orderItems.productId, products.id))
+    .where(and(eq(orders.paymentStatus, "paid"), ...dateRangeConditions(input)))
+    .groupBy(orderItems.productId, orderItems.productName)
+    .orderBy(desc(soldQtyExpr))
+    .limit(input.limit ?? 5);
+  return rows.map(row => ({
+    productId: row.productId,
+    productName: row.productName,
+    sku: row.sku,
+    imageUrl: row.imageUrl ?? null,
+    slug: row.slug ?? null,
+    soldQuantity: Number(row.soldQuantity),
+    revenueMnt: Number(row.revenueMnt),
+  }));
+}
+
+/** Customers ranked by paid orders placed inside the window. Signed-in
+ *  customers only -- a guest checkout has no stable identity to rank across
+ *  orders (same limitation getSalesOverview's new/returning split already
+ *  documents). Falls back to the order's own customerName when the user row
+ *  has no name set, so a real buyer never renders as a blank row. */
+export async function getTopCustomers(input: DateRangeInput & { limit?: number } = {}) {
+  const db = await getDb();
+  if (!db) return [];
+  const orderCountExpr = sql<number>`count(*)`;
+  const rows = await db
+    .select({
+      userId: orders.userId,
+      name: sql<string | null>`min(coalesce(${users.name}, ${orders.customerName}))`,
+      phone: sql<string | null>`min(${users.phone})`,
+      avatarUrl: sql<string | null>`min(${users.avatarUrl})`,
+      orderCount: orderCountExpr,
+      revenueMnt: sql<number>`coalesce(sum(${orders.totalMnt}), 0)`,
+    })
+    .from(orders)
+    .innerJoin(users, eq(orders.userId, users.id))
+    .where(and(eq(orders.paymentStatus, "paid"), isNotNull(orders.userId), ...dateRangeConditions(input)))
+    .groupBy(orders.userId)
+    .orderBy(desc(orderCountExpr))
+    .limit(input.limit ?? 5);
+  return rows.map(row => ({
+    userId: row.userId as number,
+    name: row.name ?? "Нэргүй харилцагч",
+    phone: row.phone ?? null,
+    avatarUrl: row.avatarUrl ?? null,
+    orderCount: Number(row.orderCount),
+    revenueMnt: Number(row.revenueMnt),
+  }));
+}
+
+export async function getDashboardHighlights(input: DateRangeInput = {}) {
+  const [topProducts, topCustomers] = await Promise.all([
+    getTopProductsWithMedia({ ...input, limit: 5 }),
+    getTopCustomers({ ...input, limit: 5 }),
+  ]);
+  return { topProducts, topCustomers };
+}

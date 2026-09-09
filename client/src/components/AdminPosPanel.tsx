@@ -71,7 +71,7 @@ export default function AdminPosPanel() {
       <div>
         <label className="grid gap-1.5 text-xs font-bold">
           <span className="flex items-center gap-1.5"><Store size={13} />Салбар</span>
-          <select value={branchId ?? ""} onChange={event => { setBranchId(event.target.value ? Number(event.target.value) : null); setLineItems([]); }} className="h-11 w-full max-w-sm rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]">
+          <select value={branchId ?? ""} onChange={event => { setBranchId(event.target.value ? Number(event.target.value) : null); setLineItems([]); }} className="h-11 w-full max-w-sm rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]">
             <option value="">Салбар сонгох</option>
             {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
           </select>
@@ -80,17 +80,17 @@ export default function AdminPosPanel() {
         {branchId && <>
           <label className="mt-4 grid gap-1.5 text-xs font-bold">
             <span className="flex items-center gap-1.5"><Search size={13} />Бараа хайх (нэр эсвэл SKU)</span>
-            <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Жишээ: Shampoo эсвэл SKU" className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" />
+            <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Жишээ: Shampoo эсвэл SKU" className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" />
           </label>
 
           <div className="mt-3 grid gap-1.5">
-            {searchQuery.isLoading && <p className="flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={14} />Уншиж байна…</p>}
-            {!searchQuery.isLoading && results.length === 0 && <p className="rounded-xl bg-[#f8f5ef] px-4 py-6 text-center text-xs text-[#9a9ba0]">{search.trim() ? "Илэрц алга." : "Хайлт бичиж бараа нэмнэ үү."}</p>}
+            {searchQuery.isLoading && <p className="flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={14} />Уншиж байна…</p>}
+            {!searchQuery.isLoading && results.length === 0 && <p className="rounded-xl bg-[var(--a-soft)] px-4 py-6 text-center text-xs text-[var(--a-faint)]">{search.trim() ? "Илэрц алга." : "Хайлт бичиж бараа нэмнэ үү."}</p>}
             {results.map(variant => (
-              <div key={variant.variantId} className="flex items-center gap-3 rounded-xl border border-black/8 bg-white p-2.5">
+              <div key={variant.variantId} className="flex items-center gap-3 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] p-2.5">
                 <div className="min-w-0 flex-1">
                   <strong className="block truncate text-xs">{variant.productName}</strong>
-                  <span className="mt-0.5 block truncate text-[11px] text-[#77787d]">{variant.sku}{formatVariantAttributes(variant.attributesJson) ? ` · ${formatVariantAttributes(variant.attributesJson)}` : ""} · Энэ салбарт: {variant.stockAtBranch} ш</span>
+                  <span className="mt-0.5 block truncate text-[11px] text-[var(--a-muted)]">{variant.sku}{formatVariantAttributes(variant.attributesJson) ? ` · ${formatVariantAttributes(variant.attributesJson)}` : ""} · Энэ салбарт: {variant.stockAtBranch} ш</span>
                 </div>
                 <span className="shrink-0 text-xs font-bold">{formatMnt(variant.priceMnt)}</span>
                 <button type="button" onClick={() => addItem(variant)} className="shrink-0 inline-flex items-center gap-1 rounded-full bg-[#df1f3d] px-3 py-1.5 text-[10px] font-extrabold text-white hover:bg-[#bc1732]"><Plus size={11} />Нэмэх</button>
@@ -100,7 +100,7 @@ export default function AdminPosPanel() {
         </>}
       </div>
 
-      <aside className="h-fit rounded-3xl bg-[#17181b] p-5 text-white">
+      <aside className="h-fit rounded-3xl bg-[var(--a-btn-dark)] p-5 text-white">
         <div className="flex items-center gap-2 text-[#f0b52d]"><ShoppingBag size={16} /><span className="text-[10px] font-extrabold tracking-[.14em]">ДЭЛГҮҮРИЙН ХУДАЛДАА</span></div>
 
         {!lineItems.length ? <p className="mt-4 rounded-xl border border-dashed border-white/25 p-4 text-center text-xs text-white/60">Бараа сонгоогүй байна.</p> : (
@@ -124,7 +124,7 @@ export default function AdminPosPanel() {
 
         <div className="mt-4 flex justify-between border-t border-white/12 pt-4 text-lg font-bold"><span>Нийт</span><span>{formatMnt(subtotalMnt)}</span></div>
 
-        <button type="button" disabled={!branchId || !lineItems.length || recordSale.isPending} onClick={submit} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[#f0b52d] px-5 text-sm font-bold text-[#17181b] disabled:cursor-not-allowed disabled:opacity-50">
+        <button type="button" disabled={!branchId || !lineItems.length || recordSale.isPending} onClick={submit} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[#f0b52d] px-5 text-sm font-bold text-[#16181c] disabled:cursor-not-allowed disabled:opacity-50">
           {recordSale.isPending ? <LoaderCircle className="animate-spin" size={16} /> : "Худалдаа баталгаажуулах"}
         </button>
 

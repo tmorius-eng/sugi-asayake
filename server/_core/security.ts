@@ -40,7 +40,19 @@ export function setSecurityHeaders(request: Request, response: Response, next: N
   response.setHeader("X-Content-Type-Options", "nosniff");
   response.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   response.setHeader("X-Frame-Options", "SAMEORIGIN");
-  response.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
+  // Admin face gate (2026-09-08): `camera=()` is an EMPTY allowlist, meaning
+  // no origin at all -- including this one -- may use the camera. It blocks
+  // getUserMedia at the document level, before the browser ever prompts, so
+  // the failure looks exactly like the user having denied permission
+  // ("Permissions policy violation: camera is not allowed in this document"
+  // in the console). That is what it did to the /admin face check on its
+  // first real run.
+  //
+  // `camera=(self)` allows only this site's own pages -- every other origin,
+  // including anything embedded in an iframe, stays blocked. microphone,
+  // geolocation and payment keep their empty allowlists: nothing in this app
+  // uses them, and the face gate deliberately captures no audio.
+  response.setHeader("Permissions-Policy", "camera=(self), microphone=(), geolocation=(), payment=()");
   response.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
   if (process.env.NODE_ENV === "production") {
     response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");

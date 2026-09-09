@@ -1,0 +1,13 @@
+-- Admin face gate: multi-pose enrollment.
+--
+-- The original enrollment captured five frames in about a second, all facing
+-- straight ahead, and averaged them into ONE descriptor. That is a single
+-- viewpoint: it matches well when the person sits exactly as they did during
+-- enrollment and degrades as soon as they are turned slightly, because the
+-- stored reference never saw them from any other angle.
+--
+-- posesJson holds a descriptor per guided pose (centre / left / right / up),
+-- and verification takes the CLOSEST match across all of them. descriptorJson
+-- is kept as the averaged frontal reference so existing enrollments keep
+-- working unchanged and nobody is forced to re-enroll.
+ALTER TABLE `face_enrollments` ADD COLUMN `posesJson` text;

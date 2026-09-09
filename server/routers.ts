@@ -1,4 +1,4 @@
-import { COOKIE_NAME, GUEST_CART_COOKIE_NAME, VISITOR_SESSION_COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME, GUEST_CART_COOKIE_NAME, NOT_ADMIN_ERR_MSG, VISITOR_SESSION_COOKIE_NAME } from "@shared/const";
 import { formatVariantAttributes } from "@shared/catalog-filter";
 import { ubDistricts } from "@shared/districts";
 import { parseDeviceType, isLikelyBot } from "@shared/deviceType";
@@ -177,14 +177,22 @@ import {
   updateUserAvatar,
   updateUserPreferences,
   updateUserProfile,
+  deleteFaceEnrollment,
+  getFaceAttempts,
+  getFaceEnrollment,
+  recordFaceAttempt,
+  upsertFaceEnrollment,
 } from "./db";
+// Admin face gate (2026-09-08) -- see server/faceAuth.ts.
+import { clearFaceProofCookie, completeFaceVerification, hasValidFaceProof, isFaceGateEnabled, startFaceVerification } from "./faceAuth";
+import { FACE_DESCRIPTOR_LENGTH, FACE_DIAGNOSTIC_MAX, FACE_MODEL_VERSION, isAdminPanelRole, isValidFaceDescriptor } from "../shared/face-auth";
 import { adminProcedure, anyStaffProcedure, catalogReadProcedure, contentReadProcedure, financeProcedure, lenientRateLimitedProcedure, marketingProcedure, moderateRateLimitedProcedure, ordersReadProcedure, phoneVerifyRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure, usersReadProcedure, warehouseProcedure } from "./_core/trpc";
 import { storagePing, storagePut, storagePutImageVariants } from "./storage";
 import { IMAGE_MAX_DIMENSION, processUploadedImage, processUploadedImageVariants } from "./_core/imageProcessing";
 import { createQPayInvoice, getQPayAvailability } from "./qpay";
 import { createNoOpVerificationSession, createVerificationSession, getSessionStatus, isNoOpSessionExpired, normalizePhoneForVerifyMn } from "./verifyMn";
 import { getCategoryWriteViolation, getProductWriteViolation } from "./catalog-validation";
-import { getAnalyticsReport, exportAnalyticsExcel, exportAnalyticsPdf, getAllCustomersForCampaign, getPreferenceSegmentBreakdown, getRecommendationCoverage, getUsersByLoyaltyTier, getUsersBySegment, type PreferenceSegmentField } from "./analytics";
+import { getAnalyticsReport, exportAnalyticsExcel, exportAnalyticsPdf, getAllCustomersForCampaign, getDashboardHighlights, getPreferenceSegmentBreakdown, getRecommendationCoverage, getUsersByLoyaltyTier, getUsersBySegment, type PreferenceSegmentField } from "./analytics";
 import { siteMediaSlotKeys } from "../shared/site-media";
 import { siteTextSlotKeys } from "../shared/site-text";
 import { storeSettingKeys, getStoreSettingSlot, type StoreSettingKey } from "../shared/store-settings";
@@ -765,6 +773,12 @@ export const appRouter = router({
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      // Admin face gate (2026-09-08): the face-proof cookie MUST die with the
+      // session. Without this it outlives logout for its full 8-hour window,
+      // so signing out and straight back in walked into /admin with no face
+      // check at all -- exactly the "every time someone logs in" requirement
+      // this gate exists to enforce. Found by Tom testing precisely that.
+      clearFaceProofCookie(ctx.req, ctx.res);
       return {
         success: true,
       } as const;
@@ -1476,6 +1490,150 @@ export const appRouter = router({
       return { orderId: order.id, paymentStatus: order.paymentStatus, orderStatus: order.status, invoiceId: attempt?.providerInvoiceId ?? null, attemptStatus: attempt?.status ?? null };
     }),
   }),
+  /**
+   * Admin face gate (2026-09-08). Scope, restated because it is the thing
+   * most likely to be misread later: this is ONLY for the five roles that can
+   * open /admin. No storefront page touches this router, and no customer is
+   * ever asked for camera access.
+   *
+   * Every procedure here is protected (never public): a user must already
+   * have passed phone+password login before any of this is reachable. The
+   * face check is a SECOND factor, never a way in on its own.
+   */
+  faceAuth: router({
+    /** Drives which of the three gate states the client renders. Cheap and
+     *  called on every /admin load, so it stays a single indexed lookup. */
+    status: protectedProcedure.query(async ({ ctx }) => {
+      const gateEnabled = isFaceGateEnabled();
+      // When the kill switch is off, report "verified" so the client renders
+      // the panel with no camera anywhere -- exactly today's pre-gate
+      // behaviour, which is the entire point of the escape hatch.
+      if (!gateEnabled || !isAdminPanelRole(ctx.user.role)) {
+        return { gateEnabled, enrolled: true, verified: true, modelStale: false };
+      }
+      const enrollment = await getFaceEnrollment(ctx.user.id);
+      const hasProof = await hasValidFaceProof(ctx.req, ctx.user.id, ctx.user.sessionVersion);
+      // A proof cookie only counts while an enrollment actually exists.
+      //
+      // Without this the two were independent, so clearing someone's
+      // enrollment left their existing proof valid for its full 8-hour
+      // window: an admin revoking access (the person left, or their face
+      // stopped matching) would not actually revoke anything until that
+      // cookie expired. Requiring both means a reset takes effect on the
+      // next request, which is what "reset" has to mean.
+      const verified = hasProof && !!enrollment;
+      return {
+        gateEnabled,
+        enrolled: !!enrollment,
+        verified,
+        // A descriptor from a superseded model can't be compared with a new
+        // one; surfaced separately so the UI says "enroll again" rather than
+        // "your face didn't match".
+        modelStale: !!enrollment && enrollment.modelVersion !== FACE_MODEL_VERSION,
+      };
+    }),
+
+    /**
+     * Stores the averaged reference descriptor for this account.
+     *
+     * `consented` is a literal true rather than a boolean so the consent gate
+     * is enforced by the schema itself, not merely by the UI that normally
+     * precedes it -- face data is sensitive personal data under Mongolia's
+     * Personal Data Protection Law, and a client that skipped the consent
+     * screen must not be able to enroll.
+     */
+    enroll: strictRateLimitedProtectedProcedure
+      .input(z.object({
+        descriptor: z.array(z.number()).length(FACE_DESCRIPTOR_LENGTH),
+        sampleCount: z.number().int().min(1).max(20),
+        // Per-pose descriptors from the guided enrollment (centre/left/
+        // right). Optional so an older client, or an enrollment where the
+        // side poses were skipped, still works off the frontal vector alone.
+        poses: z.array(z.object({
+          pose: z.string().max(20),
+          descriptor: z.array(z.number()).length(FACE_DESCRIPTOR_LENGTH),
+        })).max(8).optional(),
+        consented: z.literal(true),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (!isAdminPanelRole(ctx.user.role)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+        }
+        if (!isValidFaceDescriptor(input.descriptor)) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Царайн өгөгдөл буруу байна." });
+        }
+        // Every pose is validated the same way the primary descriptor is --
+        // a malformed or hand-crafted vector must never reach the distance
+        // math, and poses are just as much an input as the main one.
+        const poses = (input.poses ?? []).filter(p => isValidFaceDescriptor(p.descriptor));
+        await upsertFaceEnrollment({
+          userId: ctx.user.id,
+          descriptor: input.descriptor,
+          sampleCount: input.sampleCount,
+          poses,
+          modelVersion: FACE_MODEL_VERSION,
+        });
+        await recordFaceAttempt({
+          userId: ctx.user.id,
+          outcome: "enrolled",
+          detail: `samples=${input.sampleCount} poses=${(input.poses ?? []).length}`,
+          ip: ctx.req.ip ?? null,
+        });
+        // Enrolling does NOT by itself open /admin: the user still performs a
+        // live check immediately afterwards. Otherwise "enroll" would be a
+        // way to bypass the very gate it exists to feed.
+        return { ok: true as const };
+      }),
+
+    /** Issues a fresh single-use liveness challenge (blink / turn / open
+     *  mouth), randomised per attempt so a held-up photo can't satisfy it. */
+    startVerification: strictRateLimitedProtectedProcedure.mutation(async ({ ctx }) => {
+      if (!isAdminPanelRole(ctx.user.role)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+      }
+      return startFaceVerification(ctx.user.id);
+    }),
+
+    /** Compares the submitted descriptor against the enrolled one and, on a
+     *  match, sets the per-device proof cookie. */
+    completeVerification: strictRateLimitedProtectedProcedure
+      .input(z.object({
+        challengeId: z.number().int().positive(),
+        descriptor: z.array(z.number()).length(FACE_DESCRIPTOR_LENGTH),
+        livenessPassed: z.boolean(),
+        // What the browser actually measured. Recorded into
+        // face_attempts.detail so liveness thresholds can be tuned from real
+        // attempts by real staff instead of guessed at -- the same discipline
+        // already applied to FACE_MATCH_THRESHOLD via the distance column.
+        // Untrusted client-reported data: used for diagnostics only, never
+        // to make the pass/fail decision.
+        diagnostic: z.string().max(FACE_DIAGNOSTIC_MAX).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (!isAdminPanelRole(ctx.user.role)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+        }
+        return completeFaceVerification({
+          userId: ctx.user.id,
+          sessionVersion: ctx.user.sessionVersion,
+          challengeId: input.challengeId,
+          descriptor: input.descriptor,
+          livenessPassed: input.livenessPassed,
+          diagnostic: input.diagnostic,
+          req: ctx.req,
+          res: ctx.res,
+        });
+      }),
+
+    /** Lets someone re-enroll their own face without an admin (new glasses,
+     *  a beard, a different camera). Clears the enrollment and the proof
+     *  cookie so the next /admin load starts the flow from the top. */
+    resetOwnEnrollment: strictRateLimitedProtectedProcedure.mutation(async ({ ctx }) => {
+      await deleteFaceEnrollment(ctx.user.id);
+      clearFaceProofCookie(ctx.req, ctx.res);
+      return { ok: true as const };
+    }),
+  }),
   admin: router({
     // staffProcedure, not adminProcedure: staff should still see what's
     // going on operationally (orders, low stock), just not the money —
@@ -1564,6 +1722,33 @@ export const appRouter = router({
       if (!detail) throw new TRPCError({ code: "NOT_FOUND", message: "User not found." });
       return detail;
     }),
+    /**
+     * Admin face gate (2026-09-08) — the per-user break-glass. Clears one
+     * person's enrolled face so they re-enroll on their next /admin visit.
+     *
+     * This is the fix for "the gate is refusing to recognise ONE person"
+     * (new glasses, a beard, a replaced webcam, a bad enrollment capture);
+     * the ADMIN_FACE_GATE_ENABLED env switch is the fix for "the gate is
+     * broken for everyone". Deliberately does not touch the password or the
+     * session -- the account keeps working exactly as before, it just has to
+     * enroll a face again.
+     *
+     * adminProcedure, not usersReadProcedure: clearing someone's second
+     * factor is a security action, so it stays with the role that owns
+     * accounts and roles rather than anyone who can merely read the user
+     * list.
+     */
+    resetUserFaceEnrollment: adminProcedure.input(z.object({ userId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      await deleteFaceEnrollment(input.userId);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "user.face_enrollment_reset", entityType: "user", entityId: input.userId });
+      return { ok: true as const };
+    }),
+    /** Powers the Security Center's face-gate tab — the same role
+     *  login_attempts data plays for password logins. adminProcedure to match
+     *  loginHistory/auditLogs, which are already admin-only. */
+    faceAttempts: adminProcedure.input(z.object({ limit: z.number().int().min(1).max(500).optional(), userId: z.number().int().positive().optional() }).optional()).query(async ({ input }) => {
+      return getFaceAttempts({ limit: input?.limit, userId: input?.userId });
+    }),
     // PREMIUM-FEATURES.md TIER 5: bridges the physical-POS gap manually
     // (per Tom, 2026-08-25: no Smart POS API integration for now) — credits
     // a customer's known in-store lifetime spend onto their online total.
@@ -1619,6 +1804,15 @@ export const appRouter = router({
       dateFrom: z.string().datetime().optional(),
       dateTo: z.string().datetime().optional(),
     })).query(({ input }) => getAnalyticsReport({ dateFrom: input.dateFrom ? new Date(input.dateFrom) : undefined, dateTo: input.dateTo ? new Date(input.dateTo) : undefined })),
+    // 2026-09-08 (reference-driven admin redesign): the dashboard's two
+    // ranked cards. financeProcedure, same tier as analyticsReport below --
+    // it's revenue-ranked product data plus named customers, not
+    // operational staff data, so staff sees the locked-card treatment
+    // rather than a network 403.
+    dashboardHighlights: financeProcedure.input(z.object({
+      dateFrom: z.string().datetime().optional(),
+      dateTo: z.string().datetime().optional(),
+    })).query(({ input }) => getDashboardHighlights({ dateFrom: input.dateFrom ? new Date(input.dateFrom) : undefined, dateTo: input.dateTo ? new Date(input.dateTo) : undefined })),
     analyticsExport: financeProcedure.input(z.object({
       dateFrom: z.string().datetime().optional(),
       dateTo: z.string().datetime().optional(),

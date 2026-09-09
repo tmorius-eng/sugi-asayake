@@ -42,23 +42,25 @@ export default function AdminGlobalSearch({ preview = false, onSelectProduct, on
   const select = (action: () => void) => { action(); setOpen(false); setTerm(""); };
 
   return (
-    <div ref={containerRef} className="relative w-full sm:w-80">
-      <label className="flex h-10 items-center gap-2 rounded-full border border-black/10 bg-[#fffdf9] px-4">
-        <Search size={15} className="text-[#85868a]" />
-        <input value={term} onChange={event => { setTerm(event.target.value); setOpen(true); }} onFocus={() => setOpen(true)} placeholder="Хэрэглэгч, захиалга, бүтээгдэхүүн хайх…" className="w-full bg-transparent text-xs outline-none" />
+    <div ref={containerRef} className="relative w-full">
+      {/* Reference top-bar search: full-radius pill, card surface, quiet
+          magnifier. Token-driven so it follows the admin's dark mode. */}
+      <label className="flex h-10 items-center gap-2.5 rounded-full border border-[var(--a-border)] bg-[var(--a-card)] px-4 transition focus-within:border-[var(--a-border-strong)]">
+        <Search size={15} className="shrink-0 text-[var(--a-faint)]" />
+        <input value={term} onChange={event => { setTerm(event.target.value); setOpen(true); }} onFocus={() => setOpen(true)} placeholder="Хэрэглэгч, захиалга, бүтээгдэхүүн хайх…" className="w-full bg-transparent text-[13px] text-[var(--a-text)] outline-none placeholder:text-[var(--a-faint)]" />
       </label>
       {open && debounced.length >= 2 && (
-        <div className="absolute left-0 right-0 top-12 z-40 max-h-96 overflow-y-auto rounded-2xl border border-black/8 bg-white p-2 shadow-[0_16px_34px_rgba(20,22,24,.14)]">
-          {preview && <p className="p-3 text-xs text-[#77787d]">Preview горимд хайлт ажиллахгүй.</p>}
-          {!preview && searchQuery.isLoading && <p className="flex items-center gap-2 p-3 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={13} />Хайж байна…</p>}
-          {!preview && searchQuery.error && <p className="p-3 text-xs text-[#a51630]">{searchQuery.error.message}</p>}
-          {!preview && results && !hasResults && <p className="p-3 text-xs text-[#77787d]">Илэрц олдсонгүй.</p>}
+        <div className="admin-pop absolute left-0 right-0 top-12 z-40 max-h-96 overflow-y-auto rounded-2xl border border-[var(--a-border)] bg-[var(--a-card)] p-2 shadow-[var(--a-shadow-pop)]">
+          {preview && <p className="p-3 text-xs text-[var(--a-muted)]">Preview горимд хайлт ажиллахгүй.</p>}
+          {!preview && searchQuery.isLoading && <p className="flex items-center gap-2 p-3 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={13} />Хайж байна…</p>}
+          {!preview && searchQuery.error && <p className="p-3 text-xs text-[var(--a-neg)]">{searchQuery.error.message}</p>}
+          {!preview && results && !hasResults && <p className="p-3 text-xs text-[var(--a-muted)]">Илэрц олдсонгүй.</p>}
           {!preview && results && results.products.length > 0 && (
             <ResultGroup label="БҮТЭЭГДЭХҮҮН" icon={Package}>
               {results.products.map(product => (
-                <button key={product.id} type="button" onClick={() => select(() => onSelectProduct(product.sku))} className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-xs hover:bg-[#f8f5ef]">
+                <button key={product.id} type="button" onClick={() => select(() => onSelectProduct(product.sku))} className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-xs hover:bg-[var(--a-soft)]">
                   <span className="truncate font-bold">{product.name}</span>
-                  <span className="shrink-0 text-[#85868a]">{product.sku}</span>
+                  <span className="shrink-0 text-[var(--a-faint)]">{product.sku}</span>
                 </button>
               ))}
             </ResultGroup>
@@ -66,9 +68,9 @@ export default function AdminGlobalSearch({ preview = false, onSelectProduct, on
           {!preview && results && results.orders.length > 0 && (
             <ResultGroup label="ЗАХИАЛГА" icon={Receipt}>
               {results.orders.map(order => (
-                <button key={order.id} type="button" onClick={() => select(() => onSelectOrder(order.orderNumber))} className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-xs hover:bg-[#f8f5ef]">
+                <button key={order.id} type="button" onClick={() => select(() => onSelectOrder(order.orderNumber))} className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-xs hover:bg-[var(--a-soft)]">
                   <span className="truncate font-bold">{order.orderNumber} · {order.customerName}</span>
-                  <span className="shrink-0 text-[#85868a]">{formatMnt(order.totalMnt)}</span>
+                  <span className="shrink-0 text-[var(--a-faint)]">{formatMnt(order.totalMnt)}</span>
                 </button>
               ))}
             </ResultGroup>
@@ -76,9 +78,9 @@ export default function AdminGlobalSearch({ preview = false, onSelectProduct, on
           {!preview && results && results.users.length > 0 && (
             <ResultGroup label="ХЭРЭГЛЭГЧ" icon={UserRound}>
               {results.users.map(user => (
-                <button key={user.id} type="button" onClick={() => select(() => onSelectUser(user.phone ?? user.email ?? user.name ?? ""))} className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-xs hover:bg-[#f8f5ef]">
+                <button key={user.id} type="button" onClick={() => select(() => onSelectUser(user.phone ?? user.email ?? user.name ?? ""))} className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-xs hover:bg-[var(--a-soft)]">
                   <span className="truncate font-bold">{user.name ?? "Нэргүй хэрэглэгч"}</span>
-                  <span className="shrink-0 text-[#85868a]">{user.phone ?? user.email ?? "—"}</span>
+                  <span className="shrink-0 text-[var(--a-faint)]">{user.phone ?? user.email ?? "—"}</span>
                 </button>
               ))}
             </ResultGroup>
@@ -86,9 +88,9 @@ export default function AdminGlobalSearch({ preview = false, onSelectProduct, on
           {!preview && results && results.discountCodes.length > 0 && (
             <ResultGroup label="ХЯМДРАЛЫН КОД" icon={Tag}>
               {results.discountCodes.map(discountCode => (
-                <button key={discountCode.id} type="button" onClick={() => select(() => onNavigate("discountCodes"))} className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-xs hover:bg-[#f8f5ef]">
+                <button key={discountCode.id} type="button" onClick={() => select(() => onNavigate("discountCodes"))} className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-xs hover:bg-[var(--a-soft)]">
                   <span className="truncate font-bold">{discountCode.code}</span>
-                  <span className="shrink-0 text-[#85868a]">{discountCode.isActive ? "Идэвхтэй" : "Идэвхгүй"}</span>
+                  <span className="shrink-0 text-[var(--a-faint)]">{discountCode.isActive ? "Идэвхтэй" : "Идэвхгүй"}</span>
                 </button>
               ))}
             </ResultGroup>
@@ -96,9 +98,9 @@ export default function AdminGlobalSearch({ preview = false, onSelectProduct, on
           {!preview && results && results.promotions.length > 0 && (
             <ResultGroup label="УРАМШУУЛАЛ" icon={Megaphone}>
               {results.promotions.map(promotion => (
-                <button key={promotion.id} type="button" onClick={() => select(() => onNavigate("promotions"))} className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-xs hover:bg-[#f8f5ef]">
+                <button key={promotion.id} type="button" onClick={() => select(() => onNavigate("promotions"))} className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-xs hover:bg-[var(--a-soft)]">
                   <span className="truncate font-bold">{promotion.headline}</span>
-                  <span className="shrink-0 text-[#85868a]">{promotion.isActive ? "Идэвхтэй" : "Идэвхгүй"}</span>
+                  <span className="shrink-0 text-[var(--a-faint)]">{promotion.isActive ? "Идэвхтэй" : "Идэвхгүй"}</span>
                 </button>
               ))}
             </ResultGroup>
@@ -106,9 +108,9 @@ export default function AdminGlobalSearch({ preview = false, onSelectProduct, on
           {!preview && results && results.posts.length > 0 && (
             <ResultGroup label="ПОСТ" icon={FilePenLine}>
               {results.posts.map(post => (
-                <button key={post.id} type="button" onClick={() => select(() => onNavigate("posts"))} className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-xs hover:bg-[#f8f5ef]">
+                <button key={post.id} type="button" onClick={() => select(() => onNavigate("posts"))} className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-xs hover:bg-[var(--a-soft)]">
                   <span className="truncate font-bold">{post.title}</span>
-                  <span className="shrink-0 text-[#85868a]">{post.isPublished ? "Нийтэлсэн" : "Ноорог"}</span>
+                  <span className="shrink-0 text-[var(--a-faint)]">{post.isPublished ? "Нийтэлсэн" : "Ноорог"}</span>
                 </button>
               ))}
             </ResultGroup>
@@ -122,7 +124,7 @@ export default function AdminGlobalSearch({ preview = false, onSelectProduct, on
 function ResultGroup({ label, icon: Icon, children }: { label: string; icon: LucideIcon; children: ReactNode }) {
   return (
     <div className="mb-1 last:mb-0">
-      <p className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-extrabold tracking-[.12em] text-[#8a8b8f]"><Icon size={11} />{label}</p>
+      <p className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-extrabold tracking-[.12em] text-[var(--a-faint)]"><Icon size={11} />{label}</p>
       <div className="grid gap-0.5">{children}</div>
     </div>
   );

@@ -66,21 +66,21 @@ export default function AdminRecentActivityFeed({ preview = false, canSeeAuditTr
   ].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()).slice(0, 8);
 
   return (
-    <div className="rounded-xl border border-black/7 bg-card p-5 shadow-sm sm:p-6">
-      <p className="text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]">RECENT ACTIVITY</p>
-      {!preview && canSeeAuditTrail && auditQuery.isLoading && <p className="mt-4 flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={14} />Ачаалж байна…</p>}
+    <div className="rounded-xl border border-[var(--a-border)] bg-card p-5 shadow-sm sm:p-6">
+      <p className="text-[10px] font-extrabold tracking-[.13em] text-[var(--a-faint)]">RECENT ACTIVITY</p>
+      {!preview && canSeeAuditTrail && auditQuery.isLoading && <p className="mt-4 flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={14} />Ачаалж байна…</p>}
       <div className="mt-4 grid gap-3">
         {rows.map(row => (
           <div key={row.id} className="flex items-start gap-3">
             <span className={`grid size-8 shrink-0 place-items-center rounded-full text-[11px] font-extrabold text-white ${row.accentClass}`}>{row.initials}</span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-bold leading-5">{row.title}</p>
-              <p className="truncate text-[11px] text-[#8a8b8f]">{row.subtitle}</p>
+              <p className="truncate text-[11px] text-[var(--a-faint)]">{row.subtitle}</p>
             </div>
-            <span className="shrink-0 text-[10px] text-[#a9a49a]">{relativeTime(row.timestamp)}</span>
+            <span className="shrink-0 text-[10px] text-[var(--a-faint)]">{relativeTime(row.timestamp)}</span>
           </div>
         ))}
-        {rows.length === 0 && <p className="py-6 text-center text-xs text-[#8a8b8f]">Идэвх алга.</p>}
+        {rows.length === 0 && <p className="py-6 text-center text-xs text-[var(--a-faint)]">Идэвх алга.</p>}
       </div>
     </div>
   );

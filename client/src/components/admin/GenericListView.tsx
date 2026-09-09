@@ -123,10 +123,10 @@ export function GenericListView<T>({
   rowActions,
   emptyMessage,
   tableClassName = "min-w-[740px] w-full border-separate border-spacing-0 text-left",
-  headerRowClassName = "text-[10px] font-extrabold tracking-[.13em] text-[#8a8b8f]",
+  headerRowClassName = "text-[10px] font-extrabold tracking-[.13em] text-[var(--a-faint)]",
   rowClassName = "group text-sm",
-  actionsHeaderClassName = "border-b border-black/8 pb-3",
-  actionsCellClassName = "border-b border-black/6 py-4 text-right",
+  actionsHeaderClassName = "border-b border-[var(--a-border)] pb-3",
+  actionsCellClassName = "border-b border-[var(--a-border)] py-4 text-right",
 }: GenericListViewProps<T>) {
   const [page, setPage] = useState(1);
   const [internalSelectedIds, setInternalSelectedIds] = useState<Set<number | string>>(new Set());
@@ -219,7 +219,7 @@ export function GenericListView<T>({
           <thead>
             <tr className={headerRowClassName}>
               {selectable && (
-                <th className="w-8 border-b border-black/8 pb-3">
+                <th className="w-8 border-b border-[var(--a-border)] pb-3">
                   <input
                     type="checkbox"
                     checked={selectedIds.size > 0 && selectedIds.size === filtered.length}
@@ -230,7 +230,7 @@ export function GenericListView<T>({
                 </th>
               )}
               {tableColumns.map(column => (
-                <th key={column.id} className={column.headerClassName ?? "border-b border-black/8 pb-3"}>
+                <th key={column.id} className={column.headerClassName ?? "border-b border-[var(--a-border)] pb-3"}>
                   {column.header}
                 </th>
               ))}
@@ -243,7 +243,7 @@ export function GenericListView<T>({
               return (
                 <tr key={id} className={typeof rowClassName === "function" ? rowClassName(row) : rowClassName}>
                   {selectable && (
-                    <td className="border-b border-black/6 py-4">
+                    <td className="border-b border-[var(--a-border)] py-4">
                       <input
                         type="checkbox"
                         checked={selectedIds.has(id)}
@@ -254,7 +254,7 @@ export function GenericListView<T>({
                     </td>
                   )}
                   {tableColumns.map(column => (
-                    <td key={column.id} className={column.cellClassName ?? "border-b border-black/6 py-4"}>
+                    <td key={column.id} className={column.cellClassName ?? "border-b border-[var(--a-border)] py-4"}>
                       {column.render(row)}
                     </td>
                   ))}
@@ -264,7 +264,7 @@ export function GenericListView<T>({
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={colSpan} className="py-10 text-center text-sm text-[#77787d]">
+                <td colSpan={colSpan} className="py-10 text-center text-sm text-[var(--a-muted)]">
                   {resolvedEmptyMessage}
                 </td>
               </tr>
@@ -287,7 +287,7 @@ function PaginationFooter({
   page: number; setPage: (updater: (current: number) => number) => void; totalPages: number; pageSize: number; total: number; itemLabel: string;
 }) {
   return (
-    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-[#77787d]">
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-[var(--a-muted)]">
       <span>
         {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} / {total} {itemLabel}
       </span>
@@ -296,19 +296,19 @@ function PaginationFooter({
           type="button"
           onClick={() => setPage(current => Math.max(1, current - 1))}
           disabled={page === 1}
-          className="grid size-8 place-items-center rounded-full border border-black/10 text-[#57585e] transition hover:border-[#df1f3d] hover:text-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-35"
+          className="grid size-8 place-items-center rounded-full border border-[var(--a-border)] text-[var(--a-text-soft)] transition hover:border-[#df1f3d] hover:text-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-35"
           aria-label="Өмнөх хуудас"
         >
           <ChevronLeft size={15} />
         </button>
-        <span className="min-w-16 text-center font-bold text-[#17181b]">
+        <span className="min-w-16 text-center font-bold text-[var(--a-text)]">
           {page} / {totalPages}
         </span>
         <button
           type="button"
           onClick={() => setPage(current => Math.min(totalPages, current + 1))}
           disabled={page === totalPages}
-          className="grid size-8 place-items-center rounded-full border border-black/10 text-[#57585e] transition hover:border-[#df1f3d] hover:text-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-35"
+          className="grid size-8 place-items-center rounded-full border border-[var(--a-border)] text-[var(--a-text-soft)] transition hover:border-[#df1f3d] hover:text-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-35"
           aria-label="Дараагийн хуудас"
         >
           <ChevronRight size={15} />

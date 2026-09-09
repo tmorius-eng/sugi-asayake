@@ -44,22 +44,22 @@ export default function AdminBranchStockEditor({ variantId }: { variantId: numbe
     }
   };
 
-  if (stockQuery.isLoading) return <p className="mt-2 flex items-center gap-2 text-[11px] text-[#77787d]"><LoaderCircle className="animate-spin" size={12} />Уншиж байна…</p>;
-  if (!rows.length) return <p className="mt-2 text-[11px] text-[#9a9ba0]">Идэвхтэй салбар алга.</p>;
+  if (stockQuery.isLoading) return <p className="mt-2 flex items-center gap-2 text-[11px] text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={12} />Уншиж байна…</p>;
+  if (!rows.length) return <p className="mt-2 text-[11px] text-[var(--a-faint)]">Идэвхтэй салбар алга.</p>;
 
   return (
-    <div className="mt-2 grid gap-1.5 rounded-xl bg-[#f8f5ef] p-2.5">
-      <p className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-[.08em] text-[#57585e]"><Store size={12} />САЛБАР ТУС БҮРИЙН ҮЛДЭГДЭЛ</p>
+    <div className="mt-2 grid gap-1.5 rounded-xl bg-[var(--a-soft)] p-2.5">
+      <p className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-[.08em] text-[var(--a-text-soft)]"><Store size={12} />САЛБАР ТУС БҮРИЙН ҮЛДЭГДЭЛ</p>
       {rows.map(row => {
         const draft = drafts[row.branchId] ?? String(row.stockQuantity);
         const isDirty = draft !== String(row.stockQuantity);
         return (
-          <div key={row.branchId} className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5">
+          <div key={row.branchId} className="flex items-center gap-2 rounded-lg bg-[var(--a-card)] px-2.5 py-1.5">
             <span className="min-w-0 flex-1 truncate text-[11px] font-bold">{row.branchName}{row.isFulfillmentDefault && <span className="ml-1 text-[9px] font-extrabold text-[#f0b52d]">★ ҮНДСЭН</span>}</span>
             <input
               type="number" min="0" value={draft}
               onChange={event => setDrafts(current => ({ ...current, [row.branchId]: event.target.value }))}
-              className="h-8 w-20 shrink-0 rounded-md border border-black/10 px-2 text-right text-xs outline-none focus:border-[#3970a7]"
+              className="h-8 w-20 shrink-0 rounded-md border border-[var(--a-border)] px-2 text-right text-xs outline-none focus:border-[#3970a7]"
             />
             <button
               type="button" disabled={!isDirty || savingBranchId === row.branchId}

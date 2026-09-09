@@ -129,9 +129,9 @@ export default function AdminBrandsPanel() {
   return (
     <div>
       {!composerOpen && <button type="button" onClick={() => openComposer()} disabled={availableRealBrands.length === 0} className="inline-flex items-center gap-2 rounded-full bg-[#df1f3d] px-5 py-3 text-xs font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-50"><Tags size={15} /> Топ брэнд нэмэх</button>}
-      {!composerOpen && availableRealBrands.length === 0 && !realBrandsQuery.isLoading && <p className="mt-2 text-[11px] text-[#8b8c90]">Бүх бодит брэнд аль хэдийн нэмэгдсэн байна.</p>}
+      {!composerOpen && availableRealBrands.length === 0 && !realBrandsQuery.isLoading && <p className="mt-2 text-[11px] text-[var(--a-faint)]">Бүх бодит брэнд аль хэдийн нэмэгдсэн байна.</p>}
 
-      {brandsQuery.isLoading && <p className="mt-5 flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>}
+      {brandsQuery.isLoading && <p className="mt-5 flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>}
 
       {!brandsQuery.isLoading && !composerOpen && (
         <div className="mt-5">
@@ -139,22 +139,22 @@ export default function AdminBrandsPanel() {
             rows={brands}
             getRowId={brand => brand.id}
             cardListClassName="grid gap-2"
-            emptyMessage={<p className="rounded-2xl bg-[#f8f5ef] px-4 py-8 text-center text-xs text-[#77787d]">Одоогоор Топ брэнд алга. Дээрх товчоор эхнийхээ нэмээрэй.</p>}
+            emptyMessage={<p className="rounded-2xl bg-[var(--a-soft)] px-4 py-8 text-center text-xs text-[var(--a-muted)]">Одоогоор Топ брэнд алга. Дээрх товчоор эхнийхээ нэмээрэй.</p>}
             renderRow={brand => {
               const index = brands.findIndex(row => row.id === brand.id);
               return (
-                <div className="flex items-center gap-3 rounded-2xl border border-black/8 bg-white p-3">
-                  <img src={brand.photoUrl ?? "/product-placeholder.svg"} alt="" className="size-14 shrink-0 rounded-xl bg-[#f8f5ef] object-cover" />
+                <div className="flex items-center gap-3 rounded-2xl border border-[var(--a-border)] bg-[var(--a-card)] p-3">
+                  <img src={brand.photoUrl ?? "/product-placeholder.svg"} alt="" className="size-14 shrink-0 rounded-xl bg-[var(--a-soft)] object-cover" />
                   <div className="min-w-0 flex-1">
                     <strong className="block truncate text-sm">{brand.brandName}</strong>
-                    {brand.tagline ? <span className="mt-0.5 block truncate text-xs text-[#77787d]">{brand.tagline}</span> : null}
+                    {brand.tagline ? <span className="mt-0.5 block truncate text-xs text-[var(--a-muted)]">{brand.tagline}</span> : null}
                   </div>
-                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-extrabold ${brand.isActive ? "bg-[#e7f2ec] text-[#2c7650]" : "bg-[#f1f1f2] text-[#75767b]"}`}>{brand.isActive ? "Идэвхтэй" : "Идэвхгүй"}</span>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-extrabold ${brand.isActive ? "bg-[var(--a-pos-soft)] text-[var(--a-pos)]" : "bg-[var(--a-soft)] text-[var(--a-muted)]"}`}>{brand.isActive ? "Идэвхтэй" : "Идэвхгүй"}</span>
                   <div className="flex shrink-0 gap-1">
-                    <button type="button" disabled={index === 0} onClick={() => move(brand, -1)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-30" aria-label="Дээш зөөх"><ArrowUp size={15} /></button>
-                    <button type="button" disabled={index === brands.length - 1} onClick={() => move(brand, 1)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-30" aria-label="Доош зөөх"><ArrowDown size={15} /></button>
-                    <button type="button" onClick={() => openComposer(brand)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d]" aria-label={`${brand.brandName} засах`}><Pencil size={15} /></button>
-                    <button type="button" onClick={() => { if (window.confirm(`"${brand.brandName}"-г Топ брэндийн жагсаалтаас устгах уу?`)) deleteBrand.mutate({ id: brand.id }); }} className="rounded-full p-2 text-[#707176] transition hover:bg-[#fff0f2] hover:text-[#df1f3d]" aria-label={`${brand.brandName} устгах`}><Trash2 size={15} /></button>
+                    <button type="button" disabled={index === 0} onClick={() => move(brand, -1)} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)] hover:text-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-30" aria-label="Дээш зөөх"><ArrowUp size={15} /></button>
+                    <button type="button" disabled={index === brands.length - 1} onClick={() => move(brand, 1)} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)] hover:text-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-30" aria-label="Доош зөөх"><ArrowDown size={15} /></button>
+                    <button type="button" onClick={() => openComposer(brand)} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)] hover:text-[#df1f3d]" aria-label={`${brand.brandName} засах`}><Pencil size={15} /></button>
+                    <button type="button" onClick={() => { if (window.confirm(`"${brand.brandName}"-г Топ брэндийн жагсаалтаас устгах уу?`)) deleteBrand.mutate({ id: brand.id }); }} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${brand.brandName} устгах`}><Trash2 size={15} /></button>
                   </div>
                 </div>
               );
@@ -163,37 +163,37 @@ export default function AdminBrandsPanel() {
         </div>
       )}
 
-      {composerOpen && <form onSubmit={save} className="mt-2 rounded-3xl border border-[#df1f3d]/25 bg-[#fff5f6] p-5">
+      {composerOpen && <form onSubmit={save} className="mt-2 rounded-3xl border border-[#df1f3d]/25 bg-[var(--a-neg-soft)] p-5">
         <div className="flex items-center justify-between gap-3">
           <div><p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">FEATURED BRAND {form.id ? "EDIT" : "CREATION"}</p><h3 className="mt-1 font-[var(--font-display)] text-xl font-semibold tracking-[-.05em]">{form.id ? "Топ брэнд засах" : "Шинэ топ брэнд нэмэх"}</h3></div>
-          <button type="button" onClick={closeComposer} className="text-xs font-bold text-[#707176]">Хаах</button>
+          <button type="button" onClick={closeComposer} className="text-xs font-bold text-[var(--a-muted)]">Хаах</button>
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">
             Брэнд (каталогийн бодит брэндээс сонгоно)
             {form.id
-              ? <input disabled value={form.brandName} className="h-11 rounded-xl border border-black/10 bg-[#f1f1f2] px-3 text-sm font-normal text-[#77787d] outline-none" />
-              : <select required value={form.brandName} onChange={event => setForm(current => ({ ...current, brandName: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]">
+              ? <input disabled value={form.brandName} className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-soft)] px-3 text-sm font-normal text-[var(--a-muted)] outline-none" />
+              : <select required value={form.brandName} onChange={event => setForm(current => ({ ...current, brandName: event.target.value }))} className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]">
                   <option value="">— сонгох —</option>
                   {availableRealBrands.map(row => <option key={row.brand} value={row.brand!}>{row.brand} ({row.count} бараа)</option>)}
                 </select>}
           </label>
-          <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Тайлбар үг (заавал биш)<input value={form.tagline} onChange={event => setForm(current => ({ ...current, tagline: event.target.value }))} placeholder="Жишээ: Японы тансаг арчилгаа" className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+          <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Тайлбар үг (заавал биш)<input value={form.tagline} onChange={event => setForm(current => ({ ...current, tagline: event.target.value }))} placeholder="Жишээ: Японы тансаг арчилгаа" className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
           <div className="grid gap-1.5 text-xs font-bold sm:col-span-2">
             <span>Зураг (заавал биш — хоосон бол энэ брэндийн хамгийн сүүлд нэмэгдсэн бодит бүтээгдэхүүний зургийг автоматаар ашиглана)</span>
             <div className="flex items-center gap-3">
-              <img src={form.photoUrl || "/product-placeholder.svg"} alt="" className="size-14 shrink-0 rounded-xl border border-black/10 bg-[#f8f5ef] object-cover" />
-              <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-black/10 bg-white px-4 text-xs font-bold text-[#57585e] transition hover:border-[#df1f3d] hover:text-[#df1f3d]">
+              <img src={form.photoUrl || "/product-placeholder.svg"} alt="" className="size-14 shrink-0 rounded-xl border border-[var(--a-border)] bg-[var(--a-soft)] object-cover" />
+              <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-4 text-xs font-bold text-[var(--a-text-soft)] transition hover:border-[#df1f3d] hover:text-[#df1f3d]">
                 {isUploadingPhoto ? <LoaderCircle className="animate-spin" size={15} /> : <ImageUp size={15} />}
                 {isUploadingPhoto ? "Байршуулж байна…" : "Зураг байршуулах"}
                 <input type="file" accept="image/jpeg,image/png,image/webp" onChange={onPhotoFileSelected} disabled={isUploadingPhoto} className="hidden" />
               </label>
-              {form.photoUrl && <button type="button" onClick={() => setForm(current => ({ ...current, photoUrl: "" }))} className="text-xs font-bold text-[#8b8c90] transition hover:text-[#df1f3d]">Арилгах</button>}
+              {form.photoUrl && <button type="button" onClick={() => setForm(current => ({ ...current, photoUrl: "" }))} className="text-xs font-bold text-[var(--a-faint)] transition hover:text-[#df1f3d]">Арилгах</button>}
             </div>
-            <input value={form.photoUrl} onChange={event => setForm(current => ({ ...current, photoUrl: event.target.value }))} placeholder="эсвэл зургийн холбоос шууд бичих" className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" />
+            <input value={form.photoUrl} onChange={event => setForm(current => ({ ...current, photoUrl: event.target.value }))} placeholder="эсвэл зургийн холбоос шууд бичих" className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" />
           </div>
-          <label className="flex items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold"><input type="checkbox" checked={form.isActive} onChange={event => setForm(current => ({ ...current, isActive: event.target.checked }))} className="size-4 accent-[#df1f3d]" />Идэвхтэй (нүүр хуудсанд харагдана)</label>
+          <label className="flex items-center gap-3 rounded-xl bg-[var(--a-card)] px-3 py-3 text-sm font-bold"><input type="checkbox" checked={form.isActive} onChange={event => setForm(current => ({ ...current, isActive: event.target.checked }))} className="size-4 accent-[#df1f3d]" />Идэвхтэй (нүүр хуудсанд харагдана)</label>
         </div>
 
         <button type="submit" disabled={isSaving} className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#df1f3d] px-5 py-3 text-xs font-bold text-white disabled:opacity-60">{isSaving && <LoaderCircle className="animate-spin" size={15} />}{form.id ? "Өөрчлөлт хадгалах" : "Брэнд нэмэх"}</button>

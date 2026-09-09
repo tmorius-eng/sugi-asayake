@@ -98,42 +98,42 @@ export default function AdminIntegrationsPanel() {
 
   return (
     <div>
-      <div className="rounded-3xl border border-black/8 bg-white p-5">
+      <div className="rounded-3xl border border-[var(--a-border)] bg-[var(--a-card)] p-5">
         <div className="flex items-center justify-between gap-3">
-          <div><p className="text-[10px] font-extrabold tracking-[.14em] text-[#3970a7]">QPAY</p><h3 className="mt-1 font-bold">QPay төлбөр</h3><p className="mt-1 text-xs text-[#77787d]">Тохиргоог `.env`-ээр удирддаг, энэ дэлгэцээс өөрчлөх боломжгүй.</p></div>
-          {qpayQuery.isLoading ? <LoaderCircle className="animate-spin text-[#77787d]" size={16} /> : <span className={`rounded-full px-3 py-1 text-[10px] font-extrabold ${qpayQuery.data?.configured ? "bg-[#e7f2ec] text-[#2c7650]" : "bg-[#f1f1f2] text-[#75767b]"}`}>{qpayQuery.data?.configured ? "Тохируулагдсан" : "Тохируулаагүй"}</span>}
+          <div><p className="text-[10px] font-extrabold tracking-[.14em] text-[var(--a-info)]">QPAY</p><h3 className="mt-1 font-bold">QPay төлбөр</h3><p className="mt-1 text-xs text-[var(--a-muted)]">Тохиргоог `.env`-ээр удирддаг, энэ дэлгэцээс өөрчлөх боломжгүй.</p></div>
+          {qpayQuery.isLoading ? <LoaderCircle className="animate-spin text-[var(--a-muted)]" size={16} /> : <span className={`rounded-full px-3 py-1 text-[10px] font-extrabold ${qpayQuery.data?.configured ? "bg-[var(--a-pos-soft)] text-[var(--a-pos)]" : "bg-[var(--a-soft)] text-[var(--a-muted)]"}`}>{qpayQuery.data?.configured ? "Тохируулагдсан" : "Тохируулаагүй"}</span>}
         </div>
       </div>
 
-      {integrationsQuery.isLoading && <p className="mt-5 flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>}
+      {integrationsQuery.isLoading && <p className="mt-5 flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>}
 
       <div className="mt-5 grid gap-3">
         {integrations.map(row => {
           const meta = providerMeta[row.provider];
           const isEditing = editingProvider === row.provider;
           return (
-            <div key={row.provider} className="rounded-3xl border border-black/8 bg-white p-5">
+            <div key={row.provider} className="rounded-3xl border border-[var(--a-border)] bg-[var(--a-card)] p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div><p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">{row.provider.toUpperCase()}</p><h3 className="mt-1 font-bold">{meta.label}</h3><p className="mt-1 text-xs text-[#77787d]">{meta.note}</p>{row.hasCredentials ? <p className="mt-1 text-[11px] text-[#8b8c90]">{row.configuredKeys.length} талбар тохируулагдсан: {row.configuredKeys.join(", ")}</p> : <p className="mt-1 text-[11px] text-[#8b8c90]">Тохиргоо оруулаагүй байна.</p>}{!meta.wiredUp && <p className="mt-2 flex items-start gap-1.5 text-[11px] font-bold text-[#9b6417]"><TriangleAlert size={13} className="mt-0.5 shrink-0" />"Идэвхтэй" гэдэг нь зөвхөн энэ тохиргоог хадгалсан гэсэн үг — захиалга/төлбөрийн урсгалд одоогоор холбогдоогүй тул харилцагчид харагдахгүй, нөлөөлөхгүй.</p>}{meta.guidance && <p className="mt-2 rounded-xl bg-[#eef3f8] p-3 text-[11px] leading-4 text-[#3970a7]">{meta.guidance}</p>}</div>
+                <div><p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">{row.provider.toUpperCase()}</p><h3 className="mt-1 font-bold">{meta.label}</h3><p className="mt-1 text-xs text-[var(--a-muted)]">{meta.note}</p>{row.hasCredentials ? <p className="mt-1 text-[11px] text-[var(--a-faint)]">{row.configuredKeys.length} талбар тохируулагдсан: {row.configuredKeys.join(", ")}</p> : <p className="mt-1 text-[11px] text-[var(--a-faint)]">Тохиргоо оруулаагүй байна.</p>}{!meta.wiredUp && <p className="mt-2 flex items-start gap-1.5 text-[11px] font-bold text-[var(--a-warn)]"><TriangleAlert size={13} className="mt-0.5 shrink-0" />"Идэвхтэй" гэдэг нь зөвхөн энэ тохиргоог хадгалсан гэсэн үг — захиалга/төлбөрийн урсгалд одоогоор холбогдоогүй тул харилцагчид харагдахгүй, нөлөөлөхгүй.</p>}{meta.guidance && <p className="mt-2 rounded-xl bg-[var(--a-info-soft)] p-3 text-[11px] leading-4 text-[var(--a-info)]">{meta.guidance}</p>}</div>
                 <div className="flex items-center gap-2">
-                  <button type="button" onClick={() => toggleActive(row)} disabled={updateIntegration.isPending} className={`rounded-full px-3 py-1.5 text-[10px] font-extrabold transition ${row.isActive ? "bg-[#e7f2ec] text-[#2c7650]" : "bg-[#f1f1f2] text-[#75767b]"}`}>{row.isActive ? "Идэвхтэй" : "Идэвхгүй"}</button>
-                  <button type="button" onClick={() => { setEditingProvider(row.provider); openEditor(); }} className="inline-flex items-center gap-1.5 rounded-full border border-black/10 px-3 py-1.5 text-[10px] font-extrabold text-[#57585e] transition hover:border-[#df1f3d] hover:text-[#df1f3d]"><KeyRound size={12} />Тохиргоо засах</button>
+                  <button type="button" onClick={() => toggleActive(row)} disabled={updateIntegration.isPending} className={`rounded-full px-3 py-1.5 text-[10px] font-extrabold transition ${row.isActive ? "bg-[var(--a-pos-soft)] text-[var(--a-pos)]" : "bg-[var(--a-soft)] text-[var(--a-muted)]"}`}>{row.isActive ? "Идэвхтэй" : "Идэвхгүй"}</button>
+                  <button type="button" onClick={() => { setEditingProvider(row.provider); openEditor(); }} className="inline-flex items-center gap-1.5 rounded-full border border-[var(--a-border)] px-3 py-1.5 text-[10px] font-extrabold text-[var(--a-text-soft)] transition hover:border-[#df1f3d] hover:text-[#df1f3d]"><KeyRound size={12} />Тохиргоо засах</button>
                 </div>
               </div>
 
-              {isEditing && <div className="mt-4 rounded-2xl bg-[#f8f5ef] p-4">
-                <p className="text-[10px] font-extrabold tracking-[.08em] text-[#3970a7]">ШИНЭ ТОХИРГОО (одоо байгааг харуулахгүй, зөвхөн энд бичсэн утгыг хадгална)</p>
+              {isEditing && <div className="mt-4 rounded-2xl bg-[var(--a-soft)] p-4">
+                <p className="text-[10px] font-extrabold tracking-[.08em] text-[var(--a-info)]">ШИНЭ ТОХИРГОО (одоо байгааг харуулахгүй, зөвхөн энд бичсэн утгыг хадгална)</p>
                 <div className="mt-3 grid gap-2">
                   {rows.map((r, index) => <div key={index} className="flex gap-2">
-                    <input value={r.key} onChange={event => setRows(current => current.map((item, i) => i === index ? { ...item, key: event.target.value } : item))} placeholder="Түлхүүр (жишээ: apiKey)" className="h-10 w-44 shrink-0 rounded-lg border border-black/10 px-2.5 text-xs outline-none focus:border-[#df1f3d]" />
-                    <input value={r.value} onChange={event => setRows(current => current.map((item, i) => i === index ? { ...item, value: event.target.value } : item))} placeholder="Утга" type="password" className="h-10 flex-1 rounded-lg border border-black/10 px-2.5 text-xs outline-none focus:border-[#df1f3d]" />
-                    <button type="button" onClick={() => setRows(current => current.filter((_, i) => i !== index))} className="grid size-10 shrink-0 place-items-center rounded-lg text-[#707176] hover:bg-[#fff0f2] hover:text-[#df1f3d]" aria-label="Мөр хасах"><Trash2 size={14} /></button>
+                    <input value={r.key} onChange={event => setRows(current => current.map((item, i) => i === index ? { ...item, key: event.target.value } : item))} placeholder="Түлхүүр (жишээ: apiKey)" className="h-10 w-44 shrink-0 rounded-lg border border-[var(--a-border)] px-2.5 text-xs outline-none focus:border-[#df1f3d]" />
+                    <input value={r.value} onChange={event => setRows(current => current.map((item, i) => i === index ? { ...item, value: event.target.value } : item))} placeholder="Утга" type="password" className="h-10 flex-1 rounded-lg border border-[var(--a-border)] px-2.5 text-xs outline-none focus:border-[#df1f3d]" />
+                    <button type="button" onClick={() => setRows(current => current.filter((_, i) => i !== index))} className="grid size-10 shrink-0 place-items-center rounded-lg text-[var(--a-muted)] hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label="Мөр хасах"><Trash2 size={14} /></button>
                   </div>)}
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <button type="button" onClick={() => setRows(current => [...current, { key: "", value: "" }])} className="inline-flex items-center gap-1.5 rounded-full border border-black/10 px-3 py-2 text-[10px] font-extrabold text-[#57585e] hover:border-[#df1f3d] hover:text-[#df1f3d]"><Plus size={12} />Мөр нэмэх</button>
+                  <button type="button" onClick={() => setRows(current => [...current, { key: "", value: "" }])} className="inline-flex items-center gap-1.5 rounded-full border border-[var(--a-border)] px-3 py-2 text-[10px] font-extrabold text-[var(--a-text-soft)] hover:border-[#df1f3d] hover:text-[#df1f3d]"><Plus size={12} />Мөр нэмэх</button>
                   <button type="button" onClick={() => saveCredentials(row.provider)} disabled={updateIntegration.isPending} className="inline-flex items-center gap-2 rounded-full bg-[#df1f3d] px-4 py-2 text-[10px] font-extrabold text-white disabled:opacity-60">{updateIntegration.isPending && <LoaderCircle className="animate-spin" size={12} />}Хадгалах</button>
-                  <button type="button" onClick={closeEditor} className="text-[10px] font-extrabold text-[#707176]">Цуцлах</button>
+                  <button type="button" onClick={closeEditor} className="text-[10px] font-extrabold text-[var(--a-muted)]">Цуцлах</button>
                 </div>
               </div>}
             </div>

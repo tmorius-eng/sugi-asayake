@@ -35,27 +35,27 @@ export default function AdminReviewsPanel() {
   });
 
   type Review = (typeof reviews)[number];
-  const headerCell = "border-b border-black/8 pb-2";
-  const bodyCell = "border-b border-black/6 py-3";
+  const headerCell = "border-b border-[var(--a-border)] pb-2";
+  const bodyCell = "border-b border-[var(--a-border)] py-3";
   const columns: GenericListColumn<Review>[] = [
-    { id: "date", header: "ОГНОО", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[#6f7075] whitespace-nowrap`, render: review => formatDateTime(review.createdAt) },
-    { id: "product", header: "БҮТЭЭГДЭХҮҮН", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs`, render: review => <a href={`/product/${review.productSlug}`} target="_blank" rel="noreferrer" className="font-bold text-[#17181b] hover:text-[#df1f3d]">{review.productName}</a> },
+    { id: "date", header: "ОГНОО", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[var(--a-muted)] whitespace-nowrap`, render: review => formatDateTime(review.createdAt) },
+    { id: "product", header: "БҮТЭЭГДЭХҮҮН", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs`, render: review => <a href={`/product/${review.productSlug}`} target="_blank" rel="noreferrer" className="font-bold text-[var(--a-text)] hover:text-[#df1f3d]">{review.productName}</a> },
     { id: "rating", header: "ҮНЭЛГЭЭ", headerClassName: headerCell, cellClassName: bodyCell, render: review => <Stars value={review.rating} /> },
-    { id: "comment", header: "СЭТГЭГДЭЛ", headerClassName: headerCell, cellClassName: `${bodyCell} max-w-xs text-xs text-[#57585e]`, render: review => review.comment ?? <span className="text-[#a9a49a]">Сэтгэгдэл бичээгүй</span> },
-    { id: "author", header: "ЗОХИОГЧ", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs`, render: review => <><span className="block font-bold">{review.reviewerName ?? "Нэргүй"}</span><span className="text-[#9a9ba0]">{review.reviewerEmail}</span></> },
+    { id: "comment", header: "СЭТГЭГДЭЛ", headerClassName: headerCell, cellClassName: `${bodyCell} max-w-xs text-xs text-[var(--a-text-soft)]`, render: review => review.comment ?? <span className="text-[var(--a-faint)]">Сэтгэгдэл бичээгүй</span> },
+    { id: "author", header: "ЗОХИОГЧ", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs`, render: review => <><span className="block font-bold">{review.reviewerName ?? "Нэргүй"}</span><span className="text-[var(--a-faint)]">{review.reviewerEmail}</span></> },
     {
       id: "status", header: "ТӨЛӨВ", headerClassName: headerCell, cellClassName: bodyCell,
       render: review => review.isApproved
-        ? <span className="inline-flex items-center gap-1 rounded-full bg-[#e7f2ec] px-2.5 py-1 text-[10px] font-extrabold text-[#2c7650]"><CheckCircle2 size={11} />Идэвхтэй</span>
-        : <span className="inline-flex items-center gap-1 rounded-full bg-[#fff0f2] px-2.5 py-1 text-[10px] font-extrabold text-[#a51630]"><MessageSquareOff size={11} />Нуугдсан</span>,
+        ? <span className="inline-flex items-center gap-1 rounded-full bg-[var(--a-pos-soft)] px-2.5 py-1 text-[10px] font-extrabold text-[var(--a-pos)]"><CheckCircle2 size={11} />Идэвхтэй</span>
+        : <span className="inline-flex items-center gap-1 rounded-full bg-[var(--a-neg-soft)] px-2.5 py-1 text-[10px] font-extrabold text-[var(--a-neg)]"><MessageSquareOff size={11} />Нуугдсан</span>,
     },
   ];
 
   return (
     <div>
-      <div className="flex flex-wrap items-end gap-3 rounded-2xl bg-[#f8f5ef] p-4">
+      <div className="flex flex-wrap items-end gap-3 rounded-2xl bg-[var(--a-soft)] p-4">
         <label className="grid gap-1.5 text-xs font-bold">Төлөв
-          <select value={statusFilter} onChange={event => setStatusFilter(event.target.value as typeof statusFilter)} className="h-10 rounded-lg border border-black/10 bg-white px-2 text-xs font-normal outline-none focus:border-[#df1f3d]">
+          <select value={statusFilter} onChange={event => setStatusFilter(event.target.value as typeof statusFilter)} className="h-10 rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] px-2 text-xs font-normal outline-none focus:border-[#df1f3d]">
             <option value="all">Бүгд</option>
             <option value="approved">Идэвхтэй</option>
             <option value="hidden">Нуугдсан</option>
@@ -63,8 +63,8 @@ export default function AdminReviewsPanel() {
         </label>
       </div>
 
-      {query.isLoading && <p className="mt-5 flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>}
-      {query.error && <p className="mt-5 rounded-2xl bg-[#fff0f2] p-4 text-xs text-[#a51630]">{query.error.message}</p>}
+      {query.isLoading && <p className="mt-5 flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>}
+      {query.error && <p className="mt-5 rounded-2xl bg-[var(--a-neg-soft)] p-4 text-xs text-[var(--a-neg)]">{query.error.message}</p>}
 
       {!query.isLoading && !query.error && (
         <div className="mt-5">
@@ -76,11 +76,11 @@ export default function AdminReviewsPanel() {
             rowClassName="text-sm align-top"
             actionsHeaderClassName={headerCell}
             actionsCellClassName={`${bodyCell} text-right whitespace-nowrap`}
-            emptyMessage={<><Star className="mx-auto mb-2 text-[#a9a49a]" size={22} />Тохирох сэтгэгдэл олдсонгүй.</>}
+            emptyMessage={<><Star className="mx-auto mb-2 text-[var(--a-faint)]" size={22} />Тохирох сэтгэгдэл олдсонгүй.</>}
             rowActions={review => (
               <>
-                <button type="button" onClick={() => updateApproval.mutate({ id: review.id, isApproved: !review.isApproved })} disabled={updateApproval.isPending} className="mr-2 rounded-full border border-black/10 px-3 py-1.5 text-[11px] font-bold text-[#57585e] transition hover:border-[#df1f3d] hover:text-[#df1f3d] disabled:opacity-50">{review.isApproved ? <EyeOff size={13} className="inline" /> : <CheckCircle2 size={13} className="inline" />} {review.isApproved ? "Нуух" : "Сэргээх"}</button>
-                <button type="button" onClick={() => { if (window.confirm("Энэ сэтгэгдлийг бүрмөсөн устгах уу?")) deleteReview.mutate({ id: review.id }); }} disabled={deleteReview.isPending} className="rounded-full border border-[#df1f3d]/25 px-3 py-1.5 text-[11px] font-bold text-[#a51630] transition hover:border-[#df1f3d] disabled:opacity-50"><Trash2 size={13} className="inline" /> Устгах</button>
+                <button type="button" onClick={() => updateApproval.mutate({ id: review.id, isApproved: !review.isApproved })} disabled={updateApproval.isPending} className="mr-2 rounded-full border border-[var(--a-border)] px-3 py-1.5 text-[11px] font-bold text-[var(--a-text-soft)] transition hover:border-[#df1f3d] hover:text-[#df1f3d] disabled:opacity-50">{review.isApproved ? <EyeOff size={13} className="inline" /> : <CheckCircle2 size={13} className="inline" />} {review.isApproved ? "Нуух" : "Сэргээх"}</button>
+                <button type="button" onClick={() => { if (window.confirm("Энэ сэтгэгдлийг бүрмөсөн устгах уу?")) deleteReview.mutate({ id: review.id }); }} disabled={deleteReview.isPending} className="rounded-full border border-[#df1f3d]/25 px-3 py-1.5 text-[11px] font-bold text-[var(--a-neg)] transition hover:border-[#df1f3d] disabled:opacity-50"><Trash2 size={13} className="inline" /> Устгах</button>
               </>
             )}
           />

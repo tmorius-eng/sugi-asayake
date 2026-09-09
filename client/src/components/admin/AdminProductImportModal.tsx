@@ -162,7 +162,7 @@ export default function AdminProductImportModal({ open, onOpenChange }: { open: 
         </DialogDescription>
 
         {step === "pick" && (
-          <label className="mt-3 flex h-40 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-black/15 bg-[#f8f5ef] text-xs font-normal text-[#8b8c90] transition hover:border-[#df1f3d] hover:text-[#df1f3d]">
+          <label className="mt-3 flex h-40 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-black/15 bg-[var(--a-soft)] text-xs font-normal text-[var(--a-faint)] transition hover:border-[#df1f3d] hover:text-[#df1f3d]">
             <FileUp size={22} />
             CSV файл сонгох
             <input type="file" accept=".csv,text/csv" onChange={handleFile} className="hidden" />
@@ -171,11 +171,11 @@ export default function AdminProductImportModal({ open, onOpenChange }: { open: 
 
         {step === "map" && (
           <div className="grid gap-3">
-            <div className="grid max-h-72 gap-2 overflow-y-auto rounded-xl border border-black/10 p-3">
+            <div className="grid max-h-72 gap-2 overflow-y-auto rounded-xl border border-[var(--a-border)] p-3">
               {headers.map(header => (
                 <div key={header} className="flex items-center justify-between gap-3">
                   <span className="min-w-0 flex-1 truncate text-xs font-bold">{header}</span>
-                  <select value={mapping[header] ?? IGNORE_FIELD} onChange={event => setMapping(current => ({ ...current, [header]: event.target.value }))} className="h-9 w-56 rounded-lg border border-black/10 bg-white px-2 text-xs font-normal outline-none focus:border-[#df1f3d]">
+                  <select value={mapping[header] ?? IGNORE_FIELD} onChange={event => setMapping(current => ({ ...current, [header]: event.target.value }))} className="h-9 w-56 rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] px-2 text-xs font-normal outline-none focus:border-[#df1f3d]">
                     <option value={IGNORE_FIELD}>Алгасах</option>
                     {IMPORT_FIELDS.map(field => <option key={field.key} value={field.key}>{field.label}{field.required ? " *" : ""}</option>)}
                   </select>
@@ -186,8 +186,8 @@ export default function AdminProductImportModal({ open, onOpenChange }: { open: 
               <input type="checkbox" checked={allowUpdateExisting} onChange={event => setAllowUpdateExisting(event.target.checked)} className="size-4 accent-[#df1f3d]" />
               Одоо байгаа SKU-г шинэчлэх зөвшөөрөх
             </label>
-            <p className="text-[11px] text-[#8b8c90]">{rawRows.length} мөр олдлоо.{allowUpdateExisting ? " Файлд байгаа SKU-тай ижил бүтээгдэхүүнийг шинэ утгаар дарж бичнэ." : " Одоо байгаа SKU-тай мөр алгасагдана — устгаагүй."}</p>
-            <button type="button" disabled={importCsv.isPending} onClick={runPreview} className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#17181b] px-5 text-xs font-bold text-white transition hover:bg-[#df1f3d] disabled:opacity-60">
+            <p className="text-[11px] text-[var(--a-faint)]">{rawRows.length} мөр олдлоо.{allowUpdateExisting ? " Файлд байгаа SKU-тай ижил бүтээгдэхүүнийг шинэ утгаар дарж бичнэ." : " Одоо байгаа SKU-тай мөр алгасагдана — устгаагүй."}</p>
+            <button type="button" disabled={importCsv.isPending} onClick={runPreview} className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[var(--a-btn-dark)] px-5 text-xs font-bold text-white transition hover:bg-[#df1f3d] disabled:opacity-60">
               {importCsv.isPending ? <LoaderCircle className="animate-spin" size={15} /> : <Upload size={15} />} Урьдчилан харах
             </button>
           </div>
@@ -200,13 +200,13 @@ export default function AdminProductImportModal({ open, onOpenChange }: { open: 
               <GenericListView<ImportResult> rows={previewResults} getRowId={r => r.row} columns={resultColumns} pageSize={50} itemLabel="мөр" />
             </div>
             {previewResults.some(r => r.outcome === "error") && (
-              <div className="flex items-start gap-2 rounded-xl bg-[#fff0f2] p-3 text-xs text-[#a51630]"><AlertTriangle size={15} className="mt-0.5 shrink-0" /> Алдаатай мөрүүд импортлогдохгүй. Үлдсэн мөрүүдийг баталгаажуулах боломжтой.</div>
+              <div className="flex items-start gap-2 rounded-xl bg-[var(--a-neg-soft)] p-3 text-xs text-[var(--a-neg)]"><AlertTriangle size={15} className="mt-0.5 shrink-0" /> Алдаатай мөрүүд импортлогдохгүй. Үлдсэн мөрүүдийг баталгаажуулах боломжтой.</div>
             )}
             <div className="flex gap-2">
               <button type="button" disabled={importCsv.isPending || previewResults.every(r => r.outcome === "error" || r.outcome === "skipped")} onClick={commit} className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#df1f3d] px-5 text-xs font-bold text-white disabled:opacity-60">
                 {importCsv.isPending ? <LoaderCircle className="animate-spin" size={15} /> : <CheckCircle2 size={15} />} Баталгаажуулах ({previewResults.filter(r => r.outcome === "created" || r.outcome === "updated").length})
               </button>
-              <button type="button" onClick={() => setStep("map")} className="h-11 rounded-full border border-black/10 px-5 text-xs font-bold text-[#57585e]">Буцах</button>
+              <button type="button" onClick={() => setStep("map")} className="h-11 rounded-full border border-[var(--a-border)] px-5 text-xs font-bold text-[var(--a-text-soft)]">Буцах</button>
             </div>
           </div>
         )}
@@ -219,9 +219,9 @@ export default function AdminProductImportModal({ open, onOpenChange }: { open: 
             </div>
             <div className="flex gap-2">
               {finalResults.some(r => r.outcome === "error") && (
-                <button type="button" onClick={() => downloadFailedRows(finalResults)} className="inline-flex h-10 items-center gap-2 rounded-full border border-black/10 px-4 text-xs font-bold text-[#57585e]"><Download size={14} /> Алдаатай мөрүүдийг татах</button>
+                <button type="button" onClick={() => downloadFailedRows(finalResults)} className="inline-flex h-10 items-center gap-2 rounded-full border border-[var(--a-border)] px-4 text-xs font-bold text-[var(--a-text-soft)]"><Download size={14} /> Алдаатай мөрүүдийг татах</button>
               )}
-              <button type="button" onClick={() => onOpenChange(false)} className="h-10 rounded-full bg-[#17181b] px-4 text-xs font-bold text-white">Хаах</button>
+              <button type="button" onClick={() => onOpenChange(false)} className="h-10 rounded-full bg-[var(--a-btn-dark)] px-4 text-xs font-bold text-white">Хаах</button>
             </div>
           </div>
         )}

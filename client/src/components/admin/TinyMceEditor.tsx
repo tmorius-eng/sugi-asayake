@@ -13,14 +13,23 @@ import "tinymce/models/dom";
 import "tinymce/plugins/lists";
 import "tinymce/plugins/link";
 import "tinymce/plugins/wordcount";
-import "tinymce/skins/ui/oxide/skin.min.css";
+// Both skins are imported as inline strings and injected per theme via
+// `content_style` + a <style> tag below -- TinyMCE's `skin: false` mode means
+// WE own the chrome CSS, so a plain side-effect import of one skin would pin
+// the editor to light forever (it did: the toolbar stayed white on a dark
+// admin, found by the dark-mode audit).
+import skinCss from "tinymce/skins/ui/oxide/skin.min.css?inline";
+import skinDarkCss from "tinymce/skins/ui/oxide-dark/skin.min.css?inline";
 // `?inline` (Vite-specific): returns the CSS as a string instead of
 // injecting it into the parent document -- these two stylesheets style the
 // *editable content area*, not the toolbar chrome around it, so they're
 // handed to TinyMCE via `content_style` instead of a normal side-effect
 // import (which would leak WYSIWYG typography onto the admin page itself).
 import contentUiCss from "tinymce/skins/ui/oxide/content.css?inline";
+import contentUiDarkCss from "tinymce/skins/ui/oxide-dark/content.css?inline";
 import contentCss from "tinymce/skins/content/default/content.css?inline";
+import contentDarkCss from "tinymce/skins/content/dark/content.css?inline";
+import { useAdminTheme } from "@/lib/adminTheme";
 
 /**
  * Deliberately uncontrolled (`initialValue`, not `value`): TinyMCE React's
@@ -37,7 +46,13 @@ export default function TinyMceEditor({ initialValue, onChange, onRequestMedia }
   onChange: (html: string) => void;
   onRequestMedia: () => Promise<string | null>;
 }) {
+  const theme = useAdminTheme();
+  const isDark = theme === "dark";
   return (
+    <>
+      {/* The skin stylesheet for the *current* theme only. Keyed so switching
+          themes swaps it wholesale rather than layering one over the other. */}
+      <style key={theme}>{isDark ? skinDarkCss : skinCss}</style>
     <Editor
       licenseKey="gpl"
       tinymceScriptSrc={[]}
@@ -94,5 +109,6 @@ export default function TinyMceEditor({ initialValue, onChange, onRequestMedia }
         },
       }}
     />
+    </>
   );
 }

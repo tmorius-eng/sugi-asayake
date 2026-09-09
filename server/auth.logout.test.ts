@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { appRouter } from "./routers";
-import { COOKIE_NAME } from "../shared/const";
+import { ADMIN_FACE_COOKIE_NAME, COOKIE_NAME } from "../shared/const";
 import type { TrpcContext } from "./_core/context";
 
 type CookieCall = {
@@ -49,14 +49,30 @@ describe("auth.logout", () => {
     const result = await caller.auth.logout();
 
     expect(result).toEqual({ success: true });
-    expect(clearedCookies).toHaveLength(1);
-    expect(clearedCookies[0]?.name).toBe(COOKIE_NAME);
-    expect(clearedCookies[0]?.options).toMatchObject({
+    const session = clearedCookies.find(c => c.name === COOKIE_NAME);
+    expect(session).toBeDefined();
+    expect(session?.options).toMatchObject({
       maxAge: -1,
       secure: true,
       sameSite: "lax",
       httpOnly: true,
       path: "/",
     });
+  });
+
+  it("also clears the admin face-verification cookie", async () => {
+    // Admin face gate (2026-09-08): a real security bug, found by Tom logging
+    // out and straight back in and walking into /admin with no face check.
+    // The face-proof cookie lives for 8 hours, so unless logout kills it too,
+    // signing out and back in silently reuses the previous verification --
+    // defeating the "check on every login" requirement the gate exists for.
+    const { ctx, clearedCookies } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await caller.auth.logout();
+
+    const face = clearedCookies.find(c => c.name === ADMIN_FACE_COOKIE_NAME);
+    expect(face).toBeDefined();
+    expect(face?.options).toMatchObject({ httpOnly: true, sameSite: "lax", path: "/" });
   });
 });

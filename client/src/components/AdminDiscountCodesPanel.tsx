@@ -102,25 +102,25 @@ export default function AdminDiscountCodesPanel() {
   };
 
   const codes = (codesQuery.data ?? []) as DiscountCodeRow[];
-  const headerCell = "border-b border-black/8 pb-2";
-  const bodyCell = "border-b border-black/6 py-3";
+  const headerCell = "border-b border-[var(--a-border)] pb-2";
+  const bodyCell = "border-b border-[var(--a-border)] py-3";
   const columns: GenericListColumn<DiscountCodeRow>[] = [
     {
       id: "code", header: "КОД", headerClassName: headerCell, cellClassName: bodyCell,
       render: code => {
         const expired = code.expiresAt ? new Date(code.expiresAt) < new Date() : false;
-        return <><strong className="block font-mono">{code.code}</strong>{code.expiresAt ? <small className="mt-1 block text-[10px] font-bold tracking-[.06em] text-[#85868a]">{expired ? "Дууссан: " : "Хүчинтэй хүртэл: "}{new Date(code.expiresAt).toLocaleString("mn-MN")}</small> : null}</>;
+        return <><strong className="block font-mono">{code.code}</strong>{code.expiresAt ? <small className="mt-1 block text-[10px] font-bold tracking-[.06em] text-[var(--a-faint)]">{expired ? "Дууссан: " : "Хүчинтэй хүртэл: "}{new Date(code.expiresAt).toLocaleString("mn-MN")}</small> : null}</>;
       },
     },
     { id: "discount", header: "ХЯМДРАЛ", headerClassName: headerCell, cellClassName: `${bodyCell} font-bold`, render: code => code.type === "percent" ? `-${code.percentValue}%` : `-${formatMnt(code.fixedAmountMnt ?? 0)}` },
-    { id: "minimum", header: "МИНИМУМ", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[#6f7075]`, render: code => code.minSubtotalMnt > 0 ? `${formatMnt(code.minSubtotalMnt)}-с дээш` : "—" },
-    { id: "uses", header: "АШИГЛАЛТ", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[#6f7075]`, render: code => `${code.usesCount}${code.maxUses !== null ? ` / ${code.maxUses}` : ""}` },
+    { id: "minimum", header: "МИНИМУМ", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[var(--a-muted)]`, render: code => code.minSubtotalMnt > 0 ? `${formatMnt(code.minSubtotalMnt)}-с дээш` : "—" },
+    { id: "uses", header: "АШИГЛАЛТ", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[var(--a-muted)]`, render: code => `${code.usesCount}${code.maxUses !== null ? ` / ${code.maxUses}` : ""}` },
     {
       id: "status", header: "ТӨЛӨВ", headerClassName: headerCell, cellClassName: bodyCell,
       render: code => {
         const expired = code.expiresAt ? new Date(code.expiresAt) < new Date() : false;
         const usedUp = code.maxUses !== null && code.usesCount >= code.maxUses;
-        return <span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${code.isActive && !expired && !usedUp ? "bg-[#e7f2ec] text-[#2c7650]" : "bg-[#f1f1f2] text-[#75767b]"}`}>{!code.isActive ? "Идэвхгүй" : expired ? "Хугацаа дууссан" : usedUp ? "Дууссан" : "Идэвхтэй"}</span>;
+        return <span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${code.isActive && !expired && !usedUp ? "bg-[var(--a-pos-soft)] text-[var(--a-pos)]" : "bg-[var(--a-soft)] text-[var(--a-muted)]"}`}>{!code.isActive ? "Идэвхгүй" : expired ? "Хугацаа дууссан" : usedUp ? "Дууссан" : "Идэвхтэй"}</span>;
       },
     },
   ];
@@ -129,7 +129,7 @@ export default function AdminDiscountCodesPanel() {
     <div>
       {!composerOpen && <button type="button" onClick={() => openComposer()} className="inline-flex items-center gap-2 rounded-full bg-[#df1f3d] px-5 py-3 text-xs font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97]"><Tag size={15} /> Шинэ хямдралын код үүсгэх</button>}
 
-      {codesQuery.isLoading && <p className="mt-5 flex items-center gap-2 text-xs text-[#77787d]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>}
+      {codesQuery.isLoading && <p className="mt-5 flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>}
 
       {!codesQuery.isLoading && !composerOpen && (
         <div className="mt-5">
@@ -143,30 +143,30 @@ export default function AdminDiscountCodesPanel() {
             emptyMessage="Одоогоор хямдралын код алга. Дээрх товчоор эхнийхээ үүсгээрэй."
             rowActions={code => (
               <div className="flex justify-end gap-1">
-                <button type="button" onClick={() => openComposer(code)} className="rounded-full p-2 text-[#707176] transition hover:bg-[#f8f5ef] hover:text-[#df1f3d]" aria-label={`${code.code} засах`}><Pencil size={15} /></button>
-                <button type="button" onClick={() => { if (window.confirm(`"${code.code}" кодыг бүрмөсөн устгах уу?`)) deleteCode.mutate({ id: code.id }); }} className="rounded-full p-2 text-[#707176] transition hover:bg-[#fff0f2] hover:text-[#df1f3d]" aria-label={`${code.code} устгах`}><Trash2 size={15} /></button>
+                <button type="button" onClick={() => openComposer(code)} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)] hover:text-[#df1f3d]" aria-label={`${code.code} засах`}><Pencil size={15} /></button>
+                <button type="button" onClick={() => { if (window.confirm(`"${code.code}" кодыг бүрмөсөн устгах уу?`)) deleteCode.mutate({ id: code.id }); }} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${code.code} устгах`}><Trash2 size={15} /></button>
               </div>
             )}
           />
         </div>
       )}
 
-      {composerOpen && <form onSubmit={save} className="mt-2 rounded-3xl border border-[#df1f3d]/25 bg-[#fff5f6] p-5">
+      {composerOpen && <form onSubmit={save} className="mt-2 rounded-3xl border border-[#df1f3d]/25 bg-[var(--a-neg-soft)] p-5">
         <div className="flex items-center justify-between gap-3">
           <div><p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">DISCOUNT CODE {form.id ? "EDIT" : "CREATION"}</p><h3 className="mt-1 font-[var(--font-display)] text-xl font-semibold tracking-[-.05em]">{form.id ? "Хямдралын код засах" : "Шинэ хямдралын код үүсгэх"}</h3></div>
-          <button type="button" onClick={closeComposer} className="text-xs font-bold text-[#707176]">Хаах</button>
+          <button type="button" onClick={closeComposer} className="text-xs font-bold text-[var(--a-muted)]">Хаах</button>
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <label className="grid gap-1.5 text-xs font-bold">Код<input required value={form.code} onChange={event => setForm(current => ({ ...current, code: event.target.value.toUpperCase() }))} placeholder="SALE10" className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-mono font-normal outline-none focus:border-[#df1f3d]" /></label>
-          <label className="grid gap-1.5 text-xs font-bold">Хямдралын төрөл<select value={form.type} onChange={event => setForm(current => ({ ...current, type: event.target.value as "percent" | "fixed" }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]"><option value="percent">Хувь (%)</option><option value="fixed">Тогтмол дүн (₮)</option></select></label>
+          <label className="grid gap-1.5 text-xs font-bold">Код<input required value={form.code} onChange={event => setForm(current => ({ ...current, code: event.target.value.toUpperCase() }))} placeholder="SALE10" className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-mono font-normal outline-none focus:border-[#df1f3d]" /></label>
+          <label className="grid gap-1.5 text-xs font-bold">Хямдралын төрөл<select value={form.type} onChange={event => setForm(current => ({ ...current, type: event.target.value as "percent" | "fixed" }))} className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]"><option value="percent">Хувь (%)</option><option value="fixed">Тогтмол дүн (₮)</option></select></label>
           {form.type === "percent"
-            ? <label className="grid gap-1.5 text-xs font-bold">Хямдрал (%)<input required type="number" min="1" max="100" value={form.percentValue} onChange={event => setForm(current => ({ ...current, percentValue: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
-            : <label className="grid gap-1.5 text-xs font-bold">Хямдрал (₮)<input required type="number" min="1" value={form.fixedAmountMnt} onChange={event => setForm(current => ({ ...current, fixedAmountMnt: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>}
-          <label className="grid gap-1.5 text-xs font-bold">Хамгийн бага дэд дүн (₮, заавал биш)<input type="number" min="0" value={form.minSubtotalMnt} onChange={event => setForm(current => ({ ...current, minSubtotalMnt: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
-          <label className="grid gap-1.5 text-xs font-bold">Хамгийн олон удаагийн ашиглалт (заавал биш)<input type="number" min="1" placeholder="Хязгааргүй" value={form.maxUses} onChange={event => setForm(current => ({ ...current, maxUses: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
-          <label className="grid gap-1.5 text-xs font-bold">Дуусах огноо (заавал биш)<input type="datetime-local" value={form.expiresAt} onChange={event => setForm(current => ({ ...current, expiresAt: event.target.value }))} className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
-          <label className="flex items-center gap-3 rounded-xl bg-white px-3 py-3 text-sm font-bold"><input type="checkbox" checked={form.isActive} onChange={event => setForm(current => ({ ...current, isActive: event.target.checked }))} className="size-4 accent-[#df1f3d]" />Идэвхтэй</label>
+            ? <label className="grid gap-1.5 text-xs font-bold">Хямдрал (%)<input required type="number" min="1" max="100" value={form.percentValue} onChange={event => setForm(current => ({ ...current, percentValue: event.target.value }))} className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+            : <label className="grid gap-1.5 text-xs font-bold">Хямдрал (₮)<input required type="number" min="1" value={form.fixedAmountMnt} onChange={event => setForm(current => ({ ...current, fixedAmountMnt: event.target.value }))} className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>}
+          <label className="grid gap-1.5 text-xs font-bold">Хамгийн бага дэд дүн (₮, заавал биш)<input type="number" min="0" value={form.minSubtotalMnt} onChange={event => setForm(current => ({ ...current, minSubtotalMnt: event.target.value }))} className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+          <label className="grid gap-1.5 text-xs font-bold">Хамгийн олон удаагийн ашиглалт (заавал биш)<input type="number" min="1" placeholder="Хязгааргүй" value={form.maxUses} onChange={event => setForm(current => ({ ...current, maxUses: event.target.value }))} className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+          <label className="grid gap-1.5 text-xs font-bold">Дуусах огноо (заавал биш)<input type="datetime-local" value={form.expiresAt} onChange={event => setForm(current => ({ ...current, expiresAt: event.target.value }))} className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+          <label className="flex items-center gap-3 rounded-xl bg-[var(--a-card)] px-3 py-3 text-sm font-bold"><input type="checkbox" checked={form.isActive} onChange={event => setForm(current => ({ ...current, isActive: event.target.checked }))} className="size-4 accent-[#df1f3d]" />Идэвхтэй</label>
         </div>
 
         <button type="submit" disabled={isSaving} className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#df1f3d] px-5 py-3 text-xs font-bold text-white disabled:opacity-60">{isSaving && <LoaderCircle className="animate-spin" size={15} />}{form.id ? "Өөрчлөлт хадгалах" : "Код үүсгэх"}</button>
