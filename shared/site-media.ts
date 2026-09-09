@@ -1,21 +1,29 @@
 export const siteMediaSlots = [
   {
+// 2026-09-09 deep audit: the four original brand-default objects
+// (sugi-sunrise-editorial-hero_463a81c8.jpg, sugi-professional-assortment_74fa4e31.jpg,
+// sugi-professional-family_07753755.jpg, sugi-care-retail_e5616f81.jpg) no longer
+// exist in R2 -- every one returned 404, so the admin "BRAND DEFAULT" previews
+// were broken and the home-stores slot (which has no upload) rendered nothing.
+// The same photographs exist in R2 as Tom's own admin uploads under
+// site-media/1/, which is what the fallbacks point at now. If those objects
+// are ever deleted, re-upload the four photos and update these URLs.
     key: "home-hero",
     label: "Нүүр хуудасны гол зураг",
     description: "Нүүр хуудасны эхний том banner зураг.",
-    fallbackUrl: "/cdn/sugi-sunrise-editorial-hero_463a81c8.jpg",
+    fallbackUrl: "/cdn/site-media/1/sugi-professional-hero-1787734159733_30cd8572_a22051fe.webp",
   },
   {
     key: "home-categories",
     label: "Бүтээгдэхүүний ангиллын зураг",
     description: "Үндсэн ангиллын editorial зураг.",
-    fallbackUrl: "/cdn/sugi-professional-assortment_74fa4e31.jpg",
+    fallbackUrl: "/cdn/site-media/1/sugi-care-retail-1787207973163_8520a6e3_a3beb549.webp",
   },
   {
     key: "home-family",
     label: "Гэр бүлийн арчилгааны зураг",
     description: "Гэр бүлийн арчилгааны хэсгийн зураг.",
-    fallbackUrl: "/cdn/sugi-professional-family_07753755.jpg",
+    fallbackUrl: "/cdn/site-media/1/sugi-professional-family-1787207997215_9cd7f13d_9c5e5e05.webp",
   },
   {
     key: "home-category-arhis-archilgaa",
@@ -57,7 +65,7 @@ export const siteMediaSlots = [
     key: "home-stores",
     label: "Салбарын хэсгийн зураг",
     description: "Салбар, байршлын editorial зураг.",
-    fallbackUrl: "/cdn/sugi-care-retail_e5616f81.jpg",
+    fallbackUrl: "/cdn/site-media/1/sugi-care-retail-1787207973163_8520a6e3_a3beb549.webp",
   },
   // 2026-09-08 (Tom, direct): SeasonalCampaignCarousel hasn't rendered on
   // the homepage since 2026-09-06 (see shared/site-text.ts's matching

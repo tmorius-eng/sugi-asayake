@@ -14,9 +14,9 @@ import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { filterCatalogBrand, filterCatalogPriceRange, filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCategoryPlaceholderImage, getSalePercent, LOW_STOCK_THRESHOLD, skinTypeLabels, sortCatalogProducts, type CatalogSortOption, type SkinType } from "@shared/catalog-filter";
 import { imageSrcSet } from "@shared/image-variants";
+import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { rememberRecentlyViewed, resolveRecentlyViewed } from "@shared/recently-viewed";
 import { UB_DELIVERY_FEE_MNT } from "@shared/const";
-import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { useSiteText } from "@/hooks/useSiteText";
 import { useStoreSetting } from "@/hooks/useStoreSetting";
 import { formatMnt } from "@shared/format";
@@ -58,6 +58,7 @@ function RecentlyViewed({ products, rememberedCount, onRemember, onQuickView }: 
 }
 
 export default function Shop() {
+  useDocumentMeta("Дэлгүүр — SUGI ASAYAKE", "Японоос албан ёсоор нийлүүлсэн арьс арчилгаа, эрүүл мэнд, гэр бүлийн хэрэгцээний 900+ бүтээгдэхүүн.");
   const qaHistoryMode = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("historyQa") : null;
   const initialParams = new URLSearchParams(window.location.search);
   const textFor = useSiteText();
@@ -210,7 +211,6 @@ export default function Shop() {
   // rememberRecentlyViewed's own 6-id cap.
   const recentIdsQuery = trpc.catalog.byIds.useQuery({ ids: effectiveRecentIds }, { enabled: effectiveRecentIds.length > 0 });
   const recentlyViewed = useMemo(() => resolveRecentlyViewed(recentIdsQuery.data ?? [], effectiveRecentIds), [recentIdsQuery.data, effectiveRecentIds]);
-  useScrollReveal(`${catalogLoading}-${resultCount}-${pagedProducts.length}-${page}-${recentlyViewed.length}-${recommended.data?.length ?? 0}`);
 
   useEffect(() => {
     try {

@@ -14,6 +14,7 @@ import { readFileSync } from "node:fs";
 import { extname } from "node:path";
 import sharp from "sharp";
 import mysql from "mysql2/promise";
+import { planMysqlConnection } from "../server/_core/dbConnection";
 import { storagePut } from "../server/storage";
 
 function slugify(text: string): string {
@@ -35,7 +36,9 @@ async function main() {
     process.exit(1);
   }
 
-  const conn = await mysql.createConnection(process.env.DATABASE_URL ?? "");
+  // 2026-09-09: same TLS rules as the app (server/_core/dbConnection.ts) --
+  // a bare URL string let mysql2 talk to Aiven in plaintext.
+  const conn = await mysql.createConnection(planMysqlConnection(process.env.DATABASE_URL ?? "").options);
   try {
     const [rows] = await conn.execute<any[]>(
       "SELECT id, name, imageUrl FROM products WHERE id = ?",

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { Link, useLocation } from "wouter";
 import { CheckCircle2, Lock } from "lucide-react";
 import { toast } from "sonner";
@@ -18,6 +19,7 @@ const messageFrom = (error: unknown) => error instanceof Error ? error.message :
 // them is a separate, larger backend decision -- this page just no longer
 // calls them or shows a method toggle.
 export default function ForgotPassword() {
+  useDocumentMeta("Нууц үг сэргээх — SUGI ASAYAKE", null);
   const [, setLocation] = useLocation();
   const [verifiedPhoneSessionId, setVerifiedPhoneSessionId] = useState<string | null>(null);
   const [phonePassword, setPhonePassword] = useState("");

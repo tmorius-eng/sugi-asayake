@@ -3,7 +3,7 @@
 // compiled bundle. Every value below is something SUGI ASAYAKE owns and
 // configures itself — nothing here points at Manus infrastructure.
 
-function required(name: string, value: string | undefined): string {
+function required(_name: string, value: string | undefined): string {
   if (!value) {
     // We intentionally do not throw at import time: local tooling (drizzle-kit,
     // vitest unit tests that never touch the DB, etc.) should still be able to

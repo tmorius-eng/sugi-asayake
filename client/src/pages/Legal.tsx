@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { Link, useLocation } from "wouter";
 import SiteFooter from "@/components/SiteFooter";
 import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
@@ -155,6 +156,7 @@ const documents = {
 
 export default function Legal() {
   const [location] = useLocation();
+  useDocumentMeta(`${location === "/privacy" ? "Хувийн нууцлал" : location === "/terms" ? "Үйлчилгээний нөхцөл" : "Буцаалт ба солилцоо"} — SUGI ASAYAKE`, null);
   const key = location.includes("terms") ? "terms" : location.includes("returns") ? "returns" : "privacy";
   const document = documents[key];
   return (

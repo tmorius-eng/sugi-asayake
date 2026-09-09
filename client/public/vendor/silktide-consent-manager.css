@@ -260,7 +260,7 @@ Modal - Header
   gap: 16px;
 }
 
-#stcm-modal h1 {
+#stcm-modal h2 {
   font-family: var(--fontFamily);
   color: var(--textColor);
   font-size: 24px;

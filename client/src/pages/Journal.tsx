@@ -1,4 +1,5 @@
 import { ArrowUpRight, LoaderCircle, Newspaper } from "lucide-react";
+import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { Link } from "wouter";
 import CommerceHeader from "@/components/CommerceHeader";
 import SiteFooter from "@/components/SiteFooter";
@@ -24,6 +25,7 @@ const formatDate = (value: string | Date | null | undefined) => {
  * appropriate for browsing many articles vs. showcasing 1-3.
  */
 export default function Journal() {
+  useDocumentMeta("Зөвлөгөө ба мэдээ — SUGI ASAYAKE", null);
   const postsQuery = trpc.content.allPosts.useQuery();
   const posts = postsQuery.data ?? [];
 

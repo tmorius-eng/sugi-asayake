@@ -181,7 +181,7 @@ function SidebarNavContent({ section, role, badges, collapsed = false, onSelect,
         </button>
       )}
 
-      <nav className="admin-sidebar-nav mt-2 grid flex-1 content-start gap-0.5 overflow-y-auto">
+      <nav className="admin-sidebar-nav mt-2 grid min-h-0 flex-1 content-start gap-0.5 overflow-y-auto">
         {collapsed ? <span className="h-3" /> : <p className="px-3 pb-1.5 pt-3 text-[10px] font-bold uppercase tracking-[.16em] text-white/35">Ерөнхий</p>}
         {visibleNested.map(item => <NavButton key={item.key} item={item} active={section === item.key} badge={badges[item.key]} collapsed={collapsed} onSelect={onSelect} />)}
         {visibleFlat.map(item => <NavButton key={item.key} item={item} active={section === item.key} badge={badges[item.key]} collapsed={collapsed} onSelect={onSelect} />)}

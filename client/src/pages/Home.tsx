@@ -30,7 +30,6 @@ import { Fragment, useMemo, useState } from "react";
 import { Link } from "wouter";
 import {
   ArrowUpRight,
-  CircleCheck,
   Sparkles,
   Star,
   TrendingUp,
@@ -51,7 +50,6 @@ import { BestsellerCardSkeleton } from "@/components/Skeleton";
 import { imageSrcSet } from "@shared/image-variants";
 import { getSalePercent } from "@shared/catalog-filter";
 import { categories } from "@/components/home/categories-data";
-import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { useSiteText } from "@/hooks/useSiteText";
 import { trpc } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
@@ -188,7 +186,6 @@ export default function Home() {
       ))}
     </>
   );
-  useScrollReveal();
 
   return (
     <div className="sugi-site" id="top">

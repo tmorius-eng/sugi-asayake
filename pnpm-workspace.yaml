@@ -5,26 +5,13 @@ onlyBuiltDependencies:
   - esbuild
 patchedDependencies:
   wouter@3.7.1: patches/wouter@3.7.1.patch
-# 2026-09-06 audit (BUG-009): tried pinning express@4.21.2's vulnerable
-# sub-dependencies (path-to-regexp 0.1.12->0.1.13, qs 6.13.0->6.16.0,
-# body-parser 1.20.3->1.20.6) via `overrides` below, moved here from
-# package.json's now-defunct `pnpm.overrides` key. CONFIRMED NOT CURRENTLY
-# APPLIED: `pnpm --version` on this machine resolves to 10.4.1 (via
-# packageManager's pin below, not corepack -- corepack isn't installed
-# here), and pnpm 10.4.1 has a real, reported bug where `overrides` declared
-# in pnpm-workspace.yaml never make it into the lockfile / dependency graph
-# for nested transitive deps like these (pnpm/pnpm#10614, #10675) --
-# verified empirically: after `pnpm install --force`, `pnpm list
-# path-to-regexp qs body-parser --depth 10` still showed the original,
-# unpatched versions, and pnpm-lock.yaml has no `overrides:` section at all.
-# NOT fixed by bumping the pnpm version myself here: that's a cross-machine,
-# CI-affecting toolchain change (this repo is shared with a second laptop --
-# see CLAUDE.md) that deserves a deliberate decision, not a side effect of
-# patching 3 low/moderate transitive DoS advisories. Left here, correct and
-# ready to take effect, for whoever next upgrades the pinned pnpm version
-# (packageManager field below) past whatever release fixed #10614/#10675.
-overrides:
-  tailwindcss>nanoid: 3.3.7 # pre-existing, unrelated to the audit -- moved verbatim from package.json's old pnpm.overrides, not re-verified as active given the bug above
-  path-to-regexp: 0.1.13 # GHSA: ReDoS via multiple route parameters
-  qs: 6.16.0 # GHSA: several arrayLimit/isBuffer DoS advisories
-  body-parser: 1.20.6 # GHSA: DoS when an invalid limit value silently disables size enforcement
+# 2026-09-09 deep audit: transitive-dependency overrides live in package.json's
+# "pnpm.overrides" key. pnpm 10.4.1 prints "no longer read" for that key but
+# demonstrably applies it (the overrides land in pnpm-lock.yaml's
+# `overrides:` block and the resolved graph changes), whereas overrides
+# declared HERE were verified on 2026-09-06 to be silently ignored by this
+# exact pnpm version (pnpm/pnpm#10614, #10675). Keep them in ONE place until
+# the pinned pnpm version is upgraded; then move them here and delete the
+# package.json key. Ranges are bounded to the dependent's own major on
+# purpose -- an unbounded ">=1.20.8" once pulled body-parser 2 and
+# path-to-regexp 8 under express 4.

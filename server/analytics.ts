@@ -555,10 +555,25 @@ export async function getTrafficBreakdown(input: DateRangeInput = {}) {
     db.select({ source: orders.trafficSource, orderCount: sql<number>`count(*)`, revenueMnt: sql<number>`coalesce(sum(${orders.totalMnt}), 0)` }).from(orders).where(and(...conditions)).groupBy(orders.trafficSource).orderBy(desc(sql`count(*)`)).limit(10),
     db.select({ device: orders.deviceType, orderCount: sql<number>`count(*)` }).from(orders).where(and(...conditions)).groupBy(orders.deviceType),
   ]);
-  return {
-    sources: sourceRows.map(row => ({ source: row.source ?? "Тодорхойгүй", orderCount: Number(row.orderCount), revenueMnt: Number(row.revenueMnt) })),
-    deviceTypes: deviceRows.map(row => ({ device: row.device ?? "unknown", orderCount: Number(row.orderCount) })),
+  // 2026-09-09 deep audit: GROUP BY keeps NULL and the literal "unknown" /
+  // "Тодорхойгүй" as separate rows, and the "?? fallback" then produced two
+  // rows with the same label -- React logged "two children with the same
+  // key `unknown`" on the Analytics section and the admin saw the count
+  // split across two identical lines. Merge by the displayed label.
+  const mergeBy = <T extends { label: string }>(rows: T[], add: (into: T, row: T) => void) => {
+    const byLabel = new Map<string, T>();
+    for (const row of rows) { const existing = byLabel.get(row.label); if (existing) add(existing, row); else byLabel.set(row.label, { ...row }); }
+    return Array.from(byLabel.values());
   };
+  const sources = mergeBy(
+    sourceRows.map(row => ({ label: row.source ?? "Тодорхойгүй", orderCount: Number(row.orderCount), revenueMnt: Number(row.revenueMnt) })),
+    (into, row) => { into.orderCount += row.orderCount; into.revenueMnt += row.revenueMnt; },
+  ).sort((a, b) => b.revenueMnt - a.revenueMnt).map(({ label, ...rest }) => ({ source: label, ...rest }));
+  const deviceTypes = mergeBy(
+    deviceRows.map(row => ({ label: row.device ?? "unknown", orderCount: Number(row.orderCount) })),
+    (into, row) => { into.orderCount += row.orderCount; },
+  ).sort((a, b) => b.orderCount - a.orderCount).map(({ label, ...rest }) => ({ device: label, ...rest }));
+  return { sources, deviceTypes };
 }
 
 /**

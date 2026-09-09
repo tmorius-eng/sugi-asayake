@@ -45,7 +45,7 @@ const previewSummary = {
   ordersDailySeries: [3, 2, 5, 4, 3, 4, 3].map((orderCount, i) => ({ date: new Date(Date.now() - (6 - i) * 86_400_000).toISOString().slice(0, 10), orderCount })),
 };
 
-export default function AdminDashboardHome({ preview = false, canSeeFinancials, canSeeAuditTrail, userName, onNavigate, onSearchIn }: {
+export default function AdminDashboardHome({ preview = false, canSeeFinancials, userName, onNavigate, onSearchIn }: {
   preview?: boolean;
   canSeeFinancials: boolean;
   /** Kept in the props for call-site parity with the other admin sections;

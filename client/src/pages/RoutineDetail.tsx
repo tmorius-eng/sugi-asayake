@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { BadgeCheck, ChevronRight, LoaderCircle, ShoppingBag, Sparkles } from "lucide-react";
 import { Link, useRoute } from "wouter";
 import { toast } from "sonner";
@@ -14,6 +15,7 @@ import { formatMnt } from "@shared/format";
 const fallbackImage = "/product-placeholder.svg";
 
 export default function RoutineDetail() {
+  useDocumentMeta("Арчилгааны багц — SUGI ASAYAKE", null);
   const [, params] = useRoute("/routine/:slug");
   const [cartOpen, setCartOpen] = useState(false);
   const [isAddingAll, setIsAddingAll] = useState(false);

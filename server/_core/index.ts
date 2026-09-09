@@ -106,6 +106,12 @@ async function startServer() {
       },
     })
   );
+  // 2026-09-09 deep audit: /favicon.ico fell through to the SPA fallback and
+  // returned index.html as "text/html" -- browsers that still probe the
+  // legacy path (and every tool that does) got a 200 with HTML for an icon.
+  // The real icon is the <link rel="icon"> in client/index.html; send them
+  // there.
+  app.get("/favicon.ico", (_req, res) => res.redirect(302, "/cdn/sugi-symbol_0a534a76.png"));
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);

@@ -45,7 +45,6 @@ import {
   FACE_MIN_BOX_RATIO,
   FACE_MIN_DETECTION_SCORE,
   FACE_MODEL_URL,
-  type FaceChallengeAction,
   type FaceColorSample,
 } from "@shared/face-auth";
 

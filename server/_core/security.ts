@@ -36,7 +36,7 @@ const CONTENT_SECURITY_POLICY = [
   "object-src 'none'",
 ].join("; ");
 
-export function setSecurityHeaders(request: Request, response: Response, next: NextFunction) {
+export function setSecurityHeaders(_request: Request, response: Response, next: NextFunction) {
   response.setHeader("X-Content-Type-Options", "nosniff");
   response.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   response.setHeader("X-Frame-Options", "SAMEORIGIN");

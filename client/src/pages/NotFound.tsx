@@ -1,9 +1,11 @@
 import { ArrowLeft, Compass } from "lucide-react";
+import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { Link } from "wouter";
 import SiteFooter from "@/components/SiteFooter";
 import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
 
 export default function NotFound() {
+  useDocumentMeta("Хуудас олдсонгүй — SUGI ASAYAKE", null);
   return (
     <div className="notfound-shell">
       <div className="notfound-card">

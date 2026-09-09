@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { Link, useLocation, useSearch } from "wouter";
 import {
   Bell, Camera, ChevronDown, ClipboardList, CreditCard, Heart, HelpCircle, Home, LayoutDashboard,
@@ -9,8 +10,8 @@ import { LOYALTY_TIERS } from "@shared/loyalty";
 import { paymentBadgeFor } from "@shared/orders";
 import { ubDistricts, ubDistrictLabels, type UbDistrict } from "@shared/districts";
 import {
-  skinTypeOptions, skinConcernOptions, interiorStyleOptions, genderOptions, hairTypeOptions,
-  hairConcernOptions, fragrancePreferenceOptions, skinRoutineComplexityOptions, wellnessInterestOptions,
+  skinTypeOptions, skinConcernOptions, interiorStyleOptions,
+  hairConcernOptions, wellnessInterestOptions,
   genderLabels, hairTypeLabels, fragrancePreferenceLabels, skinRoutineComplexityLabels,
 } from "@shared/catalog-filter";
 import { toast } from "sonner";
@@ -25,7 +26,6 @@ import { startLogin } from "@/const";
 import { notifyAddedToCart } from "@/lib/addedToCartToast";
 import { trpc } from "@/lib/trpc";
 import type { RouterOutputs } from "@/lib/trpc";
-import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { formatMnt } from "@shared/format";
 
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Гүйцэтгэж чадсангүй. Дахин оролдоно уу.";
@@ -82,6 +82,7 @@ const FAQ_ITEMS: Array<{ q: string; a: string }> = [
 ];
 
 export default function Profile() {
+  useDocumentMeta("Миний профайл — SUGI ASAYAKE", null);
   const { user, loading, isAuthenticated, logout } = useAuth();
   const utils = trpc.useUtils();
   const [, setLocation] = useLocation();
@@ -95,7 +96,6 @@ export default function Profile() {
     return (TAB_KEYS as string[]).includes(requested ?? "") ? (requested as TabKey) : "overview";
   })();
   const goToTab = (next: TabKey) => setLocation(`/profile?tab=${next}`);
-  useScrollReveal(tab);
 
   const uploadAvatar = trpc.profile.uploadAvatar.useMutation({
     onSuccess: () => { utils.auth.me.invalidate(); toast.success("Зураг шинэчлэгдлээ."); },
@@ -748,7 +748,7 @@ function NotificationsTab() {
 /* ---------------------------------------------------------------------- */
 
 function SecurityTab() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");

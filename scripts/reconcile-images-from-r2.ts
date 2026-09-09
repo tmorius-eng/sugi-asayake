@@ -11,6 +11,7 @@
 import "dotenv/config";
 import { S3Client, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import mysql from "mysql2/promise";
+import { planMysqlConnection } from "../server/_core/dbConnection";
 
 const ENV = {
   s3Bucket: process.env.S3_BUCKET ?? "",
@@ -63,7 +64,8 @@ async function main() {
 
   console.log(`R2: found ${objectCount} objects under catalog/products/, spanning ${latestByProductId.size} product ids.`);
 
-  const conn = await mysql.createConnection(ENV.databaseUrl);
+  // 2026-09-09: same TLS rules as the app (server/_core/dbConnection.ts).
+  const conn = await mysql.createConnection(planMysqlConnection(ENV.databaseUrl).options);
   try {
     const [rows] = await conn.execute<any[]>(
       "SELECT id, imageUrl FROM products WHERE id IN (" +

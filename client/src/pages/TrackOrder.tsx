@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { Link } from "wouter";
 import { LoaderCircle, Package, Phone, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -23,6 +24,7 @@ const PAYMENT_LABEL: Record<string, string> = { paid: "Төлөгдсөн", unpa
 // page -- orders.lookup (server/routers.ts) is public + rate-limited +
 // anti-enumeration (wrong order number and wrong phone read identically).
 export default function TrackOrder() {
+  useDocumentMeta("Захиалга хянах — SUGI ASAYAKE", null);
   const [orderNumber, setOrderNumber] = useState("");
   const [phone, setPhone] = useState("");
   const lookup = trpc.orders.lookup.useMutation();

@@ -9,6 +9,7 @@ import SitePromo from "./components/SitePromo";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import { PageviewTracker } from "./lib/pageviewTracking";
+import { useScrollReveal } from "./hooks/useScrollReveal";
 
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const Checkout = lazy(() => import("./pages/Checkout"));
@@ -35,6 +36,12 @@ function RouteLoadingFallback() {
 }
 
 function Router() {
+  // 2026-09-09 deep audit: the reveal hook used to be called per page (Home,
+  // Shop, Profile only), so any [data-reveal] section on another page --
+  // the related-products shelf on every product page -- never got its
+  // .is-revealed class and stayed shifted 18px over the section below it.
+  // One observer here (it watches the DOM for new nodes) covers all routes.
+  useScrollReveal();
   return <Suspense fallback={<RouteLoadingFallback />}><Switch>
     <Route path={"/"} component={Home} />
     <Route path={"/product/:slug"} component={ProductDetail} />

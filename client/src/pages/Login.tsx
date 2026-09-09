@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { Link, useLocation, useSearch } from "wouter";
 import { LoaderCircle, Lock, LogIn, Phone, User as UserIcon, UserPlus } from "lucide-react";
 import { toast } from "sonner";
@@ -21,6 +22,7 @@ const messageFrom = (error: unknown) => error instanceof Error ? error.message :
 // there is no way to register with a number you can't actually text from.
 // Login itself is still one-step phone+password (unchanged).
 export default function Login() {
+  useDocumentMeta("Нэвтрэх — SUGI ASAYAKE", null);
   const search = useSearch();
   // Lets an outside link (e.g. the homepage membership strip) land the
   // shopper directly on the registration step instead of login — same

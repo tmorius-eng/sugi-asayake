@@ -1,14 +1,14 @@
 import { randomBytes } from "node:crypto";
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lt, lte, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { adminAuditLogs, branches, branchStock, cartItems, carts, discountCodes, faceAttempts, faceChallenges, faceEnrollments, featuredBrands, InsertProduct, InsertProductCategory, InsertUser, integrationConfigs, loginAttempts, marketingSpend, mediaLibrary, orderItems, orders, paymentAttempts, phoneVerificationSessions, postCategories, postCategoryLinks, posts, postTagLinks, postTags, productCategories, productReviews, productVariants, products, routines, routineSteps, scheduledJobRuns, siteMedia, siteText, sitePromotions, storeCreditLedger, storeSettings, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
+import { describeTransport, planMysqlConnection } from "./_core/dbConnection";
+import { adminAuditLogs, branches, branchStock, cartItems, carts, discountCodes, faceAttempts, faceChallenges, faceEnrollments, featuredBrands, InsertProduct, InsertProductCategory, integrationConfigs, loginAttempts, marketingSpend, mediaLibrary, orderItems, orders, paymentAttempts, phoneVerificationSessions, postCategories, postCategoryLinks, posts, postTagLinks, postTags, productCategories, productReviews, productVariants, products, routines, routineSteps, scheduledJobRuns, siteMedia, siteText, sitePromotions, storeCreditLedger, storeSettings, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
 import { slugify } from "../shared/slugify";
 import { guessDistrictFromAddress, type UbDistrict } from "../shared/districts";
 import { computeDeliveryFeeMnt } from "../shared/delivery";
 import { getStoreSettingSlot, type StoreSettingKey } from "../shared/store-settings";
 import { decryptJson, encryptJson } from "./_core/crypto";
 import { sqlQueryLogger } from "./_core/sqlQueryLog";
-import { ENV } from './_core/env';
 import { sanitizePostContent } from "./_core/sanitizeHtml";
 import { getInventoryReservationFailure, shouldRestoreStock } from "./commerce-lifecycle";
 import { getLoyaltyTier, getNextLoyaltyTier } from "../shared/loyalty";
@@ -86,7 +86,15 @@ export async function getDb() {
       // in-process ring buffer that backs the admin "SQL лог" tab (see
       // server/_core/sqlQueryLog.ts for why this can't just read Aiven's
       // own slow-query log instead).
-      _db = drizzle({ connection: { uri: process.env.DATABASE_URL, connectTimeout: 10_000, enableKeepAlive: true }, logger: sqlQueryLogger });
+      // 2026-09-09 deep audit: the URI form let mysql2 parse DATABASE_URL
+      // itself, and mysql2 does not know "ssl-mode=REQUIRED" -- it warned
+      // and connected to Aiven in PLAINTEXT (Ssl_cipher empty on the live
+      // service). planMysqlConnection turns the URL into explicit options
+      // and enables TLS for every non-loopback host; see
+      // server/_core/dbConnection.ts for the CA-verification rules.
+      const plan = planMysqlConnection(process.env.DATABASE_URL);
+      if (plan.transport !== "plaintext-loopback") console.warn(`[db] ${describeTransport(plan)}`);
+      _db = drizzle({ connection: { ...plan.options, connectTimeout: 10_000, enableKeepAlive: true }, logger: sqlQueryLogger });
       // drizzle-orm's mysql `timestamp` column hard-assumes the DB session
       // is UTC: it reads a raw wire value and appends "+0000" (see
       // node_modules/drizzle-orm/mysql-core/columns/timestamp.js), and
@@ -1677,10 +1685,11 @@ export async function recordInStoreSale(input: InStoreSaleInput) {
   }
 
   const subtotalMnt = input.items.reduce((sum, item) => sum + variantsById.get(item.variantId)!.priceMnt * item.quantity, 0);
-  const orderNumber = `SA${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-
+  // 2026-09-09 deep audit: this path minted its own 4-character order
+  // number and never retried on a duplicate, so a collision surfaced as a
+  // raw ER_DUP_ENTRY to the cashier. Same generator + retry as checkout.
   let orderId = 0;
-  await db.transaction(async tx => {
+  const recordSale = (orderNumber: string) => db.transaction(async tx => {
     for (const item of input.items) {
       const variant = variantsById.get(item.variantId)!;
       await decrementBranchStock(tx, input.branchId, item.variantId, item.quantity, { requirePublished: false, itemLabel: variant.productName });
@@ -1713,6 +1722,15 @@ export async function recordInStoreSale(input: InStoreSaleInput) {
       };
     }));
   });
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await recordSale(generateOrderNumber());
+      break;
+    } catch (error) {
+      if (attempt < 3 && isDuplicateOrderNumberError(error)) continue;
+      throw error;
+    }
+  }
 
   const order = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
   return order[0];

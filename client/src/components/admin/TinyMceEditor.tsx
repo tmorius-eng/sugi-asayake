@@ -69,7 +69,7 @@ export default function TinyMceEditor({ initialValue, onChange, onRequestMedia }
         branding: false,
         skin: false,
         content_css: false,
-        content_style: `${contentUiCss}\n${contentCss}\nbody{font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;padding:12px;}`,
+        content_style: `${isDark ? contentUiDarkCss : contentUiCss}\n${isDark ? contentDarkCss : contentCss}\nbody{font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;padding:12px;}`,
         plugins: "lists link wordcount",
         // Two fixed rows, mirroring WordPress's classic-editor toolbar +
         // "kitchen sink" row -- rendered always-visible rather than behind a
