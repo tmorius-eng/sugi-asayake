@@ -41,6 +41,7 @@ const previewSummary = {
   failedPayments: [{ id: 1, orderId: 2, orderNumber: "SA-0119", provider: "qpay" as const, createdAt: new Date() }],
   ordersLast7d: 24,
   ordersPrevious7d: 19,
+  refundOwedCount: 0,
   ordersDailySeries: [3, 2, 5, 4, 3, 4, 3].map((orderCount, i) => ({ date: new Date(Date.now() - (6 - i) * 86_400_000).toISOString().slice(0, 10), orderCount })),
 };
 
@@ -194,6 +195,14 @@ export default function AdminDashboardHome({ preview = false, canSeeFinancials, 
             <AlertTriangle size={16} style={{ color: "var(--a-warn)" }} aria-hidden="true" />
             <h3 className="font-[var(--font-display)] text-[19px] font-semibold tracking-[-.03em] text-[var(--a-text)]">Анхаарах зүйлс</h3>
           </div>
+          {/* Audit 2026-09-09 (R2): paid-then-cancelled orders finance still
+              owes a refund on -- the Orders section has the matching filter. */}
+          {data.refundOwedCount > 0 && (
+            <button type="button" onClick={() => onNavigate("orders")} className="mt-4 flex w-full items-center justify-between gap-3 rounded-xl border border-[#7a5a12]/30 bg-[#fff5dd] px-3 py-2.5 text-left text-[12px] transition hover:bg-[#ffefc4]">
+              <span className="font-semibold text-[#7a5a12]">Буцаан олголт хүлээгдэж буй захиалга</span>
+              <span className="shrink-0 rounded-full bg-[#7a5a12] px-2 py-0.5 text-[11px] font-bold text-white">{data.refundOwedCount}</span>
+            </button>
+          )}
           <div className="mt-4 grid gap-5 sm:grid-cols-2">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[.12em] text-[var(--a-faint)]">Нөөц дуусч байна</p>
@@ -242,12 +251,20 @@ function SystemHealthCard() {
       <div className="mt-4 grid gap-2">
         <HealthRow icon={Database} label="Өгөгдлийн сан" ok={health.db.ok} error={health.db.error} />
         <HealthRow icon={HardDrive} label="Зургийн сан (S3)" ok={health.storage.ok} error={health.storage.error} />
+        {/* Audit 2026-09-09 (architecture debt #3): cached balance vs ledger
+            sum, for every account that has ever held credit. */}
+        {health.storeCredit && (
+          <HealthRow icon={Database} label="Дэлгүүрийн зээлийн тэнцэл" ok={health.storeCredit.ok}
+            okLabel={`Тэнцсэн (${health.storeCredit.checkedAccounts} данс)`}
+            badLabel={`${health.storeCredit.driftedAccounts} данс зөрүүтэй`}
+            error={health.storeCredit.ok ? undefined : "users.storeCreditMnt нь store_credit_ledger-ийн нийлбэртэй таарахгүй байна"} />
+        )}
       </div>
     </section>
   );
 }
 
-function HealthRow({ icon: Icon, label, ok, error }: { icon: LucideIcon; label: string; ok: boolean; error?: string }) {
+function HealthRow({ icon: Icon, label, ok, error, okLabel = "Ажиллаж байна", badLabel = "Доголдолтой" }: { icon: LucideIcon; label: string; ok: boolean; error?: string; okLabel?: string; badLabel?: string }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-xl bg-[var(--a-soft)] px-3 py-2.5" title={ok ? undefined : error}>
       <span className="flex items-center gap-2 text-[13px] font-semibold text-[var(--a-text)]">
@@ -256,7 +273,7 @@ function HealthRow({ icon: Icon, label, ok, error }: { icon: LucideIcon; label: 
       </span>
       <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold" style={{ background: ok ? "var(--a-pos-soft)" : "var(--a-neg-soft)", color: ok ? "var(--a-pos)" : "var(--a-neg)" }}>
         <span className="size-1.5 rounded-full" style={{ background: ok ? "var(--a-pos)" : "var(--a-neg)" }} aria-hidden="true" />
-        {ok ? "Ажиллаж байна" : "Доголдолтой"}
+        {ok ? okLabel : badLabel}
       </span>
     </div>
   );

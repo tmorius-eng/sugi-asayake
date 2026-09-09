@@ -5,6 +5,16 @@ import { downloadCsv } from "@/lib/csv";
 import { trpc } from "@/lib/trpc";
 import AdminBulkActionBar from "./AdminBulkActionBar";
 import { GenericListView } from "./admin/GenericListView";
+import { isRefundable, isRefundOwed, paymentBadgeFor } from "@shared/orders";
+
+// Audit 2026-09-09 (R2): one wording + one colour per money state, shared
+// with the customer's own profile via shared/orders.ts.
+const paymentToneClass: Record<ReturnType<typeof paymentBadgeFor>["tone"], string> = {
+  paid: "bg-[var(--a-pos-soft)] text-[var(--a-pos)]",
+  refunded: "bg-[var(--a-soft)] text-[var(--a-text-soft)]",
+  "refund-owed": "bg-[#fff5dd] text-[#7a5a12]",
+  unpaid: "bg-[var(--a-soft)] text-[var(--a-text)]",
+};
 import { formatMnt } from "@shared/format";
 
 type OrderStatus = "pending" | "confirmed" | "packed" | "out_for_delivery" | "completed" | "cancelled" | "returned";
@@ -52,7 +62,13 @@ export default function AdminOperationsPanel({ preview = false, query = "", role
   const [exportDateTo, setExportDateTo] = useState("");
 
   const allOrders = preview ? [] : (ordersQuery.data ?? []);
-  const orders = query.trim() ? allOrders.filter(order => [order.orderNumber, order.customerName, order.customerPhone].some(value => value.toLocaleLowerCase().includes(query.toLocaleLowerCase()))) : allOrders;
+  const searchedOrders = query.trim() ? allOrders.filter(order => [order.orderNumber, order.customerName, order.customerPhone].some(value => value.toLocaleLowerCase().includes(query.toLocaleLowerCase()))) : allOrders;
+  // Audit 2026-09-09 (R2): finance's "refund owed" queue -- paid, then
+  // cancelled, not yet refunded. A one-click filter with a live count, so
+  // nobody has to scan the list for that combination by eye.
+  const [refundOwedOnly, setRefundOwedOnly] = useState(false);
+  const refundOwedCount = allOrders.filter(isRefundOwed).length;
+  const orders = refundOwedOnly ? searchedOrders.filter(isRefundOwed) : searchedOrders;
   type OrderRow = (typeof orders)[number];
 
   const applyBulkStatus = async () => {
@@ -90,6 +106,12 @@ export default function AdminOperationsPanel({ preview = false, query = "", role
           <button type="button" onClick={() => setViewMode("board")} aria-label="Самбар харагдац" title="Самбар (Kanban)" className={`grid size-8 place-items-center rounded-full transition ${viewMode === "board" ? "bg-[var(--a-btn-dark)] text-white" : "text-[var(--a-faint)] hover:text-[var(--a-text)]"}`}><LayoutGrid size={14} /></button>
           <button type="button" onClick={() => setViewMode("list")} aria-label="Жагсаалт харагдац" title="Жагсаалт" className={`grid size-8 place-items-center rounded-full transition ${viewMode === "list" ? "bg-[var(--a-btn-dark)] text-white" : "text-[var(--a-faint)] hover:text-[var(--a-text)]"}`}><List size={14} /></button>
         </div>
+        {refundOwedCount > 0 && (
+          <button type="button" onClick={() => setRefundOwedOnly(current => !current)} aria-pressed={refundOwedOnly} className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-bold transition ${refundOwedOnly ? "border-[#7a5a12] bg-[#fff5dd] text-[#7a5a12]" : "border-[var(--a-border)] bg-[var(--a-card)] text-[var(--a-text-soft)] hover:border-[#7a5a12]"}`}>
+            Буцаан олголт хүлээгдэж буй
+            <span className="rounded-full bg-[#7a5a12] px-1.5 py-0.5 text-[10px] text-white">{refundOwedCount}</span>
+          </button>
+        )}
       </div>
       <button type="button" onClick={() => setShowExport(current => !current)} className="inline-flex items-center gap-2 rounded-full border border-[var(--a-border)] bg-[var(--a-card)] px-4 py-2.5 text-xs font-bold text-[var(--a-text-soft)] transition hover:border-[#df1f3d] hover:text-[#df1f3d]"><Download size={14} />Экспорт</button>
     </div>
@@ -134,7 +156,7 @@ export default function AdminOperationsPanel({ preview = false, query = "", role
                   <p className="mt-1 text-xs text-[var(--a-muted)]">{order.customerPhone} · {order.deliveryMethod === "store_pickup" ? "Салбараас авах" : order.deliveryAddress ?? "УБ хүргэлт"}</p>
                 </div>
               </div>
-              <span className="rounded-full bg-[var(--a-soft)] px-3 py-1 text-xs font-bold">{order.paymentStatus === "paid" ? "Төлөгдсөн" : order.paymentStatus === "refunded" ? "Буцаан олгосон" : "Төлбөр хүлээж буй"}</span>
+              <span className={`rounded-full px-3 py-1 text-xs font-bold ${paymentToneClass[paymentBadgeFor(order).tone]}`}>{paymentBadgeFor(order).label}</span>
             </div>
             <p className="mt-4 text-xs text-[var(--a-text-soft)]">{order.items.map(item => `${item.productName} × ${item.quantity}`).join(" · ")}</p>
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
@@ -146,7 +168,9 @@ export default function AdminOperationsPanel({ preview = false, query = "", role
                 own action, not a 3rd option folded into the status <select>
                 above -- it's a money decision (financeProcedure server-side),
                 distinct from the fulfilment ladder that select controls. */}
-            {canRefund && order.status === "returned" && order.paymentStatus !== "refunded" && (
+            {/* Audit 2026-09-09: a cancelled-but-paid order is refundable too
+                (shared/orders.ts isRefundable mirrors server refundOrder). */}
+            {canRefund && isRefundable(order) && (
               refundForm?.orderId === order.id ? (
                 <div className="mt-3 grid gap-2 rounded-2xl bg-[var(--a-neg-soft)] p-4">
                   <div className="flex flex-wrap gap-2">

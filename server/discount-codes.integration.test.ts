@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { adminAuditLogs, cartItems, carts, discountCodes, orderItems, orders, productCategories, productVariants, products, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
 import { getDb } from "./db";
@@ -20,8 +20,26 @@ function callerFor(user: TrpcContext["user"]): ReturnType<typeof appRouter.creat
   return appRouter.createCaller(ctx);
 }
 
+// A guest whose cookies persist between calls (the default callerFor's
+// res.cookie is a no-op, so a guest cart minted on addItem would be lost by
+// createOrder). Exposes the jar so afterAll can delete the guest carts.
+function guestCaller() {
+  const jar: Record<string, string> = {};
+  const ctx: TrpcContext = {
+    user: null,
+    req: {
+      protocol: "https",
+      headers: { get cookie() { return Object.entries(jar).map(([name, value]) => `${name}=${value}`).join("; "); } },
+      ip: `203.0.117.${Math.floor(Math.random() * 250) + 1}`, socket: { remoteAddress: "203.0.117.1" },
+    } as unknown as TrpcContext["req"],
+    res: { cookie: (name: string, value: string) => { jar[name] = value; }, clearCookie: () => undefined } as unknown as TrpcContext["res"],
+  };
+  return { caller: appRouter.createCaller(ctx), tokens: () => Object.values(jar) };
+}
+
 describeWithDatabase("discount code integration", () => {
   const marker = `coupon-test-${Date.now()}`;
+  const guestTokens: string[] = [];
   const adminEmail = `${marker}-admin@example.invalid`;
   const shopperEmail = `${marker}-shopper@example.invalid`;
   let adminId = 0;
@@ -61,6 +79,11 @@ describeWithDatabase("discount code integration", () => {
     for (const orderId of createdOrderIds) {
       await db.delete(orderItems).where(eq(orderItems.orderId, orderId));
       await db.delete(orders).where(eq(orders.id, orderId));
+    }
+    if (guestTokens.length) {
+      const guestCarts = await db.select({ id: carts.id }).from(carts).where(inArray(carts.guestToken, guestTokens));
+      for (const cart of guestCarts) await db.delete(cartItems).where(eq(cartItems.cartId, cart.id));
+      await db.delete(carts).where(inArray(carts.guestToken, guestTokens));
     }
     for (const id of createdCodeIds) await db.delete(discountCodes).where(eq(discountCodes.id, id));
     await db.delete(adminAuditLogs).where(eq(adminAuditLogs.actorUserId, adminId));
@@ -176,5 +199,37 @@ describeWithDatabase("discount code integration", () => {
 
     await admin1.admin.updateDiscountCode({ id: created.id, isActive: false });
     await expect(caller.cart.applicableCouponDiscount({ code: created.code })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  // Audit 2026-09-09 (R1): maxUsesPerCustomer -- the global budget alone let
+  // one shopper redeem a code on every order.
+  it("enforces a per-customer cap (by account, and by phone for guests) while the global budget still has room", async () => {
+    const created = await admin().admin.createDiscountCode({ code: `${marker}-ONEPER`, type: "percent", percentValue: 10, minSubtotalMnt: 0, maxUses: 10, maxUsesPerCustomer: 1, isActive: true });
+    createdCodeIds.push(created.id);
+    const orderInput = { deliveryMethod: "store_pickup" as const, pickupBranch: "Орос элчингийн салбар", paymentMethod: "cash_on_delivery" as const, couponCode: created.code };
+
+    const caller = shopper();
+    await caller.cart.addItem({ productId, quantity: 1 });
+    const order = await caller.checkout.createOrder({ ...orderInput, customerName: "Coupon Test Shopper", customerPhone: "99001122" });
+    createdOrderIds.push(order.id);
+    expect(order.couponDiscountMnt).toBe(4_000);
+
+    // Same signed-in shopper: the preview already refuses.
+    await caller.cart.addItem({ productId, quantity: 1 });
+    await expect(caller.cart.applicableCouponDiscount({ code: created.code })).rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringContaining("ашигласан") });
+
+    // A guest giving the same phone (formatted differently) is the same customer.
+    const samePerson = guestCaller();
+    await samePerson.caller.cart.addItem({ productId, quantity: 1 });
+    guestTokens.push(...samePerson.tokens());
+    await expect(samePerson.caller.checkout.createOrder({ ...orderInput, customerName: "Same Person", customerPhone: "+976 9900-1122" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    // A different phone is a different customer, and the global budget (10) has room.
+    const otherPerson = guestCaller();
+    await otherPerson.caller.cart.addItem({ productId, quantity: 1 });
+    guestTokens.push(...otherPerson.tokens());
+    const otherOrder = await otherPerson.caller.checkout.createOrder({ ...orderInput, customerName: "Other Person", customerPhone: "99009900" });
+    createdOrderIds.push(otherOrder.id);
+    expect(otherOrder.couponDiscountMnt).toBe(4_000);
   });
 });

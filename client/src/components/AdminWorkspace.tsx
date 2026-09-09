@@ -45,13 +45,14 @@ type ProductRow = {
   slug: string;
   brand: string | null;
   shortDescription: string | null;
-  description: string | null;
+  // description / galleryJson deliberately absent (audit 2026-09-09, R4):
+  // the list never shows them and they were most of a ~940-row payload.
+  // The editor fetches admin.productDetail for the one product it opens.
   sku: string;
   priceMnt: number;
   compareAtPriceMnt: number | null;
   costMnt: number | null;
   imageUrl: string | null;
-  galleryJson: string | null;
   stockQuantity: number;
   isPublished: boolean;
   updatedAt: Date;
@@ -111,9 +112,9 @@ type CategoryForm = {
 };
 
 const previewProducts: ProductRow[] = [
-  { id: 1, categoryId: 1, name: "Hada Labo Gokujyun Lotion", slug: "hada-labo-gokujyun-lotion", brand: "Hada Labo", shortDescription: null, description: null, sku: "HADA-GL-170", priceMnt: 29800, compareAtPriceMnt: null, costMnt: null, imageUrl: null, galleryJson: null, stockQuantity: 34, isPublished: true, updatedAt: new Date(), categoryName: "Арьс арчилгаа", skinType: "dry", skinConcerns: "aging", interiorStyle: null, hairType: null, hairConcerns: null, fragrancePreference: null, wellnessInterests: null },
-  { id: 2, categoryId: 2, name: "Shiseido Tsubaki Premium Repair", slug: "shiseido-tsubaki-premium-repair", brand: "Shiseido", shortDescription: null, description: null, sku: "TSUB-PR-490", priceMnt: 42500, compareAtPriceMnt: null, costMnt: null, imageUrl: null, galleryJson: null, stockQuantity: 18, isPublished: true, updatedAt: new Date(), categoryName: "Үс ба бие", skinType: null, skinConcerns: null, interiorStyle: null, hairType: null, hairConcerns: null, fragrancePreference: null, wellnessInterests: null },
-  { id: 3, categoryId: 1, name: "Rohto Melano CC Essence", slug: "rohto-melano-cc-essence", brand: "Rohto", shortDescription: null, description: null, sku: "ROHTO-MCC-20", priceMnt: 35900, compareAtPriceMnt: null, costMnt: null, imageUrl: null, galleryJson: null, stockQuantity: 0, isPublished: false, updatedAt: new Date(), categoryName: "Арьс арчилгаа", skinType: "oily", skinConcerns: "acne", interiorStyle: null, hairType: null, hairConcerns: null, fragrancePreference: null, wellnessInterests: null },
+  { id: 1, categoryId: 1, name: "Hada Labo Gokujyun Lotion", slug: "hada-labo-gokujyun-lotion", brand: "Hada Labo", shortDescription: null, sku: "HADA-GL-170", priceMnt: 29800, compareAtPriceMnt: null, costMnt: null, imageUrl: null, stockQuantity: 34, isPublished: true, updatedAt: new Date(), categoryName: "Арьс арчилгаа", skinType: "dry", skinConcerns: "aging", interiorStyle: null, hairType: null, hairConcerns: null, fragrancePreference: null, wellnessInterests: null },
+  { id: 2, categoryId: 2, name: "Shiseido Tsubaki Premium Repair", slug: "shiseido-tsubaki-premium-repair", brand: "Shiseido", shortDescription: null, sku: "TSUB-PR-490", priceMnt: 42500, compareAtPriceMnt: null, costMnt: null, imageUrl: null, stockQuantity: 18, isPublished: true, updatedAt: new Date(), categoryName: "Үс ба бие", skinType: null, skinConcerns: null, interiorStyle: null, hairType: null, hairConcerns: null, fragrancePreference: null, wellnessInterests: null },
+  { id: 3, categoryId: 1, name: "Rohto Melano CC Essence", slug: "rohto-melano-cc-essence", brand: "Rohto", shortDescription: null, sku: "ROHTO-MCC-20", priceMnt: 35900, compareAtPriceMnt: null, costMnt: null, imageUrl: null, stockQuantity: 0, isPublished: false, updatedAt: new Date(), categoryName: "Арьс арчилгаа", skinType: "oily", skinConcerns: "acne", interiorStyle: null, hairType: null, hairConcerns: null, fragrancePreference: null, wellnessInterests: null },
 ];
 
 const previewCategories: CategoryRow[] = [
@@ -125,6 +126,10 @@ const slugify = (value: string) => value.toLocaleLowerCase().trim().replace(/[^a
 const emptyProduct = (): ProductForm => ({ categoryId: "", name: "", slug: "", brand: "", shortDescription: "", description: "", sku: "", priceMnt: "", compareAtPriceMnt: "", costMnt: "", imageUrl: "", stockQuantity: "0", isPublished: false, skinType: "", skinConcerns: "", interiorStyle: "", hairType: "", hairConcerns: "", fragrancePreference: "", wellnessInterests: "" });
 const skinTypeLabels: Record<string, string> = { dry: "Хуурай", oily: "Тослог", combination: "Холимог", sensitive: "Мэдрэмтгий", normal: "Хэвийн" };
 const emptyCategory = (): CategoryForm => ({ name: "", slug: "", description: "", imageUrl: "", sortOrder: "0", isActive: true });
+// Audit 2026-09-09 (R4): the Users table is paged and searched server-side
+// now (admin.users takes { search, page, pageSize }), so this is the page
+// the query asks for, not a client-side slice of the whole table.
+const USERS_PAGE_SIZE = 25;
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Үйлдлийг гүйцэтгэж чадсангүй. Дахин оролдоно уу.";
 const skinConcernLabelByValue = new Map(skinConcernOptions.map(option => [option.value, option.label]));
 const hairConcernLabelByValue = new Map(hairConcernOptions.map(option => [option.value, option.label]));
@@ -198,6 +203,10 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
   // sidebar section.
   const [mediaTab, setMediaTab] = useState<"images" | "text">("images");
   const [query, setQuery] = useState("");
+  const [usersPage, setUsersPage] = useState(1);
+  // A new search always starts from page 1 -- otherwise a query that
+  // matches 3 users while the pager sits on page 4 shows an empty page.
+  useEffect(() => { setUsersPage(1); }, [query]);
   const [composer, setComposer] = useState<"product" | "category" | null>(null);
   const [productForm, setProductForm] = useState<ProductForm>(emptyProduct);
   // What's actually live right now for the product being edited -- see
@@ -240,7 +249,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
   // and the "users" section itself is already hidden from staff. Harmless
   // in effect (staff never saw the data, just a console 403), but a real
   // pre-existing bug, not something this dashboard rebuild introduced.
-  const usersQuery = trpc.admin.users.useQuery(undefined, { enabled: !preview && visibleSections.has("users") });
+  const usersQuery = trpc.admin.users.useQuery({ search: query.trim() || undefined, page: usersPage, pageSize: USERS_PAGE_SIZE }, { enabled: !preview && visibleSections.has("users"), placeholderData: previous => previous });
 
   const refreshCatalog = async () => {
     await Promise.all([utils.admin.products.invalidate(), utils.admin.categories.invalidate(), utils.catalog.list.invalidate()]);
@@ -260,7 +269,8 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
   const users = preview ? [
     { id: 1, name: "SUGI ASAYAKE Owner", email: "owner@asayake.mn", phone: "99110022", role: "admin", createdAt: new Date(), lastSignedIn: new Date(), suspendedAt: null, suspendedReason: null },
     { id: 2, name: "Store manager", email: null, phone: "88112233", role: "user", createdAt: new Date(), lastSignedIn: new Date(), suspendedAt: null, suspendedReason: null },
-  ] : (usersQuery.data ?? []);
+  ] : (usersQuery.data?.rows ?? []);
+  const usersTotal = preview ? users.length : (usersQuery.data?.total ?? 0);
   type UserRow = (typeof users)[number];
   const userColumns: GenericListColumn<UserRow>[] = [
     {
@@ -301,13 +311,10 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
   // PRODUCT-IMPORT.md), which is exactly why GenericListView paginates by
   // default rather than rendering an endless-scroll table.
   const PRODUCTS_PAGE_SIZE = 25;
-  // Admin overhaul (2026-09-08, Phase D): the Users table never had a
-  // pageSize, so it always rendered every row at once -- GenericListView
-  // only shows its pager when pageSize is truthy (see the Products table
-  // above, which already does this). Trivial with real user counts today,
-  // but not something to leave until it isn't.
-  const USERS_PAGE_SIZE = 25;
-  const filteredUsers = useMemo(() => users.filter(user => [user.name ?? "", user.email ?? "", user.phone ?? ""].some(value => value.toLocaleLowerCase().includes(query.toLocaleLowerCase()))), [users, query]);
+  // `users` is already the server-filtered page for the current search
+  // (see usersQuery above); kept under this name for the ROLE MANAGEMENT
+  // block below, which lists the same rows.
+  const filteredUsers = users;
   // Preference Profile v2 (2026-09-01): same rule-based matcher the bulk
   // auto-tag script uses (shared/product-tagging.ts) -- dismissible
   // suggestion chips below each already-empty tag field, so per-product
@@ -329,9 +336,20 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
     await utils.admin.users.invalidate();
   };
 
-  const openProductComposer = (product?: ProductRow) => {
+  const openProductComposer = async (product?: ProductRow) => {
     if (product) {
-      setProductForm({ id: product.id, categoryId: String(product.categoryId), name: product.name, slug: product.slug, brand: product.brand ?? "", shortDescription: product.shortDescription ?? "", description: product.description ?? "", sku: product.sku, priceMnt: String(product.priceMnt), compareAtPriceMnt: product.compareAtPriceMnt ? String(product.compareAtPriceMnt) : "", costMnt: product.costMnt ? String(product.costMnt) : "", imageUrl: product.imageUrl ?? "", stockQuantity: String(product.stockQuantity), isPublished: product.isPublished, skinType: product.skinType ?? "", skinConcerns: product.skinConcerns ?? "", interiorStyle: product.interiorStyle ?? "", hairType: product.hairType ?? "", hairConcerns: product.hairConcerns ?? "", fragrancePreference: product.fragrancePreference ?? "", wellnessInterests: product.wellnessInterests ?? "" });
+      // Audit 2026-09-09 (R4): the list no longer carries every product's
+      // full description -- load this one product's on open instead.
+      let description = "";
+      if (!preview) {
+        try {
+          description = (await utils.admin.productDetail.fetch({ id: product.id })).description ?? "";
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : "Бүтээгдэхүүний дэлгэрэнгүйг уншиж чадсангүй.");
+          return;
+        }
+      }
+      setProductForm({ id: product.id, categoryId: String(product.categoryId), name: product.name, slug: product.slug, brand: product.brand ?? "", shortDescription: product.shortDescription ?? "", description, sku: product.sku, priceMnt: String(product.priceMnt), compareAtPriceMnt: product.compareAtPriceMnt ? String(product.compareAtPriceMnt) : "", costMnt: product.costMnt ? String(product.costMnt) : "", imageUrl: product.imageUrl ?? "", stockQuantity: String(product.stockQuantity), isPublished: product.isPublished, skinType: product.skinType ?? "", skinConcerns: product.skinConcerns ?? "", interiorStyle: product.interiorStyle ?? "", hairType: product.hairType ?? "", hairConcerns: product.hairConcerns ?? "", fragrancePreference: product.fragrancePreference ?? "", wellnessInterests: product.wellnessInterests ?? "" });
       // Tracked separately from productForm.slug/.isPublished (which the
       // admin can edit before saving) -- the "view live" link must always
       // point at what's ACTUALLY live right now, never a not-yet-saved
@@ -709,10 +727,8 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
                 rows={users}
                 getRowId={user => user.id}
                 columns={userColumns}
-                searchQuery={query}
-                getSearchText={user => `${user.name ?? ""} ${user.email ?? ""} ${user.phone ?? ""}`}
                 tableClassName="min-w-[720px] w-full border-separate border-spacing-0 text-left"
-                pageSize={USERS_PAGE_SIZE}
+                serverPagination={{ page: usersPage, pageSize: USERS_PAGE_SIZE, total: usersTotal, onPageChange: setUsersPage }}
                 itemLabel="хэрэглэгч"
                 emptyMessage="Хэрэглэгч олдсонгүй."
                 rowActions={user => !preview && <button type="button" onClick={() => setSelectedUserId(user.id)} className="rounded-full border border-[var(--a-border)] px-3 py-1.5 text-[11px] font-bold text-[var(--a-text-soft)] transition hover:border-[#df1f3d] hover:text-[#df1f3d]">Дэлгэрэнгүй</button>}

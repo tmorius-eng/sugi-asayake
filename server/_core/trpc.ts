@@ -3,6 +3,7 @@ import superjson from "superjson";
 import { UNAUTHED_ERR_MSG, NOT_ADMIN_ERR_MSG } from "@shared/const";
 import type { TrpcContext } from "./context";
 import { checkRateLimit } from "./security";
+import { checkPersistentRateLimit } from "./persistentRateLimit";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
@@ -158,12 +159,28 @@ function rateLimitMiddleware(bucketName: string, maxAttempts: number, windowMs: 
   });
 }
 
+// Audit 2026-09-09 (R3): the strict tiers below count in the shared database
+// (server/_core/persistentRateLimit.ts) rather than this process's memory,
+// so an attacker cannot get a fresh budget from every server instance or
+// every restart. The in-memory rateLimitMiddleware above stays for the
+// high-volume cart/telemetry tiers, where a DB round trip per call would
+// cost more than it protects.
+function persistentRateLimitMiddleware(bucketName: string, maxAttempts: number, windowMs: number) {
+  return t.middleware(async ({ ctx, path, next }) => {
+    const result = await checkPersistentRateLimit(bucketName, `${path}:${requestKey(ctx)}`, maxAttempts, windowMs);
+    if (!result.allowed) {
+      throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: `Хэт олон оролдлого хийлээ. ${result.retryAfterSeconds} секундын дараа дахин оролдоно уу.` });
+    }
+    return next();
+  });
+}
+
 // Strict tier (8 attempts/15min/IP): brute-force/enumeration/abuse targets
 // where each request is either security-sensitive (login, register,
 // password reset) or writes a real business record (checkout — it also
 // decrements stock, so leaving it under only the general 300/15min cap would
 // let one IP place enough garbage orders to exhaust inventory).
-const strictRateLimit = rateLimitMiddleware("strict", 8, 15 * 60 * 1000);
+const strictRateLimit = persistentRateLimitMiddleware("strict", 8, 15 * 60 * 1000);
 export const strictRateLimitedProcedure = publicProcedure.use(strictRateLimit);
 export const strictRateLimitedProtectedProcedure = protectedProcedure.use(strictRateLimit);
 
@@ -190,5 +207,5 @@ export const lenientRateLimitedProcedure = publicProcedure.use(lenientRateLimit)
 // cost, not just a nuisance-abuse cost. Only wraps auth.startPhoneVerification
 // (session creation); the status-poll and reset/attach procedures don't
 // trigger a new SMS, so they stay on the standard strict tier.
-const phoneVerifyRateLimit = rateLimitMiddleware("phoneVerify", 3, 15 * 60 * 1000);
+const phoneVerifyRateLimit = persistentRateLimitMiddleware("phoneVerify", 3, 15 * 60 * 1000);
 export const phoneVerifyRateLimitedProcedure = publicProcedure.use(phoneVerifyRateLimit);

@@ -160,6 +160,8 @@ import {
   getOrderForTracking,
   getUsersForCampaignSend,
   refundOrder,
+  getAdminProductDetail,
+  getStoreCreditDrift,
   updateAdminOrder,
   updateAdminPost,
   updateAdminProduct,
@@ -195,6 +197,7 @@ import { getCategoryWriteViolation, getProductWriteViolation } from "./catalog-v
 import { getAnalyticsReport, exportAnalyticsExcel, exportAnalyticsPdf, getAllCustomersForCampaign, getDashboardHighlights, getPreferenceSegmentBreakdown, getRecommendationCoverage, getUsersByLoyaltyTier, getUsersBySegment, type PreferenceSegmentField } from "./analytics";
 import { siteMediaSlotKeys } from "../shared/site-media";
 import { siteTextSlotKeys } from "../shared/site-text";
+import { isRefundOwed } from "../shared/orders";
 import { storeSettingKeys, getStoreSettingSlot, type StoreSettingKey } from "../shared/store-settings";
 import { formatMnt } from "@shared/format";
 
@@ -407,6 +410,8 @@ const discountCodeBaseSchema = z.object({
   fixedAmountMnt: z.number().int().min(1).nullable().optional(),
   minSubtotalMnt: z.number().int().min(0),
   maxUses: z.number().int().min(1).nullable().optional(),
+  // Audit 2026-09-09 (R1): per-customer cap; null = unlimited (see schema).
+  maxUsesPerCustomer: z.number().int().min(1).max(1_000).nullable().optional(),
   isActive: z.boolean(),
   expiresAt: z.coerce.date().nullable().optional(),
 });
@@ -530,16 +535,20 @@ async function sendOrderConfirmationEmail(order: { orderNumber: string; customer
   });
 }
 
-async function sendOrderStatusUpdateEmail(order: { orderNumber: string; customerEmail: string | null; customerName: string; status: string; deliveryTrackingRef: string | null }) {
+async function sendOrderStatusUpdateEmail(order: { orderNumber: string; customerEmail: string | null; customerName: string; status: string; paymentStatus: string; deliveryTrackingRef: string | null }) {
   if (!order.customerEmail) return;
   const messageKey = orderStatusMessageKeys[order.status];
   if (!messageKey) return; // "pending" (initial state) has no transition to announce.
   const message = await getStoreSettingValue(messageKey);
   const trackingLine = order.deliveryTrackingRef ? `\nХүргэлтийн дугаар: ${order.deliveryTrackingRef}` : "";
+  // Audit 2026-09-09 (R2): a cancelled order whose payment was already
+  // collected tells the customer the money is coming back, instead of a
+  // bare "cancelled" that reads like the payment vanished.
+  const refundLine = isRefundOwed(order) ? "\n\nТаны төлсөн төлбөрийг бүрэн буцаан олгоно. Манай ажилтан буцаан олголтын талаар тантай холбогдоно." : "";
   await sendAccountEmail({
     to: order.customerEmail,
     subject: `SUGI ASAYAKE — Захиалга ${order.orderNumber}: шинэчлэлт`,
-    content: `Сайн байна уу, ${order.customerName}!\n\n${message}${trackingLine}\n\nЗахиалгын дугаар: ${order.orderNumber}`,
+    content: `Сайн байна уу, ${order.customerName}!\n\n${message}${trackingLine}${refundLine}\n\nЗахиалгын дугаар: ${order.orderNumber}`,
   });
 }
 
@@ -1111,7 +1120,10 @@ export const appRouter = router({
       const subtotalMnt = cart.items.reduce((sum, item) => sum + item.priceMnt * item.quantity, 0);
       const routineDiscount = await getApplicableRoutineDiscount(cart.items);
       try {
-        return await validateDiscountCode(input.code, subtotalMnt - (routineDiscount?.discountMnt ?? 0));
+        // A signed-in shopper gets the per-customer cap (R1) checked here
+        // already; a guest's phone is only known at order time, so their
+        // cap is enforced in createOrderFromActiveCart instead.
+        return await validateDiscountCode(input.code, subtotalMnt - (routineDiscount?.discountMnt ?? 0), { userId: ctx.user?.id ?? null, phone: null });
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Хямдралын код шалгаж чадсангүй." });
       }
@@ -1136,7 +1148,7 @@ export const appRouter = router({
       let afterCouponMnt = afterRoutineMnt;
       if (input.couponCode) {
         try {
-          const coupon = await validateDiscountCode(input.couponCode, afterRoutineMnt);
+          const coupon = await validateDiscountCode(input.couponCode, afterRoutineMnt, { userId: ctx.user.id, phone: null });
           afterCouponMnt = afterRoutineMnt - coupon.discountMnt;
         } catch {
           // An invalid/stale coupon at preview time isn't this endpoint's
@@ -1257,7 +1269,11 @@ export const appRouter = router({
     }),
   }),
   orders: router({
-    mine: protectedProcedure.query(({ ctx }) => getOrdersForUser(ctx.user.id)),
+    // Audit 2026-09-09 (R4): cursor-paged, newest first (see getOrdersForUser).
+    mine: protectedProcedure.input(z.object({
+      cursor: z.number().int().positive().nullish(),
+      limit: z.number().int().min(1).max(50).optional(),
+    }).optional()).query(({ ctx, input }) => getOrdersForUser(ctx.user.id, { cursor: input?.cursor ?? null, limit: input?.limit })),
     // Admin overhaul (2026-09-08, Phase F): a guest checkout customer's only
     // way to check status until now. A mutation (not a query) so the phone
     // number stays out of a GET query string, matching auth.login/
@@ -1474,11 +1490,19 @@ export const appRouter = router({
       if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found." });
       if (order.paymentMethod !== "qpay") throw new TRPCError({ code: "BAD_REQUEST", message: "This order is not configured for QPay." });
       if (order.paymentStatus === "paid") throw new TRPCError({ code: "BAD_REQUEST", message: "This order has already been paid." });
+      // Audit 2026-09-09: a customer could cancel a pending QPay order (stock
+      // restored), then still mint an invoice for it and pay -- the webhook
+      // would then re-confirm an order whose goods were already released.
+      // markQPayPaymentAttemptPaid now refuses to touch a closed order too;
+      // this is the earlier, friendlier stop.
+      if (order.status === "cancelled" || order.status === "returned") throw new TRPCError({ code: "BAD_REQUEST", message: "This order is closed and can no longer be paid." });
       const invoice = await createQPayInvoice({
         senderInvoiceNo: order.orderNumber,
         amountMnt: order.totalMnt,
         description: `SUGI ASAYAKE order ${order.orderNumber}`,
-        callbackUrl: `${ctx.req.protocol}://${ctx.req.get("host")}/api/payments/qpay/callback`,
+        // Audit 2026-09-09 (R7): prefer the configured public origin; the
+        // request's Host header is only the fallback for a bare deployment.
+        callbackUrl: `${ENV.publicBaseUrl || `${ctx.req.protocol}://${ctx.req.get("host")}`}/api/payments/qpay/callback`,
       });
       await createQPayPaymentAttempt({ orderId: order.id, providerInvoiceId: invoice.invoiceId, responseJson: JSON.stringify(invoice.raw) });
       return { orderId: order.id, orderNumber: order.orderNumber, invoiceId: invoice.invoiceId, qrText: invoice.qrText, urls: invoice.urls };
@@ -1652,8 +1676,15 @@ export const appRouter = router({
     // terse error string), so staff can see it too — the same audience as
     // the rest of the dashboard.
     systemHealth: anyStaffProcedure.query(async () => {
-      const [db, storage] = await Promise.all([dbPing(), storagePing()]);
-      return { db, storage };
+      // Audit 2026-09-09 (architecture debt #3): the store-credit invariant
+      // check rides on this same card. Cached for a minute -- it scans the
+      // ledger, and the dashboard polls this query every 60s.
+      const [db, storage, storeCredit] = await Promise.all([
+        dbPing(),
+        storagePing(),
+        getOrSetCached("storeCreditDrift", 60_000, () => getStoreCreditDrift()).catch(() => null),
+      ]);
+      return { db, storage, storeCredit: storeCredit ? { ok: storeCredit.driftedAccounts === 0, ...storeCredit } : null };
     }),
     // Same idea for search: staff can look up products/orders, but user
     // records (and thus any way to reach user management from a search hit)
@@ -1675,6 +1706,13 @@ export const appRouter = router({
       if (ctx.user.role === "admin") return products;
       return products.map(product => ({ ...product, costMnt: null }));
     }),
+    // Audit 2026-09-09 (R4): one product's full row for the editor -- the
+    // list (admin.products) no longer carries description/galleryJson.
+    productDetail: catalogReadProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ input }) => {
+      const product = await getAdminProductDetail(input.id);
+      if (!product) throw new TRPCError({ code: "NOT_FOUND", message: "Бүтээгдэхүүн олдсонгүй." });
+      return product;
+    }),
     categories: catalogReadProcedure.query(() => getAdminCategories()),
     orders: ordersReadProcedure.query(() => getAdminOrders()),
     posts: contentReadProcedure.query(() => getAdminPosts()),
@@ -1683,7 +1721,12 @@ export const appRouter = router({
     siteMedia: marketingProcedure.query(() => getSiteMedia()),
     siteText: marketingProcedure.query(() => getSiteText()),
     storeSettings: marketingProcedure.query(() => getStoreSettings()),
-    users: usersReadProcedure.query(() => getAdminUsers()),
+    // Audit 2026-09-09 (R4): server-side page + search (see getAdminUsers).
+    users: usersReadProcedure.input(z.object({
+      search: z.string().trim().max(120).optional(),
+      page: z.number().int().positive().optional(),
+      pageSize: z.number().int().min(1).max(100).optional(),
+    }).optional()).query(({ input }) => getAdminUsers(input ?? {})),
     // 2026-09-05 ("admin invite staff section just change it to manually
     // only admin give staff role to default users" -- Tom, explicit): the
     // email-invitation flow (staffInvitations/inviteStaff/

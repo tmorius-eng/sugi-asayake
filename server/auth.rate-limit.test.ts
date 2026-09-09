@@ -7,10 +7,14 @@ import type { TrpcContext } from "./_core/context";
 // tests the bucket logic in isolation). No database is required: every
 // attempt here uses credentials that can't possibly match a real account, so
 // the assertions hold whether or not DATABASE_URL is configured.
+// Audit 2026-09-09: the strict tiers now count in the shared database, so a
+// fixed subnet would carry a blocked bucket from one test run into the next
+// (within the 15-minute window). A per-run random subnet keeps runs independent.
+const RUN_SUBNET = Math.floor(Math.random() * 200) + 10;
 let nextTestIpOctet = 1;
 function uniqueTestIp() {
   nextTestIpOctet += 1;
-  return `203.0.113.${nextTestIpOctet}`;
+  return `10.${RUN_SUBNET}.113.${nextTestIpOctet}`;
 }
 
 function makeCaller(ip: string) {

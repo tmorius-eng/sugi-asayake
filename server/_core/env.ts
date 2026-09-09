@@ -102,6 +102,16 @@ export const ENV = {
   // explicit exception to this file's usual convention, not an oversight.
   verifyMnApiKey: process.env.VERIFY_MN_API_KEY ?? "",
 
+  // Audit 2026-09-09 (R7): the site's own public origin, e.g.
+  // "https://sugiasayake.mn" -- no trailing slash. Used wherever the server
+  // must hand a third party an absolute URL pointing back at itself (today:
+  // the QPay payment callback_url). When unset, those URLs are derived from
+  // the incoming request's protocol + Host header instead, which is right
+  // on a plain single-host deployment but goes wrong behind a proxy that
+  // rewrites Host, and is client-influenced in principle. Set this once
+  // hosting is chosen; nothing else about the app changes.
+  publicBaseUrl: (process.env.PUBLIC_BASE_URL ?? "").trim().replace(/\/+$/, ""),
+
   // Admin face gate (2026-09-08): requires every /admin user (all 5 panel
   // roles -- staff/finance/marketing/warehouse/admin) to pass a browser
   // camera face check on top of their phone+password login. Customer-facing

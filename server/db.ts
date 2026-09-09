@@ -1,9 +1,10 @@
 import { randomBytes } from "node:crypto";
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lt, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lt, lte, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { adminAuditLogs, branches, branchStock, cartItems, carts, discountCodes, faceAttempts, faceChallenges, faceEnrollments, featuredBrands, InsertProduct, InsertProductCategory, InsertUser, integrationConfigs, loginAttempts, marketingSpend, mediaLibrary, orderItems, orders, paymentAttempts, phoneVerificationSessions, postCategories, postCategoryLinks, posts, postTagLinks, postTags, productCategories, productReviews, productVariants, products, routines, routineSteps, scheduledJobRuns, siteMedia, siteText, sitePromotions, storeCreditLedger, storeSettings, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
 import { slugify } from "../shared/slugify";
 import { guessDistrictFromAddress, type UbDistrict } from "../shared/districts";
+import { computeDeliveryFeeMnt } from "../shared/delivery";
 import { getStoreSettingSlot, type StoreSettingKey } from "../shared/store-settings";
 import { decryptJson, encryptJson } from "./_core/crypto";
 import { sqlQueryLogger } from "./_core/sqlQueryLog";
@@ -14,6 +15,50 @@ import { getLoyaltyTier, getNextLoyaltyTier } from "../shared/loyalty";
 import { applyDiversityCap, computeCategoryAffinity, filterCatalogBrand, filterCatalogPriceRange, filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCatalogCategories, getCatalogSkinTypes, scorePreferenceMatch, scorePriceBandAffinity, sortCatalogProducts, type CatalogSortOption, type PreferenceProfile, type SkinType } from "../shared/catalog-filter";
 
 let _db: ReturnType<typeof drizzle> | null = null;
+
+/**
+ * Audit 2026-09-09: the ONE definition of "this order counts as a sale that
+ * actually happened" -- used by every revenue, loyalty-spend, bestseller and
+ * analytics query in this file and in server/analytics.ts.
+ *
+ * `paymentStatus = 'paid'` alone (what every reader used to check) is not
+ * enough: a QPay order becomes "paid" the moment the webhook lands, while its
+ * fulfilment status is still pending/confirmed -- exactly the window in which
+ * a customer may self-cancel it (orders.cancel) or a warehouse user may cancel
+ * it (admin.updateOrder). Cancellation restores stock but deliberately never
+ * touches paymentStatus (the money really was collected and is now owed
+ * back), so such an order stayed "paid" forever and was silently counted as
+ * revenue, as lifetime loyalty spend (a free tier upgrade for a purchase that
+ * never shipped), and as bestseller volume -- while analytics.ts's own header
+ * comment promised "a pending/cancelled order never inflates revenue".
+ * Excluding cancelled orders here restores that promise in one place. A
+ * refunded order is already excluded by paymentStatus <> 'paid'.
+ */
+export const settledSaleSql = sql`(${orders.paymentStatus} = 'paid' AND ${orders.status} <> 'cancelled')`;
+
+/** SQL twin of shared/orders.ts's isRefundOwed: the customer's money was
+ *  collected and the order is dead -- finance owes a refund. */
+export const refundOwedSql = sql`(${orders.paymentStatus} = 'paid' AND ${orders.status} = 'cancelled')`;
+
+// Audit 2026-09-09 (R5): "SA" + base-36 milliseconds + 6 random base-36
+// characters (was 4). orders.orderNumber is UNIQUE, so a same-millisecond
+// collision never silently duplicates -- but it used to surface as a raw
+// database error to the shopper. Six characters make a collision ~1 in 2.2
+// billion per same-millisecond pair, and createOrderFromActiveCart retries
+// with a fresh number on the remaining chance. Injectable for the test that
+// proves the retry (see order-unwind.integration.test.ts).
+export function generateOrderNumber(): string {
+  return `SA${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+}
+
+function isDuplicateOrderNumberError(error: unknown): boolean {
+  const candidates = [error, (error as { cause?: unknown } | null)?.cause];
+  return candidates.some(candidate => {
+    if (!candidate || typeof candidate !== "object") return false;
+    const { code, errno, message } = candidate as { code?: string; errno?: number; message?: string };
+    return (code === "ER_DUP_ENTRY" || errno === 1062) && typeof message === "string" && message.includes("orderNumber");
+  });
+}
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
@@ -779,7 +824,7 @@ export async function getBestsellingProducts(limit = 8) {
     .select({ productId: orderItems.productId, soldQuantity: soldQtyExpr })
     .from(orderItems)
     .innerJoin(orders, eq(orderItems.orderId, orders.id))
-    .where(eq(orders.paymentStatus, "paid"))
+    .where(settledSaleSql)
     .groupBy(orderItems.productId)
     .orderBy(desc(soldQtyExpr))
     .limit(limit * 3); // headroom: some winners may since have gone unpublished
@@ -832,7 +877,7 @@ export async function getCategoryShelfProducts(categoryId: number, limit = 12) {
     .from(orderItems)
     .innerJoin(orders, eq(orderItems.orderId, orders.id))
     .innerJoin(products, eq(orderItems.productId, products.id))
-    .where(and(eq(orders.paymentStatus, "paid"), eq(products.categoryId, categoryId), eq(products.isPublished, true)))
+    .where(and(settledSaleSql, eq(products.categoryId, categoryId), eq(products.isPublished, true)))
     .groupBy(orderItems.productId)
     .orderBy(desc(soldQtyExpr))
     .limit(limit);
@@ -990,7 +1035,7 @@ export async function getRecommendedProducts(userId: number | null, limit = 8) {
       .from(orderItems)
       .innerJoin(orders, eq(orderItems.orderId, orders.id))
       .leftJoin(products, eq(orderItems.productId, products.id))
-      .where(and(eq(orders.userId, userId), eq(orders.paymentStatus, "paid")));
+      .where(and(eq(orders.userId, userId), settledSaleSql));
     categoryAffinity = computeCategoryAffinity(paidOrderItemRows.map(row => ({ categoryId: row.categoryId, quantity: row.quantity })));
     if (paidOrderItemRows.length) {
       avgHistoricalUnitPriceMnt = paidOrderItemRows.reduce((sum, row) => sum + row.unitPriceMnt, 0) / paidOrderItemRows.length;
@@ -1136,7 +1181,7 @@ export async function getRelatedProducts(productId: number, limit = 6) {
   const soldQtyExpr = sql<number>`SUM(${orderItems.quantity})`;
   const soldRows = await db.select({ productId: orderItems.productId, soldQuantity: soldQtyExpr })
     .from(orderItems).innerJoin(orders, eq(orderItems.orderId, orders.id))
-    .where(eq(orders.paymentStatus, "paid")).groupBy(orderItems.productId);
+    .where(settledSaleSql).groupBy(orderItems.productId);
   const soldByProduct = new Map(soldRows.map(row => [row.productId, Number(row.soldQuantity)]));
 
   const scored = candidates
@@ -1392,7 +1437,7 @@ export async function createOrderFromActiveCart(input: {
   // as couponCode above). Guests (no owner.userId) can never have a
   // balance, so this is silently ignored for them rather than erroring.
   applyStoreCreditMnt?: number | null;
-}) {
+}, options?: { generateOrderNumber?: () => string }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const cart = await getActiveCartForOwner(input.owner);
@@ -1438,9 +1483,9 @@ export async function createOrderFromActiveCart(input: {
     getStoreSettingNumber("delivery-fee-ub-mnt"),
     getStoreSettingNumber("free-shipping-threshold-mnt"),
   ]);
-  const deliveryFeeMnt = input.deliveryMethod === "ub_delivery"
-    ? (freeShippingThresholdMnt > 0 && subtotalMnt >= freeShippingThresholdMnt ? 0 : deliveryFeeUbMnt)
-    : 0;
+  // Audit 2026-09-09: the ONE delivery-fee rule, shared with Checkout.tsx's
+  // preview (shared/delivery.ts) -- no second hand-copied formula.
+  const deliveryFeeMnt = computeDeliveryFeeMnt({ deliveryMethod: input.deliveryMethod, subtotalMnt, deliveryFeeUbMnt, freeShippingThresholdMnt });
   // PREMIUM-FEATURES.md TIER 4: computed from the cart's real contents right
   // now, not a client-supplied amount — see getApplicableRoutineDiscount.
   const routineDiscount = await getApplicableRoutineDiscount(cart.items);
@@ -1450,7 +1495,7 @@ export async function createOrderFromActiveCart(input: {
   // if the code has gone stale between the checkout-preview call and now
   // (expired, used up, deactivated), the whole order fails with a clear
   // error rather than silently dropping the discount the shopper was shown.
-  const couponResult = input.couponCode ? await validateDiscountCode(input.couponCode, subtotalMnt - discountMnt) : null;
+  const couponResult = input.couponCode ? await validateDiscountCode(input.couponCode, subtotalMnt - discountMnt, { userId: input.owner.userId ?? null, phone: input.customerPhone }) : null;
   const couponDiscountMnt = couponResult?.discountMnt ?? 0;
   // PREMIUM-FEATURES.md TIER 5: loyalty applies to the subtotal after both
   // the routine discount and the coupon — sequential stacking throughout,
@@ -1463,7 +1508,6 @@ export async function createOrderFromActiveCart(input: {
   // itself, so a district is captured even when the client doesn't send
   // one — see shared/districts.ts and scripts/backfill-order-districts.ts.
   const deliveryDistrict = input.deliveryMethod === "ub_delivery" ? (input.district ?? guessDistrictFromAddress(input.deliveryAddress)) : null;
-  const orderNumber = `SA${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
   const payableBeforeCreditMnt = subtotalMnt + deliveryFeeMnt - discountMnt - couponDiscountMnt - loyaltyDiscountMnt;
   // Phase I: credit is cash-equivalent, so it's applied LAST against the
   // already-discounted total, never stacked into the routine/coupon/loyalty
@@ -1478,7 +1522,11 @@ export async function createOrderFromActiveCart(input: {
     storeCreditAppliedMnt = Math.max(0, Math.min(input.applyStoreCreditMnt, creditRow?.storeCreditMnt ?? 0, payableBeforeCreditMnt));
   }
   let orderId = 0;
-  await db.transaction(async tx => {
+  // The whole checkout transaction, parameterised by the order number so it
+  // can be re-run with a fresh one on the (rare) UNIQUE collision -- see
+  // generateOrderNumber / isDuplicateOrderNumberError. A failed attempt has
+  // been fully rolled back (stock, coupon, credit), so re-running is safe.
+  const placeOrderTransaction = (orderNumber: string) => db.transaction(async tx => {
     for (const item of cart.items) {
       // "Controls everything" admin overhaul (2026-09-08, Phase L): decrements
       // the SPECIFIC fulfilling branch's shelf now, not one shared global
@@ -1559,6 +1607,16 @@ export async function createOrderFromActiveCart(input: {
     }
     await tx.update(carts).set({ status: "converted", updatedAt: new Date() }).where(eq(carts.id, cart.id));
   });
+  const nextOrderNumber = options?.generateOrderNumber ?? generateOrderNumber;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await placeOrderTransaction(nextOrderNumber());
+      break;
+    } catch (error) {
+      if (attempt < 3 && isDuplicateOrderNumberError(error)) continue;
+      throw error;
+    }
+  }
 
   const order = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
   // The cart's items are already in memory (loaded above, before the stock
@@ -1912,17 +1970,30 @@ export async function getOrderForUser(orderId: number, userId: number) {
   return result[0];
 }
 
-export async function getOrdersForUser(userId: number) {
+// Audit 2026-09-09 (R4): cursor-paged (newest first, `cursor` = the last
+// order id already shown) instead of the whole history in one response, so
+// a long-standing customer's profile never grows into an unbounded query.
+// `total` rides along for the profile's "Нийт захиалга" counter, which
+// used to be `orders.length` of the (now partial) list.
+export async function getOrdersForUser(userId: number, input: { cursor?: number | null; limit?: number } = {}) {
   const db = await getDb();
-  if (!db) return [];
-  const orderRows = await db.select().from(orders).where(eq(orders.userId, userId)).orderBy(desc(orders.createdAt));
-  if (!orderRows.length) return [];
+  if (!db) return { orders: [], nextCursor: null as number | null, total: 0 };
+  const limit = Math.min(50, Math.max(1, input.limit ?? 20));
+  const where = input.cursor ? and(eq(orders.userId, userId), lt(orders.id, input.cursor)) : eq(orders.userId, userId);
+  const [orderRows, [countRow]] = await Promise.all([
+    db.select().from(orders).where(where).orderBy(desc(orders.id)).limit(limit + 1),
+    db.select({ count: sql<number>`count(*)` }).from(orders).where(eq(orders.userId, userId)),
+  ]);
+  const total = Number(countRow?.count ?? 0);
+  const pageRows = orderRows.slice(0, limit);
+  const nextCursor = orderRows.length > limit ? pageRows[pageRows.length - 1].id : null;
+  if (!pageRows.length) return { orders: [], nextCursor: null, total };
   // `productId` (nullable — SET NULL if the product was later deleted) lets
   // the "Дахин захиалах" (Buy Again) button on the profile Orders tab
   // re-add these exact products to the cart. Scoped to this user's own
   // order ids rather than scanning the whole order_items table.
-  const lineItems = await db.select({ orderId: orderItems.orderId, productId: orderItems.productId, productName: orderItems.productName, sku: orderItems.sku, quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt }).from(orderItems).where(inArray(orderItems.orderId, orderRows.map(order => order.id)));
-  return orderRows.map(order => ({ ...order, items: lineItems.filter(item => item.orderId === order.id) }));
+  const lineItems = await db.select({ orderId: orderItems.orderId, productId: orderItems.productId, productName: orderItems.productName, sku: orderItems.sku, quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt }).from(orderItems).where(inArray(orderItems.orderId, pageRows.map(order => order.id)));
+  return { orders: pageRows.map(order => ({ ...order, items: lineItems.filter(item => item.orderId === order.id) })), nextCursor, total };
 }
 
 // Admin overhaul (2026-09-08, Phase G): customer self-service cancellation.
@@ -2116,17 +2187,62 @@ export async function getPaymentAttemptByInvoiceId(providerInvoiceId: string) {
   return attempts[0];
 }
 
+export async function getOrderById(orderId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const rows = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  return rows[0] ?? null;
+}
+
+// Audit 2026-09-09 (R6): an invoice QPay reports as PAID for LESS than the
+// order total is recorded as a failed attempt (visible on the dashboard's
+// "Амжилтгүй төлбөр" list) rather than silently confirming the order.
+export async function markQPayPaymentAttemptFailed(input: { id: number; providerPaymentId: string | null }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.update(paymentAttempts).set({ status: "failed", providerPaymentId: input.providerPaymentId, updatedAt: new Date() }).where(eq(paymentAttempts.id, input.id));
+}
+
 export async function storeQPayPaymentAttemptResponse(input: { id: number; responseJson: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.update(paymentAttempts).set({ responseJson: input.responseJson, updatedAt: new Date() }).where(eq(paymentAttempts.id, input.id));
 }
 
+// Audit 2026-09-09: this used to be an unconditional
+// `SET paymentStatus='paid', status='confirmed'`, i.e. the webhook was the one
+// writer in the codebase that ignored updateAdminOrder's forward-only ladder.
+// A late or duplicate QPay callback (they are delivered at-least-once) could
+// therefore: resurrect a CANCELLED order into "confirmed" after its stock had
+// already been restored (oversell), knock a packed/completed order backward
+// to "confirmed", or flip a REFUNDED order back to "paid". Now the order row
+// only changes while it is genuinely awaiting payment: still unpaid and not
+// closed. "pending" advances to "confirmed" as before; any later fulfilment
+// status is left alone (payment arriving after packing must not un-pack it).
+// The payment_attempts row is always recorded, so money that arrives for an
+// already-cancelled order is never lost -- it is visible to finance as a
+// paid attempt on a closed order (logged below) and refundable from there.
 export async function markQPayPaymentAttemptPaid(input: { id: number; orderId: number; providerPaymentId: string | null }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.update(paymentAttempts).set({ status: "paid", providerPaymentId: input.providerPaymentId, updatedAt: new Date() }).where(eq(paymentAttempts.id, input.id));
-  await db.update(orders).set({ paymentStatus: "paid", status: "confirmed", updatedAt: new Date() }).where(eq(orders.id, input.orderId));
+  const updated = await db.update(orders)
+    .set({ paymentStatus: "paid", status: sql`IF(${orders.status} = 'pending', 'confirmed', ${orders.status})`, updatedAt: new Date() })
+    .where(and(eq(orders.id, input.orderId), eq(orders.paymentStatus, "unpaid"), sql`${orders.status} NOT IN ('cancelled', 'returned')`));
+  const orderUpdated = Number(updated[0].affectedRows ?? 0) === 1;
+  if (!orderUpdated) {
+    console.warn(`[QPay] Payment ${input.providerPaymentId ?? "(no id)"} confirmed for order ${input.orderId}, but the order is already paid or closed -- left unchanged; check payment_attempts for a refund.`);
+  }
+  return { orderUpdated };
+}
+
+/** The editor's own load for ONE product -- carries the heavy columns
+ *  (description, galleryJson) that getAdminProducts's list omits. */
+export async function getAdminProductDetail(productId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const rows = await db.select().from(products).where(eq(products.id, productId)).limit(1);
+  return rows[0] ?? null;
 }
 
 export async function getAdminProducts() {
@@ -2141,13 +2257,16 @@ export async function getAdminProducts() {
       slug: products.slug,
       brand: products.brand,
       shortDescription: products.shortDescription,
-      description: products.description,
+      // Audit 2026-09-09 (R4/performance): `description` and `galleryJson`
+      // are deliberately NOT in this list -- at ~940 products they were most
+      // of the payload on every open of the Products section, and the list
+      // never displays either. The editor loads them for the one product
+      // being edited via getAdminProductDetail below.
       sku: products.sku,
       priceMnt: products.priceMnt,
       compareAtPriceMnt: products.compareAtPriceMnt,
       costMnt: products.costMnt,
       imageUrl: products.imageUrl,
-      galleryJson: products.galleryJson,
       stockQuantity: products.stockQuantity,
       isPublished: products.isPublished,
       updatedAt: products.updatedAt,
@@ -2210,7 +2329,7 @@ export async function getLowStockProducts() {
 export async function getAdminDashboardSummary() {
   const db = await getDb();
   if (!db) {
-    return { totalOrders: 0, totalRevenueMnt: 0, activeUsers: 0, recentOrders: [] as { id: number; orderNumber: string; customerName: string; totalMnt: number; status: string; paymentStatus: string; createdAt: Date; firstItemName: string | null; firstItemImageUrl: string | null; itemCount: number }[], lowStockProducts: [], failedPayments: [], ordersLast7d: 0, ordersPrevious7d: 0, ordersDailySeries: [] as { date: string; orderCount: number }[] };
+    return { totalOrders: 0, totalRevenueMnt: 0, activeUsers: 0, recentOrders: [] as { id: number; orderNumber: string; customerName: string; totalMnt: number; status: string; paymentStatus: string; createdAt: Date; firstItemName: string | null; firstItemImageUrl: string | null; itemCount: number }[], lowStockProducts: [], failedPayments: [], ordersLast7d: 0, ordersPrevious7d: 0, ordersDailySeries: [] as { date: string; orderCount: number }[], refundOwedCount: 0 };
   }
 
   const activeSince = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -2226,9 +2345,9 @@ export async function getAdminDashboardSummary() {
   const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
   const dailyOrderDateExpr = sql<string>`date(${orders.createdAt})`;
 
-  const [[orderCountRow], [revenueRow], [activeUserRow], recentOrders, lowStockProducts, failedPayments, dailyOrderRows] = await Promise.all([
+  const [[orderCountRow], [revenueRow], [activeUserRow], recentOrders, lowStockProducts, failedPayments, dailyOrderRows, [refundOwedRow]] = await Promise.all([
     db.select({ count: sql<number>`count(*)` }).from(orders),
-    db.select({ total: sql<number>`coalesce(sum(${orders.totalMnt}), 0)` }).from(orders).where(eq(orders.paymentStatus, "paid")),
+    db.select({ total: sql<number>`coalesce(sum(${orders.totalMnt}), 0)` }).from(orders).where(settledSaleSql),
     db.select({ count: sql<number>`count(*)` }).from(users).where(gte(users.lastSignedIn, activeSince)),
     db.select({
       id: orders.id,
@@ -2248,6 +2367,9 @@ export async function getAdminDashboardSummary() {
       createdAt: paymentAttempts.createdAt,
     }).from(paymentAttempts).leftJoin(orders, eq(paymentAttempts.orderId, orders.id)).where(eq(paymentAttempts.status, "failed")).orderBy(desc(paymentAttempts.createdAt)).limit(10),
     db.select({ date: dailyOrderDateExpr, count: sql<number>`count(*)` }).from(orders).where(gte(orders.createdAt, fourteenDaysAgo)).groupBy(dailyOrderDateExpr),
+    // Audit 2026-09-09 (R2): orders whose money was collected and that were
+    // then cancelled -- finance owes each one a refund (see refundOwedSql).
+    db.select({ count: sql<number>`count(*)` }).from(orders).where(refundOwedSql),
   ]);
 
   // 2026-09-08 (reference-driven admin redesign): the new dashboard's
@@ -2299,6 +2421,7 @@ export async function getAdminDashboardSummary() {
     ordersLast7d,
     ordersPrevious7d,
     ordersDailySeries,
+    refundOwedCount: Number(refundOwedRow?.count ?? 0),
   };
 }
 
@@ -2483,6 +2606,34 @@ async function restoreStockForOrder(tx: OrderTx, orderId: number) {
   for (const variantId of Array.from(affectedVariantIds)) await recomputeVariantStockTotal(tx, variantId);
 }
 
+// Audit 2026-09-09: store credit is cash-equivalent money the customer
+// already handed over (createOrderFromActiveCart debits users.storeCreditMnt
+// inside the checkout transaction and writes the negative ledger row), yet
+// neither cancellation nor refund ever gave it back -- restoreStockForOrder
+// returned the goods to the shelf while the credit simply vanished. Worse,
+// refundOrder capped the cash refund at orders.totalMnt, which is the
+// AFTER-credit figure, so a 100,000₮ order paid with 30,000₮ credit could be
+// "fully refunded" for 70,000₮ and the customer was 30,000₮ short with no
+// ledger trace. This is the single reversal used by both unwind paths.
+//
+// Idempotent by construction: the positive ledger row it writes for this
+// orderId is the marker, so a cancel followed by a refund (both legitimate
+// on the same order, see refundOrder) credits back exactly once. Runs inside
+// the caller's transaction so a failed status flip rolls the credit back too.
+async function reverseStoreCreditForOrder(tx: OrderTx, orderId: number, reason: string) {
+  const [orderRow] = await tx.select({ userId: orders.userId, orderNumber: orders.orderNumber, storeCreditAppliedMnt: orders.storeCreditAppliedMnt }).from(orders).where(eq(orders.id, orderId)).limit(1);
+  if (!orderRow || !orderRow.userId || orderRow.storeCreditAppliedMnt <= 0) return 0;
+  const alreadyReversed = await tx.select({ id: storeCreditLedger.id }).from(storeCreditLedger)
+    .where(and(eq(storeCreditLedger.orderId, orderId), eq(storeCreditLedger.userId, orderRow.userId), sql`${storeCreditLedger.deltaMnt} > 0`)).limit(1);
+  if (alreadyReversed.length) return 0;
+  await tx.update(users).set({ storeCreditMnt: sql`${users.storeCreditMnt} + ${orderRow.storeCreditAppliedMnt}`, updatedAt: new Date() }).where(eq(users.id, orderRow.userId));
+  await tx.insert(storeCreditLedger).values({
+    userId: orderRow.userId, deltaMnt: orderRow.storeCreditAppliedMnt,
+    reason: `Захиалга ${orderRow.orderNumber} ${reason} — дэлгүүрийн зээл буцаан олгов`, actorUserId: null, orderId,
+  });
+  return orderRow.storeCreditAppliedMnt;
+}
+
 export async function updateAdminOrder(input: { id: number; status?: FulfilmentStatus; deliveryTrackingRef?: string | null; adminNote?: string | null }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
@@ -2502,12 +2653,28 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
     }
   }
   await db.transaction(async tx => {
+    // Audit 2026-09-09: the ladder checks above are a plain read, not a
+    // lock -- two concurrent cancels (a double-clicked button, or a customer
+    // self-cancel racing a warehouse cancel) both read "confirmed", both
+    // passed, and both ran restoreStockForOrder: stock credited back TWICE
+    // for one order. Same TOCTOU shape as the audit's BUG-003 phone sessions.
+    // Fix is the same WHERE-guard + affectedRows idiom checkout uses: the
+    // status flip is conditional on the status we validated against, and it
+    // runs FIRST so the loser of the race blocks on the row lock, then sees
+    // 0 rows and throws before touching stock or credit.
+    if (input.status) {
+      const flipped = await tx.update(orders).set({ status: input.status, ...(input.status === "returned" ? { returnedAt: new Date() } : {}), updatedAt: new Date() })
+        .where(and(eq(orders.id, input.id), eq(orders.status, current[0].status)));
+      if (Number(flipped[0].affectedRows ?? 0) !== 1) throw new Error("This order was changed by someone else just now. Refresh and try again.");
+    }
     if (shouldRestoreStock(current[0].status as FulfilmentStatus, input.status)) {
       await restoreStockForOrder(tx, input.id);
     }
+    if (input.status === "cancelled") {
+      await reverseStoreCreditForOrder(tx, input.id, "цуцлагдсан");
+    }
     await tx.update(orders).set({
-      ...(input.status ? { status: input.status } : {}),
-      ...(input.status === "returned" ? { returnedAt: new Date() } : {}),
+      // status/returnedAt were already written by the guarded flip above.
       // Fixes a real pre-existing gap: paymentStatus was only ever written
       // by the QPay webhook (markQPayPaymentAttemptPaid) -- a cash_on_
       // delivery/bank_transfer/card order never became "paid" anywhere in
@@ -2539,20 +2706,36 @@ export async function refundOrder(input: { id: number; refundAmountMnt: number; 
   if (!db) throw new Error("Database is not available");
   const current = await db.select().from(orders).where(eq(orders.id, input.id)).limit(1);
   if (!current[0]) throw new Error("Order not found.");
-  if (current[0].status !== "returned") throw new Error("Only a returned order can be refunded.");
+  // Audit 2026-09-09: "returned" was the only refundable state, which left a
+  // real dead end -- a QPay order becomes paymentStatus="paid" at webhook
+  // time, while still pending/confirmed and therefore still cancellable
+  // (orders.cancel / admin.updateOrder). Cancelling restores stock but the
+  // money stays collected, and there was no path at all to record giving it
+  // back: refundOrder refused (not "returned"), updateAdminOrder refused
+  // (closed). A cancelled order that was actually paid is refundable here for
+  // exactly that reason. An order that was never recorded as paid has nothing
+  // to refund -- the guard below is also what makes the conditional UPDATE
+  // race-proof (two concurrent refund clicks: one wins, one sees 0 rows).
+  if (current[0].status !== "returned" && current[0].status !== "cancelled") throw new Error("Only a returned or cancelled order can be refunded.");
   if (current[0].paymentStatus === "refunded") throw new Error("This order has already been refunded.");
+  if (current[0].paymentStatus !== "paid") throw new Error("This order was never recorded as paid, so there is nothing to refund.");
+  // totalMnt is the CASH the customer paid (after any store credit). The
+  // store-credit portion is returned as credit by reverseStoreCreditForOrder
+  // below, so this cap and that reversal never overlap.
   if (input.refundAmountMnt > current[0].totalMnt) throw new Error("Refund amount cannot exceed the order total.");
   await db.transaction(async tx => {
-    if (input.restockItems) {
-      await restoreStockForOrder(tx, input.id);
-    }
-    await tx.update(orders).set({
+    const flipped = await tx.update(orders).set({
       paymentStatus: "refunded",
       refundAmountMnt: input.refundAmountMnt,
       refundedAt: new Date(),
       refundNote: input.refundNote,
       updatedAt: new Date(),
-    }).where(eq(orders.id, input.id));
+    }).where(and(eq(orders.id, input.id), eq(orders.paymentStatus, "paid")));
+    if (Number(flipped[0].affectedRows ?? 0) !== 1) throw new Error("This order has already been refunded.");
+    if (input.restockItems) {
+      await restoreStockForOrder(tx, input.id);
+    }
+    await reverseStoreCreditForOrder(tx, input.id, "буцаагдсан");
   });
   const updated = await db.select().from(orders).where(eq(orders.id, input.id)).limit(1);
   return updated[0];
@@ -3218,6 +3401,28 @@ export async function getUserStoreCreditBalance(userId: number): Promise<number>
   return row?.storeCreditMnt ?? 0;
 }
 
+/**
+ * Audit 2026-09-09 (architecture debt #3): users.storeCreditMnt is a cached
+ * balance and store_credit_ledger is the append-only truth; every writer
+ * must update both inside one transaction, and nothing else checks they
+ * agree. This is that check -- the number of accounts whose cached balance
+ * differs from the sum of their ledger rows. Surfaced on the admin System
+ * Health card so a drift is seen the day it happens, not the day a
+ * customer complains (which is exactly how BUG-U1 stayed hidden).
+ */
+export async function getStoreCreditDrift() {
+  const db = await getDb();
+  if (!db) return { driftedAccounts: 0, checkedAccounts: 0 };
+  const ledgerTotals = db.select({ userId: storeCreditLedger.userId, ledgerTotal: sql<number>`coalesce(sum(${storeCreditLedger.deltaMnt}), 0)`.as("ledgerTotal") })
+    .from(storeCreditLedger).groupBy(storeCreditLedger.userId).as("ledgerTotals");
+  const [row] = await db.select({
+    checked: sql<number>`count(*)`,
+    drifted: sql<number>`coalesce(sum(case when ${users.storeCreditMnt} <> coalesce(${ledgerTotals.ledgerTotal}, 0) then 1 else 0 end), 0)`,
+  }).from(users).leftJoin(ledgerTotals, eq(ledgerTotals.userId, users.id))
+    .where(or(ne(users.storeCreditMnt, 0), isNotNull(ledgerTotals.userId)));
+  return { driftedAccounts: Number(row?.drifted ?? 0), checkedAccounts: Number(row?.checked ?? 0) };
+}
+
 export async function getStoreCreditLedger(userId: number) {
   const db = await getDb();
   if (!db) return [];
@@ -3681,12 +3886,22 @@ export async function updateAdminCategory(input: { id: number } & Partial<Catego
   return updated[0];
 }
 
-export async function getAdminUsers() {
+// Audit 2026-09-09 (R4): server-side page + search, instead of shipping the
+// entire users table to the browser on every open of the Users section.
+// Invisible with today's handful of accounts; the point is that it stays
+// invisible at 50,000. Search is a plain prefix/contains match on the three
+// columns the old client-side filter used, so the admin sees exactly the
+// same results as before, just computed where the data is.
+export async function getAdminUsers(input: { search?: string; page?: number; pageSize?: number } = {}) {
   const db = await getDb();
-  if (!db) return [];
-
-  return db
-    .select({
+  if (!db) return { rows: [], total: 0 };
+  const page = Math.max(1, input.page ?? 1);
+  const pageSize = Math.min(100, Math.max(1, input.pageSize ?? 25));
+  const search = input.search?.trim() ?? "";
+  const pattern = `%${search}%`;
+  const where = search ? or(like(users.name, pattern), like(users.email, pattern), like(users.phone, pattern)) : undefined;
+  const [rows, [countRow]] = await Promise.all([
+    db.select({
       id: users.id,
       name: users.name,
       email: users.email,
@@ -3696,9 +3911,10 @@ export async function getAdminUsers() {
       lastSignedIn: users.lastSignedIn,
       suspendedAt: users.suspendedAt,
       suspendedReason: users.suspendedReason,
-    })
-    .from(users)
-    .orderBy(desc(users.lastSignedIn));
+    }).from(users).where(where).orderBy(desc(users.lastSignedIn), desc(users.id)).limit(pageSize).offset((page - 1) * pageSize),
+    db.select({ count: sql<number>`count(*)` }).from(users).where(where),
+  ]);
+  return { rows, total: Number(countRow?.count ?? 0) };
 }
 
 // Admin overhaul (2026-09-08, Phase J): the campaign composer always sends
@@ -3741,7 +3957,7 @@ export async function getAdminUserDetail(userId: number) {
       totalMnt: orders.totalMnt,
       createdAt: orders.createdAt,
     }).from(orders).where(eq(orders.userId, userId)).orderBy(desc(orders.createdAt)),
-    db.select({ total: sql<number>`coalesce(sum(${orders.totalMnt}), 0)` }).from(orders).where(and(eq(orders.userId, userId), eq(orders.paymentStatus, "paid"))),
+    db.select({ total: sql<number>`coalesce(sum(${orders.totalMnt}), 0)` }).from(orders).where(and(eq(orders.userId, userId), settledSaleSql)),
   ]);
 
   const onlineSpendMnt = Number(spendRow?.total ?? 0);
@@ -3775,7 +3991,7 @@ export async function getUserLoyaltyStatus(userId: number) {
   const rows = await db.select({ phone: users.phone, loyaltyManualAdjustmentMnt: users.loyaltyManualAdjustmentMnt }).from(users).where(eq(users.id, userId)).limit(1);
   const user = rows[0];
   if (!user) return null;
-  const [spendRow] = await db.select({ total: sql<number>`coalesce(sum(${orders.totalMnt}), 0)` }).from(orders).where(and(eq(orders.userId, userId), eq(orders.paymentStatus, "paid")));
+  const [spendRow] = await db.select({ total: sql<number>`coalesce(sum(${orders.totalMnt}), 0)` }).from(orders).where(and(eq(orders.userId, userId), settledSaleSql));
   const onlineSpendMnt = Number(spendRow?.total ?? 0);
   const totalSpendMnt = onlineSpendMnt + user.loyaltyManualAdjustmentMnt;
   const nextTier = getNextLoyaltyTier(totalSpendMnt);
@@ -3790,7 +4006,7 @@ export async function getUserLoyaltyStatus(userId: number) {
   // orders.loyaltyDiscountMnt is a column entirely separate from
   // orders.discountMnt (routine) and orders.couponDiscountMnt (coupon), so
   // summing it alone can't leak either of those into "loyalty savings".
-  const [savingsRow] = await db.select({ total: sql<number>`coalesce(sum(${orders.loyaltyDiscountMnt}), 0)` }).from(orders).where(and(eq(orders.userId, userId), eq(orders.paymentStatus, "paid")));
+  const [savingsRow] = await db.select({ total: sql<number>`coalesce(sum(${orders.loyaltyDiscountMnt}), 0)` }).from(orders).where(and(eq(orders.userId, userId), settledSaleSql));
   const totalLoyaltySavingsMnt = Number(savingsRow?.total ?? 0);
   return {
     cardNumber: user.phone,
@@ -3834,7 +4050,19 @@ export async function getApplicableLoyaltyDiscount(userId: number | undefined, a
  * the number a shopper sees before confirming is guaranteed to match what's
  * actually charged.
  */
-export async function validateDiscountCode(rawCode: string, amountMnt: number) {
+/**
+ * Audit 2026-09-09 (R1): `customer` identifies who is redeeming, for the
+ * per-customer cap (discount_codes.maxUsesPerCustomer). A signed-in shopper
+ * is matched by account id; a guest by the last 8 digits of the phone they
+ * gave at checkout (so signing out does not reset the count). Cancelled
+ * orders do not count -- their coupon use was undone with everything else.
+ * At preview time a guest's phone is not yet known, so the preview passes
+ * only a null identity and the real check happens at order time; a signed-in
+ * shopper gets the honest answer already in the preview.
+ */
+export type DiscountRedeemer = { userId: number | null; phone: string | null };
+
+export async function validateDiscountCode(rawCode: string, amountMnt: number, customer: DiscountRedeemer = { userId: null, phone: null }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const code = rawCode.trim().toUpperCase();
@@ -3845,6 +4073,20 @@ export async function validateDiscountCode(rawCode: string, amountMnt: number) {
   if (record.expiresAt && record.expiresAt < new Date()) throw new Error("Хямдралын кодны хугацаа дууссан байна.");
   if (record.maxUses !== null && record.usesCount >= record.maxUses) throw new Error("Хямдралын код дууссан байна.");
   if (amountMnt < record.minSubtotalMnt) throw new Error(`Энэ код ${record.minSubtotalMnt.toLocaleString("mn-MN")}₮-с дээш захиалгад хамаарна.`);
+  if (record.maxUsesPerCustomer !== null) {
+    const phoneDigits = customer.phone ? customer.phone.replace(/\D/g, "").slice(-8) : "";
+    const identityConditions = [
+      ...(customer.userId ? [eq(orders.userId, customer.userId)] : []),
+      ...(phoneDigits.length === 8 ? [sql`RIGHT(REGEXP_REPLACE(${orders.customerPhone}, '[^0-9]', ''), 8) = ${phoneDigits}`] : []),
+    ];
+    if (identityConditions.length) {
+      const [usage] = await db.select({ count: sql<number>`count(*)` }).from(orders)
+        .where(and(eq(orders.couponCode, record.code), ne(orders.status, "cancelled"), or(...identityConditions)));
+      if (Number(usage?.count ?? 0) >= record.maxUsesPerCustomer) {
+        throw new Error(record.maxUsesPerCustomer === 1 ? "Та энэ кодыг аль хэдийн ашигласан байна." : `Энэ кодыг нэг хэрэглэгч хамгийн ихдээ ${record.maxUsesPerCustomer} удаа ашиглана — та хязгаартаа хүрсэн байна.`);
+      }
+    }
+  }
   const discountMnt = record.type === "percent"
     ? Math.round(amountMnt * (record.percentValue ?? 0) / 100)
     : Math.min(record.fixedAmountMnt ?? 0, amountMnt);

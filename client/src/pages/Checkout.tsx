@@ -14,6 +14,7 @@ import { getStoredTrafficSource } from "@/lib/trafficSource";
 import { useStoreSetting } from "@/hooks/useStoreSetting";
 import { formatVariantAttributes } from "@shared/catalog-filter";
 import { UB_DELIVERY_FEE_MNT } from "@shared/const";
+import { computeDeliveryFeeMnt } from "@shared/delivery";
 import { ubDistricts, ubDistrictLabels, type UbDistrict } from "@shared/districts";
 import { formatMnt } from "@shared/format";
 
@@ -114,9 +115,9 @@ export default function Checkout() {
   const valueForSetting = useStoreSetting();
   const deliveryFeeUbMnt = Number(valueForSetting("delivery-fee-ub-mnt", String(UB_DELIVERY_FEE_MNT)));
   const freeShippingThresholdMnt = Number(valueForSetting("free-shipping-threshold-mnt", "0"));
-  const deliveryFee = delivery === "delivery"
-    ? (freeShippingThresholdMnt > 0 && subtotal >= freeShippingThresholdMnt ? 0 : deliveryFeeUbMnt)
-    : 0;
+  // Audit 2026-09-09: the same shared rule the server charges with
+  // (shared/delivery.ts) -- no second hand-copied formula here any more.
+  const deliveryFee = computeDeliveryFeeMnt({ deliveryMethod: delivery === "delivery" ? "ub_delivery" : "store_pickup", subtotalMnt: subtotal, deliveryFeeUbMnt, freeShippingThresholdMnt });
   const discountMnt = routineDiscount.data?.discountMnt ?? 0;
   const couponDiscountMnt = couponQuery.data?.discountMnt ?? 0;
   const loyaltyDiscountMnt = loyaltyDiscountQuery.data?.discountMnt ?? 0;

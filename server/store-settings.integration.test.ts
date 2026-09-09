@@ -100,7 +100,7 @@ function makeGuestContext(existingGuestToken?: string): { ctx: TrpcContext; cook
     req: {
       protocol: "https",
       headers: { cookie: existingGuestToken ? `${GUEST_CART_COOKIE_NAME}=${existingGuestToken}` : "" },
-      ip: "203.0.114.9",
+      ip: `203.${Math.floor(Math.random() * 200) + 10}.114.9`,
       socket: { remoteAddress: "203.0.114.9" },
     } as unknown as TrpcContext["req"],
     res: {

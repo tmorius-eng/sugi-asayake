@@ -983,6 +983,13 @@ export const discountCodes = mysqlTable("discount_codes", {
   fixedAmountMnt: int("fixedAmountMnt"),
   minSubtotalMnt: int("minSubtotalMnt").notNull().default(0),
   maxUses: int("maxUses"),
+  // Audit 2026-09-09 (R1): maxUses above is a GLOBAL budget -- with only
+  // that, one shopper could redeem a percent code on every order until the
+  // whole budget was gone. NULL = unlimited per customer (today's behaviour
+  // for every existing code); N = each customer (matched by account, or by
+  // phone for guests) may redeem this code on at most N non-cancelled
+  // orders. Enforced in validateDiscountCode (server/db.ts).
+  maxUsesPerCustomer: int("maxUsesPerCustomer"),
   usesCount: int("usesCount").notNull().default(0),
   isActive: boolean("isActive").notNull().default(true),
   expiresAt: timestamp("expiresAt"),
@@ -1276,6 +1283,25 @@ export const storeCreditLedger = mysqlTable("store_credit_ledger", {
   index("store_credit_ledger_user_idx").on(table.userId),
 ]);
 export type StoreCreditLedgerEntry = typeof storeCreditLedger.$inferSelect;
+
+/**
+ * Audit 2026-09-09 (R3): shared counters behind the STRICT rate-limit tiers
+ * (login / register / password reset / checkout / phone verification -- see
+ * server/_core/persistentRateLimit.ts). The general and cart tiers stay in
+ * process memory (server/_core/security.ts) because they run on every
+ * request and a database round trip there would cost more than it protects;
+ * the strict tiers are low-volume brute-force targets where the limit MUST
+ * hold across every server instance, which an in-memory Map cannot do the
+ * moment the app runs on more than one process. Rows are upserted with one
+ * atomic INSERT ... ON DUPLICATE KEY UPDATE and swept once expired.
+ */
+export const rateLimitBuckets = mysqlTable("rate_limit_buckets", {
+  bucketKey: varchar("bucketKey", { length: 200 }).primaryKey(),
+  count: int("count").notNull().default(1),
+  resetAt: timestamp("resetAt").notNull(),
+}, table => [
+  index("rate_limit_buckets_reset_idx").on(table.resetAt),
+]);
 
 /**
  * Admin face gate (2026-09-08) -- one enrolled face reference per staff

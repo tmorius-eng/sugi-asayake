@@ -20,6 +20,7 @@ type DiscountCodeRow = {
   fixedAmountMnt: number | null;
   minSubtotalMnt: number;
   maxUses: number | null;
+  maxUsesPerCustomer: number | null;
   usesCount: number;
   isActive: boolean;
   expiresAt: string | Date | null;
@@ -33,11 +34,12 @@ type DiscountCodeForm = {
   fixedAmountMnt: string;
   minSubtotalMnt: string;
   maxUses: string;
+  maxUsesPerCustomer: string;
   isActive: boolean;
   expiresAt: string;
 };
 
-const emptyForm = (): DiscountCodeForm => ({ id: null, code: "", type: "percent", percentValue: "10", fixedAmountMnt: "", minSubtotalMnt: "0", maxUses: "", isActive: true, expiresAt: "" });
+const emptyForm = (): DiscountCodeForm => ({ id: null, code: "", type: "percent", percentValue: "10", fixedAmountMnt: "", minSubtotalMnt: "0", maxUses: "", maxUsesPerCustomer: "", isActive: true, expiresAt: "" });
 
 const toLocalInputValue = (value: string | Date | null) => {
   if (!value) return "";
@@ -70,6 +72,7 @@ export default function AdminDiscountCodesPanel() {
       fixedAmountMnt: code.fixedAmountMnt ? String(code.fixedAmountMnt) : "",
       minSubtotalMnt: String(code.minSubtotalMnt),
       maxUses: code.maxUses ? String(code.maxUses) : "",
+      maxUsesPerCustomer: code.maxUsesPerCustomer ? String(code.maxUsesPerCustomer) : "",
       isActive: code.isActive,
       expiresAt: toLocalInputValue(code.expiresAt),
     } : emptyForm());
@@ -87,6 +90,7 @@ export default function AdminDiscountCodesPanel() {
       fixedAmountMnt: form.type === "fixed" ? Number(form.fixedAmountMnt) || null : null,
       minSubtotalMnt: Number(form.minSubtotalMnt) || 0,
       maxUses: form.maxUses ? Number(form.maxUses) : null,
+      maxUsesPerCustomer: form.maxUsesPerCustomer ? Number(form.maxUsesPerCustomer) : null,
       isActive: form.isActive,
       expiresAt: form.expiresAt ? new Date(form.expiresAt) : null,
     };
@@ -114,7 +118,7 @@ export default function AdminDiscountCodesPanel() {
     },
     { id: "discount", header: "ХЯМДРАЛ", headerClassName: headerCell, cellClassName: `${bodyCell} font-bold`, render: code => code.type === "percent" ? `-${code.percentValue}%` : `-${formatMnt(code.fixedAmountMnt ?? 0)}` },
     { id: "minimum", header: "МИНИМУМ", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[var(--a-muted)]`, render: code => code.minSubtotalMnt > 0 ? `${formatMnt(code.minSubtotalMnt)}-с дээш` : "—" },
-    { id: "uses", header: "АШИГЛАЛТ", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[var(--a-muted)]`, render: code => `${code.usesCount}${code.maxUses !== null ? ` / ${code.maxUses}` : ""}` },
+    { id: "uses", header: "АШИГЛАЛТ", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[var(--a-muted)]`, render: code => `${code.usesCount}${code.maxUses !== null ? ` / ${code.maxUses}` : ""}${code.maxUsesPerCustomer !== null ? ` · хэрэглэгч бүрт ${code.maxUsesPerCustomer}` : ""}` },
     {
       id: "status", header: "ТӨЛӨВ", headerClassName: headerCell, cellClassName: bodyCell,
       render: code => {
@@ -165,6 +169,7 @@ export default function AdminDiscountCodesPanel() {
             : <label className="grid gap-1.5 text-xs font-bold">Хямдрал (₮)<input required type="number" min="1" value={form.fixedAmountMnt} onChange={event => setForm(current => ({ ...current, fixedAmountMnt: event.target.value }))} className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>}
           <label className="grid gap-1.5 text-xs font-bold">Хамгийн бага дэд дүн (₮, заавал биш)<input type="number" min="0" value={form.minSubtotalMnt} onChange={event => setForm(current => ({ ...current, minSubtotalMnt: event.target.value }))} className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
           <label className="grid gap-1.5 text-xs font-bold">Хамгийн олон удаагийн ашиглалт (заавал биш)<input type="number" min="1" placeholder="Хязгааргүй" value={form.maxUses} onChange={event => setForm(current => ({ ...current, maxUses: event.target.value }))} className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+          <label className="grid gap-1.5 text-xs font-bold">Нэг хэрэглэгч хамгийн олон удаа (заавал биш)<input type="number" min="1" max="1000" placeholder="Хязгааргүй" value={form.maxUsesPerCustomer} onChange={event => setForm(current => ({ ...current, maxUsesPerCustomer: event.target.value }))} className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /><span className="text-[10px] font-normal text-[var(--a-muted)]">Бүртгэлтэй хэрэглэгчийг данс, зочныг утасны дугаараар нь таньж тоолно.</span></label>
           <label className="grid gap-1.5 text-xs font-bold">Дуусах огноо (заавал биш)<input type="datetime-local" value={form.expiresAt} onChange={event => setForm(current => ({ ...current, expiresAt: event.target.value }))} className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
           <label className="flex items-center gap-3 rounded-xl bg-[var(--a-card)] px-3 py-3 text-sm font-bold"><input type="checkbox" checked={form.isActive} onChange={event => setForm(current => ({ ...current, isActive: event.target.checked }))} className="size-4 accent-[#df1f3d]" />Идэвхтэй</label>
         </div>

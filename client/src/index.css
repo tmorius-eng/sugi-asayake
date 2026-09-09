@@ -883,6 +883,10 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .order-date { margin: 4px 0 0; font-family: var(--font-display); font-size: 19px; font-weight: 650; letter-spacing: -.03em; }
 .order-status-pill { padding: 7px 12px; background: #eef3f1; color: #286b4c; font-size: 11px; font-weight: 800; }
 .order-status-pill.cancelled { background: #fff0f2; color: #b11b34; }
+/* Audit 2026-09-09 (R2): money-state pills next to the fulfilment pill --
+   "refund owed" (paid, then cancelled) and "refunded". */
+.order-status-pill.refund-owed { background: #fff5dd; color: #7a5a12; }
+.order-status-pill.refunded { background: #eef3f1; color: #3f4a46; }
 .order-items { display: grid; gap: 8px; margin-top: 14px; }
 .order-item { display: flex; justify-content: space-between; gap: 14px; font-size: 13px; }
 .order-item span { color: #6f7076; }

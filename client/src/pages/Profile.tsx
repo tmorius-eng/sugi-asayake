@@ -6,6 +6,7 @@ import {
   ShieldCheck, ShieldOff, ShoppingBag, Sparkles, Star, Trash2, User as UserIcon, X,
 } from "lucide-react";
 import { LOYALTY_TIERS } from "@shared/loyalty";
+import { paymentBadgeFor } from "@shared/orders";
 import { ubDistricts, ubDistrictLabels, type UbDistrict } from "@shared/districts";
 import {
   skinTypeOptions, skinConcernOptions, interiorStyleOptions, genderOptions, hairTypeOptions,
@@ -45,6 +46,16 @@ const NAV_ITEMS: Array<{ key: TabKey; label: string; icon: typeof LayoutDashboar
 ];
 
 const ORDER_STATUS_LABEL: Record<string, string> = { pending: "Хүлээгдэж байна", confirmed: "Баталгаажсан", packed: "Бэлтгэж байна", out_for_delivery: "Хүргэлтэд гарсан", completed: "Дууссан", cancelled: "Цуцлагдсан", returned: "Буцаагдсан" };
+// Audit 2026-09-09 (R2): the money-state pill shown next to the fulfilment
+// pill -- only for the two states a customer actually needs to know about
+// ("your money is coming back" / "your money came back"); a plain paid
+// order says nothing extra, the timeline already covers it.
+function PaymentStatePill({ order }: { order: { status: string; paymentStatus: string } }) {
+  const badge = paymentBadgeFor(order);
+  if (badge.tone !== "refund-owed" && badge.tone !== "refunded") return null;
+  return <span className={`order-status-pill ${badge.tone}`}>{badge.label}</span>;
+}
+
 const ORDER_STEPS: Array<{ key: string; label: string }> = [
   { key: "pending", label: "Хүлээгдэж байна" },
   { key: "confirmed", label: "Баталгаажсан" },
@@ -187,10 +198,12 @@ export default function Profile() {
 
 function OverviewTab({ onNavigate }: { onNavigate: (tab: TabKey) => void }) {
   const { user } = useAuth();
-  const orders = trpc.orders.mine.useQuery();
+  // Audit 2026-09-09 (R4): orders.mine is cursor-paged now -- the overview
+  // only needs the newest order and the true total, so ask for exactly that.
+  const orders = trpc.orders.mine.useQuery({ limit: 1 });
   const wishlist = trpc.profile.wishlist.list.useQuery();
   const addresses = trpc.profile.addresses.list.useQuery();
-  const latestOrder = orders.data?.[0];
+  const latestOrder = orders.data?.orders[0];
   const firstName = user?.name?.trim()?.split(/\s+/)[0] || "Танд";
 
   return (
@@ -203,7 +216,7 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: TabKey) => void }) {
 
       <div className="overview-stats" data-reveal>
         <button type="button" className="overview-stat" style={{ cursor: "pointer", textAlign: "left" }} onClick={() => onNavigate("orders")}>
-          <strong>{orders.data?.length ?? "—"}</strong>
+          <strong>{orders.data?.total ?? "—"}</strong>
           <span>Нийт захиалга</span>
         </button>
         <button type="button" className="overview-stat" style={{ cursor: "pointer", textAlign: "left" }} onClick={() => onNavigate("wishlist")}>
@@ -228,6 +241,7 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: TabKey) => void }) {
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
               <span className={`order-status-pill${latestOrder.status === "cancelled" ? " cancelled" : ""}`}>{ORDER_STATUS_LABEL[latestOrder.status] ?? latestOrder.status}</span>
+              <PaymentStatePill order={latestOrder} />
               <button type="button" onClick={() => onNavigate("orders")} className="quiet-link">Дэлгэрэнгүй</button>
             </div>
           </div>
@@ -259,7 +273,10 @@ function OrderTimeline({ status }: { status: string }) {
 }
 
 function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
-  const orders = trpc.orders.mine.useQuery();
+  // Audit 2026-09-09 (R4): 20 orders per page, "Илүү үзэх" loads the next
+  // page by cursor -- a customer's history is no longer one unbounded query.
+  const orders = trpc.orders.mine.useInfiniteQuery({ limit: 20 }, { getNextPageParam: lastPage => lastPage.nextCursor ?? undefined });
+  const orderList = orders.data?.pages.flatMap(page => page.orders) ?? [];
   const utils = trpc.useUtils();
   const addItem = trpc.cart.addItem.useMutation();
   const [buyingAgainId, setBuyingAgainId] = useState<number | null>(null);
@@ -274,7 +291,7 @@ function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
     onError: error => toast.error(error instanceof Error ? error.message : "Захиалгыг цуцлах боломжгүй боллоо."),
   });
 
-  const buyAgain = async (order: NonNullable<typeof orders.data>[number]) => {
+  const buyAgain = async (order: (typeof orderList)[number]) => {
     const available = order.items.filter((item): item is typeof item & { productId: number } => item.productId != null);
     if (!available.length) { toast.error("Энэ захиалгын бүтээгдэхүүн(үүд) одоо каталогт байхгүй байна."); return; }
     setBuyingAgainId(order.id);
@@ -307,16 +324,19 @@ function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
             </article>
           ))}
         </div>
-      ) : orders.data?.length ? (
+      ) : orderList.length ? (
         <div className="order-list" style={{ marginTop: "0" }}>
-          {orders.data.map(order => (
+          {orderList.map(order => (
             <article key={order.id} className="order-card">
               <div className="order-card-head">
                 <div>
                   <p className="order-number">{order.orderNumber}</p>
                   <h2 className="order-date">{new Date(order.createdAt).toLocaleDateString("mn-MN")}</h2>
                 </div>
-                <span className={`order-status-pill${order.status === "cancelled" ? " cancelled" : ""}`}>{ORDER_STATUS_LABEL[order.status] ?? order.status}</span>
+                <span style={{ display: "flex", flexWrap: "wrap", gap: "6px", justifyContent: "flex-end" }}>
+                  <span className={`order-status-pill${order.status === "cancelled" ? " cancelled" : ""}`}>{ORDER_STATUS_LABEL[order.status] ?? order.status}</span>
+                  <PaymentStatePill order={order} />
+                </span>
               </div>
               <OrderTimeline status={order.status} />
               <div className="order-items">
@@ -344,6 +364,11 @@ function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
               </div>
             </article>
           ))}
+          {orders.hasNextPage && (
+            <button type="button" className="order-buy-again" style={{ justifySelf: "center" }} disabled={orders.isFetchingNextPage} onClick={() => orders.fetchNextPage()}>
+              {orders.isFetchingNextPage ? <Loader2 className="animate-spin" size={14} /> : <ChevronDown size={14} />} Өмнөх захиалгуудыг үзэх
+            </button>
+          )}
         </div>
       ) : (
         <div className="address-empty">Захиалга байхгүй байна. <Link href="/shop" style={{ color: "var(--primary)", fontWeight: 800 }}>Дэлгүүр үзэх</Link></div>

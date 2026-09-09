@@ -10,7 +10,7 @@ import { and, desc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import { carts, cartItems, orderItems, orders, productCategories, products, users, visitorSessions } from "../drizzle/schema";
-import { getDb, getMarketingSpendRows } from "./db";
+import { getDb, getMarketingSpendRows, settledSaleSql } from "./db";
 import { ubDistrictLabels, type UbDistrict } from "../shared/districts";
 import { LOYALTY_TIERS, getLoyaltyTier } from "../shared/loyalty";
 import { formatMnt } from "@shared/format";
@@ -50,7 +50,7 @@ export async function getSalesOverview(input: DateRangeInput = {}) {
   const db = await getDb();
   if (!db) return { revenueMnt: 0, orderCount: 0, aovMnt: 0, newCustomerCount: 0, returningCustomerCount: 0 };
 
-  const windowConditions = [eq(orders.paymentStatus, "paid"), ...dateRangeConditions(input)];
+  const windowConditions = [settledSaleSql, ...dateRangeConditions(input)];
   const [totalsRow] = await db
     .select({ revenueMnt: sql<number>`coalesce(sum(${orders.totalMnt}), 0)`, orderCount: sql<number>`count(*)` })
     .from(orders)
@@ -68,7 +68,7 @@ export async function getSalesOverview(input: DateRangeInput = {}) {
       const firstPaidOrderRows = await db
         .select({ userId: orders.userId, firstPaidAt: sql<string>`min(${orders.createdAt})` })
         .from(orders)
-        .where(and(eq(orders.paymentStatus, "paid"), inArray(orders.userId, userIds)))
+        .where(and(settledSaleSql, inArray(orders.userId, userIds)))
         .groupBy(orders.userId);
       for (const row of firstPaidOrderRows) {
         if (new Date(row.firstPaidAt) >= input.dateFrom) newCustomerCount++;
@@ -92,7 +92,7 @@ export async function getRevenueTimeseries(input: DateRangeInput = {}) {
   const rows = await db
     .select({ date: dateExpr, revenueMnt: sql<number>`coalesce(sum(${orders.totalMnt}), 0)`, orderCount: sql<number>`count(*)` })
     .from(orders)
-    .where(and(eq(orders.paymentStatus, "paid"), ...dateRangeConditions(input)))
+    .where(and(settledSaleSql, ...dateRangeConditions(input)))
     .groupBy(dateExpr)
     .orderBy(dateExpr);
   return rows.map(row => ({ date: row.date, revenueMnt: Number(row.revenueMnt), orderCount: Number(row.orderCount) }));
@@ -110,7 +110,7 @@ export async function getTopProducts(input: DateRangeInput & { limit?: number } 
     .select({ productId: orderItems.productId, productName: orderItems.productName, soldQuantity: soldQtyExpr, revenueMnt: sql<number>`coalesce(sum(${orderItems.unitPriceMnt} * ${orderItems.quantity}), 0)` })
     .from(orderItems)
     .innerJoin(orders, eq(orderItems.orderId, orders.id))
-    .where(and(eq(orders.paymentStatus, "paid"), ...dateRangeConditions(input)))
+    .where(and(settledSaleSql, ...dateRangeConditions(input)))
     .groupBy(orderItems.productId, orderItems.productName)
     .orderBy(desc(soldQtyExpr))
     .limit(input.limit ?? 10);
@@ -132,7 +132,7 @@ export async function getTopCategories(input: DateRangeInput & { limit?: number 
     .innerJoin(orders, eq(orderItems.orderId, orders.id))
     .innerJoin(products, eq(orderItems.productId, products.id))
     .innerJoin(productCategories, eq(products.categoryId, productCategories.id))
-    .where(and(eq(orders.paymentStatus, "paid"), ...dateRangeConditions(input)))
+    .where(and(settledSaleSql, ...dateRangeConditions(input)))
     .groupBy(productCategories.id, productCategories.name)
     .orderBy(desc(soldQtyExpr))
     .limit(input.limit ?? 10);
@@ -149,7 +149,7 @@ export async function getTopCategories(input: DateRangeInput & { limit?: number 
 export async function getDistrictBreakdown(input: DateRangeInput = {}) {
   const db = await getDb();
   if (!db) return { districts: [], storePickupCount: 0, unknownCount: 0 };
-  const conditions = [eq(orders.paymentStatus, "paid"), ...dateRangeConditions(input)];
+  const conditions = [settledSaleSql, ...dateRangeConditions(input)];
 
   const deliveryRows = await db
     .select({ district: orders.deliveryDistrict, orderCount: sql<number>`count(*)`, revenueMnt: sql<number>`coalesce(sum(${orders.totalMnt}), 0)` })
@@ -376,7 +376,7 @@ export async function getLoyaltyTierBreakdown() {
     .select({
       userId: users.id,
       loyaltyManualAdjustmentMnt: users.loyaltyManualAdjustmentMnt,
-      totalSpendMnt: sql<number>`coalesce(sum(case when ${orders.paymentStatus} = 'paid' then ${orders.totalMnt} else 0 end), 0)`,
+      totalSpendMnt: sql<number>`coalesce(sum(case when ${settledSaleSql} then ${orders.totalMnt} else 0 end), 0)`,
     })
     .from(users)
     .leftJoin(orders, eq(orders.userId, users.id))
@@ -405,7 +405,7 @@ export async function getUsersByLoyaltyTier(tierName: string) {
     .select({
       id: users.id, name: users.name, phone: users.phone, email: users.email,
       loyaltyManualAdjustmentMnt: users.loyaltyManualAdjustmentMnt,
-      totalSpendMnt: sql<number>`coalesce(sum(case when ${orders.paymentStatus} = 'paid' then ${orders.totalMnt} else 0 end), 0)`,
+      totalSpendMnt: sql<number>`coalesce(sum(case when ${settledSaleSql} then ${orders.totalMnt} else 0 end), 0)`,
     })
     .from(users)
     .leftJoin(orders, eq(orders.userId, users.id))
@@ -426,7 +426,7 @@ const CHANNEL_LABELS: Record<string, string> = { ub_delivery: "УБ хүргэл
 export async function getOrdersByChannel(input: DateRangeInput = {}) {
   const db = await getDb();
   if (!db) return { byDeliveryMethod: [], byPaymentMethod: [] };
-  const conditions = [eq(orders.paymentStatus, "paid"), ...dateRangeConditions(input)];
+  const conditions = [settledSaleSql, ...dateRangeConditions(input)];
 
   const [byDelivery, byPayment] = await Promise.all([
     db.select({ key: orders.deliveryMethod, orderCount: sql<number>`count(*)` }).from(orders).where(and(...conditions)).groupBy(orders.deliveryMethod),
@@ -507,7 +507,7 @@ export async function getInventorySnapshot() {
 export async function getProfitOverview(input: DateRangeInput = {}) {
   const db = await getDb();
   if (!db) return { revenueWithCostDataMnt: 0, costMnt: 0, profitMnt: 0, marginPercent: 0, itemsWithCostCount: 0, totalItemsSold: 0 };
-  const conditions = [eq(orders.paymentStatus, "paid"), ...dateRangeConditions(input)];
+  const conditions = [settledSaleSql, ...dateRangeConditions(input)];
 
   const [totalsRow] = await db
     .select({ totalItemsSold: sql<number>`coalesce(sum(${orderItems.quantity}), 0)` })
@@ -547,7 +547,7 @@ export async function getProfitOverview(input: DateRangeInput = {}) {
 export async function getTrafficBreakdown(input: DateRangeInput = {}) {
   const db = await getDb();
   if (!db) return { sources: [], deviceTypes: [] };
-  const conditions = [eq(orders.paymentStatus, "paid"), ...dateRangeConditions(input)];
+  const conditions = [settledSaleSql, ...dateRangeConditions(input)];
 
   const [sourceRows, deviceRows] = await Promise.all([
     // revenueMnt added here (Tier D) so "Sales by referer" can be a real
@@ -666,7 +666,7 @@ export async function getPnlOverview(input: DateRangeInput = {}): Promise<PnlOve
   const db = await getDb();
   const empty: PnlOverview = { subtotalMnt: 0, deliveryFeesCollectedMnt: 0, discountsGivenMnt: 0, netRevenueMnt: 0, costOfGoodsMnt: 0, itemsWithCostCount: 0, totalItemsSold: 0, netProfitMnt: 0 };
   if (!db) return empty;
-  const conditions = [eq(orders.paymentStatus, "paid"), ...dateRangeConditions(input)];
+  const conditions = [settledSaleSql, ...dateRangeConditions(input)];
 
   const [row] = await db
     .select({
@@ -792,7 +792,7 @@ export async function getConversionOverview(input: DateRangeInput = {}): Promise
     db.select({ count: sql<number>`count(distinct ${orders.visitorSessionId})` })
       .from(orders)
       .innerJoin(visitorSessions, eq(orders.visitorSessionId, visitorSessions.id))
-      .where(and(eq(orders.paymentStatus, "paid"), ...sessionConditions)),
+      .where(and(settledSaleSql, ...sessionConditions)),
     db.select({ earliest: sql<string | null>`min(${visitorSessions.createdAt})` }).from(visitorSessions),
   ]);
 
@@ -851,7 +851,7 @@ export async function getReturnRateOverview(input: DateRangeInput = {}): Promise
   const empty: ReturnRateOverview = { returnRatePercent: 0, returnedOrderCount: 0, completedOrReturnedOrderCount: 0, returnsProcessedInRangeCount: 0 };
   if (!db) return empty;
 
-  const conditions = [eq(orders.paymentStatus, "paid"), ...dateRangeConditions(input)];
+  const conditions = [settledSaleSql, ...dateRangeConditions(input)];
   const [row] = await db
     .select({
       completedOrReturnedOrderCount: sql<number>`coalesce(sum(case when ${orders.status} in ('completed','returned') then 1 else 0 end), 0)`,
@@ -1177,7 +1177,7 @@ export async function getTopProductsWithMedia(input: DateRangeInput & { limit?: 
     .from(orderItems)
     .innerJoin(orders, eq(orderItems.orderId, orders.id))
     .leftJoin(products, eq(orderItems.productId, products.id))
-    .where(and(eq(orders.paymentStatus, "paid"), ...dateRangeConditions(input)))
+    .where(and(settledSaleSql, ...dateRangeConditions(input)))
     .groupBy(orderItems.productId, orderItems.productName)
     .orderBy(desc(soldQtyExpr))
     .limit(input.limit ?? 5);
@@ -1212,7 +1212,7 @@ export async function getTopCustomers(input: DateRangeInput & { limit?: number }
     })
     .from(orders)
     .innerJoin(users, eq(orders.userId, users.id))
-    .where(and(eq(orders.paymentStatus, "paid"), isNotNull(orders.userId), ...dateRangeConditions(input)))
+    .where(and(settledSaleSql, isNotNull(orders.userId), ...dateRangeConditions(input)))
     .groupBy(orders.userId)
     .orderBy(desc(orderCountExpr))
     .limit(input.limit ?? 5);

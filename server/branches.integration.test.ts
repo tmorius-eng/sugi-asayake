@@ -99,7 +99,7 @@ function makeGuestContext(existingGuestToken?: string): { ctx: TrpcContext; cook
   const cookiesSet: Record<string, string> = {};
   const ctx: TrpcContext = {
     user: null,
-    req: { protocol: "https", headers: { cookie: existingGuestToken ? `${GUEST_CART_COOKIE_NAME}=${existingGuestToken}` : "" }, ip: "203.0.117.9", socket: { remoteAddress: "203.0.117.9" } } as unknown as TrpcContext["req"],
+    req: { protocol: "https", headers: { cookie: existingGuestToken ? `${GUEST_CART_COOKIE_NAME}=${existingGuestToken}` : "" }, ip: `203.${Math.floor(Math.random() * 200) + 10}.117.9`, socket: { remoteAddress: "203.0.117.9" } } as unknown as TrpcContext["req"],
     res: { cookie: (name: string, value: string) => { cookiesSet[name] = value; }, clearCookie: () => undefined } as unknown as TrpcContext["res"],
   };
   return { ctx, cookiesSet };

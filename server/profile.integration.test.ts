@@ -232,7 +232,7 @@ describeWithDatabase("customer profile — change password & delete account", ()
     let cookieSet: string | undefined;
     const ctx: TrpcContext = {
       user: sessionUser,
-      req: { protocol: "https", headers: {}, ip: "127.0.0.1", socket: { remoteAddress: "127.0.0.1" } } as unknown as TrpcContext["req"],
+      req: { protocol: "https", headers: {}, ip: `127.${Math.floor(Math.random() * 200) + 10}.0.1`, socket: { remoteAddress: "127.0.0.1" } } as unknown as TrpcContext["req"],
       res: { cookie: (_name: string, value: string) => { cookieSet = value; }, clearCookie: () => undefined } as unknown as TrpcContext["res"],
     };
     const caller = appRouter.createCaller(ctx);

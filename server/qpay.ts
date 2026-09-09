@@ -1,6 +1,8 @@
 import type { Express, Request, Response } from "express";
 import {
+  getOrderById,
   getPaymentAttemptByInvoiceId,
+  markQPayPaymentAttemptFailed,
   markQPayPaymentAttemptPaid,
   storeQPayPaymentAttemptResponse,
 } from "./db";
@@ -27,9 +29,12 @@ type QPayInvoiceResponse = {
   raw: unknown;
 };
 
-type QPayPaymentCheck = {
+export type QPayPaymentCheck = {
   paid: boolean;
   paymentId: string | null;
+  /** Total QPay reports as paid for this invoice, in MNT; null when the
+   *  response carried no usable amount (see parseQPayPaymentCheck). */
+  paidAmountMnt: number | null;
   raw: unknown;
 };
 
@@ -110,18 +115,60 @@ export async function createQPayInvoice(input: QPayInvoiceInput): Promise<QPayIn
   };
 }
 
+const PAID_STATUSES = new Set(["PAID", "paid", "SUCCESS", "success"]);
+
+function asAmount(value: unknown): number | null {
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+/**
+ * Pure parser for QPay's `/v2/payment/check` response, split out so it can
+ * be unit-tested without network. Documented shape (developer.qpay.mn):
+ * `{ count, paid_amount, rows: [{ payment_id, payment_status, payment_amount, ... }] }`.
+ *
+ * Audit 2026-09-09 (R6): `paid` used to be "any row says PAID", with the
+ * amount never looked at -- a partial payment QPay reported as PAID would
+ * have confirmed the whole order. `paidAmountMnt` prefers the top-level
+ * `paid_amount`, else sums the PAID rows' `payment_amount`, else null (an
+ * unrecognised shape must not be mistaken for "paid in full" OR for "paid
+ * nothing" -- the caller treats null as "amount unknown").
+ */
+export function parseQPayPaymentCheck(payload: Record<string, unknown>): Omit<QPayPaymentCheck, "raw"> {
+  const rows = Array.isArray(payload.rows) ? payload.rows : Array.isArray(payload.payments) ? payload.payments : [];
+  const paidRows = rows.filter((row): row is Record<string, unknown> => Boolean(row && typeof row === "object") && PAID_STATUSES.has(String((row as Record<string, unknown>).payment_status ?? (row as Record<string, unknown>).status)));
+  const successful = paidRows[0];
+  const topLevelAmount = asAmount(payload.paid_amount);
+  const rowAmounts = paidRows.map(row => asAmount(row.payment_amount ?? row.amount));
+  const summedRows = rowAmounts.length && rowAmounts.every(amount => amount !== null) ? rowAmounts.reduce<number>((sum, amount) => sum + (amount ?? 0), 0) : null;
+  return {
+    paid: Boolean(successful),
+    paymentId: successful && typeof successful.payment_id === "string" ? successful.payment_id : null,
+    paidAmountMnt: topLevelAmount ?? summedRows,
+  };
+}
+
 export async function checkQPayPayment(invoiceId: string): Promise<QPayPaymentCheck> {
   const payload = await qpayFetch("/v2/payment/check", {
     method: "POST",
     body: JSON.stringify({ object_type: "INVOICE", object_id: invoiceId }),
   });
-  const rows = Array.isArray(payload.rows) ? payload.rows : Array.isArray(payload.payments) ? payload.payments : [];
-  const successful = rows.find((row): row is Record<string, unknown> => Boolean(row && typeof row === "object") && ["PAID", "paid", "SUCCESS", "success"].includes(String((row as Record<string, unknown>).payment_status ?? (row as Record<string, unknown>).status)));
-  return {
-    paid: Boolean(successful),
-    paymentId: successful && typeof successful.payment_id === "string" ? successful.payment_id : null,
-    raw: payload,
-  };
+  return { ...parseQPayPaymentCheck(payload), raw: payload };
+}
+
+/**
+ * What to do with a verified payment-check result for an order that owes
+ * `orderTotalMnt`. Pure, so the underpayment rule is unit-tested:
+ *   - not paid                          -> nothing
+ *   - paid, amount unknown (null)       -> confirm (status is all QPay gave us)
+ *   - paid, amount >= total             -> confirm
+ *   - paid, amount <  total             -> UNDERPAID: record as a failed
+ *     attempt for finance, never confirm the order
+ */
+export function decideCallbackOutcome(verification: Pick<QPayPaymentCheck, "paid" | "paidAmountMnt">, orderTotalMnt: number): "confirm" | "underpaid" | "unpaid" {
+  if (!verification.paid) return "unpaid";
+  if (verification.paidAmountMnt !== null && verification.paidAmountMnt < orderTotalMnt) return "underpaid";
+  return "confirm";
 }
 
 export async function verifyQPayCallback(invoiceId: string) {
@@ -130,10 +177,15 @@ export async function verifyQPayCallback(invoiceId: string) {
 
   const verification = await checkQPayPayment(invoiceId);
   await storeQPayPaymentAttemptResponse({ id: attempt.id, responseJson: JSON.stringify(verification.raw) });
-  if (verification.paid) {
+  const order = await getOrderById(attempt.orderId);
+  const outcome = order ? decideCallbackOutcome(verification, order.totalMnt) : "unpaid";
+  if (outcome === "confirm") {
     await markQPayPaymentAttemptPaid({ id: attempt.id, orderId: attempt.orderId, providerPaymentId: verification.paymentId });
+  } else if (outcome === "underpaid") {
+    console.warn(`[QPay] Invoice ${invoiceId} for order ${attempt.orderId} reports ${verification.paidAmountMnt}₮ paid against a ${order?.totalMnt}₮ total -- recorded as a failed attempt, order left unconfirmed.`);
+    await markQPayPaymentAttemptFailed({ id: attempt.id, providerPaymentId: verification.paymentId });
   }
-  return { ...verification, orderId: attempt.orderId };
+  return { ...verification, paid: outcome === "confirm", orderId: attempt.orderId, outcome };
 }
 
 function callbackInvoiceId(req: Request) {
