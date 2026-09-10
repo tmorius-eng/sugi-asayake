@@ -1,5 +1,8 @@
 <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ээж ба хүүхдийн зураг удахгүй нэмэгдэнэ">
-  <rect width="400" height="400" fill="#eef0ee"/>
+  <!-- 2026-09-10: was a solid #eef0ee square. The /shop card now floats the
+       product on white, so a filled background drew a grey box around every
+       one of the 415 photo-less products. Transparent lets the tile read as
+       "photo coming" instead of "broken image". -->
   <circle cx="200" cy="168" r="76" fill="#fce7eb"/>
   <path d="M180 165h40a8 8 0 0 1 8 8v70a10 10 0 0 1-10 10h-36a10 10 0 0 1-10-10v-70a8 8 0 0 1 8-8z" fill="none" stroke="#df1f3d" stroke-width="6" stroke-linejoin="round"/>
   <rect x="192" y="150" width="16" height="15" fill="none" stroke="#df1f3d" stroke-width="6"/>

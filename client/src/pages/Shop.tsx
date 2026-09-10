@@ -1,4 +1,4 @@
-import { ArrowDownUp, ArrowUpRight, ChevronLeft, ChevronRight, Eye, Grid3x3, Heart, LayoutGrid, MapPin, PackageCheck, Phone, RotateCcw, Search, ShoppingBag, SlidersHorizontal, Sparkles, Star, Truck, Wallet } from "lucide-react";
+import { ArrowDownUp, ArrowUpRight, ChevronLeft, ChevronRight, Eye, Grid3x3, Heart, LayoutGrid, MapPin, PackageCheck, Phone, RotateCcw, LoaderCircle, Search, ShoppingCart, SlidersHorizontal, Sparkles, Star, Truck, Wallet } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import CartDrawer from "@/components/CartDrawer";
@@ -11,7 +11,9 @@ import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
 import { ProductCardSkeleton } from "@/components/Skeleton";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
+import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { notifyAddedToCart } from "@/lib/addedToCartToast";
 import { filterCatalogBrand, filterCatalogPriceRange, filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCategoryPlaceholderImage, getSalePercent, LOW_STOCK_THRESHOLD, skinTypeLabels, sortCatalogProducts, type CatalogSortOption, type SkinType } from "@shared/catalog-filter";
 import { imageSrcSet } from "@shared/image-variants";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
@@ -109,6 +111,24 @@ export default function Shop() {
     try { window.localStorage.setItem(DENSITY_KEY, density); } catch { /* private-browsing/blocked storage -- the toggle still works for this visit */ }
   }, [density]);
   const [cartOpen, setCartOpen] = useState(false);
+  // 2026-09-10: the grid's cart button used to be a decorative circle inside
+  // the product <Link>, so clicking it only navigated. It adds to the cart
+  // now, on the same success path as ProductDetail (invalidate -> open
+  // drawer -> toast). addCartItem resolves a product's default variant
+  // server-side, so one click is enough for a single-variant catalogue --
+  // which is all 937 published products today. If multi-variant products
+  // come back, this button must route those to Quick View rather than
+  // silently guessing a variant for the shopper.
+  const addToCart = trpc.cart.addItem.useMutation({
+    onError: error => toast.error(error instanceof Error ? error.message : "Сагсанд нэмж чадсангүй."),
+  });
+  const addProductToCart = (product: { id: number; name: string }) => addToCart.mutate({ productId: product.id, quantity: 1 }, {
+    onSuccess: () => {
+      utils.cart.current.invalidate();
+      setCartOpen(true);
+      notifyAddedToCart(`${product.name} сагсанд нэмэгдлээ.`);
+    },
+  });
   const [quickViewProduct, setQuickViewProduct] = useState<QuickViewProduct | null>(null);
   const [recentlyViewedIds, setRecentlyViewedIds] = useState<number[]>([]);
   const { isAuthenticated } = useAuth();
@@ -279,10 +299,38 @@ export default function Shop() {
         // (see shared/image-variants.ts).
         const srcSet = imageSrcSet(product.imageUrl, 1600);
         const responsive = srcSet ? { srcSet, sizes: "(max-width: 760px) 46vw, (max-width: 900px) 31vw, 23vw" } : {};
+        const brandLabel = product.brand?.trim() || product.categoryName || "SUGI ASAYAKE";
+        const outOfStock = product.stockQuantity <= 0;
+        const addingThis = addToCart.isPending && addToCart.variables?.productId === product.id;
         return <article key={product.id} className="shop-product-card" data-reveal style={{ transitionDelay: `${Math.min(index * 55, 300)}ms` }}>
-        <button type="button" className={`shop-wishlist-toggle${wishlistIds.has(product.id) ? " active" : ""}`} onClick={() => onToggleWishlist(product.id)} aria-label={wishlistIds.has(product.id) ? `${product.name}-г хүслийн жагсаалтаас хасах` : `${product.name}-г хүслийн жагсаалтад нэмэх`}><Heart size={15} /></button>
-        <Link href={`/product/${product.slug}`} onClick={() => rememberProduct(product.id)} className="shop-product-link"><div className="shop-product-image">{salePercent ? <span className="shop-sale-badge">-{salePercent}%</span> : null}<img src={product.imageUrl ?? getCategoryPlaceholderImage(product.categorySlug)} alt={product.name} loading="lazy" {...responsive} /><span className={lowStock ? "is-low-stock" : undefined}>{product.stockQuantity > 0 ? `${product.stockQuantity} ширхэг үлдсэн` : "Нөөц дууссан"}</span><i aria-hidden="true">VIEW</i></div><div className="shop-product-copy"><p>{product.brand ?? product.categoryName ?? "SUGI ASAYAKE"}</p><h2>{product.name}</h2>{product.reviewCount > 0 ? <span className="shop-product-rating"><Star size={12} fill="#f0b52d" stroke="#f0b52d" /> {product.avgRating?.toFixed(1)} <em>({product.reviewCount})</em></span> : null}<small>{product.shortDescription ?? "Японоос баталгаат бүтээгдэхүүн"}</small><div><div className="shop-product-price-group"><strong>{formatMnt(product.priceMnt)}</strong>{salePercent ? <s>{formatMnt(product.compareAtPriceMnt!)}</s> : null}</div><span><ShoppingBag size={15} /></span></div></div></Link>
-        <button type="button" className="quick-view-trigger" onClick={() => openQuickView(product)} aria-label={`${product.name} шуурхай харах`}><Eye size={15} /> Шуурхай харах</button>
+        <div className="shop-product-media">
+          {/* Every value on this card is a product column an admin edits at
+              /admin -> Бүтээгдэхүүн: the brand chip is products.brand, the
+              badge and struck price come from хуучин үнэ (compareAtPriceMnt)
+              against Үнэ, the photo is imageUrl and the button's disabled
+              state is stockQuantity. No copy is hardcoded here. */}
+          <span className="shop-brand-chip">{brandLabel}</span>
+          {salePercent ? <span className="shop-sale-badge">-{salePercent}<i>%</i></span> : null}
+          <Link href={`/product/${product.slug}`} onClick={() => rememberProduct(product.id)} className="shop-product-link" tabIndex={-1} aria-hidden="true"><img src={product.imageUrl ?? getCategoryPlaceholderImage(product.categorySlug)} alt="" loading="lazy" {...responsive} /></Link>
+          <button type="button" className={`shop-wishlist-toggle${wishlistIds.has(product.id) ? " active" : ""}`} onClick={() => onToggleWishlist(product.id)} aria-label={wishlistIds.has(product.id) ? `${product.name}-г хүслийн жагсаалтаас хасах` : `${product.name}-г хүслийн жагсаалтад нэмэх`}><Heart size={15} /></button>
+          {outOfStock ? <span className="shop-stock-flag is-out">Нөөц дууссан</span> : lowStock ? <span className="shop-stock-flag">{product.stockQuantity} ширхэг үлдсэн</span> : null}
+          <button type="button" className="shop-quick-view" onClick={() => openQuickView(product)}><Eye size={13} /> Шуурхай</button>
+        </div>
+        <div className="shop-product-copy">
+          <Link href={`/product/${product.slug}`} onClick={() => rememberProduct(product.id)} className="shop-product-link"><h2>{product.name}</h2></Link>
+          <span className="shop-product-rating">{product.reviewCount > 0 ? <><Star size={12} fill="#f0b52d" stroke="#f0b52d" /> {product.avgRating?.toFixed(1)} <em>({product.reviewCount})</em></> : null}</span>
+          <div className="shop-product-foot">
+            <div className="shop-product-prices">
+              {/* Empty when there's no хуучин үнэ, but the line still takes
+                  its height so prices align across a row of mixed cards. */}
+              <s>{salePercent ? formatMnt(product.compareAtPriceMnt!) : ""}</s>
+              <strong>{formatMnt(product.priceMnt)}</strong>
+            </div>
+            <button type="button" className="shop-cart-button" disabled={outOfStock || addingThis} onClick={() => addProductToCart(product)} aria-label={outOfStock ? `${product.name} — нөөц дууссан` : `${product.name}-г сагсанд нэмэх`}>
+              {addingThis ? <LoaderCircle className="animate-spin" size={20} /> : <ShoppingCart size={20} />}
+            </button>
+          </div>
+        </div>
       </article>;
       })}</section>{totalPages > 1 ? <nav className="shop-pagination" aria-label="Хуудаслалт">
         <button type="button" onClick={() => { setPage(current => Math.max(1, current - 1)); document.getElementById("shop-product-grid")?.scrollIntoView({ block: "start", behavior: "smooth" }); }} disabled={page === 1}><ChevronLeft size={16} /> Өмнөх</button>
