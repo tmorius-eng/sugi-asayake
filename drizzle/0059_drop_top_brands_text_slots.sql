@@ -1,0 +1,16 @@
+-- 2026-09-10: Tom, on the Top Brands rebuild -- "Тансаг брэндүүд. bas ene
+-- text ustga bur mussun!!! buh medeeliin sangaas arilga!!"
+--
+-- The strings themselves lived in shared/site-text.ts as fallbackValues, and
+-- those slot definitions are removed in the same change. This clears the
+-- other half: any admin override row still sitting in site_text for the two
+-- retired keys. Nothing reads them once the slots are gone, so a leftover row
+-- would be invisible clutter rather than a live bug -- but "delete it from
+-- the database" was the explicit instruction, and an orphaned row would also
+-- resurface if either key were ever reused.
+--
+-- Checked before writing this: site_text currently holds one row in total
+-- (home-text-cat-heading), so this is expected to affect 0 rows on Aiven. It
+-- is written as a migration anyway so the intent is recorded and the result
+-- is the same on any other database restored from an older backup.
+DELETE FROM `site_text` WHERE `slotKey` IN ('home-text-brands-eyebrow', 'home-text-brands-heading');

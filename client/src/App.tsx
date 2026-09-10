@@ -3,18 +3,21 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { lazy, Suspense } from "react";
 import { Route, Switch } from "wouter";
 import AddedToCartToast from "./components/AddedToCartToast";
+import BackToTop from "./components/BackToTop";
 import BottomNavBar from "./components/BottomNavBar";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SitePromo from "./components/SitePromo";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import { PageviewTracker } from "./lib/pageviewTracking";
+import { useConsentIconAutoHide } from "./lib/consentIconAutoHide";
 import { useScrollReveal } from "./hooks/useScrollReveal";
 
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const Checkout = lazy(() => import("./pages/Checkout"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const Journal = lazy(() => import("./pages/Journal"));
+const Brands = lazy(() => import("./pages/Brands"));
 const Legal = lazy(() => import("./pages/Legal"));
 const Login = lazy(() => import("./pages/Login"));
 const MyOrders = lazy(() => import("./pages/MyOrders"));
@@ -42,6 +45,9 @@ function Router() {
   // .is-revealed class and stayed shifted 18px over the section below it.
   // One observer here (it watches the DOM for new nodes) covers all routes.
   useScrollReveal();
+  // Retires the permanently-parked cookie button 10s after a choice is made
+  // (the footer's "Күкийн тохиргоо" is the way back). See the hook.
+  useConsentIconAutoHide();
   return <Suspense fallback={<RouteLoadingFallback />}><Switch>
     <Route path={"/"} component={Home} />
     <Route path={"/product/:slug"} component={ProductDetail} />
@@ -62,6 +68,7 @@ function Router() {
         read as a post-slug lookup (and 404, since no post has that slug)
         instead of reaching this page. */}
     <Route path={"/journal"} component={Journal} />
+    <Route path={"/brands"} component={Brands} />
     <Route path={"/:slug"} component={PostDetail} />
     <Route component={NotFound} />
   </Switch></Suspense>;
@@ -75,6 +82,7 @@ function App() {
         <PageviewTracker />
         <SitePromo />
         <BottomNavBar />
+        <BackToTop />
         <AddedToCartToast />
         <Router />
       </TooltipProvider>

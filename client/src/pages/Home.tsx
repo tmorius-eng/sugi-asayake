@@ -44,8 +44,7 @@ import BrandStorySection from "@/components/home/BrandStorySection";
 import EditorialBanner from "@/components/home/EditorialBanner";
 import StoreLocatorSection from "@/components/home/StoreLocatorSection";
 import QuickStatsSection from "@/components/home/QuickStatsSection";
-import BrandTileCard from "@/components/home/BrandTileCard";
-import CarouselShelf from "@/components/home/CarouselShelf";
+import FeaturedBrandsCarousel from "@/components/home/FeaturedBrandsCarousel";
 import { BestsellerCardSkeleton } from "@/components/Skeleton";
 import { imageSrcSet } from "@shared/image-variants";
 import { getSalePercent } from "@shared/catalog-filter";
@@ -207,16 +206,21 @@ export default function Home() {
 
         <BrandStorySection branchCount={branchCount} productCountLabel={productCountLabel} featuredReviews={featuredReviews} />
 
-        {/* Restored 2026-09-06 (Tom: "we need Top Brands, must have!!") --
-            same CarouselShelf horizontal-scroll primitive as the bestseller/
-            recommended/category rails, real admin-curated brands only. See
-            AdminBrandsPanel.tsx for the CRUD side; #top-brands is the header
-            nav's anchor target. */}
+        {/* Restored 2026-09-06 (Tom: "we need Top Brands, must have!!"), then
+            rebuilt 2026-09-10 against matsuyaginza.com/en's "Featured Brands"
+            at Tom's request -- the CarouselShelf/BrandTileCard version was a
+            static row of shadowed, rounded tiles with the name overlaid on the
+            photo ("zgrl neg durvuljin tegsen shadow edrtei utaggui"). The old
+            home-text-brands-eyebrow/-heading slots went with it: Tom asked for
+            "Тансаг брэндүүд." to be deleted outright, and the reference has no
+            eyebrow at all. See AdminBrandsPanel.tsx for the CRUD side (it now
+            takes a brand logo too); #top-brands is the header nav's anchor. */}
         {featuredBrands.length > 0 && (
           <div id="top-brands">
-            <CarouselShelf eyebrow={textFor("home-text-brands-eyebrow", "ТОП БРЭНД")} title={textFor("home-text-brands-heading", "Тансаг брэндүүд.")} cardWidth={240}>
-              {featuredBrands.map(brand => <BrandTileCard brand={brand} key={brand.id} />)}
-            </CarouselShelf>
+            <FeaturedBrandsCarousel
+              brands={featuredBrands}
+              heading={textFor("home-text-featured-brands-heading", "Онцлох брэндүүд")}
+            />
           </div>
         )}
 

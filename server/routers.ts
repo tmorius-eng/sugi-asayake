@@ -46,6 +46,7 @@ import {
   recordInStoreSale,
   searchVariantsForBranch,
   getDistinctRealBrands,
+  getBrandDirectory,
   getFeaturedBrands,
   getFeaturedReviews,
   getHomeCategoryShelves,
@@ -347,6 +348,7 @@ const featuredBrandWriteSchema = z.object({
   brandName: z.string().trim().min(1).max(120),
   tagline: nullableText(300),
   photoUrl: nullableText(1_000),
+  logoUrl: nullableText(1_000),
   sortOrder: z.number().int().default(0),
   isActive: z.boolean().default(true),
 });
@@ -1022,6 +1024,10 @@ export const appRouter = router({
     categoryShelves: publicProcedure.query(() => getHomeCategoryShelves()),
     // NEWVISION.md §5: real, admin-curated "Топ брэндүүд" tiles.
     featuredBrands: publicProcedure.query(() => getFeaturedBrands()),
+    // 2026-09-10: backs /brands, the "View Full Brand List" destination.
+    // Every real catalogue brand, not just the curated tiles -- see
+    // getBrandDirectory's own comment for why.
+    brandDirectory: publicProcedure.query(() => getBrandDirectory()),
   }),
   // PREMIUM-FEATURES.md TIER 5: cumulative-spend loyalty tiers (mirrors
   // Tom's Smart POS in-store membership card — see shared/loyalty.ts).

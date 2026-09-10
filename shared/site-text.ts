@@ -398,20 +398,23 @@ export const siteTextSlots = [
   // retired from the homepage during the design-review consolidation, then
   // restored the same day at Tom's explicit "we need Top Brands, must
   // have!!" -- back in Home.tsx between BrandStorySection and
-  // CategoryMasonry, same position it always had.) --------------------
+  // CategoryMasonry, same position it always had.)
+  //
+  // 2026-09-10: the section was rebuilt against matsuyaginza.com/en's
+  // "Featured Brands". Tom asked for "Тансаг брэндүүд." to be deleted
+  // outright, so `home-text-brands-heading` and its eyebrow companion
+  // `home-text-brands-eyebrow` ("ТОП БРЭНД") were removed rather than
+  // re-worded -- the reference carries no eyebrow at all, just one plain
+  // 40px heading. This single slot replaces both. Dropping the two old keys
+  // from siteTextSlotKeys also stops the admin Текст tab from listing copy
+  // that nothing renders any more; any stale site_text row is inert (nothing
+  // reads it) and is deleted alongside this change. --------------------
   {
-    key: "home-text-brands-eyebrow",
-    group: "Топ брэндүүд",
-    label: "Эйброу текст",
-    description: "",
-    fallbackValue: "ТОП БРЭНД",
-  },
-  {
-    key: "home-text-brands-heading",
+    key: "home-text-featured-brands-heading",
     group: "Топ брэндүүд",
     label: "Гарчиг",
-    description: "",
-    fallbackValue: "Тансаг брэндүүд.",
+    description: "Каруселийн дээрх гарчиг. SUGI-ийн улаан өнгөөр, цэггүй.",
+    fallbackValue: "Онцлох брэндүүд",
   },
 
   // ---- Family / care section ------------------------------------------------

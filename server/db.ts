@@ -3063,7 +3063,7 @@ export async function insertMediaLibraryItem(input: { key: string; url: string; 
 }
 
 // NEWVISION.md §5 "Топ брэндүүд" -- same CRUD shape as posts above.
-export type FeaturedBrandWriteInput = { brandName: string; tagline?: string | null; photoUrl?: string | null; sortOrder?: number; isActive?: boolean };
+export type FeaturedBrandWriteInput = { brandName: string; tagline?: string | null; photoUrl?: string | null; logoUrl?: string | null; sortOrder?: number; isActive?: boolean };
 
 /**
  * Public, customer-facing list -- active brands only, in admin-chosen
@@ -3104,10 +3104,47 @@ export async function getDistinctRealBrands() {
     .orderBy(desc(sql`count(*)`));
 }
 
+/**
+ * Public brand directory behind /brands -- the "View Full Brand List" the
+ * Featured Brands carousel links to (Tom, 2026-09-10, pointing at
+ * matsuyaginza.com/en/brands).
+ *
+ * Deliberately built from real `products.brand` values rather than the
+ * curated `featured_brands` table: that table holds a handful of hand-picked
+ * tiles, while a "full brand list" that shows six of the catalogue's brands
+ * would be a lie. The featured rows are only joined in for their artwork, so
+ * a brand that has a logo shows it and every other brand still gets listed.
+ */
+export async function getBrandDirectory() {
+  const db = await getDb();
+  if (!db) return [];
+  const [counts, featured] = await Promise.all([
+    db.select({ brand: products.brand, count: sql<number>`count(*)` }).from(products)
+      .where(and(eq(products.isPublished, true), sql`${products.brand} IS NOT NULL AND ${products.brand} <> ''`))
+      .groupBy(products.brand),
+    db.select().from(featuredBrands).where(eq(featuredBrands.isActive, true)),
+  ]);
+  const artwork = new Map(featured.map(row => [row.brandName, row]));
+  return counts
+    .filter((row): row is { brand: string; count: number } => Boolean(row.brand))
+    .map(row => {
+      const tile = artwork.get(row.brand);
+      return {
+        brandName: row.brand,
+        productCount: Number(row.count),
+        logoUrl: tile?.logoUrl ?? null,
+        isFeatured: Boolean(tile),
+      };
+    })
+    // Alphabetical by the visitor's locale, not MySQL's collation -- this list
+    // mixes Latin and Cyrillic brand names and is read as an A-Z index.
+    .sort((a, b) => a.brandName.localeCompare(b.brandName, "mn"));
+}
+
 export async function createFeaturedBrand(input: FeaturedBrandWriteInput) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  const inserted = await db.insert(featuredBrands).values({ ...input, tagline: input.tagline ?? null, photoUrl: input.photoUrl ?? null, sortOrder: input.sortOrder ?? 0, isActive: input.isActive ?? true });
+  const inserted = await db.insert(featuredBrands).values({ ...input, tagline: input.tagline ?? null, photoUrl: input.photoUrl ?? null, logoUrl: input.logoUrl ?? null, sortOrder: input.sortOrder ?? 0, isActive: input.isActive ?? true });
   const created = await db.select().from(featuredBrands).where(eq(featuredBrands.id, Number(inserted[0].insertId))).limit(1);
   return created[0];
 }

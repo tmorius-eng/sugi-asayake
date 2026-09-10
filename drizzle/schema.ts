@@ -251,6 +251,11 @@ export const featuredBrands = mysqlTable("featured_brands", {
   brandName: varchar("brandName", { length: 120 }).notNull(),
   tagline: text("tagline"),
   photoUrl: text("photoUrl"),
+  // 2026-09-10: the brand's own logo lockup, shown in its own band under the
+  // square photo (see the Featured Brands carousel). Distinct from photoUrl
+  // -- that is a lifestyle/product shot, this is the wordmark -- and never
+  // derived from product data, so it stays null until an admin uploads one.
+  logoUrl: text("logoUrl"),
   sortOrder: int("sortOrder").notNull().default(0),
   isActive: boolean("isActive").notNull().default(true),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

@@ -1,0 +1,18 @@
+-- 2026-09-10: Featured Brands carousel rebuild against the Matsuya Ginza
+-- reference (matsuyaginza.com/en "Featured Brands").
+--
+-- Each slide in that reference is TWO images, not one: a square lifestyle/
+-- product photo, and -- in a separate 100px band beneath it -- the brand's
+-- own logo lockup, `object-fit: contain`. `photoUrl` already covers the
+-- first; nothing covered the second, so brand identity had to be carried by
+-- overlaid text on the photo, which is exactly what read as cheap.
+--
+-- Deliberately nullable with no backfill: a logo is a real asset an admin
+-- uploads per brand (/admin -> Брэндүүд), and there is no honest way to
+-- derive one from product data. Until one is uploaded the logo band renders
+-- empty rather than substituting invented text -- Tom's explicit choice
+-- ("зөвхөн лого зураг") over a name-wordmark fallback.
+--
+-- Run directly against Aiven via scripts/db-apply-migration.ts (drizzle/meta
+-- is not exported in this project, per CLAUDE.md).
+ALTER TABLE `featured_brands` ADD COLUMN `logoUrl` text;

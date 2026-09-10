@@ -71,7 +71,7 @@
   --secondary: #e9f0f2;
   --secondary-foreground: #17181b;
   --muted: #f1ede6;
-  --muted-foreground: #6f7076;
+  --muted-foreground: #52535a;
   --accent: #f0b52d;
   --accent-foreground: #17181b;
   --destructive: #df1f3d;
@@ -231,7 +231,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .hero-copy h1 { max-width: 690px; margin: 0; font-family: var(--font-display); font-size: clamp(52px, 6.1vw, 94px); font-weight: 650; letter-spacing: -.075em; line-height: .91; }
 .hero-copy h1 span { color: var(--primary); }
 .hero-copy h1 strong { font-weight: 650; }
-.hero-description { max-width: 420px; margin: 30px 0 26px; color: #6f7076; font-size: 16px; line-height: 1.7; }
+.hero-description { max-width: 440px; margin: 30px 0 26px; color: #45464b; font-size: 17px; font-weight: 600; line-height: 1.7; }
 .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; }
 .button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 11px; padding: 12px 17px 12px 20px; border: 1px solid transparent; border-radius: 999px; font-size: 12px; font-weight: 800; transition: transform .18s var(--ease-out), background .18s var(--ease-out), border-color .18s var(--ease-out), color .18s var(--ease-out); }
 .button:hover { transform: translateY(-2px); }
@@ -242,10 +242,10 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .button-light:hover { background: #fff3e6; }
 .quiet-link, .inline-link { display: inline-flex; align-items: center; gap: 6px; color: #3d3e42; font-size: 12px; font-weight: 800; transition: color .18s var(--ease-out), gap .18s var(--ease-out); }
 .quiet-link:hover, .inline-link:hover { gap: 10px; color: var(--primary); }
-.hero-trust { display: flex; align-items: center; gap: 11px; margin-top: 64px; color: #6f7076; }
+.hero-trust { display: flex; align-items: center; gap: 11px; margin-top: 64px; color: #52535a; }
 .hero-trust svg { flex: 0 0 auto; color: var(--primary); }
 .hero-trust div { display: grid; gap: 2px; }
-.hero-trust strong { color: #343539; font-size: 12px; }
+.hero-trust strong { color: #2b2c30; font-size: 15px; font-weight: 700; }
 .hero-trust span { font-size: 11px; }
 /* background (not just background-image): a gradient shows through
    whenever the slot's photo hasn't been uploaded yet via /admin -> Content
@@ -260,7 +260,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 /* .section-heading -- backs the shared <SectionEyebrow> primitive
    (client/src/components/home/SectionEyebrow.tsx), used by CategoryMasonry
    and StoreLocatorSection's numbered "02"/"03" badges. */
-.section-heading { position: relative; display: flex; justify-content: space-between; gap: 28px; padding-top: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--border); color: #6f7076; font-size: 10px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+.section-heading { position: relative; display: flex; justify-content: space-between; gap: 28px; padding-top: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--border); color: #52535a; font-size: 10px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
 .section-heading::before { content: ""; position: absolute; top: 0; left: 0; width: 54px; height: 3px; background: var(--primary); }
 .section-heading span:first-child { color: var(--primary-text); font-family: var(--font-display); font-size: 22px; letter-spacing: -.08em; line-height: 1; }
 
@@ -278,16 +278,16 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .location-list { border-top: 1px solid var(--border); }
 .location-row { display: grid; grid-template-columns: 30px 1fr 17px; align-items: center; gap: 12px; min-height: 90px; border-bottom: 1px solid var(--border); transition: padding .2s var(--ease-out), color .2s var(--ease-out); }
 .location-row:hover { transform: translateX(7px); color: var(--primary); }
-.location-row > span { color: var(--primary); font-family: var(--font-display); font-size: 12px; font-weight: 800; }
+.location-row > span { color: var(--primary-text); font-family: var(--font-display); font-size: 14px; font-weight: 800; }
 .location-row div { display: grid; gap: 3px; }
-.location-row strong { font-family: var(--font-display); font-size: 14px; }
-.location-row small { color: #7d7e82; font-size: 11px; }
-.location-row .location-meta { display: inline-flex; align-items: center; gap: 5px; margin-top: 2px; color: #9a9b9f; }
-.location-row .location-meta svg { color: #9a9b9f; }
+.location-row strong { font-family: var(--font-display); font-size: 17px; font-weight: 700; }
+.location-row small { color: #4c4d52; font-size: 14px; font-weight: 500; line-height: 1.5; }
+.location-row .location-meta { display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; color: #54555a; font-size: 14px; font-weight: 600; }
+.location-row .location-meta svg { color: #54555a; }
 .location-row .location-meta-divider { margin: 0 1px; }
 .location-row svg { color: #9a9b9f; transition: transform .2s var(--ease-out), color .2s var(--ease-out); }
 .location-row:hover svg { color: var(--primary); transform: translate(2px, -2px); }
-.location-note { display: flex; align-items: center; gap: 7px; margin: 18px 0 0; color: #818287; font-size: 10px; }
+.location-note { display: flex; align-items: center; gap: 7px; margin: 18px 0 0; color: #4c4d52; font-size: 14px; font-weight: 600; }
 .location-note svg { color: var(--primary); }
 
 .site-footer { background: #17181b; color: #fff; }
@@ -382,6 +382,16 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    unusable until the banner is dismissed. Lifts it above the bar and
    shrinks max-height to match, so a tall banner still can't run off the
    top. Desktop (>760px, no bottom bar) keeps the vendor's own 16px. */
+/* Set by client/src/lib/consentIconAutoHide.ts ten seconds after the visitor
+   has finished choosing their cookie preferences (Tom, 2026-09-10: the
+   permanently-parked button "bainga haragdaad uneheer tuvugtei baina").
+   `!important` because the vendor script owns this element's inline
+   `style.display` and flips it to "flex" itself -- see showCookieIcon() in
+   client/public/vendor/silktide-consent-manager.js. Reaching the preferences
+   again does not depend on this button: SiteFooter.tsx's "Күкийн тохиргоо"
+   calls resetConsent(), and that path un-hides this too. */
+#stcm-icon.sugi-consent-icon-hidden { display: none !important; }
+
 @media (max-width: 760px) {
   #stcm-icon { bottom: calc(var(--mobile-sticky-bar-h) + var(--safe-bottom) + 10px) !important; }
   #stcm-banner {
@@ -390,7 +400,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
   }
 }
 
-.footer-column a, .footer-column-button { color: rgba(255,255,255,.86); font-weight: 700; transition: color .18s var(--ease-out); }
+.footer-column a, .footer-column-button { color: rgba(255,255,255,.92); font-size: 14px; font-weight: 700; transition: color .18s var(--ease-out); }
 .footer-column a:hover, .footer-column-button:hover { color: #ffd27a; }
 /* Resets default <button> chrome so "Күкийн тохиргоо" reads identically to
    the <a> links beside it in the same column -- it's a button (triggers
@@ -404,7 +414,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    "a different font" even though the family itself was already correct.
    Only inheriting the sub-properties native <button> chrome actually needs
    overriding (family/size/line-height) leaves font-weight alone. */
-.footer-column-button { background: none; border: none; padding: 0; margin: 0; font-family: inherit; font-size: inherit; line-height: inherit; text-align: left; cursor: pointer; }
+.footer-column-button { background: none; border: none; padding: 0; margin: 0; font-family: inherit; font-size: 14px; line-height: inherit; text-align: left; cursor: pointer; }
 .footer-column small { margin-top: 8px; color: rgba(255,255,255,.46); }
 /* 2026-09-06 (real a11y-audit finding): .42 opacity measured 4.07:1 against
    the dark footer, under the 4.5:1 small-text threshold -- bumped to .5
@@ -458,6 +468,22 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
      SitePromo.tsx) rather than a hardcoded value, so a motion-sensitive
      visitor still gets the same unhurried pace, just never-stopping. */
   .site-promo-ticker > div { animation-duration: var(--promo-ticker-duration, 24s) !important; animation-iteration-count: infinite !important; }
+  /* Fourth instance of the same owner-directed exemption (Tom, 2026-09-10:
+     "ANIMATION AJILHGU BAINA SHWW URSAHGUI BAINA AUTO!!!"). The Featured
+     Brands carousel must keep advancing on its own for every visitor.
+     Confirmed by measurement, not assumed: with reducedMotion emulated the
+     active slide stayed on brand 1 for 8.8s, while it advanced normally
+     without it -- the same root cause that made the sunrise ribbon look
+     frozen on Tom's machine, which has the OS reduce-motion setting on.
+     The blanket rule above crushes transition-duration to .01ms, which
+     would turn the 1000ms glide into a hard cut even once autoplay runs,
+     so the duration is restored here too. The drag override below stays
+     more specific so grabbing the strip still tracks the pointer 1:1.
+     Knowing accessibility tradeoff, consistent with the three tickers
+     above: slow (one brand per 4s), low-contrast, decorative brand chrome. */
+  .fbrand-slide, .fbrand-scale { transition-duration: 1000ms !important; }
+  .fbrand-viewport.is-dragging .fbrand-slide, .fbrand-viewport.is-dragging .fbrand-scale { transition-duration: 0ms !important; }
+  .fbrand-slide.is-teleporting, .fbrand-slide.is-teleporting .fbrand-scale { transition-duration: 0ms !important; }
 }
 
 /* Scroll choreography keeps the visual rhythm tactile without hiding content from motion-sensitive visitors. */
@@ -505,7 +531,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 /* rgba(23,24,27,.66) over #f0b52d measured 4.38:1, just under 4.5:1 --
    bumped to .74 for real margin (verified ~5:1). Same fix mirrored below
    for .bestseller-heading > p, which shares this exact literal. */
-.recently-viewed-heading > p:last-child { max-width: 260px; margin: 0 0 3px auto; color: rgba(23,24,27,.74); font-size: 11px; line-height: 1.55; }.recently-viewed-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }.recently-viewed-card { overflow: hidden; background: #fffdf9; box-shadow: 7px 8px 0 rgba(23,24,27,.14); transition: transform .22s var(--ease-out), box-shadow .22s var(--ease-out); }.recently-viewed-card:hover { box-shadow: 10px 12px 0 rgba(223,31,61,.22); transform: translateY(-5px); }.recently-viewed-card > a { display: grid; grid-template-columns: 104px 1fr; min-height: 132px; color: #17181b; }.recently-viewed-image { position: relative; display: block; width: 104px; height: 132px; }.recently-viewed-card img { width: 100%; height: 100%; object-fit: cover; }.recently-viewed-card a div { display: flex; min-width: 0; flex-direction: column; justify-content: center; padding: 15px; }.recently-viewed-card p { margin: 0; color: #df1f3d; font-size: 8px; font-weight: 900; letter-spacing: .12em; }.recently-viewed-card h3 { display: -webkit-box; overflow: hidden; margin: 6px 0; color: #17181b; font-family: var(--font-display); font-size: 19px; font-weight: 650; letter-spacing: -.05em; line-height: .96; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }.recently-viewed-card strong { font-size: 12px; }.recently-viewed-card s { margin-left: 6px; color: #a5a6ab; font-size: 10px; font-weight: 600; }.recently-viewed-card button { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 14px; border-top: 1px solid rgba(23,24,27,.1); color: #17181b; font-size: 9px; font-weight: 900; letter-spacing: .06em; transition: background .18s var(--ease-out), color .18s var(--ease-out); }.recently-viewed-card button:hover { background: #17181b; color: #fff; }.recently-viewed-empty { display: flex; align-items: center; gap: 14px; min-height: 105px; background: #fffdf9; box-shadow: 7px 8px 0 rgba(23,24,27,.14); padding: 24px 28px; color: #17181b; font-size: 12px; font-weight: 700; line-height: 1.6; }.recently-viewed-empty svg { flex: 0 0 auto; color: #df1f3d; }
+.recently-viewed-heading > p:last-child { max-width: 340px; margin: 0 0 3px auto; color: #17181b; font-size: 16px; font-weight: 600; line-height: 1.6; }.recently-viewed-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }.recently-viewed-card { overflow: hidden; background: #fffdf9; box-shadow: 7px 8px 0 rgba(23,24,27,.14); transition: transform .22s var(--ease-out), box-shadow .22s var(--ease-out); }.recently-viewed-card:hover { box-shadow: 10px 12px 0 rgba(223,31,61,.22); transform: translateY(-5px); }.recently-viewed-card > a { display: grid; grid-template-columns: 104px 1fr; min-height: 132px; color: #17181b; }.recently-viewed-image { position: relative; display: block; width: 104px; height: 132px; }.recently-viewed-card img { width: 100%; height: 100%; object-fit: cover; }.recently-viewed-card a div { display: flex; min-width: 0; flex-direction: column; justify-content: center; padding: 15px; }.recently-viewed-card p { margin: 0; color: #c81b34; font-size: 11px; font-weight: 900; letter-spacing: .08em; }.recently-viewed-card h3 { display: -webkit-box; overflow: hidden; margin: 6px 0; color: #17181b; font-family: var(--font-display); font-size: 19px; font-weight: 650; letter-spacing: -.05em; line-height: .96; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }.recently-viewed-card strong { font-size: 15px; font-weight: 700; }.recently-viewed-card s { margin-left: 6px; color: #a5a6ab; font-size: 10px; font-weight: 600; }.recently-viewed-card button { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 11px 14px; border-top: 1px solid rgba(23,24,27,.1); color: #17181b; font-size: 12px; font-weight: 900; letter-spacing: .04em; transition: background .18s var(--ease-out), color .18s var(--ease-out); }.recently-viewed-card button:hover { background: #17181b; color: #fff; }.recently-viewed-empty { display: flex; align-items: center; gap: 14px; min-height: 105px; background: #fffdf9; box-shadow: 7px 8px 0 rgba(23,24,27,.14); padding: 24px 28px; color: #17181b; font-size: 12px; font-weight: 700; line-height: 1.6; }.recently-viewed-empty svg { flex: 0 0 auto; color: #df1f3d; }
 .recently-viewed-notice { margin: 14px 0 0; border-left: 3px solid #df1f3d; padding: 10px 13px; background: rgba(255,253,249,.55); color: #17181b; font-size: 11px; font-weight: 700; line-height: 1.5; }
 @media (max-width: 760px) { .quick-view-layout { grid-template-columns: 1fr; }.quick-view-image { min-height: 260px; max-height: 330px; }.quick-view-copy { padding: 28px 22px; }.quick-view-actions { flex-wrap: wrap; }.quick-view-add { min-width: 180px; }.recently-viewed-section { padding: 34px 18px; }.recently-viewed-heading { grid-template-columns: 1fr; gap: 12px; }.recently-viewed-heading > p:last-child { margin: 0; }.recently-viewed-grid { grid-template-columns: 1fr; }.recently-viewed-card > a { grid-template-columns: 112px 1fr; }.recently-viewed-image { width: 112px; }.quick-view-dialog { max-width: calc(100% - 1rem) !important; } }
 
@@ -519,7 +545,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .hero-copy { position: relative; z-index: 1; }
 .hero-topline { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .hero-topline .eyebrow { margin-bottom: 20px; }
-.hero-time { color: #3970a7; font-family: var(--font-display); font-size: 10px; font-weight: 800; letter-spacing: .14em; white-space: nowrap; }
+.hero-time { color: #24506f; font-family: var(--font-display); font-size: 14px; font-weight: 800; letter-spacing: .1em; white-space: nowrap; }
 .hero-copy h1 { position: relative; text-shadow: 3px 3px 0 rgba(255,255,255,.68); }
 .hero-copy h1 strong { display: inline-block; position: relative; z-index: 0; }
 .hero-copy h1 strong::after { content: ""; position: absolute; z-index: -1; right: -8px; bottom: 7px; left: -8px; height: 14px; background: #f0b52d; transform: rotate(-2deg); }
@@ -563,14 +589,14 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .commerce-back { display: grid; flex: 0 0 auto; width: 36px; height: 36px; place-items: center; border: 1px solid rgba(23,24,27,.12); border-radius: 50%; color: var(--primary); background: #fff; transition: transform .18s var(--ease-out), background .18s var(--ease-out), color .18s var(--ease-out); }
 .commerce-brand:hover .commerce-back { color: #fff; background: var(--primary); transform: translateX(-2px); }
 .commerce-brand img { width: 139px; height: auto; }
-.commerce-brand > span:last-child { padding-left: 13px; border-left: 1px solid rgba(23,24,27,.12); color: #6f7076; font-size: 10px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+.commerce-brand > span:last-child { padding-left: 13px; border-left: 1px solid rgba(23,24,27,.12); color: #52535a; font-size: 10px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
 .commerce-header-actions { display: flex; align-items: center; gap: 22px; }
-.commerce-header-actions > a { position: relative; padding-bottom: 3px; color: #4e4f53; font-size: 12px; font-weight: 800; transition: color .18s var(--ease-out); }
+.commerce-header-actions > a { position: relative; padding-bottom: 3px; color: #3f4044; font-size: 14px; font-weight: 800; transition: color .18s var(--ease-out); }
 .commerce-header-actions > a::after { content: ""; position: absolute; left: 0; right: 100%; bottom: 0; height: 2px; background: var(--primary); transition: right .2s var(--ease-out); }
 .commerce-header-actions > a:hover { color: #17181b; }
 .commerce-header-actions > a:hover::after, .commerce-header-actions > a.is-current::after { right: 0; }
 .commerce-header-actions > a.is-current { color: var(--primary); }
-.commerce-header-actions button { position: relative; display: inline-flex; align-items: center; gap: 8px; padding: 11px 16px; border: 0; border-radius: 999px; background: #17181b; color: #fff; font-size: 12px; font-weight: 800; transition: transform .18s var(--ease-out), background .18s var(--ease-out); }
+.commerce-header-actions button { position: relative; display: inline-flex; align-items: center; gap: 8px; padding: 11px 16px; border: 0; border-radius: 999px; background: #17181b; color: #fff; font-size: 14px; font-weight: 800; transition: transform .18s var(--ease-out), background .18s var(--ease-out); }
 .commerce-header-actions button:hover { background: var(--primary); transform: translateY(-2px); }.commerce-header-actions button:active { transform: scale(.97); }
 .commerce-header-actions button span { display: grid; width: 19px; height: 19px; place-items: center; border-radius: 50%; background: #f0b52d; color: #17181b; font-size: 10px; }
 
@@ -724,7 +750,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    the cart) since research is unambiguous that a fee surfacing only at
    checkout is a leading cause of cart abandonment. */
 .shop-hero-delivery { display: inline-flex; align-items: center; gap: 9px; padding: 10px 13px; background: #eef3f1; color: #286b4c; font-size: 9px; font-weight: 800; letter-spacing: .06em; }.shop-hero-delivery svg { color: #286b4c; }
-.shop-search-panel { position: relative; z-index: 1; padding: 43px 30px 26px; background: #fff9f2; border-radius: 26px 0 26px 26px; box-shadow: 14px 14px 0 rgba(240,181,45,.72); }.shop-search-panel label { display: flex; align-items: center; gap: 12px; padding: 16px 17px; border: 1px solid rgba(23,24,27,.14); border-radius: 999px; background: #fff; color: var(--primary); box-shadow: 0 8px 18px rgba(23,24,27,.07); }.shop-search-panel input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: #17181b; font: inherit; font-size: 13px; }.shop-search-panel p { margin: 15px 4px 0; color: #6f7076; font-size: 11px; }.shop-search-panel p strong { color: var(--primary); font-family: var(--font-display); font-size: 23px; letter-spacing: -.08em; }.shop-search-stamp { position: absolute; top: -31px; right: 21px; display: grid; width: 70px; height: 70px; place-items: center; border-radius: 50%; background: #df1f3d; color: #fff; font-size: 8px; font-weight: 800; letter-spacing: .12em; line-height: 1.25; text-align: center; transform: rotate(10deg); }
+.shop-search-panel { position: relative; z-index: 1; padding: 43px 30px 26px; background: #fff9f2; border-radius: 26px 0 26px 26px; box-shadow: 14px 14px 0 rgba(240,181,45,.72); }.shop-search-panel label { display: flex; align-items: center; gap: 12px; padding: 16px 17px; border: 1px solid rgba(23,24,27,.14); border-radius: 999px; background: #fff; color: var(--primary); box-shadow: 0 8px 18px rgba(23,24,27,.07); }.shop-search-panel input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: #17181b; font: inherit; font-size: 13px; }.shop-search-panel p { margin: 15px 4px 0; color: #52535a; font-size: 11px; }.shop-search-panel p strong { color: var(--primary); font-family: var(--font-display); font-size: 23px; letter-spacing: -.08em; }.shop-search-stamp { position: absolute; top: -31px; right: 21px; display: grid; width: 70px; height: 70px; place-items: center; border-radius: 50%; background: #df1f3d; color: #fff; font-size: 8px; font-weight: 800; letter-spacing: .12em; line-height: 1.25; text-align: center; transform: rotate(10deg); }
 /* 2026-09-01: was a single static flex row with no animation at all --
    "CURATED IN JAPAN" repeated as the 4th item was a crude fake-marquee
    trick (no actual motion) rather than a real scroll. Rebuilt on the
@@ -749,7 +775,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .site-promo-ticker > div { display: flex; flex: 0 0 auto; align-items: center; gap: 12px; padding-right: 12px; animation: sunrise-track var(--promo-ticker-duration, 24s) linear infinite; }
 .site-promo-ticker span { font-size: 13px; font-weight: 600; }
 .site-promo-ticker i { width: 4px; height: 4px; flex: 0 0 auto; border-radius: 50%; background: #df1f3d; }
-.shop-filter { display: flex; align-items: end; justify-content: space-between; gap: 30px; padding: 39px 0 28px; border-bottom: 1px solid rgba(23,24,27,.12); }.shop-filter p { display: flex; align-items: center; gap: 9px; margin: 0; color: #55565b; font-size: 10px; font-weight: 800; letter-spacing: .16em; }.shop-filter p svg { color: var(--primary); }.shop-filter > div > span { display: block; margin-top: 7px; color: #6f7076; font-size: 11px; }/* .shop-filter-facets groups the category-pills row and (when present) the
+.shop-filter { display: flex; align-items: end; justify-content: space-between; gap: 30px; padding: 39px 0 28px; border-bottom: 1px solid rgba(23,24,27,.12); }.shop-filter p { display: flex; align-items: center; gap: 9px; margin: 0; color: #55565b; font-size: 10px; font-weight: 800; letter-spacing: .16em; }.shop-filter p svg { color: var(--primary); }.shop-filter > div > span { display: block; margin-top: 7px; color: #52535a; font-size: 11px; }/* .shop-filter-facets groups the category-pills row and (when present) the
    skin-type-pills row into one right-aligned column -- see Shop.tsx's own
    comment for why this replaced 2 separate .shop-filter children. */
 .shop-filter-facets { display: flex; max-width: 68%; flex-direction: column; align-items: flex-end; gap: 10px; }
@@ -757,7 +783,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .shop-loading { display: grid; min-height: 420px; place-items: center; align-content: center; gap: 11px; color: var(--primary); font-size: 11px; font-weight: 800; letter-spacing: .1em; }.shop-status-card { display: grid; min-height: 360px; place-items: center; align-content: center; padding: 46px; background: #fff; color: #17181b; text-align: center; }.shop-status-card svg { color: var(--primary); }.shop-status-card h2 { max-width: 520px; margin: 18px 0 0; font-family: var(--font-display); font-size: 38px; letter-spacing: -.065em; }.shop-status-card p { margin: 11px 0 0; color: #737479; font-size: 14px; }.shop-status-card button { margin-top: 25px; padding: 12px 18px; border: 0; border-radius: 999px; background: #17181b; color: #fff; font-size: 11px; font-weight: 800; }.shop-status-card.error { background: #fff0f1; }
 .shop-discovery { padding: 72px clamp(22px,6vw,92px) 30px; background: linear-gradient(120deg,#f8e7d9 0%,#f8e7d9 58%,#fbf4df 58%); }.shop-discovery-heading { display: grid; grid-template-columns: 1fr .65fr; gap: 10%; align-items: end; }.shop-discovery h2 { font-size: clamp(49px,5.5vw,82px); }.shop-discovery-heading > p:last-child { max-width: 360px; margin: 0 0 8px; color: #68696e; font-size: 14px; line-height: 1.75; }.shop-category-deck { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-top: 54px; }.shop-category-card { position: relative; display: flex; min-height: 225px; flex-direction: column; justify-content: space-between; padding: 21px; overflow: hidden; transition: transform .22s var(--ease-out), box-shadow .22s var(--ease-out); }.shop-category-card:hover { transform: translateY(-8px) rotate(-1deg); box-shadow: 0 17px 29px rgba(23,24,27,.14); }.shop-category-card > span { color: rgba(23,24,27,.55); font-family: var(--font-display); font-size: 13px; font-weight: 800; }.shop-category-card > div { position: relative; z-index: 1; }.shop-category-card small { font-size: 8px; font-weight: 800; letter-spacing: .13em; }.shop-category-card h3 { margin: 8px 0 0; font-family: var(--font-display); font-size: 26px; letter-spacing: -.06em; line-height: 1; }.shop-category-card p { margin: 10px 0 0; font-size: 11px; line-height: 1.5; }.shop-category-card > svg { position: relative; z-index: 1; margin-left: auto; }.shop-category-card::after { content: ""; position: absolute; right: -40px; bottom: -40px; width: 120px; height: 120px; border: 1px solid rgba(23,24,27,.23); border-radius: 50%; box-shadow: 0 0 0 18px rgba(255,255,255,.16), 0 0 0 36px rgba(255,255,255,.08); }.shop-category-card.rose { background: linear-gradient(145deg, #efccd4 0%, #f6dde2 60%, #efccd4 100%); }.shop-category-card.cobalt { background: linear-gradient(145deg, #b8cde1 0%, #d3e0ee 60%, #b8cde1 100%); }.shop-category-card.marigold { background: linear-gradient(145deg, #f3ca55 0%, #f8dd8e 60%, #f3ca55 100%); }.shop-category-card.mint { background: linear-gradient(145deg, #bcd9cf 0%, #d8ebe4 60%, #bcd9cf 100%); }.shop-category-card.peach { background: linear-gradient(145deg, #e8c9ae 0%, #f3ddc9 60%, #e8c9ae 100%); }.shop-category-card.sand { background: linear-gradient(145deg, #ddd6c6 0%, #ece7dc 60%, #ddd6c6 100%); }.shop-category-card::before { content: ""; position: absolute; inset: 0; background-image: repeating-linear-gradient(128deg, rgba(23,24,27,.05) 0 1px, transparent 1px 13px); pointer-events: none; }
 .shop-discovery-cta { display: flex; align-items: center; justify-content: space-between; gap: 30px; margin-top: 49px; padding: 24px 0 0; border-top: 1px solid rgba(23,24,27,.2); }.shop-discovery-cta > div:first-child { display: flex; align-items: center; gap: 12px; }.shop-discovery-cta > div:first-child svg { color: var(--primary); }.shop-discovery-cta strong, .shop-discovery-cta small { display: block; }.shop-discovery-cta strong { font-size: 13px; }.shop-discovery-cta small { margin-top: 3px; color: #737479; font-size: 11px; }.shop-discovery-cta > div:last-child { display: flex; gap: 10px; }.shop-discovery-cta a { display: inline-flex; align-items: center; gap: 8px; padding: 12px 14px; border: 1px solid #17181b; color: #17181b; font-size: 11px; font-weight: 800; transition: transform .18s var(--ease-out), background .18s var(--ease-out), color .18s var(--ease-out); }.shop-discovery-cta a:last-child { border-color: var(--primary); background: var(--primary); color: #fff; }.shop-discovery-cta a:hover { transform: translateY(-2px); }.shop-discovery-cta a:first-child:hover { background: #17181b; color: #fff; }
-.shop-pagination { display: flex; align-items: center; justify-content: center; gap: 22px; padding: 10px 0 46px; }.shop-pagination button { display: inline-flex; align-items: center; gap: 6px; padding: 12px 18px; border: 1px solid rgba(23,24,27,.14); border-radius: 999px; background: #fff; color: #17181b; font-size: 12px; font-weight: 800; transition: transform .18s var(--ease-out), color .18s var(--ease-out), border-color .18s var(--ease-out); }.shop-pagination button:hover:not(:disabled) { color: var(--primary); border-color: var(--primary); transform: translateY(-2px); }.shop-pagination button:disabled { cursor: not-allowed; opacity: .35; }.shop-pagination span { color: #55565b; font-size: 12px; font-weight: 800; text-align: center; }.shop-pagination span em { color: #6f7076; font-style: normal; font-weight: 600; }
+.shop-pagination { display: flex; align-items: center; justify-content: center; gap: 22px; padding: 10px 0 46px; }.shop-pagination button { display: inline-flex; align-items: center; gap: 6px; padding: 12px 18px; border: 1px solid rgba(23,24,27,.14); border-radius: 999px; background: #fff; color: #17181b; font-size: 12px; font-weight: 800; transition: transform .18s var(--ease-out), color .18s var(--ease-out), border-color .18s var(--ease-out); }.shop-pagination button:hover:not(:disabled) { color: var(--primary); border-color: var(--primary); transform: translateY(-2px); }.shop-pagination button:disabled { cursor: not-allowed; opacity: .35; }.shop-pagination span { color: #55565b; font-size: 12px; font-weight: 800; text-align: center; }.shop-pagination span em { color: #52535a; font-style: normal; font-weight: 600; }
 /* ============================================================
    2026-09-10 -- /shop product card rebuilt to Tom's reference card
    (white card, brand chip top-left, orange discount badge top-right,
@@ -807,13 +833,13 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .shop-product-card:hover .shop-quick-view, .shop-quick-view:focus-visible { opacity: 1; }
 
 .shop-stock-flag { position: absolute; z-index: 2; bottom: 10px; left: 50px; padding: 5px 8px; border-radius: 7px; background: #fdecef; color: var(--primary); font-size: 10px; font-weight: 800; }
-.shop-stock-flag.is-out { background: #f1f1f3; color: #6f7076; }
+.shop-stock-flag.is-out { background: #f1f1f3; color: #52535a; }
 
 /* --- copy --- */
 .shop-product-copy { display: flex; flex: 1 1 auto; flex-direction: column; padding: 14px 15px 15px; }
 .shop-product-copy h2 { display: -webkit-box; overflow: hidden; margin: 0; color: #17181b; font-family: var(--font-body); font-size: 15px; font-weight: 800; letter-spacing: -.01em; line-height: 1.32; -webkit-box-orient: vertical; -webkit-line-clamp: 2; min-height: calc(2 * 1.32 * 15px); }
 .shop-product-copy .shop-product-link:hover h2 { color: var(--primary); }
-.shop-product-rating { display: flex; align-items: center; gap: 4px; min-height: 16px; margin-top: 7px; color: #6f7076; font-size: 11px; font-weight: 700; }
+.shop-product-rating { display: flex; align-items: center; gap: 4px; min-height: 16px; margin-top: 7px; color: #52535a; font-size: 11px; font-weight: 700; }
 .shop-product-rating svg { flex: 0 0 auto; }
 .shop-product-rating em { font-style: normal; font-weight: 600; }
 
@@ -821,7 +847,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 /* The struck price keeps its line even when a product isn't discounted,
    so prices sit on the same baseline across a row of mixed cards. */
 .shop-product-prices { display: grid; min-width: 0; gap: 2px; }
-.shop-product-prices s { min-height: 17px; color: #6f7076; font-size: 13px; font-weight: 500; text-decoration-thickness: 1px; }
+.shop-product-prices s { min-height: 17px; color: #52535a; font-size: 13px; font-weight: 500; text-decoration-thickness: 1px; }
 .shop-product-prices strong { color: var(--primary); font-family: var(--font-body); font-size: 22px; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; white-space: nowrap; }
 
 .shop-cart-button { display: grid; width: 50px; height: 50px; flex: 0 0 auto; place-items: center; border: 0; border-radius: 11px; background: var(--cart-blue); color: #fff; transition: background .18s var(--ease-out), transform .18s var(--ease-out); }
@@ -855,7 +881,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    .is-compact only bumps column count/gap; card internals (image, copy)
    are untouched and already read fine smaller. */
 .shop-grid-toolbar { display: flex; justify-content: flex-end; gap: 8px; margin: -10px 0 14px; }
-.shop-grid-toolbar button { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid rgba(23,24,27,.14); background: #fff; color: #6f7076; transition: color .18s var(--ease-out), border-color .18s var(--ease-out), background .18s var(--ease-out); }
+.shop-grid-toolbar button { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid rgba(23,24,27,.14); background: #fff; color: #52535a; transition: color .18s var(--ease-out), border-color .18s var(--ease-out), background .18s var(--ease-out); }
 .shop-grid-toolbar button:hover { color: #17181b; }
 .shop-grid-toolbar button.active { border-color: #17181b; background: #17181b; color: #fff; }
 .shop-product-grid.is-compact { grid-template-columns: repeat(6,1fr); gap: 12px; }
@@ -939,7 +965,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .doc-kicker { margin: 0; color: var(--primary); font-size: 10px; font-weight: 800; letter-spacing: .18em; }
 .doc-head h1 { margin: 12px 0 0; font-family: var(--font-display); font-size: clamp(38px, 6vw, 58px); font-weight: 650; letter-spacing: -.065em; line-height: .96; }
 .doc-head p { max-width: 560px; margin: 16px 0 0; color: #63646a; font-size: 15px; line-height: 1.7; }
-.doc-updated { display: inline-block; margin-top: 16px; color: #6f7076; font-size: 11px; font-weight: 700; }
+.doc-updated { display: inline-block; margin-top: 16px; color: #52535a; font-size: 11px; font-weight: 700; }
 .doc-sections { display: grid; }
 .doc-section { display: grid; grid-template-columns: 52px 1fr; gap: 18px; padding: 30px 0; border-bottom: 1px solid var(--border); }
 .doc-section-index { font-family: var(--font-display); font-size: 13px; font-weight: 800; color: var(--primary-text); }
@@ -978,7 +1004,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .order-status-pill.refunded { background: #eef3f1; color: #3f4a46; }
 .order-items { display: grid; gap: 8px; margin-top: 14px; }
 .order-item { display: flex; justify-content: space-between; gap: 14px; font-size: 13px; }
-.order-item span { color: #6f7076; }
+.order-item span { color: #52535a; }
 .order-item strong { font-weight: 800; }
 .order-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(23,24,27,.08); font-size: 12px; color: #6b6c71; }
 .order-foot strong { font-family: var(--font-display); font-size: 17px; color: var(--foreground); }
@@ -1013,7 +1039,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .profile-avatar-remove { margin-top: 8px; padding: 0; border: 0; background: transparent; color: #8c8d91; font-size: 10px; font-weight: 800; text-decoration: underline; text-underline-offset: 2px; }
 .profile-avatar-remove:hover { color: var(--primary); }
 .profile-head-copy h1 { margin: 0; font-family: var(--font-display); font-size: clamp(26px, 4vw, 32px); font-weight: 700; letter-spacing: -.03em; }
-.profile-head-copy p { margin: 5px 0 0; color: #6f7076; font-size: 13px; }
+.profile-head-copy p { margin: 5px 0 0; color: #52535a; font-size: 13px; }
 .profile-grid { display: grid; grid-template-columns: 1fr; gap: 18px; margin-top: 34px; }
 .profile-section { position: relative; padding: 27px 28px; background: #fff; border: 1px solid rgba(23,24,27,.08); box-shadow: var(--shadow-sm); }
 .profile-section::before { content: ""; position: absolute; top: 0; left: 0; width: 46px; height: 3px; background: var(--primary); }
@@ -1054,7 +1080,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .account-signout { margin-top: 14px; }
 .account-main { min-width: 0; display: grid; gap: 20px; }
 .account-panel-head h2 { margin: 0; font-family: var(--font-display); font-size: 24px; font-weight: 700; letter-spacing: -.025em; }
-.account-panel-head p { margin: 5px 0 0; color: #6f7076; font-size: 13px; }
+.account-panel-head p { margin: 5px 0 0; color: #52535a; font-size: 13px; }
 @media (max-width: 900px) {
   .account-shell { grid-template-columns: 1fr; gap: 20px; }
   .account-sidebar { position: static; display: flex; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
@@ -1077,11 +1103,11 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .overview-stat:hover { transform: translateY(-5px); box-shadow: 0 20px 36px rgba(223,31,61,.15); border-color: rgba(223,31,61,.3); }
 .overview-stat:hover::after { transform: scale(1); }
 .overview-stat strong { display: block; position: relative; font-family: var(--font-display); font-size: 28px; font-weight: 700; letter-spacing: -.03em; color: var(--primary); }
-.overview-stat span { display: block; position: relative; margin-top: 4px; color: #6f7076; font-size: 11px; font-weight: 700; }
+.overview-stat span { display: block; position: relative; margin-top: 4px; color: #52535a; font-size: 11px; font-weight: 700; }
 .overview-latest-order { position: relative; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; padding: 20px 24px; background: #fff; border: 1px solid rgba(23,24,27,.08); border-left: 3px solid var(--primary); box-shadow: 0 14px 30px rgba(20,22,24,.06); transition: transform .2s var(--ease-out), box-shadow .2s var(--ease-out); }
 .overview-latest-order:hover { transform: translateY(-3px); box-shadow: 0 20px 38px rgba(20,22,24,.1); }
 .overview-latest-order strong { display: block; font-family: var(--font-display); font-size: 17px; }
-.overview-latest-order span { display: block; margin-top: 3px; color: #6f7076; font-size: 12px; }
+.overview-latest-order span { display: block; margin-top: 3px; color: #52535a; font-size: 12px; }
 @media (max-width: 640px) { .overview-stats { grid-template-columns: 1fr; } }
 
 /* Orders tab: back-in-stock-style restock timeline + buy again */
@@ -1171,11 +1197,11 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .loyalty-card-number { position: relative; z-index: 2; margin-top: 14px; font-family: var(--font-mono, monospace); font-size: 15px; letter-spacing: .1em; color: rgba(255,255,255,.75); }
 .loyalty-card-bottom { position: relative; z-index: 2; margin-top: 20px; display: inline-flex; padding: 7px 13px; border-radius: 999px; background: rgba(240,181,45,.16); color: #f0b52d; font-size: 11px; font-weight: 800; }
 .loyalty-progress { margin-top: 22px; }
-.loyalty-progress-row { display: flex; align-items: baseline; justify-content: space-between; font-size: 12px; color: #6f7076; }
+.loyalty-progress-row { display: flex; align-items: baseline; justify-content: space-between; font-size: 12px; color: #52535a; }
 .loyalty-progress-row strong { font-family: var(--font-display); font-size: 20px; color: #17181b; }
 .loyalty-progress-bar { position: relative; margin-top: 10px; height: 8px; border-radius: 999px; background: #eee9df; overflow: hidden; }
 .loyalty-progress-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--primary), #f0b52d); transition: width .4s var(--ease-out); }
-.loyalty-progress-note { margin: 10px 0 0; color: #6f7076; font-size: 12px; line-height: 1.6; }
+.loyalty-progress-note { margin: 10px 0 0; color: #52535a; font-size: 12px; line-height: 1.6; }
 .loyalty-tiers { margin-top: 22px; display: grid; gap: 8px; }
 .loyalty-tier-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border: 1px solid rgba(23,24,27,.08); font-size: 12px; color: #5f6065; }
 .loyalty-tier-row.active { border-color: var(--primary); background: #fff2f4; color: #17181b; font-weight: 800; }
@@ -1245,7 +1271,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .membership-panel:last-child { border-right: 0; }
 .membership-panel svg { flex: 0 0 auto; color: var(--primary); }
 .membership-panel strong { display: block; font-family: var(--font-display); font-size: 14px; font-weight: 700; letter-spacing: -.02em; }
-.membership-panel span { display: block; margin-top: 4px; color: #6f7076; font-size: 11px; line-height: 1.5; }
+.membership-panel span { display: block; margin-top: 4px; color: #52535a; font-size: 11px; line-height: 1.5; }
 .membership-cta { justify-content: space-between; background: #17181b; color: #fff; transition: background .2s var(--ease-out); }
 .membership-cta svg:first-child { color: #f0b52d; }
 .membership-cta span { color: rgba(255,255,255,.62); }
@@ -1257,6 +1283,12 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    uses, so the two "real data, ranked" rails on the site read as one
    family even though they're on different pages. */
 .bestseller-section { padding: clamp(64px, 8vw, 112px) max(34px, 7vw); background: #f0b52d; }
+/* Two of these stack on the homepage (bestsellers, then recommended) sharing
+   one gold background, so their facing paddings read as a single dead band
+   rather than as two sections breathing. Halve the seam; the outer padding of
+   the pair is untouched. */
+.bestseller-section + .bestseller-section { padding-top: clamp(24px, 2.6vw, 38px); }
+.bestseller-section:has(+ .bestseller-section) { padding-bottom: clamp(24px, 2.6vw, 38px); }
 .bestseller-heading { display: grid; grid-template-columns: minmax(0, .95fr) minmax(220px, .45fr); gap: 26px; align-items: end; margin-bottom: 34px; }
 .bestseller-heading h2 { margin: 8px 0 0; color: #17181b; font-family: var(--font-display); font-size: clamp(35px, 4vw, 58px); font-weight: 650; letter-spacing: -.08em; line-height: .9; }
 /* 2026-09-06 (design review): was `color: var(--primary)` (red) -- on this
@@ -1265,17 +1297,17 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    rest of the line for real contrast, marks the accent word with an
    underline instead of a color shift. */
 .bestseller-heading h2 em { color: #17181b; font-style: normal; text-decoration: underline; text-decoration-color: var(--primary); text-decoration-thickness: 3px; text-underline-offset: 6px; }
-.bestseller-heading > p { max-width: 280px; margin: 0 0 3px auto; color: rgba(23,24,27,.74); font-size: 11px; line-height: 1.55; }
+.bestseller-heading > p { max-width: 350px; margin: 0 0 3px auto; color: #17181b; font-size: 16px; font-weight: 600; line-height: 1.6; }
 .bestseller-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; }
 .bestseller-card { position: relative; display: flex; flex-direction: column; overflow: hidden; background: #fffdf9; color: #17181b; box-shadow: 7px 8px 0 rgba(23,24,27,.14); transition: transform .22s var(--ease-out), box-shadow .22s var(--ease-out); }
 .bestseller-card:hover { box-shadow: 10px 12px 0 rgba(223,31,61,.22); transform: translateY(-5px); }
 .bestseller-rank { position: absolute; top: 9px; left: 9px; z-index: 1; display: grid; width: 26px; height: 26px; place-items: center; border-radius: 50%; background: #17181b; color: #f0b52d; font-family: var(--font-display); font-size: 12px; font-weight: 700; }
 .bestseller-card img { width: 100%; aspect-ratio: 1; object-fit: cover; }
 .bestseller-card > div { padding: 13px 14px 15px; }
-.bestseller-card p { margin: 0; color: var(--primary); font-size: 8px; font-weight: 900; letter-spacing: .1em; }
+.bestseller-card p { margin: 0; color: var(--primary-text); font-size: 11px; font-weight: 900; letter-spacing: .07em; }
 .bestseller-card h3 { display: -webkit-box; overflow: hidden; margin: 6px 0; font-family: var(--font-display); font-size: 14px; font-weight: 650; letter-spacing: -.03em; line-height: 1.15; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .bestseller-rating { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; font-size: 10px; font-weight: 800; }
-.bestseller-rating em { color: #6f7076; font-style: normal; }
+.bestseller-rating em { color: #52535a; font-style: normal; }
 .bestseller-card strong { font-size: 12px; }
 .bestseller-compare-price { margin-left: 6px; color: #a5a6ab; font-size: 11px; font-weight: 600; }
 .bestseller-all-link { display: inline-flex; align-items: center; gap: 8px; margin-top: 30px; color: #17181b; font-size: 11px; font-weight: 900; letter-spacing: .06em; transition: gap .18s var(--ease-out); }
@@ -1300,7 +1332,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .carousel-shelf-section--inset { padding: 0; }
 .carousel-shelf-heading { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 26px; }
 .carousel-shelf-heading h2 { margin: 8px 0 0; font-family: var(--font-display); font-size: clamp(28px, 3.2vw, 40px); font-weight: 650; letter-spacing: -.06em; line-height: 1; }
-.carousel-shelf-description { max-width: 420px; margin: 8px 0 0; color: #6f7076; font-size: 13px; line-height: 1.6; }
+.carousel-shelf-description { max-width: 440px; margin: 8px 0 0; color: #52535a; font-size: 16px; font-weight: 600; line-height: 1.65; }
 .carousel-shelf-all-link { display: inline-flex; align-items: center; gap: 6px; color: #17181b; font-size: 11px; font-weight: 800; letter-spacing: .04em; white-space: nowrap; transition: gap .18s var(--ease-out); }
 .carousel-shelf-all-link:hover { gap: 10px; color: var(--primary); }
 .carousel-shelf-outer { position: relative; }
@@ -1326,7 +1358,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .carousel-shelf-btn:disabled { opacity: 0; pointer-events: none; }
 .carousel-shelf-btn.prev { left: -18px; }
 .carousel-shelf-btn.next { right: -18px; }
-.carousel-shelf-empty { padding: 40px; text-align: center; color: #6f7076; font-size: 13px; background: #f8f5ef; border-radius: 20px; }
+.carousel-shelf-empty { padding: 40px; text-align: center; color: #52535a; font-size: 13px; background: #f8f5ef; border-radius: 20px; }
 @media (max-width: 640px) { .carousel-shelf-btn { display: none; } }
 
 .shelf-card { display: flex; flex-direction: column; overflow: hidden; background: #fffdf9; border-radius: 18px; box-shadow: var(--shadow-sm); transition: transform .22s var(--ease-out), box-shadow .22s var(--ease-out); }
@@ -1338,7 +1370,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .shelf-card-body p { margin: 0; color: var(--primary); font-size: 8px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
 .shelf-card-body h3 { display: -webkit-box; overflow: hidden; margin: 6px 0; font-family: var(--font-display); font-size: 14px; font-weight: 650; letter-spacing: -.03em; line-height: 1.15; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .shelf-card-rating { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; font-size: 10px; font-weight: 800; }
-.shelf-card-rating em { color: #6f7076; font-style: normal; }
+.shelf-card-rating em { color: #52535a; font-style: normal; }
 .shelf-card-price { display: flex; align-items: baseline; gap: 8px; }
 .shelf-card-price strong { font-size: 13px; }
 .shelf-card-price s { color: #a5a6ab; font-size: 11px; }
@@ -1363,14 +1395,14 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    time; axe's contrast scan is what surfaced it (it was checking the WRONG
    color/size pair entirely). :not(.eyebrow) restores the real description
    paragraph's own styling without touching the eyebrow. */
-/* #6f7076 (this project's usual safe muted gray) still measured only 4.27:1
+/* #52535a (this project's usual safe muted gray) still measured only 4.27:1
    here -- .editorial-banner-copy's own var(--secondary) (#e9f0f2) background
    is measurably darker than the cream/near-white backgrounds that gray
    passes against elsewhere, so this specific pairing needs its own slightly
    darker shade (#65666b, verified ~5:1 here) rather than reusing the
    general-purpose one and falling short. */
-.editorial-banner-copy > p:not(.eyebrow) { max-width: 440px; margin: 22px 0 0; color: #65666b; font-size: 15px; line-height: 1.75; }
-.editorial-banner-points { display: grid; gap: 10px; margin: 22px 0 0; padding: 0; list-style: none; color: #414247; font-size: 12px; font-weight: 700; }
+.editorial-banner-copy > p:not(.eyebrow) { max-width: 460px; margin: 22px 0 0; color: #494a4f; font-size: 16px; font-weight: 600; line-height: 1.75; }
+.editorial-banner-points { display: grid; gap: 12px; margin: 22px 0 0; padding: 0; list-style: none; color: #2c2d31; font-size: 15px; font-weight: 700; }
 .editorial-banner-points li { display: flex; align-items: center; gap: 9px; }
 .editorial-banner-points li::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--primary); flex: 0 0 auto; }
 .editorial-banner-copy .inline-link { margin-top: 26px; }
@@ -1389,22 +1421,122 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
   .editorial-banner--full-bleed { min-height: 420px; }
 }
 
-/* NEWVISION.md §5 "Топ брэндүүд" -- a dark editorial-poster treatment
-   (image + gradient + overlaid name) suits "these are our premium brands"
-   better than a plain product-card grid. Was its own small wrapping CSS
-   grid (repeat(auto-fit, minmax(240px,1fr))) reasoned as "too few items to
-   need horizontal scroll" -- Tom, 2026-09-05: adding just 1 more brand tile
-   pushed the grid onto an awkward half-empty 2nd row, so this now rides the
-   same CarouselShelf horizontal-scroll primitive as the rails below it (see
-   Home.tsx) -- .brand-tile itself needs no width rule since a block-level
-   flex box already fills its .shelf-card-slot's fixed width by default. */
-.brand-tile { position: relative; display: flex; min-height: 220px; flex-direction: column; justify-content: flex-end; overflow: hidden; border-radius: 20px; background: #17181b; color: #fff; transition: transform .22s var(--ease-out), box-shadow .22s var(--ease-out); }
-.brand-tile:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
-.brand-tile-image { position: absolute; inset: 0; background-position: center; background-size: cover; background-color: #2a2b2f; }
-.brand-tile-image::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(23,24,27,.92) 0%, rgba(23,24,27,.35) 55%, rgba(23,24,27,0) 100%); }
-.brand-tile-body { position: relative; z-index: 1; padding: 20px; }
-.brand-tile-body strong { display: block; font-family: var(--font-display); font-size: 22px; font-weight: 600; letter-spacing: -.03em; }
-.brand-tile-body span { display: block; margin-top: 4px; color: rgba(255,255,255,.72); font-size: 12px; line-height: 1.5; }
+/* Featured Brands carousel (2026-09-10), rebuilt against matsuyaginza.com/en.
+   Replaces .brand-tile*, which was a rounded, shadowed, dark poster card with
+   the brand name and tagline overlaid on the photo -- Tom: "zgrl neg durvuljin
+   tegsen shadow edrtei utaggui". That is the same pair of mistakes that killed
+   CategoryMasonry v5 (heavy shadow) and v6 (text stacked ON the image instead
+   of in its own band below it), so the reference's structure is copied here
+   exactly: flat square photo, NO radius, NO shadow, NO scrim, no text on the
+   slide -- brand identity is the brand's own logo, in its own band underneath.
+
+   Every number below is measured off the reference's live computed DOM, not
+   guessed from a screenshot: base slide 227.26px at a 1440px viewport
+   (= 15.78vw), gap 40px, active slide parked at x=90 flush with the heading,
+   100px logo band, active scale 2.25, 1000ms `ease`. FeaturedBrandsCarousel.tsx
+   reads these custom properties back via getComputedStyle so its height math
+   and its off-screen test always agree with whatever CSS actually applied. */
+.fbrand-section {
+  /* Bounds only -- the actual slide width is solved for in
+     FeaturedBrandsCarousel.tsx so that TARGET_VISIBLE (7) brands fit the
+     viewport. It is NOT a clamp() here on purpose: getComputedStyle does not
+     resolve an unregistered custom property, so a clamp() came back as a
+     literal string and the component silently used its own fallback for every
+     breakpoint. Plain px values round-trip correctly. 240px is the reference's
+     own tile width, the ceiling on a wide monitor. */
+  --fbrand-w-min: 150px;
+  /* Generous on purpose -- on a wide monitor the slide width is governed by
+     "fit 7 across" and by the active slide's height cap, not by this. A hard
+     240px ceiling here left the strip huddled on the left of a 4K/5K screen
+     with the right two-thirds empty. */
+  --fbrand-w-max: 900px;
+  --fbrand-scale: 2.25;
+  --fbrand-left: 90px;
+  --fbrand-gap: 40px;
+  --fbrand-logo-h: 100px;
+  position: relative;
+  padding: clamp(48px, 6vw, 76px) 0;
+}
+/* Home.tsx's <main> has no container, so this is edge-to-edge for free --
+   no 100vw breakout, and therefore no scrollbar-width correction to get
+   wrong (see .sunrise-ribbon, which relies on the same thing). */
+.fbrand-header { padding-left: var(--fbrand-left); }
+/* Reference: 40px, font-normal (NOT bold), #2E2E2E (not pure black),
+   leading 110%, no eyebrow above it and no trailing period. */
+/* Keeps the reference's geometry (40px, leading 110%, no eyebrow, no trailing
+   period) but drops its #2E2E2E/weight-400 for SUGI's own -- Tom, 2026-09-10:
+   "mongol bolgood red font ymuu ene odooiin website iin unguniii image
+   taarrsan ym hii". --primary is the exact red every CTA and eyebrow on this
+   site already uses, and 650 / -.05em is the display treatment shared with
+   every other section heading, so this reads as part of the site rather than
+   as a transplant from the reference. */
+.fbrand-title { margin: 0; color: var(--primary); font-family: var(--font-display); font-size: clamp(26px, 3.4vw, 40px); font-weight: 650; letter-spacing: -.05em; line-height: 1.1; }
+.fbrand-viewport { position: relative; margin-top: 20px; overflow: hidden; cursor: grab; touch-action: pan-y pinch-zoom; -webkit-user-select: none; user-select: none; }
+.fbrand-viewport.is-dragging { cursor: grabbing; }
+/* Outer transform = where the slide sits. Inner = how big it is. Keeping them
+   on separate elements is what lets one slide scale from its own top-left
+   while the whole strip still slides horizontally. */
+.fbrand-slide { position: absolute; top: 0; left: 0; box-sizing: border-box; will-change: transform; transition-property: transform, opacity; transition-duration: 1000ms; transition-timing-function: ease; }
+.fbrand-scale { transform-origin: top left; transition-property: transform; transition-duration: 1000ms; transition-timing-function: ease; }
+/* While the pointer is down the strip must track the finger exactly, so the
+   glide is switched off for the duration of the drag rather than fought. */
+.fbrand-viewport.is-dragging .fbrand-slide, .fbrand-viewport.is-dragging .fbrand-scale { transition-duration: 0ms; }
+/* The slide recycling from the left edge to the far right must jump, not
+   glide across the whole page in plain sight. See the teleport bookkeeping in
+   FeaturedBrandsCarousel.tsx -- the class arrives in the same commit as the
+   new transform, so there is no transition left to run. */
+.fbrand-slide.is-teleporting, .fbrand-slide.is-teleporting .fbrand-scale { transition-duration: 0ms; }
+.fbrand-link { display: block; color: inherit; text-decoration: none; }
+.fbrand-photo { position: relative; display: block; width: 100%; aspect-ratio: 1; overflow: hidden; background: #efece6; }
+.fbrand-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* Reserves its height whether or not a logo exists, so slides stay aligned
+   and an un-uploaded logo reads as deliberate space, not a broken image. */
+/* The explicit background is what makes the logo's multiply blend below do
+   anything at all: mix-blend-mode composites an element against whatever is
+   PAINTED behind it inside the same stacking context, and .fbrand-scale's
+   transform creates one -- so a transparent band left the blend with nothing
+   to work against (exactly the trap documented on .cat-mosaic-item-photo).
+   Painting the page's own colour here is invisible against the page and gives
+   the blend a surface. */
+.fbrand-logo { display: flex; width: 100%; height: var(--fbrand-logo-h); align-items: center; justify-content: center; overflow: hidden; background: var(--background); }
+/* Brand logos arrive as whatever the brand supplies -- Cocochi's is a WebP on
+   a solid white field, which read as a white card floating on the warm page.
+   Same fix, and same reasoning, as .cat-mosaic-item-photo img (index.css
+   ~1675, the Aesop-referenced treatment): multiply lets the logo's own light
+   background dissolve into the page while the dark mark stays. A logo that is
+   already transparent is unaffected, so this costs nothing when Tom uploads a
+   proper transparent PNG later. */
+.fbrand-logo img { max-width: 44%; max-height: 50%; object-fit: contain; mix-blend-mode: multiply; }
+/* One row beneath the strip: arrows at the leading edge, the full-list CTA at
+   the trailing edge. It used to be an absolutely-positioned column on the
+   right, which worked only while slides stopped short of the right margin --
+   once the strip filled the viewport to fit seven brands, the last slide ran
+   straight over it. */
+.fbrand-controls { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin: 34px var(--fbrand-left) 0; }
+.fbrand-arrows { display: flex; justify-content: space-between; }
+.fbrand-arrow { padding: 0; border: 0; background: none; color: #d7d7d7; cursor: pointer; transition: color .2s var(--ease-out); }
+.fbrand-arrow:hover { color: #17181b; }
+.fbrand-arrow:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; border-radius: 50%; }
+/* Reference shape (40px pill, 14px, weight-normal, centred) in SUGI's own
+   CTA colour -- the reference's sage green is Matsuya's brand colour, not
+   ours, and every other button on this site is --primary. */
+.fbrand-all { display: inline-flex; min-height: 52px; align-items: center; justify-content: center; padding: 0 30px; border-radius: 40px; background: var(--primary); color: #fff; font-size: 16px; font-weight: 700; text-align: center; transition: background .18s var(--ease-out), transform .18s var(--ease-out); }
+.fbrand-all:hover { background: #bc1732; transform: translateY(-1px); }
+
+/* Smaller screens get a gentler spotlight and tighter margins; the control row
+   needs no override, since it already keys its own side margins off
+   --fbrand-left. */
+@media (max-width: 1024px) {
+  .fbrand-section { --fbrand-scale: 1.8; --fbrand-left: 40px; --fbrand-gap: 28px; --fbrand-logo-h: 76px; --fbrand-w-min: 130px; --fbrand-w-max: 200px; }
+  .fbrand-controls { margin-top: 28px; }
+  .fbrand-arrows { gap: 12px; }
+}
+
+@media (max-width: 640px) {
+  .fbrand-section { --fbrand-scale: 1.45; --fbrand-left: 20px; --fbrand-gap: 16px; --fbrand-logo-h: 64px; --fbrand-w-min: 120px; --fbrand-w-max: 170px; }
+  .fbrand-controls { margin-top: 22px; }
+  .fbrand-arrow svg { width: 44px; height: 44px; }
+}
 
 /* .section-heading-light -- the tone="onDark" variant of the shared
    <SectionEyebrow> primitive (CategoryMasonry/StoreLocatorSection use the
@@ -1461,7 +1593,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    var(--background)) is belt-and-suspenders: even in an edge case, the
    text's own box paints over the card rather than the reverse. */
 .cat-mosaic-heading-block { position: relative; z-index: 3; display: flex; flex-direction: column; justify-content: center; background: var(--background); }
-.cat-mosaic-heading-block > p { max-width: 380px; margin: 18px 0 20px; color: #6f7076; font-size: 15px; line-height: 1.7; }
+.cat-mosaic-heading-block > p { max-width: 420px; margin: 18px 0 20px; color: #52535a; font-size: 16px; font-weight: 600; line-height: 1.7; }
 
 .cat-mosaic-anchor { position: relative; z-index: 1; display: block; min-height: 320px; overflow: hidden; border-radius: 18px; background: linear-gradient(135deg, #f8f5ef 0%, #e9f0f2 100%); background-position: center top; background-size: cover; box-shadow: var(--shadow-lg); transition: box-shadow .22s var(--ease-out); }
 .cat-mosaic-anchor:hover { box-shadow: 0 26px 60px rgba(34, 37, 38, .22); }
@@ -1592,13 +1724,13 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    from screen readers -- a sighted low-vision visitor still SEES this text
    and axe correctly still checks its visual contrast. Darkened to the
    site's established safe muted gray rather than leaving both fixes half-done. */
-.cat-mosaic-item-number { color: #6f7076; font-family: var(--font-display); font-size: 12px; font-weight: 800; }
-.cat-mosaic-item-title { display: block; font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--foreground); }
-.cat-mosaic-item-detail { display: block; margin-top: 4px; color: #6f7076; font-size: 11px; line-height: 1.5; }
+.cat-mosaic-item-number { color: #52535a; font-family: var(--font-display); font-size: 12px; font-weight: 800; }
+.cat-mosaic-item-title { display: block; font-family: var(--font-display); font-size: 17px; font-weight: 700; color: var(--foreground); }
+.cat-mosaic-item-detail { display: block; margin-top: 5px; color: #52535a; font-size: 14px; font-weight: 600; line-height: 1.5; }
 .cat-mosaic-item-arrow { position: absolute; right: 16px; bottom: 16px; color: #b7b4ab; transition: color .18s var(--ease-out), transform .18s var(--ease-out); }
 .cat-mosaic-item:hover .cat-mosaic-item-arrow { color: var(--primary); transform: translate(2px, -2px); }
 
-.cat-mosaic-note { display: flex; align-items: center; gap: 14px; margin-top: 56px; color: #6f7076; font-size: 12px; line-height: 1.6; }
+.cat-mosaic-note { display: flex; align-items: center; gap: 14px; margin-top: 56px; color: #52535a; font-size: 15px; font-weight: 600; line-height: 1.6; }
 .cat-mosaic-note img { width: 34px; height: 34px; }
 
 @media (max-width: 1024px) {
@@ -1665,15 +1797,15 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .wcu-card { display: flex; flex-direction: column; gap: 16px; padding: 32px 28px; border-radius: 16px; background: var(--card); color: var(--foreground); box-shadow: var(--shadow-lg); }
 .wcu-card-icon { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 50%; background: var(--muted); color: var(--primary); }
 .wcu-card strong { font-family: var(--font-display); font-size: 19px; font-weight: 600; }
-.wcu-card span { color: #6f7076; font-size: 13px; line-height: 1.6; }
+.wcu-card span { color: #52535a; font-size: 16px; font-weight: 600; line-height: 1.65; }
 /* The anchor card: reuses the hero badge's big-number treatment (this
    site's own established "large stat" signature) instead of the
    icon-in-circle format the other 2 cards keep. */
 .wcu-card-stat { grid-row: 1 / 3; justify-content: center; gap: 10px; background: linear-gradient(155deg, var(--card) 0%, #fff8ec 100%); }
-.wcu-stat-number { font-family: var(--font-display); font-size: clamp(52px, 5.5vw, 80px); font-weight: 600; letter-spacing: -.04em; line-height: .95; color: var(--primary); }
+.wcu-stat-number { font-family: var(--font-display); font-size: clamp(52px, 5.5vw, 80px); font-weight: 700; letter-spacing: -.04em; line-height: .95; color: var(--primary); }
 .wcu-stat-label { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-display); font-size: 19px; font-weight: 600; color: var(--foreground); }
 .wcu-stat-label svg { color: var(--primary); }
-.wcu-card-stat p { margin: 0; color: #6f7076; font-size: 13px; line-height: 1.6; }
+.wcu-card-stat p { margin: 0; color: #52535a; font-size: 16px; font-weight: 600; line-height: 1.65; }
 
 @media (max-width: 820px) {
   .wcu-cards { grid-template-columns: 1fr; gap: 16px; }
@@ -1747,7 +1879,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .jn-card--tone-0 { background: var(--card); color: var(--foreground); }
 .jn-card--tone-0 h3 { color: var(--foreground); }
 .jn-card--tone-0 .jn-card-date { color: var(--primary); }
-.jn-card--tone-0 p { color: #6f7076; }
+.jn-card--tone-0 p { color: #52535a; }
 .jn-card--tone-0 em { color: var(--foreground); }
 .jn-card--tone-1 { background: var(--surface-dark-raised); color: #fff; }
 .jn-card--tone-1:hover { background: var(--surface-dark-raised-hover); }
@@ -1780,7 +1912,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .locator-copy { padding-top: 2px; }
 .locator-copy .eyebrow { margin: 18px 0 0; }
 .locator-copy .eyebrow svg { color: var(--primary); }
-.locator-lede { max-width: 320px; margin: 18px 0 26px; color: #55605c; font-size: 14px; line-height: 1.7; }
+.locator-lede { max-width: 360px; margin: 18px 0 26px; color: #414a47; font-size: 16px; font-weight: 600; line-height: 1.7; }
 
 .locator-map { position: relative; min-height: 360px; overflow: hidden; border-radius: 18px; background: linear-gradient(135deg, #f2f6f2 0%, #e4ece6 100%); }
 .locator-map svg { display: block; width: 100%; height: 100%; }
@@ -1830,11 +1962,11 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    See docs/REFERENCE-DRIVEN-PREMIUM-REDESIGN-MASTER-PROMPT.md section 16. */
 .qs-section { padding: clamp(64px, 8vw, 112px) max(34px, 7vw); background: #fffdf9; }
 .qs-grid { display: grid; grid-template-columns: minmax(0, .34fr) minmax(0, .66fr); align-items: center; width: min(1320px, 100%); margin: 0 auto; gap: 64px; }
-.qs-desc { max-width: 320px; margin: 18px 0 26px; color: #6f7076; font-size: 14px; line-height: 1.65; }
+.qs-desc { max-width: 360px; margin: 18px 0 26px; color: #45464b; font-size: 16px; font-weight: 600; line-height: 1.65; }
 .qs-subtitle { max-width: 320px; margin: 14px 0 0; color: var(--foreground); font-size: 15px; font-weight: 650; line-height: 1.4; }
 .qs-meta { display: grid; gap: 10px; margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--border); }
-.qs-meta-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 13px; }
-.qs-meta-row span:first-child { color: #6f7076; }
+.qs-meta-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 15px; font-weight: 600; }
+.qs-meta-row span:first-child { color: #52535a; }
 .qs-meta-row strong { font-family: var(--font-display); font-weight: 650; }
 /* The shared .eyebrow class is display:inline-flex site-wide (fine
    elsewhere, where a block sibling always follows it) -- inside .qs-copy
@@ -1844,22 +1976,22 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    "Гишүүнээр бүртгүүлэх" link were running together). Scoped override,
    not a global .eyebrow change, per this fix's approved scope. */
 .qs-copy > .eyebrow { display: flex; }
-.qs-cta { display: inline-flex; align-items: center; gap: 8px; margin-top: 22px; color: var(--primary); font-size: 13px; font-weight: 700; transition: gap .18s var(--ease-out); }
+.qs-cta { display: inline-flex; align-items: center; gap: 8px; margin-top: 22px; color: var(--primary-text); font-size: 15px; font-weight: 700; transition: gap .18s var(--ease-out); }
 .qs-cta:hover { gap: 12px; }
 
 .qs-stage { display: flex; flex-direction: column; align-items: center; gap: 30px; }
 .qs-savings { text-align: center; }
 .qs-savings strong { display: block; font-family: var(--font-display); font-size: clamp(24px, 2.6vw, 34px); font-weight: 650; color: var(--foreground); }
-.qs-savings span { display: block; margin-top: 4px; color: #6f7076; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.qs-savings span { display: block; margin-top: 4px; color: #45464b; font-size: 13px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 .qs-unavailable { color: #9a9b9f; font-size: 12px; font-style: italic; }
 .qs-sr-summary { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
-.qs-example-tag { margin: 0 0 4px; color: #6f7076; font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; text-align: center; }
-.qs-example-note { max-width: 480px; margin: 4px 0 0; color: #6f7076; font-size: 12px; line-height: 1.6; text-align: center; }
+.qs-example-tag { margin: 0 0 4px; color: #52535a; font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; text-align: center; }
+.qs-example-note { max-width: 500px; margin: 4px 0 0; color: #45464b; font-size: 15px; font-weight: 600; line-height: 1.6; text-align: center; }
 .qs-guest-tiers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; width: 100%; max-width: 620px; }
 .qs-guest-tier { padding: 16px 14px; border: 1px solid var(--border); border-radius: 14px; text-align: center; background: var(--card); }
 .qs-guest-tier strong { display: block; font-family: var(--font-display); font-size: 20px; font-weight: 650; color: var(--primary); }
-.qs-guest-tier span { display: block; margin-top: 4px; font-size: 11px; color: #6f7076; }
+.qs-guest-tier span { display: block; margin-top: 4px; font-size: 14px; font-weight: 600; color: #45464b; }
 
 .qs-skeleton-block { width: 100%; max-width: 620px; height: 240px; border-radius: 18px; background: var(--muted); }
 
@@ -1877,7 +2009,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .ig-value-left { left: 36.9%; }
 .ig-value-right { left: 63.1%; }
 .ig-value strong { font-family: var(--font-display); font-size: clamp(22px, 3vw, 32px); font-weight: 650; letter-spacing: -.03em; line-height: 1; color: var(--foreground); }
-.ig-value span { margin-top: 6px; color: #6f7076; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; line-height: 1.35; }
+.ig-value span { margin-top: 6px; color: #52535a; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; line-height: 1.35; }
 
 @media (max-width: 1024px) {
   .qs-grid { grid-template-columns: 1fr; gap: 40px; }
@@ -1900,7 +2032,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .face-gate-card { animation: face-gate-card-in .42s cubic-bezier(.22,.61,.36,1) both; width: 100%; max-width: 420px; padding: 28px; border-radius: var(--radius-lg, 18px); background: #fff; box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.08)); text-align: center; }
 .face-gate-card--wide { max-width: 520px; text-align: left; }
 .face-gate-card h2 { margin: 0; font-family: var(--font-display); font-size: 22px; font-weight: 620; letter-spacing: -.04em; color: var(--foreground); }
-.face-gate-muted { margin: 6px 0 0; font-size: 13px; line-height: 1.6; color: #6f7076; }
+.face-gate-muted { margin: 6px 0 0; font-size: 13px; line-height: 1.6; color: #52535a; }
 .face-gate-ok { color: #1a7f4b; }
 .face-gate-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 18px; color: var(--primary-text, #c11a35); }
 .face-gate-head h2 { margin: 0; }
@@ -1968,7 +2100,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .face-gate-facts li { padding-left: 14px; position: relative; font-size: 13px; line-height: 1.6; color: #52535a; }
 .face-gate-facts li::before { content: ""; position: absolute; left: 0; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--primary, #df1f3d); }
 .face-gate-facts strong { color: var(--foreground); }
-.face-gate-limit { margin: 0 0 18px; padding: 12px 14px; border-radius: 12px; background: #faf7f1; font-size: 12px; line-height: 1.65; color: #6f7076; }
+.face-gate-limit { margin: 0 0 18px; padding: 12px 14px; border-radius: 12px; background: #faf7f1; font-size: 12px; line-height: 1.65; color: #52535a; }
 
 .face-gate-consent { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px; font-size: 13px; line-height: 1.6; color: #52535a; cursor: pointer; }
 .face-gate-consent input { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--primary, #df1f3d); flex: none; }
@@ -2005,12 +2137,12 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .face-gate-brand { margin: 0; font-size: 10px; font-weight: 800; letter-spacing: .18em; color: var(--primary-text, #c11a35); }
 .face-gate-identity { margin: 6px 0 0; font-size: 13px; font-weight: 600; color: #52535a; }
 .face-gate-title { margin: 16px 0 0; font-family: var(--font-display); font-size: 24px; font-weight: 620; letter-spacing: -.045em; color: var(--foreground); }
-.face-gate-lede { margin: 8px 0 20px; font-size: 13px; line-height: 1.7; color: #6f7076; }
+.face-gate-lede { margin: 8px 0 20px; font-size: 13px; line-height: 1.7; color: #52535a; }
 
 /* "password + face = access" — the security model at a glance. */
 .face-gate-diagram { display: flex; align-items: flex-start; justify-content: center; gap: 10px; margin: 0 0 20px; padding: 18px 12px; border-radius: 14px; background: #faf7f1; }
 .face-gate-diagram-item { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1; text-align: center; font-size: 11px; font-weight: 700; color: #52535a; line-height: 1.35; }
-.face-gate-diagram-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; background: #fff; box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.08)); color: #6f7076; }
+.face-gate-diagram-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; background: #fff; box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.08)); color: #52535a; }
 .face-gate-diagram-icon--accent { color: var(--primary-text, #c11a35); box-shadow: 0 0 0 2px rgba(223,31,61,.16), var(--shadow-sm, 0 1px 3px rgba(0,0,0,.08)); }
 .face-gate-diagram-icon--ok { color: #1a7f4b; }
 .face-gate-diagram-op { align-self: center; margin-top: -14px; font-size: 17px; font-weight: 700; color: #a9a49a; }
@@ -2035,7 +2167,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .face-gate-tips { margin-top: 16px; padding: 12px 14px; border-radius: 12px; background: #faf7f1; }
 .face-gate-tips summary { font-size: 12px; font-weight: 700; color: #52535a; cursor: pointer; }
 .face-gate-tips ul { margin: 10px 0 0; padding-left: 18px; display: grid; gap: 7px; }
-.face-gate-tips li { font-size: 12px; line-height: 1.6; color: #6f7076; }
+.face-gate-tips li { font-size: 12px; line-height: 1.6; color: #52535a; }
 .face-gate-tips-note { margin: 10px 0 0; font-size: 11px; line-height: 1.6; color: #8a8b8f; }
 
 @media (max-width: 520px) {
@@ -2354,4 +2486,103 @@ html[data-admin-theme="dark"] .tox .tox-edit-area__iframe { background-color: #1
   .admin-card-hover:hover, .admin-kpi:hover, .admin-nav-item:hover, .admin-icon-btn:hover { transform: none !important; }
 }
 
+}
+
+/* /brands (2026-09-10), built against matsuyaginza.com/en/brands: a sticky
+   left rail (brand-name search + an A-Z grid whose empty letters grey out)
+   beside letter-grouped cards, each a bordered square holding the brand's
+   mark with the name underneath. Hand-written CSS rather than Tailwind
+   utilities because this page has real structure (sticky rail, responsive
+   card grid, disabled states) -- same call Home's sections already make. */
+.brands-page { width: min(1380px, calc(100% - 68px)); margin: 0 auto; padding: 40px 0 88px; }
+.brands-intro h1 { margin: 0; color: var(--primary); font-family: var(--font-display); font-size: clamp(30px, 4vw, 46px); font-weight: 650; letter-spacing: -.05em; line-height: 1.05; }
+.brands-intro p { margin: 12px 0 0; color: #52535a; font-size: 13px; }
+.brands-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 56px; margin-top: 36px; align-items: start; }
+/* Sticky so the A-Z stays reachable while scrolling 167 brands. */
+.brands-rail { position: sticky; top: 96px; display: flex; flex-direction: column; gap: 22px; }
+.brands-search { position: relative; display: flex; align-items: center; }
+.brands-search input { width: 100%; height: 48px; padding: 0 44px 0 16px; border: 1px solid var(--border); border-radius: 0; background: #fff; color: #17181b; font-size: 13px; letter-spacing: .06em; outline: none; }
+.brands-search input:focus { border-color: var(--primary); }
+.brands-search input::placeholder { color: #9a958c; letter-spacing: .1em; }
+.brands-search > svg, .brands-search > button { position: absolute; right: 14px; color: #52535a; }
+.brands-search > button { display: grid; padding: 4px; border: 0; background: none; cursor: pointer; place-items: center; }
+.brands-search > button:hover { color: var(--primary); }
+/* Five across, exactly like the reference's letter block. */
+.brands-letters { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.brands-letters button { padding: 10px 0; border: 0; background: none; color: #17181b; font-family: var(--font-display); font-size: 15px; cursor: pointer; transition: color .16s var(--ease-out); }
+.brands-letters button:hover:not(:disabled) { color: var(--primary); }
+.brands-letters button.is-active { color: var(--primary); font-weight: 700; }
+/* Greyed rather than hidden: the reference keeps the full alphabet visible so
+   the block never reflows, and an absent letter is information too. WCAG 1.4.3
+   exempts inactive controls from the contrast minimum, but a first pass at
+   #cfc9be measured 1.51:1 -- invisible, not merely muted -- so this is the
+   darkest grey that still reads as unavailable next to the live letters. */
+.brands-letters button:disabled { color: #a29c93; cursor: default; }
+.brands-reset { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--primary-text); font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: underline; }
+.brands-results { display: flex; flex-direction: column; gap: 44px; }
+.brands-status { display: flex; align-items: center; gap: 8px; padding: 48px 0; color: #52535a; font-size: 13px; }
+.brands-group h2 { margin: 0 0 16px; color: #17181b; font-family: var(--font-display); font-size: 18px; font-weight: 650; }
+.brands-group ul { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 26px 22px; margin: 0; padding: 0; list-style: none; }
+.brand-card { display: flex; flex-direction: column; gap: 10px; color: inherit; }
+/* The bordered square is the reference's own card: a thin rule, white ground,
+   the mark centred with generous padding -- no shadow, no radius. */
+.brand-card-mark { display: grid; aspect-ratio: 1; padding: 18px; border: 1px solid var(--border); background: #fff; place-items: center; overflow: hidden; transition: border-color .18s var(--ease-out); }
+.brand-card:hover .brand-card-mark { border-color: var(--primary); }
+.brand-card-mark img { max-width: 100%; max-height: 100%; object-fit: contain; mix-blend-mode: multiply; }
+/* Fallback for the ~160 brands with no uploaded logo: set the name as a
+   wordmark inside the square so the grid keeps its rhythm instead of showing
+   a row of empty boxes. Never invented artwork -- just the real name. */
+.brand-card-mark em { color: #45464a; font-family: var(--font-display); font-size: 15px; font-style: normal; font-weight: 600; letter-spacing: .04em; line-height: 1.3; text-align: center; overflow-wrap: anywhere; }
+.brand-card strong { font-size: 13px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.brand-card-count { color: #52535a; font-size: 11px; }
+
+@media (max-width: 1100px) {
+  .brands-layout { grid-template-columns: 1fr; gap: 30px; }
+  /* The rail stops being a column and becomes a normal block above the grid,
+     so it must not stay sticky (it would pin over the results). */
+  .brands-rail { position: static; }
+  .brands-letters { grid-template-columns: repeat(9, 1fr); }
+  .brands-group ul { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .brands-page { width: calc(100% - 36px); padding: 26px 0 64px; }
+  .brands-letters { grid-template-columns: repeat(7, 1fr); }
+  .brands-group ul { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 14px; }
+  .brand-card-mark { padding: 12px; }
+}
+
+/* Back-to-top button (client/src/components/BackToTop.tsx), on every
+   storefront route. Bottom-RIGHT on purpose: the Silktide cookie button owns
+   bottom-left, and BottomNavBar owns the full width on mobile -- hence the
+   same --mobile-sticky-bar-h / --safe-bottom lift #stcm-icon uses. Small by
+   request ("gehdee neeh tom bish shww"), 44px being the smallest comfortable
+   touch target. */
+.back-to-top {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: var(--shadow-sm);
+  place-items: center;
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+  transition: opacity .2s var(--ease-out), transform .2s var(--ease-out), background .18s var(--ease-out);
+}
+.back-to-top.is-visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
+.back-to-top:hover { background: #bc1732; }
+.back-to-top:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+
+@media (max-width: 760px) {
+  /* Clear of the sticky tab bar and the phone's home indicator. */
+  .back-to-top { right: 12px; bottom: calc(var(--mobile-sticky-bar-h) + var(--safe-bottom) + 12px); width: 42px; height: 42px; }
 }
