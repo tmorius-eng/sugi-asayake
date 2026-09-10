@@ -117,3 +117,7 @@ backups/
 
 # Playwright MCP screenshot/snapshot output (QA only, never committed)
 .playwright-mcp/
+
+# Aiven CA certificate (per CLAUDE.md: never commit)
+aiven-ca.pem
+*.pem
