@@ -4,6 +4,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 import { describeTransport, planMysqlConnection } from "./_core/dbConnection";
 import { adminAuditLogs, branches, branchStock, cartItems, carts, discountCodes, faceAttempts, faceChallenges, faceEnrollments, featuredBrands, InsertProduct, InsertProductCategory, integrationConfigs, loginAttempts, marketingSpend, mediaLibrary, orderItems, orders, paymentAttempts, phoneVerificationSessions, postCategories, postCategoryLinks, posts, postTagLinks, postTags, productCategories, productReviews, productVariants, products, routines, routineSteps, scheduledJobRuns, siteMedia, siteText, sitePromotions, storeCreditLedger, storeSettings, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
 import { slugify } from "../shared/slugify";
+import { looksLikeBarcode, normaliseBarcode } from "../shared/barcode";
 import { guessDistrictFromAddress, type UbDistrict } from "../shared/districts";
 import { computeDeliveryFeeMnt } from "../shared/delivery";
 import { getStoreSettingSlot, type StoreSettingKey } from "../shared/store-settings";
@@ -975,6 +976,16 @@ export async function searchPublishedCatalog(query: string) {
   const booleanQuery = terms.join(" ");
   const matchExpr = sql`MATCH(${products.name}, ${products.brand}, ${products.shortDescription}) AGAINST(${booleanQuery} IN BOOLEAN MODE)`;
 
+  // 2026-09-11: a barcode typed (or scanned) into the search box used to
+  // return nothing at all -- the FULLTEXT index covers name/brand/
+  // shortDescription, and no product's prose contains its own SKU. Rather
+  // than widen the index (a migration, and 13-digit tokens would bloat it
+  // for no relevance benefit), match the barcode against the already
+  // UNIQUE `sku` column. Only attempted when the query actually looks like
+  // a code, so a normal phrase still costs exactly one FULLTEXT scan.
+  const scannedCode = looksLikeBarcode(query) ? normaliseBarcode(query) : null;
+  const findExpr = scannedCode ? or(matchExpr, eq(products.sku, scannedCode)) : matchExpr;
+
   return db
     .select({
       id: products.id,
@@ -997,7 +1008,7 @@ export async function searchPublishedCatalog(query: string) {
     .from(products)
     .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
     .leftJoin(productReviews, eq(productReviews.productId, products.id))
-    .where(and(eq(products.isPublished, true), matchExpr))
+    .where(and(eq(products.isPublished, true), findExpr))
     .groupBy(products.id, productCategories.id)
     .orderBy(desc(matchExpr))
     .limit(200);
@@ -1277,6 +1288,43 @@ export async function getProductBySlug(slug: string) {
     .leftJoin(productReviews, eq(productReviews.productId, products.id))
     .where(and(eq(products.slug, slug), eq(products.isPublished, true)))
     .groupBy(products.id, productCategories.id)
+    .limit(1);
+
+  return result[0] ?? null;
+}
+
+/**
+ * Resolves a scanned/typed barcode to the product page it should open
+ * (2026-09-11, barcode scanning).
+ *
+ * Deliberately narrow: it returns only what the scan handler needs to
+ * navigate and show a confirmation toast, NOT the full product payload --
+ * the product page itself re-fetches through `getProductBySlug` the moment
+ * it mounts, so returning the whole row here would just be a second copy
+ * of the same data on the wire for every scan.
+ *
+ * `products.sku` is NOT NULL + UNIQUE, so this is an indexed single-row
+ * fetch. Unpublished products resolve to null on purpose: a shopper
+ * scanning a box on the shelf must not be sent to a page they cannot see,
+ * and the caller can then say "not on the site" rather than 404.
+ */
+export async function getPublishedProductBySku(sku: string) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db
+    .select({
+      id: products.id,
+      name: products.name,
+      slug: products.slug,
+      brand: products.brand,
+      sku: products.sku,
+      priceMnt: products.priceMnt,
+      imageUrl: products.imageUrl,
+      stockQuantity: products.stockQuantity,
+    })
+    .from(products)
+    .where(and(eq(products.sku, sku), eq(products.isPublished, true)))
     .limit(1);
 
   return result[0] ?? null;

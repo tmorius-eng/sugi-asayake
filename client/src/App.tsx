@@ -4,6 +4,7 @@ import { lazy, Suspense } from "react";
 import { Route, Switch } from "wouter";
 import AddedToCartToast from "./components/AddedToCartToast";
 import BackToTop from "./components/BackToTop";
+import BarcodeScanNavigator from "./components/BarcodeScanNavigator";
 import BottomNavBar from "./components/BottomNavBar";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SitePromo from "./components/SitePromo";
@@ -80,6 +81,7 @@ function App() {
       <TooltipProvider>
         <Toaster />
         <PageviewTracker />
+        <BarcodeScanNavigator />
         <SitePromo />
         <BottomNavBar />
         <BackToTop />

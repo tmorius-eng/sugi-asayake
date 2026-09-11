@@ -1,9 +1,10 @@
-import { useState } from "react";
-import { LoaderCircle, Minus, Plus, Search, ShoppingBag, Store, Trash2 } from "lucide-react";
+import { useCallback, useState } from "react";
+import { LoaderCircle, Minus, Plus, ScanBarcode, Search, ShoppingBag, Store, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
 import { formatVariantAttributes } from "@shared/catalog-filter";
+import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 
 // "Controls everything" admin overhaul (2026-09-08, Phase M): the POS
 // in-person-sale tool -- records a REAL order (paymentStatus "paid"
@@ -28,18 +29,47 @@ export default function AdminPosPanel() {
 
   const searchQuery = trpc.admin.posSearchVariants.useQuery({ branchId: branchId ?? 0, search }, { enabled: branchId !== null });
   const recordSale = trpc.admin.recordInStoreSale.useMutation();
+  const utils = trpc.useUtils();
 
   const branches = branchesQuery.data ?? [];
   const results = searchQuery.data ?? [];
   const subtotalMnt = lineItems.reduce((sum, item) => sum + item.priceMnt * item.quantity, 0);
 
-  const addItem = (variant: (typeof results)[number]) => {
+  const addItem = useCallback((variant: (typeof results)[number]) => {
     setLineItems(current => {
       const existing = current.find(item => item.variantId === variant.variantId);
       if (existing) return current.map(item => item.variantId === variant.variantId ? { ...item, quantity: item.quantity + 1 } : item);
       return [...current, { variantId: variant.variantId, productName: variant.productName, sku: variant.sku, attributesJson: variant.attributesJson, priceMnt: variant.priceMnt, quantity: 1 }];
     });
-  };
+  }, []);
+  // Barcode scanning at the register (2026-09-11). The storefront's global
+  // scan-to-navigate listener deliberately stands down inside /admin (it
+  // would yank the cashier off a half-rung sale), so the register opts in
+  // here with the behaviour that actually belongs at a till: the scanned
+  // item goes straight onto the receipt.
+  //
+  // Reuses posSearchVariants rather than adding a second lookup endpoint --
+  // it already matches SKU, and since product_variants.sku is UNIQUE the
+  // exact-match filter below can only ever select the one right row.
+  const handleScan = useCallback(async (code: string) => {
+    if (!branchId) { toast.error("Эхлээд салбараа сонгоно уу."); return; }
+    try {
+      const matches = await utils.admin.posSearchVariants.fetch({ branchId, search: code });
+      const variant = matches.find(row => row.sku === code);
+      if (!variant) { toast.error("Энэ баркодтой бараа олдсонгүй.", { description: code }); return; }
+      addItem(variant);
+      // Stock is enforced for real by the server when the sale is recorded;
+      // this is an early warning so the cashier finds out at the scan, not
+      // at the end of a full basket.
+      if (variant.stockAtBranch <= 0) toast.warning(`${variant.productName} — энэ салбарт үлдэгдэлгүй байна.`);
+      else toast.success(variant.productName, { description: `${formatMnt(variant.priceMnt)} · нэмэгдлээ` });
+    } catch {
+      toast.error("Баркод хайхад алдаа гарлаа. Дахин уншуулна уу.");
+    }
+  }, [branchId, utils, addItem]);
+
+  useBarcodeScanner(handleScan, branchId !== null);
+
   const changeQuantity = (variantId: number, delta: number) => {
     setLineItems(current => current.map(item => item.variantId === variantId ? { ...item, quantity: Math.max(1, item.quantity + delta) } : item).filter(item => item.quantity > 0));
   };
@@ -78,7 +108,12 @@ export default function AdminPosPanel() {
         </label>
 
         {branchId && <>
-          <label className="mt-4 grid gap-1.5 text-xs font-bold">
+          <p className="mt-4 flex items-center gap-2 rounded-xl bg-[var(--a-soft)] px-3 py-2.5 text-[11px] text-[var(--a-muted)]">
+            <ScanBarcode size={14} className="shrink-0" />
+            <span>Баркод уншуулахад бараа шууд худалдаанд нэмэгдэнэ — хайлтын талбар дээр дарах шаардлагагүй.</span>
+          </p>
+
+          <label className="mt-3 grid gap-1.5 text-xs font-bold">
             <span className="flex items-center gap-1.5"><Search size={13} />Бараа хайх (нэр эсвэл SKU)</span>
             <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Жишээ: Shampoo эсвэл SKU" className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" />
           </label>

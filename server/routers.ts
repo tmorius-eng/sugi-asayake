@@ -3,6 +3,7 @@ import { formatVariantAttributes } from "@shared/catalog-filter";
 import { ubDistricts } from "@shared/districts";
 import { parseDeviceType, isLikelyBot } from "@shared/deviceType";
 import { slugify } from "@shared/slugify";
+import { looksLikeBarcode, MAX_BARCODE_LENGTH, normaliseBarcode } from "@shared/barcode";
 import { TRPCError } from "@trpc/server";
 import { parse as parseCookieHeader } from "cookie";
 import { randomBytes } from "node:crypto";
@@ -97,6 +98,7 @@ import {
   getOrderForUser,
   getOrdersForUser,
   getProductBySlug,
+  getPublishedProductBySku,
   getProductReviews,
   getProductStockQuantity,
   getProductWriteConflicts,
@@ -992,6 +994,19 @@ export const appRouter = router({
     // matching behavior.
     search: publicProcedure.input(z.object({ query: z.string().trim().min(2).max(120) })).query(({ input }) => searchPublishedCatalog(input.query)),
     bySlug: publicProcedure.input(z.object({ slug: z.string().min(1).max(200) })).query(({ input }) => getProductBySlug(input.slug)),
+    // Barcode scanning (2026-09-11). publicProcedure because the whole
+    // point is a shopper standing in the shop scanning the box in their
+    // hand -- there is no account involved, and it exposes nothing that
+    // the product page itself does not already show to guests.
+    // Returns null (not a 404) for an unknown or unpublished code so the
+    // caller can say "this product is not on the site" instead of throwing.
+    bySku: publicProcedure
+      .input(z.object({ sku: z.string().trim().min(1).max(MAX_BARCODE_LENGTH * 2) }))
+      .query(({ input }) => {
+        const code = normaliseBarcode(input.sku);
+        if (!looksLikeBarcode(code)) return null;
+        return getPublishedProductBySku(code);
+      }),
     // Preference Profile v2 (2026-09-01): "recommended for you" is now
     // public, not protected — getRecommendedProducts always returns a
     // bestseller-backed fallback for a guest (ctx.user is undefined here)
