@@ -25,6 +25,8 @@ Tom тодорхой заасан: **Isetan-ийн бүтэц/ритмийг SUG
 
 ## 3. Дизайны token — өөрчлөгдөхгүй
 
+> ⚠️ **2026-09-11-нд ХЭСЭГЧЛЭН ХУУЧИРСАН.** Доорх блок нь 2026-09-02-ны байдлаарх утгууд. Менежерийн "хэт гэрэлтэй" шүүмжийн дараа **гадаргуугийн** токенууд Linen палитр руу шилжсэн: `--background` #f8f5ef → **#dae0da**, `--card` #fffdf9 → **#f2f5f2**, `--border` #ded9d0 → **#b7beb9**, `--muted-foreground` → **#545958**, `--primary-text` → **#b01729**, `--surface-tint` → **#d3dad4**, `--sky` → **#28537a**. **Брэндийн үндсэн өнгө (`--primary` #df1f3d) болон header-ийн gradient зурвас хэвээр**; `--accent` #f0b52d нь дэвсгэр биш зөвхөн badge/rank/зураас болж үлдсэн. Шрифт нь 2026-09-06-д Golos Text болсон (Space Grotesk/DM Sans-д кирилл глиф байгаагүй). Одоогийн бодит утгыг үргэлж `client/src/index.css`-ийн `:root`-оос шалга. Дэлгэрэнгүй: CLAUDE.md-ийн 2026-09-11 хэсэг.
+
 Tom тодорхой шийдвэрлэсэн: **SUGI-ийн одоогийн брэндийн өнгийг бүрэн хэвээр хадгална**, зөвхөн Isetan-ийн бүтэц/ритмийг зээлнэ:
 
 ```
@@ -99,6 +101,7 @@ Header (нэгтгэгдсэн, §8) → Hero (өөрчлөгдөөгүй) → s
 
 - **Tier 0** — суурь baseline, одоогийн байдлыг screenshot хийж баримтжуулах.
 - **Tier 1** — CarouselShelf + ShelfProductCard + BrandTileCard (тусад нь, хуудсанд холбогдоогүй).
+  > ⚠️ 2026-09-10: `BrandTileCard.tsx` устаж, `FeaturedBrandsCarousel.tsx` (Matsuya Ginza лавлагаа, drag-тай, идэвхтэй slide 2.25x томордог) орлов. Мөн шинэ `/brands` хуудас нэмэгдсэн.
 - **Tier 2** — EditorialBanner + TrustTriptych (тусад нь).
 - **Tier 3** — Backend (categoryShelves, featuredBrands + migration, featuredReviews).
 - **Tier 4** — Admin "Брэндүүд" CRUD UI.

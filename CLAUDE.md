@@ -84,6 +84,7 @@ pnpm exec vitest run --no-file-parallelism
 ## Одоогийн статус — юу шалгагдсан, юу шалгагдаагүй
 
 **Ажиллаж байгаа нь баталгаажсан:** бүртгэл/нэвтрэлт (OTP 2-алхамт, эхний хэрэглэгч auto-admin), role-based хамгаалалт, admin панель (бүтээгдэхүүн/зураг/post/routine/coupon/promo/integrations/variants), каталог+server-side FULLTEXT хайлт (`catalog.search`), guest checkout, loyalty/routine хямдрал, reviews, wishlist, profile (address book, preferences, security), захиалгын имэйл мэдэгдэл (Brevo), Cloudflare R2 storage (хоёр laptop хуваалцдаг), **Product Variants PHASE 1+2 (variant сонголттой худалдан авалт, доор дэлгэрэнгүй)**, **Admin Analytics/CRM dashboard (Geckoboard маягийн харанхуй KPI самбар: sparkline/gauge/P&L card/ranked list-үүд, + борлуулалт/дүүрэг/харилцагчийн мэдээлэл/ашиг/маржин/сагс орхилт/нөөц/суваг/эх сурвалж/**хөрвүүлэлтийн хувь (Conversion Rate, бодит visitor session tracking)**/**CAC**/**буцаалтын хувь (Return Rate)** + Excel/PDF export, доор дэлгэрэнгүй — Playwright-ээр throwaway өгөгдлөөр screenshot баталгаажсан, бодит 937 барааны өгөгдлөөр хараахан үзээгүй)**, **Нүүр хуудасны premium reference-driven редизайн (2026-08-28, доор дэлгэрэнгүй — QuickStatsSection infinity graph, CategoryMasonry v2 (pixel-хэмжилтээр баталгаажсан overlap/offset/watermark засвар), WhyChooseUs, JournalSection, StoreLocatorSection, бодит throwaway хэрэглэгчээр authenticated screenshot баталгаажсан)**. Дэлгэрэнгүй бүх TIER-ийн баталгаажуулалт: [HISTORY.md](HISTORY.md), [ROADMAP.md](ROADMAP.md), [PREMIUM-FEATURES.md](PREMIUM-FEATURES.md), [ADMIN-PANEL.md](ADMIN-PANEL.md).
+**Өнгөний систем (2026-09-11):** storefront нь **Linen** цайвар палитр (суурь `#dae0da`, карт `#f2f5f2`, band `#ced5cf`) — харанхуй горим БИШ. 7 хуудас × 4 өргөнд WCAG 2.2 AA контрастын алдаа 0 (бодит computed дэвсгэр дээр хэмжсэн). Дэлгэрэнгүй доорх 2026-09-11 хэсэгт.
 **Навигацийн засвар (2026-08-28):** Shop-ийн хайлт/ангилал/хуудаслалт URL-д хадгалагдаж refresh болон product-оос буцахад state сэргээнэ; product breadcrumb болон Admin-ийн нүүр хуудасны холбоосууд ажиллана.
 
 **Шалгагдаагүй/хараахан идэвхгүй:**
@@ -97,6 +98,8 @@ pnpm exec vitest run --no-file-parallelism
 
 2026-09-09-нд CLAUDE.md 208KB болж session бүрт ачаалагдах хэмжээнээсээ хэтэрсэн тул доорх session бүрийн тэмдэглэлүүдийг **бүрэн эхээр нь** HISTORY.md-ийн "CLAUDE.md-ээс зөөсөн session бүрийн тэмдэглэл" хэсэгт зөөв. Гарчиг бүр тэнд яг ижил нэртэй байгаа тул хайлтаар олно. Тодорхой bug/шийдвэрийн шалтгааныг мэдэх хэрэгтэй үед л тэнд хайна.
 
+- (2026-09-11) Storefront-ийн гэрэл 20% багасгаж **Linen** палитр болов + бүх хэсгийн босоо зай татав (нүүр 8015→6612px) + bestseller rail дүүргэв + **хоёр лаптопын git sync алдаа** (доор дэлгэрэнгүй)
+- (2026-09-10, ажлын лаптоп) Топ брэнд Matsuya Ginza лавлагаагаар carousel болж дахин бүтээгдэв + шинэ `/brands` хуудас + back-to-top товч
 - (2026-09-08) /admin бүхэлдээ reference дизайнаар дахин бүтээгдэв + харанхуй горим + хүссэн огноогоор шүүх
 - (2026-09-08) /admin-д царайгаар нэвтрэх шалгалт (browser camera face recognition) — `admin-face-auth` branch
 - (2026-09-07) Admin "Шинэ мэдээ" WordPress classic-editor parity болгож дахин бүтээв (`admin-posts-wordpress-editor` branch, main-д merge хийгээгүй)
@@ -189,6 +192,32 @@ Tom: "chinii hiij ugsun code edr bugd zunduu har myngan aldaa baina!! ... deep a
 
 **Ачааллын тест (production build, нэг Node process, энэ laptop, 100 зэрэгцээ, 8с)**: статик HTML `/` → **5,410 req/s, p50 18ms, p99 29ms, 0 алдаа**; API (`catalog.list`, `catalog.bestsellers`) → нэг IP-ээс 300 request/15мин global limiter-т тулж 429 (limiter өөрөө 17k req/s даана). 10k хүн зэрэг орох тохиолдолд бодит хязгаар нь **DB зам**: pool `connectionLimit` 10 (mysql2 default), Aiven Бангалор RTT ~170–330ms → cache-гүй query ~30–60/с; нүүр хуудас ~11 tRPC дуудлага (batch). Дэлгэрэнгүй санал "Дараагийн ажлын санал"-д.
 
+## ⚠️ ХОЁР ЛАПТОП — session бүрийн эхэнд ЗААВАЛ `git fetch` (2026-09-11 бодит incident)
+
+```powershell
+git fetch --all --prune ; git status -sb
+```
+
+**Яагаад**: 2026-09-11-нд session нь remote-ыг шалгалгүй эхэлж, `origin/main`-аас **2 commit хоцорсон** branch дээр бүтэн өдрийн ажил хийсэн. Ажлын лаптоп өчигдөр push хийсэн "Top Brands + /brands" ажил (15 файл, `index.css`-ийн 397 мөр) огт харагдаагүй, улмаар **хоёр өдөр ижил CSS мөрүүдийг бие даан дахин бичсэн**. Засахын тулд өдрийн ажлыг backup хийж, `--ff-only`-оор өчигдрийн ажлыг буцааж аваад, өөрчлөлтүүдийг **дахин хэрэгжүүлэх** шаардлагатай болсон (3-way merge нь таамаглал болох байсан).
+
+⚠️ **Хамгийн зальтай хэсэг**: Aiven DB болон R2 нь хоёр лаптопт **хуваалцсан** тул нөгөө лаптопын migration аль хэдийн бодит DB дээр ажилласан байдаг. Өөрөөр хэлбэл **DB шинэ, код хуучин** гэсэн байдал чимээгүйхэн үүсдэг (2026-09-11-нд `featured_brands.logoUrl` багана DB дээр байсан ч энэ лаптопын `drizzle/schema.ts`-д байгаагүй). Аппликейшн ажиллаж байгаа нь синк болсны баталгаа БИШ.
+
+## ✅ (2026-09-11) Гэрэл багасгасан Linen палитр + босоо зайн засвар + bestseller rail
+
+**Менежер**: "нүүр болон бүх frontend хуудас хэт гэрэлтэй, юу ч харагдахгүй". **Tom: харанхуй горим ХЭРЭГГҮЙ** — 2 цайвар хувилбараас (Paper дулаан / Linen сэрүүн) **Linen** сонгогдов.
+
+**Хэмжсэн шалтгаан**: хуудасны дэвсгэр 91.5% luminance, карт vs суурь **1.07:1** (карт/хуудас/цагаан packshot гурав нэг цагаан хуудас мэт), мөн **2 бүтэн дэлгэцийн ханасан шар band** (`#f0b52d`, нийт 1443px өндөр) — гялбааны хамгийн том эх үүсвэр.
+
+**Linen токенууд**: суурь `#dae0da` · ээлжлэх band `#ced5cf` · карт `#f2f5f2` · хүрээ `#b7beb9` · тайлбар текст `#545958` · жижиг улаан `--primary-text` **#b01729** · surface-tint `#d3dad4` · sky `#28537a`. Шар нь зөвхөн badge/rank/гарчгийн зураас. **Барааны зургийн тавцан цэвэр цагаан хэвээр**; `wcu-section` харанхуй хэвээр (контрастын хэмнэл). Гэрэл **20% буурав**, карт vs суурь **1.22:1**.
+
+⚠️ **Жижиг улаан текстэд `var(--primary)` (#df1f3d) ХЭРЭГЛЭХГҮЙ** — шинэ band дээр 3.19:1. Үүнд зориулж `--primary-text` байдаг (14 газар шилжүүлсэн). **`.brands-page`/`.back-to-top` CSS нь admin theme блокийн ДООР** байрладаг тул палитр өөрчлөхдөө тэр хэсгийг мартаж болохгүй.
+
+**Босоо зай**: band бүр 25–34% хоосон padding байсныг татав; `.editorial-heading` 82px→56px cap, `/shop` h1 96px→62px (нүүрний hero-гоос том байсан), hero 1009px→628px (h1 428→184). **Нийт нүүр 8015→6612px (−18%)**.
+
+**Bestseller rail**: бүх DB-д ердөө **3 төлөгдсөн захиалга** байгаа тул rail ганц карт зурдаг байв. `getBestsellingProducts` одоо `getCategoryShelfProducts`-ийн гэрээг дагаж, бодит борлуулалтын дараа **admin-ий featured брэндүүдээс** (round-robin) дүүргэнэ — **хуурамч захиалга үүсгээгүй**, бодит борлуулалт гармагц filler шахагдана. `Asmy` featured brand болж нэмэгдэв (`scripts/seed-featured-brand-asmy.ts`; ⚠️ `products.brand` дээр яг **"Asmy"**, "ASMY" биш). `getRecommendedProducts`-ийн cold-start нь 2 дахин гүн хуудсын хоёр дахь хэсгийг авдаг болсон — эс бөгөөс хоёр rail ижил 6 картыг давхардуулж байв.
+
+**Баталгаажуулалт**: 28 хослол (7 хуудас × 1440/1024/390/320) — hэвтээ overflow 0, давхцал 0, **контрастын алдаа 0** (эхэлж 55 байсныг бүгдийг заслаа, бодит computed дэвсгэр дээр хэмжсэн), эвдэрсэн зураг 0, `<h1>` хуудас бүрт 1. `pnpm check`/`pnpm build` цэвэр, bestseller+catalog тест 24/24.
+
 ## ✅ (2026-09-10) /shop-ийн барааны карт Tom-ийн лавлагаа зурган дээрх карт болов
 
 Tom лавлагаа screenshot (SHARP шүүлтүүрийн карт) илгээж: "Build like same thing exact one!!! Even brand name thats located on left top!!" + "Make it 100% data driven and editable on ./admin page".
@@ -212,7 +241,7 @@ Tom лавлагаа screenshot (SHARP шүүлтүүрийн карт) илгэ
 
 ⚠️ **Tom-д**: одоогоор **937 бараанаас 0-д нь "Хуучин үнэ" тавигдаагүй** тул улбар шар **-N% badge бодит сайт дээр хараахан харагдахгүй**. Badge ажиллаж байгааг нэг бараан дээр түр 309,900→30,900 тавьж (-90%) баталгаажуулаад **шууд буцаасан** (одоо дахин 19,000₮, хуучин үнэ NULL). Хямдрал харуулах бол /admin → Бүтээгдэхүүн → **Хуучин үнэ** талбарыг бөглөнө.
 
-## Дараагийн ажлын санал (2026-09-09-ний байдлаар НЭЭЛТТЭЙ зүйлс л — хаагдсан бүх зүйл HISTORY.md-д)
+## Дараагийн ажлын санал (2026-09-11-ний байдлаар НЭЭЛТТЭЙ зүйлс л — хаагдсан бүх зүйл HISTORY.md-д)
 0. **10k зэрэгцээ хэрэглэгч (Tom-ийн асуулт, 2026-09-09)** — одоогийн архитектур (нэг Node process, in-memory rate limiter, mysql2 pool 10, Бангалор RTT ~174ms, cache зөвхөн /shop каталогийн 10с TTL) статик HTML-ийг даана (5.4k req/s хэмжсэн) харин DB-д хүрэх бүх зүйл ~30–60 query/с-т тулна. Дараалал: (a) нүүр/каталог/site_media/site_text/brands/bestsellers read-үүдэд 30–60с in-memory cache (`catalogPageCache` загвар) — хамгийн том ялалт, backend өөрчлөлт бага; (b) Aiven-ийг Токио руу (Console → Change cloud) + `connectionLimit` 10→25–50 (Aiven plan-ий max_connections шалгах); (c) hosting дээр Node-ийг `cluster`/PM2-ээр CPU бүрт + Cloudflare CDN (HTML "no-cache" тул зөвхөн assets, /cdn/*); (d) хэрэв олон instance бол R3-ийн in-memory tier + `catalogPageCache`-ийг Redis руу; (e) global limiter 300/15мин/IP нь оффисын NAT-ад бага байж болзошгүй — hosting дээр бодит тоогоор тааруулах. Бодит 10k-ийн өмнө staging дээр k6-ээр нүүр хуудасны бүрэн flow-г ачааллах.
 1. **Барааны бодит зураг — үлдсэн 415** (`docs/products-needing-photos.csv`): автомат эх сурвалжууд шавхагдсан (HISTORY.md, "Зургийн эх сурвалжийн бүрэн эрэл"), дэлгүүрт өөрөө зураг авах л үлдсэн.
 2. **Tom-ийн бизнесийн алхам шаардах зүйлс** (код бэлэн, тохиргоо/гэрээ л дутуу): QPay merchant credential (R6/R7 засвартай), eBarimt ([EBARIMT.md](EBARIMT.md)-ийн 6 асуулт), StorePay/хүргэлтийн гэрээ, Honeybadger API key (`HONEYBADGER_API_KEY` + `VITE_HONEYBADGER_API_KEY`), Brevo SMS кредит/route (mass SMS campaign-ийн өмнө), hosting сонголт (дараа нь `PUBLIC_BASE_URL`, staging/CDN/uptime, R3-ийн in-memory tier-үүдийг шаардлагатай бол Redis).
@@ -223,5 +252,8 @@ Tom лавлагаа screenshot (SHARP шүүлтүүрийн карт) илгэ
 7. **NEWVISION §14 / PREMIUM TIER 5 үлдэгдэл**: density toggle, үнийн faceted filter, "Pairs well with" cross-sell; referral, abandoned-cart имэйл.
 8. **Купоны per-customer cap race**: нэг хэрэглэгч сүүлчийн зөвшөөрөгдсөн ашиглалтыг 2 зэрэгцээ checkout-оор давж болно (global `maxUses` атомик хэвээр) — хэрэгтэй бол (code, customer, n) unique key.
 9. `--a-faint` (admin жижиг uppercase шошго) гэрэл горимд 2.74:1 — WCAG AA-д хүрэхгүй (codemod-оос өмнө ч ижил байсан, регресс биш).
+10. ⚠️ **`/shop` "баруун тийш шахагдсан" (Tom, 2026-09-11) — НӨХӨН ҮЗҮҮЛЭГДЭЭГҮЙ**: 1024–3200px хүртэл 15 өргөнд `scrollWidth - clientWidth` хэмжихэд бүгдэд нь 0 гарсан. Дахин гарвал Tom-оос **цонхны бодит өргөн + browser zoom хувь**-ийг асуух (zoom нь `vw` нэгжүүдийг өөрчилдөг).
+11. **Онцлох брэндүүд carousel (2026-09-10)** — `featured_brands.logoUrl` багана нэмэгдсэн ч **лого хараахан байршуулаагүй**; carousel нь брэндийн хамгийн сүүлийн барааны зургаар орлуулж байна. Admin → Брэнд дээр лого оруулбал зохистой.
+12. **Bestseller filler-ийг брэндээр хязгаарлах** — одоо `featured_brands`-ийн БҮХ идэвхтэй брэнд round-robin-д ордог. Хэрэв зөвхөн тодорхой 3-4 брэнд харагдах ёстой бол admin → Брэнд дээр бусдыг нь идэвхгүй болгох, эсвэл filler-д зориулсан тусдаа тугийн багана нэмэх.
 
 Дэлгэрэнгүй бүх session-ий бүрэн түүх, шалтгаан, screenshot-ын баталгаажуулалт: **[HISTORY.md](HISTORY.md)**.

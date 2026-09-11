@@ -1,5 +1,8 @@
 # SUGI ASAYAKE — REFERENCE-DRIVEN WORLD-CLASS PREMIUM WEBSITE REDESIGN MASTER PROMPT
 
+> ⚠️ **ТҮҮХЭН БАРИМТ (2026-08-28-ны redesign-ий даалгавар).** Энд бичигдсэн өнгөний утгууд (`#f8f5ef`, `#fffdf9`, `#f0b52d` г.м.) 2026-09-11-нд Linen палитраар солигдсон — суурь `#dae0da`, карт `#f2f5f2`, шар нь зөвхөн accent. Геометр/бүтцийн заавар хүчинтэй хэвээр; өнгөний утгыг `client/src/index.css`-ийн `:root`-оос шалга.
+
+
 > Note: This document preserves the complete prompt content available in the supplied attachment. The attachment itself was truncated by the chat export at 50,000 characters during the Quick Stats section; no missing text was invented or silently replaced.
 
 Доорх нь өмнө ярьсан **бүх reference image, бүх geometry, composition, responsive, functionality, safety, testing, Tier 0–6 шаардлагыг нэгтгэсэн бүрэн master prompt**. Үүнийг Claude AI Pro-д шууд хуулж өг. Reference зургуудыг мөн хамтад нь attach хийнэ.
