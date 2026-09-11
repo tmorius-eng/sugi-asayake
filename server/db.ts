@@ -838,31 +838,103 @@ export async function getBestsellingProducts(limit = 8) {
     .limit(limit * 3); // headroom: some winners may since have gone unpublished
 
   const productIds = soldRows.map(row => row.productId).filter((id): id is number => id != null);
-  if (!productIds.length) return [];
   const soldQuantityByProduct = new Map(soldRows.map(row => [row.productId, Number(row.soldQuantity)]));
 
-  const catalogRows = await db
-    .select({
-      id: products.id,
-      name: products.name,
-      slug: products.slug,
-      brand: products.brand,
-      priceMnt: products.priceMnt,
-      compareAtPriceMnt: products.compareAtPriceMnt,
-      imageUrl: products.imageUrl,
-      stockQuantity: products.stockQuantity,
-      avgRating: avgRatingExpr,
-      reviewCount: reviewCountExpr,
-    })
-    .from(products)
-    .leftJoin(productReviews, eq(productReviews.productId, products.id))
-    .where(and(inArray(products.id, productIds), eq(products.isPublished, true)))
-    .groupBy(products.id);
+  const catalogColumns = {
+    id: products.id,
+    name: products.name,
+    slug: products.slug,
+    brand: products.brand,
+    priceMnt: products.priceMnt,
+    compareAtPriceMnt: products.compareAtPriceMnt,
+    imageUrl: products.imageUrl,
+    stockQuantity: products.stockQuantity,
+    avgRating: avgRatingExpr,
+    reviewCount: reviewCountExpr,
+  };
 
-  return catalogRows
+  const catalogRows = productIds.length
+    ? await db
+        .select(catalogColumns)
+        .from(products)
+        .leftJoin(productReviews, eq(productReviews.productId, products.id))
+        .where(and(inArray(products.id, productIds), eq(products.isPublished, true)))
+        .groupBy(products.id)
+    : [];
+
+  const picked = catalogRows
     .map(row => ({ ...row, soldQuantity: soldQuantityByProduct.get(row.id) ?? 0 }))
     .sort((a, b) => b.soldQuantity - a.soldQuantity)
     .slice(0, limit);
+
+  if (picked.length >= limit) return picked;
+
+  /*
+   * 2026-09-11 (Tom): with 3 settled orders in the whole catalogue this rail
+   * rendered a single card in a full-width band -- a real empty-state defect,
+   * not a data problem that fixes itself. Same remedy, and the same ordering
+   * contract, as getCategoryShelfProducts below: genuinely sold products keep
+   * the top slots and their real sold counts, then the remaining slots fill
+   * from the brands an admin has already marked featured (/admin -> Брэнд,
+   * the `featured_brands` table that also backs the Топ брэнд rail), in that
+   * panel's own sortOrder. Nothing here writes or invents an order, so the
+   * moment real sales exist they displace the filler automatically and the
+   * section becomes a true ranking again.
+   *
+   * Round-robin across brands rather than brand-by-brand: PRIECLAT alone has
+   * 21 published products and would otherwise take every free slot, hiding
+   * the other featured brands the admin chose.
+   */
+  const excludeIds = picked.map(row => row.id);
+  const notAlreadyPicked = excludeIds.length
+    ? sql`${products.id} NOT IN (${sql.join(excludeIds, sql`, `)})`
+    : sql`1=1`;
+
+  const featuredRows = await db
+    .select({ ...catalogColumns, brandSort: featuredBrands.sortOrder, brandId: featuredBrands.id })
+    .from(products)
+    .innerJoin(featuredBrands, eq(featuredBrands.brandName, products.brand))
+    .leftJoin(productReviews, eq(productReviews.productId, products.id))
+    .where(and(
+      eq(featuredBrands.isActive, true),
+      eq(products.isPublished, true),
+      gte(products.stockQuantity, 1),
+      isNotNull(products.imageUrl),
+      ne(products.imageUrl, ""),
+      notAlreadyPicked,
+    ))
+    .groupBy(products.id, featuredBrands.id)
+    // products.id is the final tiebreak on purpose: createdAt ties are common
+    // here (bulk imports share a timestamp), and without a stable last key
+    // MySQL may order tied rows differently per query. The cold-start
+    // recommender asks for a deeper page of this same list and takes the
+    // tail, so an unstable prefix would leak one product into both homepage
+    // rails.
+    .orderBy(asc(featuredBrands.sortOrder), asc(featuredBrands.id), desc(products.createdAt), desc(products.id))
+    // Fixed cap, NOT a multiple of `limit`: rows come back in brand order, so
+    // a limit-scaled cap truncated later brands out of a small request while
+    // including them in a large one -- which changed how many queues the
+    // round-robin interleaved and produced exactly that leak. 400 covers
+    // every product behind the featured brands today (~180).
+    .limit(400);
+
+  const byBrand = new Map<number, typeof featuredRows>();
+  for (const row of featuredRows) {
+    const bucket = byBrand.get(row.brandId);
+    if (bucket) bucket.push(row); else byBrand.set(row.brandId, [row]);
+  }
+  const queues = Array.from(byBrand.values());
+  let cursor = 0;
+  while (picked.length < limit && queues.some(queue => queue.length)) {
+    const queue = queues[cursor % queues.length];
+    cursor += 1;
+    const next = queue.shift();
+    if (!next) continue;
+    const { brandSort: _brandSort, brandId: _brandId, ...row } = next;
+    picked.push({ ...row, soldQuantity: 0 });
+  }
+
+  return picked.slice(0, limit);
 }
 
 /**
@@ -1069,8 +1141,17 @@ export async function getRecommendedProducts(userId: number | null, limit = 8) {
     // has content -- which is what this component's contract already
     // claimed. With no preferences every score is 0, so the scoring work
     // below is skipped naturally and only that last tier fills the list.
-    const top = await bestsellers();
-    if (top.length) return top;
+    // 2026-09-11: since getBestsellingProducts now backfills its empty slots
+    // from the featured brands, returning it verbatim here printed the SAME
+    // six cards twice on the homepage -- "Их зарагддаг" and "Танд санал
+    // болгож байна" became identical rails stacked on each other. Asking for
+    // twice the depth and taking the SECOND page keeps the same ranking logic
+    // while guaranteeing the two rails never overlap; if the catalog is too
+    // thin to fill both, fall back to the first page rather than nothing.
+    const deep = await getBestsellingProducts(limit * 2);
+    const second = deep.slice(limit);
+    if (second.length >= Math.min(4, limit)) return second;
+    if (deep.length) return deep.slice(0, limit);
   }
 
   const candidates = await db.select({
