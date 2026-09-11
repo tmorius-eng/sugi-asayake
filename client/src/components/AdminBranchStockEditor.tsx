@@ -47,6 +47,9 @@ function MovementHistory({ variantId }: { variantId: number }) {
 export default function AdminBranchStockEditor({ variantId }: { variantId: number }) {
   const utils = trpc.useUtils();
   const stockQuery = trpc.admin.branchStock.useQuery({ variantId });
+  // Phase 4: units sent on a transfer but not yet received anywhere -- not
+  // on any shelf, so not in the rows below, but not lost either.
+  const inTransitQuery = trpc.inventory.inTransit.useQuery({ variantId });
   const setStock = trpc.admin.setBranchStock.useMutation();
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const [note, setNote] = useState("");
@@ -110,6 +113,9 @@ export default function AdminBranchStockEditor({ variantId }: { variantId: numbe
           </div>
         );
       })}
+      {(inTransitQuery.data ?? 0) > 0 && (
+        <p className="flex items-center justify-between rounded-lg bg-[var(--a-warn-soft)] px-2.5 py-1.5 text-[11px] font-bold text-[var(--a-warn)]"><span>Замд (шилжүүлгээр явж байгаа)</span><span>{inTransitQuery.data} ш</span></p>
+      )}
       {anyDirty && (
         <input
           value={note}

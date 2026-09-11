@@ -5,6 +5,8 @@ import {
   listCounts, listReceipts, loadInventoryActor, postCount, postReceipt, saveCountLines, saveReceiptLines, submitCount, updateReceiptDetails,
 } from "./inventory";
 import { randomBytes } from "node:crypto";
+import { cancelTransfer, confirmTransferReceipt, createTransfer, getInTransitForVariant, getTransfer, listTransfers, resolveTransferLine, saveReceivedDraft, saveTransferLines, sendTransfer } from "./transfers";
+import { OVER_RESOLUTIONS, SHORT_RESOLUTIONS } from "../shared/transfer-reconcile";
 import { logAdminAction } from "./db";
 import { storagePut } from "./storage";
 import { assertImageSignature, decodeBase64Upload, imageContentTypes, processUploadedImageOrThrow } from "./_core/imageUpload";
@@ -98,4 +100,44 @@ export const inventoryRouter = router({
     await logAdminAction({ actorUserId: ctx.user.id, action: "inventory.count_cancelled", entityType: "stock_count", entityId: input.id });
     return result;
   })),
+
+  // --- Transfers (Phase 4, server/transfers.ts) ---------------------------
+  transfers: inventoryProcedure.input(z.object({ branchId: z.number().int().positive().optional() }).optional()).query(async ({ ctx, input }) => listTransfers(await loadInventoryActor(ctx.user), { branchId: input?.branchId })),
+  // Every active location, for the warehouse's "to" picker (a store
+  // consultant's own context only lists their branch).
+  transferBranches: inventoryProcedure.query(async ({ ctx }) => {
+    const actor = await loadInventoryActor(ctx.user);
+    if (actor.role !== "admin" && actor.role !== "warehouse") return [];
+    return (await getInventoryContext({ ...actor, role: "admin" })).branches;
+  }),
+  transfer: inventoryProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ ctx, input }) => run(async () => getTransfer(await loadInventoryActor(ctx.user), input.id))),
+  createTransfer: inventoryProcedure.input(z.object({ fromBranchId: z.number().int().positive(), toBranchId: z.number().int().positive(), note: text(500) })).mutation(async ({ ctx, input }) => run(async () => {
+    const transfer = await createTransfer(await loadInventoryActor(ctx.user), input);
+    await logAdminAction({ actorUserId: ctx.user.id, action: "inventory.transfer_created", entityType: "stock_transfer", entityId: transfer.id, metadata: { code: transfer.code, fromBranchId: input.fromBranchId, toBranchId: input.toBranchId } });
+    return transfer;
+  })),
+  saveTransferLines: inventoryProcedure.input(z.object({ id: z.number().int().positive(), lines: linesSchema })).mutation(async ({ ctx, input }) => run(async () => saveTransferLines(await loadInventoryActor(ctx.user), input.id, input.lines))),
+  sendTransfer: inventoryProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => run(async () => {
+    const result = await sendTransfer(await loadInventoryActor(ctx.user), input.id);
+    await logAdminAction({ actorUserId: ctx.user.id, action: "inventory.transfer_sent", entityType: "stock_transfer", entityId: input.id, metadata: { code: result.code } });
+    return result;
+  })),
+  saveTransferReceived: inventoryProcedure.input(z.object({ id: z.number().int().positive(), lines: linesSchema })).mutation(async ({ ctx, input }) => run(async () => saveReceivedDraft(await loadInventoryActor(ctx.user), input.id, input.lines))),
+  confirmTransfer: inventoryProcedure.input(z.object({ id: z.number().int().positive(), note: z.string().trim().max(300).optional() })).mutation(async ({ ctx, input }) => run(async () => {
+    const result = await confirmTransferReceipt(await loadInventoryActor(ctx.user), input.id, input.note);
+    await logAdminAction({ actorUserId: ctx.user.id, action: "inventory.transfer_received", entityType: "stock_transfer", entityId: input.id, metadata: { code: result.code, discrepancy: result.discrepancyStatus } });
+    return result;
+  })),
+  resolveTransferLine: inventoryProcedure.input(z.object({ lineId: z.number().int().positive(), resolution: z.enum([...SHORT_RESOLUTIONS, ...OVER_RESOLUTIONS]), note: z.string().trim().max(300).optional() })).mutation(async ({ ctx, input }) => run(async () => {
+    const result = await resolveTransferLine(await loadInventoryActor(ctx.user), input.lineId, input.resolution, input.note);
+    await logAdminAction({ actorUserId: ctx.user.id, action: "inventory.transfer_line_resolved", entityType: "stock_transfer", entityId: result.id, metadata: { lineId: input.lineId, resolution: input.resolution } });
+    return result;
+  })),
+  cancelTransfer: inventoryProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => run(async () => {
+    const result = await cancelTransfer(await loadInventoryActor(ctx.user), input.id);
+    await logAdminAction({ actorUserId: ctx.user.id, action: "inventory.transfer_cancelled", entityType: "stock_transfer", entityId: input.id });
+    return result;
+  })),
+  // "Замд" -- sent but not yet confirmed, for the per-branch stock editor.
+  inTransit: inventoryProcedure.input(z.object({ variantId: z.number().int().positive() })).query(({ input }) => getInTransitForVariant(input.variantId)),
 });

@@ -581,6 +581,47 @@ export const stockCountLines = mysqlTable("stock_count_lines", {
   postedDelta: int("postedDelta"),
 }, table => [uniqueIndex("stock_count_lines_unique").on(table.countId, table.scannedCode)]);
 
+/**
+ * 2026-09-11 (migration 0065): warehouse -> store transfers, checked by
+ * scanning at both ends (server/transfers.ts). draft -> sent (goods leave
+ * the source shelf) -> received (the store's blind scan is compared with
+ * what was sent; arrivals added, differences left open for an admin to
+ * resolve line by line) | cancelled.
+ */
+export const stockTransfers = mysqlTable("stock_transfers", {
+  id: int("id").autoincrement().primaryKey(),
+  code: varchar("code", { length: 24 }).notNull().unique(),
+  fromBranchId: int("fromBranchId").notNull().references(() => branches.id, { onDelete: "cascade" }),
+  toBranchId: int("toBranchId").notNull().references(() => branches.id, { onDelete: "cascade" }),
+  status: mysqlEnum("status", ["draft", "sent", "received", "cancelled"]).notNull().default("draft"),
+  discrepancyStatus: mysqlEnum("discrepancyStatus", ["none", "open", "resolved"]).notNull().default("none"),
+  note: varchar("note", { length: 500 }),
+  createdByUserId: int("createdByUserId").references(() => users.id, { onDelete: "set null" }),
+  sentByUserId: int("sentByUserId").references(() => users.id, { onDelete: "set null" }),
+  sentAt: timestamp("sentAt"),
+  receivedByUserId: int("receivedByUserId").references(() => users.id, { onDelete: "set null" }),
+  receivedAt: timestamp("receivedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  index("stock_transfers_to_status_idx").on(table.toBranchId, table.status),
+  index("stock_transfers_from_status_idx").on(table.fromBranchId, table.status),
+]);
+
+export const stockTransferLines = mysqlTable("stock_transfer_lines", {
+  id: int("id").autoincrement().primaryKey(),
+  transferId: int("transferId").notNull().references(() => stockTransfers.id, { onDelete: "cascade" }),
+  variantId: int("variantId").references(() => productVariants.id, { onDelete: "set null" }),
+  scannedCode: varchar("scannedCode", { length: 80 }).notNull(),
+  sku: varchar("sku", { length: 100 }),
+  productName: varchar("productName", { length: 255 }),
+  qtySent: int("qtySent").notNull().default(0),
+  receivedDraftQty: int("receivedDraftQty"),
+  qtyReceived: int("qtyReceived"),
+  resolution: mysqlEnum("resolution", ["write_off", "returned_to_source", "found_later", "deducted_from_source", "accepted_over"]),
+  resolutionNote: varchar("resolutionNote", { length: 300 }),
+}, table => [uniqueIndex("stock_transfer_lines_unique").on(table.transferId, table.scannedCode)]);
+
 export const carts = mysqlTable("carts", {
   id: int("id").autoincrement().primaryKey(),
   // Exactly one of userId / guestToken is set. Nullable (guest checkout):

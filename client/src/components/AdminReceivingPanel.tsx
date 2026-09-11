@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
-import { ArrowLeft, Camera, CheckCircle2, ClipboardList, CloudOff, LoaderCircle, PackagePlus, Plus, Send, TriangleAlert, Truck, X } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight, Camera, CheckCircle2, ClipboardList, CloudOff, LoaderCircle, PackagePlus, Plus, Send, TriangleAlert, Truck, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useScanDraft } from "@/hooks/useScanDraft";
 import ScanSession, { buildSkuLookup } from "./inventory/ScanSession";
+import TransfersView from "./inventory/TransfersView";
 
 /**
  * /admin -> Бараа хүлээн авах (2026-09-11, Phase 3).
@@ -31,7 +32,7 @@ const statusStyle: Record<string, string> = {
   cancelled: "bg-[var(--a-soft)] text-[var(--a-muted)]",
 };
 
-type Mode = "receive" | "count";
+type Mode = "receive" | "count" | "transfer";
 type Open = { kind: "receipt" | "count"; id: number } | null;
 
 function SaveIndicator({ status, dirty }: { status: string; dirty: boolean }) {
@@ -278,6 +279,19 @@ export default function AdminReceivingPanel() {
     try { const count = await createCount.mutateAsync({ branchId: selectedBranchId, scope: countScope, isOpening }); await utils.inventory.counts.invalidate(); setOpen({ kind: "count", id: count.id }); } catch (error) { toast.error(messageFrom(error)); }
   };
 
+  if (mode === "transfer") {
+    return (
+      <div className="grid gap-4">
+        <div className="inline-flex w-fit rounded-full bg-[var(--a-soft)] p-1" role="tablist">
+          <button type="button" role="tab" aria-selected={false} onClick={() => setMode("receive")} className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold text-[var(--a-muted)]"><Truck size={14} />Бараа хүлээн авах</button>
+          <button type="button" role="tab" aria-selected={false} onClick={() => setMode("count")} className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold text-[var(--a-muted)]"><ClipboardList size={14} />Тооллого</button>
+          <button type="button" role="tab" aria-selected className="inline-flex items-center gap-1.5 rounded-full bg-[var(--a-card)] px-4 py-2 text-xs font-bold text-[var(--a-text)] shadow-sm"><ArrowLeftRight size={14} />Шилжүүлэг</button>
+        </div>
+        <TransfersView lookup={lookup} role={context.role} branches={branchOptions} myBranchId={context.branchId} />
+      </div>
+    );
+  }
+
   const rows = mode === "receive" ? (receiptsQuery.data ?? []) : (countsQuery.data ?? []);
   const listLoading = mode === "receive" ? receiptsQuery.isLoading : countsQuery.isLoading;
 
@@ -287,6 +301,7 @@ export default function AdminReceivingPanel() {
         <div className="inline-flex rounded-full bg-[var(--a-soft)] p-1" role="tablist">
           <button type="button" role="tab" aria-selected={mode === "receive"} onClick={() => setMode("receive")} className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold ${mode === "receive" ? "bg-[var(--a-card)] text-[var(--a-text)] shadow-sm" : "text-[var(--a-muted)]"}`}><Truck size={14} />Бараа хүлээн авах</button>
           <button type="button" role="tab" aria-selected={mode === "count"} onClick={() => setMode("count")} className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold ${mode === "count" ? "bg-[var(--a-card)] text-[var(--a-text)] shadow-sm" : "text-[var(--a-muted)]"}`}><ClipboardList size={14} />Тооллого</button>
+          <button type="button" role="tab" aria-selected={false} onClick={() => setMode("transfer")} className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold text-[var(--a-muted)]"><ArrowLeftRight size={14} />Шилжүүлэг</button>
         </div>
         {branchOptions.length > 1 && (
           <select value={selectedBranchId ?? ""} onChange={event => setBranchId(event.target.value ? Number(event.target.value) : null)} className="h-10 rounded-full border border-[var(--a-border)] bg-[var(--a-card)] px-4 text-xs font-bold outline-none focus:border-[var(--a-info)]" aria-label="Салбар">

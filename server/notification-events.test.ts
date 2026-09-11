@@ -25,6 +25,9 @@ const samples: { [K in NotificationEventType]: NotificationPayloads[K] } = {
   "receipt.posted": { code: "RC-260911-7Q4K", branchName: "Их наяд плаза", supplierName: "Kao Mongolia", lineCount: 12, pieces: 240, unknownCount: 1 },
   "count.submitted": { code: "CT-260911-AB23", branchName: "Их наяд плаза", lineCount: 80, varianceLines: 3 },
   "count.posted": { code: "CT-260911-AB23", branchName: "Агуулах", adjustedLines: 3, netDelta: -2, isOpening: false },
+  "transfer.sent": { code: "TR-260911-QW3E", fromBranchName: "Агуулах", toBranchName: "Их наяд плаза", lineCount: 18, pieces: 320 },
+  "transfer.received": { code: "TR-260911-QW3E", toBranchName: "Их наяд плаза", receivedPieces: 315, sentPieces: 320 },
+  "transfer.discrepancy": { code: "TR-260911-QW3E", toBranchName: "Их наяд плаза", shortLines: 2, overLines: 1, unexpectedLines: 1, missingPieces: 5, extraPieces: 2, examples: ["Бараа А −3"] },
   "integration.test": { groupLabel: "Агуулах" },
 };
 

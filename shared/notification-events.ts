@@ -75,6 +75,9 @@ export type NotificationPayloads = {
   "receipt.posted": { code: string; branchName: string; supplierName: string | null; lineCount: number; pieces: number; unknownCount: number };
   "count.submitted": { code: string; branchName: string; lineCount: number; varianceLines: number };
   "count.posted": { code: string; branchName: string; adjustedLines: number; netDelta: number; isOpening: boolean };
+  "transfer.sent": { code: string; fromBranchName: string; toBranchName: string; lineCount: number; pieces: number };
+  "transfer.received": { code: string; toBranchName: string; receivedPieces: number; sentPieces: number };
+  "transfer.discrepancy": { code: string; toBranchName: string; shortLines: number; overLines: number; unexpectedLines: number; missingPieces: number; extraPieces: number; examples: string[] };
   "integration.test": { groupLabel: string };
 };
 export type NotificationEventType = keyof NotificationPayloads;
@@ -102,6 +105,9 @@ export const NOTIFICATION_EVENTS: Record<NotificationEventType, EventSpec> = {
   "receipt.posted": { label: "Бараа хүлээн авсан", groups: ["warehouse", "admin"], priority: 3, tags: ["inbox_tray"], clickSection: "receiving" },
   "count.submitted": { label: "Тооллого батлуулахаар ирсэн", groups: ["warehouse", "admin"], priority: 4, tags: ["clipboard"], clickSection: "receiving" },
   "count.posted": { label: "Тооллого батлагдсан", groups: ["admin"], priority: 3, tags: ["white_check_mark"], clickSection: "receiving" },
+  "transfer.sent": { label: "Шилжүүлэг илгээгдсэн", groups: ["store", "admin"], priority: 4, tags: ["truck"], clickSection: "receiving" },
+  "transfer.received": { label: "Шилжүүлэг хүлээн авсан", groups: ["warehouse", "admin"], priority: 3, tags: ["white_check_mark"], clickSection: "receiving" },
+  "transfer.discrepancy": { label: "Шилжүүлгийн зөрүү", groups: ["admin", "warehouse"], priority: 5, tags: ["warning"], clickSection: "receiving" },
   "integration.test": { label: "Туршилтын мэдэгдэл", groups: [], priority: 3, tags: ["bell"], clickSection: "notifications" },
 };
 
@@ -160,6 +166,19 @@ export function buildNotificationMessage<K extends NotificationEventType>(type: 
     case "count.posted": {
       const p = payload as NotificationPayloads["count.posted"];
       return { title: `${p.isOpening ? "Эхний үлдэгдэл" : "Тооллого"} батлагдлаа ${p.code}`, message: `${p.branchName}: ${p.adjustedLines} бараа засагдсан, нийт ${p.netDelta > 0 ? "+" : ""}${p.netDelta} ширхэг.` };
+    }
+    case "transfer.sent": {
+      const p = payload as NotificationPayloads["transfer.sent"];
+      return { title: `Шилжүүлэг замд ${p.code}`, message: `${p.fromBranchName} → ${p.toBranchName}: ${p.lineCount} төрөл · ${pieces(p.pieces)}. Ирэхэд "Бараа хүлээн авах → Шилжүүлэг"-ээс уншуулж хүлээн авна уу.` };
+    }
+    case "transfer.received": {
+      const p = payload as NotificationPayloads["transfer.received"];
+      return { title: `Шилжүүлэг хүлээн авлаа ${p.code}`, message: `${p.toBranchName}: илгээсэн ${pieces(p.sentPieces)}, хүлээн авсан ${pieces(p.receivedPieces)}.` };
+    }
+    case "transfer.discrepancy": {
+      const p = payload as NotificationPayloads["transfer.discrepancy"];
+      const parts = [p.shortLines ? `${p.shortLines} бараа дутуу (−${p.missingPieces})` : "", p.overLines ? `${p.overLines} илүү` : "", p.unexpectedLines ? `${p.unexpectedLines} жагсаалтад байгаагүй` : ""].filter(Boolean).join(", ");
+      return { title: `Шилжүүлгийн зөрүү ${p.code}`, message: `${p.toBranchName}: ${parts}.${p.examples.length ? `\n${p.examples.join("\n")}` : ""}\nАдмин шийдвэр гаргана уу.` };
     }
     case "integration.test": {
       const p = payload as NotificationPayloads["integration.test"];
