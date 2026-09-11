@@ -19,7 +19,7 @@ import { registerQPayCallbackRoute } from "../qpay";
 import { registerVerifyMnCallbackRoute } from "../verifyMn";
 import { dbPing } from "../db";
 import { startScheduler } from "./scheduler";
-import { registerAbandonedCartReminderJob, registerLowStockDigestJob, registerNotificationOutboxPurgeJob } from "../automation";
+import { registerAbandonedCartReminderJob, registerLowStockDigestJob, registerNotificationOutboxPurgeJob, registerStaleTransferJob, registerStockLedgerDriftJob } from "../automation";
 import { startNotificationDispatcher } from "../notifications";
 import { notifyError, registerHoneybadgerErrorMiddleware, registerHoneybadgerMiddleware } from "./honeybadger";
 import { limitApiTraffic, protectStateChangingApiRequests, setSecurityHeaders } from "./security";
@@ -141,6 +141,8 @@ async function startServer() {
   registerAbandonedCartReminderJob();
   registerLowStockDigestJob();
   registerNotificationOutboxPurgeJob();
+  registerStockLedgerDriftJob();
+  registerStaleTransferJob();
   startScheduler();
   // Phone push notifications (2026-09-11) -- only sends on the machine with
   // NOTIFICATIONS_DISPATCH=1; see server/notifications.ts.

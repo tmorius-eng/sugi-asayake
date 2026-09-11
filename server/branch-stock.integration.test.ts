@@ -170,7 +170,11 @@ maybeDescribe("branch stock integration", () => {
     // restoration re-derived "the current default" instead of reading the
     // order's own captured fulfillingBranchId, this would incorrectly
     // credit branch B instead of branch A.
-    await adminCaller.admin.updateBranch({ id: branchAId, isFulfillmentDefault: false });
+    // 2026-09-11: the flag is a radio button -- making B the default clears
+    // A in the same transaction. Turning A off FIRST (the old two-step) is
+    // now refused, because it would leave a moment with no fulfilment branch
+    // at all, during which every delivery checkout fails.
+    await expect(adminCaller.admin.updateBranch({ id: branchAId, isFulfillmentDefault: false })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     await adminCaller.admin.updateBranch({ id: branchBId, isFulfillmentDefault: true });
     try {
       const deliveryOrderId = createdOrderIds[0]; // the ub_delivery order from branch A
@@ -180,7 +184,6 @@ maybeDescribe("branch stock integration", () => {
       expect(stockRows.find(row => row.branchId === branchBId)?.stockQuantity).toBe(2); // untouched by this restore
     } finally {
       await adminCaller.admin.updateBranch({ id: branchAId, isFulfillmentDefault: true });
-      await adminCaller.admin.updateBranch({ id: branchBId, isFulfillmentDefault: false });
     }
   });
 });

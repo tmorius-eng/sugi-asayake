@@ -19,6 +19,7 @@ import { sqlQueryLogger } from "./_core/sqlQueryLog";
 import { sanitizePostContent } from "./_core/sanitizeHtml";
 import { getInventoryReservationFailure, shouldRestoreStock } from "./commerce-lifecycle";
 import { getLoyaltyTier, getNextLoyaltyTier, LOYALTY_TIERS, type LoyaltyTier } from "../shared/loyalty";
+import { LOW_STOCK_THRESHOLD as SHARED_LOW_STOCK_THRESHOLD } from "../shared/catalog-filter";
 import { applyDiversityCap, computeCategoryAffinity, filterCatalogBrand, filterCatalogPriceRange, filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCatalogCategories, getCatalogSkinTypes, scorePreferenceMatch, scorePriceBandAffinity, sortCatalogProducts, type CatalogSortOption, type PreferenceProfile, type SkinType } from "../shared/catalog-filter";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -2556,7 +2557,10 @@ export async function getAdminOrders(limit = 200) {
   return orderRows.map(order => ({ ...order, items: lineItems.filter(item => item.orderId === order.id) }));
 }
 
-const LOW_STOCK_THRESHOLD = 5;
+// One definition (shared/catalog-filter.ts) -- the storefront badge and the
+// admin digest must agree on what "low" means. Per-location alert levels
+// (branches.lowStockThreshold) are a separate, admin-set number.
+const LOW_STOCK_THRESHOLD = SHARED_LOW_STOCK_THRESHOLD;
 
 /**
  * "Controls everything" admin overhaul (2026-09-08, Phase F): extracted out

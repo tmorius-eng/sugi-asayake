@@ -1,5 +1,8 @@
 import { and, eq, gte, sql } from "drizzle-orm";
 import { branches, branchStock, products, productVariants, stockMovements, type StockMovementType } from "../drizzle/schema";
+import { ubDateKey, type NotificationGroup } from "../shared/notification-events";
+import { ALERTING_MOVEMENT_TYPES, classifyStockCrossing } from "../shared/stock-alerts";
+import { enqueueNotification } from "./notificationOutbox";
 import type { DbOrTx } from "./db";
 
 /**
@@ -43,7 +46,13 @@ export async function recomputeVariantStockTotal(db: DbOrTx, variantId: number) 
     .innerJoin(branches, eq(branches.id, branchStock.branchId))
     .where(and(eq(branchStock.variantId, variantId), eq(branches.countsTowardOnlineStock, true)));
   const total = Number(totalRow?.total ?? 0);
+  const [previous] = await db.select({ stock: productVariants.stockQuantity, sku: productVariants.sku, productName: products.name, isPublished: products.isPublished })
+    .from(productVariants).innerJoin(products, eq(products.id, productVariants.productId)).where(eq(productVariants.id, variantId)).limit(1);
   await db.update(productVariants).set({ stockQuantity: total, updatedAt: new Date() }).where(eq(productVariants.id, variantId));
+  // Phase 5: a published product the website can no longer sell at all.
+  if (previous?.isPublished && previous.stock > 0 && total <= 0) {
+    await enqueueNotification(db, "stock.total_out", { productName: previous.productName, sku: previous.sku }, { dedupeKey: `${variantId}:${ubDateKey()}` });
+  }
   const [variantRow] = await db.select({ productId: productVariants.productId }).from(productVariants).where(eq(productVariants.id, variantId)).limit(1);
   if (variantRow) {
     const siblings = await db.select({ id: productVariants.id }).from(productVariants).where(eq(productVariants.productId, variantRow.productId));
@@ -91,13 +100,28 @@ async function shelfCount(db: DbOrTx, branchId: number, variantId: number): Prom
  */
 export async function recordStockMovement(db: DbOrTx, branchId: number, variantId: number, delta: number, meta: MovementMeta): Promise<void> {
   if (delta === 0) return;
-  const [variant] = await db.select({ sku: productVariants.sku }).from(productVariants).where(eq(productVariants.id, variantId)).limit(1);
+  const [variant] = await db.select({ sku: productVariants.sku, productName: products.name }).from(productVariants).innerJoin(products, eq(products.id, productVariants.productId)).where(eq(productVariants.id, variantId)).limit(1);
+  const balanceAfter = await shelfCount(db, branchId, variantId);
   await db.insert(stockMovements).values({
     branchId, variantId, sku: variant?.sku ?? "?",
-    type: meta.type, delta, balanceAfter: await shelfCount(db, branchId, variantId),
+    type: meta.type, delta, balanceAfter,
     refType: meta.refType ?? null, refId: meta.refId ?? null, actorUserId: meta.actorUserId ?? null,
     note: meta.note ? meta.note.slice(0, 300) : null,
   });
+  // Phase 5 (2026-09-11): a sale or transfer that takes this shelf over its
+  // low-stock line pushes once, to the location's own group plus admin.
+  // Same transaction as the movement, so a rolled-back sale never alerts.
+  if (delta < 0 && ALERTING_MOVEMENT_TYPES.has(meta.type)) {
+    const [branch] = await db.select({ name: branches.name, kind: branches.kind, threshold: branches.lowStockThreshold }).from(branches).where(eq(branches.id, branchId)).limit(1);
+    const level = branch ? classifyStockCrossing(balanceAfter - delta, balanceAfter, branch.threshold) : null;
+    if (branch && level) {
+      const groups: NotificationGroup[] = branch.kind === "warehouse" ? ["warehouse", "admin"] : ["store", "admin"];
+      const dedupeKey = `${branchId}:${variantId}:${ubDateKey()}`;
+      const productName = variant?.productName ?? variant?.sku ?? "?";
+      if (level === "out") await enqueueNotification(db, "stock.out", { branchName: branch.name, productName, sku: variant?.sku ?? "?" }, { dedupeKey, groups });
+      else await enqueueNotification(db, "stock.low", { branchName: branch.name, productName, sku: variant?.sku ?? "?", quantity: balanceAfter, threshold: branch.threshold ?? 0 }, { dedupeKey, groups });
+    }
+  }
 }
 
 export class StockShortageError extends Error {

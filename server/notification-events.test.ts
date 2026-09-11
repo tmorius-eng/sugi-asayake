@@ -28,6 +28,11 @@ const samples: { [K in NotificationEventType]: NotificationPayloads[K] } = {
   "transfer.sent": { code: "TR-260911-QW3E", fromBranchName: "Агуулах", toBranchName: "Их наяд плаза", lineCount: 18, pieces: 320 },
   "transfer.received": { code: "TR-260911-QW3E", toBranchName: "Их наяд плаза", receivedPieces: 315, sentPieces: 320 },
   "transfer.discrepancy": { code: "TR-260911-QW3E", toBranchName: "Их наяд плаза", shortLines: 2, overLines: 1, unexpectedLines: 1, missingPieces: 5, extraPieces: 2, examples: ["Бараа А −3"] },
+  "stock.low": { branchName: "Агуулах", productName: "Бараа А", sku: "4900000000001", quantity: 4, threshold: 5 },
+  "stock.out": { branchName: "Агуулах", productName: "Бараа А", sku: "4900000000001" },
+  "stock.total_out": { productName: "Бараа А", sku: "4900000000001" },
+  "stock.ledger_drift": { count: 3 },
+  "transfer.stale": { code: "TR-260911-QW3E", toBranchName: "Их наяд плаза", hours: 50 },
   "integration.test": { groupLabel: "Агуулах" },
 };
 

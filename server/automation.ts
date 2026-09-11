@@ -1,4 +1,5 @@
-import { getAbandonedCartsNeedingReminder, getLowStockProducts, markCartReminderSent, getStoreSettingValue, purgeNotificationOutbox, recordNotification } from "./db";
+import { getAbandonedCartsNeedingReminder, getLowStockProducts, getStockLedgerHealth, markCartReminderSent, getStoreSettingValue, purgeNotificationOutbox, recordNotification } from "./db";
+import { getStaleTransfers } from "./transfers";
 import { fillTemplate } from "../shared/store-settings";
 import { ubDateKey } from "../shared/notification-events";
 import { sendAccountEmail, notifyOwner } from "./_core/notification";
@@ -64,6 +65,30 @@ export async function runLowStockDigestJob(): Promise<void> {
 // full day pass with no digest at all.
 export function registerLowStockDigestJob() {
   registerJob({ name: "low-stock-owner-digest", intervalMs: 20 * 60 * 60 * 1000, run: runLowStockDigestJob });
+}
+
+// Phase 5 (2026-09-11): the stock ledger should always add up to the
+// shelves. If something changed branch_stock behind its back (the other
+// laptop on older code, a manual SQL edit), tell admin -- once a day.
+export async function runStockLedgerDriftJob(): Promise<void> {
+  const { driftCount } = await getStockLedgerHealth();
+  if (driftCount > 0) await recordNotification("stock.ledger_drift", { count: driftCount }, `day:${ubDateKey()}`);
+}
+
+export function registerStockLedgerDriftJob() {
+  registerJob({ name: "stock-ledger-drift", intervalMs: 60 * 60 * 1000, run: runStockLedgerDriftJob });
+}
+
+// Phase 5: goods that left the warehouse two days ago and still are not
+// confirmed anywhere are either unscanned at the store or lost in transit.
+export async function runStaleTransferJob(): Promise<void> {
+  for (const transfer of await getStaleTransfers(48)) {
+    await recordNotification("transfer.stale", { code: transfer.code, toBranchName: transfer.toBranchName, hours: transfer.hours }, `transfer:${transfer.id}:${ubDateKey()}`);
+  }
+}
+
+export function registerStaleTransferJob() {
+  registerJob({ name: "stale-transfer-reminder", intervalMs: 6 * 60 * 60 * 1000, run: runStaleTransferJob });
 }
 
 // 2026-09-11: keeps notification_outbox small -- see purgeNotificationOutbox.

@@ -78,6 +78,11 @@ export type NotificationPayloads = {
   "transfer.sent": { code: string; fromBranchName: string; toBranchName: string; lineCount: number; pieces: number };
   "transfer.received": { code: string; toBranchName: string; receivedPieces: number; sentPieces: number };
   "transfer.discrepancy": { code: string; toBranchName: string; shortLines: number; overLines: number; unexpectedLines: number; missingPieces: number; extraPieces: number; examples: string[] };
+  "stock.low": { branchName: string; productName: string; sku: string; quantity: number; threshold: number };
+  "stock.out": { branchName: string; productName: string; sku: string };
+  "stock.total_out": { productName: string; sku: string };
+  "stock.ledger_drift": { count: number };
+  "transfer.stale": { code: string; toBranchName: string; hours: number };
   "integration.test": { groupLabel: string };
 };
 export type NotificationEventType = keyof NotificationPayloads;
@@ -108,6 +113,13 @@ export const NOTIFICATION_EVENTS: Record<NotificationEventType, EventSpec> = {
   "transfer.sent": { label: "Шилжүүлэг илгээгдсэн", groups: ["store", "admin"], priority: 4, tags: ["truck"], clickSection: "receiving" },
   "transfer.received": { label: "Шилжүүлэг хүлээн авсан", groups: ["warehouse", "admin"], priority: 3, tags: ["white_check_mark"], clickSection: "receiving" },
   "transfer.discrepancy": { label: "Шилжүүлгийн зөрүү", groups: ["admin", "warehouse"], priority: 5, tags: ["warning"], clickSection: "receiving" },
+  // stock.low / stock.out go to the location's own group (warehouse or
+  // store) plus admin -- see stockLedger.ts, which passes the groups.
+  "stock.low": { label: "Нөөц бага болсон", groups: ["warehouse", "admin"], priority: 3, tags: ["chart_with_downwards_trend"], clickSection: "products" },
+  "stock.out": { label: "Нөөц дууссан", groups: ["warehouse", "admin"], priority: 4, tags: ["x"], clickSection: "products" },
+  "stock.total_out": { label: "Онлайн нөөц дууссан", groups: ["admin", "warehouse"], priority: 4, tags: ["no_entry"], clickSection: "products" },
+  "stock.ledger_drift": { label: "Нөөцийн бүртгэлийн зөрүү", groups: ["admin"], priority: 3, tags: ["mag"], clickSection: "dashboard" },
+  "transfer.stale": { label: "Хүлээн аваагүй шилжүүлэг", groups: ["admin", "warehouse"], priority: 3, tags: ["hourglass"], clickSection: "receiving" },
   "integration.test": { label: "Туршилтын мэдэгдэл", groups: [], priority: 3, tags: ["bell"], clickSection: "notifications" },
 };
 
@@ -179,6 +191,26 @@ export function buildNotificationMessage<K extends NotificationEventType>(type: 
       const p = payload as NotificationPayloads["transfer.discrepancy"];
       const parts = [p.shortLines ? `${p.shortLines} бараа дутуу (−${p.missingPieces})` : "", p.overLines ? `${p.overLines} илүү` : "", p.unexpectedLines ? `${p.unexpectedLines} жагсаалтад байгаагүй` : ""].filter(Boolean).join(", ");
       return { title: `Шилжүүлгийн зөрүү ${p.code}`, message: `${p.toBranchName}: ${parts}.${p.examples.length ? `\n${p.examples.join("\n")}` : ""}\nАдмин шийдвэр гаргана уу.` };
+    }
+    case "stock.low": {
+      const p = payload as NotificationPayloads["stock.low"];
+      return { title: `Нөөц бага: ${p.productName}`, message: `${p.branchName}: ${p.quantity} ширхэг үлдлээ (босго ${p.threshold}).\n${p.sku}` };
+    }
+    case "stock.out": {
+      const p = payload as NotificationPayloads["stock.out"];
+      return { title: `Нөөц дууслаа: ${p.productName}`, message: `${p.branchName}-д үлдэгдэл 0 боллоо.\n${p.sku}` };
+    }
+    case "stock.total_out": {
+      const p = payload as NotificationPayloads["stock.total_out"];
+      return { title: `Онлайнд дууслаа: ${p.productName}`, message: `Сайт дээр зарагдах нөөц 0 боллоо — худалдан авагч захиалах боломжгүй.\n${p.sku}` };
+    }
+    case "stock.ledger_drift": {
+      const p = payload as NotificationPayloads["stock.ledger_drift"];
+      return { title: "Нөөцийн бүртгэл үлдэгдэлтэй таарахгүй байна", message: `${p.count} салбар/бараа дээр нөөц бүртгэлгүйгээр өөрчлөгдсөн (хуучин код эсвэл гар засвар). scripts/stock-ledger-rebaseline.ts-ээр шалгана уу.` };
+    }
+    case "transfer.stale": {
+      const p = payload as NotificationPayloads["transfer.stale"];
+      return { title: `Хүлээн аваагүй шилжүүлэг ${p.code}`, message: `${p.toBranchName} руу илгээснээс хойш ${p.hours} цаг өнгөрсөн ч хүлээн аваагүй байна.` };
     }
     case "integration.test": {
       const p = payload as NotificationPayloads["integration.test"];
