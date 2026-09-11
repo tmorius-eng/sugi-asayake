@@ -1,0 +1,131 @@
+import { describe, expect, it } from "vitest";
+import { escapeAttribute, escapeJsString } from "./_core/indexHtml";
+import { fillTemplate, storeSettingSlots, tokensIn } from "@shared/store-settings";
+import { siteTextSlots } from "@shared/site-text";
+
+/**
+ * The index.html substitution (2026-09-12) is the one place in this app
+ * where admin-typed text is written into a document as raw markup rather
+ * than rendered by React, which escapes for us. Two different contexts --
+ * an HTML attribute and a JavaScript string literal -- need two different
+ * escapes, and getting either wrong turns the SEO panel into a way for a
+ * marketing-role account to inject script into every page of the site.
+ */
+describe("index.html escaping", () => {
+  describe("escapeAttribute", () => {
+    it("neutralises a quote that would otherwise close the attribute", () => {
+      expect(escapeAttribute(`" onload="alert(1)`)).toBe("&quot; onload=&quot;alert(1)");
+    });
+
+    it("neutralises tag delimiters", () => {
+      expect(escapeAttribute("<script>x</script>")).toBe("&lt;script&gt;x&lt;/script&gt;");
+    });
+
+    it("escapes the ampersand first, so an escape is never double-decoded", () => {
+      // Naively escaping "<" before "&" would turn "&lt;" into "&amp;lt;"
+      // only if & ran second -- this asserts the order that avoids it.
+      expect(escapeAttribute("Tom & Co <b>")).toBe("Tom &amp; Co &lt;b&gt;");
+    });
+
+    it("leaves ordinary Mongolian copy untouched", () => {
+      const copy = "Японоос баталгаат бүтээгдэхүүнийг 4 салбараар хүргэнэ.";
+      expect(escapeAttribute(copy)).toBe(copy);
+    });
+  });
+
+  describe("escapeJsString", () => {
+    it("escapes a quote so the consent-manager config stays parseable", () => {
+      expect(escapeJsString('say "hi"')).toBe('say \\"hi\\"');
+    });
+
+    it("escapes a backslash", () => {
+      expect(escapeJsString("a\\b")).toBe("a\\\\b");
+    });
+
+    it("turns a real newline into an escape rather than breaking the literal", () => {
+      expect(escapeJsString("line1\nline2")).toBe("line1\\nline2");
+      expect(escapeJsString("line1\nline2")).not.toContain("\n");
+    });
+
+    it("neutralises a closing script tag that would end the inline block early", () => {
+      const escaped = escapeJsString("</script><script>alert(1)</script>");
+      expect(escaped).not.toContain("</script");
+      expect(escaped).toContain("<\\/script");
+    });
+
+    it("neutralises a closing script tag whatever its casing", () => {
+      expect(escapeJsString("</SCRIPT>")).not.toMatch(/<\/script/i);
+    });
+
+    it("round-trips: what the browser parses back is exactly what the admin typed", () => {
+      for (const value of ['a "quoted" word', "back\\slash", "line\nbreak", "</script>", "Күкийн тохиргоо"]) {
+        expect(JSON.parse(`"${escapeJsString(value)}"`)).toBe(value);
+      }
+    });
+  });
+});
+
+/**
+ * Email templates carry {tokens}. The server rejects a token a slot has not
+ * declared (server/routers.ts's updateStoreSetting), which is only safe if
+ * the shipped defaults themselves obey that rule -- otherwise the very
+ * first "save" of an untouched field would fail.
+ */
+describe("store-setting templates", () => {
+  it("fills declared tokens", () => {
+    expect(fillTemplate("Захиалга {захиалга} шинэчлэгдлээ", { "{захиалга}": "AB12CD" })).toBe("Захиалга AB12CD шинэчлэгдлээ");
+  });
+
+  it("fills every occurrence, not just the first", () => {
+    expect(fillTemplate('"{бараа}" ба "{бараа}"', { "{бараа}": "Diane" })).toBe('"Diane" ба "Diane"');
+  });
+
+  it("leaves an unfilled token visible rather than blanking it", () => {
+    expect(fillTemplate("Сайн байна уу, {нэр}!", {})).toBe("Сайн байна уу, {нэр}!");
+  });
+
+  it("finds the tokens in a template", () => {
+    expect(tokensIn("SUGI — Захиалга {захиалга}: {төлөв}")).toEqual(["{захиалга}", "{төлөв}"]);
+    expect(tokensIn("Ямар ч орлуулгагүй мөр")).toEqual([]);
+  });
+
+  it("every shipped default only uses tokens its own slot declares", () => {
+    const offenders = storeSettingSlots.flatMap(slot => {
+      const allowed: readonly string[] = ("tokens" in slot ? slot.tokens : []) ?? [];
+      return tokensIn(slot.fallbackValue)
+        .filter(token => !allowed.includes(token))
+        .map(token => `${slot.key} uses undeclared ${token}`);
+    });
+    expect(offenders).toEqual([]);
+  });
+});
+
+/**
+ * The registries are the contract between the admin UI and every consumer:
+ * a duplicate key would make one of the two entries unreachable (the admin
+ * panel renders both, but reads resolve to whichever the Map kept).
+ */
+describe("slot registries", () => {
+  it("has no duplicate site-text slot keys", () => {
+    const keys = siteTextSlots.map(slot => slot.key);
+    expect(keys.length).toBe(new Set(keys).size);
+  });
+
+  it("has no duplicate store-setting keys", () => {
+    const keys = storeSettingSlots.map(slot => slot.key);
+    expect(keys.length).toBe(new Set(keys).size);
+  });
+
+  it("gives every slot a group and a label, so nothing renders unlabelled in /admin", () => {
+    for (const slot of siteTextSlots) {
+      expect(slot.group, slot.key).toBeTruthy();
+      expect(slot.label, slot.key).toBeTruthy();
+      expect(slot.fallbackValue, slot.key).toBeTruthy();
+    }
+    for (const slot of storeSettingSlots) {
+      expect(slot.group, slot.key).toBeTruthy();
+      expect(slot.label, slot.key).toBeTruthy();
+      expect(slot.fallbackValue, slot.key).toBeTruthy();
+    }
+  });
+});

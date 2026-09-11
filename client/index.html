@@ -9,20 +9,19 @@
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0" />
-    <title>SUGI ASAYAKE Mongolia — Япон чанарыг гэр бүл бүрт</title>
-    <meta name="description" content="SUGI ASAYAKE Mongolia — Японоос баталгаат бүтээгдэхүүнүүдийг албан ёсны эрхтэйгээр хүргэж байна. Улаанбаатар хотод 3 салбартай." />
+    <title>%SEO_TITLE%</title>
+    <meta name="description" content="%SEO_DESCRIPTION%" />
     <meta name="theme-color" content="#e31b3b" />
-    <!-- TODO: replace with the real production domain once one is chosen/purchased -->
-    <link rel="canonical" href="https://sugiasayake.mn/" />
+    <link rel="canonical" href="%SEO_CANONICAL%" />
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="mn_MN" />
-    <meta property="og:site_name" content="SUGI ASAYAKE Mongolia" />
-    <meta property="og:title" content="SUGI ASAYAKE Mongolia — Япон чанарыг гэр бүл бүрт" />
-    <meta property="og:description" content="Японоос баталгаат бүтээгдэхүүнийг албан ёсны эрхтэйгээр Улаанбаатарын 3 салбар болон онлайнаар хүргэж байна." />
+    <meta property="og:site_name" content="%SEO_SITE_NAME%" />
+    <meta property="og:title" content="%SEO_TITLE%" />
+    <meta property="og:description" content="%SEO_OG_DESCRIPTION%" />
     <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="SUGI ASAYAKE Mongolia" />
-    <meta name="twitter:description" content="Япон чанарыг гэр бүлийн гишүүн бүрт." />
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"Store","name":"SUGI ASAYAKE Mongolia","description":"Албан ёсны Япон гоо сайхан, эрүүл мэнд, өдөр тутмын хэрэглээний бүтээгдэхүүний дэлгүүр.","telephone":"+97694509911","address":{"@type":"PostalAddress","addressLocality":"Ulaanbaatar","addressCountry":"MN"},"sameAs":["https://www.facebook.com/AsayakeJapaneseDrugstore/","https://www.instagram.com/asayake_japan_cosmetics/"]}</script>
+    <meta name="twitter:title" content="%SEO_SITE_NAME%" />
+    <meta name="twitter:description" content="%SEO_TWITTER_DESCRIPTION%" />
+    <script type="application/ld+json">%SEO_STRUCTURED_DATA%</script>
     <link rel="icon" type="image/png" href="/cdn/sugi-symbol_0a534a76.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -66,29 +65,29 @@
         consentTypes: [
           {
             id: "essential",
-            label: "Зайлшгүй шаардлагатай",
-            description: "Нэвтэрсэн төлөв, зочны сагсыг санах зэрэг сайтын үндсэн үйл ажиллагаанд шаардлагатай эхний талын күки. Унтраах боломжгүй.",
+            label: "%COOKIE_ESSENTIAL_LABEL%",
+            description: "%COOKIE_ESSENTIAL_DESCRIPTION%",
             required: true,
           },
           {
             id: "analytics",
-            label: "Статистик, аналитик",
-            description: "Зочдын хандалт, хөрвүүлэлтийн хувийг тооцоолоход туслах анонимчилсан, эхний талын күки. Гуравдагч тал (Google Analytics, Meta Pixel гэх мэт) огт ашигладаггүй.",
+            label: "%COOKIE_ANALYTICS_LABEL%",
+            description: "%COOKIE_ANALYTICS_DESCRIPTION%",
             required: false,
             defaultValue: false,
           },
         ],
         text: {
           prompt: {
-            description: "Бид энэ сайтад зайлшгүй шаардлагатай күки, мөн таны зөвшөөрснөөр сайтын статистик цуглуулах анонимчилсан күки ашигладаг.",
-            acceptAllButtonText: "Бүгдийг зөвшөөрөх",
-            rejectNonEssentialButtonText: "Зөвхөн шаардлагатайг зөвшөөрөх",
-            preferencesButtonText: "Тохиргоо",
+            description: "%COOKIE_PROMPT_DESCRIPTION%",
+            acceptAllButtonText: "%COOKIE_ACCEPT_ALL%",
+            rejectNonEssentialButtonText: "%COOKIE_REJECT%",
+            preferencesButtonText: "%COOKIE_PREFERENCES_BUTTON%",
           },
           preferences: {
-            title: "Күкийн тохиргоо",
-            description: "SUGI ASAYAKE Mongolia ямар күки ашигладгийг доор харж, зөвшөөрлөө өөрчлөх боломжтой.",
-            saveButtonText: "Тохиргоог хадгалах",
+            title: "%COOKIE_PREFERENCES_TITLE%",
+            description: "%COOKIE_PREFERENCES_DESCRIPTION%",
+            saveButtonText: "%COOKIE_SAVE%",
           },
         },
       });

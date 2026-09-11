@@ -2,6 +2,7 @@ import express, { type Express } from "express";
 import fs from "node:fs";
 import path from "node:path";
 import type { Server } from "node:http";
+import { renderIndexHtml } from "./indexHtml";
 
 export async function setupVite(app: Express, server: Server) {
   const { createServer: createViteServer } = await import("vite");
@@ -19,6 +20,9 @@ export async function setupVite(app: Express, server: Server) {
       const clientTemplatePath = path.resolve(import.meta.dirname, "..", "..", "client", "index.html");
       let template = await fs.promises.readFile(clientTemplatePath, "utf-8");
       template = await vite.transformIndexHtml(url, template);
+      // Same substitution as production (see serveStatic) so an SEO edit can
+      // actually be checked locally instead of only after a deploy.
+      template = await renderIndexHtml(template);
       res.status(200).set({ "Content-Type": "text/html" }).end(template);
     } catch (error) {
       vite.ssrFixStacktrace(error as Error);
@@ -46,6 +50,12 @@ export function serveStatic(app: Express) {
   // never leaves a returning visitor's browser holding a stale index.html
   // that references asset filenames which no longer exist.
   app.use(express.static(distPath, {
+    // `index: false` so express.static does NOT answer "/" with the raw
+    // index.html off disk -- that file still contains the %SEO_*%
+    // placeholders, and serving it verbatim would put literal "%SEO_TITLE%"
+    // in the browser tab. Every HTML response has to go through the
+    // fallback below, which fills them in.
+    index: false,
     setHeaders: (res, filePath) => {
       if (filePath.includes(`${path.sep}assets${path.sep}`)) {
         res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
@@ -55,9 +65,16 @@ export function serveStatic(app: Express) {
     },
   }));
 
+  const templatePath = path.resolve(distPath, "index.html");
+
   // SPA fallback: any route that isn't a static asset or an already-handled
   // /api/* route falls back to index.html so client-side routing works.
-  app.use("*", (_req, res) => {
-    res.sendFile(path.resolve(distPath, "index.html"));
+  app.use("*", async (_req, res, next) => {
+    try {
+      const template = await fs.promises.readFile(templatePath, "utf-8");
+      res.status(200).set({ "Content-Type": "text/html", "Cache-Control": "no-cache" }).end(await renderIndexHtml(template));
+    } catch (error) {
+      next(error);
+    }
   });
 }
