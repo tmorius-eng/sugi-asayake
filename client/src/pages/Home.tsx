@@ -35,7 +35,6 @@ import {
 import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
 import SiteFooter from "@/components/SiteFooter";
-import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
 import HeroSection from "@/components/home/HeroSection";
 import CategoryMasonry from "@/components/home/CategoryMasonry";
 import BrandStorySection from "@/components/home/BrandStorySection";
@@ -46,7 +45,9 @@ import FeaturedBrandsCarousel from "@/components/home/FeaturedBrandsCarousel";
 import { BestsellerCardSkeleton } from "@/components/Skeleton";
 import { imageSrcSet } from "@shared/image-variants";
 import { getSalePercent } from "@shared/catalog-filter";
-import { categories } from "@/components/home/categories-data";
+import { useCategories } from "@/hooks/useCategories";
+import { useShopContact } from "@/hooks/useShopContact";
+import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { useSiteText } from "@/hooks/useSiteText";
 import { trpc } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
@@ -164,6 +165,17 @@ export default function Home() {
     return url ? { backgroundImage: `url(${url})` } : undefined;
   };
   const textFor = useSiteText();
+  const contact = useShopContact();
+  // The catalogue categories, from the database rather than a hardcoded
+  // array -- see useCategories() for how the photo/icon halves are joined.
+  const categories = useCategories();
+  // The homepage previously relied on index.html's static <title>; it now
+  // owns its own so an admin can edit what Google and a shared link show.
+  // {N} is the live branch count, never a hardcoded "3".
+  useDocumentMeta(
+    textFor("seo-text-home-title", "SUGI ASAYAKE Mongolia — Япон чанарыг гэр бүл бүрт"),
+    textFor("seo-text-home-description", "SUGI ASAYAKE Mongolia — Японоос баталгаат бүтээгдэхүүнүүдийг албан ёсны эрхтэйгээр хүргэж байна. Улаанбаатар хотод {N} салбартай.").replace("{N}", String(branchCount)),
+  );
   const [bestsellerHeadingLine1, bestsellerHeadingLine2] = textFor("home-text-bestseller-heading", "Их зарагддаг\nбараанууд.").split("\n");
   const [careHeadingLine1, careHeadingLine2] = textFor("home-text-care-heading", "Багахан итгэл.\nИх халамж.").split("\n");
   const [finalCtaHeadingLine1, finalCtaHeadingLine2] = textFor("home-text-finalcta-heading", "Сайн сонголт\nойрхон байна.").split("\n");
@@ -222,16 +234,12 @@ export default function Home() {
           </div>
         )}
 
+        {/* Photo precedence (admin upload -> the category's own imageUrl
+            -> this codebase's per-slot default -> placeholder) is resolved
+            inside useCategories(), so every surface that shows a category
+            picture resolves it the same way. */}
         <CategoryMasonry
-          categories={categories.map(category => ({
-            ...category,
-            // Admin-uploaded photo (via /admin -> Content & Media, slot
-            // "home-category-<slug>") wins if one exists; otherwise falls
-            // back to the real catalog product photo already on the
-            // category object. Same imageFor() pattern as every other
-            // homepage image slot -- see shared/site-media.ts.
-            imageUrl: imageFor(`home-category-${category.slug}`, category.imageUrl ?? null) ?? undefined,
-          }))}
+          categories={categories}
           anchorImageStyle={bgStyle("home-categories", assortmentImage)}
           symbolImage={symbolImage}
         />
@@ -325,13 +333,11 @@ export default function Home() {
       </main>
 
       <SiteFooter
-        logoUrl={footerLogoUrl}
-        socials={footerSocials}
         ctaBanner={{
           eyebrow: textFor("home-text-finalcta-eyebrow", "NEED A LITTLE HELP?"),
           headingLine1: finalCtaHeadingLine1,
           headingLine2: finalCtaHeadingLine2,
-          phoneLabel: "9450-9911",
+          phoneLabel: contact.phone,
         }}
       />
       <CartDrawer open={cartOpen} onOpenChange={setCartOpen} />

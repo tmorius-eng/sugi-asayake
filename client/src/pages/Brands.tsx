@@ -3,9 +3,9 @@ import { Link } from "wouter";
 import { LoaderCircle, Search, X } from "lucide-react";
 import CommerceHeader from "@/components/CommerceHeader";
 import SiteFooter from "@/components/SiteFooter";
-import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { trpc } from "@/lib/trpc";
+import { useSiteText } from "@/hooks/useSiteText";
 
 /**
  * /brands -- the "Бүх брэнд үзэх" destination the Featured Brands carousel
@@ -47,7 +47,11 @@ function bucketFor(name: string): string {
 }
 
 export default function Brands() {
-  useDocumentMeta("Бүх брэнд — SUGI ASAYAKE", "SUGI ASAYAKE-д худалдаалагдаж буй Японы бүх брэндийн жагсаалт.");
+  const textFor = useSiteText();
+  useDocumentMeta(
+    textFor("seo-text-brands-title", "Бүх брэнд — SUGI ASAYAKE"),
+    textFor("seo-text-brands-description", "SUGI ASAYAKE-д худалдаалагдаж буй Японы бүх брэндийн жагсаалт."),
+  );
   const directoryQuery = trpc.catalog.brandDirectory.useQuery();
   const brands: DirectoryBrand[] = useMemo(() => directoryQuery.data ?? [], [directoryQuery.data]);
   const [query, setQuery] = useState("");
@@ -84,7 +88,7 @@ export default function Brands() {
       <CommerceHeader backLabel="SUGI ASAYAKE" />
       <main className="brands-page">
         <header className="brands-intro">
-          <h1>Бүх брэнд</h1>
+          <h1>{textFor("brands-text-heading", "Бүх брэнд")}</h1>
           {!directoryQuery.isLoading && brands.length > 0 && (
             <p>{brands.length} брэнд · {brands.reduce((sum, brand) => sum + brand.productCount, 0).toLocaleString("mn-MN")} бүтээгдэхүүн</p>
           )}
@@ -161,7 +165,7 @@ export default function Brands() {
           </div>
         </div>
       </main>
-      <SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} />
+      <SiteFooter />
     </div>
   );
 }

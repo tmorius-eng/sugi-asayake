@@ -14,6 +14,7 @@ import AdminGlobalSearch from "./AdminGlobalSearch";
 import AdminCommandPalette from "./admin/AdminCommandPalette";
 import AdminContentCalendarPanel from "./admin/AdminContentCalendarPanel";
 import AdminSidebar, { getVisibleSections, type NavBadges } from "./admin/AdminSidebar";
+import AdminSectionTip from "./admin/AdminSectionTip";
 import { roleBadgeClass, roleLabel } from "@/lib/adminRoles";
 import AdminTopBar from "./admin/AdminTopBar";
 import { GenericListView, type GenericListColumn } from "./admin/GenericListView";
@@ -27,6 +28,8 @@ import AdminBranchesPanel from "./AdminBranchesPanel";
 import AdminPosPanel from "./AdminPosPanel";
 import AdminCampaignsPanel from "./admin/AdminCampaignsPanel";
 import AdminStoreSettingsPanel from "./AdminStoreSettingsPanel";
+import AdminDocumentsPanel from "./AdminDocumentsPanel";
+import AdminLoyaltyTiersPanel from "./AdminLoyaltyTiersPanel";
 import AdminDiscountCodesPanel from "./AdminDiscountCodesPanel";
 import AdminIntegrationsPanel from "./AdminIntegrationsPanel";
 import AdminProductVariantsPanel from "./AdminProductVariantsPanel";
@@ -147,7 +150,7 @@ function TagSuggestionChips({ suggestions, current, labelFor, onApply }: { sugge
   ))}</div>;
 }
 
-export type AdminSection = "dashboard" | "analytics" | "products" | "orders" | "posts" | "reviews" | "routines" | "promotions" | "calendar" | "discountCodes" | "brands" | "branches" | "pos" | "campaigns" | "storeSettings" | "users" | "media" | "security" | "integrations";
+export type AdminSection = "dashboard" | "analytics" | "products" | "orders" | "posts" | "reviews" | "routines" | "promotions" | "calendar" | "discountCodes" | "brands" | "branches" | "pos" | "campaigns" | "storeSettings" | "users" | "media" | "documents" | "loyalty" | "security" | "integrations";
 
 
 export default function AdminWorkspace({ preview = false }: { preview?: boolean }) {
@@ -570,7 +573,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
     }
   };
 
-  const sectionLabel = section === "dashboard" ? "Хянах самбар" : section === "products" ? "Бүтээгдэхүүн" : section === "orders" ? "Захиалга" : section === "posts" ? "Шинэ мэдээ" : section === "reviews" ? "Сэтгэгдэл" : section === "routines" ? "Routine" : section === "promotions" ? "Урамшуулал" : section === "calendar" ? "Хуанли" : section === "discountCodes" ? "Хямдралын код" : section === "brands" ? "Топ брэндүүд" : section === "branches" ? "Салбарууд" : section === "pos" ? "Дэлгүүрийн худалдаа" : section === "media" ? "Content & Media" : section === "campaigns" ? "Кампанит ажил" : section === "storeSettings" ? "Дэлгүүрийн тохиргоо" : section === "analytics" ? "Аналитик" : section === "security" ? "Аюулгүй байдал" : section === "integrations" ? "Интеграцууд" : "Хэрэглэгч";
+  const sectionLabel = section === "dashboard" ? "Хянах самбар" : section === "products" ? "Бүтээгдэхүүн" : section === "orders" ? "Захиалга" : section === "posts" ? "Шинэ мэдээ" : section === "reviews" ? "Сэтгэгдэл" : section === "routines" ? "Routine" : section === "promotions" ? "Урамшуулал" : section === "calendar" ? "Хуанли" : section === "discountCodes" ? "Хямдралын код" : section === "brands" ? "Топ брэндүүд" : section === "branches" ? "Салбарууд" : section === "pos" ? "Дэлгүүрийн худалдаа" : section === "media" ? "Content & Media" : section === "documents" ? "Баримт бичиг" : section === "loyalty" ? "Гишүүнчлэлийн зэрэглэл" : section === "campaigns" ? "Кампанит ажил" : section === "storeSettings" ? "Дэлгүүрийн тохиргоо" : section === "analytics" ? "Аналитик" : section === "security" ? "Аюулгүй байдал" : section === "integrations" ? "Интеграцууд" : "Хэрэглэгч";
   // Same query AdminDashboardHome makes (undefined input) -- React Query
   // dedupes identical query keys, so this is a free cache read whenever
   // the dashboard section already fetched it, and a real (still cheap)
@@ -635,7 +638,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
               content. */}
           <section className={section === "dashboard" ? "min-w-0" : "admin-card min-w-0 p-5 sm:p-7"}>
             <div className={`mb-6 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between ${section === "dashboard" ? "hidden" : "flex"}`}>
-              <div><h2 className="font-[var(--font-display)] text-2xl font-semibold tracking-[-.06em]">{section === "dashboard" ? "Хянах самбар" : section === "products" ? "Бүтээгдэхүүний сан" : section === "orders" ? "Захиалгын гүйцэтгэл" : section === "posts" ? "Шинэ бүтээгдэхүүний пост" : section === "reviews" ? "Сэтгэгдэл ба үнэлгээ" : section === "routines" ? "Routine (арчилгааны дараалал)" : section === "promotions" ? "Урамшуулал (попап/banner)" : section === "calendar" ? "Контентийн хуанли" : section === "discountCodes" ? "Хямдралын код" : section === "brands" ? "Топ брэндүүд" : section === "branches" ? "Салбарууд" : section === "pos" ? "Дэлгүүрийн худалдаа" : section === "media" ? "Content & Media" : section === "campaigns" ? "Кампанит ажил" : section === "storeSettings" ? "Дэлгүүрийн тохиргоо" : section === "analytics" ? "Аналитик ба тайлан" : section === "security" ? "Аюулгүй байдал" : section === "integrations" ? "Интеграцууд" : "Хэрэглэгч ба эрх"}</h2><p className="mt-1 text-xs text-[var(--a-muted)]">{section === "dashboard" ? "Дэлгүүрийн ерөнхий байдал нэг дэлгэцэд" : section === "products" ? "SKU, үнэ, үлдэгдэл, нийтлэх төлөв" : section === "orders" ? "Төлбөрийн төлөв, хүргэлтийн явц, захиалгын мэдээлэл" : section === "posts" ? "Бодитоор хадгалагдах шинэ бүтээгдэхүүний мэдээ" : section === "reviews" ? "Баталгаажсан худалдан авалтын сэтгэгдэл, жижиг moderation" : section === "routines" ? "Алхам дараалалтай бүтээгдэхүүний багц, идэвхтэй хямдралтай" : section === "promotions" ? "Шинэ бүтээгдэхүүн, хямдрал зарлах попап/banner мессеж" : section === "calendar" ? "Товлогдсон пост, урамшууллын хугацааг нэг дэлгэцэд" : section === "discountCodes" ? "Захиалгын үед оруулах хямдралын код (жишээ нь SALE10)" : section === "brands" ? "Нүүр хуудасны 'Топ брэндүүд' хэсэгт харагдах бодит брэндүүд" : section === "branches" ? "Дэлгүүрийн бодит салбарууд — хаяг, утас, зураг, захиалгын дэлгэрэнгүй" : section === "pos" ? "Дэлгүүрт биечлэн ирж худалдан авсан борлуулалтыг бүртгэх" : section === "media" ? "Нүүр хуудасны зураг болон текстийг кодгүйгээр солих" : section === "campaigns" ? "Сегмент болон гишүүнчлэлийн зэрэглэлээр имэйл/SMS илгээх" : section === "storeSettings" ? "Хүргэлтийн үнэ, хямдралын доод дүн, захиалгын имэйл мессежийг кодгүйгээр удирдах" : section === "analytics" ? "Борлуулалт, ашиг, харилцагчийн бодит дата нэг дэлгэцэд" : section === "security" ? "Admin аудит лог, нэвтрэлтийн түүх, Honeybadger алдааны хяналт" : section === "integrations" ? "QPay, И-баримт, StorePay, карт, хүргэлтийн үйлчилгээ тохируулах" : "Шинэ хэрэглэгчийг урих болон staff/admin эрх удирдах"}</p></div>
+              <div><h2 className="font-[var(--font-display)] text-2xl font-semibold tracking-[-.06em]">{section === "dashboard" ? "Хянах самбар" : section === "products" ? "Бүтээгдэхүүний сан" : section === "orders" ? "Захиалгын гүйцэтгэл" : section === "posts" ? "Шинэ бүтээгдэхүүний пост" : section === "reviews" ? "Сэтгэгдэл ба үнэлгээ" : section === "routines" ? "Routine (арчилгааны дараалал)" : section === "promotions" ? "Урамшуулал (попап/banner)" : section === "calendar" ? "Контентийн хуанли" : section === "discountCodes" ? "Хямдралын код" : section === "brands" ? "Топ брэндүүд" : section === "branches" ? "Салбарууд" : section === "pos" ? "Дэлгүүрийн худалдаа" : section === "media" ? "Content & Media" : section === "documents" ? "Баримт бичиг" : section === "loyalty" ? "Гишүүнчлэлийн зэрэглэл" : section === "campaigns" ? "Кампанит ажил" : section === "storeSettings" ? "Дэлгүүрийн тохиргоо" : section === "analytics" ? "Аналитик ба тайлан" : section === "security" ? "Аюулгүй байдал" : section === "integrations" ? "Интеграцууд" : "Хэрэглэгч ба эрх"}</h2><p className="mt-1 text-xs text-[var(--a-muted)]">{section === "dashboard" ? "Дэлгүүрийн ерөнхий байдал нэг дэлгэцэд" : section === "products" ? "SKU, үнэ, үлдэгдэл, нийтлэх төлөв" : section === "orders" ? "Төлбөрийн төлөв, хүргэлтийн явц, захиалгын мэдээлэл" : section === "posts" ? "Бодитоор хадгалагдах шинэ бүтээгдэхүүний мэдээ" : section === "reviews" ? "Баталгаажсан худалдан авалтын сэтгэгдэл, жижиг moderation" : section === "routines" ? "Алхам дараалалтай бүтээгдэхүүний багц, идэвхтэй хямдралтай" : section === "promotions" ? "Шинэ бүтээгдэхүүн, хямдрал зарлах попап/banner мессеж" : section === "calendar" ? "Товлогдсон пост, урамшууллын хугацааг нэг дэлгэцэд" : section === "discountCodes" ? "Захиалгын үед оруулах хямдралын код (жишээ нь SALE10)" : section === "brands" ? "Нүүр хуудасны 'Топ брэндүүд' хэсэгт харагдах бодит брэндүүд" : section === "branches" ? "Дэлгүүрийн бодит салбарууд — хаяг, утас, зураг, захиалгын дэлгэрэнгүй" : section === "pos" ? "Дэлгүүрт биечлэн ирж худалдан авсан борлуулалтыг бүртгэх" : section === "documents" ? "Нууцлал, үйлчилгээний нөхцөл, буцаалтын хуудсыг засварлах" : section === "loyalty" ? "Нийт худалдан авалтаар олгох хөнгөлөлтийн зэрэглэлүүд" : section === "media" ? "Нүүр хуудасны зураг болон текстийг кодгүйгээр солих" : section === "campaigns" ? "Сегмент болон гишүүнчлэлийн зэрэглэлээр имэйл/SMS илгээх" : section === "storeSettings" ? "Хүргэлтийн үнэ, хямдралын доод дүн, захиалгын имэйл мессежийг кодгүйгээр удирдах" : section === "analytics" ? "Борлуулалт, ашиг, харилцагчийн бодит дата нэг дэлгэцэд" : section === "security" ? "Admin аудит лог, нэвтрэлтийн түүх, Honeybadger алдааны хяналт" : section === "integrations" ? "QPay, И-баримт, StorePay, карт, хүргэлтийн үйлчилгээ тохируулах" : "Шинэ хэрэглэгчийг урих болон staff/admin эрх удирдах"}</p></div>
               <div className="flex flex-wrap items-center gap-2">
                 {section === "products" && <>
                   <button type="button" onClick={() => setShowProductExport(current => !current)} className="inline-flex items-center justify-center gap-2 rounded-full border border-[var(--a-border)] bg-[var(--a-card)] px-4 py-3 text-xs font-bold text-[var(--a-text-soft)] transition hover:-translate-y-0.5 hover:border-[#df1f3d] hover:text-[#df1f3d] active:scale-[.97]"><Download size={15} />Экспорт</button>
@@ -647,6 +650,11 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
                 {section !== "dashboard" && section !== "posts" && section !== "reviews" && section !== "routines" && section !== "promotions" && section !== "calendar" && section !== "discountCodes" && section !== "brands" && section !== "branches" && section !== "pos" && section !== "media" && section !== "campaigns" && section !== "storeSettings" && section !== "security" && section !== "integrations" && <label className="flex h-10 items-center gap-2 rounded-full border border-[var(--a-border)] bg-[var(--a-card)] px-4"><Search size={15} className="text-[var(--a-faint)]" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={section === "users" ? "Нэр эсвэл имэйл хайх" : section === "orders" ? "Дугаар, хэрэглэгч, утас хайх" : "Нэр, SKU хайх"} className="w-full bg-transparent text-xs outline-none" /></label>}
               </div>
             </div>
+            {/* One "what is this screen for" panel per section (2026-09-12).
+                Rendered once here rather than inside each panel so a new
+                section cannot ship without help, and so the on/off toggle has
+                a single place to take effect. */}
+            <AdminSectionTip section={section} />
             {section === "dashboard" && <AdminDashboardHome
               preview={preview}
               canSeeFinancials={canSeeFinancials}
@@ -676,6 +684,8 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
             {section === "campaigns" && !preview && <AdminCampaignsPanel />}
             {section === "campaigns" && preview && <div className="rounded-3xl bg-[var(--a-soft)] p-8 text-center text-sm text-[var(--a-muted)]">Preview горимд кампанит ажил харагдахгүй.</div>}
             {section === "storeSettings" && <AdminStoreSettingsPanel preview={preview} />}
+            {section === "documents" && <AdminDocumentsPanel preview={preview} />}
+            {section === "loyalty" && <AdminLoyaltyTiersPanel preview={preview} />}
             {section === "integrations" && !preview && <AdminIntegrationsPanel />}
             {section === "integrations" && preview && <div className="rounded-3xl bg-[var(--a-soft)] p-8 text-center text-sm text-[var(--a-muted)]">Preview горимд интеграцийн тохиргоо харагдахгүй.</div>}
             {section === "analytics" && !preview && <AdminAnalyticsPanel />}

@@ -1,5 +1,6 @@
 import type { QuickViewProduct } from "@/components/QuickViewDialog";
 import RailProductCard from "@/components/RailProductCard";
+import { useSiteText } from "@/hooks/useSiteText";
 
 /**
  * Preference Profile v2 (2026-09-01): extracted out of Shop.tsx (where this
@@ -23,14 +24,16 @@ export type RecommendedForYouProps = {
 };
 
 export default function RecommendedForYou({ products, onRemember, onQuickView }: RecommendedForYouProps) {
+  const textFor = useSiteText();
+  const [recommendedLine1, recommendedLine2] = textFor("shop-text-recommended-heading", "Танд\nсанал болгож байна.").split("\n");
   if (!products.length) return null;
   return <section className="recently-viewed-section" data-reveal>
     <div className="recently-viewed-heading">
       <div>
-        <p className="shop-kicker"><span /> ТАНД ЗОРИУЛАН</p>
-        <h2>Танд <em>санал болгож байна.</em></h2>
+        <p className="shop-kicker"><span /> {textFor("shop-text-recommended-kicker", "ТАНД ЗОРИУЛАН")}</p>
+        <h2>{recommendedLine1} <em>{recommendedLine2}</em></h2>
       </div>
-      <p>Таны профайл дээр хадгалсан арьсны төрөл, арчилгааны сонирхол, интерьер загварт тохирсон бүтээгдэхүүнүүд.</p>
+      <p>{textFor("shop-text-recommended-description", "Таны профайл дээр хадгалсан арьсны төрөл, арчилгааны сонирхол, интерьер загварт тохирсон бүтээгдэхүүнүүд.")}</p>
     </div>
     <div className="recently-viewed-grid">{products.map(product => <RailProductCard product={product} onRemember={onRemember} onQuickView={onQuickView} key={product.id} />)}</div>
   </section>;

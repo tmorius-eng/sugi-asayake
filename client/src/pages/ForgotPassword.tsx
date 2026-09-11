@@ -6,8 +6,8 @@ import { toast } from "sonner";
 import CommerceHeader from "@/components/CommerceHeader";
 import PhoneVerificationStep from "@/components/PhoneVerificationStep";
 import SiteFooter from "@/components/SiteFooter";
-import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
 import { trpc } from "@/lib/trpc";
+import { useSiteText } from "@/hooks/useSiteText";
 
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Хүсэлт амжилтгүй боллоо. Дахин оролдоно уу.";
 
@@ -19,7 +19,9 @@ const messageFrom = (error: unknown) => error instanceof Error ? error.message :
 // them is a separate, larger backend decision -- this page just no longer
 // calls them or shows a method toggle.
 export default function ForgotPassword() {
+  const textFor = useSiteText();
   useDocumentMeta("Нууц үг сэргээх — SUGI ASAYAKE", null);
+  const [forgotLine1, forgotLine2] = textFor("forgot-text-heading", "Нууц үгээ\nсэргээх.").split("\n");
   const [, setLocation] = useLocation();
   const [verifiedPhoneSessionId, setVerifiedPhoneSessionId] = useState<string | null>(null);
   const [phonePassword, setPhonePassword] = useState("");
@@ -49,8 +51,8 @@ export default function ForgotPassword() {
       <main className="auth-main">
         <div className="auth-head">
           <p className="auth-kicker">ACCOUNT RECOVERY</p>
-          <h1>Нууц үгээ <em>сэргээх.</em></h1>
-          <p className="auth-lede">Бүртгэлтэй утасны дугаараа оруулбал SMS-ээр баталгаажуулна.</p>
+          <h1>{forgotLine1} <em>{forgotLine2}</em></h1>
+          <p className="auth-lede">{textFor("forgot-text-lede", "Бүртгэлтэй утасны дугаараа оруулбал SMS-ээр баталгаажуулна.")}</p>
         </div>
 
         {resetPasswordViaPhone.isSuccess ? (
@@ -85,7 +87,7 @@ export default function ForgotPassword() {
 
         <Link href="/login" className="auth-switch">Нэвтрэх хуудас руу буцах</Link>
       </main>
-      <SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} />
+      <SiteFooter />
     </div>
   );
 }

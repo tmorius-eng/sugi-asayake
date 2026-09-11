@@ -3,7 +3,8 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import HeaderSearch from "@/components/HeaderSearch";
-import { categories } from "@/components/home/categories-data";
+import { useCategories } from "@/hooks/useCategories";
+import { useSiteText } from "@/hooks/useSiteText";
 import { trpc } from "@/lib/trpc";
 
 type CommerceHeaderProps = {
@@ -34,17 +35,25 @@ type CommerceHeaderProps = {
 // script to its siblings (instead of forcing a font override) fixes it at
 // the root; Journal.tsx's own "SUGI JOURNAL" kicker is a separate,
 // deliberate editorial mark and is unaffected.
+// 2026-09-12: the five labels are admin-editable site-text slots; the hrefs
+// stay in code because they are real routes/anchors, not copy -- renaming
+// "Зөвлөгөө" must never be able to break the link to /journal.
 const marketingNavItems = [
-  { label: "Дэлгүүр", href: "/shop", anchor: false },
-  { label: "Топ брэнд", href: "#top-brands", anchor: true },
-  { label: "Гишүүнчлэл", href: "#membership", anchor: true },
-  { label: "Салбарууд", href: "#stores", anchor: true },
-  { label: "Зөвлөгөө", href: "/journal", anchor: false },
+  { slot: "nav-text-shop", fallback: "Дэлгүүр", href: "/shop", anchor: false },
+  { slot: "nav-text-brands", fallback: "Топ брэнд", href: "#top-brands", anchor: true },
+  { slot: "nav-text-membership", fallback: "Гишүүнчлэл", href: "#membership", anchor: true },
+  { slot: "nav-text-stores", fallback: "Салбарууд", href: "#stores", anchor: true },
+  { slot: "nav-text-journal", fallback: "Зөвлөгөө", href: "/journal", anchor: false },
 ];
 
 export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = "SUGI ASAYAKE", marketingNav = false }: CommerceHeaderProps) {
   const { user } = useAuth();
   const [location] = useLocation();
+  const textFor = useSiteText();
+  const categories = useCategories();
+  // Resolved once so the desktop nav and the mobile drawer can never show
+  // two different labels for the same link.
+  const navItems = marketingNavItems.map(item => ({ ...item, label: textFor(item.slot, item.fallback) }));
   // The circular back-arrow means "return to the homepage" -- meaningless
   // (and previously just a same-page no-op link) on the homepage itself.
   const isHome = location === "/";
@@ -90,9 +99,9 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
                 full-width row below the header -- same nav, same items. */}
             {marketingNav && (
               <nav className="commerce-marketing-nav" aria-label="Нүүр хуудасны цэс">
-                {marketingNavItems.map(item => item.anchor
-                  ? <a href={item.href} key={item.label}>{item.label}</a>
-                  : <Link href={item.href} key={item.label}>{item.label}</Link>)}
+                {navItems.map(item => item.anchor
+                  ? <a href={item.href} key={item.slot}>{item.label}</a>
+                  : <Link href={item.href} key={item.slot}>{item.label}</Link>)}
               </nav>
             )}
           </div>
@@ -148,15 +157,15 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
               legal/support pages, never bsb.mn's own categories. */}
           <p className="commerce-mobile-menu-heading">Ангилал</p>
           {categories.map(category => (
-            <Link href={`/shop?category=${encodeURIComponent(category.title)}`} key={category.slug} onClick={closeMenu}>
-              <span className="flex items-center gap-2"><category.Icon size={15} aria-hidden="true" />{category.title}</span>
+            <Link href={`/shop?category=${encodeURIComponent(category.name)}`} key={category.slug} onClick={closeMenu}>
+              <span className="flex items-center gap-2"><category.Icon size={15} aria-hidden="true" />{category.name}</span>
               <ChevronRight size={16} aria-hidden="true" />
             </Link>
           ))}
           <Link href="/shop" onClick={closeMenu}><span>Бүх бүтээгдэхүүн</span><ArrowUpRight size={16} /></Link>
-          {marketingNav && marketingNavItems.filter(item => item.label !== "Дэлгүүр").map(item => item.anchor
-            ? <a href={item.href} key={item.label} onClick={closeMenu}><span>{item.label}</span><ArrowUpRight size={16} /></a>
-            : <Link href={item.href} key={item.label} onClick={closeMenu}><span>{item.label}</span><ArrowUpRight size={16} /></Link>)}
+          {marketingNav && navItems.filter(item => item.href !== "/shop").map(item => item.anchor
+            ? <a href={item.href} key={item.slot} onClick={closeMenu}><span>{item.label}</span><ArrowUpRight size={16} /></a>
+            : <Link href={item.href} key={item.slot} onClick={closeMenu}><span>{item.label}</span><ArrowUpRight size={16} /></Link>)}
           {user && (
             <Link href="/profile?tab=wishlist" onClick={closeMenu}>
               <span>Хүслийн жагсаалт{wishlistCount > 0 ? ` (${wishlistCount})` : ""}</span><ArrowUpRight size={16} />

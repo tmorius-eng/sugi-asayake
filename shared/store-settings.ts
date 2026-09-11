@@ -25,6 +25,69 @@ import { UB_DELIVERY_FEE_MNT } from "./const";
  * structure" boundary for the homepage's 2-line headings.
  */
 export const storeSettingSlots = [
+  // ---- Холбоо барих (Contact) — 2026-09-12 ------------------------------
+  // The shop's own contact facts. Before this group existed, the phone
+  // number was hardcoded in 9 files / 17 places, the email in 3, and the
+  // opening hours in a code constant -- changing the shop's phone number
+  // meant a code deploy touching every page's footer, the store locator,
+  // the /shop CTA, the profile support tab and all three legal documents.
+  //
+  // `contact-phone-tel` is deliberately SEPARATE from `contact-phone`:
+  // one is the human-readable label ("9450-9911"), the other is what goes
+  // into a `tel:` href, which must not contain the hyphen. Deriving one
+  // from the other by stripping non-digits would work today but silently
+  // break the moment a country code or extension is added, so both are
+  // explicit -- the same "never infer a functional value from a display
+  // value" rule site-text.ts applies to category titles.
+  {
+    key: "contact-phone",
+    group: "Холбоо барих",
+    type: "text" as const,
+    label: "Утасны дугаар (харагдах хэлбэр)",
+    description: "Сайт даяар (footer, салбарын хэсэг, /shop, профайл) харагдах утасны дугаар.",
+    fallbackValue: "9450-9911",
+  },
+  {
+    key: "contact-phone-tel",
+    group: "Холбоо барих",
+    type: "text" as const,
+    label: "Утасны дугаар (залгах холбоос)",
+    description: "Дарахад залгагдах жинхэнэ дугаар. Зай, зураасгүй, зөвхөн цифр (жишээ: 94509911).",
+    fallbackValue: "94509911",
+  },
+  {
+    key: "contact-email",
+    group: "Холбоо барих",
+    type: "text" as const,
+    label: "Холбоо барих имэйл",
+    description: "Footer, профайлын тусламж, хуулийн хуудсанд харагдах имэйл хаяг.",
+    fallbackValue: "asayake0307@gmail.com",
+  },
+  {
+    key: "contact-branch-hours",
+    group: "Холбоо барих",
+    type: "text" as const,
+    label: "Салбаруудын ажиллах цаг",
+    description: "Бүх салбарт нэг ижил ажиллах цаг (салбар бүрээр өөр бол Салбарууд хэсгээс тус тусад нь бичнэ).",
+    fallbackValue: "Өдөр бүр 11:00–20:00",
+  },
+  {
+    key: "contact-facebook-url",
+    group: "Холбоо барих",
+    type: "text" as const,
+    label: "Facebook хуудасны холбоос",
+    description: "Footer-ийн Facebook icon. Icon-ыг нуухын тулд холбоосын оронд \"-\" бичнэ (http-ээр эхлээгүй утгыг холбоос биш гэж үзэж, icon-ыг харуулахгүй).",
+    fallbackValue: "https://www.facebook.com/AsayakeJapaneseDrugstore/",
+  },
+  {
+    key: "contact-instagram-url",
+    group: "Холбоо барих",
+    type: "text" as const,
+    label: "Instagram хуудасны холбоос",
+    description: "Footer-ийн Instagram icon. Icon-ыг нуухын тулд холбоосын оронд \"-\" бичнэ.",
+    fallbackValue: "https://www.instagram.com/asayake_japan_cosmetics/",
+  },
+
   // ---- Хүргэлт (Delivery) — Phase B --------------------------------------
   {
     key: "delivery-fee-ub-mnt",
@@ -107,7 +170,93 @@ export const storeSettingSlots = [
     description: "Захиалга баталгаажсан имэйлийн хамгийн сүүлийн (баярлалаа гэсэн) өгүүлбэр.",
     fallbackValue: "Захиалгынхаа явцыг веб сайтаас харах боломжтой. Худалдан авалт хийсэнд баярлалаа!",
   },
+
+  // ---- Имэйлийн гарчиг ба бусад загвар (2026-09-12) ---------------------
+  // The block above is placeholder-free prose by design. These are not: an
+  // order-confirmation subject line without the order number in it is
+  // useless in an inbox. Rather than abandon that discipline, they declare
+  // exactly which tokens they accept -- `tokens` is enforced at write time
+  // (server/routers.ts rejects an unknown {...} before it can be saved), so
+  // a typo surfaces as an admin error instead of reaching a customer's
+  // inbox as literal "{zahialga}".
+  {
+    key: "email-subject-order-confirmation",
+    group: "Имэйлийн гарчиг",
+    type: "text" as const,
+    label: "Захиалга баталгаажсан имэйлийн гарчиг",
+    description: "Хэрэглэгчийн inbox-д харагдах мөр.",
+    tokens: ["{захиалга}"] as const,
+    fallbackValue: "SUGI ASAYAKE — Захиалга баталгаажлаа ({захиалга})",
+  },
+  {
+    key: "email-subject-order-status",
+    group: "Имэйлийн гарчиг",
+    type: "text" as const,
+    label: "Захиалгын төлөв өөрчлөгдсөн имэйлийн гарчиг",
+    description: "",
+    tokens: ["{захиалга}"] as const,
+    fallbackValue: "SUGI ASAYAKE — Захиалга {захиалга}: шинэчлэлт",
+  },
+  {
+    key: "email-subject-back-in-stock",
+    group: "Имэйлийн гарчиг",
+    type: "text" as const,
+    label: "Бараа дахин нөөцөд орсон имэйлийн гарчиг",
+    description: "Хүслийн жагсаалтад нэмсэн бараа дахин нөөцөд орох үед илгээгдэнэ.",
+    tokens: ["{бараа}"] as const,
+    fallbackValue: "SUGI ASAYAKE — \"{бараа}\" дахин нөөцөд орлоо",
+  },
+  {
+    key: "email-body-back-in-stock",
+    group: "Имэйлийн гарчиг",
+    type: "text" as const,
+    label: "Бараа дахин нөөцөд орсон имэйлийн бие",
+    description: "",
+    tokens: ["{бараа}"] as const,
+    fallbackValue: "Таны хүслийн жагсаалтад байгаа \"{бараа}\" бүтээгдэхүүн дахин нөөцөд орлоо. Дуусахаас өмнө SUGI ASAYAKE дэлгүүрийн \"{бараа}\" хуудсаас шалгаарай.",
+  },
+  {
+    key: "email-subject-abandoned-cart",
+    group: "Имэйлийн гарчиг",
+    type: "text" as const,
+    label: "Сагс орхисон сануулгын гарчиг",
+    description: "Сагсандаа бараа үлдээгээд 24 цаг өнгөрсөн хэрэглэгчид илгээгдэнэ.",
+    fallbackValue: "SUGI ASAYAKE — Сагсандаа юм үлдсэн байна",
+  },
+  {
+    key: "email-body-abandoned-cart",
+    group: "Имэйлийн гарчиг",
+    type: "text" as const,
+    label: "Сагс орхисон сануулгын бие",
+    description: "Нэр нь тодорхойгүй хэрэглэгчид \"хүндэт харилцагч\" гэж орно.",
+    tokens: ["{нэр}"] as const,
+    fallbackValue: "Сайн байна уу, {нэр}!\n\nТаны сагсанд сонгосон бүтээгдэхүүн хэвээр хадгалагдаж байна. Захиалгаа өнөөдөр дуусгаад, дуртай зүйлээ гартаа авчих боломжтой.\n\nАсуух зүйл байвал бидэнтэй холбогдоно уу.",
+  },
+  {
+    key: "email-subject-low-stock-digest",
+    group: "Имэйлийн гарчиг",
+    type: "text" as const,
+    label: "Нөөц дуусч буй барааны мэдэгдлийн гарчиг (эзэнд)",
+    description: "Энэ имэйл зөвхөн дэлгүүрийн эзэнд (OWNER_EMAIL) өдөрт нэг удаа очно, харилцагчид очихгүй.",
+    tokens: ["{тоо}"] as const,
+    fallbackValue: "SUGI ASAYAKE — {тоо} бараа нөөц дуусч байна",
+  },
 ] as const;
+
+/**
+ * Fills a template's declared tokens. Anything not in `values` is left
+ * exactly as typed -- a template that somehow carries an unknown token is
+ * printed literally rather than silently blanked, which makes the mistake
+ * visible instead of producing a sentence with a hole in it.
+ */
+export function fillTemplate(template: string, values: Record<string, string>): string {
+  let filled = template;
+  for (const [token, value] of Object.entries(values)) filled = filled.replaceAll(token, value);
+  return filled;
+}
+
+/** Every `{...}` token a template actually contains -- used to validate an admin's edit. */
+export const tokensIn = (template: string): string[] => template.match(/\{[^}\s]+\}/g) ?? [];
 
 export type StoreSettingKey = (typeof storeSettingSlots)[number]["key"];
 

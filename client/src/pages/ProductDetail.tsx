@@ -12,10 +12,10 @@ import VariantPicker from "@/components/VariantPicker";
 import CarouselShelf from "@/components/home/CarouselShelf";
 import ShelfProductCard from "@/components/home/ShelfProductCard";
 import SiteFooter from "@/components/SiteFooter";
-import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { notifyAddedToCart } from "@/lib/addedToCartToast";
 import { trpc } from "@/lib/trpc";
+import { useSiteText } from "@/hooks/useSiteText";
 import { useStoreSetting } from "@/hooks/useStoreSetting";
 import { getCategoryPlaceholderImage, getSalePercent, getStockStatusLabel } from "@shared/catalog-filter";
 import { UB_DELIVERY_FEE_MNT } from "@shared/const";
@@ -47,6 +47,7 @@ function StarRating({ value, size = 14 }: { value: number; size?: number }) {
 // top of opening the drawer -- matching bsb.mn's own real behavior of
 // showing both at once.
 function RoutineCrossSell({ productId, onAdded }: { productId: number; onAdded: () => void }) {
+  const textFor = useSiteText();
   const utils = trpc.useUtils();
   const routineQuery = trpc.routines.forProduct.useQuery({ productId });
   const addItem = trpc.cart.addItem.useMutation({
@@ -59,8 +60,8 @@ function RoutineCrossSell({ productId, onAdded }: { productId: number; onAdded: 
   if (!otherSteps.length) return null;
 
   return <section className="mt-10 rounded-2xl border border-[#df1f3d]/20 bg-[#fff8f4] p-6">
-    <p className="flex items-center gap-2 text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]"><ListChecks size={14} /> ROUTINE-ОО ДУУСГА</p>
-    <h3 className="mt-2 font-[var(--font-display)] text-2xl font-semibold tracking-[-.05em]">Хамт авбал тохирно</h3>
+    <p className="flex items-center gap-2 text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]"><ListChecks size={14} /> {textFor("pdp-text-routine-kicker", "ROUTINE-ОО ДУУСГА")}</p>
+    <h3 className="mt-2 font-[var(--font-display)] text-2xl font-semibold tracking-[-.05em]">{textFor("pdp-text-routine-heading", "Хамт авбал тохирно")}</h3>
     <p className="mt-2 text-xs leading-5 text-[#6f7076]">Энэ бүтээгдэхүүн <Link href={`/routine/${routine.slug}`} className="font-bold text-[#df1f3d] hover:underline">"{routine.name}"</Link> арчилгааны дараалалд багтдаг.{routine.discountPercent > 0 ? ` Бүгдийг хамт авбал -${routine.discountPercent}% хямдралтай.` : ""}</p>
     <div className="mt-5 grid gap-3 sm:grid-cols-2">
       {otherSteps.map(step => <div key={step.id} className="flex items-center gap-3 rounded-xl bg-white p-3">
@@ -97,6 +98,7 @@ function RelatedProducts({ productId }: { productId: number }) {
 }
 
 function ReviewsSection({ productId }: { productId: number }) {
+  const textFor = useSiteText();
   const { isAuthenticated } = useAuth();
   const utils = trpc.useUtils();
   const reviewsQuery = trpc.reviews.list.useQuery({ productId });
@@ -119,8 +121,8 @@ function ReviewsSection({ productId }: { productId: number }) {
   const eligibility = eligibilityQuery.data;
 
   return <section className="mt-16 border-t border-black/10 pt-10">
-    <h2 className="font-[var(--font-display)] text-3xl font-semibold tracking-[-.06em]">Хэрэглэгчийн сэтгэгдэл{reviews.length ? ` (${reviews.length})` : ""}</h2>
-    {reviewsQuery.isLoading ? <p className="mt-4 text-sm text-[#6f7076]">Ачааллаж байна...</p> : reviews.length === 0 ? <p className="mt-4 text-sm text-[#6f7076]">Одоогоор сэтгэгдэл байхгүй байна. Эхний сэтгэгдлийг та үлдээгээрэй!</p> : <div className="mt-6 grid gap-4">{reviews.map(review => <article key={review.id} className="rounded-2xl bg-white p-5"><div className="flex items-center justify-between gap-3"><StarRating value={review.rating} /><span className="text-[11px] text-[#6f7076]">{new Date(review.createdAt).toLocaleDateString("mn-MN")}</span></div><p className="mt-3 flex flex-wrap items-center gap-2 text-sm font-bold text-[#17181b]">{review.reviewerName ?? "Хэрэглэгч"}<span className="inline-flex items-center gap-1 rounded-full bg-[#eaf6ef] px-2 py-0.5 text-[10px] font-extrabold text-[#1f8a54]"><BadgeCheck size={12} /> Баталгаажсан худалдан авалт</span></p>{review.comment ? <p className="mt-2 text-sm leading-6 text-[#5c5d61]">{review.comment}</p> : null}</article>)}</div>}
+    <h2 className="font-[var(--font-display)] text-3xl font-semibold tracking-[-.06em]">{textFor("pdp-text-reviews-heading", "Хэрэглэгчийн сэтгэгдэл")}{reviews.length ? ` (${reviews.length})` : ""}</h2>
+    {reviewsQuery.isLoading ? <p className="mt-4 text-sm text-[#6f7076]">Ачааллаж байна...</p> : reviews.length === 0 ? <p className="mt-4 text-sm text-[#6f7076]">{textFor("pdp-text-reviews-empty", "Одоогоор сэтгэгдэл байхгүй байна. Эхний сэтгэгдлийг та үлдээгээрэй!")}</p> : <div className="mt-6 grid gap-4">{reviews.map(review => <article key={review.id} className="rounded-2xl bg-white p-5"><div className="flex items-center justify-between gap-3"><StarRating value={review.rating} /><span className="text-[11px] text-[#6f7076]">{new Date(review.createdAt).toLocaleDateString("mn-MN")}</span></div><p className="mt-3 flex flex-wrap items-center gap-2 text-sm font-bold text-[#17181b]">{review.reviewerName ?? "Хэрэглэгч"}<span className="inline-flex items-center gap-1 rounded-full bg-[#eaf6ef] px-2 py-0.5 text-[10px] font-extrabold text-[#1f8a54]"><BadgeCheck size={12} /> Баталгаажсан худалдан авалт</span></p>{review.comment ? <p className="mt-2 text-sm leading-6 text-[#5c5d61]">{review.comment}</p> : null}</article>)}</div>}
 
     {!isAuthenticated ? <p className="mt-7 text-sm text-[#6f7076]"><Link href="/login" className="font-bold text-[#df1f3d]">Нэвтэрч</Link> сэтгэгдэл үлдээгээрэй.</p>
       : eligibility?.canReview ? <form onSubmit={event => { event.preventDefault(); createReview.mutate({ productId, rating, comment: comment.trim() || null }); }} className="mt-8 max-w-lg rounded-2xl border border-black/10 bg-[#f8f5ef] p-6">
@@ -130,7 +132,7 @@ function ReviewsSection({ productId }: { productId: number }) {
         <button type="submit" disabled={createReview.isPending} className="mt-3 min-h-11 rounded-full bg-[#df1f3d] px-6 text-xs font-bold text-white transition hover:bg-[#bc1732] disabled:cursor-not-allowed disabled:opacity-55">{createReview.isPending ? <LoaderCircle className="mx-auto animate-spin" size={15} /> : "Нийтлэх"}</button>
       </form>
       : eligibility?.alreadyReviewed ? <p className="mt-7 text-sm text-[#6f7076]">Та энэ бүтээгдэхүүнд сэтгэгдэл бичсэн байна. Баярлалаа!</p>
-      : eligibilityQuery.isSuccess ? <p className="mt-7 text-sm text-[#6f7076]">Зөвхөн энэ бүтээгдэхүүнийг захиалсан хэрэглэгч сэтгэгдэл бичих боломжтой.</p>
+      : eligibilityQuery.isSuccess ? <p className="mt-7 text-sm text-[#6f7076]">{textFor("pdp-text-reviews-eligibility", "Зөвхөн энэ бүтээгдэхүүнийг захиалсан хэрэглэгч сэтгэгдэл бичих боломжтой.")}</p>
       : null}
   </section>;
 }
@@ -186,11 +188,11 @@ export default function ProductDetail() {
   const metaSource = product?.shortDescription || product?.description || null;
   useDocumentMeta(product?.name ? `${product.name} — SUGI ASAYAKE` : null, typeof metaSource === "string" ? metaSource.replace(/<[^>]+>/g, "").slice(0, 160) : null);
   if (productQuery.isLoading) {
-    return <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]"><CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="SUGI ASAYAKE дэлгүүр" /><main className="mx-auto max-w-7xl px-4 py-8 sm:px-8 sm:py-12" aria-busy="true" aria-label="Бүтээгдэхүүнийг ачаалж байна"><div className="grid gap-10 lg:grid-cols-[1.1fr_.9fr] lg:gap-16"><div><Skeleton className="aspect-[4/5] w-full rounded-3xl" /><div className="mt-4 grid grid-cols-3 gap-3">{[0, 1, 2].map(index => <Skeleton key={index} className="aspect-square rounded-2xl" />)}</div></div><section className="max-w-xl pt-4 lg:pt-10"><LineSkeleton width="30%" height="10px" /><Skeleton style={{ width: "80%", height: "52px", marginTop: "14px" }} /><LineSkeleton width="95%" style={{ marginTop: "26px" }} /><LineSkeleton width="70%" style={{ marginTop: "10px" }} /><Skeleton style={{ width: "45%", height: "40px", marginTop: "26px" }} /><Skeleton style={{ width: "100%", height: "48px", marginTop: "26px", borderRadius: "999px" }} /></section></div></main><SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} /><CartDrawer open={cartOpen} onOpenChange={setCartOpen} /></div>;
+    return <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]"><CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="SUGI ASAYAKE дэлгүүр" /><main className="mx-auto max-w-7xl px-4 py-8 sm:px-8 sm:py-12" aria-busy="true" aria-label="Бүтээгдэхүүнийг ачаалж байна"><div className="grid gap-10 lg:grid-cols-[1.1fr_.9fr] lg:gap-16"><div><Skeleton className="aspect-[4/5] w-full rounded-3xl" /><div className="mt-4 grid grid-cols-3 gap-3">{[0, 1, 2].map(index => <Skeleton key={index} className="aspect-square rounded-2xl" />)}</div></div><section className="max-w-xl pt-4 lg:pt-10"><LineSkeleton width="30%" height="10px" /><Skeleton style={{ width: "80%", height: "52px", marginTop: "14px" }} /><LineSkeleton width="95%" style={{ marginTop: "26px" }} /><LineSkeleton width="70%" style={{ marginTop: "10px" }} /><Skeleton style={{ width: "45%", height: "40px", marginTop: "26px" }} /><Skeleton style={{ width: "100%", height: "48px", marginTop: "26px", borderRadius: "999px" }} /></section></div></main><SiteFooter /><CartDrawer open={cartOpen} onOpenChange={setCartOpen} /></div>;
   }
 
   if (productQuery.isError || !product) {
-    return <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]"><CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="SUGI ASAYAKE дэлгүүр" /><main className="mx-auto grid min-h-[62vh] max-w-3xl place-items-center px-4 py-12 sm:px-8"><section className="w-full rounded-[2rem] border border-black/8 bg-white p-8 text-center shadow-[var(--shadow-md)] sm:p-12"><p className="text-[10px] font-extrabold tracking-[.18em] text-[#c81b34]">CATALOG NOTICE</p><h1 className="mt-4 font-[var(--font-display)] text-4xl font-semibold tracking-[-.07em] sm:text-5xl">Бүтээгдэхүүн олдсонгүй.</h1><p className="mx-auto mt-5 max-w-md text-sm leading-6 text-[#67686c]">Таны хайсан бүтээгдэхүүн одоогоор нийтлэгдээгүй, эсвэл холбоос өөрчлөгдсөн байж болно. Манай каталогоос бусад сонголтыг хараарай.</p><Link href="/shop" className="mt-8 inline-flex min-h-12 items-center justify-center rounded-full bg-[#df1f3d] px-6 text-sm font-bold text-white! transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97]">Бүтээгдэхүүнүүдийг харах</Link></section></main><SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} /><CartDrawer open={cartOpen} onOpenChange={setCartOpen} /></div>;
+    return <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]"><CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="SUGI ASAYAKE дэлгүүр" /><main className="mx-auto grid min-h-[62vh] max-w-3xl place-items-center px-4 py-12 sm:px-8"><section className="w-full rounded-[2rem] border border-black/8 bg-white p-8 text-center shadow-[var(--shadow-md)] sm:p-12"><p className="text-[10px] font-extrabold tracking-[.18em] text-[#c81b34]">CATALOG NOTICE</p><h1 className="mt-4 font-[var(--font-display)] text-4xl font-semibold tracking-[-.07em] sm:text-5xl">Бүтээгдэхүүн олдсонгүй.</h1><p className="mx-auto mt-5 max-w-md text-sm leading-6 text-[#67686c]">Таны хайсан бүтээгдэхүүн одоогоор нийтлэгдээгүй, эсвэл холбоос өөрчлөгдсөн байж болно. Манай каталогоос бусад сонголтыг хараарай.</p><Link href="/shop" className="mt-8 inline-flex min-h-12 items-center justify-center rounded-full bg-[#df1f3d] px-6 text-sm font-bold text-white! transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97]">Бүтээгдэхүүнүүдийг харах</Link></section></main><SiteFooter /><CartDrawer open={cartOpen} onOpenChange={setCartOpen} /></div>;
   }
   const display = product;
   const currentImage = gallery[Math.min(activeImage, Math.max(0, gallery.length - 1))] ?? previewGallery[0];
@@ -228,5 +230,5 @@ export default function ProductDetail() {
   <div className="inline-flex items-center rounded-full border border-black/12 bg-white"><button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="grid size-11 place-items-center" aria-label="Тоо хасах"><Minus size={16} /></button><span className="grid min-w-10 place-items-center font-bold">{quantity}</span><button type="button" disabled={quantity >= activeStockQuantity} onClick={() => setQuantity(quantity + 1)} className="grid size-11 place-items-center disabled:opacity-40" aria-label="Тоо нэмэх"><Plus size={16} /></button></div>
   <button type="button" disabled={addItem.isPending || activeStockQuantity === 0} onClick={addToCart} className="min-h-12 flex-1 rounded-full bg-[#df1f3d] px-6 text-sm font-bold text-white transition active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-55">{addItem.isPending ? <LoaderCircle className="mx-auto animate-spin" size={17} /> : activeStockQuantity === 0 ? "Нөөц дууссан" : `Сагсанд нэмэх — ${formatMnt(activePriceMnt * quantity)}`}</button>
 </div>
-<SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} /><CartDrawer open={cartOpen} onOpenChange={setCartOpen} /></div>;
+<SiteFooter /><CartDrawer open={cartOpen} onOpenChange={setCartOpen} /></div>;
 }

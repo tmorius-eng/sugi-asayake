@@ -5,8 +5,8 @@ import { LoaderCircle, Package, Phone, Search } from "lucide-react";
 import { toast } from "sonner";
 import CommerceHeader from "@/components/CommerceHeader";
 import SiteFooter from "@/components/SiteFooter";
-import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
 import { trpc } from "@/lib/trpc";
+import { useSiteText } from "@/hooks/useSiteText";
 import { formatMnt } from "@shared/format";
 
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Хайлт амжилтгүй боллоо. Дахин оролдоно уу.";
@@ -24,7 +24,9 @@ const PAYMENT_LABEL: Record<string, string> = { paid: "Төлөгдсөн", unpa
 // page -- orders.lookup (server/routers.ts) is public + rate-limited +
 // anti-enumeration (wrong order number and wrong phone read identically).
 export default function TrackOrder() {
-  useDocumentMeta("Захиалга хянах — SUGI ASAYAKE", null);
+  const textFor = useSiteText();
+  useDocumentMeta(textFor("seo-text-track-title", "Захиалга хянах — SUGI ASAYAKE"), null);
+  const [trackLine1, trackLine2] = textFor("track-text-heading", "Захиалгаа\nхянах.").split("\n");
   const [orderNumber, setOrderNumber] = useState("");
   const [phone, setPhone] = useState("");
   const lookup = trpc.orders.lookup.useMutation();
@@ -49,8 +51,8 @@ export default function TrackOrder() {
       <main className="auth-main">
         <div className="auth-head">
           <p className="auth-kicker">TRACK ORDER</p>
-          <h1>Захиалгаа <em>хянах.</em></h1>
-          <p className="auth-lede">Захиалгын дугаар болон захиалахад ашигласан утасны дугаараа оруулна уу.</p>
+          <h1>{trackLine1} <em>{trackLine2}</em></h1>
+          <p className="auth-lede">{textFor("track-text-lede", "Захиалгын дугаар болон захиалахад ашигласан утасны дугаараа оруулна уу.")}</p>
         </div>
 
         <form onSubmit={event => { event.preventDefault(); submit(); }} className="auth-card">
@@ -102,7 +104,7 @@ export default function TrackOrder() {
 
         <Link href="/shop" className="auth-switch">Дэлгүүр рүү буцах</Link>
       </main>
-      <SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} />
+      <SiteFooter />
     </div>
   );
 }

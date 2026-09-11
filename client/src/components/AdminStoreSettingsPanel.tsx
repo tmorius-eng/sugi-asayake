@@ -97,6 +97,19 @@ export default function AdminStoreSettingsPanel({ preview = false }: { preview?:
                         <span className={`rounded-full px-2.5 py-1 text-[9px] font-extrabold tracking-[.12em] ${isCustom ? "bg-[var(--a-pos-soft)] text-[var(--a-pos)]" : "bg-[var(--a-info-soft)] text-[var(--a-muted)]"}`}>{isCustom ? "ЗАСВАРЛАСАН" : "АНХНЫ УТГА"}</span>
                       </div>
                       {slot.description && <p className="mt-1 text-xs leading-5 text-[var(--a-muted)]">{slot.description}</p>}
+                      {/* An email template's declared tokens. Shown as
+                          copyable chips because the server rejects the save
+                          outright if one is mistyped -- better to read the
+                          exact spelling here than to discover it from an
+                          error toast. */}
+                      {"tokens" in slot && slot.tokens.length > 0 && (
+                        <p className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--a-muted)]">
+                          <span>Ашиглаж болох орлуулга:</span>
+                          {slot.tokens.map(token => (
+                            <code key={token} className="rounded-md bg-[var(--a-soft)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--a-text-soft)]">{token}</code>
+                          ))}
+                        </p>
+                      )}
                       {slot.type === "number" ? (
                         <input
                           type="number"

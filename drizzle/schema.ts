@@ -893,6 +893,63 @@ export const siteText = mysqlTable("site_text", {
 ]);
 
 /**
+ * The three legal pages (/privacy, /terms, /returns) -- 2026-09-12.
+ *
+ * Same override-a-code-fallback contract as siteText/siteMedia/
+ * storeSettings above: a row here replaces the corresponding entry in
+ * shared/legal-documents.ts, deleting it restores that entry verbatim.
+ * `contentHtml` passes through server/_core/sanitizeHtml.ts on every write,
+ * exactly like posts.content, because the same TinyMCE "Text" tab that can
+ * paste arbitrary HTML edits it.
+ *
+ * `updatedLabel` is the editorial "Сүүлд шинэчилсэн" stamp, kept separate
+ * from `updatedAt` on purpose -- a legal document's stated revision date is
+ * a claim the shop makes, not the row's modification time (fixing a typo
+ * should not advance it).
+ */
+export const siteDocuments = mysqlTable("site_documents", {
+  id: int("id").autoincrement().primaryKey(),
+  documentKey: varchar("documentKey", { length: 40 }).notNull().unique(),
+  title: varchar("title", { length: 200 }).notNull(),
+  lead: text("lead"),
+  contentHtml: text("contentHtml").notNull(),
+  updatedLabel: varchar("updatedLabel", { length: 40 }),
+  updatedByUserId: int("updatedByUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  index("site_documents_updated_by_idx").on(table.updatedByUserId),
+]);
+
+/**
+ * The cumulative-lifetime-spend discount ladder (2026-09-12).
+ *
+ * Previously shared/loyalty.ts's LOYALTY_TIERS constant. It mirrors the
+ * tiers configured on the shop's own POS, so it is a business setting the
+ * owner changes, not a code decision -- but it is also ENFORCED (server/
+ * db.ts's getApplicableLoyaltyDiscount computes a real discount from it),
+ * which is why it gets a proper table with its own rows rather than a
+ * JSON blob in store_settings: an admin edits one tier's percentage
+ * without the risk of hand-editing JSON that prices every order.
+ *
+ * shared/loyalty.ts keeps the same four tiers as the fallback used when
+ * the table is empty or unreachable, so a DB hiccup can never silently
+ * grant or revoke everyone's discount.
+ */
+export const loyaltyTiers = mysqlTable("loyalty_tiers", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 60 }).notNull().unique(),
+  discountPercent: int("discountPercent").notNull().default(0),
+  minSpendMnt: int("minSpendMnt").notNull().default(0),
+  sortOrder: int("sortOrder").notNull().default(0),
+  updatedByUserId: int("updatedByUserId").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  index("loyalty_tiers_min_spend_idx").on(table.minSpendMnt),
+]);
+
+/**
  * "Controls everything" admin overhaul (2026-09-08, Phase A): a NEW table,
  * not a reuse of site_text above -- that table's own doc-comment scopes it
  * to homepage marketing copy, and these are business-rule values (delivery

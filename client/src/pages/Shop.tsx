@@ -7,7 +7,8 @@ import QuickViewDialog, { type QuickViewProduct } from "@/components/QuickViewDi
 import RailProductCard from "@/components/RailProductCard";
 import RecommendedForYou from "@/components/RecommendedForYou";
 import SiteFooter from "@/components/SiteFooter";
-import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
+import { useCategories } from "@/hooks/useCategories";
+import { useShopContact } from "@/hooks/useShopContact";
 import { ProductCardSkeleton } from "@/components/Skeleton";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
@@ -28,7 +29,6 @@ import { formatMnt } from "@shared/format";
 // (see categories-data.ts), so the empty-catalog discovery cards below can
 // never silently disagree with what the rest of the site calls these
 // categories again.
-import { categories as discoveryCategories } from "@/components/home/categories-data";
 
 const RECENTLY_VIEWED_KEY = "sugi-asayake-recently-viewed-v1";
 // NEWVISION.md §14 (Phase 2): Isetan's small/large grid density toggle --
@@ -46,24 +46,38 @@ type RecentlyViewedProps = {
 };
 
 function RecentlyViewed({ products, rememberedCount, onRemember, onQuickView }: RecentlyViewedProps) {
+  const textFor = useSiteText();
   const unavailableCount = Math.max(0, rememberedCount - products.length);
+  const [recentLine1, recentLine2] = textFor("shop-text-recent-heading", "Буцаад\nхараарай.").split("\n");
   return <section className="recently-viewed-section" data-reveal>
     <div className="recently-viewed-heading">
       <div>
-        <p className="shop-kicker"><span /> ТАНЫ СҮҮЛД ҮЗСЭН</p>
-        <h2>Буцаад <em>хараарай.</em></h2>
+        <p className="shop-kicker"><span /> {textFor("shop-text-recent-kicker", "ТАНЫ СҮҮЛД ҮЗСЭН")}</p>
+        <h2>{recentLine1} <em>{recentLine2}</em></h2>
       </div>
-      <p>Энэ жагсаалт зөвхөн таны энэ төхөөрөмж дээр хадгалагдана. Нэвтрэх мэдээлэл, захиалга, эсвэл хувийн таних мэдээлэл цуглуулахгүй.</p>
+      <p>{textFor("shop-text-recent-note", "Энэ жагсаалт зөвхөн таны энэ төхөөрөмж дээр хадгалагдана. Нэвтрэх мэдээлэл, захиалга, эсвэл хувийн таних мэдээлэл цуглуулахгүй.")}</p>
     </div>
     {products.length ? <><div className="recently-viewed-grid">{products.map(product => <RailProductCard product={product} onRemember={onRemember} onQuickView={onQuickView} key={product.id} />)}</div>{unavailableCount ? <p className="recently-viewed-notice">Таны өмнө үзсэн {unavailableCount} бүтээгдэхүүн одоогоор онлайн каталогоос хасагдсан байна.</p> : null}</> : <div className="recently-viewed-empty"><Eye size={19} /><p>{rememberedCount ? `Таны өмнө үзсэн ${rememberedCount} бүтээгдэхүүн одоогоор онлайн каталогоос хасагдсан байна. Шинэ сонголт нэмэгдэхэд энд дахин гарна.` : "Таны үзсэн бүтээгдэхүүн энд гарна. Бодит каталог нийтлэгдсэний дараа бүтээгдэхүүний картнаас “Шуурхай харах” эсвэл дэлгэрэнгүй хуудас нээгээрэй."}</p></div>}
   </section>;
 }
 
 export default function Shop() {
-  useDocumentMeta("Дэлгүүр — SUGI ASAYAKE", "Японоос албан ёсоор нийлүүлсэн арьс арчилгаа, эрүүл мэнд, гэр бүлийн хэрэгцээний 900+ бүтээгдэхүүн.");
   const qaHistoryMode = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("historyQa") : null;
   const initialParams = new URLSearchParams(window.location.search);
   const textFor = useSiteText();
+  useDocumentMeta(
+    textFor("seo-text-shop-title", "Дэлгүүр — SUGI ASAYAKE"),
+    textFor("seo-text-shop-description", "Японоос албан ёсоор нийлүүлсэн арьс арчилгаа, эрүүл мэнд, гэр бүлийн хэрэгцээний 900+ бүтээгдэхүүн."),
+  );
+  const contact = useShopContact();
+  // The discovery deck (shown when the catalogue returns nothing) lists the
+  // real categories from the database -- same source as the homepage, the
+  // header drawer and the footer, so a rename in /admin reaches all four.
+  const discoveryCategories = useCategories();
+  const branchesQuery = trpc.content.branches.useQuery();
+  const branchCount = branchesQuery.data?.length ?? 0;
+  const [shopLine1, shopLine2] = textFor("shop-text-hero-heading", "Өдөр тутмын\nсонголтууд.").split("\n");
+  const [discoveryLine1, discoveryLine2] = textFor("shop-text-discovery-heading", "Өнөөдрийн хэрэгцээ\nэндээс эхэлнэ.").split("\n");
   const valueForSetting = useStoreSetting();
   const deliveryFeeUbMnt = Number(valueForSetting("delivery-fee-ub-mnt", String(UB_DELIVERY_FEE_MNT)));
   // Variable-count phrase list (one per line), unlike Home.tsx's sunrise
@@ -255,7 +269,7 @@ export default function Shop() {
     <CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="" />
     <main className="shop-main">
       <section className="shop-hero" data-reveal>
-        <div className="shop-hero-copy"><p className="shop-kicker"><span /> 02 / SUGI MARKET</p><h1>Өдөр тутмын<br /><em>сонголтууд.</em></h1><p>Японоос албан ёсоор нийлүүлсэн арьс арчилгаа, эрүүл мэнд, гэр бүлийн хэрэгцээний бүтээгдэхүүнээ өөртөө тохируулан олоорой.</p><div className="shop-hero-badges"><div className="shop-hero-signature"><Sparkles size={17} /><span>ТАНЫ ӨДӨР БҮРТ / ЯПОН ЧАНАР</span></div><div className="shop-hero-delivery"><Truck size={17} /><span>УБ ХҮРГЭЛТ {formatMnt(deliveryFeeUbMnt)} / САЛБАРААС ҮНЭГҮЙ АВАХ</span></div></div></div>
+        <div className="shop-hero-copy"><p className="shop-kicker"><span /> {textFor("shop-text-hero-kicker", "02 / SUGI MARKET")}</p><h1>{shopLine1}<br /><em>{shopLine2}</em></h1><p>{textFor("shop-text-hero-description", "Японоос албан ёсоор нийлүүлсэн арьс арчилгаа, эрүүл мэнд, гэр бүлийн хэрэгцээний бүтээгдэхүүнээ өөртөө тохируулан олоорой.")}</p><div className="shop-hero-badges"><div className="shop-hero-signature"><Sparkles size={17} /><span>{textFor("shop-text-hero-signature", "ТАНЫ ӨДӨР БҮРТ / ЯПОН ЧАНАР")}</span></div><div className="shop-hero-delivery"><Truck size={17} /><span>УБ ХҮРГЭЛТ {formatMnt(deliveryFeeUbMnt)} / САЛБАРААС ҮНЭГҮЙ АВАХ</span></div></div></div>
         <div className="shop-search-panel"><div className="shop-search-stamp" aria-hidden="true">CARE<br />IS<br />COLOR</div><label><Search size={19} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Бүтээгдэхүүн, брэндээр хайх" /></label><p><strong>{resultCount}</strong> үр дүн / <span>{sourceCount} бүтээгдэхүүн</span></p></div>
       </section>
       <div className="shop-ribbon" aria-label="SUGI ASAYAKE брэндийн мессеж">
@@ -263,7 +277,7 @@ export default function Shop() {
         <div aria-hidden="true">{shopRibbonRow("shop-ribbon-b")}</div>
       </div>
       <section className="shop-filter" data-reveal>
-        <div><p><SlidersHorizontal size={15} /> АНГИЛЛААР ШҮҮХ</p><span>Таны өдөр тутмын хэрэгцээний хэмнэлээр</span></div>
+        <div><p><SlidersHorizontal size={15} /> {textFor("shop-text-filter-heading", "АНГИЛЛААР ШҮҮХ")}</p><span>{textFor("shop-text-filter-subtitle", "Таны өдөр тутмын хэрэгцээний хэмнэлээр")}</span></div>
         {/* Tom, 2026-09-05: category pills + skin-type pills are now ONE flex
             item (a right-aligned column) instead of 2 separate siblings of
             .shop-filter -- previously the skin-type row's only way to reach
@@ -285,9 +299,9 @@ export default function Shop() {
           <label className="stock-toggle"><input type="checkbox" checked={inStockOnly} onChange={event => setInStockOnly(event.target.checked)} /><span><PackageCheck size={14} /> Бэлэн нөөцтэй</span></label><label className="sort-control"><ArrowDownUp size={14} /><span>Эрэмбэ</span><select value={sort} onChange={event => setSort(event.target.value as CatalogSortOption)}><option value="featured">Онцлох</option><option value="price-low">Үнэ: багаас</option><option value="price-high">Үнэ: ихээс</option><option value="name-asc">Нэр: A–Я</option></select></label></div>
       </section>
       {catalogLoading ? <section className="shop-product-grid" aria-busy="true" aria-label={isSearching ? "Хайж байна" : "Каталогийг бэлдэж байна"}>{Array.from({ length: 8 }, (_, index) => <ProductCardSkeleton key={index} />)}</section> : catalogErrored ? <section className="shop-status-card error"><h2>Каталогийг ачаалж чадсангүй.</h2><p>Интернэт холболтоо шалгаад дахин оролдоно уу.</p></section> : !isSearching && sourceCount === 0 && !forceZeroResults ? <section className="shop-discovery" data-reveal>
-        <div className="shop-discovery-heading"><p className="shop-kicker"><span /> SUGI ASAYAKE / DISCOVER</p><h2>Өнөөдрийн хэрэгцээ<br /><em>эндээс эхэлнэ.</em></h2><p>Онлайн каталогийг бид салбарын бодит нөөцтэй нь уялдуулан шинэчилж байна. Харин та өөрт ойр салбараас дараах ангиллаар шууд асууж болно.</p></div>
-        <div className="shop-category-deck">{discoveryCategories.map(item => <div className={`shop-category-card ${item.tone}`} key={item.number}><span>{item.number}</span><div><small>SUGI DAILY CARE</small><h3>{item.title}</h3><p>{item.detail}</p></div><ArrowUpRight size={20} /></div>)}</div>
-        <div className="shop-discovery-cta" id="shop-contact"><div><MapPin size={20} /><span><strong>3 салбар, нэг өдөр тутмын сонголт.</strong><small>Таны хайж буй бүтээгдэхүүнийг ойр салбараас асуугаарай.</small></span></div><div><Link href="/#stores">Салбар олох <ArrowUpRight size={16} /></Link><a href="tel:94509911">9450-9911 <Phone size={15} /></a></div></div>
+        <div className="shop-discovery-heading"><p className="shop-kicker"><span /> {textFor("shop-text-discovery-kicker", "SUGI ASAYAKE / DISCOVER")}</p><h2>{discoveryLine1}<br /><em>{discoveryLine2}</em></h2><p>{textFor("shop-text-discovery-description", "Онлайн каталогийг бид салбарын бодит нөөцтэй нь уялдуулан шинэчилж байна. Харин та өөрт ойр салбараас дараах ангиллаар шууд асууж болно.")}</p></div>
+        <div className="shop-category-deck">{discoveryCategories.map(item => <div className={`shop-category-card ${item.tone}`} key={item.slug}><span><item.Icon size={18} /></span><div><small>SUGI DAILY CARE</small><h3>{item.name}</h3><p>{item.detail}</p></div><ArrowUpRight size={20} /></div>)}</div>
+        <div className="shop-discovery-cta" id="shop-contact"><div><MapPin size={20} /><span><strong>{textFor("shop-text-contact-cta-title", "{N} салбар, нэг өдөр тутмын сонголт.").replace("{N}", String(branchCount))}</strong><small>{textFor("shop-text-contact-cta-subtitle", "Таны хайж буй бүтээгдэхүүнийг ойр салбараас асуугаарай.")}</small></span></div><div><Link href="/#stores">Салбар олох <ArrowUpRight size={16} /></Link><a href={`tel:${contact.phoneHref}`}>{contact.phone} <Phone size={15} /></a></div></div>
       </section> : resultCount ? <><div className="shop-grid-toolbar"><button type="button" className={density === "comfortable" ? "active" : ""} onClick={() => setDensity("comfortable")} aria-pressed={density === "comfortable"} aria-label="Том grid харагдац"><LayoutGrid size={15} /></button><button type="button" className={density === "compact" ? "active" : ""} onClick={() => setDensity("compact")} aria-pressed={density === "compact"} aria-label="Жижиг grid харагдац"><Grid3x3 size={15} /></button></div><section className={`shop-product-grid${density === "compact" ? " is-compact" : ""}`} id="shop-product-grid">{pagedProducts.map((product, index) => {
         const salePercent = getSalePercent(product.priceMnt, product.compareAtPriceMnt);
         const lowStock = product.stockQuantity > 0 && product.stockQuantity <= LOW_STOCK_THRESHOLD;
@@ -343,7 +357,7 @@ export default function Shop() {
           render this once the shopper has actually looked at something. */}
       {!recentIdsQuery.isLoading && !recentIdsQuery.isError && effectiveRecentIds.length > 0 ? <RecentlyViewed products={recentlyViewed} rememberedCount={effectiveRecentIds.length} onRemember={rememberProduct} onQuickView={openQuickView} /> : null}
     </main>
-    <SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} />
+    <SiteFooter />
     <QuickViewDialog open={Boolean(quickViewProduct)} product={quickViewProduct} onOpenChange={open => { if (!open) setQuickViewProduct(null); }} onAdded={() => setCartOpen(true)} />
     <CartDrawer open={cartOpen} onOpenChange={setCartOpen} />
   </div>;

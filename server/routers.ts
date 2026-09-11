@@ -4,6 +4,8 @@ import { ubDistricts } from "@shared/districts";
 import { parseDeviceType, isLikelyBot } from "@shared/deviceType";
 import { slugify } from "@shared/slugify";
 import { looksLikeBarcode, MAX_BARCODE_LENGTH, normaliseBarcode } from "@shared/barcode";
+import { invalidateIndexHtmlCache } from "./_core/indexHtml";
+import { legalDocumentKeys } from "@shared/legal-documents";
 import { TRPCError } from "@trpc/server";
 import { parse as parseCookieHeader } from "cookie";
 import { randomBytes } from "node:crypto";
@@ -99,6 +101,14 @@ import {
   getOrdersForUser,
   getProductBySlug,
   getPublishedProductBySku,
+  getPublishedCategories,
+  getSiteDocuments,
+  upsertSiteDocument,
+  deleteSiteDocument,
+  getLoyaltyTierTable,
+  getAdminLoyaltyTiers,
+  upsertLoyaltyTier,
+  deleteLoyaltyTier,
   getProductReviews,
   getProductStockQuantity,
   getProductWriteConflicts,
@@ -200,7 +210,7 @@ import { getAnalyticsReport, exportAnalyticsExcel, exportAnalyticsPdf, getAllCus
 import { siteMediaSlotKeys } from "../shared/site-media";
 import { siteTextSlotKeys } from "../shared/site-text";
 import { isRefundOwed } from "../shared/orders";
-import { storeSettingKeys, getStoreSettingSlot, type StoreSettingKey } from "../shared/store-settings";
+import { storeSettingKeys, getStoreSettingSlot, fillTemplate, tokensIn, type StoreSettingKey } from "../shared/store-settings";
 import { formatMnt } from "@shared/format";
 
 const slugSchema = z.string().trim().min(2).max(200).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens only.");
@@ -444,6 +454,7 @@ const staffRoleSchema = z.enum(["user", "staff", "finance", "marketing", "wareho
 const siteMediaSlotSchema = z.enum(siteMediaSlotKeys);
 const siteTextSlotSchema = z.enum(siteTextSlotKeys);
 const storeSettingKeySchema = z.enum(storeSettingKeys);
+const legalDocumentKeySchema = z.enum(legalDocumentKeys);
 // A syntactically valid but unusable scrypt hash (correct salt/hash lengths,
 // see server/_core/password.ts), used to run `verifyPassword` through its
 // full computation even when no account matches the submitted phone number.
@@ -533,7 +544,7 @@ async function sendOrderConfirmationEmail(order: { orderNumber: string; customer
   const closingLine = await getStoreSettingValue("email-order-confirmation-closing");
   await sendAccountEmail({
     to: order.customerEmail,
-    subject: `SUGI ASAYAKE — Захиалга баталгаажлаа (${order.orderNumber})`,
+    subject: fillTemplate(await getStoreSettingValue("email-subject-order-confirmation"), { "{захиалга}": order.orderNumber }),
     content: `Сайн байна уу, ${order.customerName}!\n\nТаны ${order.orderNumber} дугаартай захиалгыг хүлээн авлаа:\n\n${itemLines}${routineDiscountLine}${couponDiscountLine}${loyaltyDiscountLine}${storeCreditLine}\n\nНийт дүн: ${formatMnt(order.totalMnt)}\n${deliveryLine}\n\n${closingLine}`,
   });
 }
@@ -550,7 +561,7 @@ async function sendOrderStatusUpdateEmail(order: { orderNumber: string; customer
   const refundLine = isRefundOwed(order) ? "\n\nТаны төлсөн төлбөрийг бүрэн буцаан олгоно. Манай ажилтан буцаан олголтын талаар тантай холбогдоно." : "";
   await sendAccountEmail({
     to: order.customerEmail,
-    subject: `SUGI ASAYAKE — Захиалга ${order.orderNumber}: шинэчлэлт`,
+    subject: fillTemplate(await getStoreSettingValue("email-subject-order-status"), { "{захиалга}": order.orderNumber }),
     content: `Сайн байна уу, ${order.customerName}!\n\n${message}${trackingLine}${refundLine}\n\nЗахиалгын дугаар: ${order.orderNumber}`,
   });
 }
@@ -1104,6 +1115,19 @@ export const appRouter = router({
     // -- StoreLocatorSection/SiteFooter/Checkout's pickup-branch picker all
     // read this live query now instead of importing that file.
     branches: publicProcedure.query(() => getActiveBranches()),
+    // 2026-09-12: the storefront's single source for catalogue categories.
+    // Home, /shop's discovery cards, the header drawer and the footer read
+    // this instead of the old hardcoded categories-data.ts array, so an
+    // admin rename now reaches every surface at once (it previously only
+    // changed /shop's filter pills).
+    categories: publicProcedure.query(() => getPublishedCategories()),
+    // Only the rows an admin has actually saved; the client merges them
+    // over shared/legal-documents.ts so an unedited page still renders.
+    siteDocuments: publicProcedure.query(() => getSiteDocuments()),
+    // The live discount ladder. publicProcedure because the homepage's
+    // membership section shows it to signed-out visitors as the reason to
+    // register -- it is marketing, not account data.
+    loyaltyTiers: publicProcedure.query(() => getLoyaltyTierTable()),
   }),
   cart: router({
     // publicProcedure, not protectedProcedure: UX-RESEARCH.md priority #1 is
@@ -1737,6 +1761,8 @@ export const appRouter = router({
     siteMedia: marketingProcedure.query(() => getSiteMedia()),
     siteText: marketingProcedure.query(() => getSiteText()),
     storeSettings: marketingProcedure.query(() => getStoreSettings()),
+    siteDocuments: marketingProcedure.query(() => getSiteDocuments()),
+    loyaltyTiers: marketingProcedure.query(() => getAdminLoyaltyTiers()),
     // Audit 2026-09-09 (R4): server-side page + search (see getAdminUsers).
     users: usersReadProcedure.input(z.object({
       search: z.string().trim().max(120).optional(),
@@ -2233,10 +2259,11 @@ export const appRouter = router({
           // ENV in server/_core/env.ts) — every other transactional email is
           // plain text with no link for the same reason, so this follows
           // suit rather than hard-coding a guessed production domain.
+          const backInStockTokens = { "{бараа}": product.name };
           await sendAccountEmail({
             to: watcher.email,
-            subject: `SUGI ASAYAKE — "${product.name}" дахин нөөцөд орлоо`,
-            content: `Таны хүслийн жагсаалтад байгаа "${product.name}" бүтээгдэхүүн дахин нөөцөд орлоо. Дуусахаас өмнө SUGI ASAYAKE дэлгүүрийн "${product.name}" хуудсаас шалгаарай.`,
+            subject: fillTemplate(await getStoreSettingValue("email-subject-back-in-stock"), backInStockTokens),
+            content: fillTemplate(await getStoreSettingValue("email-body-back-in-stock"), backInStockTokens),
           });
         }
         if (watchers.length) await clearWishlistNotifyFlagsForProduct(product.id);
@@ -2458,11 +2485,13 @@ export const appRouter = router({
       textValue: z.string().trim().min(1).max(4_000),
     })).mutation(async ({ ctx, input }) => {
       const text = await upsertSiteText({ ...input, updatedByUserId: ctx.user.id });
+      invalidateIndexHtmlCache();
       await logAdminAction({ actorUserId: ctx.user.id, action: "site_text.updated", entityType: "site_text", entityId: text.id, metadata: { slotKey: input.slotKey } });
       return text;
     }),
     clearSiteText: marketingProcedure.input(z.object({ slotKey: siteTextSlotSchema })).mutation(async ({ ctx, input }) => {
       await deleteSiteText(input.slotKey);
+      invalidateIndexHtmlCache();
       await logAdminAction({ actorUserId: ctx.user.id, action: "site_text.cleared", entityType: "site_text", metadata: { slotKey: input.slotKey } });
       return { slotKey: input.slotKey };
     }),
@@ -2482,12 +2511,88 @@ export const appRouter = router({
       if (slot.type === "number" && !Number.isFinite(Number(input.settingValue))) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ тохиргоо зөвхөн тоо байх ёстой." });
       }
+      // An email template declares which {tokens} it understands. A token
+      // this slot doesn't fill would be sent to a real customer as literal
+      // text, so a typo is rejected here rather than discovered in an
+      // inbox. A slot with no declared tokens accepts none at all.
+      const allowedTokens: readonly string[] = ("tokens" in slot ? slot.tokens : []) ?? [];
+      const unknownTokens = tokensIn(input.settingValue).filter(token => !allowedTokens.includes(token));
+      if (unknownTokens.length) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: allowedTokens.length
+            ? `Танигдахгүй орлуулга: ${unknownTokens.join(", ")}. Энэ талбарт зөвхөн ${allowedTokens.join(", ")} ашиглана.`
+            : `Энэ талбар орлуулга авахгүй, гэвч ${unknownTokens.join(", ")} гэж бичигдсэн байна.`,
+        });
+      }
       const setting = await upsertStoreSetting({ ...input, updatedByUserId: ctx.user.id });
+      invalidateIndexHtmlCache();
       await logAdminAction({ actorUserId: ctx.user.id, action: "store_settings.updated", entityType: "store_settings", entityId: setting.id, metadata: { settingKey: input.settingKey } });
       return setting;
     }),
+    // ---- Legal documents (2026-09-12) ---------------------------------
+    // marketingProcedure, the same weight as site text/media: this is
+    // published page copy. The HTML is sanitized inside upsertSiteDocument
+    // (server/db.ts) on every write, exactly like posts.content, because
+    // the same TinyMCE "Text" tab can paste raw markup.
+    updateSiteDocument: marketingProcedure.input(z.object({
+      documentKey: legalDocumentKeySchema,
+      title: z.string().trim().min(2).max(200),
+      lead: nullableText(2_000),
+      contentHtml: z.string().trim().min(10).max(200_000),
+      updatedLabel: nullableText(40),
+    })).mutation(async ({ ctx, input }) => {
+      const document = await upsertSiteDocument({
+        documentKey: input.documentKey,
+        title: input.title,
+        lead: input.lead ?? null,
+        contentHtml: input.contentHtml,
+        updatedLabel: input.updatedLabel ?? null,
+        updatedByUserId: ctx.user.id,
+      });
+      await logAdminAction({ actorUserId: ctx.user.id, action: "site_document.updated", entityType: "site_document", entityId: document.id, metadata: { documentKey: input.documentKey } });
+      return document;
+    }),
+    clearSiteDocument: marketingProcedure.input(z.object({ documentKey: legalDocumentKeySchema })).mutation(async ({ ctx, input }) => {
+      await deleteSiteDocument(input.documentKey);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "site_document.cleared", entityType: "site_document", entityId: null, metadata: { documentKey: input.documentKey } });
+      return { documentKey: input.documentKey };
+    }),
+
+    // ---- Loyalty ladder (2026-09-12) ----------------------------------
+    // adminProcedure, NOT marketingProcedure: unlike page copy, these
+    // numbers are enforced at checkout (getApplicableLoyaltyDiscount), so
+    // editing them changes what every qualifying customer is charged.
+    // Same reasoning that keeps refunds and role changes admin-only.
+    saveLoyaltyTier: adminProcedure.input(z.object({
+      id: z.number().int().positive().optional(),
+      name: z.string().trim().min(1).max(60),
+      discountPercent: z.number().int().min(0).max(100),
+      minSpendMnt: z.number().int().min(0).max(2_000_000_000),
+      sortOrder: z.number().int().min(0).max(10_000),
+    })).mutation(async ({ ctx, input }) => {
+      let tier;
+      try {
+        tier = await upsertLoyaltyTier({ ...input, updatedByUserId: ctx.user.id });
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Зэрэглэлийг хадгалж чадсангүй." });
+      }
+      await logAdminAction({ actorUserId: ctx.user.id, action: "loyalty_tier.saved", entityType: "loyalty_tier", entityId: tier.id, metadata: { name: tier.name, discountPercent: tier.discountPercent, minSpendMnt: tier.minSpendMnt } });
+      return tier;
+    }),
+    deleteLoyaltyTier: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      try {
+        await deleteLoyaltyTier(input.id);
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Зэрэглэлийг устгаж чадсангүй." });
+      }
+      await logAdminAction({ actorUserId: ctx.user.id, action: "loyalty_tier.deleted", entityType: "loyalty_tier", entityId: input.id, metadata: {} });
+      return { id: input.id };
+    }),
+
     clearStoreSetting: marketingProcedure.input(z.object({ settingKey: storeSettingKeySchema })).mutation(async ({ ctx, input }) => {
       await deleteStoreSetting(input.settingKey);
+      invalidateIndexHtmlCache();
       await logAdminAction({ actorUserId: ctx.user.id, action: "store_settings.cleared", entityType: "store_settings", metadata: { settingKey: input.settingKey } });
       return { settingKey: input.settingKey };
     }),

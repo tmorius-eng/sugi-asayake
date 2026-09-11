@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Link } from "wouter";
 import { ArrowUpRight } from "lucide-react";
 import { LOYALTY_TIERS, getLoyaltyTier, getNextLoyaltyTier } from "@shared/loyalty";
@@ -25,8 +26,6 @@ const formatMntCompact = (amount: number) => {
   }
   return formatMnt(amount);
 };
-const MAX_DISCOUNT_PERCENT = Math.max(...LOYALTY_TIERS.map((tier) => tier.discountPercent));
-
 // Guests see the same infinity graph rather than a plain tier grid (that
 // mismatch was why the live page looked nothing like the reference when
 // logged out). The example is *computed from the real tier table* via
@@ -34,11 +33,13 @@ const MAX_DISCOUNT_PERCENT = Math.max(...LOYALTY_TIERS.map((tier) => tier.discou
 // "ЖИШЭЭ ХАРУУЛАЛТ" on screen, so it is never mistaken for the visitor's
 // own data -- the master prompt allows numbers that are "clearly labeled as
 // example/public data".
+//
+// 2026-09-12: that "real tier table" is now the admin-editable
+// `loyalty_tiers` table, so the example is derived per render from the live
+// ladder instead of from module constants frozen at build time -- otherwise
+// raising the top discount in /admin would leave the homepage still
+// advertising the old percentage as the reason to sign up.
 const EXAMPLE_SPEND_MNT = 600_000;
-const EXAMPLE_TIER = getLoyaltyTier(EXAMPLE_SPEND_MNT);
-const EXAMPLE_NEXT_TIER = getNextLoyaltyTier(EXAMPLE_SPEND_MNT);
-const EXAMPLE_LEFT_RATIO = EXAMPLE_NEXT_TIER ? EXAMPLE_SPEND_MNT / EXAMPLE_NEXT_TIER.minSpendMnt : 1;
-const EXAMPLE_RIGHT_RATIO = MAX_DISCOUNT_PERCENT > 0 ? EXAMPLE_TIER.discountPercent / MAX_DISCOUNT_PERCENT : 0;
 
 /**
  * Tier 7 of the home redesign, and the section the master prompt is
@@ -61,6 +62,23 @@ const EXAMPLE_RIGHT_RATIO = MAX_DISCOUNT_PERCENT > 0 ? EXAMPLE_TIER.discountPerc
 export default function QuickStatsSection() {
   const { user, loading: authLoading } = useAuth();
   const statusQuery = trpc.loyalty.myStatus.useQuery(undefined, { enabled: Boolean(user) });
+  // Falls back to the code constant while the request is in flight -- the
+  // same list the server itself falls back to -- so the guest example never
+  // flashes an empty ladder.
+  const tiersQuery = trpc.content.loyaltyTiers.useQuery();
+  const tiers = tiersQuery.data ?? LOYALTY_TIERS;
+  const example = useMemo(() => {
+    const maxDiscountPercent = Math.max(0, ...tiers.map(tier => tier.discountPercent));
+    const tier = getLoyaltyTier(EXAMPLE_SPEND_MNT, tiers);
+    const nextTier = getNextLoyaltyTier(EXAMPLE_SPEND_MNT, tiers);
+    return {
+      maxDiscountPercent,
+      tier,
+      nextTier,
+      leftRatio: nextTier && nextTier.minSpendMnt > 0 ? EXAMPLE_SPEND_MNT / nextTier.minSpendMnt : 1,
+      rightRatio: maxDiscountPercent > 0 ? tier.discountPercent / maxDiscountPercent : 0,
+    };
+  }, [tiers]);
   const textFor = useSiteText();
   const [headingLine1, headingLine2] = textFor("home-text-qs-heading", "Quick\nStats").split("\n");
 
@@ -118,7 +136,7 @@ export default function QuickStatsSection() {
           {user && statusQuery.data && (() => {
             const status = statusQuery.data;
             const leftRatio = status.nextTier ? status.totalSpendMnt / status.nextTier.minSpendMnt : 1;
-            const rightRatio = MAX_DISCOUNT_PERCENT > 0 ? status.currentTier.discountPercent / MAX_DISCOUNT_PERCENT : 0;
+            const rightRatio = example.maxDiscountPercent > 0 ? status.currentTier.discountPercent / example.maxDiscountPercent : 0;
             const nextTierSummary = status.nextTier
               ? `дараагийн "${status.nextTier.name}" зэрэглэлд хүрэхэд ${formatMnt(status.amountToNextTierMnt ?? 0)} дутуу байна`
               : "хамгийн дээд зэрэглэлд хүрсэн байна";
@@ -147,20 +165,20 @@ export default function QuickStatsSection() {
             <>
               <p className="qs-example-tag">ЖИШЭЭ ХАРУУЛАЛТ</p>
               <InfinityGraph
-                leftRatio={EXAMPLE_LEFT_RATIO}
+                leftRatio={example.leftRatio}
                 leftValue={formatMntCompact(EXAMPLE_SPEND_MNT)}
                 leftLabel="Жишээ: нийт худалдан авалт"
-                rightRatio={EXAMPLE_RIGHT_RATIO}
-                rightValue={`${EXAMPLE_TIER.discountPercent}%`}
+                rightRatio={example.rightRatio}
+                rightValue={`${example.tier.discountPercent}%`}
                 rightLabel="Жишээ: хөнгөлөлт"
               />
               <p className="qs-example-note">
-                {EXAMPLE_NEXT_TIER
-                  ? `Жишээ нь: ${formatMnt(EXAMPLE_SPEND_MNT)} худалдан авалттай гишүүн "${EXAMPLE_TIER.name}" зэрэглэлд ${EXAMPLE_TIER.discountPercent}% хөнгөлөлт эдэлж, "${EXAMPLE_NEXT_TIER.name}" зэрэглэл хүртэл ${formatMnt(EXAMPLE_NEXT_TIER.minSpendMnt - EXAMPLE_SPEND_MNT)} дутуу байна.`
-                  : `Жишээ нь: ${formatMnt(EXAMPLE_SPEND_MNT)} худалдан авалттай гишүүн "${EXAMPLE_TIER.name}" зэрэглэлд ${EXAMPLE_TIER.discountPercent}% хөнгөлөлт эдэлнэ.`}
+                {example.nextTier
+                  ? `Жишээ нь: ${formatMnt(EXAMPLE_SPEND_MNT)} худалдан авалттай гишүүн "${example.tier.name}" зэрэглэлд ${example.tier.discountPercent}% хөнгөлөлт эдэлж, "${example.nextTier.name}" зэрэглэл хүртэл ${formatMnt(example.nextTier.minSpendMnt - EXAMPLE_SPEND_MNT)} дутуу байна.`
+                  : `Жишээ нь: ${formatMnt(EXAMPLE_SPEND_MNT)} худалдан авалттай гишүүн "${example.tier.name}" зэрэглэлд ${example.tier.discountPercent}% хөнгөлөлт эдэлнэ.`}
               </p>
               <div className="qs-guest-tiers">
-                {LOYALTY_TIERS.map((tier) => (
+                {tiers.map((tier) => (
                   <div className="qs-guest-tier" key={tier.name}>
                     <strong>{tier.discountPercent}%</strong>
                     <span>{tier.name}</span>

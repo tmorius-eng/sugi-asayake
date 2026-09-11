@@ -10,9 +10,9 @@ import { and, desc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import { carts, cartItems, orderItems, orders, productCategories, products, users, visitorSessions } from "../drizzle/schema";
-import { getDb, getMarketingSpendRows, settledSaleSql } from "./db";
+import { getDb, getLoyaltyTierTable, getMarketingSpendRows, settledSaleSql } from "./db";
 import { ubDistrictLabels, type UbDistrict } from "../shared/districts";
-import { LOYALTY_TIERS, getLoyaltyTier } from "../shared/loyalty";
+import { getLoyaltyTier } from "../shared/loyalty";
 import { formatMnt } from "@shared/format";
 
 // pdfkit's built-in standard-14 fonts (Helvetica etc.) are Latin-only per
@@ -370,7 +370,13 @@ export async function getRecommendationCoverage() {
  *  instead of one shopper). */
 export async function getLoyaltyTierBreakdown() {
   const db = await getDb();
-  if (!db) return LOYALTY_TIERS.map(tier => ({ tierName: tier.name, customerCount: 0 }));
+  // 2026-09-12: the ladder is admin-editable (loyalty_tiers), so both the
+  // row labels and the classification below read the same live table the
+  // storefront and checkout price against -- otherwise renaming a tier in
+  // /admin would leave this report counting customers into tiers that no
+  // longer exist.
+  const tiers = await getLoyaltyTierTable();
+  if (!db) return tiers.map(tier => ({ tierName: tier.name, customerCount: 0 }));
 
   const rows = await db
     .select({
@@ -385,10 +391,10 @@ export async function getLoyaltyTierBreakdown() {
 
   const tierCounts = new Map<string, number>();
   for (const row of rows) {
-    const tier = getLoyaltyTier(Number(row.totalSpendMnt) + row.loyaltyManualAdjustmentMnt);
+    const tier = getLoyaltyTier(Number(row.totalSpendMnt) + row.loyaltyManualAdjustmentMnt, tiers);
     tierCounts.set(tier.name, (tierCounts.get(tier.name) ?? 0) + 1);
   }
-  return LOYALTY_TIERS.map(tier => ({ tierName: tier.name, customerCount: tierCounts.get(tier.name) ?? 0 }));
+  return tiers.map(tier => ({ tierName: tier.name, customerCount: tierCounts.get(tier.name) ?? 0 }));
 }
 
 // Admin overhaul (2026-09-08, Phase J): the campaign composer's loyalty-tier
@@ -400,6 +406,7 @@ export async function getLoyaltyTierBreakdown() {
 export async function getUsersByLoyaltyTier(tierName: string) {
   const db = await getDb();
   if (!db) return [];
+  const tiers = await getLoyaltyTierTable();
 
   const rows = await db
     .select({
@@ -413,7 +420,7 @@ export async function getUsersByLoyaltyTier(tierName: string) {
     .groupBy(users.id, users.name, users.phone, users.email, users.loyaltyManualAdjustmentMnt);
 
   return rows
-    .filter(row => getLoyaltyTier(Number(row.totalSpendMnt) + row.loyaltyManualAdjustmentMnt).name === tierName)
+    .filter(row => getLoyaltyTier(Number(row.totalSpendMnt) + row.loyaltyManualAdjustmentMnt, tiers).name === tierName)
     .map(row => ({ id: row.id, name: row.name, phone: row.phone, email: row.email }));
 }
 

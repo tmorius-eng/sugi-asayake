@@ -2,7 +2,7 @@ import { ArrowUpRight, Clock3, MapPin, Navigation, Phone } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useSiteText } from "@/hooks/useSiteText";
 import SectionHeading from "./SectionHeading";
-import { BRANCH_HOURS } from "./locations-data";
+import { useShopContact } from "@/hooks/useShopContact";
 
 // Rough, deliberately non-geographic placement for each pin on the
 // abstract map illustration -- this is an editorial graphic, not a real
@@ -37,6 +37,7 @@ const PIN_POSITIONS: Record<string, { x: number; y: number }> = {
  */
 export default function StoreLocatorSection() {
   const textFor = useSiteText();
+  const contact = useShopContact();
   const branchesQuery = trpc.content.branches.useQuery();
   const locations = (branchesQuery.data ?? []).map((branch, index) => ({
     number: String(index + 1).padStart(2, "0"),
@@ -59,7 +60,7 @@ export default function StoreLocatorSection() {
           <p className="eyebrow"><Navigation size={14} /> {locations.length} {textFor("home-text-locator-count-suffix", "БАЙРШИЛ")}</p>
           <SectionHeading>{headingLine1}<br /><em>{headingLine2}</em></SectionHeading>
           <p className="locator-lede">{textFor("home-text-locator-description", "Улаанбаатарын өөр өөр цэгүүдэд япон чанарыг танд ойртуулж байна.")}</p>
-          <a className="button button-primary" href="tel:94509911">9450-9911 руу залгах <Phone size={15} /></a>
+          <a className="button button-primary" href={`tel:${contact.phoneHref}`}>{contact.phone} руу залгах <Phone size={15} /></a>
         </div>
 
         {/* 2026-09-06 (real a11y-audit finding, axe-core aria-hidden-focus +
@@ -116,7 +117,7 @@ export default function StoreLocatorSection() {
                   <strong>{location.name}</strong>
                   <small>{location.detail}</small>
                   <small className="location-meta">
-                    <Clock3 size={11} /> {BRANCH_HOURS}
+                    <Clock3 size={11} /> {contact.hours}
                     <span className="location-meta-divider" aria-hidden="true">•</span>
                     <Phone size={11} /> {location.phone}
                   </small>

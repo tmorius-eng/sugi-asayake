@@ -1,27 +1,35 @@
-import { BadgeCheck, CircleCheck, Flower2, Gift, ShieldCheck, Sparkles, type LucideIcon } from "lucide-react";
+import { BadgeCheck, CircleCheck, Flower2, Gift, LayoutGrid, ShieldCheck, Sparkles, type LucideIcon } from "lucide-react";
 
-// 2026-09-04 cohesion audit: Home.tsx and Shop.tsx each hardcoded their own
-// independent copy of "the 6 real product categories" -- different order,
-// different detail copy, and Shop's version only listed 4 of the 6 (missing
-// "Эрүүл ахуй" and, until reordered here, drifting on which number went with
-// "Ээж ба хүүхэд"). If a category is ever renamed or a 7th added, only
-// fixing one of the two lists would silently leave the other stale. Single
-// source of truth now, same pattern as this folder's own locations-data.ts
-// for store branches.
+// 2026-09-12: this file used to BE the category list -- name, description,
+// photo and order for all six, hardcoded. That made it the second source of
+// truth next to the real `product_categories` table, and they had already
+// drifted: /shop's filter pills read the database while the homepage, the
+// header drawer and the footer read this array, so renaming a category in
+// /admin changed one surface and left the other three showing the old name.
+// The admin form's `description` and `imageUrl` fields were written to the
+// database and then never read by anything at all.
 //
-// slug matches the real product_categories.slug values (confirmed against
-// backups/sugi-catalog-export-2026-08-27.sql). imageUrl is one real,
-// currently-published product photo per category (queried directly from the
-// DB, not invented/stock imagery) -- CategoryMasonry falls back to
-// shared/catalog-filter.ts's getCategoryPlaceholderImage(slug) if that photo
-// is ever unpublished/removed. `tone` is only used by Shop.tsx's empty-catalog
-// discovery cards (a decorative color treatment, not a real link) -- Home's
-// CategoryMasonry uses Icon/imageUrl instead.
-export const categories: { number: string; title: string; detail: string; slug: string; Icon: LucideIcon; imageUrl: string; tone: string }[] = [
-  { number: "01", title: "Арьс арчилгаа", detail: "Өдөр тутмын цэвэр, зөөлөн арчилгаа", slug: "arhis-archilgaa", Icon: Flower2, imageUrl: "/cdn/catalog/products/69/organic-sugar-squalane_4d846540.jpg", tone: "rose" },
-  { number: "02", title: "Гоо сайхан", detail: "Японы сонгомол хэрэгцээт бүтээгдэхүүн", slug: "goo-saikhan", Icon: Sparkles, imageUrl: "/cdn/catalog/products/550/sokamocka-makeup-remover-oil_cbd97a5a.jpg", tone: "cobalt" },
-  { number: "03", title: "Эрүүл мэнд", detail: "Өдөр тутмын сайн сайхны найдвартай сонголт", slug: "eruul-mend", Icon: ShieldCheck, imageUrl: "/cdn/catalog/products/163/morimori-coffee_f163ce05.jpg", tone: "marigold" },
-  { number: "04", title: "Эрүүл ахуй", detail: "Гэр бүлд хэрэгтэй цэвэр, аюулгүй хэрэглээ", slug: "eruul-akhui", Icon: BadgeCheck, imageUrl: "/cdn/catalog/products/168/dental-beauty-care_d580f8bc.jpg", tone: "mint" },
-  { number: "05", title: "Үс ба бие", detail: "Өдөр бүрийн арчилгааг илүү хялбар болгоно", slug: "us-ba-bie", Icon: CircleCheck, imageUrl: "/cdn/catalog/products/150/bayu_b7aca8ad.jpg", tone: "peach" },
-  { number: "06", title: "Ээж ба хүүхэд", detail: "Зөөлөн, хэрэгцээт сонголтууд", slug: "eej-ba-khuukhed", Icon: Gift, imageUrl: "/cdn/catalog/products/275/milk-save-blend_d14e5ce4.jpg", tone: "sand" },
-];
+// The list now comes from `trpc.content.categories` (server/db.ts's
+// getPublishedCategories -- active categories that actually have published
+// products). What stays here is the part a database column cannot hold: the
+// Lucide icon component for each category, and the decorative `tone` class
+// /shop's discovery cards use. Both are keyed by the real
+// product_categories.slug, with a neutral default so a category added in
+// /admin tomorrow renders correctly instead of crashing.
+//
+// See useCategories.ts for the hook that joins the two halves.
+
+export type CategoryPresentation = { Icon: LucideIcon; tone: string };
+
+const PRESENTATION_BY_SLUG: Record<string, CategoryPresentation> = {
+  "arhis-archilgaa": { Icon: Flower2, tone: "rose" },
+  "goo-saikhan": { Icon: Sparkles, tone: "cobalt" },
+  "eruul-mend": { Icon: ShieldCheck, tone: "marigold" },
+  "eruul-akhui": { Icon: BadgeCheck, tone: "mint" },
+  "us-ba-bie": { Icon: CircleCheck, tone: "peach" },
+  "eej-ba-khuukhed": { Icon: Gift, tone: "sand" },
+};
+
+/** Never throws for an unknown slug -- a brand-new category gets a neutral look. */
+export const categoryPresentation = (slug: string): CategoryPresentation =>
+  PRESENTATION_BY_SLUG[slug] ?? { Icon: LayoutGrid, tone: "sand" };

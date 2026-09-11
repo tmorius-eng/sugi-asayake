@@ -1,10 +1,11 @@
 import { randomBytes } from "node:crypto";
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lt, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lt, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { describeTransport, planMysqlConnection } from "./_core/dbConnection";
-import { adminAuditLogs, branches, branchStock, cartItems, carts, discountCodes, faceAttempts, faceChallenges, faceEnrollments, featuredBrands, InsertProduct, InsertProductCategory, integrationConfigs, loginAttempts, marketingSpend, mediaLibrary, orderItems, orders, paymentAttempts, phoneVerificationSessions, postCategories, postCategoryLinks, posts, postTagLinks, postTags, productCategories, productReviews, productVariants, products, routines, routineSteps, scheduledJobRuns, siteMedia, siteText, sitePromotions, storeCreditLedger, storeSettings, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
+import { adminAuditLogs, branches, branchStock, cartItems, carts, discountCodes, faceAttempts, faceChallenges, faceEnrollments, featuredBrands, InsertProduct, InsertProductCategory, integrationConfigs, loginAttempts, loyaltyTiers, marketingSpend, mediaLibrary, orderItems, orders, paymentAttempts, phoneVerificationSessions, postCategories, postCategoryLinks, posts, postTagLinks, postTags, productCategories, productReviews, productVariants, products, routines, routineSteps, scheduledJobRuns, siteDocuments, siteMedia, siteText, sitePromotions, storeCreditLedger, storeSettings, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
 import { slugify } from "../shared/slugify";
 import { looksLikeBarcode, normaliseBarcode } from "../shared/barcode";
+import { expandQueryGroups, normaliseSearchText } from "../shared/search-synonyms";
 import { guessDistrictFromAddress, type UbDistrict } from "../shared/districts";
 import { computeDeliveryFeeMnt } from "../shared/delivery";
 import { getStoreSettingSlot, type StoreSettingKey } from "../shared/store-settings";
@@ -12,7 +13,7 @@ import { decryptJson, encryptJson } from "./_core/crypto";
 import { sqlQueryLogger } from "./_core/sqlQueryLog";
 import { sanitizePostContent } from "./_core/sanitizeHtml";
 import { getInventoryReservationFailure, shouldRestoreStock } from "./commerce-lifecycle";
-import { getLoyaltyTier, getNextLoyaltyTier } from "../shared/loyalty";
+import { getLoyaltyTier, getNextLoyaltyTier, LOYALTY_TIERS, type LoyaltyTier } from "../shared/loyalty";
 import { applyDiversityCap, computeCategoryAffinity, filterCatalogBrand, filterCatalogPriceRange, filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCatalogCategories, getCatalogSkinTypes, scorePreferenceMatch, scorePriceBandAffinity, sortCatalogProducts, type CatalogSortOption, type PreferenceProfile, type SkinType } from "../shared/catalog-filter";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -964,17 +965,120 @@ export async function searchPublishedCatalog(query: string) {
   const db = await getDb();
   if (!db) return [];
 
-  const terms = query.trim().split(/\s+/).filter(Boolean)
-    // Strip MySQL boolean-mode operator characters so user input can't
-    // change the query's structure (e.g. a leading "-" would exclude
-    // instead of require a term) — this is a search relevance concern, not
-    // a SQL-injection one (drizzle still parameterizes the whole string).
-    .map(term => term.replace(/[+\-<>()~*"@]/g, ""))
-    .filter(Boolean)
-    .map(term => `+${term}*`);
-  if (!terms.length) return [];
-  const booleanQuery = terms.join(" ");
-  const matchExpr = sql`MATCH(${products.name}, ${products.brand}, ${products.shortDescription}) AGAINST(${booleanQuery} IN BOOLEAN MODE)`;
+  // Strip MySQL boolean-mode operator characters so user input can't change
+  // the query's structure (e.g. a leading "-" would exclude instead of
+  // require a term) — a search relevance concern, not a SQL-injection one
+  // (drizzle still parameterizes the whole string).
+  const sanitise = (term: string) => term.replace(/[+\-<>()~*"@]/g, "");
+
+  /**
+   * 2026-09-12, Tom: "хүмүүс морины тос, морины шампуунь гэж бичнэ",
+   * "заавал кириллээр бичихгүй, латинаар бичих ч хүн байгаа".
+   *
+   * Shoppers search in Mongolian (or romanised Mongolian) against a
+   * catalogue whose 937 product names are 100% Latin, and whose Mongolian
+   * text is one formulaic sentence per product — carrying no useful word at
+   * all for 220 of them. Each word of the query is expanded through the
+   * bilingual dictionary in shared/search-synonyms.ts, which is what lets
+   * "морины тос" reach the English "horse"/"oil" printed in the name.
+   *
+   * The expansion comes back as one GROUP PER CONCEPT rather than a flat
+   * list, because the two are searched very differently below.
+   */
+  const groups = expandQueryGroups(query)
+    .map(group => group.map(sanitise).filter(Boolean))
+    .filter(group => group.length);
+  const words = Array.from(new Set(groups.flat()));
+  if (!words.length) return [];
+
+  /**
+   * MySQL's FULLTEXT index holds no word shorter than
+   * innodb_ft_min_token_size (3 on this server, verified). Under the
+   * previous query every term was `+required`, so one short word matched
+   * nothing and zeroed the ENTIRE search: "шүдний оо" returned 0 while 12
+   * products were literally described as "шүдний оо", and "гарын тос"
+   * returned 0 while "тос" alone returned 70.
+   */
+  const MIN_FULLTEXT_TOKEN = 3;
+  const isCyrillic = (word: string) => /[а-яөүё]/i.test(word);
+  const isSingleWord = (word: string) => !word.includes(" ");
+  const ownWords = new Set(normaliseSearchText(query).split(" ").map(sanitise).filter(Boolean));
+
+  /**
+   * Prefix matching is what lets a half-typed word still find things, but
+   * applied to the dictionary's own Cyrillic entries it does more harm than
+   * good: a prefix search on "маск" also matches "маскара", so "нүүрний
+   * маск" came back led by mascara instead of face masks. The dictionary
+   * already enumerates the Mongolian inflections worth matching, so those
+   * are matched exactly. The shopper's OWN words always keep the wildcard,
+   * and so does English — product names carry base forms, and "sheet"
+   * legitimately needs to reach "sheets".
+   */
+  const asTerm = (word: string) => (isCyrillic(word) && !ownWords.has(word) ? word : `${word}*`);
+
+  /**
+   * Multi-word dictionary entries ("шүдний оо", "нүх сүв") stay OUT of the
+   * boolean expression. Unquoted, boolean mode reads them as independent
+   * tokens, so the group matched every toothBRUSH on "шүдний" alone.
+   * Quoted, InnoDB nullifies the whole parenthesised group — measured
+   * directly: the group without the phrase returns 4 rows, the same group
+   * with the quoted phrase added returns 0. Nesting a phrase inside a group
+   * is simply not supported. Nothing is lost: a description reading
+   * "нүүрний маск" still matches the single token "маск", and the phrases
+   * are matched as plain substrings separately below.
+   */
+  const searchable = (group: string[]) =>
+    group.filter(word => isSingleWord(word) && word.length >= MIN_FULLTEXT_TOKEN);
+
+  /**
+   * STRICT: one word from EVERY concept the shopper typed, via boolean
+   * mode's group syntax. "гарын тос" requires a hand-word AND an
+   * oil/cream-word, so a hand cream matches and an oil-blotting PAPER does
+   * not. Searched as a flat OR instead, that blotting paper came back
+   * first — a widened search that felt worse than the broken one.
+   */
+  const strictGroups = groups.map(searchable).filter(group => group.length);
+  /**
+   * The shopper's OWN words, used purely for ranking (see orderExpr below).
+   *
+   * They cannot simply be appended to the boolean query as optional terms:
+   * MySQL's manual says an unprefixed word only affects relevance, but
+   * InnoDB measurably widens the match set instead — the same query grew
+   * from 11 rows to 69, and from 3 to 46, once the typed words were added
+   * that way. So the requirement stays in WHERE and the preference goes
+   * into ORDER BY, where it can only reorder what already matched.
+   */
+  const boostWords = Array.from(ownWords).filter(word => word.length >= MIN_FULLTEXT_TOKEN);
+  const boostExpr = boostWords.length
+    ? sql`MATCH(${products.name}, ${products.brand}, ${products.shortDescription}) AGAINST(${boostWords.map(word => `${word}*`).join(" ")} IN BOOLEAN MODE)`
+    : sql`0`;
+
+  const strictQuery = strictGroups.map(group => `+(${group.map(asTerm).join(" ")})`).join(" ");
+  const strictExpr = strictGroups.length
+    ? sql`MATCH(${products.name}, ${products.brand}, ${products.shortDescription}) AGAINST(${strictQuery} IN BOOLEAN MODE)`
+    : sql`FALSE`;
+
+  /** BROAD: any word from any concept. Used only when STRICT finds nothing. */
+  const broadWords = words.filter(word => isSingleWord(word) && word.length >= MIN_FULLTEXT_TOKEN);
+  const broadQuery = broadWords.map(asTerm).join(" ");
+  const broadExpr = broadWords.length
+    ? sql`MATCH(${products.name}, ${products.brand}, ${products.shortDescription}) AGAINST(${broadQuery} IN BOOLEAN MODE)`
+    : sql`FALSE`;
+
+  /**
+   * Substring passes for what FULLTEXT structurally cannot answer: the
+   * multi-word phrases excluded above, and a query made entirely of words
+   * too short to index at all ("оо", "үс"). Both stay a handful of LIKEs
+   * over 937 rows. The short-word pass is gated on there being no indexable
+   * word anywhere, because as a general OR it was far too loose — a
+   * substring search for "оо" also matched "хоол" and "тоос".
+   */
+  const phrases = Array.from(new Set(groups.flat().filter(word => !isSingleWord(word))));
+  const shortOwnWords = Array.from(ownWords).filter(word => word.length === 2);
+  const substrings = [...phrases, ...(broadWords.length ? [] : shortOwnWords)];
+  const likeExpr = substrings.length
+    ? or(...substrings.map(value => sql`${products.shortDescription} LIKE ${`%${value}%`}`))
+    : null;
 
   // 2026-09-11: a barcode typed (or scanned) into the search box used to
   // return nothing at all -- the FULLTEXT index covers name/brand/
@@ -984,9 +1088,8 @@ export async function searchPublishedCatalog(query: string) {
   // UNIQUE `sku` column. Only attempted when the query actually looks like
   // a code, so a normal phrase still costs exactly one FULLTEXT scan.
   const scannedCode = looksLikeBarcode(query) ? normaliseBarcode(query) : null;
-  const findExpr = scannedCode ? or(matchExpr, eq(products.sku, scannedCode)) : matchExpr;
 
-  return db
+  const rowsFor = (rankExpr: SQL<unknown>) => db
     .select({
       id: products.id,
       name: products.name,
@@ -1008,10 +1111,20 @@ export async function searchPublishedCatalog(query: string) {
     .from(products)
     .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
     .leftJoin(productReviews, eq(productReviews.productId, products.id))
-    .where(and(eq(products.isPublished, true), findExpr))
+    .where(and(eq(products.isPublished, true), or(
+      rankExpr,
+      ...(likeExpr ? [likeExpr] : []),
+      ...(scannedCode ? [eq(products.sku, scannedCode)] : []),
+    )!))
     .groupBy(products.id, productCategories.id)
-    .orderBy(desc(matchExpr))
+    .orderBy(desc(sql`${rankExpr} + (${boostExpr} * 3)`))
     .limit(200);
+
+  // Strict first. Only when requiring every concept finds nothing at all do
+  // we widen — an empty shelf is the one outcome worse than a loose one.
+  const strictRows = await rowsFor(strictExpr);
+  if (strictRows.length) return strictRows;
+  return rowsFor(broadExpr);
 }
 
 // Preference Profile v2 (2026-09-01): "recommended for you" v2. A real read
@@ -3394,6 +3507,184 @@ export async function deleteSiteText(slotKey: string) {
 }
 
 /**
+ * The three legal pages (2026-09-12) -- same override-a-fallback contract
+ * as siteText above. Returns only the rows an admin has actually saved;
+ * the caller merges them over shared/legal-documents.ts, so a key that has
+ * never been edited simply isn't here.
+ */
+export async function getSiteDocuments() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      documentKey: siteDocuments.documentKey,
+      title: siteDocuments.title,
+      lead: siteDocuments.lead,
+      contentHtml: siteDocuments.contentHtml,
+      updatedLabel: siteDocuments.updatedLabel,
+      updatedAt: siteDocuments.updatedAt,
+    })
+    .from(siteDocuments)
+    .orderBy(asc(siteDocuments.documentKey));
+}
+
+export async function upsertSiteDocument(input: {
+  documentKey: string;
+  title: string;
+  lead: string | null;
+  contentHtml: string;
+  updatedLabel: string | null;
+  updatedByUserId: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  // Same trust boundary as posts.content: the admin editor's "Text" tab can
+  // paste arbitrary HTML, so it is sanitized server-side on every write
+  // rather than trusted at render time.
+  const contentHtml = sanitizePostContent(input.contentHtml);
+  await db.insert(siteDocuments).values({
+    documentKey: input.documentKey,
+    title: input.title,
+    lead: input.lead,
+    contentHtml,
+    updatedLabel: input.updatedLabel,
+    updatedByUserId: input.updatedByUserId,
+  }).onDuplicateKeyUpdate({
+    set: {
+      title: input.title,
+      lead: input.lead,
+      contentHtml,
+      updatedLabel: input.updatedLabel,
+      updatedByUserId: input.updatedByUserId,
+      updatedAt: new Date(),
+    },
+  });
+  const updated = await db.select().from(siteDocuments).where(eq(siteDocuments.documentKey, input.documentKey)).limit(1);
+  return updated[0];
+}
+
+export async function deleteSiteDocument(documentKey: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.delete(siteDocuments).where(eq(siteDocuments.documentKey, documentKey));
+  return { documentKey };
+}
+
+/**
+ * The loyalty ladder (2026-09-12). Reads the `loyalty_tiers` table, and
+ * falls back to shared/loyalty.ts's constant when the table is empty or
+ * the DB is unreachable.
+ *
+ * That fallback is not defensive decoration: this list PRICES ORDERS
+ * (getApplicableLoyaltyDiscount below), so "no rows" must mean "today's
+ * known-good ladder", never "everyone's discount silently becomes 0%".
+ * Sorted by minSpendMnt because getLoyaltyTier walks the list in ascending
+ * order and takes the last tier the shopper qualifies for.
+ */
+export async function getLoyaltyTierTable(): Promise<LoyaltyTier[]> {
+  const db = await getDb();
+  if (!db) return LOYALTY_TIERS;
+  const rows = await db
+    .select({ name: loyaltyTiers.name, discountPercent: loyaltyTiers.discountPercent, minSpendMnt: loyaltyTiers.minSpendMnt })
+    .from(loyaltyTiers)
+    .orderBy(asc(loyaltyTiers.minSpendMnt), asc(loyaltyTiers.sortOrder));
+  return rows.length ? rows : LOYALTY_TIERS;
+}
+
+export async function getAdminLoyaltyTiers() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(loyaltyTiers).orderBy(asc(loyaltyTiers.minSpendMnt), asc(loyaltyTiers.sortOrder));
+}
+
+export async function upsertLoyaltyTier(input: {
+  id?: number;
+  name: string;
+  discountPercent: number;
+  minSpendMnt: number;
+  sortOrder: number;
+  updatedByUserId: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  if (input.id) {
+    await db.update(loyaltyTiers).set({
+      name: input.name,
+      discountPercent: input.discountPercent,
+      minSpendMnt: input.minSpendMnt,
+      sortOrder: input.sortOrder,
+      updatedByUserId: input.updatedByUserId,
+      updatedAt: new Date(),
+    }).where(eq(loyaltyTiers.id, input.id));
+    const updated = await db.select().from(loyaltyTiers).where(eq(loyaltyTiers.id, input.id)).limit(1);
+    return updated[0];
+  }
+  const inserted = await db.insert(loyaltyTiers).values({
+    name: input.name,
+    discountPercent: input.discountPercent,
+    minSpendMnt: input.minSpendMnt,
+    sortOrder: input.sortOrder,
+    updatedByUserId: input.updatedByUserId,
+  });
+  const created = await db.select().from(loyaltyTiers).where(eq(loyaltyTiers.id, Number(inserted[0].insertId))).limit(1);
+  return created[0];
+}
+
+/**
+ * Refuses to delete the last remaining tier: an empty table falls back to
+ * the code constant (see getLoyaltyTierTable), so "delete them all" would
+ * look like it worked in the admin list and then silently restore the four
+ * original tiers on the storefront -- the most confusing possible outcome.
+ */
+export async function deleteLoyaltyTier(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const remaining = await db.select({ id: loyaltyTiers.id }).from(loyaltyTiers);
+  if (remaining.length <= 1) throw new Error("Хамгийн багадаа нэг зэрэглэл үлдэх ёстой.");
+  await db.delete(loyaltyTiers).where(eq(loyaltyTiers.id, id));
+  return { id };
+}
+
+/**
+ * Active catalogue categories for the STOREFRONT (2026-09-12).
+ *
+ * The homepage, /shop's discovery cards, the header's mobile drawer and the
+ * footer all used to read a hardcoded `categories` array in
+ * client/src/components/home/categories-data.ts, while /shop's own filter
+ * pills read the real DB categories -- so renaming a category in /admin
+ * changed the filter and left every other surface showing the old name.
+ * One source now, and the admin's `description`/`imageUrl` fields (which
+ * the storefront never read before) finally reach the page.
+ */
+export async function getPublishedCategories() {
+  const db = await getDb();
+  if (!db) return [];
+  // Active AND actually stocked. The live database has an empty leftover
+  // category ("Shampoo", 0 products, still flagged active) which the old
+  // hardcoded array simply never listed; reading the table naively would
+  // have put it on the homepage, in the header drawer and in the footer as
+  // a link to an empty shelf. Requiring at least one published product is
+  // the same rule the rest of this storefront already follows -- rails and
+  // sections hide themselves rather than render an empty state.
+  const rows = await db
+    .select({
+      id: productCategories.id,
+      name: productCategories.name,
+      slug: productCategories.slug,
+      description: productCategories.description,
+      imageUrl: productCategories.imageUrl,
+      sortOrder: productCategories.sortOrder,
+      productCount: sql<number>`count(${products.id})`,
+    })
+    .from(productCategories)
+    .innerJoin(products, and(eq(products.categoryId, productCategories.id), eq(products.isPublished, true)))
+    .where(eq(productCategories.isActive, true))
+    .groupBy(productCategories.id)
+    .orderBy(asc(productCategories.sortOrder), asc(productCategories.name));
+  return rows.map(row => ({ ...row, productCount: Number(row.productCount) }));
+}
+
+/**
  * "Controls everything" admin overhaul (2026-09-08, Phase A): store_settings
  * -- same upsert-by-unique-key shape as site_media/site_text above, see
  * shared/store-settings.ts for the slot registry and drizzle/schema.ts for
@@ -4106,11 +4397,12 @@ export async function getAdminUserDetail(userId: number) {
 
   const onlineSpendMnt = Number(spendRow?.total ?? 0);
   const totalSpendMnt = onlineSpendMnt + user.loyaltyManualAdjustmentMnt;
+  const adminTiers = await getLoyaltyTierTable();
   return {
     ...user,
     orders: userOrders,
     totalSpentMnt: onlineSpendMnt, // kept for the existing admin panel display
-    loyalty: { onlineSpendMnt, totalSpendMnt, manualAdjustmentMnt: user.loyaltyManualAdjustmentMnt, currentTier: getLoyaltyTier(totalSpendMnt), nextTier: getNextLoyaltyTier(totalSpendMnt) },
+    loyalty: { onlineSpendMnt, totalSpendMnt, manualAdjustmentMnt: user.loyaltyManualAdjustmentMnt, currentTier: getLoyaltyTier(totalSpendMnt, adminTiers), nextTier: getNextLoyaltyTier(totalSpendMnt, adminTiers) },
   };
 }
 
@@ -4138,7 +4430,10 @@ export async function getUserLoyaltyStatus(userId: number) {
   const [spendRow] = await db.select({ total: sql<number>`coalesce(sum(${orders.totalMnt}), 0)` }).from(orders).where(and(eq(orders.userId, userId), settledSaleSql));
   const onlineSpendMnt = Number(spendRow?.total ?? 0);
   const totalSpendMnt = onlineSpendMnt + user.loyaltyManualAdjustmentMnt;
-  const nextTier = getNextLoyaltyTier(totalSpendMnt);
+  // 2026-09-12: the ladder is admin-editable now (loyalty_tiers), so it is
+  // read per call rather than closed over from a module constant.
+  const tiers = await getLoyaltyTierTable();
+  const nextTier = getNextLoyaltyTier(totalSpendMnt, tiers);
   // Home redesign Quick Stats section: lifetime money actually saved via the
   // loyalty tier discount, kept mathematically separate from totalSpendMnt
   // (spend) and currentTier.discountPercent (rate). Same "same bar as
@@ -4158,8 +4453,9 @@ export async function getUserLoyaltyStatus(userId: number) {
     manualAdjustmentMnt: user.loyaltyManualAdjustmentMnt,
     totalSpendMnt,
     totalLoyaltySavingsMnt,
-    currentTier: getLoyaltyTier(totalSpendMnt),
+    currentTier: getLoyaltyTier(totalSpendMnt, tiers),
     nextTier,
+    tiers,
     amountToNextTierMnt: nextTier ? nextTier.minSpendMnt - totalSpendMnt : null,
   };
 }

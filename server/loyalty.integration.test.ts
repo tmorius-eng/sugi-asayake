@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { adminAuditLogs, cartItems, carts, orderItems, orders, productCategories, productVariants, products, routineSteps, routines, users } from "../drizzle/schema";
+import { adminAuditLogs, cartItems, carts, loyaltyTiers, orderItems, orders, productCategories, productVariants, products, routineSteps, routines, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
 import { getDb } from "./db";
 import { hashPassword } from "./_core/password";
@@ -29,9 +29,32 @@ describeWithDatabase("loyalty tier discount integration", () => {
   let adminId = 0;
   let productId = 0;
   let createdOrderIds: number[] = [];
+  /**
+   * 2026-09-12: the tier ladder moved out of a code constant and into the
+   * admin-editable `loyalty_tiers` table, so these tests started failing the
+   * moment someone changed a threshold in /admin -- which is exactly what
+   * happened (Хүрэл was set to 300,000 while the assertions below expect
+   * 500,000). Rather than weaken the assertions, this file now snapshots the
+   * real ladder, installs the canonical one for the duration, and puts the
+   * shop's own back afterwards. Same snapshot-and-restore discipline
+   * CLAUDE.md requires of every test that touches real admin-managed data.
+   */
+  let tierSnapshot: { id: number; name: string; discountPercent: number; minSpendMnt: number; sortOrder: number }[] = [];
+  const CANONICAL_TIERS = [
+    { name: "Стандарт", discountPercent: 0, minSpendMnt: 0, sortOrder: 0 },
+    { name: "Хүрэл", discountPercent: 3, minSpendMnt: 500_000, sortOrder: 1 },
+    { name: "Мөнгөн", discountPercent: 5, minSpendMnt: 1_000_000, sortOrder: 2 },
+    { name: "Алтан", discountPercent: 10, minSpendMnt: 10_000_000, sortOrder: 3 },
+  ];
 
   beforeAll(async () => {
     const db = await getDb();
+
+    // Snapshot the shop's real tier ladder, then install the canonical one
+    // the assertions below are written against.
+    tierSnapshot = await db.select().from(loyaltyTiers);
+    await db.delete(loyaltyTiers);
+    for (const tier of CANONICAL_TIERS) await db.insert(loyaltyTiers).values(tier);
     if (!db) throw new Error("DATABASE_URL is required for loyalty integration tests.");
 
     const shopperInsert = await db.insert(users).values({ email: shopperEmail, passwordHash: await hashPassword("ShopperPassw0rd!"), name: "Loyalty Test Shopper", phone: "99112233", role: "user", emailVerifiedAt: new Date() });
@@ -68,6 +91,10 @@ describeWithDatabase("loyalty tier discount integration", () => {
     await db.delete(adminAuditLogs).where(eq(adminAuditLogs.actorUserId, adminId));
     await db.delete(users).where(eq(users.id, shopperId));
     await db.delete(users).where(eq(users.id, adminId));
+    // Put the shop's own ladder back exactly as it was, ids included -- an
+    // owner's real discount settings must survive a test run.
+    await db.delete(loyaltyTiers);
+    for (const tier of tierSnapshot) await db.insert(loyaltyTiers).values(tier);
   });
 
   function shopper() {

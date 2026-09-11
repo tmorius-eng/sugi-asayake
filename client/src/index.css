@@ -986,6 +986,27 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .doc-section p { max-width: 640px; margin: 8px 0 0; color: #4c514d; font-size: 14px; line-height: 1.75; }
 @media (max-width: 620px) { .doc-section { grid-template-columns: 1fr; gap: 6px; } }
 
+/* 2026-09-12: the legal pages moved into the site_documents table and are
+   now one authored HTML body per page (TinyMCE in /admin) instead of a
+   mapped [heading, paragraph] array, so the rules above -- which target a
+   per-section wrapper this markup no longer has -- are restated here for
+   the tags an editor actually produces. The numbered index column went with
+   the wrapper: an admin can reorder or add sections freely now, and a
+   hand-maintained "01/02/03" gutter would have gone wrong the first time
+   they did. Same type sizes and rhythm as before, so the pages read
+   identically. */
+.doc-body > h2 { margin: 26px 0 0; font-size: 17px; font-weight: 800; letter-spacing: -.01em; }
+.doc-body > h2:first-child { margin-top: 6px; }
+.doc-body > h3 { margin: 20px 0 0; font-size: 15px; font-weight: 800; letter-spacing: -.01em; }
+.doc-body > p { max-width: 640px; margin: 8px 0 0; color: #4c514d; font-size: 14px; line-height: 1.75; }
+.doc-body > p:not(:last-child) { padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+.doc-body > ul, .doc-body > ol { max-width: 640px; margin: 10px 0 0; padding-left: 20px; color: #4c514d; font-size: 14px; line-height: 1.75; }
+.doc-body > ul { list-style: disc; }
+.doc-body > ol { list-style: decimal; }
+.doc-body a { color: var(--primary-text); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+.doc-body strong { font-weight: 800; }
+.doc-body img { max-width: 100%; height: auto; margin-top: 14px; }
+
 /* 404 gets its own brand moment instead of the generic slate/blue shadcn
    template card — same accent-ring language as the auth shell. */
 .notfound-shell { position: relative; overflow: hidden; display: grid; min-height: 100vh; place-items: center; padding: 32px; background: var(--background); text-align: center; }

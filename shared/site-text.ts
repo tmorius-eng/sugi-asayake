@@ -614,6 +614,627 @@ export const siteTextSlots = [
     description: "",
     fallbackValue: "Сайн сонголт\nойрхон байна.",
   },
+
+  // ======================================================================
+  // 2026-09-12: everything below extends this registry PAST the homepage.
+  //
+  // Until now all 70 slots above were `home-*`: the homepage was fully
+  // admin-editable while /shop, /checkout, the product page, the account
+  // pages and every <title> stayed hardcoded, so changing the shop hero's
+  // headline was a click and changing the /shop headline was a deploy.
+  //
+  // Same rules as the homepage slots -- fallbackValue is the CURRENT real
+  // copy, copied verbatim from the component it came from, and the same
+  // exclusions still apply: nothing that doubles as a functional key
+  // (category titles, tel: numbers -- those are store_settings now),
+  // nothing built around a server-computed number, and no pure UI
+  // microcopy (button labels, form validation, toasts, aria-labels).
+  // ======================================================================
+
+  // ---- Толгой цэс ба хөл (site-wide) ------------------------------------
+  {
+    key: "nav-text-shop",
+    group: "Толгой цэс ба хөл",
+    label: "Цэс: Дэлгүүр",
+    description: "Нүүр хуудасны дээд цэсний холбоосын нэр (холбоос нь /shop хэвээр).",
+    fallbackValue: "Дэлгүүр",
+  },
+  {
+    key: "nav-text-brands",
+    group: "Толгой цэс ба хөл",
+    label: "Цэс: Топ брэнд",
+    description: "",
+    fallbackValue: "Топ брэнд",
+  },
+  {
+    key: "nav-text-membership",
+    group: "Толгой цэс ба хөл",
+    label: "Цэс: Гишүүнчлэл",
+    description: "",
+    fallbackValue: "Гишүүнчлэл",
+  },
+  {
+    key: "nav-text-stores",
+    group: "Толгой цэс ба хөл",
+    label: "Цэс: Салбарууд",
+    description: "",
+    fallbackValue: "Салбарууд",
+  },
+  {
+    key: "nav-text-journal",
+    group: "Толгой цэс ба хөл",
+    label: "Цэс: Зөвлөгөө",
+    description: "",
+    fallbackValue: "Зөвлөгөө",
+  },
+  {
+    key: "footer-text-tagline",
+    group: "Толгой цэс ба хөл",
+    label: "Хөлийн уриа",
+    description: "Логоны доор харагдах нэг мөр.",
+    fallbackValue: "Япон чанарыг гэр бүл бүрт.",
+  },
+  {
+    key: "footer-text-column-shop",
+    group: "Толгой цэс ба хөл",
+    label: "Хөл: \"Дэлгүүр\" баганын гарчиг",
+    description: "Доорх жагсаалт нь бодит ангиллууд — тэдгээрийг Бүтээгдэхүүн → Ангилал хэсгээс засварлана.",
+    fallbackValue: "Дэлгүүр",
+  },
+  {
+    key: "footer-text-column-branches",
+    group: "Толгой цэс ба хөл",
+    label: "Хөл: \"Салбарууд\" баганын гарчиг",
+    description: "Доорх жагсаалт нь бодит салбарууд — Салбарууд хэсгээс засварлана.",
+    fallbackValue: "Салбарууд",
+  },
+  {
+    key: "footer-text-column-legal",
+    group: "Толгой цэс ба хөл",
+    label: "Хөл: \"Нөхцөл ба бодлого\" баганын гарчиг",
+    description: "",
+    fallbackValue: "Нөхцөл ба бодлого",
+  },
+  {
+    key: "footer-text-column-contact",
+    group: "Толгой цэс ба хөл",
+    label: "Хөл: \"Холбоо барих\" баганын гарчиг",
+    description: "Утас, имэйлийг Дэлгүүрийн тохиргоо → Холбоо барих хэсгээс засварлана.",
+    fallbackValue: "Холбоо барих",
+  },
+  {
+    key: "footer-text-copyright",
+    group: "Толгой цэс ба хөл",
+    label: "Хөл: зохиогчийн эрхийн мөр",
+    description: "",
+    fallbackValue: "© 2026 SUGI ASAYAKE Mongolia",
+  },
+  {
+    key: "footer-text-subsidiary",
+    group: "Толгой цэс ба хөл",
+    label: "Хөл: баруун доод мөр",
+    description: "",
+    fallbackValue: "Official SUGI Drug Store Japan subsidiary",
+  },
+
+  // ---- /shop -------------------------------------------------------------
+  {
+    key: "shop-text-hero-kicker",
+    group: "Дэлгүүр (/shop)",
+    label: "Дээд жижиг тэмдэглэгээ",
+    description: "",
+    fallbackValue: "02 / SUGI MARKET",
+  },
+  {
+    key: "shop-text-hero-heading",
+    group: "Дэлгүүр (/shop)",
+    label: "Гол гарчиг (2 мөр)",
+    description: "Мөр бүрийг шинэ мөрөнд бичнэ үү. Хоёр дахь мөр онцолж харагдана.",
+    fallbackValue: "Өдөр тутмын\nсонголтууд.",
+  },
+  {
+    key: "shop-text-hero-description",
+    group: "Дэлгүүр (/shop)",
+    label: "Гарчгийн доорх тайлбар",
+    description: "",
+    fallbackValue: "Японоос албан ёсоор нийлүүлсэн арьс арчилгаа, эрүүл мэнд, гэр бүлийн хэрэгцээний бүтээгдэхүүнээ өөртөө тохируулан олоорой.",
+  },
+  {
+    key: "shop-text-hero-signature",
+    group: "Дэлгүүр (/shop)",
+    label: "Тэмдэглэгээний зурвас",
+    description: "Гарчгийн доорх жижиг badge. Хажууд нь харагдах хүргэлтийн үнэ нь Дэлгүүрийн тохиргооноос автоматаар гарна.",
+    fallbackValue: "ТАНЫ ӨДӨР БҮРТ / ЯПОН ЧАНАР",
+  },
+  {
+    key: "shop-text-filter-heading",
+    group: "Дэлгүүр (/shop)",
+    label: "Шүүлтүүрийн гарчиг",
+    description: "",
+    fallbackValue: "АНГИЛЛААР ШҮҮХ",
+  },
+  {
+    key: "shop-text-filter-subtitle",
+    group: "Дэлгүүр (/shop)",
+    label: "Шүүлтүүрийн тайлбар",
+    description: "",
+    fallbackValue: "Таны өдөр тутмын хэрэгцээний хэмнэлээр",
+  },
+  {
+    key: "shop-text-discovery-kicker",
+    group: "Дэлгүүр (/shop)",
+    label: "Discovery хэсгийн тэмдэглэгээ",
+    description: "Каталог хоосон үед харагдах хэсэг.",
+    fallbackValue: "SUGI ASAYAKE / DISCOVER",
+  },
+  {
+    key: "shop-text-discovery-heading",
+    group: "Дэлгүүр (/shop)",
+    label: "Discovery гарчиг (2 мөр)",
+    description: "",
+    fallbackValue: "Өнөөдрийн хэрэгцээ\nэндээс эхэлнэ.",
+  },
+  {
+    key: "shop-text-discovery-description",
+    group: "Дэлгүүр (/shop)",
+    label: "Discovery тайлбар",
+    description: "",
+    fallbackValue: "Онлайн каталогийг бид салбарын бодит нөөцтэй нь уялдуулан шинэчилж байна. Харин та өөрт ойр салбараас дараах ангиллаар шууд асууж болно.",
+  },
+  {
+    key: "shop-text-contact-cta-title",
+    group: "Дэлгүүр (/shop)",
+    label: "Салбарын CTA гарчиг",
+    description: "Салбарын тоо автоматаар бодит тоогоор солигдоно — {N} гэж бичсэн газар орно.",
+    fallbackValue: "{N} салбар, нэг өдөр тутмын сонголт.",
+  },
+  {
+    key: "shop-text-contact-cta-subtitle",
+    group: "Дэлгүүр (/shop)",
+    label: "Салбарын CTA тайлбар",
+    description: "",
+    fallbackValue: "Таны хайж буй бүтээгдэхүүнийг ойр салбараас асуугаарай.",
+  },
+  {
+    key: "shop-text-recent-kicker",
+    group: "Дэлгүүр (/shop)",
+    label: "\"Сүүлд үзсэн\" тэмдэглэгээ",
+    description: "",
+    fallbackValue: "ТАНЫ СҮҮЛД ҮЗСЭН",
+  },
+  {
+    key: "shop-text-recent-heading",
+    group: "Дэлгүүр (/shop)",
+    label: "\"Сүүлд үзсэн\" гарчиг (2 мөр)",
+    description: "",
+    fallbackValue: "Буцаад\nхараарай.",
+  },
+  {
+    key: "shop-text-recent-note",
+    group: "Дэлгүүр (/shop)",
+    label: "\"Сүүлд үзсэн\" тайлбар",
+    description: "",
+    fallbackValue: "Энэ жагсаалт зөвхөн таны энэ төхөөрөмж дээр хадгалагдана. Нэвтрэх мэдээлэл, захиалга, эсвэл хувийн таних мэдээлэл цуглуулахгүй.",
+  },
+  {
+    key: "shop-text-recommended-kicker",
+    group: "Дэлгүүр (/shop)",
+    label: "\"Танд зориулан\" тэмдэглэгээ",
+    description: "",
+    fallbackValue: "ТАНД ЗОРИУЛАН",
+  },
+  {
+    key: "shop-text-recommended-heading",
+    group: "Дэлгүүр (/shop)",
+    label: "\"Танд зориулан\" гарчиг (2 мөр)",
+    description: "",
+    fallbackValue: "Танд\nсанал болгож байна.",
+  },
+  {
+    key: "shop-text-recommended-description",
+    group: "Дэлгүүр (/shop)",
+    label: "\"Танд зориулан\" тайлбар",
+    description: "",
+    fallbackValue: "Таны профайл дээр хадгалсан арьсны төрөл, арчилгааны сонирхол, интерьер загварт тохирсон бүтээгдэхүүнүүд.",
+  },
+
+  // ---- Барааны хуудас ----------------------------------------------------
+  {
+    key: "pdp-text-routine-kicker",
+    group: "Барааны хуудас",
+    label: "Routine хэсгийн тэмдэглэгээ",
+    description: "Тухайн бараа arчилгааны багцад багтдаг үед л харагдана.",
+    fallbackValue: "ROUTINE-ОО ДУУСГА",
+  },
+  {
+    key: "pdp-text-routine-heading",
+    group: "Барааны хуудас",
+    label: "Routine хэсгийн гарчиг",
+    description: "",
+    fallbackValue: "Хамт авбал тохирно",
+  },
+  {
+    key: "pdp-text-reviews-heading",
+    group: "Барааны хуудас",
+    label: "Сэтгэгдлийн хэсгийн гарчиг",
+    description: "Сэтгэгдлийн тоо автоматаар хажууд нь нэмэгдэнэ.",
+    fallbackValue: "Хэрэглэгчийн сэтгэгдэл",
+  },
+  {
+    key: "pdp-text-reviews-empty",
+    group: "Барааны хуудас",
+    label: "Сэтгэгдэл байхгүй үеийн текст",
+    description: "",
+    fallbackValue: "Одоогоор сэтгэгдэл байхгүй байна. Эхний сэтгэгдлийг та үлдээгээрэй!",
+  },
+  {
+    key: "pdp-text-reviews-eligibility",
+    group: "Барааны хуудас",
+    label: "Сэтгэгдэл бичих эрхгүй үеийн тайлбар",
+    description: "Тухайн барааг захиалаагүй хэрэглэгчид харагдана.",
+    fallbackValue: "Зөвхөн энэ бүтээгдэхүүнийг захиалсан хэрэглэгч сэтгэгдэл бичих боломжтой.",
+  },
+
+  // ---- Захиалга баталгаажуулах (/checkout) -------------------------------
+  {
+    key: "checkout-text-heading",
+    group: "Захиалга баталгаажуулах",
+    label: "Гол гарчиг (2 мөр)",
+    description: "Хоёр дахь мөр улаанаар онцлогдоно.",
+    fallbackValue: "Захиалгаа\nбаталгаажуулах.",
+  },
+  {
+    key: "checkout-text-description",
+    group: "Захиалга баталгаажуулах",
+    label: "Гарчгийн доорх тайлбар",
+    description: "",
+    fallbackValue: "Захиалгын мэдээллээ баталгаажуулаад, хүргэлт эсвэл салбарынхаа сонголтыг хий. QPay зөвхөн merchant тохиргоо дууссаны дараа идэвхжинэ.",
+  },
+  {
+    key: "checkout-text-returns-notice",
+    group: "Захиалга баталгаажуулах",
+    label: "Буцаалтын анхааруулга",
+    description: "Захиалга өгөхийн өмнө харуулах бодлогын анхааруулга. Төгсгөлд нь \"Буцаалт, солилцоо\" хуудасны холбоос автоматаар нэмэгдэнэ.",
+    fallbackValue: "Нээгдсэн, ашигласан бүтээгдэхүүнийг зөвхөн бодит гэмтэлтэй эсвэл зарласан чанар/шинж чанараа хангаагүй үед л буцаана — таалагдаагүй, санаа өөрчлөгдсөн шалтгаанаар буцаах боломжгүй. Ариун цэврийн лац, савлагаа нээгдсэн эрүүл ахуйн бүтээгдэхүүнийг халдваргүйжлийн шалтгаанаар буцаах, солих боломж хязгаарлагдана.",
+  },
+  {
+    key: "checkout-text-qpay-notice",
+    group: "Захиалга баталгаажуулах",
+    label: "QPay идэвхгүй үеийн анхааруулга",
+    description: "QPay merchant тохиргоо хийгдсэний дараа энэ мөр өөрөө алга болно.",
+    fallbackValue: "Merchant credentials орох хүртэл зөвхөн бэлэн мөнгөний захиалга ажиллана. Bank transfer болон картын төлбөр нь тохиргоогүй тул зориуд харагдахгүй байна.",
+  },
+
+  // ---- Данс, туслах хуудсууд ---------------------------------------------
+  {
+    key: "login-text-heading",
+    group: "Нэвтрэх, бүртгүүлэх",
+    label: "Нэвтрэх гарчиг (2 мөр)",
+    description: "",
+    fallbackValue: "Дахин\nтавтай морил.",
+  },
+  {
+    key: "login-text-register-heading",
+    group: "Нэвтрэх, бүртгүүлэх",
+    label: "Бүртгүүлэх гарчиг (2 мөр)",
+    description: "",
+    fallbackValue: "Бүртгэл\nүүсгэх.",
+  },
+  {
+    key: "login-text-verify-heading",
+    group: "Нэвтрэх, бүртгүүлэх",
+    label: "Утас баталгаажуулах гарчиг (2 мөр)",
+    description: "",
+    fallbackValue: "Утасны дугаараа\nбаталгаажуулах.",
+  },
+  {
+    key: "login-text-verify-lede",
+    group: "Нэвтрэх, бүртгүүлэх",
+    label: "Утас баталгаажуулах тайлбар",
+    description: "",
+    fallbackValue: "Бүртгэл үүсгэхийн тулд эхлээд утасны дугаараа SMS-ээр баталгаажуулна уу.",
+  },
+  {
+    key: "forgot-text-heading",
+    group: "Нэвтрэх, бүртгүүлэх",
+    label: "Нууц үг сэргээх гарчиг (2 мөр)",
+    description: "",
+    fallbackValue: "Нууц үгээ\nсэргээх.",
+  },
+  {
+    key: "forgot-text-lede",
+    group: "Нэвтрэх, бүртгүүлэх",
+    label: "Нууц үг сэргээх тайлбар",
+    description: "",
+    fallbackValue: "Бүртгэлтэй утасны дугаараа оруулбал SMS-ээр баталгаажуулна.",
+  },
+  {
+    key: "track-text-heading",
+    group: "Захиалга хянах",
+    label: "Гарчиг (2 мөр)",
+    description: "",
+    fallbackValue: "Захиалгаа\nхянах.",
+  },
+  {
+    key: "track-text-lede",
+    group: "Захиалга хянах",
+    label: "Тайлбар",
+    description: "",
+    fallbackValue: "Захиалгын дугаар болон захиалахад ашигласан утасны дугаараа оруулна уу.",
+  },
+  {
+    key: "journal-text-heading",
+    group: "Зөвлөгөө ба мэдээ",
+    label: "Гарчиг (2 мөр)",
+    description: "",
+    fallbackValue: "Зөвлөгөө ба\nмэдээ.",
+  },
+  {
+    key: "journal-text-lede",
+    group: "Зөвлөгөө ба мэдээ",
+    label: "Тайлбар",
+    description: "",
+    fallbackValue: "SUGI ASAYAKE-ийн арчилгаа, гоо сайхан, өдөр тутмын зөвлөгөөнүүд.",
+  },
+  {
+    key: "brands-text-heading",
+    group: "Бүх брэнд",
+    label: "Гарчиг",
+    description: "Брэнд болон бүтээгдэхүүний тоо доор нь автоматаар харагдана.",
+    fallbackValue: "Бүх брэнд",
+  },
+  {
+    key: "notfound-text-heading",
+    group: "Хуудас олдсонгүй (404)",
+    label: "Гарчиг",
+    description: "",
+    fallbackValue: "Энэ хуудас олдсонгүй.",
+  },
+  {
+    key: "notfound-text-description",
+    group: "Хуудас олдсонгүй (404)",
+    label: "Тайлбар",
+    description: "",
+    fallbackValue: "Холбоос буруу байж болзошгүй, эсвэл хуудас зөөгдсөн байна. Нүүр хуудас руу буцаж дахин хайж үзээрэй.",
+  },
+  {
+    key: "profile-text-greeting-kicker",
+    group: "Профайл",
+    label: "Дээд тэмдэглэгээ",
+    description: "",
+    fallbackValue: "SUGI ASAYAKE / ТАНЫ ӨДӨР БҮР",
+  },
+  {
+    key: "profile-text-greeting-lede",
+    group: "Профайл",
+    label: "Мэндчилгээний тайлбар",
+    description: "",
+    fallbackValue: "Өглөөний туяа шиг гэрэлтээрэй — таны бүх мэдээлэл эндээс нэг дороос харагдана.",
+  },
+  {
+    key: "profile-text-signedout-heading",
+    group: "Профайл",
+    label: "Нэвтрээгүй үеийн гарчиг",
+    description: "",
+    fallbackValue: "Профайлаа харахын тулд нэвтэрнэ үү.",
+  },
+  {
+    key: "profile-text-signedout-lede",
+    group: "Профайл",
+    label: "Нэвтрээгүй үеийн тайлбар",
+    description: "",
+    fallbackValue: "Хувийн мэдээлэл, зураг, хүслийн жагсаалт болон хүргэлтийн хаягаа энд хадгалж болно.",
+  },
+
+  // ---- SEO (хуудасны гарчиг, тайлбар) ------------------------------------
+  // These feed <title>/<meta name="description"> per route -- what Google
+  // and a Facebook link preview show. Kept as their own group because an
+  // owner edits them for search reasons, not for on-page design reasons.
+  {
+    key: "seo-text-home-title",
+    group: "SEO (хайлтын гарчиг)",
+    label: "Нүүр хуудас: title",
+    description: "Browser-ийн таб болон Google-ийн хайлтын үр дүнд харагдах гарчиг.",
+    fallbackValue: "SUGI ASAYAKE Mongolia — Япон чанарыг гэр бүл бүрт",
+  },
+  {
+    key: "seo-text-home-description",
+    group: "SEO (хайлтын гарчиг)",
+    label: "Нүүр хуудас: тайлбар",
+    description: "Салбарын тоо {N} гэж бичсэн газар бодит тоогоор солигдоно.",
+    fallbackValue: "SUGI ASAYAKE Mongolia — Японоос баталгаат бүтээгдэхүүнүүдийг албан ёсны эрхтэйгээр хүргэж байна. Улаанбаатар хотод {N} салбартай.",
+  },
+  {
+    key: "seo-text-shop-title",
+    group: "SEO (хайлтын гарчиг)",
+    label: "Дэлгүүр: title",
+    description: "",
+    fallbackValue: "Дэлгүүр — SUGI ASAYAKE",
+  },
+  {
+    key: "seo-text-shop-description",
+    group: "SEO (хайлтын гарчиг)",
+    label: "Дэлгүүр: тайлбар",
+    description: "",
+    fallbackValue: "Японоос албан ёсоор нийлүүлсэн арьс арчилгаа, эрүүл мэнд, гэр бүлийн хэрэгцээний 900+ бүтээгдэхүүн.",
+  },
+  {
+    key: "seo-text-journal-title",
+    group: "SEO (хайлтын гарчиг)",
+    label: "Зөвлөгөө ба мэдээ: title",
+    description: "",
+    fallbackValue: "Зөвлөгөө ба мэдээ — SUGI ASAYAKE",
+  },
+  {
+    key: "seo-text-brands-title",
+    group: "SEO (хайлтын гарчиг)",
+    label: "Бүх брэнд: title",
+    description: "",
+    fallbackValue: "Бүх брэнд — SUGI ASAYAKE",
+  },
+  {
+    key: "seo-text-brands-description",
+    group: "SEO (хайлтын гарчиг)",
+    label: "Бүх брэнд: тайлбар",
+    description: "",
+    fallbackValue: "SUGI ASAYAKE-д худалдаалагдаж буй Японы бүх брэндийн жагсаалт.",
+  },
+  {
+    key: "seo-text-checkout-title",
+    group: "SEO (хайлтын гарчиг)",
+    label: "Захиалга баталгаажуулах: title",
+    description: "",
+    fallbackValue: "Захиалга баталгаажуулах — SUGI ASAYAKE",
+  },
+  {
+    key: "seo-text-login-title",
+    group: "SEO (хайлтын гарчиг)",
+    label: "Нэвтрэх: title",
+    description: "",
+    fallbackValue: "Нэвтрэх — SUGI ASAYAKE",
+  },
+  {
+    key: "seo-text-track-title",
+    group: "SEO (хайлтын гарчиг)",
+    label: "Захиалга хянах: title",
+    description: "",
+    fallbackValue: "Захиалга хянах — SUGI ASAYAKE",
+  },
+  {
+    key: "seo-text-profile-title",
+    group: "SEO (хайлтын гарчиг)",
+    label: "Профайл: title",
+    description: "",
+    fallbackValue: "Миний профайл — SUGI ASAYAKE",
+  },
+  {
+    key: "seo-text-notfound-title",
+    group: "SEO (хайлтын гарчиг)",
+    label: "404: title",
+    description: "",
+    fallbackValue: "Хуудас олдсонгүй — SUGI ASAYAKE",
+  },
+
+  // ---- Нийгмийн сүлжээний хуваалцалт ба бүтэцлэгдсэн өгөгдөл --------------
+  // 2026-09-12: unlike every slot above, these four are NOT rendered by
+  // React -- a crawler or a Facebook/Messenger link preview reads the HTML
+  // before any JavaScript runs, so a client-side edit would never reach it.
+  // The server substitutes these into client/index.html on the way out (see
+  // server/_core/indexHtml.ts), which is why they live here rather than in
+  // the static file they end up in.
+  {
+    key: "seo-text-site-name",
+    group: "SEO (хуваалцах, бүтэцлэгдсэн өгөгдөл)",
+    label: "Сайтын нэр",
+    description: "Facebook/Twitter дээр хуваалцахад болон Google-ийн бизнесийн карт дээр гарах нэр.",
+    fallbackValue: "SUGI ASAYAKE Mongolia",
+  },
+  {
+    key: "seo-text-og-description",
+    group: "SEO (хуваалцах, бүтэцлэгдсэн өгөгдөл)",
+    label: "Facebook/Messenger-т хуваалцахад гарах тайлбар",
+    description: "Холбоосыг чатад эсвэл ханан дээр тавихад зурган доор гарах текст. {N} гэж бичсэн газар салбарын бодит тоогоор солигдоно.",
+    fallbackValue: "Японоос баталгаат бүтээгдэхүүнийг албан ёсны эрхтэйгээр Улаанбаатарын {N} салбар болон онлайнаар хүргэж байна.",
+  },
+  {
+    key: "seo-text-twitter-description",
+    group: "SEO (хуваалцах, бүтэцлэгдсэн өгөгдөл)",
+    label: "Twitter/X-д хуваалцахад гарах тайлбар",
+    description: "Ихэвчлэн дээрхээс богино байдаг. {N} гэж бичсэн газар салбарын бодит тоогоор солигдоно.",
+    fallbackValue: "Япон чанарыг гэр бүлийн гишүүн бүрт.",
+  },
+  {
+    key: "seo-text-ld-description",
+    group: "SEO (хуваалцах, бүтэцлэгдсэн өгөгдөл)",
+    label: "Google-ийн бизнесийн картын тайлбар",
+    description: "Google-д дэлгүүрийг тодорхойлох бүтэцлэгдсэн өгөгдөл (schema.org Store). {N} гэж бичсэн газар салбарын бодит тоогоор солигдоно.",
+    fallbackValue: "Албан ёсны Япон гоо сайхан, эрүүл мэнд, өдөр тутмын хэрэглээний бүтээгдэхүүний дэлгүүр.",
+  },
+
+  // ---- Күкийн зөвшөөрлийн банер -----------------------------------------
+  // 2026-09-12: same server-substitution path as the SEO block above, for
+  // the same reason -- the consent manager (client/public/vendor/silktide-
+  // consent-manager.js) is configured in client/index.html and has already
+  // drawn the banner before React mounts, so React could not supply this
+  // copy even if it wanted to. What it says is a legal-disclosure question
+  // an owner should be able to answer without a deploy.
+  {
+    key: "cookie-text-prompt-description",
+    group: "Күкийн банер",
+    label: "Банерын гол текст",
+    description: "Сайтад анх ороход баруун доод буланд гарч ирэх цонхны тайлбар.",
+    fallbackValue: "Бид энэ сайтад зайлшгүй шаардлагатай күки, мөн таны зөвшөөрснөөр сайтын статистик цуглуулах анонимчилсан күки ашигладаг.",
+  },
+  {
+    key: "cookie-text-accept-all",
+    group: "Күкийн банер",
+    label: "\"Бүгдийг зөвшөөрөх\" товчны текст",
+    description: "",
+    fallbackValue: "Бүгдийг зөвшөөрөх",
+  },
+  {
+    key: "cookie-text-reject",
+    group: "Күкийн банер",
+    label: "\"Зөвхөн шаардлагатайг\" товчны текст",
+    description: "",
+    fallbackValue: "Зөвхөн шаардлагатайг зөвшөөрөх",
+  },
+  {
+    key: "cookie-text-preferences-button",
+    group: "Күкийн банер",
+    label: "\"Тохиргоо\" товчны текст",
+    description: "",
+    fallbackValue: "Тохиргоо",
+  },
+  {
+    key: "cookie-text-preferences-title",
+    group: "Күкийн банер",
+    label: "Тохиргооны цонхны гарчиг",
+    description: "",
+    fallbackValue: "Күкийн тохиргоо",
+  },
+  {
+    key: "cookie-text-preferences-description",
+    group: "Күкийн банер",
+    label: "Тохиргооны цонхны тайлбар",
+    description: "",
+    fallbackValue: "SUGI ASAYAKE Mongolia ямар күки ашигладгийг доор харж, зөвшөөрлөө өөрчлөх боломжтой.",
+  },
+  {
+    key: "cookie-text-save",
+    group: "Күкийн банер",
+    label: "\"Хадгалах\" товчны текст",
+    description: "",
+    fallbackValue: "Тохиргоог хадгалах",
+  },
+  {
+    key: "cookie-text-essential-label",
+    group: "Күкийн банер",
+    label: "Заавал шаардлагатай күкийн нэр",
+    description: "",
+    fallbackValue: "Зайлшгүй шаардлагатай",
+  },
+  {
+    key: "cookie-text-essential-description",
+    group: "Күкийн банер",
+    label: "Заавал шаардлагатай күкийн тайлбар",
+    description: "⚠️ Энэ бол хуулийн мэдэгдэл. Сайт бодитоор ямар күки ашигладгийг үнэн зөв тайлбарласан байх ёстой.",
+    fallbackValue: "Нэвтэрсэн төлөв, зочны сагсыг санах зэрэг сайтын үндсэн үйл ажиллагаанд шаардлагатай эхний талын күки. Унтраах боломжгүй.",
+  },
+  {
+    key: "cookie-text-analytics-label",
+    group: "Күкийн банер",
+    label: "Статистикийн күкийн нэр",
+    description: "",
+    fallbackValue: "Статистик, аналитик",
+  },
+  {
+    key: "cookie-text-analytics-description",
+    group: "Күкийн банер",
+    label: "Статистикийн күкийн тайлбар",
+    description: "⚠️ Энэ бол хуулийн мэдэгдэл. Гуравдагч талын хэрэгсэл нэмвэл энэ текстийг заавал шинэчилнэ.",
+    fallbackValue: "Зочдын хандалт, хөрвүүлэлтийн хувийг тооцоолоход туслах анонимчилсан, эхний талын күки. Гуравдагч тал (Google Analytics, Meta Pixel гэх мэт) огт ашигладаггүй.",
+  },
 ] as const;
 
 export type SiteTextSlotKey = (typeof siteTextSlots)[number]["key"];

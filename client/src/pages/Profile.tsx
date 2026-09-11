@@ -6,7 +6,8 @@ import {
   Loader2, LoaderCircle, LogIn, LogOut, Mail, MapPin, Pencil, Phone, Plus, RotateCcw,
   ShieldCheck, ShieldOff, ShoppingBag, Sparkles, Star, Trash2, User as UserIcon, X,
 } from "lucide-react";
-import { LOYALTY_TIERS } from "@shared/loyalty";
+import { useShopContact } from "@/hooks/useShopContact";
+import { useSiteText } from "@/hooks/useSiteText";
 import { paymentBadgeFor } from "@shared/orders";
 import { ubDistricts, ubDistrictLabels, type UbDistrict } from "@shared/districts";
 import {
@@ -19,7 +20,6 @@ import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
 import ProfileQuizWizard from "@/components/ProfileQuizWizard";
 import SiteFooter from "@/components/SiteFooter";
-import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
 import { LineSkeleton, Skeleton } from "@/components/Skeleton";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
@@ -82,7 +82,8 @@ const FAQ_ITEMS: Array<{ q: string; a: string }> = [
 ];
 
 export default function Profile() {
-  useDocumentMeta("Миний профайл — SUGI ASAYAKE", null);
+  const textFor = useSiteText();
+  useDocumentMeta(textFor("seo-text-profile-title", "Миний профайл — SUGI ASAYAKE"), null);
   const { user, loading, isAuthenticated, logout } = useAuth();
   const utils = trpc.useUtils();
   const [, setLocation] = useLocation();
@@ -129,12 +130,12 @@ export default function Profile() {
         <main className="profile-main">
           <section className="orders-gate">
             <LogIn size={24} style={{ margin: "0 auto" }} />
-            <h2>Профайлаа харахын тулд нэвтэрнэ үү.</h2>
-            <p>Хувийн мэдээлэл, зураг, хүслийн жагсаалт болон хүргэлтийн хаягаа энд хадгалж болно.</p>
+            <h2>{textFor("profile-text-signedout-heading", "Профайлаа харахын тулд нэвтэрнэ үү.")}</h2>
+            <p>{textFor("profile-text-signedout-lede", "Хувийн мэдээлэл, зураг, хүслийн жагсаалт болон хүргэлтийн хаягаа энд хадгалж болно.")}</p>
             <button type="button" onClick={startLogin} className="button button-primary" style={{ marginTop: "24px" }}>Нэвтрэх</button>
           </section>
         </main>
-        <SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} />
+        <SiteFooter />
       </div>
     );
   }
@@ -186,7 +187,7 @@ export default function Profile() {
         </div>
       </div>
 
-      <SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} />
+      <SiteFooter />
       <CartDrawer open={cartOpen} onOpenChange={setCartOpen} />
     </div>
   );
@@ -197,6 +198,7 @@ export default function Profile() {
 /* ---------------------------------------------------------------------- */
 
 function OverviewTab({ onNavigate }: { onNavigate: (tab: TabKey) => void }) {
+  const textFor = useSiteText();
   const { user } = useAuth();
   // Audit 2026-09-09 (R4): orders.mine is cursor-paged now -- the overview
   // only needs the newest order and the true total, so ask for exactly that.
@@ -209,9 +211,9 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: TabKey) => void }) {
   return (
     <div style={{ display: "grid", gap: "20px" }}>
       <div className="overview-hero" data-reveal>
-        <p>SUGI ASAYAKE / ТАНЫ ӨДӨР БҮР</p>
+        <p>{textFor("profile-text-greeting-kicker", "SUGI ASAYAKE / ТАНЫ ӨДӨР БҮР")}</p>
         <h2>Сайн байна уу, {firstName}.</h2>
-        <span>Өглөөний туяа шиг гэрэлтээрэй — таны бүх мэдээлэл эндээс нэг дороос харагдана.</span>
+        <span>{textFor("profile-text-greeting-lede", "Өглөөний туяа шиг гэрэлтээрэй — таны бүх мэдээлэл эндээс нэг дороос харагдана.")}</span>
       </div>
 
       <div className="overview-stats" data-reveal>
@@ -835,6 +837,7 @@ function SecurityTab() {
 
 function SupportTab() {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
+  const contact = useShopContact();
   return (
     <section className="profile-section" data-reveal>
       <div className="profile-section-head"><div><h2>Тусламж</h2><p>Түгээмэл асуултууд болон холбоо барих</p></div></div>
@@ -849,8 +852,8 @@ function SupportTab() {
         ))}
       </div>
       <div className="support-contact">
-        <a href="tel:94509911"><Phone size={14} /> 9450-9911</a>
-        <a href="mailto:asayake0307@gmail.com"><Mail size={14} /> asayake0307@gmail.com</a>
+        <a href={`tel:${contact.phoneHref}`}><Phone size={14} /> {contact.phone}</a>
+        <a href={`mailto:${contact.email}`}><Mail size={14} /> {contact.email}</a>
         <Link href="/#stores"><MapPin size={14} /> Салбар олох</Link>
       </div>
     </section>
@@ -896,7 +899,11 @@ function LoyaltyTab() {
         </div>
 
         <div className="loyalty-tiers">
-          {LOYALTY_TIERS.map(tier => <div key={tier.name} className={`loyalty-tier-row${tier.name === data.currentTier.name ? " active" : ""}`}>
+          {/* 2026-09-12: the ladder is admin-editable (loyalty_tiers), and
+              it arrives on the same payload that decided this shopper's own
+              tier -- so the row highlighted as "active" can never disagree
+              with the card above it, which a second query could. */}
+          {data.tiers.map(tier => <div key={tier.name} className={`loyalty-tier-row${tier.name === data.currentTier.name ? " active" : ""}`}>
             <span><strong>{tier.name}</strong> · {tier.minSpendMnt > 0 ? `${formatMnt(tier.minSpendMnt)}-с эхлэн` : "0₮-с эхлэн"}</span>
             <span>{tier.discountPercent > 0 ? `-${tier.discountPercent}%` : "Хямдралгүй"}</span>
           </div>)}

@@ -1,17 +1,12 @@
-// PREMIUM-FEATURES.md TIER 3 Store Locator: hours are the same across all
-// branches (confirmed with Tom, 2026-08-25) -- daily 11:00-20:00.
+// This file used to hold the branch list (name/address/phone/mapUrl) as a
+// hardcoded array; those moved into the `branches` table on 2026-09-08 and
+// are edited in /admin -> Салбарууд.
 //
-// "Controls everything" admin overhaul (2026-09-08, Phase J): the real
-// branch records (name/address/phone/mapUrl) that used to live here as a
-// hardcoded `locations` array now live in the `branches` table, read live
-// via `trpc.content.branches.useQuery()` (StoreLocatorSection/SiteFooter/
-// Checkout's pickup-branch picker all read it) -- an admin can add/edit/
-// deactivate a branch without a deploy now, and it fixed a real bug as a
-// side effect: branch 04 existed in the old array but wasn't in checkout's
-// separate, stale 3-branch enum, so it was never actually selectable.
-//
-// BRANCH_HOURS stays here as a code constant rather than a `branches`
-// column: it's one shared operating-hours fact across every branch, not a
-// per-branch field, so a `branches` table column would just duplicate the
-// same string 4 times for no benefit.
-export const BRANCH_HOURS = "Өдөр бүр 11:00–20:00";
+// 2026-09-12: the last constant here, BRANCH_HOURS, moved too -- it is now
+// the `contact-branch-hours` store setting (/admin -> Дэлгүүрийн тохиргоо
+// -> Холбоо барих), read via useShopContact(). Nothing about the shop's
+// real-world operation is hardcoded any more, so this file is intentionally
+// left empty rather than deleted: its name appears in several explanatory
+// comments across the homepage components, and an empty file with this note
+// is a better landing place for that trail than a broken path.
+export {};

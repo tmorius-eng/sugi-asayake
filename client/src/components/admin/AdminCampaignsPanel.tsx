@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, LoaderCircle, Mail, MessageSquareText, Send, ShieldCheck, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
+// 2026-09-12: the ladder is admin-editable, so the segment dropdown lists
+// the live tiers; the constant stays as the in-flight fallback, matching
+// what the server falls back to.
 import { LOYALTY_TIERS } from "@shared/loyalty";
 import { GenericListView } from "./GenericListView";
 import AdminCustomerSegmentsPanel, { type SegmentField } from "./AdminCustomerSegmentsPanel";
@@ -76,7 +79,19 @@ export default function AdminCampaignsPanel() {
 
   const [recipientSource, setRecipientSource] = useState<RecipientSource | null>(null);
   const [segmentRecipients, setSegmentRecipients] = useState<{ ids: number[]; label: string } | null>(null);
+  const loyaltyTiersQuery = trpc.content.loyaltyTiers.useQuery();
+  const availableTiers = loyaltyTiersQuery.data ?? LOYALTY_TIERS;
   const [loyaltyTier, setLoyaltyTier] = useState<string>(LOYALTY_TIERS[0]?.name ?? "");
+  // Tiers are renameable now, so the initial value (seeded from the code
+  // constant before the live list arrives) can name a tier that no longer
+  // exists. Left alone, the <select> would display the first option while
+  // the state still held the stale name -- and the campaign would be sent
+  // to a segment matching nobody.
+  useEffect(() => {
+    if (!availableTiers.length) return;
+    if (availableTiers.some(tier => tier.name === loyaltyTier)) return;
+    setLoyaltyTier(availableTiers[0].name);
+  }, [availableTiers, loyaltyTier]);
   const [channel, setChannel] = useState<"email" | "sms">("email");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -149,7 +164,7 @@ export default function AdminCampaignsPanel() {
                 <button type="button" onClick={() => setActiveTab("segment")} className={`rounded-2xl border px-3 py-3 text-left text-xs font-bold transition ${recipientSource === "segment" ? "border-[#df1f3d] bg-[var(--a-neg-soft)] text-[var(--a-neg)]" : "border-[var(--a-border)] text-[var(--a-text-soft)] hover:border-black/20"}`}>Сегмент таб-аас сонгох</button>
               </div>
               {recipientSource === "loyalty" && (
-                <label className="mt-3 grid gap-1.5 text-xs font-bold">Зэрэглэл<select value={loyaltyTier} onChange={event => setLoyaltyTier(event.target.value)} className="h-10 rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] px-2 text-xs font-normal outline-none focus:border-[#df1f3d]">{LOYALTY_TIERS.map(tier => <option key={tier.name} value={tier.name}>{tier.name}</option>)}</select></label>
+                <label className="mt-3 grid gap-1.5 text-xs font-bold">Зэрэглэл<select value={loyaltyTier} onChange={event => setLoyaltyTier(event.target.value)} className="h-10 rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] px-2 text-xs font-normal outline-none focus:border-[#df1f3d]">{availableTiers.map(tier => <option key={tier.name} value={tier.name}>{tier.name}</option>)}</select></label>
               )}
               <p className="mt-3 text-xs text-[var(--a-muted)]">{recipientSource === null ? "Дээрээс сонгоно уу." : isResolvingRecipients ? "Тоолж байна…" : <>Хүлээн авагч: <strong className="text-[var(--a-text)]">{recipientLabel}</strong> — {recipientIds.length} харилцагч (илгээхээс өмнө opt-out/имэйл-утасгүй хэрэглэгчийг шүүнэ).</>}</p>
             </section>

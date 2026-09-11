@@ -6,8 +6,8 @@ import { toast } from "sonner";
 import CommerceHeader from "@/components/CommerceHeader";
 import PhoneVerificationStep from "@/components/PhoneVerificationStep";
 import SiteFooter from "@/components/SiteFooter";
-import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
 import { trpc } from "@/lib/trpc";
+import { useSiteText } from "@/hooks/useSiteText";
 
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Хүсэлт амжилтгүй боллоо. Дахин оролдоно уу.";
 
@@ -22,7 +22,11 @@ const messageFrom = (error: unknown) => error instanceof Error ? error.message :
 // there is no way to register with a number you can't actually text from.
 // Login itself is still one-step phone+password (unchanged).
 export default function Login() {
-  useDocumentMeta("Нэвтрэх — SUGI ASAYAKE", null);
+  const textFor = useSiteText();
+  useDocumentMeta(textFor("seo-text-login-title", "Нэвтрэх — SUGI ASAYAKE"), null);
+  const [verifyLine1, verifyLine2] = textFor("login-text-verify-heading", "Утасны дугаараа\nбаталгаажуулах.").split("\n");
+  const [loginLine1, loginLine2] = textFor("login-text-heading", "Дахин\nтавтай морил.").split("\n");
+  const [registerLine1, registerLine2] = textFor("login-text-register-heading", "Бүртгэл\nүүсгэх.").split("\n");
   const search = useSearch();
   // Lets an outside link (e.g. the homepage membership strip) land the
   // shopper directly on the registration step instead of login — same
@@ -83,13 +87,13 @@ export default function Login() {
         <main className="auth-main">
           <div className="auth-head">
             <p className="auth-kicker">01 / VERIFY PHONE</p>
-            <h1>Утасны дугаараа <em>баталгаажуулах.</em></h1>
-            <p className="auth-lede">Бүртгэл үүсгэхийн тулд эхлээд утасны дугаараа SMS-ээр баталгаажуулна уу.</p>
+            <h1>{verifyLine1} <em>{verifyLine2}</em></h1>
+            <p className="auth-lede">{textFor("login-text-verify-lede", "Бүртгэл үүсгэхийн тулд эхлээд утасны дугаараа SMS-ээр баталгаажуулна уу.")}</p>
           </div>
           <PhoneVerificationStep purpose="register" onVerified={setVerifiedSessionId} />
           <button type="button" onClick={() => setMode("login")} className="auth-switch">Бүртгэлтэй юу? Нэвтрэх</button>
         </main>
-        <SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} />
+        <SiteFooter />
       </div>
     );
   }
@@ -100,7 +104,7 @@ export default function Login() {
       <main className="auth-main">
         <div className="auth-head">
           <p className="auth-kicker">{mode === "login" ? "01 / SIGN IN" : "02 / CREATE ACCOUNT"}</p>
-          <h1>{mode === "login" ? <>Дахин <em>тавтай морил.</em></> : <>Бүртгэл <em>үүсгэх.</em></>}</h1>
+          <h1>{mode === "login" ? <>{loginLine1} <em>{loginLine2}</em></> : <>{registerLine1} <em>{registerLine2}</em></>}</h1>
         </div>
 
         {mode === "login" ? (
@@ -157,7 +161,7 @@ export default function Login() {
           {mode === "login" ? "Шинэ хэрэглэгч үү? Бүртгүүлэх" : "Бүртгэлтэй юу? Нэвтрэх"}
         </button>
       </main>
-      <SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} />
+      <SiteFooter />
     </div>
   );
 }

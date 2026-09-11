@@ -5,9 +5,12 @@ import { getCategoryPlaceholderImage } from "@shared/catalog-filter";
 import { useSiteText } from "@/hooks/useSiteText";
 import SectionHeading from "./SectionHeading";
 
+// 2026-09-12: this shape is now produced by useCategories() from the real
+// product_categories table plus the admin's image slots, instead of a
+// hardcoded array. `number` is gone -- the numbering was retired in the
+// 2026-09-11 audit (categories are not a sequence) and nothing read it.
 export type HomeCategory = {
-  number: string;
-  title: string;
+  name: string;
   detail: string;
   slug: string;
   Icon: ComponentType<{ size?: number }>;
@@ -92,6 +95,10 @@ export default function CategoryMasonry({
       <div className="cat-mosaic-grid">
         {categories.map((category) => {
           const imageSrc = category.imageUrl || getCategoryPlaceholderImage(category.slug);
+          // The description an admin types in /admin -> Ангилал is the
+          // card's second line; the per-card text slot stays as an override
+          // for anyone who wants different wording on the homepage than in
+          // the catalogue itself.
           // Category TITLE is never a text slot -- it's also the exact-match
           // /shop?category= filter value (see shared/catalog-filter.ts), so
           // free-text editing it here could silently break that link. Only
@@ -100,9 +107,9 @@ export default function CategoryMasonry({
 
           return (
             <Link
-              href={`/shop?category=${encodeURIComponent(category.title)}`}
+              href={`/shop?category=${encodeURIComponent(category.name)}`}
               className="cat-mosaic-item"
-              key={category.number}
+              key={category.slug}
             >
               {/* v9 (2026-09-01): a real <img> (not a background-image span)
                   inside a neutral "shelf" panel (.cat-mosaic-item-photo,
@@ -121,7 +128,7 @@ export default function CategoryMasonry({
                   means a real alt text instead of a decorative
                   background-image with no accessible name. */}
               <span className="cat-mosaic-item-photo">
-                <img src={imageSrc} alt={category.title} loading="lazy" />
+                <img src={imageSrc} alt={category.name} loading="lazy" />
               </span>
               <span className="cat-mosaic-item-body">
                 {/* 2026-09-11 audit: the "01".."06" index was removed. The six
@@ -130,7 +137,7 @@ export default function CategoryMasonry({
                     information, and one of the clearest dated-design tells on
                     the page. `category.number` stays in categories-data.ts;
                     nothing else reads it. */}
-                <span className="cat-mosaic-item-title">{category.title}</span>
+                <span className="cat-mosaic-item-title">{category.name}</span>
                 <span className="cat-mosaic-item-detail">{detail}</span>
                 <ArrowUpRight size={16} className="cat-mosaic-item-arrow" />
               </span>

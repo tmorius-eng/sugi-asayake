@@ -3,8 +3,12 @@ import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { Link } from "wouter";
 import CommerceHeader from "@/components/CommerceHeader";
 import SiteFooter from "@/components/SiteFooter";
-import { footerLogoUrl, footerSocials } from "@/components/site-footer-data";
 import { trpc } from "@/lib/trpc";
+import { useSiteText } from "@/hooks/useSiteText";
+
+// Two lines; the second is the emphasised half. Kept as a constant so the
+// escape lives in exactly one place.
+const JOURNAL_HEADING_FALLBACK = "Зөвлөгөө ба\nмэдээ.";
 
 const formatDate = (value: string | Date | null | undefined) => {
   if (!value) return "";
@@ -25,7 +29,9 @@ const formatDate = (value: string | Date | null | undefined) => {
  * appropriate for browsing many articles vs. showcasing 1-3.
  */
 export default function Journal() {
-  useDocumentMeta("Зөвлөгөө ба мэдээ — SUGI ASAYAKE", null);
+  const textFor = useSiteText();
+  useDocumentMeta(textFor("seo-text-journal-title", "Зөвлөгөө ба мэдээ — SUGI ASAYAKE"), null);
+  const [journalLine1, journalLine2] = textFor("journal-text-heading", JOURNAL_HEADING_FALLBACK).split("\n");
   const postsQuery = trpc.content.allPosts.useQuery();
   const posts = postsQuery.data ?? [];
 
@@ -38,10 +44,10 @@ export default function Journal() {
           <Newspaper size={13} /> SUGI JOURNAL
         </p>
         <h1 className="mt-4 font-[var(--font-display)] text-4xl font-semibold tracking-[-.07em] sm:text-5xl">
-          Зөвлөгөө ба <em className="text-[#df1f3d] not-italic">мэдээ.</em>
+          {journalLine1} <em className="text-[#df1f3d] not-italic">{journalLine2}</em>
         </h1>
         <p className="mt-5 max-w-lg text-[15px] leading-7 text-[#66676b]">
-          SUGI ASAYAKE-ийн арчилгаа, гоо сайхан, өдөр тутмын зөвлөгөөнүүд.
+          {textFor("journal-text-lede", "SUGI ASAYAKE-ийн арчилгаа, гоо сайхан, өдөр тутмын зөвлөгөөнүүд.")}
         </p>
 
         {postsQuery.isLoading && (
@@ -87,7 +93,7 @@ export default function Journal() {
           </div>
         )}
       </main>
-      <SiteFooter logoUrl={footerLogoUrl} socials={footerSocials} />
+      <SiteFooter />
     </div>
   );
 }

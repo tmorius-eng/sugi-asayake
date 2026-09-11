@@ -1,4 +1,5 @@
-import { getAbandonedCartsNeedingReminder, getLowStockProducts, markCartReminderSent } from "./db";
+import { getAbandonedCartsNeedingReminder, getLowStockProducts, markCartReminderSent, getStoreSettingValue } from "./db";
+import { fillTemplate } from "../shared/store-settings";
 import { sendAccountEmail, notifyOwner } from "./_core/notification";
 import { registerJob } from "./_core/scheduler";
 
@@ -21,8 +22,8 @@ export async function runAbandonedCartReminderJob(): Promise<void> {
     if (!cart.email) continue; // belt-and-suspenders; the query itself already filters this
     await sendAccountEmail({
       to: cart.email,
-      subject: "SUGI ASAYAKE — Сагсандаа юм үлдсэн байна",
-      content: `Сайн байна уу, ${cart.name ?? "хүндэт харилцагч"}!\n\nТаны сагсанд сонгосон бүтээгдэхүүн хэвээр хадгалагдаж байна. Захиалгаа өнөөдөр дуусгаад, дуртай зүйлээ гартаа авчих боломжтой.\n\nАсуух зүйл байвал бидэнтэй холбогдоно уу.`,
+      subject: await getStoreSettingValue("email-subject-abandoned-cart"),
+      content: fillTemplate(await getStoreSettingValue("email-body-abandoned-cart"), { "{нэр}": cart.name ?? "хүндэт харилцагч" }),
     });
     await markCartReminderSent(cart.cartId);
   }
@@ -46,7 +47,7 @@ export async function runLowStockDigestJob(): Promise<void> {
   if (lowStockProducts.length === 0) return;
   const lines = lowStockProducts.map(product => `- ${product.name} (SKU: ${product.sku}) — үлдэгдэл: ${product.stockQuantity}`).join("\n");
   await notifyOwner({
-    title: `SUGI ASAYAKE — ${lowStockProducts.length} бараа нөөц дуусч байна`,
+    title: fillTemplate(await getStoreSettingValue("email-subject-low-stock-digest"), { "{тоо}": String(lowStockProducts.length) }),
     content: `Дараах бараануудын нөөц бага байна:\n\n${lines}\n\nАдмин самбарын Бүтээгдэхүүн хэсгээс шинэчилнэ үү.`,
   });
 }
