@@ -13,6 +13,24 @@ export const siteMediaSlots = [
     description: "Нүүр хуудасны эхний том banner зураг.",
     fallbackUrl: "/cdn/site-media/1/sugi-professional-hero-1787734159733_30cd8572_a22051fe.webp",
   },
+  // 2026-09-12: the hero became a three-slide show (Tom). A slide is only
+  // rendered when its image resolves, so these two ship pointing at other
+  // real SUGI photographs already in R2 rather than at nothing -- the
+  // slideshow works the moment it deploys, and an admin replaces them here
+  // with whatever the campaign actually needs. Clearing a slot returns it
+  // to the photo named below, never to an empty frame.
+  {
+    key: "home-hero-2",
+    label: "Нүүр хуудасны 2-р слайдын зураг",
+    description: "Hero-гийн зургийн слайд 2. Слайд бүрийн текстийг Текст таб → \"Hero — 2-р слайд\" бүлгээс засна.",
+    fallbackUrl: "/cdn/site-media/1/sugi-professional-family-1787207997215_9cd7f13d_9c5e5e05.webp",
+  },
+  {
+    key: "home-hero-3",
+    label: "Нүүр хуудасны 3-р слайдын зураг",
+    description: "Hero-гийн зургийн слайд 3. Слайд бүрийн текстийг Текст таб → \"Hero — 3-р слайд\" бүлгээс засна.",
+    fallbackUrl: "/cdn/site-media/1/sugi-care-retail-1787207973163_8520a6e3_a3beb549.webp",
+  },
   {
     key: "home-categories",
     label: "Бүтээгдэхүүний ангиллын зураг",

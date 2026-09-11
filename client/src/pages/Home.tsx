@@ -201,7 +201,7 @@ export default function Home() {
       <CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="SUGI ASAYAKE" marketingNav />
 
       <main>
-        <HeroSection heroImageStyle={bgStyle("home-hero", heroImage)} productCountLabel={productCountLabel} />
+        <HeroSection imageFor={imageFor} productCountLabel={productCountLabel} branchCount={branchCount} />
 
         <div className="sunrise-ribbon" aria-label="SUGI ASAYAKE brand promise">
           <div>{ribbonRow("ribbon-a")}</div>

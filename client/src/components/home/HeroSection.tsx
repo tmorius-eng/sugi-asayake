@@ -1,25 +1,78 @@
-import type { CSSProperties } from "react";
 import { Link } from "wouter";
-import { ArrowUpRight, BadgeCheck, ChevronRight, Flower2, Sparkles } from "lucide-react";
+import { ArrowUpRight, BadgeCheck, ChevronRight, Flower2 } from "lucide-react";
+import { getSiteMediaSlot, type SiteMediaSlotKey } from "@shared/site-media";
 import { useSiteText } from "@/hooks/useSiteText";
+import HeroImageSlideshow, { type HeroSlide } from "./HeroImageSlideshow";
 
 /**
  * Homepage hero -- extracted verbatim from the old inline
  * client/src/pages/Home.tsx (Tier 1 of the home redesign, see
- * docs/REFERENCE-DRIVEN-PREMIUM-REDESIGN-MASTER-PROMPT.md). No visual or
- * behavioral change: the existing asymmetric split (.88fr/1.12fr, ~44/56%),
- * rotated image treatment, and "800+" badge already match the master
- * prompt's Tier-11 hero geometry, so this tier is a structural extraction
- * only -- not a redesign of the hero itself.
+ * docs/REFERENCE-DRIVEN-PREMIUM-REDESIGN-MASTER-PROMPT.md). The existing
+ * asymmetric split (.88fr/1.12fr, ~44/56%) and badge geometry already match
+ * the master prompt's Tier-11 hero.
  *
- * heroImageStyle comes from Home.tsx's bgStyle("home-hero", heroImage) --
- * that R2-fallback lookup stays owned by the page (it depends on the
- * siteMedia query), this component just renders whatever style object it's
- * given, same as the old inline markup did.
+ * 2026-09-12: the single photograph became a three-slide show (see
+ * HeroImageSlideshow for the mechanism and the accessibility reasoning).
+ * The left-hand copy deliberately does NOT change with the slides -- it
+ * carries the <h1> and the primary call to action, and a heading that
+ * rewrote itself every five seconds would be both disorienting and bad for
+ * search. Only the photograph and its own four overlays rotate.
  */
-export default function HeroSection({ heroImageStyle, productCountLabel }: { heroImageStyle: CSSProperties | undefined; productCountLabel: string }) {
+export default function HeroSection({ imageFor, productCountLabel, branchCount }: {
+  /** Resolves a site_media slot to an uploaded URL, or its brand default. */
+  imageFor: (slotKey: string, fallbackUrl: string | null) => string | null;
+  productCountLabel: string;
+  branchCount: number;
+}) {
   const textFor = useSiteText();
   const [headingLine1, headingLine2, headingLine3] = textFor("home-text-hero-heading", "ГЭР БҮЛИЙН\nГИШҮҮН БҮРТ\nЯПОН ЧАНАР").split("\n");
+
+  /**
+   * Keeps a headline number true while leaving the words around it
+   * editable -- the same reason the catalogue size stopped being the
+   * hardcoded "800+" it once was. An admin types {бараа} or {салбар}; the
+   * live count is substituted here.
+   */
+  const withCounts = (value: string) =>
+    value.replaceAll("{бараа}", productCountLabel).replaceAll("{салбар}", String(branchCount));
+
+  /**
+   * Each slide takes the admin's uploaded photo for its slot, falling back
+   * to the brand default registered for that slot in shared/site-media.ts
+   * -- so the slideshow runs with three real photographs from the first
+   * deploy, and clearing a slot in /admin returns it to that default rather
+   * than to an empty frame. A slide with no resolvable image at all is
+   * dropped instead of crossfading into nothing.
+   */
+  const slideFor = (slotKey: SiteMediaSlotKey, prefix: string, defaults: Omit<HeroSlide, "key" | "imageUrl">): HeroSlide | null => {
+    const imageUrl = imageFor(slotKey, getSiteMediaSlot(slotKey).fallbackUrl);
+    if (!imageUrl) return null;
+    return {
+      key: slotKey,
+      imageUrl,
+      badgeValue: withCounts(textFor(`${prefix}badge-value`, defaults.badgeValue)),
+      badgeLabel: textFor(`${prefix}badge-label`, defaults.badgeLabel),
+      markerLabel: textFor(`${prefix}marker-label`, defaults.markerLabel),
+      cornerLabel: textFor(`${prefix}label`, defaults.cornerLabel),
+      caption: textFor(`${prefix}image-caption`, defaults.caption),
+    };
+  };
+
+  const slides = [
+    slideFor("home-hero", "home-text-hero-", {
+      badgeValue: "{бараа}", badgeLabel: "DAILY CHOICES", markerLabel: "THE MORNING OF CARE",
+      cornerLabel: "JAPAN QUALITY", caption: "Өдөр бүрийн арчилгаа, илүү ойрхон",
+    }),
+    slideFor("home-hero-2", "home-text-hero-2-", {
+      badgeValue: "24–48", badgeLabel: "ЦАГТ ХҮРГЭНЭ", markerLabel: "DELIVERED IN ULAANBAATAR",
+      cornerLabel: "FAST DELIVERY", caption: "Захиалгаа хоёр өдрийн дотор гартаа",
+    }),
+    slideFor("home-hero-3", "home-text-hero-3-", {
+      badgeValue: "{салбар}", badgeLabel: "САЛБАР", markerLabel: "ALWAYS CLOSE TO YOU",
+      cornerLabel: "NEAR YOU", caption: "Улаанбаатарын салбаруудаас өөрөө аваарай",
+    }),
+  ].filter((slide): slide is HeroSlide => slide !== null);
+
   return (
     <section className="hero-section hero-sunrise" aria-labelledby="hero-title">
       <div className="hero-copy">
@@ -42,29 +95,7 @@ export default function HeroSection({ heroImageStyle, productCountLabel }: { her
           <span>{textFor("home-text-hero-signature", "Өглөөнөөс орой хүртэл таны өдөр тутмын сонголт.")}</span>
         </div>
       </div>
-      <div className="hero-image" style={heroImageStyle} aria-label="SUGI ASAYAKE everyday-care products" role="img">
-        <div className="hero-image-shade" />
-        {/* 2026-09-04: this badge used to hardcode "800+" directly (never
-            admin-editable, and stale the moment the real catalog outgrew
-            it -- confirmed at 937 published products). Now derived from a
-            real COUNT(*) (see getPublishedProductCount, Home.tsx), rounded
-            down to the nearest hundred so it still reads as marketing
-            copy ("900+") rather than an oddly precise number, and never
-            overstates. CategoryMasonry/BrandStorySection still carry their
-            own "800+"-containing sentences as free CMS text (an admin can
-            already edit those directly) -- only this one was purely
-            hardcoded code with no way to fix it short of a deploy.
-            2026-09-06: rotated gold circle ("hero-image-sun") replaced with
-            a restrained rectangular pill (design-review consolidation). */}
-        <div className="hero-image-badge" aria-hidden="true"><span>{productCountLabel}</span><small>{textFor("home-text-hero-badge-label", "DAILY CHOICES")}</small></div>
-        <div className="hero-image-marker" aria-hidden="true"><Sparkles size={15} /><span>{textFor("home-text-hero-marker-label", "THE MORNING OF CARE")}</span></div>
-        {/* 2026-09-11 audit: the circled "01" that sat opposite this label was
-            removed. It was the first of seventeen two-digit markers on the page
-            and, like the rest, numbered nothing -- there was no 02 to follow it
-            here. "JAPAN QUALITY" is the claim; the counter added no meaning. */}
-        <div className="hero-image-label"><span>JAPAN QUALITY</span></div>
-        <div className="hero-image-caption">{textFor("home-text-hero-image-caption", "Өдөр бүрийн арчилгаа, илүү ойрхон")}</div>
-      </div>
+      <HeroImageSlideshow slides={slides} imageAlt="SUGI ASAYAKE everyday-care products" />
     </section>
   );
 }

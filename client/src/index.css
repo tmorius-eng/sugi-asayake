@@ -258,9 +258,9 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    & Media, instead of a blank box -- see imageFor() in Home.tsx. */
 .hero-image { position: relative; min-height: 540px; overflow: hidden; border-radius: 18px; background: linear-gradient(135deg, #dae0da 0%, #ced5cf 100%); background-position: center; background-size: cover; box-shadow: 0 22px 50px rgba(34, 37, 38, .12); }
 .hero-image-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(13, 17, 20, .08), transparent 42%, rgba(13, 17, 20, .44)); }
-.hero-image-label { position: absolute; top: 26px; left: 27px; right: 27px; display: flex; align-items: center; justify-content: space-between; color: rgba(255, 255, 255, .84); font-size: 10px; font-weight: 800; letter-spacing: .16em; }
+.hero-image-label { position: absolute; top: 26px; left: 27px; right: 27px; display: flex; align-items: center; justify-content: space-between; color: #fff; font-size: 10px; font-weight: 800; letter-spacing: .16em; }
 .hero-image-label strong { display: grid; width: 35px; height: 35px; place-items: center; border: 1px solid rgba(255,255,255,.65); border-radius: 50%; font-family: var(--font-display); letter-spacing: 0; }
-.hero-image-caption { position: absolute; right: 28px; bottom: 26px; color: rgba(255,255,255,.88); font-size: 11px; font-weight: 700; }
+.hero-image-caption { position: absolute; right: 28px; bottom: 26px; color: #fff; font-size: 11px; font-weight: 700; }
 
 .page-section { width: min(1380px, calc(100% - 68px)); margin: 0 auto; }
 /* .section-heading -- backs the shared <SectionEyebrow> primitive
@@ -565,8 +565,20 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .hero-signature { display: flex; align-items: center; gap: 9px; margin-top: 22px; color: #28537a; font-size: 10px; font-weight: 800; letter-spacing: .075em; line-height: 1.45; text-transform: uppercase; }
 .hero-signature svg { color: var(--primary); }
 .hero-image { border-radius: 34px 34px 0 34px; transform: rotate(1.25deg); outline: 1px solid rgba(23,24,27,.12); outline-offset: 9px; box-shadow: 25px 27px 0 rgba(57,112,167,.16), 0 30px 70px rgba(34,37,38,.16); }
-.hero-image::before { content: ""; position: absolute; z-index: 1; top: 0; right: 0; width: 110px; height: 110px; background: #df1f3d; clip-path: polygon(100% 0, 0 0, 100% 100%); }
-.hero-image-shade { background: linear-gradient(180deg, rgba(13,17,20,.14), transparent 37%, rgba(13,17,20,.52)); }
+/* 2026-09-12: raised above the slideshow layers. The slides sit at z-index 1,
+   so at the wedge's old z-index 1 the later-painted active slide covered this
+   brand corner entirely -- it had silently disappeared from the hero. */
+.hero-image::before { content: ""; position: absolute; z-index: 2; top: 0; right: 0; width: 110px; height: 110px; background: #df1f3d; clip-path: polygon(100% 0, 0 0, 100% 100%); }
+/* 2026-09-12, Tom: "зураг нь өөрөө цагаан байвал цагаан текстүүд харагдахгүй
+   байна". Correct, and it was measured rather than eyeballed: the old top
+   stop was 14% black, which on a pure-white photograph leaves white text at
+   1.38:1 -- invisible. Now the scrim is strong exactly where text sits and
+   clear through the middle where the product is, so the photo still reads:
+   58% behind the corner label (4.74:1 on a white photo) easing to nothing by
+   42%, then back to 62% behind the caption (~4.7:1). Both clear WCAG AA for
+   small text against the WORST case an admin can upload, not just against
+   the photos currently in place. */
+.hero-image-shade { background: linear-gradient(180deg, rgba(13,17,20,.58) 0%, rgba(13,17,20,.58) 9%, rgba(13,17,20,.20) 24%, transparent 42%, transparent 60%, rgba(13,17,20,.26) 72%, rgba(13,17,20,.62) 90%, rgba(13,17,20,.62) 100%); }
 /* 2026-09-06: was a rotated gold circle badge (.hero-image-sun) -- replaced
    with a restrained rectangular pill, same real content (productCountLabel
    + "DAILY CHOICES" label), per the decorative-shape removal above. */
@@ -574,8 +586,68 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .hero-image-badge span { font-family: var(--font-display); font-size: 24px; font-weight: 800; letter-spacing: -.06em; line-height: 1; }
 .hero-image-badge small { font-size: 9px; font-weight: 800; letter-spacing: .1em; line-height: 1.1; }
 .hero-image-marker { position: absolute; z-index: 2; top: 50%; left: -1px; display: flex; align-items: center; gap: 8px; padding: 10px 13px; background: #28537a; color: #fff; font-size: 8px; font-weight: 800; letter-spacing: .1em; line-height: 1.25; }
-.hero-image-label { z-index: 2; }
-.hero-image-caption { z-index: 2; }
+.hero-image-label { z-index: 2; text-shadow: 0 1px 3px rgba(13,17,20,.5); }
+.hero-image-caption { z-index: 2; text-shadow: 0 1px 3px rgba(13,17,20,.5); }
+
+/* ---- Hero slideshow (2026-09-12) -------------------------------------
+   Three stacked slides crossfading every 5s, with each slide's four
+   overlays arriving on a stagger so the change reads as a scene rather
+   than a frame swap. All motion is CSS; see HeroImageSlideshow.tsx for why
+   no animation library was added.
+
+   The photo lives on .hero-slide now, not on .hero-image -- the wrapper
+   keeps the rotation, radius and shadow, and the slides sit inside it. */
+.hero-slide { position: absolute; inset: 0; z-index: 0; background-position: center; background-size: cover; opacity: 0; transition: opacity 900ms ease; }
+.hero-slide.is-active { z-index: 1; opacity: 1; }
+/* A very slow drift on the visible photo only. 5s of 1 -> 1.05 is well
+   under the threshold where a pan reads as movement rather than depth. */
+.hero-slide.is-active { animation: hero-drift 9s ease-out forwards; }
+@keyframes hero-drift { from { background-size: 100% auto; } to { background-size: 106% auto; } }
+
+/* The overlays start slightly low and transparent, then settle. Delays are
+   staggered by 90ms so the badge, marker, corner label and caption arrive
+   in that order -- the sequence is the whole effect. */
+.hero-slide .hero-image-badge,
+.hero-slide .hero-image-marker,
+.hero-slide .hero-image-label,
+.hero-slide .hero-image-caption { opacity: 0; transform: translateY(10px); transition: opacity 620ms ease, transform 620ms cubic-bezier(.22,.78,.3,1); }
+.hero-slide.is-active .hero-image-badge,
+.hero-slide.is-active .hero-image-marker,
+.hero-slide.is-active .hero-image-label,
+.hero-slide.is-active .hero-image-caption { opacity: 1; transform: none; }
+.hero-slide.is-active .hero-image-badge { transition-delay: 240ms; }
+.hero-slide.is-active .hero-image-marker { transition-delay: 330ms; }
+.hero-slide.is-active .hero-image-label { transition-delay: 420ms; }
+.hero-slide.is-active .hero-image-caption { transition-delay: 510ms; }
+
+/* Controls sit above the red corner wedge (z-index 1) and the slides. */
+.hero-slide-controls { position: absolute; z-index: 3; bottom: 22px; left: 26px; display: flex; align-items: center; gap: 12px; }
+.hero-slide-toggle { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid rgba(255,255,255,.42); border-radius: 50%; background: rgba(13,17,20,.42); color: #fff; backdrop-filter: blur(4px); transition: background 180ms ease, border-color 180ms ease; }
+.hero-slide-toggle:hover { border-color: rgba(255,255,255,.8); background: rgba(13,17,20,.62); }
+.hero-slide-dots { display: flex; gap: 7px; }
+.hero-slide-dot { position: relative; width: 26px; height: 4px; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.38); transition: background 180ms ease; }
+.hero-slide-dot:hover { background: rgba(255,255,255,.6); }
+.hero-slide-dot.is-active { background: rgba(255,255,255,.34); }
+.hero-slide-dot-fill { position: absolute; inset: 0; transform: scaleX(0); transform-origin: left; background: #fff; }
+/* Drains over exactly the slide interval, so the bar IS the timer rather
+   than a decoration that happens to move. Paused (by hover, by focus, by
+   the button) freezes it where it stands. */
+.hero-slide-dot-fill[data-running="true"] { animation: hero-dot-fill 5000ms linear forwards; }
+.hero-slide-dot.is-active .hero-slide-dot-fill[data-running="false"] { transform: scaleX(1); background: rgba(255,255,255,.85); }
+@keyframes hero-dot-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* Reduced motion: keep the crossfade (a change of picture, not movement),
+   drop everything that actually travels. The rotation itself is NOT
+   stopped -- see the long note in HeroImageSlideshow.tsx; the pause button
+   is what satisfies WCAG 2.2.2 here. */
+@media (prefers-reduced-motion: reduce) {
+  .hero-slide.is-active { animation: none; }
+  .hero-slide .hero-image-badge,
+  .hero-slide .hero-image-marker,
+  .hero-slide .hero-image-label,
+  .hero-slide .hero-image-caption { transform: none; transition: opacity 620ms ease; }
+  .hero-slide-dot-fill[data-running="true"] { animation-duration: 5000ms !important; animation-iteration-count: 1 !important; }
+}
 .sunrise-ribbon { display: flex; overflow: hidden; padding: 14px 0; background: #17181b; color: #fff; white-space: nowrap; }
 .sunrise-ribbon > div { display: flex; flex: 0 0 auto; align-items: center; gap: 22px; padding-right: 22px; animation: sunrise-track 24s linear infinite; }
 .sunrise-ribbon span { color: #f7d17a; font-size: 9px; font-weight: 800; letter-spacing: .16em; }
