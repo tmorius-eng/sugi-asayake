@@ -30,6 +30,10 @@ VERIFY_MN_API_KEY=
 # сертификатыг шалгана; байхгүй бол TLS ажиллах ч сертификат шалгагдахгүй (startup-д warning).
 # Эсвэл файлын зам: DATABASE_CA_CERT_PATH=./aiven-ca.pem (файлыг commit хийхгүй).
 DATABASE_CA_CERT=
+# Сонголттой (2026-09-11): утасны push мэдэгдлийг ЭНЭ машинаас илгээх эсэх. Хоёр лаптоп нэг DB
+# хуваалцдаг тул зөвхөн НЭГ машин (production host) дээр 1 болгоно. ntfy-ийн token/сэдвүүд .env-д
+# БИШ, /admin → Интеграцууд-д шифрлэгдэж хадгалагдана.
+NOTIFICATIONS_DISPATCH=
 ```
 Клиент талд мөн `VITE_HONEYBADGER_API_KEY` (server-ийн `HONEYBADGER_API_KEY`-тэй ижил утга) тохируулж болно — Vite build руу шингэдэг тул нууц биш, Sentry-ийн public DSN-тэй ижил итгэлийн загвар.
 (Бодит Aiven нууц үг/R2 утгууд: Tom-оос асуух, эсвэл Aiven dashboard → sugi-asayake-db → Connection information / Cloudflare dashboard → R2 → Manage R2 API Tokens. Хоёр laptop **нэг ижил Aiven DB, нэг ижил R2 bucket**-ыг хуваалцдаг тул `DATABASE_URL`/`S3_*` утгууд хаана ч яг ижил байх ёстой.)
@@ -72,7 +76,7 @@ pnpm exec tsx scripts/db-apply-migration.ts drizzle/0056_discount_code_per_custo
 $env:RUN_AUTH_INTEGRATION_TESTS="1"; $env:COMMERCE_INTEGRATION_TESTS="1"; $env:RUN_MEDIA_INTEGRATION_TESTS="1"
 pnpm exec vitest run --no-file-parallelism
 ```
-Одоогийн бүрэн тоо (2026-09-09, орой): **578/578 ✅ (63/63 файл)** — өмнөх 570 + deep audit #2-ийн `dbConnection.test.ts` 8, регресс 0 (CI горимд gate-үүд идэвхгүй тул ихэнх integration файл skip болно — хэвийн). ⚠️ Strict rate-limit tier-үүд одоо DB дээр тоолдог (`rate_limit_buckets`) тул тестэд **тогтмол IP** ашиглавал 15 минутын дотор дахин ажиллуулахад блоклогдоно — `callerFor`-ийн санамсаргүй/per-run IP загварыг дага.
+Одоогийн бүрэн тоо (2026-09-11, шөнө): **676/676 ✅ (70/70 файл)** — ntfy Phase 1-ийн шинэ тестүүд + ажлын лаптопын тестүүд, регресс 0 (~13 минут) (CI горимд gate-үүд идэвхгүй тул ихэнх integration файл skip болно — хэвийн). ⚠️ Strict rate-limit tier-үүд одоо DB дээр тоолдог (`rate_limit_buckets`) тул тестэд **тогтмол IP** ашиглавал 15 минутын дотор дахин ажиллуулахад блоклогдоно — `callerFor`-ийн санамсаргүй/per-run IP загварыг дага.
 
 ✅ **CI-ийн `INTEGRATIONS_ENCRYPTION_KEY` цоорхой ШИЙДЭГДСЭН (2026-09-01)**: `server/integrations.integration.test.ts`-ийн "encryption (unit)" 2 тест gate-гүйгээр ажилладаг ба `server/_core/crypto.ts`-ийн `getKey()` нь 64-тэмдэгт hex түлхүүргүй бол шууд шатдаг тул бодит GitHub Actions дээр улаан гарч байв. Эдгээр нь **зөвхөн round-trip болон tamper-detection шалгадаг цэвэр unit тест** бөгөөд түлхүүрийн утга нь огт хамаагүй. Тиймээс `server/_test-setup.ts` орчинд түлхүүр байхгүй үед л **түр зуурын түлхүүр өгдөг** болгов (бодит `.env` утга байвал үргэлж түүнийг хүндэтгэнэ). **Аппликейшний код (`env.ts`/`crypto.ts`) огт хөндөгдөөгүй** — жинхэнэ сервер бодит түлхүүргүйгээр юу ч шифрлэхээс татгалзсан хэвээр, өөрөөр хэлбэл аюултай "insecure dev fallback" НЭМЭЭГҮЙ. Улмаар `ci.yml`-д repo secret огт хэрэггүй болж, шинэ clone дээр `pnpm test` тохиргоогүйгээр ногоон гарна.
 
@@ -98,6 +102,7 @@ pnpm exec vitest run --no-file-parallelism
 
 2026-09-09-нд CLAUDE.md 208KB болж session бүрт ачаалагдах хэмжээнээсээ хэтэрсэн тул доорх session бүрийн тэмдэглэлүүдийг **бүрэн эхээр нь** HISTORY.md-ийн "CLAUDE.md-ээс зөөсөн session бүрийн тэмдэглэл" хэсэгт зөөв. Гарчиг бүр тэнд яг ижил нэртэй байгаа тул хайлтаар олно. Тодорхой bug/шийдвэрийн шалтгааныг мэдэх хэрэгтэй үед л тэнд хайна.
 
+- (2026-09-11, шөнө) **Утасны push мэдэгдэл (ntfy) + admin хонх + интеграцийн самбарын засвар** — 6 phase-ийн Phase 1, доорх хэсэгт. Мөн ажлын лаптопын 9 commit (`f7b6563..d30dc06`: баркод, Монгол хайлт, хууль/лоялти/footer admin-аар, hero слайд, migration 0061) татагдсан — тэдний тэмдэглэл HISTORY.md-д товчоор
 - (2026-09-11, орой) **Гүнзгий аудит** (UI/UX+front+back) — үхсэн public endpoint (13 query/дуудлага), `getFeaturedBrands`-ийн N+1, `products.brand` индекс, хэсэг бүрийн ижил eyebrow/дугаарлалт, "Онцлох брэндүүд"-ийн цагаан зай — бүгд заслаа
 - (2026-09-11) Storefront-ийн гэрэл 20% багасгаж **Linen** палитр болов + бүх хэсгийн босоо зай татав (нүүр 8015→6612px) + bestseller rail дүүргэв + **хоёр лаптопын git sync алдаа** (доор дэлгэрэнгүй)
 - (2026-09-10, ажлын лаптоп) Топ брэнд Matsuya Ginza лавлагаагаар carousel болж дахин бүтээгдэв + шинэ `/brands` хуудас + back-to-top товч
@@ -192,6 +197,20 @@ Tom: "chinii hiij ugsun code edr bugd zunduu har myngan aldaa baina!! ... deep a
 **Баталгаажуулалт**: `pnpm check`/`pnpm build` цэвэр; `pnpm audit --prod` 0; unit+integration suite (доор тоо); post-fix crawl: stuck reveal 0, h1 1/хуудас, title хуудас бүрт, checkout overflow 0 (320), analytics console алдаа 0.
 
 **Ачааллын тест (production build, нэг Node process, энэ laptop, 100 зэрэгцээ, 8с)**: статик HTML `/` → **5,410 req/s, p50 18ms, p99 29ms, 0 алдаа**; API (`catalog.list`, `catalog.bestsellers`) → нэг IP-ээс 300 request/15мин global limiter-т тулж 429 (limiter өөрөө 17k req/s даана). 10k хүн зэрэг орох тохиолдолд бодит хязгаар нь **DB зам**: pool `connectionLimit` 10 (mysql2 default), Aiven Бангалор RTT ~170–330ms → cache-гүй query ~30–60/с; нүүр хуудас ~11 tRPC дуудлага (batch). Дэлгэрэнгүй санал "Дараагийн ажлын санал"-д.
+
+## ✅ (2026-09-11, шөнө) Утасны push мэдэгдэл (ntfy) — Phase 1 ДУУССАН, Phase 2–6 хүлээгдэж байна
+
+**Бүтэн төлөвлөгөө (Tom баталсан, 6 phase)**: `C:\Users\hero_\.claude\plans\https-github-com-binwiederhier-ntfy-enii-happy-avalanche.md` (гэрийн лаптоп дээр л байгаа — гол шийдвэрүүд HISTORY.md-ийн ижил нэртэй хэсэгт). Үлдсэн phase: **2** нөөцийн хөдөлгөөний ledger (`stock_movements`, бүх нөөц бичигч нэг `applyStockDeltas` helper-ээр), **3** агуулах байршил (`branches.kind`) + `users.branchId` + USB сканнераар бараа хүлээн авах/тооллого (A4 цаас + group chat зургийг орлоно), **4** агуулах→дэлгүүр шилжүүлэг, blind скан тулгалт, **5** салбар бүрийн бага нөөцийн alert, **6** Smart Software adapter-ийн суурь.
+
+**Хэрхэн ажилладаг**: business код мэдэгдлийг `notification_outbox`-д **өөрийн transaction дотор** бичнэ (`enqueueNotification`, `recordNotification`) → `server/notifications.ts` dispatcher ntfy.sh руу илгээнэ. Бүлэг: admin/warehouse/finance/store (`staff` = дэлгүүрийн зөвлөх). Мессежид харилцагчийн нэр/утас/хаяг **хэзээ ч** ороохгүй (payload төрлөөр хамгаалагдсан). Admin top bar-ын **хонх** ижил мөрүүдийг харуулна (уншсан төлөв `users.lastSeenNotificationId`).
+
+⚠️ **Чухал тохиргоо**:
+- **`NOTIFICATIONS_DISPATCH=1`** тохируулсан машин л утас руу илгээнэ (хоёр лаптоп нэг DB хуваалцдаг тул opt-in). Одоо **аль ч машин дээр тохируулаагүй** — бодит захиалгын мэдэгдэл queue-д орж, 2 цагийн дараа expired болно. Hosting сонгогдмогц production дээр тохируулна. /admin → Интеграцууд → "Туршилт" товч үүнээс үл хамааран шууд илгээнэ.
+- ntfy тохиргоо (token + 4 бүлгийн сэдэв) `integration_configs`-д **шифрлэгдсэн**, идэвхтэй. Tom-ийн iPhone admin сэдэвт бүртгэлтэй, **бодитоор ирж байгааг баталгаажуулсан**. Ажилтан гарвал тухайн бүлгийн сэдвийг "Шинэчлэх" дарж солино.
+- `server/_test-setup.ts` нь `NOTIFICATIONS_SUPPRESS=1` тавьдаг — тест бодит Aiven дээр захиалга үүсгэсэн ч мэдэгдэл `suppressed` болж утас руу **хэзээ ч** явахгүй.
+- **Dedupe түлхүүр үйл явдлын төрлөөр namespace хийгдсэн** (`outboxDedupeKey`) — нэг захиалгын "шинэ", "төлөгдсөн", "цуцлагдсан" бүгд `order:<id>`-ээр дуудагддаг; namespace-гүй бол unique index тэднийг чимээгүй залгидаг байсан (тестээр олдсон).
+- Интеграцийн тохиргоо одоо **merge** хийгдэнэ (өмнө нь нэг түлхүүр хадгалахад бусад нь устдаг байв). REST API / OAuth2 **зориуд байхгүй** — Smart Software-ийн API хэлбэр тодорхой болсны дараа.
+- Шинэ admin хэсэг "Утасны мэдэгдэл" (`notifications`) — хэсэг нэмэхдээ `AdminSection` union, `adminSectionKeys`, `SECTION_ROLES`, 3 гарчгийн ternary chain, `shared/admin-tips.ts` + `server/admin-tips.test.ts` бүгдийг шинэчлэх.
 
 ## ⚠️ ХОЁР ЛАПТОП — session бүрийн эхэнд ЗААВАЛ `git fetch` (2026-09-11 бодит incident)
 

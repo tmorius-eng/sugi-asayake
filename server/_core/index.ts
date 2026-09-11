@@ -19,7 +19,8 @@ import { registerQPayCallbackRoute } from "../qpay";
 import { registerVerifyMnCallbackRoute } from "../verifyMn";
 import { dbPing } from "../db";
 import { startScheduler } from "./scheduler";
-import { registerAbandonedCartReminderJob, registerLowStockDigestJob } from "../automation";
+import { registerAbandonedCartReminderJob, registerLowStockDigestJob, registerNotificationOutboxPurgeJob } from "../automation";
+import { startNotificationDispatcher } from "../notifications";
 import { notifyError, registerHoneybadgerErrorMiddleware, registerHoneybadgerMiddleware } from "./honeybadger";
 import { limitApiTraffic, protectStateChangingApiRequests, setSecurityHeaders } from "./security";
 import { serveStatic, setupVite } from "./vite";
@@ -139,7 +140,11 @@ async function startServer() {
   // server/automation.ts for the two real jobs registered on it.
   registerAbandonedCartReminderJob();
   registerLowStockDigestJob();
+  registerNotificationOutboxPurgeJob();
   startScheduler();
+  // Phone push notifications (2026-09-11) -- only sends on the machine with
+  // NOTIFICATIONS_DISPATCH=1; see server/notifications.ts.
+  startNotificationDispatcher();
 }
 
 // Backend audit (2026-09-02): neither handler existed anywhere -- an

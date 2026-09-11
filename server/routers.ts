@@ -184,6 +184,7 @@ import {
   updateAdminUserRole,
   updateAdminUserPhone,
   updateAdminIntegration,
+  getRecentNotificationOutbox,
   updateUserLoyaltyAdjustment,
   updateCartItemQuantity,
   updateNotificationPreferences,
@@ -204,6 +205,10 @@ import { adminProcedure, anyStaffProcedure, catalogReadProcedure, contentReadPro
 import { storagePing, storagePut, storagePutImageVariants } from "./storage";
 import { IMAGE_MAX_DIMENSION, processUploadedImage, processUploadedImageVariants } from "./_core/imageProcessing";
 import { createQPayInvoice, getQPayAvailability } from "./qpay";
+import { sendNtfyTest } from "./notifications";
+import { notificationsRouter } from "./notificationsRouter";
+import { INTEGRATION_PROVIDERS } from "../shared/integrations";
+import { buildNotificationMessage, NOTIFICATION_GROUP_LABELS, NOTIFICATION_GROUPS, NTFY_TOPIC_FIELD } from "../shared/notification-events";
 import { createNoOpVerificationSession, createVerificationSession, getSessionStatus, isNoOpSessionExpired, normalizePhoneForVerifyMn } from "./verifyMn";
 import { getCategoryWriteViolation, getProductWriteViolation } from "./catalog-validation";
 import { getAnalyticsReport, exportAnalyticsExcel, exportAnalyticsPdf, getAllCustomersForCampaign, getDashboardHighlights, getPreferenceSegmentBreakdown, getRecommendationCoverage, getUsersByLoyaltyTier, getUsersBySegment, type PreferenceSegmentField } from "./analytics";
@@ -748,6 +753,7 @@ async function validatePostCategoryName(name: string) {
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
+  notifications: notificationsRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     // 2026-09-06: there is no more single-step auth.register. Tom initially
@@ -1870,15 +1876,65 @@ export const appRouter = router({
     // these are financial/security-sensitive credentials. QPay isn't part
     // of this (still env-based, see server/qpay.ts).
     integrations: adminProcedure.query(() => getAdminIntegrations()),
+    // 2026-09-11: merge-on-save. `config` is the old field name, still
+    // accepted and treated as `set` so an older client cannot wipe settings.
     updateIntegration: adminProcedure.input(z.object({
-      provider: z.enum(["ebarimt", "storepay", "card_golomt", "courier_ebuuhia"]),
+      provider: z.enum(INTEGRATION_PROVIDERS),
       isActive: z.boolean().optional(),
+      set: z.record(z.string().max(80), z.string().max(2_000)).optional(),
+      clearKeys: z.array(z.string().max(80)).max(40).optional(),
+      replaceAll: z.boolean().optional(),
       config: z.record(z.string().max(80), z.string().max(2_000)).optional(),
     })).mutation(async ({ ctx, input }) => {
-      const result = await updateAdminIntegration(input, ctx.user.id);
-      await logAdminAction({ actorUserId: ctx.user.id, action: "integration.updated", entityType: "integration", metadata: { provider: input.provider, isActive: input.isActive, credentialsChanged: Boolean(input.config && Object.keys(input.config).length > 0) } });
+      const set = { ...(input.config ?? {}), ...(input.set ?? {}) };
+      let result;
+      try {
+        result = await updateAdminIntegration({ provider: input.provider, isActive: input.isActive, set, clearKeys: input.clearKeys, replaceAll: input.replaceAll }, ctx.user.id);
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Тохиргоог хадгалж чадсангүй." });
+      }
+      // Key NAMES only, never values.
+      await logAdminAction({ actorUserId: ctx.user.id, action: "integration.updated", entityType: "integration", metadata: { provider: input.provider, isActive: input.isActive, keysSet: Object.keys(set), keysCleared: input.clearKeys ?? [], replaceAll: Boolean(input.replaceAll) } });
       return result;
     }),
+    // Sends one ntfy message to a group's topic immediately (not queued), so
+    // an admin can check the setup from a phone before switching it on.
+    testIntegration: adminProcedure.input(z.object({ provider: z.literal("ntfy"), group: z.enum(NOTIFICATION_GROUPS) })).mutation(async ({ ctx, input }) => {
+      const result = await sendNtfyTest(input.group, { ...buildNotificationMessage("integration.test", { groupLabel: NOTIFICATION_GROUP_LABELS[input.group] }), priority: 3, tags: ["bell"] });
+      await logAdminAction({ actorUserId: ctx.user.id, action: "integration.tested", entityType: "integration", metadata: { provider: input.provider, group: input.group, ok: result.ok, status: result.status } });
+      return { ok: result.ok, status: result.status, error: result.error };
+    }),
+    // A long random topic generated on the server (never typed in, never
+    // guessable). Also how a topic is ROTATED when a staff member leaves:
+    // everyone still in the group re-scans the new QR code.
+    generateNtfyTopic: adminProcedure.input(z.object({ group: z.enum(NOTIFICATION_GROUPS) })).mutation(async ({ ctx, input }) => {
+      const topic = `sugi-${input.group}-${randomBytes(15).toString("base64url")}`;
+      const result = await updateAdminIntegration({ provider: "ntfy", set: { [NTFY_TOPIC_FIELD[input.group]]: topic } }, ctx.user.id);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "integration.ntfy_topic_generated", entityType: "integration", metadata: { group: input.group } });
+      return result;
+    }),
+    // Which .env-configured services are set up -- yes/no only, never a
+    // value. Before this, the Integrations screen showed only QPay, so
+    // "is SMS verification / error tracking / storage configured?" meant
+    // opening the server's .env.
+    envIntegrationStatus: adminProcedure.query(async () => {
+      const storage = await storagePing().catch(error => ({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+      return [
+        { key: "brevo", label: "Brevo имэйл", configured: Boolean(ENV.brevoApiKey && ENV.brevoSenderEmail), note: "Захиалгын имэйл, нууц үг сэргээх" },
+        { key: "smsCampaigns", label: "Масс SMS кампанит ажил", configured: ENV.smsCampaignsEnabled, note: "SMS_CAMPAIGNS_ENABLED=1 үед л асна" },
+        { key: "verifyMn", label: "verify.mn утас баталгаажуулалт", configured: Boolean(ENV.verifyMnApiKey), note: "Бүртгэл, нууц үг сэргээх" },
+        { key: "qpay", label: "QPay төлбөр", configured: getQPayAvailability().configured, note: "Онлайн төлбөр" },
+        { key: "storage", label: "Cloudflare R2 зургийн сан", configured: storage.ok, note: storage.ok ? "Холбогдож байна" : "Холбогдсонгүй" },
+        { key: "honeybadger", label: "Honeybadger алдааны хяналт", configured: Boolean(ENV.honeybadgerApiKey), note: "Алдаа илгээх түлхүүр" },
+        { key: "honeybadgerRead", label: "Honeybadger алдаа унших", configured: Boolean(ENV.honeybadgerPersonalAuthToken), note: "Аюулгүй байдал хэсэгт алдааг харуулна" },
+        { key: "publicBaseUrl", label: "Сайтын нийтийн хаяг", configured: Boolean(ENV.publicBaseUrl), note: "PUBLIC_BASE_URL -- QPay callback, мэдэгдэл дээр дарахад нээгдэх холбоос" },
+        { key: "encryptionKey", label: "Тохиргооны шифрлэлтийн түлхүүр", configured: /^[0-9a-f]{64}$/i.test(ENV.integrationsEncryptionKey), note: "Энэ хуудсан дээрх нууц утгуудыг хамгаална" },
+        { key: "databaseCa", label: "Өгөгдлийн сангийн сертификат", configured: Boolean(process.env.DATABASE_CA_CERT || process.env.DATABASE_CA_CERT_PATH), note: "Aiven-ий TLS сертификатыг шалгана" },
+        { key: "faceGate", label: "Царайгаар нэвтрэх шалгалт", configured: ENV.adminFaceGateEnabled, note: "ADMIN_FACE_GATE_ENABLED=1" },
+        { key: "notificationsDispatch", label: "Мэдэгдэл илгээгч (энэ сервер)", configured: ENV.notificationsDispatchEnabled, note: "NOTIFICATIONS_DISPATCH=1 тохируулсан машин л утас руу илгээнэ" },
+      ];
+    }),
+    notificationOutbox: adminProcedure.query(() => getRecentNotificationOutbox(50)),
     // Sales/customer/district analytics for the people running the
     // business -- adminProcedure like Security Center/Integrations
     // (revenue + customer data, not everyday staff-level). Note this is

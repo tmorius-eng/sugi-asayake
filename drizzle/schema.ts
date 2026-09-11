@@ -1,5 +1,6 @@
-import { boolean, index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { boolean, index, int, mysqlEnum, mysqlTable, text, timestamp, tinyint, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 import { ubDistricts } from "../shared/districts";
+import { INTEGRATION_PROVIDERS } from "../shared/integrations";
 
 /**
  * Core user table backing auth flow.
@@ -162,6 +163,14 @@ export const users = mysqlTable("users", {
    * admin UI can show "last verified ..." per account.
    */
   faceVerifiedAt: timestamp("faceVerifiedAt"),
+  /**
+   * 2026-09-11 (migration 0062): the admin top bar's bell lists the same
+   * notifications staff get on their phones (notification_outbox rows for
+   * their group). Everything with a higher id than this is "unread". Stored
+   * on the account rather than in the browser so the shop PC and the
+   * owner's phone agree on what has been seen. NULL = never opened.
+   */
+  lastSeenNotificationId: int("lastSeenNotificationId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -1287,7 +1296,9 @@ export type InsertDiscountCode = typeof discountCodes.$inferInsert;
  */
 export const integrationConfigs = mysqlTable("integration_configs", {
   id: int("id").autoincrement().primaryKey(),
-  provider: mysqlEnum("provider", ["ebarimt", "storepay", "card_golomt", "courier_ebuuhia"]).notNull().unique(),
+  // The one provider list (shared/integrations.ts) -- migration 0062 widened
+  // the column to match when 'ntfy' and 'smartsoftware' were added.
+  provider: mysqlEnum("provider", INTEGRATION_PROVIDERS).notNull().unique(),
   isActive: boolean("isActive").notNull().default(false),
   encryptedConfig: text("encryptedConfig"),
   // Nullable + SET NULL: this is an operational/audit trail field, not
@@ -1298,6 +1309,52 @@ export const integrationConfigs = mysqlTable("integration_configs", {
 });
 export type IntegrationConfig = typeof integrationConfigs.$inferSelect;
 export type InsertIntegrationConfig = typeof integrationConfigs.$inferInsert;
+
+/**
+ * 2026-09-11 (migration 0062): phone push notifications. Every push is
+ * written here first, inside the same transaction as the event that caused
+ * it, and delivered afterwards by server/notifications.ts -- so a rolled-back
+ * checkout never announces an order, and a slow ntfy.sh never slows a
+ * checkout down. One row per recipient GROUP (warehouse/admin/finance/store,
+ * see shared/notification-events.ts), not per person: each group is one ntfy
+ * topic its members subscribe to on their phones.
+ *
+ * `dedupeKey` + the unique index turn repeated events (QPay delivers its
+ * callback at least once) into one notification; NULL never collides.
+ * `status`:
+ *   pending    -> waiting (or waiting to retry, see nextAttemptAt)
+ *   sending    -> claimed by one machine; the claim is a guarded UPDATE, so
+ *                 two laptops sharing this database never both send it
+ *   sent/failed -> terminal
+ *   suppressed -> written but deliberately never sent (the test suite, or an
+ *                 event the admin switched off)
+ *   expired    -> sat undelivered for 2h+; sending it now would only confuse
+ * Message text never contains customer PII -- the payload types in
+ * shared/notification-events.ts have no name/phone/address fields at all.
+ */
+export const notificationOutbox = mysqlTable("notification_outbox", {
+  id: int("id").autoincrement().primaryKey(),
+  eventType: varchar("eventType", { length: 60 }).notNull(),
+  groupKey: varchar("groupKey", { length: 40 }).notNull(),
+  dedupeKey: varchar("dedupeKey", { length: 160 }),
+  title: varchar("title", { length: 200 }).notNull(),
+  message: text("message").notNull(),
+  priority: tinyint("priority").notNull().default(3),
+  tagsJson: varchar("tagsJson", { length: 300 }),
+  clickPath: varchar("clickPath", { length: 300 }),
+  status: mysqlEnum("status", ["pending", "sending", "sent", "failed", "suppressed", "expired"]).notNull().default("pending"),
+  attempts: int("attempts").notNull().default(0),
+  lastError: varchar("lastError", { length: 300 }),
+  claimedAt: timestamp("claimedAt"),
+  nextAttemptAt: timestamp("nextAttemptAt").defaultNow().notNull(),
+  sentAt: timestamp("sentAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  uniqueIndex("notification_outbox_dedupe_unique").on(table.groupKey, table.dedupeKey),
+  index("notification_outbox_status_next_idx").on(table.status, table.nextAttemptAt),
+  index("notification_outbox_group_id_idx").on(table.groupKey, table.id),
+]);
+export type NotificationOutboxRow = typeof notificationOutbox.$inferSelect;
 
 /**
  * "Controls everything" admin overhaul (2026-09-08, Phase D): the only

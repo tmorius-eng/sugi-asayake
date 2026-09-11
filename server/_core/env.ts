@@ -157,4 +157,19 @@ export const ENV = {
   // Shipping a door that keeps the owner out is not more secure than one
   // that reliably admits the right person and logs everything.
   adminFaceLivenessEnforced: process.env.ADMIN_FACE_LIVENESS_ENFORCED === "1",
+
+  // Phone push notifications (2026-09-11, server/notifications.ts). Both
+  // laptops and any future host share ONE database, and every one of them
+  // runs a dispatcher loop -- so sending is opt-in per machine. Set this to
+  // "1" on exactly the machine that should deliver (the production host once
+  // there is one). Notifications are still queued everywhere; the admin
+  // Integrations screen shows the queue, so "nothing arrives" is visible
+  // rather than silent. The "send a test" button works regardless.
+  notificationsDispatchEnabled: process.env.NOTIFICATIONS_DISPATCH === "1",
+
+  // Set by server/_test-setup.ts. The integration suites place real orders
+  // against the shared Aiven database; with this set, the notifications they
+  // cause are written as `suppressed` (so tests can still assert on them) and
+  // can never reach a staff member's phone, whichever machine is dispatching.
+  notificationsSuppressed: process.env.NOTIFICATIONS_SUPPRESS === "1",
 };

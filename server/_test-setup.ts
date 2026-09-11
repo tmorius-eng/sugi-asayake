@@ -40,3 +40,12 @@ import "dotenv/config";
 if (!process.env.INTEGRATIONS_ENCRYPTION_KEY) {
   process.env.INTEGRATIONS_ENCRYPTION_KEY = "0".repeat(64);
 }
+
+// 3. Phone push notifications (2026-09-11). The integration suites place
+//    real orders on the shared Aiven database; without this, the "new order"
+//    pushes they cause would be queued as real and delivered to the shop
+//    staff's phones by whichever machine is running the dispatcher. With it,
+//    they are written as `suppressed`: still assertable, never sent. This one
+//    DOES override the environment, on purpose -- no test run should ever
+//    page a real person.
+process.env.NOTIFICATIONS_SUPPRESS = "1";

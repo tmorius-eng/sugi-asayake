@@ -1,4 +1,4 @@
-import { Bell, ChevronDown, CircleUserRound, Command, Home, Lightbulb, LogOut, Menu, Moon, Store, Sun } from "lucide-react";
+import { ChevronDown, CircleUserRound, Command, Home, Lightbulb, LogOut, Menu, Moon, Store, Sun } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -16,13 +16,12 @@ import { toggleAdminTips, useAdminTipsEnabled } from "@/lib/adminTips";
  * admin's dark mode (new -- Tom, explicit), and notifications. The moon/sun is
  * the reference's own moon slot, finally wired to a real preference.
  */
-export default function AdminTopBar({ sectionLabel, onOpenMobileSidebar, searchSlot, notificationCount, notificationLabel, onOpenNotifications, onOpenCommandPalette, userName, userRoleLabel, userAvatarUrl, onLogout }: {
+export default function AdminTopBar({ sectionLabel, onOpenMobileSidebar, searchSlot, notificationSlot, onOpenCommandPalette, userName, userRoleLabel, userAvatarUrl, onLogout }: {
   sectionLabel: string;
   onOpenMobileSidebar: () => void;
   searchSlot?: ReactNode;
-  notificationCount: number;
-  notificationLabel: string;
-  onOpenNotifications: () => void;
+  /** The bell -- AdminNotificationBell.tsx, which owns its own data. */
+  notificationSlot?: ReactNode;
   onOpenCommandPalette: () => void;
   userName: string;
   userRoleLabel: string;
@@ -72,15 +71,7 @@ export default function AdminTopBar({ sectionLabel, onOpenMobileSidebar, searchS
         >
           {theme === "dark" ? <Sun size={17} className="admin-pop" /> : <Moon size={17} className="admin-pop" />}
         </button>
-        <button type="button" onClick={onOpenNotifications} className="admin-icon-btn relative" title={notificationLabel} aria-label={notificationLabel}>
-          <Bell size={17} />
-          {notificationCount > 0 && (
-            <span className="absolute right-2 top-2 size-2">
-              <span className="admin-ping" aria-hidden="true" />
-              <span className="absolute inset-0 rounded-full" style={{ background: "var(--a-neg)" }} aria-hidden="true" />
-            </span>
-          )}
-        </button>
+        {notificationSlot}
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

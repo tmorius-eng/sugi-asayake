@@ -25,3 +25,11 @@ export async function getOrSetCached<T>(key: string, ttlMs: number, compute: () 
   store.set(key, { value, expiresAt: Date.now() + ttlMs });
   return value;
 }
+
+/** Drops one entry. Added 2026-09-11 for integration settings: a staleness
+ *  window is fine for a read-only log view, but not for "I just pasted a new
+ *  ntfy topic and pressed Test". Only clears THIS process's copy -- the other
+ *  laptop picks the change up when its own entry expires. */
+export function invalidateCached(key: string): void {
+  store.delete(key);
+}

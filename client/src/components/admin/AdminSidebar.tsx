@@ -1,4 +1,4 @@
-import { LayoutDashboard, PackagePlus, CheckCircle2, CreditCard, FilePenLine, FileText, Star, ListChecks, Megaphone, Tag, Tags, ImageUp, UsersRound, ChartColumnIncreasing, ShieldAlert, Plug, CalendarDays, Send, Settings, MapPin, ShoppingBag, LogOut, Menu, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, PackagePlus, CheckCircle2, CreditCard, FilePenLine, FileText, Star, ListChecks, Megaphone, Tag, Tags, ImageUp, UsersRound, ChartColumnIncreasing, ShieldAlert, Plug, CalendarDays, Send, Settings, MapPin, ShoppingBag, Smartphone, LogOut, Menu, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import type { AdminSection } from "../AdminWorkspace";
@@ -43,6 +43,7 @@ const flatGroup: NavItem[] = [
   { key: "storeSettings", label: "Дэлгүүрийн тохиргоо", Icon: Settings },
   { key: "branches", label: "Салбарууд", Icon: MapPin },
   { key: "pos", label: "Дэлгүүрийн худалдаа", Icon: ShoppingBag },
+  { key: "notifications", label: "Утасны мэдэгдэл", Icon: Smartphone },
 ];
 const adminOnlyFlatGroup: NavItem[] = [
   { key: "loyalty", label: "Гишүүнчлэлийн зэрэглэл", Icon: CreditCard },
@@ -98,6 +99,10 @@ const SECTION_ROLES: Record<AdminSection, ReadonlySet<string>> = {
   // AdminWorkspace.tsx/AdminUserDetailDrawer.tsx.
   users: new Set(["finance", "admin"]),
   integrations: new Set(["admin"]),
+  // 2026-09-11: everyone who has a notification group (shared/
+  // notification-events.ts groupsForRole) subscribes their own phone here.
+  // Marketing has no group, so no entry.
+  notifications: new Set(["staff", "finance", "warehouse", "admin"]),
 };
 
 // Exported so the command palette (AdminCommandPalette.tsx) lists exactly

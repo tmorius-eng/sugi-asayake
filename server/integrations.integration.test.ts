@@ -45,10 +45,16 @@ describeWithDatabase("integration config admin API", () => {
   const staffEmail = `${marker}-staff@example.invalid`;
   let adminId = 0;
   let staffId = 0;
+  // 2026-09-11: snapshot-and-restore (CLAUDE.md rule). afterAll used to
+  // DELETE the ebarimt row unconditionally -- harmless while the table was
+  // empty, but the same table now holds the live ntfy settings, and a test
+  // run must never touch real configuration.
+  let snapshot: (typeof integrationConfigs.$inferSelect)[] = [];
 
   beforeAll(async () => {
     const db = await getDb();
     if (!db) throw new Error("DATABASE_URL is required for integration config tests.");
+    snapshot = await db.select().from(integrationConfigs);
     const adminInsert = await db.insert(users).values({ email: adminEmail, passwordHash: await hashPassword("AdminPassw0rd!"), name: "Integration Test Admin", role: "admin", emailVerifiedAt: new Date() });
     adminId = Number(adminInsert[0].insertId);
     const staffInsert = await db.insert(users).values({ email: staffEmail, passwordHash: await hashPassword("StaffPassw0rd!"), name: "Integration Test Staff", role: "staff", emailVerifiedAt: new Date() });
@@ -58,7 +64,13 @@ describeWithDatabase("integration config admin API", () => {
   afterAll(async () => {
     const db = await getDb();
     if (!db) return;
-    await db.delete(integrationConfigs).where(eq(integrationConfigs.provider, "ebarimt"));
+    // Put every provider row back exactly as it was (and remove any the
+    // tests created) -- updatedByUserId included, which must be cleared
+    // before the throwaway admin can be deleted below.
+    await db.delete(integrationConfigs).where(eq(integrationConfigs.updatedByUserId, adminId));
+    for (const row of snapshot) {
+      await db.insert(integrationConfigs).values(row).onDuplicateKeyUpdate({ set: { isActive: row.isActive, encryptedConfig: row.encryptedConfig, updatedByUserId: row.updatedByUserId, updatedAt: row.updatedAt } });
+    }
     await db.delete(adminAuditLogs).where(eq(adminAuditLogs.actorUserId, adminId));
     await db.delete(users).where(eq(users.id, adminId));
     await db.delete(users).where(eq(users.id, staffId));
@@ -76,10 +88,14 @@ describeWithDatabase("integration config admin API", () => {
     await expect(staff().admin.updateIntegration({ provider: "ebarimt", isActive: true })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
-  it("lists all four providers even before any row has been created (lazy defaults)", async () => {
+  it("lists every provider even before any row has been created (lazy defaults)", async () => {
+    const db = await getDb();
+    if (!db) throw new Error("DATABASE_URL is required for integration config tests.");
+    // Start ebarimt from a clean slate; afterAll restores the snapshot.
+    await db.delete(integrationConfigs).where(eq(integrationConfigs.provider, "ebarimt"));
     const list = await admin().admin.integrations();
     const providers = list.map(row => row.provider).sort();
-    expect(providers).toEqual(["card_golomt", "courier_ebuuhia", "ebarimt", "storepay"]);
+    expect(providers).toEqual(["card_golomt", "courier_ebuuhia", "ebarimt", "ntfy", "smartsoftware", "storepay"]);
     const ebarimt = list.find(row => row.provider === "ebarimt");
     expect(ebarimt).toMatchObject({ isActive: false, hasCredentials: false, configuredKeys: [] });
   });
@@ -115,6 +131,51 @@ describeWithDatabase("integration config admin API", () => {
     const ebarimt = list.find(row => row.provider === "ebarimt");
     expect(ebarimt?.isActive).toBe(false);
     expect(ebarimt?.hasCredentials).toBe(true);
-    expect(ebarimt?.configuredKeys).toEqual(["apiKey"]);
+    // 2026-09-11: saving one key MERGES -- posNumber from the earlier test
+    // survives. (This assertion used to be ["apiKey"]: the old editor
+    // replaced the whole config, silently deleting every other key.)
+    expect(ebarimt?.configuredKeys.sort()).toEqual(["apiKey", "posNumber"]);
+  });
+
+  it("clears one key without touching the rest, and rejects keys a typed provider does not have", async () => {
+    const admin1 = admin();
+    const cleared = await admin1.admin.updateIntegration({ provider: "ebarimt", clearKeys: ["apiKey"] });
+    expect(cleared.configuredKeys).toEqual(["posNumber"]);
+    await expect(admin1.admin.updateIntegration({ provider: "ntfy", set: { notARealSetting: "x" } })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(admin1.admin.updateIntegration({ provider: "ntfy", set: { topicStore: "short" } })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("shows plain URL settings back, but never secrets or topics", async () => {
+    const admin1 = admin();
+    await admin1.admin.updateIntegration({ provider: "ntfy", set: { serverUrl: "https://ntfy.example.invalid", accessToken: "tk_secret_value_xyz" } });
+    await admin1.admin.generateNtfyTopic({ group: "store" });
+    const ntfy = (await admin1.admin.integrations()).find(row => row.provider === "ntfy")!;
+    expect(ntfy.fields.find(field => field.key === "serverUrl")).toMatchObject({ isSet: true, value: "https://ntfy.example.invalid" });
+    expect(ntfy.fields.find(field => field.key === "accessToken")).toMatchObject({ isSet: true, value: null });
+    expect(ntfy.fields.find(field => field.key === "topicStore")).toMatchObject({ isSet: true, value: null });
+    expect(JSON.stringify(ntfy)).not.toContain("tk_secret_value_xyz");
+    expect(JSON.stringify(ntfy)).not.toContain("sugi-store-");
+  });
+
+  it("gives each staff member only their own group's topic, and keeps setup admin-only", async () => {
+    const staffCaller = staff();
+    const mine = await staffCaller.notifications.mySubscriptions();
+    expect(mine.groups.map(group => group.group)).toEqual(["store"]);
+    expect(mine.groups[0].topic).toMatch(/^sugi-store-/);
+    expect(mine.groups[0].webUrl).toBe(`https://ntfy.example.invalid/${mine.groups[0].topic}`);
+    await expect(staffCaller.admin.testIntegration({ provider: "ntfy", group: "store" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(staffCaller.admin.generateNtfyTopic({ group: "store" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(staffCaller.admin.notificationOutbox()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(staffCaller.notifications.sendTestToMyGroup({ group: "finance" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("reports .env services as yes/no only, never their values", async () => {
+    const status = await admin().admin.envIntegrationStatus();
+    expect(status.length).toBeGreaterThan(5);
+    const serialized = JSON.stringify(status);
+    for (const name of ["DATABASE_URL", "JWT_SECRET", "INTEGRATIONS_ENCRYPTION_KEY", "S3_SECRET_ACCESS_KEY", "BREVO_API_KEY", "VERIFY_MN_API_KEY", "HONEYBADGER_API_KEY"]) {
+      const value = process.env[name];
+      if (value && value.length > 6) expect(serialized, name).not.toContain(value);
+    }
   });
 });

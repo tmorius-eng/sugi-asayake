@@ -4,6 +4,7 @@ import {
   getPaymentAttemptByInvoiceId,
   markQPayPaymentAttemptFailed,
   markQPayPaymentAttemptPaid,
+  recordNotification,
   storeQPayPaymentAttemptResponse,
 } from "./db";
 import { limitQPayCallbackTraffic } from "./_core/security";
@@ -184,6 +185,7 @@ export async function verifyQPayCallback(invoiceId: string) {
   } else if (outcome === "underpaid") {
     console.warn(`[QPay] Invoice ${invoiceId} for order ${attempt.orderId} reports ${verification.paidAmountMnt}₮ paid against a ${order?.totalMnt}₮ total -- recorded as a failed attempt, order left unconfirmed.`);
     await markQPayPaymentAttemptFailed({ id: attempt.id, providerPaymentId: verification.paymentId });
+    if (order) await recordNotification("payment.underpaid", { orderNumber: order.orderNumber, paidMnt: verification.paidAmountMnt, totalMnt: order.totalMnt }, `attempt:${attempt.id}`);
   }
   return { ...verification, paid: outcome === "confirm", orderId: attempt.orderId, outcome };
 }

@@ -1,103 +1,269 @@
 import { useState } from "react";
-import { KeyRound, LoaderCircle, Plus, TriangleAlert, Trash2 } from "lucide-react";
+import { CheckCircle2, CircleDashed, KeyRound, LoaderCircle, Plus, RefreshCw, Send, TriangleAlert, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { INTEGRATION_META, validateIntegrationSettings, type IntegrationProvider } from "@shared/integrations";
+import { NOTIFICATION_EVENTS, NOTIFICATION_GROUP_LABELS, NTFY_TOPIC_FIELD, type NotificationEventType, type NotificationGroup } from "@shared/notification-events";
 
-// Admin-manageable third-party provider config (eBarimt/StorePay/Golomt
-// card/eBuuhia courier) -- moves credentials out of .env into the DB so an
-// admin can toggle a provider and paste in its API keys without a code
-// deploy. QPay is shown alongside these for a unified view but is NOT
-// managed here -- it already works end-to-end from .env (server/qpay.ts)
-// and isn't retrofitted into this table. Credential edits are write-only:
-// the server never returns decrypted values back, only which keys are set.
+/**
+ * /admin -> Интеграцууд.
+ *
+ * 2026-09-11 rewrite. What changed, and why:
+ *  - Settings SAVE BY MERGING. The old editor sent only the keys typed into
+ *    the form and the server replaced the whole stored config with them, so
+ *    adding one key silently deleted every other one. Now each field is its
+ *    own row: type a new value, or clear it; untouched fields are kept.
+ *  - Fields come from shared/integrations.ts, so ntfy asks for exactly what
+ *    it needs instead of a blank key/value grid.
+ *  - ntfy (phone notifications) is the first provider actually wired to
+ *    runtime code; it gets "generate topic" and "send test" buttons and the
+ *    delivery log.
+ *  - .env-configured services get a yes/no status card, so checking whether
+ *    SMS verification or error tracking is set up no longer means opening
+ *    the server's .env.
+ *  - An honest card: there is no public REST API and no OAuth2 on this site
+ *    (Tom asked, 2026-09-11) -- deliberately, until Smart Software's API
+ *    shape is known.
+ * Credentials stay write-only: the server never returns a secret or a topic.
+ */
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Үйлдэл амжилтгүй боллоо.";
 
-type Provider = "ebarimt" | "storepay" | "card_golomt" | "courier_ebuuhia";
+type FieldState = { key: string; isSet: boolean; value: string | null };
 type IntegrationRow = {
-  provider: Provider;
+  provider: IntegrationProvider;
   isActive: boolean;
   hasCredentials: boolean;
   configuredKeys: string[];
+  decryptFailed: boolean;
+  fields: FieldState[];
   updatedAt: string | Date | null;
 };
 
-// 2026-09-04 audit finding: this screen lets an admin flip a provider to
-// "Идэвхтэй" and paste in real credentials, but that flag has never had a
-// runtime reader anywhere -- no code path in Checkout.tsx/server/db.ts ever
-// offers StorePay/Golomt-card as a payment method or calls eBarimt/eBuuhia.
-// The "Идэвхтэй" toggle only reflects the admin's own intent, not whether
-// the feature does anything for a real customer -- which could otherwise
-// mislead Tom into thinking a provider is live. `wiredUp: false` for all 4
-// records that honestly; flip a provider's flag to true only once real
-// checkout/order code actually calls it (see server/qpay.ts for what a
-// wired-up provider looks like -- QPay isn't in this table because it's
-// already real).
-const providerMeta: Record<Provider, { label: string; note: string; wiredUp: boolean; guidance?: string }> = {
-  // 2026-09-04: read the developer.smartsoftware.mn page Tom pointed at --
-  // it's a marketing/company-overview page with zero API/webhook docs, not
-  // a technical integration guide. Separately confirmed (3 independent
-  // open-source ebarimt client libraries, incl. a Node.js one) that
-  // Mongolia's underlying POS API 3.0 -- which every ebarimt POS vendor,
-  // SmartSoftware included, is built on -- requires a "PosService" process
-  // running LOCALLY on the merchant's own network (e.g. 127.0.0.1:7080),
-  // registered with an 8-digit POS number, not a plain cloud REST call our
-  // Aiven-hosted server could dial from anywhere. Writing server/ebarimt.ts
-  // against a guessed cloud shape would risk shipping something that looks
-  // configured but can never actually reach the tax system -- see
-  // EBARIMT.md's now-7 open questions for exactly what to ask SmartSoftware
-  // support before any code here can be real.
-  ebarimt: {
-    label: "И-баримт",
-    note: "Татварын албаны цахим баримт (SmartSoftware эсвэл POS API 3.0)",
-    wiredUp: false,
-    guidance: "developer.smartsoftware.mn-д техникийн API баримт бичиг байхгүй байсныг баталгаажуулсан. EBARIMT.md-д SmartSoftware-аас тодруулах 7 асуулт бэлэн байгаа -- ялангуяа: манай сервер таны PosService-тэй нэг сүлжээнд байх ёстой юу, эсвэл хаанаас ч дуудаж болох cloud endpoint байгаа юу? Хариу ирмэгц энд бодит талбарууд (жишээ нь posServiceUrl/posNumber) нэмэгдэнэ.",
-  },
-  storepay: { label: "StorePay", note: "Хэсэгчилсэн төлбөр (BNPL)", wiredUp: false },
-  card_golomt: { label: "Голомт банк (карт)", note: "Visa/Mastercard шууд төлбөр (e-Merchant)", wiredUp: false },
-  courier_ebuuhia: { label: "eBuuhia хүргэлт", note: "Эльчийн хүргэлтийн үйлчилгээ", wiredUp: false },
+const TOPIC_GROUP_BY_FIELD = Object.fromEntries(Object.entries(NTFY_TOPIC_FIELD).map(([group, field]) => [field, group])) as Record<string, NotificationGroup>;
+
+const statusStyles: Record<string, string> = {
+  sent: "bg-[var(--a-pos-soft)] text-[var(--a-pos)]",
+  pending: "bg-[var(--a-info-soft)] text-[var(--a-info)]",
+  sending: "bg-[var(--a-info-soft)] text-[var(--a-info)]",
+  failed: "bg-[var(--a-neg-soft)] text-[var(--a-neg)]",
+  expired: "bg-[var(--a-warn-soft)] text-[var(--a-warn)]",
+  suppressed: "bg-[var(--a-soft)] text-[var(--a-muted)]",
 };
+const statusLabels: Record<string, string> = { sent: "Илгээсэн", pending: "Хүлээгдэж буй", sending: "Илгээж байна", failed: "Амжилтгүй", expired: "Хугацаа хэтэрсэн", suppressed: "Илгээгээгүй" };
 
-export default function AdminIntegrationsPanel() {
+function ProviderCard({ row }: { row: IntegrationRow }) {
   const utils = trpc.useUtils();
-  const integrationsQuery = trpc.admin.integrations.useQuery();
-  const qpayQuery = trpc.payments.qpayAvailability.useQuery();
   const updateIntegration = trpc.admin.updateIntegration.useMutation();
+  const testIntegration = trpc.admin.testIntegration.useMutation();
+  const generateTopic = trpc.admin.generateNtfyTopic.useMutation();
+  const meta = INTEGRATION_META[row.provider];
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [extraRows, setExtraRows] = useState<{ key: string; value: string }[]>([]);
+  const [replaceAll, setReplaceAll] = useState(false);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
 
-  const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
-  const [rows, setRows] = useState<{ key: string; value: string }[]>([]);
+  const refresh = () => Promise.all([utils.admin.integrations.invalidate(), utils.notifications.mySubscriptions.invalidate()]);
 
-  const openEditor = () => { setRows([{ key: "", value: "" }]); };
-  const closeEditor = () => { setEditingProvider(null); setRows([]); };
-
-  const toggleActive = async (row: IntegrationRow) => {
+  const run = async (key: string, action: () => Promise<unknown>, success?: string) => {
+    setBusyKey(key);
     try {
-      await updateIntegration.mutateAsync({ provider: row.provider, isActive: !row.isActive });
-      utils.admin.integrations.invalidate();
+      await action();
+      if (success) toast.success(success);
+      await refresh();
     } catch (error) {
       toast.error(messageFrom(error));
+    } finally {
+      setBusyKey(null);
     }
   };
 
-  const saveCredentials = async (provider: Provider) => {
-    const config: Record<string, string> = {};
-    for (const row of rows) {
-      const key = row.key.trim();
-      if (key) config[key] = row.value;
-    }
-    try {
-      await updateIntegration.mutateAsync({ provider, config: Object.keys(config).length > 0 ? config : undefined });
-      toast.success("Тохиргоо хадгалагдлаа.");
-      utils.admin.integrations.invalidate();
-      closeEditor();
-    } catch (error) {
-      toast.error(messageFrom(error));
-    }
+  const dirtySet = (): Record<string, string> => {
+    const set: Record<string, string> = {};
+    for (const [key, value] of Object.entries(drafts)) if (value.trim()) set[key] = value;
+    for (const extra of extraRows) if (extra.key.trim() && extra.value.trim()) set[extra.key.trim()] = extra.value;
+    return set;
   };
 
-  const integrations = (integrationsQuery.data ?? []) as IntegrationRow[];
+  const save = () => {
+    const set = dirtySet();
+    if (!Object.keys(set).length && !replaceAll) { toast.message("Өөрчлөх утга оруулаагүй байна."); return; }
+    const problem = validateIntegrationSettings(row.provider, set);
+    if (problem) { toast.error(problem); return; }
+    return run("save", () => updateIntegration.mutateAsync({ provider: row.provider, set, replaceAll: replaceAll || undefined }).then(() => { setDrafts({}); setExtraRows([]); setReplaceAll(false); }), "Тохиргоо хадгалагдлаа.");
+  };
+
+  const clearKey = (key: string) => {
+    if (!window.confirm(`"${key}" тохиргоог устгах уу?`)) return;
+    return run(`clear:${key}`, () => updateIntegration.mutateAsync({ provider: row.provider, clearKeys: [key] }), "Устгалаа.");
+  };
+
+  const knownKeys = new Set(meta.fields.map(field => field.key));
+  const handTypedKeys = row.fields.filter(field => !knownKeys.has(field.key));
+  const hasDirty = Object.values(drafts).some(value => value.trim()) || extraRows.some(extra => extra.key.trim() && extra.value.trim());
 
   return (
-    <div>
+    <div className="rounded-3xl border border-[var(--a-border)] bg-[var(--a-card)] p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">{row.provider.toUpperCase()}</p>
+          <h3 className="mt-1 font-bold">{meta.label}</h3>
+          <p className="mt-1 text-xs text-[var(--a-muted)]">{meta.note}</p>
+          {!meta.wiredUp && <p className="mt-2 flex items-start gap-1.5 text-[11px] font-bold text-[var(--a-warn)]"><TriangleAlert size={13} className="mt-0.5 shrink-0" />"Идэвхтэй" гэдэг нь зөвхөн энэ тохиргоог хадгалсан гэсэн үг — захиалга/төлбөрийн урсгалд одоогоор холбогдоогүй тул харилцагчид харагдахгүй, нөлөөлөхгүй.</p>}
+        </div>
+        <button type="button" onClick={() => run("toggle", () => updateIntegration.mutateAsync({ provider: row.provider, isActive: !row.isActive }))} disabled={busyKey !== null} className={`shrink-0 rounded-full px-3 py-1.5 text-[10px] font-extrabold transition ${row.isActive ? "bg-[var(--a-pos-soft)] text-[var(--a-pos)]" : "bg-[var(--a-soft)] text-[var(--a-muted)]"}`}>
+          {busyKey === "toggle" ? <LoaderCircle className="animate-spin" size={12} /> : row.isActive ? "Идэвхтэй" : "Идэвхгүй"}
+        </button>
+      </div>
+      {meta.guidance && <p className="mt-3 rounded-xl bg-[var(--a-info-soft)] p-3 text-[11px] leading-4 text-[var(--a-info)]">{meta.guidance}</p>}
+      {row.decryptFailed && (
+        <div className="mt-3 rounded-xl bg-[var(--a-neg-soft)] p-3 text-[11px] leading-4 text-[var(--a-neg)]">
+          Хадгалсан тохиргоог тайлж чадсангүй (шифрлэлтийн түлхүүр өөрчлөгдсөн байж магадгүй). Бүх утгыг шинээр оруулж доорх "Бүгдийг солих"-г сонгоод хадгална уу.
+          <label className="mt-2 flex items-center gap-2 font-bold"><input type="checkbox" checked={replaceAll} onChange={event => setReplaceAll(event.target.checked)} />Бүгдийг солих</label>
+        </div>
+      )}
+
+      {meta.fields.length > 0 && (
+        <div className="mt-4 grid gap-2">
+          {meta.fields.map(field => {
+            const state = row.fields.find(item => item.key === field.key);
+            const isSecret = field.kind === "secret" || field.kind === "topic";
+            const topicGroup = field.kind === "topic" ? TOPIC_GROUP_BY_FIELD[field.key] : undefined;
+            return (
+              <div key={field.key} className="rounded-2xl bg-[var(--a-soft)] p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="flex items-center gap-1.5 text-xs font-bold">
+                    {state?.isSet ? <CheckCircle2 size={13} className="text-[var(--a-pos)]" /> : <CircleDashed size={13} className="text-[var(--a-faint)]" />}
+                    {field.label}
+                    <span className="font-normal text-[var(--a-faint)]">· {state?.isSet ? (isSecret ? "тохируулсан (нууц)" : "тохируулсан") : "хоосон"}</span>
+                  </p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {topicGroup && <button type="button" disabled={busyKey !== null} onClick={() => { if (state?.isSet && !window.confirm(`"${NOTIFICATION_GROUP_LABELS[topicGroup]}" бүлгийн сэдвийг шинэчлэх үү? Одоо бүртгүүлсэн хүмүүс QR кодыг дахин уншуулах шаардлагатай болно.`)) return; void run(`topic:${field.key}`, () => generateTopic.mutateAsync({ group: topicGroup }), "Сэдэв үүслээ."); }} className="inline-flex items-center gap-1 rounded-full border border-[var(--a-border)] bg-[var(--a-card)] px-2.5 py-1 text-[10px] font-extrabold text-[var(--a-text-soft)] hover:border-[var(--a-info)] hover:text-[var(--a-info)]">
+                      {busyKey === `topic:${field.key}` ? <LoaderCircle className="animate-spin" size={11} /> : <RefreshCw size={11} />}{state?.isSet ? "Шинэчлэх" : "Сэдэв үүсгэх"}
+                    </button>}
+                    {topicGroup && meta.testable && state?.isSet && <button type="button" disabled={busyKey !== null} onClick={() => run(`test:${field.key}`, async () => { const result = await testIntegration.mutateAsync({ provider: "ntfy", group: topicGroup }); if (!result.ok) throw new Error(result.error ?? "Илгээж чадсангүй."); }, "Туршилт илгээлээ — утсаа шалгана уу.")} className="inline-flex items-center gap-1 rounded-full bg-[var(--a-info)] px-2.5 py-1 text-[10px] font-extrabold text-white disabled:opacity-60">
+                      {busyKey === `test:${field.key}` ? <LoaderCircle className="animate-spin" size={11} /> : <Send size={11} />}Туршилт
+                    </button>}
+                    {state?.isSet && <button type="button" disabled={busyKey !== null} onClick={() => clearKey(field.key)} className="grid size-6 place-items-center rounded-full text-[var(--a-muted)] hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${field.label} устгах`}><X size={12} /></button>}
+                  </div>
+                </div>
+                {!topicGroup && (
+                  <input
+                    value={drafts[field.key] ?? ""}
+                    onChange={event => setDrafts(current => ({ ...current, [field.key]: event.target.value }))}
+                    type={isSecret ? "password" : "text"}
+                    autoComplete="off"
+                    placeholder={state?.value ?? (state?.isSet ? "•••••••• (шинэ утга бичвэл солигдоно)" : field.defaultValue ?? "")}
+                    className="mt-2 h-9 w-full rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] px-2.5 text-xs outline-none focus:border-[#df1f3d]"
+                  />
+                )}
+                {field.help && <p className="mt-1.5 text-[11px] leading-4 text-[var(--a-muted)]">{field.help}</p>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {meta.freeForm && (
+        <div className="mt-4 rounded-2xl bg-[var(--a-soft)] p-3">
+          <p className="text-[10px] font-extrabold tracking-[.08em] text-[var(--a-info)]">НЭМЭЛТ ТҮЛХҮҮРҮҮД</p>
+          {handTypedKeys.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {handTypedKeys.map(field => <span key={field.key} className="inline-flex items-center gap-1 rounded-full bg-[var(--a-card)] px-2.5 py-1 text-[11px] font-bold"><KeyRound size={11} />{field.key}<button type="button" onClick={() => clearKey(field.key)} className="text-[var(--a-muted)] hover:text-[#df1f3d]" aria-label={`${field.key} устгах`}><X size={11} /></button></span>)}
+            </div>
+          ) : <p className="mt-1 text-[11px] text-[var(--a-faint)]">Одоогоор нэмэлт түлхүүр алга.</p>}
+          <div className="mt-2 grid gap-2">
+            {extraRows.map((extra, index) => (
+              <div key={index} className="flex gap-2">
+                <input value={extra.key} onChange={event => setExtraRows(current => current.map((item, i) => i === index ? { ...item, key: event.target.value } : item))} placeholder="Түлхүүр (жишээ: apiKey)" className="h-9 w-40 shrink-0 rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] px-2.5 text-xs outline-none focus:border-[#df1f3d]" />
+                <input value={extra.value} onChange={event => setExtraRows(current => current.map((item, i) => i === index ? { ...item, value: event.target.value } : item))} placeholder="Утга" type="password" autoComplete="off" className="h-9 min-w-0 flex-1 rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] px-2.5 text-xs outline-none focus:border-[#df1f3d]" />
+                <button type="button" onClick={() => setExtraRows(current => current.filter((_, i) => i !== index))} className="grid size-9 shrink-0 place-items-center rounded-lg text-[var(--a-muted)] hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label="Мөр хасах"><Trash2 size={13} /></button>
+              </div>
+            ))}
+          </div>
+          <button type="button" onClick={() => setExtraRows(current => [...current, { key: "", value: "" }])} className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-[var(--a-border)] bg-[var(--a-card)] px-3 py-1.5 text-[10px] font-extrabold text-[var(--a-text-soft)] hover:border-[#df1f3d] hover:text-[#df1f3d]"><Plus size={12} />Түлхүүр нэмэх</button>
+        </div>
+      )}
+
+      {(hasDirty || replaceAll) && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button type="button" onClick={save} disabled={busyKey !== null} className="inline-flex items-center gap-2 rounded-full bg-[#df1f3d] px-4 py-2 text-[11px] font-extrabold text-white disabled:opacity-60">{busyKey === "save" && <LoaderCircle className="animate-spin" size={12} />}Хадгалах</button>
+          <button type="button" onClick={() => { setDrafts({}); setExtraRows([]); setReplaceAll(false); }} className="text-[11px] font-extrabold text-[var(--a-muted)]">Цуцлах</button>
+          <p className="text-[11px] text-[var(--a-faint)]">Зөвхөн бичсэн талбарууд солигдоно, бусад нь хэвээр үлдэнэ.</p>
+        </div>
+      )}
+
+      {row.provider === "ntfy" && <NotificationOutboxLog />}
+    </div>
+  );
+}
+
+function NotificationOutboxLog() {
+  const outboxQuery = trpc.admin.notificationOutbox.useQuery(undefined, { refetchInterval: 30_000 });
+  const rows = outboxQuery.data ?? [];
+  return (
+    <div className="mt-4">
+      <p className="text-[10px] font-extrabold tracking-[.08em] text-[var(--a-info)]">СҮҮЛИЙН МЭДЭГДЛҮҮД</p>
+      {outboxQuery.isLoading && <p className="mt-2 flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={13} />Уншиж байна…</p>}
+      {!outboxQuery.isLoading && !rows.length && <p className="mt-2 text-[11px] text-[var(--a-faint)]">Одоогоор мэдэгдэл үүсээгүй.</p>}
+      {rows.length > 0 && (
+        <div className="mt-2 max-h-80 overflow-auto rounded-2xl border border-[var(--a-border)]">
+          <table className="w-full min-w-[560px] text-left text-[11px]">
+            <thead className="sticky top-0 bg-[var(--a-soft)] text-[10px] uppercase tracking-[.06em] text-[var(--a-muted)]">
+              <tr><th className="px-3 py-2">Хэзээ</th><th className="px-3 py-2">Мэдэгдэл</th><th className="px-3 py-2">Бүлэг</th><th className="px-3 py-2">Төлөв</th></tr>
+            </thead>
+            <tbody>
+              {rows.map(row => (
+                <tr key={row.id} className="border-t border-[var(--a-border)] align-top">
+                  <td className="whitespace-nowrap px-3 py-2 text-[var(--a-muted)]">{new Date(row.createdAt).toLocaleString("mn-MN")}</td>
+                  <td className="px-3 py-2"><span className="font-bold">{row.title}</span><span className="block text-[var(--a-faint)]">{NOTIFICATION_EVENTS[row.eventType as NotificationEventType]?.label ?? row.eventType}</span></td>
+                  <td className="px-3 py-2">{NOTIFICATION_GROUP_LABELS[row.groupKey as NotificationGroup] ?? row.groupKey}</td>
+                  <td className="px-3 py-2">
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${statusStyles[row.status] ?? ""}`}>{statusLabels[row.status] ?? row.status}</span>
+                    {row.attempts > 1 && <span className="ml-1 text-[var(--a-faint)]">×{row.attempts}</span>}
+                    {row.lastError && row.status !== "sent" && <span className="mt-1 block max-w-[220px] break-words text-[var(--a-faint)]">{row.lastError}</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EnvStatusCard() {
+  const statusQuery = trpc.admin.envIntegrationStatus.useQuery();
+  return (
+    <div className="rounded-3xl border border-[var(--a-border)] bg-[var(--a-card)] p-5">
+      <p className="text-[10px] font-extrabold tracking-[.14em] text-[var(--a-info)]">СЕРВЕРИЙН ТОХИРГОО (.env)</p>
+      <h3 className="mt-1 font-bold">Сервер дээр тохируулдаг үйлчилгээнүүд</h3>
+      <p className="mt-1 text-xs text-[var(--a-muted)]">Эдгээрийг энэ дэлгэцээс өөрчлөхгүй — зөвхөн тохируулагдсан эсэхийг харуулна. Нууц утга хэзээ ч харагдахгүй.</p>
+      {statusQuery.isLoading && <p className="mt-3 flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={13} />Шалгаж байна…</p>}
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        {(statusQuery.data ?? []).map(item => (
+          <div key={item.key} className="flex items-start gap-2 rounded-2xl bg-[var(--a-soft)] p-3">
+            {item.configured ? <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-[var(--a-pos)]" /> : <CircleDashed size={15} className="mt-0.5 shrink-0 text-[var(--a-faint)]" />}
+            <div className="min-w-0">
+              <p className="text-xs font-bold">{item.label}</p>
+              <p className="text-[11px] leading-4 text-[var(--a-muted)]">{item.configured ? "Тохируулсан" : "Тохируулаагүй"} · {item.note}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function AdminIntegrationsPanel() {
+  const integrationsQuery = trpc.admin.integrations.useQuery();
+  const qpayQuery = trpc.payments.qpayAvailability.useQuery();
+  const integrations = (integrationsQuery.data ?? []) as IntegrationRow[];
+  // The one wired-up provider first; the rest in their schema order.
+  const ordered = [...integrations].sort((a, b) => Number(INTEGRATION_META[b.provider].wiredUp) - Number(INTEGRATION_META[a.provider].wiredUp));
+
+  return (
+    <div className="grid gap-4">
       <div className="rounded-3xl border border-[var(--a-border)] bg-[var(--a-card)] p-5">
         <div className="flex items-center justify-between gap-3">
           <div><p className="text-[10px] font-extrabold tracking-[.14em] text-[var(--a-info)]">QPAY</p><h3 className="mt-1 font-bold">QPay төлбөр</h3><p className="mt-1 text-xs text-[var(--a-muted)]">Тохиргоог `.env`-ээр удирддаг, энэ дэлгэцээс өөрчлөх боломжгүй.</p></div>
@@ -105,40 +271,16 @@ export default function AdminIntegrationsPanel() {
         </div>
       </div>
 
-      {integrationsQuery.isLoading && <p className="mt-5 flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>}
+      {integrationsQuery.isLoading && <p className="flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>}
+      {integrationsQuery.error && <p className="rounded-2xl bg-[var(--a-neg-soft)] p-4 text-xs text-[var(--a-neg)]">{messageFrom(integrationsQuery.error)}</p>}
+      {ordered.map(row => <ProviderCard key={row.provider} row={row} />)}
 
-      <div className="mt-5 grid gap-3">
-        {integrations.map(row => {
-          const meta = providerMeta[row.provider];
-          const isEditing = editingProvider === row.provider;
-          return (
-            <div key={row.provider} className="rounded-3xl border border-[var(--a-border)] bg-[var(--a-card)] p-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div><p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">{row.provider.toUpperCase()}</p><h3 className="mt-1 font-bold">{meta.label}</h3><p className="mt-1 text-xs text-[var(--a-muted)]">{meta.note}</p>{row.hasCredentials ? <p className="mt-1 text-[11px] text-[var(--a-faint)]">{row.configuredKeys.length} талбар тохируулагдсан: {row.configuredKeys.join(", ")}</p> : <p className="mt-1 text-[11px] text-[var(--a-faint)]">Тохиргоо оруулаагүй байна.</p>}{!meta.wiredUp && <p className="mt-2 flex items-start gap-1.5 text-[11px] font-bold text-[var(--a-warn)]"><TriangleAlert size={13} className="mt-0.5 shrink-0" />"Идэвхтэй" гэдэг нь зөвхөн энэ тохиргоог хадгалсан гэсэн үг — захиалга/төлбөрийн урсгалд одоогоор холбогдоогүй тул харилцагчид харагдахгүй, нөлөөлөхгүй.</p>}{meta.guidance && <p className="mt-2 rounded-xl bg-[var(--a-info-soft)] p-3 text-[11px] leading-4 text-[var(--a-info)]">{meta.guidance}</p>}</div>
-                <div className="flex items-center gap-2">
-                  <button type="button" onClick={() => toggleActive(row)} disabled={updateIntegration.isPending} className={`rounded-full px-3 py-1.5 text-[10px] font-extrabold transition ${row.isActive ? "bg-[var(--a-pos-soft)] text-[var(--a-pos)]" : "bg-[var(--a-soft)] text-[var(--a-muted)]"}`}>{row.isActive ? "Идэвхтэй" : "Идэвхгүй"}</button>
-                  <button type="button" onClick={() => { setEditingProvider(row.provider); openEditor(); }} className="inline-flex items-center gap-1.5 rounded-full border border-[var(--a-border)] px-3 py-1.5 text-[10px] font-extrabold text-[var(--a-text-soft)] transition hover:border-[#df1f3d] hover:text-[#df1f3d]"><KeyRound size={12} />Тохиргоо засах</button>
-                </div>
-              </div>
+      <EnvStatusCard />
 
-              {isEditing && <div className="mt-4 rounded-2xl bg-[var(--a-soft)] p-4">
-                <p className="text-[10px] font-extrabold tracking-[.08em] text-[var(--a-info)]">ШИНЭ ТОХИРГОО (одоо байгааг харуулахгүй, зөвхөн энд бичсэн утгыг хадгална)</p>
-                <div className="mt-3 grid gap-2">
-                  {rows.map((r, index) => <div key={index} className="flex gap-2">
-                    <input value={r.key} onChange={event => setRows(current => current.map((item, i) => i === index ? { ...item, key: event.target.value } : item))} placeholder="Түлхүүр (жишээ: apiKey)" className="h-10 w-44 shrink-0 rounded-lg border border-[var(--a-border)] px-2.5 text-xs outline-none focus:border-[#df1f3d]" />
-                    <input value={r.value} onChange={event => setRows(current => current.map((item, i) => i === index ? { ...item, value: event.target.value } : item))} placeholder="Утга" type="password" className="h-10 flex-1 rounded-lg border border-[var(--a-border)] px-2.5 text-xs outline-none focus:border-[#df1f3d]" />
-                    <button type="button" onClick={() => setRows(current => current.filter((_, i) => i !== index))} className="grid size-10 shrink-0 place-items-center rounded-lg text-[var(--a-muted)] hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label="Мөр хасах"><Trash2 size={14} /></button>
-                  </div>)}
-                </div>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <button type="button" onClick={() => setRows(current => [...current, { key: "", value: "" }])} className="inline-flex items-center gap-1.5 rounded-full border border-[var(--a-border)] px-3 py-2 text-[10px] font-extrabold text-[var(--a-text-soft)] hover:border-[#df1f3d] hover:text-[#df1f3d]"><Plus size={12} />Мөр нэмэх</button>
-                  <button type="button" onClick={() => saveCredentials(row.provider)} disabled={updateIntegration.isPending} className="inline-flex items-center gap-2 rounded-full bg-[#df1f3d] px-4 py-2 text-[10px] font-extrabold text-white disabled:opacity-60">{updateIntegration.isPending && <LoaderCircle className="animate-spin" size={12} />}Хадгалах</button>
-                  <button type="button" onClick={closeEditor} className="text-[10px] font-extrabold text-[var(--a-muted)]">Цуцлах</button>
-                </div>
-              </div>}
-            </div>
-          );
-        })}
+      <div className="rounded-3xl border border-dashed border-[var(--a-border)] bg-[var(--a-card)] p-5">
+        <p className="text-[10px] font-extrabold tracking-[.14em] text-[var(--a-muted)]">REST API / OAUTH2</p>
+        <h3 className="mt-1 font-bold">Гадны системд зориулсан API — одоогоор байхгүй (зориуд)</h3>
+        <p className="mt-1 text-xs leading-5 text-[var(--a-muted)]">Энэ сайт гадны программд нээлттэй REST API болон OAuth2 нэвтрэлт гаргадаггүй. Гадагшаа холбогддог цэгүүд нь зөвхөн QPay болон verify.mn-ийн callback. Smart Software-ийн нөөц, гишүүнчлэлийн API-ийн хэлбэр тодорхой болмогц тохирох аргыг сонгоно: тэд манай руу өгөгдөл илгээдэг бол гарын үсэгтэй (HMAC) webhook, тэд манайхаас татдаг бол хэш-ээр хадгалсан API түлхүүр, OAuth2-ийг зөвхөн тэд шаардвал.</p>
       </div>
     </div>
   );

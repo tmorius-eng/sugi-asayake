@@ -4,6 +4,35 @@
 
 ---
 
+## Утасны push мэдэгдэл (ntfy) + admin хонх + интеграцийн самбарын засвар — Phase 1 (2026-09-11, гэрийн лаптоп, шөнө)
+
+**Хүсэлт (Tom)**: <https://github.com/binwiederhier/ntfy> судалж сайтад суулгах. Агуулахын ажилтан, admin, finance утсан дээрээ мэдэгдэл авах: сайтаар зарагдсан, нөөц дуусч байгаа, захиалга орж ирсэн, бараа орсон/гарсан. Агуулахаас дэлгүүр рүү бараа гаргахад агуулахаас хасч дэлгүүрт нэмэх. Ирээдүйд Smart Software-ийн inventory/loyalty/management API. Мөн "/admin интеграцийн хэсэгт REST API/OAuth2 байгаа юу, сайн ажиллаж байна уу". Замдаа нэмсэн хүсэлтүүд: шинэ бараа ирэхэд худалдааны зөвлөх (staff) код+ширхэгийг **A4 цаасан дээр бичээд group chat руу зураг явуулдаг** асуудлыг шийдэх; admin top bar-ын **хонх** дээр мэдэгдэл ирдэг болгох.
+
+**Төлөвлөгөө (6 phase, Tom баталсан)**: `C:\Users\hero_\.claude\plans\https-github-com-binwiederhier-ntfy-enii-happy-avalanche.md`. Tom-ийн шийдвэрүүд: ntfy.sh + урт санамсаргүй нууц topic (бүлэг бүрт нэг, PII ороохгүй); шилжүүлэг = агуулах "илгээх"-д хасагдана → дэлгүүрт **USB сканнераар уншуулж** автоматаар тоологдоно → илгээсэнтэй тулгана; **тусдаа агуулах** байршил, онлайн захиалга тэндээс; зөвлөхүүд одоогийн **`staff`** эрхээр; дэлгүүрүүд борлуулалтаа **зөвхөн Smart POS**-д бүртгэдэг (тиймээс Smart POS синк хүртэл онлайн нөөц = агуулахын нөөц); staff тооллого = draft, admin батална; REST API/OAuth2-ийг одоо бүтээхгүй.
+
+**DB дээр хэмжсэн эхлэлийн байдал**: 4 салбар бүгд дэлгүүр, агуулах байхгүй; бүх 18,725 ширхэг "Орос элчин" (id 1) дээр; `integration_configs` хоосон; ажилтан: admin 1 (id 1 "bataa") + 2 тестийн admin үлдэгдэл, staff/warehouse 0.
+
+**Интеграцийн аудит (Tom-ийн асуултын хариу)**: REST API болон OAuth2 **огт байгаагүй** (express route: /health, /api/trpc, QPay + verify.mn callback, /cdn/*). 4 картын тохиргоо шифрлэгдэж хадгалагддаг ч **runtime-д уншдаг код байгаагүй**, "холболт шалгах" товч байгаагүй. **Bug**: нэг түлхүүр хадгалахад бусад бүх түлхүүр устдаг байв (`updateAdminIntegration` бүх config-ийг орлуулдаг; хуучин тест үүнийг зөв гэж баталж байсан). **Bug**: `integrations.integration.test.ts`-ийн afterAll бодит `ebarimt` мөрийг болзолгүй устгадаг байв. Provider-ийн жагсаалт 5 газар давхардсан байв.
+
+**Хийсэн (Phase 1)**:
+
+- Migration `0062` (Aiven дээр ажилласан): `integration_configs.provider`-т `ntfy`, `smartsoftware`; шинэ `notification_outbox`; `users.lastSeenNotificationId`.
+- `shared/integrations.ts` — нэг provider жагсаалт + provider бүрийн талбар (url/text/secret/topic), validation, **merge-on-save**. `shared/notification-events.ts` — бүлэг (admin/warehouse/finance/store), эрх→бүлэг, үйл явдал→бүлэг/priority/tag, Монгол мессеж builder (payload төрөлд нэр/утас/хаяг талбар **байхгүй** — PII дүрмийг compiler хамгаална).
+- `server/_core/ntfy.ts` — JSON POST (кирилл header-т найдваргүй), 5с timeout, хэзээ ч throw хийхгүй. `server/notificationOutbox.ts` — transaction дотор бичих (leaf модуль, db.ts-тэй cycle үүсгэхгүй). `server/notifications.ts` — dispatcher: guarded claim (хоёр лаптоп давхар илгээхгүй), retry 1м/5м/30м, 5 оролдлого, 2 цагаас хуучирвал expired, тестийн мөрийг 1 хоногийн дараа устгана. `server/notificationsRouter.ts` — хонхны feed/markSeen, өөрийн бүлгийн сэдвүүд, туршилт (rate-limit).
+- Hook-ууд: `order.placed` (checkout transaction дотор), `order.paid` (QPay), `payment.paid_on_closed_order`, `payment.underpaid`, `order.cancelled_by_customer`, `refund.recorded` (transaction дотор), `stock.low_digest` (өдрийн job, УБ-ын огноогоор dedupe).
+- Admin: интеграцийн самбар дахин бичигдэв (талбар бүр тусдаа, цэвэрлэх товч, ntfy "Сэдэв үүсгэх"/"Туршилт", илгээсэн мэдэгдлийн түүх, `.env` үйлчилгээнүүдийн тийм/үгүй төлөв, "REST API / OAuth2 — байхгүй (зориуд)" карт). Шинэ "Утасны мэдэгдэл" хэсэг (staff/warehouse/finance/admin): алхам, QR (`qrcode` dependency), сэдэв хуулах, туршилт. **Хонх**: өөрийн бүлгийн мэдэгдлийн жагсаалт, уншаагүй тоо (данс дээр хадгалагдана), 30с polling, шинэ мэдэгдэл ирэхэд toast.
+- Замдаа: `adminSectionKeys`-д `documents`, `loyalty` байгаагүй (refresh хийхэд хянах самбар руу үсэрдэг байсан) — нэмэв; эдгээр хоёр хэсэгт ажилладаггүй хайлтын талбар харагддаг байсныг нуув.
+
+**Олдсон/заслагдсан bug (тестээр)**: нэг захиалгын бүх үйл явдал `order:<id>` гэсэн ижил dedupe түлхүүртэй байсан тул unique index "төлөгдсөн", "цуцлагдсан" мэдэгдлийг чимээгүй залгиж байв → түлхүүрийг үйл явдлын төрлөөр namespace хийв (`outboxDedupeKey`). Хонхны самбар 390px-д дэлгэцээс 50px гадагш гарч байв → утсан дээр viewport-д бэхлэв.
+
+**Бодит тохиргоо**: Tom-ийн ntfy.sh access token (эхнийх нь 2026-09-14-нд дуусах browser-session token байсан тул хугацаагүйг нь авав) шифрлэгдэж хадгалагдав, 4 бүлэгт санамсаргүй сэдэв үүсгэв, ntfy идэвхтэй. Tom эхлээд `Sugi`/`95651578` сэдэвт бүртгүүлсэн тул юу ч ирээгүй → admin сэдэвт бүртгүүлсний дараа **iPhone дээр ирж байгааг Tom screenshot-оор баталгаажуулав** (шууд туршилт + outbox→dispatcher зам хоёулаа).
+
+**Баталгаажуулалт**: `pnpm check` цэвэр; шинэ тест `ntfy.test.ts` (6), `notification-events.test.ts` (19), `notifications.integration.test.ts` (6), `integrations.integration.test.ts` (4→10), admin-tips; Playwright (3100 порт, face gate унтраалттай, throwaway admin+staff, дараа нь устгасан): интеграцийн хуудас, хонх (admin 2 мөр, staff зөвхөн store 1 мөр), "Утасны мэдэгдэл" (admin 4 QR, staff 1), 1440/1024/390-д overflow 0, console алдаа 0.
+
+**Ажлын лаптопоос татсан 9 commit** (энэ session-ий эхэнд, `d30dc06` хүртэл): баркод сканнераар сайтын аль ч хуудаснаас бараа руу үсрэх, Монгол хайлтын synonym, featured брэнд → брэндийн хуудас, README, /admin хэсэг бүрийн Монгол тайлбар (tip), SEO/cookie текст DB-ээс, хууль эрх зүйн 3 хуудас + лоялти түвшин + footer/холбоо барих /admin-аар засагдах (migration `0061`, Aiven дээр аль хэдийн ажилласан), hero 3 слайд, 42 ашиглагдаагүй компонент + 25 package устгав. Тэр ажлын CLAUDE.md/HISTORY.md тэмдэглэл ирээгүй — дэлгэрэнгүйг `git log f7b6563..d30dc06`-оос. ⚠️ Лоялти босго DB дээр 300k/500k/5M болсон (migration-ий seed 500k/1M/10M) — /admin-аар өөрчилсөн бололтой.
+
+---
+
 ## Гүнзгий аудит (UI/UX + frontend + backend) — хэмжилтээр нотолж, эхний 3 зүйлийг шууд заслаа (2026-09-11, оройн session)
 
 Tom: "Ui ux bolon fronted bolon backend bugdiin deep audit hiij deep inspect analyze hiij aldaa ol!!! Bas ymarch utag uchirgui feature baiwal hai! ... AI slop oor hiigegu ym shig haragduulmaar baina, website design bol still 2019 style tai bgaa teriign sudal!! 2026 onii best designi AI or Design MCP sudal!!" Дараа нь: "Start take action make my website better!!!"

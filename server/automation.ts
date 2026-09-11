@@ -1,5 +1,6 @@
-import { getAbandonedCartsNeedingReminder, getLowStockProducts, markCartReminderSent, getStoreSettingValue } from "./db";
+import { getAbandonedCartsNeedingReminder, getLowStockProducts, markCartReminderSent, getStoreSettingValue, purgeNotificationOutbox, recordNotification } from "./db";
 import { fillTemplate } from "../shared/store-settings";
+import { ubDateKey } from "../shared/notification-events";
 import { sendAccountEmail, notifyOwner } from "./_core/notification";
 import { registerJob } from "./_core/scheduler";
 
@@ -50,10 +51,27 @@ export async function runLowStockDigestJob(): Promise<void> {
     title: fillTemplate(await getStoreSettingValue("email-subject-low-stock-digest"), { "{тоо}": String(lowStockProducts.length) }),
     content: `Дараах бараануудын нөөц бага байна:\n\n${lines}\n\nАдмин самбарын Бүтээгдэхүүн хэсгээс шинэчилнэ үү.`,
   });
+  // 2026-09-11: the same digest as a phone push to the warehouse. Keyed by
+  // the Ulaanbaatar date, so a restart that re-runs the job the same day
+  // does not buzz everyone twice.
+  await recordNotification("stock.low_digest", {
+    count: lowStockProducts.length,
+    items: lowStockProducts.map(product => ({ sku: product.sku, name: product.name, quantity: product.stockQuantity })),
+  }, `day:${ubDateKey()}`);
 }
 
 // ~20h interval (not a literal 24h) so a slightly-early tick never lets a
 // full day pass with no digest at all.
 export function registerLowStockDigestJob() {
   registerJob({ name: "low-stock-owner-digest", intervalMs: 20 * 60 * 60 * 1000, run: runLowStockDigestJob });
+}
+
+// 2026-09-11: keeps notification_outbox small -- see purgeNotificationOutbox.
+export async function runNotificationOutboxPurgeJob(): Promise<void> {
+  const { testRows, oldRows } = await purgeNotificationOutbox();
+  if (testRows || oldRows) console.log(`[notifications] outbox purge: ${testRows} test row(s), ${oldRows} row(s) older than 90 days`);
+}
+
+export function registerNotificationOutboxPurgeJob() {
+  registerJob({ name: "notification-outbox-purge", intervalMs: 20 * 60 * 60 * 1000, run: runNotificationOutboxPurgeJob });
 }

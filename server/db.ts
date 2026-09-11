@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lt, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { describeTransport, planMysqlConnection } from "./_core/dbConnection";
-import { adminAuditLogs, branches, branchStock, cartItems, carts, discountCodes, faceAttempts, faceChallenges, faceEnrollments, featuredBrands, InsertProduct, InsertProductCategory, integrationConfigs, loginAttempts, loyaltyTiers, marketingSpend, mediaLibrary, orderItems, orders, paymentAttempts, phoneVerificationSessions, postCategories, postCategoryLinks, posts, postTagLinks, postTags, productCategories, productReviews, productVariants, products, routines, routineSteps, scheduledJobRuns, siteDocuments, siteMedia, siteText, sitePromotions, storeCreditLedger, storeSettings, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
+import { adminAuditLogs, branches, branchStock, cartItems, carts, discountCodes, faceAttempts, faceChallenges, faceEnrollments, featuredBrands, InsertProduct, InsertProductCategory, integrationConfigs, loginAttempts, notificationOutbox, loyaltyTiers, marketingSpend, mediaLibrary, orderItems, orders, paymentAttempts, phoneVerificationSessions, postCategories, postCategoryLinks, posts, postTagLinks, postTags, productCategories, productReviews, productVariants, products, routines, routineSteps, scheduledJobRuns, siteDocuments, siteMedia, siteText, sitePromotions, storeCreditLedger, storeSettings, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
 import { slugify } from "../shared/slugify";
 import { looksLikeBarcode, normaliseBarcode } from "../shared/barcode";
 import { expandQueryGroups, normaliseSearchText } from "../shared/search-synonyms";
@@ -10,6 +10,10 @@ import { guessDistrictFromAddress, type UbDistrict } from "../shared/districts";
 import { computeDeliveryFeeMnt } from "../shared/delivery";
 import { getStoreSettingSlot, type StoreSettingKey } from "../shared/store-settings";
 import { decryptJson, encryptJson } from "./_core/crypto";
+import { getOrSetCached, invalidateCached } from "./_core/ttlCache";
+import { enqueueNotification, TEST_SUPPRESSED_MARKER } from "./notificationOutbox";
+import { INTEGRATION_META, INTEGRATION_PROVIDERS, mergeIntegrationSettings, validateIntegrationSettings, type IntegrationProvider } from "../shared/integrations";
+import type { NotificationEventType, NotificationPayloads } from "../shared/notification-events";
 import { sqlQueryLogger } from "./_core/sqlQueryLog";
 import { sanitizePostContent } from "./_core/sanitizeHtml";
 import { getInventoryReservationFailure, shouldRestoreStock } from "./commerce-lifecycle";
@@ -1771,6 +1775,17 @@ export async function createOrderFromActiveCart(input: {
       unitPriceMnt: item.priceMnt,
       quantity: item.quantity,
     })));
+    // Phone push to the warehouse (2026-09-11). Inside the transaction, so a
+    // checkout that fails further down (coupon race, credit race) never
+    // announced an order that does not exist. No customer PII in it.
+    await enqueueNotification(tx, "order.placed", {
+      orderNumber,
+      totalMnt: payableBeforeCreditMnt - storeCreditAppliedMnt,
+      itemCount: cart.items.reduce((sum, item) => sum + item.quantity, 0),
+      deliveryMethod: input.deliveryMethod,
+      paymentMethod: input.paymentMethod,
+      pickupBranchName: input.deliveryMethod === "store_pickup" ? (input.pickupBranch ?? null) : null,
+    }, { dedupeKey: `order:${orderId}` });
     if (storeCreditAppliedMnt > 0) {
       // Same WHERE-guard + affectedRows race-proof idiom as the stock/coupon
       // decrements above -- if a concurrent spend already ate into this
@@ -2204,7 +2219,11 @@ export async function cancelOwnOrder(orderId: number, userId: number) {
   const current = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
   if (!current[0] || current[0].userId !== userId) throw new Error("Order not found.");
   if (current[0].status !== "pending" && current[0].status !== "confirmed") throw new Error("This order can no longer be cancelled -- it has already been packed or closed.");
-  return updateAdminOrder({ id: orderId, status: "cancelled" });
+  const result = await updateAdminOrder({ id: orderId, status: "cancelled" });
+  // The warehouse may already be picking this order -- tell them (2026-09-11).
+  const [itemCount] = await db.select({ total: sql<number>`COALESCE(SUM(${orderItems.quantity}), 0)` }).from(orderItems).where(eq(orderItems.orderId, orderId));
+  await recordNotification("order.cancelled_by_customer", { orderNumber: current[0].orderNumber, totalMnt: current[0].totalMnt, itemCount: Number(itemCount?.total ?? 0) }, `order:${orderId}`);
+  return result;
 }
 
 /**
@@ -2425,6 +2444,17 @@ export async function markQPayPaymentAttemptPaid(input: { id: number; orderId: n
   const orderUpdated = Number(updated[0].affectedRows ?? 0) === 1;
   if (!orderUpdated) {
     console.warn(`[QPay] Payment ${input.providerPaymentId ?? "(no id)"} confirmed for order ${input.orderId}, but the order is already paid or closed -- left unchanged; check payment_attempts for a refund.`);
+  }
+  // Phone pushes (2026-09-11). The dedupe keys make QPay's at-least-once
+  // callbacks harmless: one "paid" per order, one alarm per payment attempt.
+  const [order] = await db.select({ orderNumber: orders.orderNumber, totalMnt: orders.totalMnt, status: orders.status, paymentStatus: orders.paymentStatus }).from(orders).where(eq(orders.id, input.orderId)).limit(1);
+  if (order && orderUpdated) {
+    await recordNotification("order.paid", { orderNumber: order.orderNumber, totalMnt: order.totalMnt }, `order:${input.orderId}`);
+  } else if (order && (order.status === "cancelled" || order.status === "returned" || order.paymentStatus === "refunded")) {
+    // Money arrived for an order that is closed -- someone has to give it
+    // back. (A repeat callback for an order that is simply already paid is
+    // routine and says nothing.)
+    await recordNotification("payment.paid_on_closed_order", { orderNumber: order.orderNumber, orderStatus: order.status, paymentStatus: order.paymentStatus }, `attempt:${input.id}`);
   }
   return { orderUpdated };
 }
@@ -2668,12 +2698,14 @@ export type FulfilmentStatus = keyof typeof orderStatusRank | "cancelled" | "ret
 // drizzle-orm/mysql2's transaction type exists elsewhere in this file) so
 // restoreStockForOrder below can be extracted out of updateAdminOrder's
 // inline transaction body and reused by refundOrder's own transaction.
-type OrderTx = Parameters<Parameters<NonNullable<Awaited<ReturnType<typeof getDb>>>["transaction"]>[0]>[0];
+export type OrderTx = Parameters<Parameters<NonNullable<Awaited<ReturnType<typeof getDb>>>["transaction"]>[0]>[0];
 // Accepted by every branch-stock helper below so they work identically
 // standalone (a plain getDb() connection) or inside an existing
 // db.transaction callback (OrderTx) -- both expose the same query-builder
 // shape, so one implementation covers both without duplicating it.
-type DbOrTx = OrderTx | NonNullable<Awaited<ReturnType<typeof getDb>>>;
+// Exported (type-only) for the leaf modules db.ts itself imports, e.g.
+// server/notificationOutbox.ts.
+export type DbOrTx = OrderTx | NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
 /**
  * "Controls everything" admin overhaul (2026-09-08, Phase K/L): the one
@@ -2929,6 +2961,7 @@ export async function refundOrder(input: { id: number; refundAmountMnt: number; 
       await restoreStockForOrder(tx, input.id);
     }
     await reverseStoreCreditForOrder(tx, input.id, "буцаагдсан");
+    await enqueueNotification(tx, "refund.recorded", { orderNumber: current[0].orderNumber, refundMnt: input.refundAmountMnt, restocked: input.restockItems }, { dedupeKey: `order:${input.id}` });
   });
   const updated = await db.select().from(orders).where(eq(orders.id, input.id)).limit(1);
   return updated[0];
@@ -4655,18 +4688,25 @@ export async function updateAdminUserPhone(input: { userId: number; phone: strin
 }
 
 /**
- * Admin-manageable third-party provider config (eBarimt/StorePay/Golomt
- * card/eBuuhia courier — see integrationConfigs in drizzle/schema.ts).
- * QPay is deliberately not part of this: it already works end-to-end from
- * process.env (server/qpay.ts) and isn't retrofitted here.
+ * Admin-manageable third-party provider config (see integrationConfigs in
+ * drizzle/schema.ts, and shared/integrations.ts for the provider list and
+ * each provider's fields). QPay is deliberately not part of this: it already
+ * works end-to-end from process.env (server/qpay.ts) and isn't retrofitted
+ * here.
  */
-const INTEGRATION_PROVIDERS = ["ebarimt", "storepay", "card_golomt", "courier_ebuuhia"] as const;
-export type IntegrationProvider = (typeof INTEGRATION_PROVIDERS)[number];
+export type { IntegrationProvider };
 
-/** Never returns decrypted credential values to the caller — only which
- *  keys are set (`configuredKeys`), so the admin UI can show "3 талбар
- *  тохируулагдсан" without ever re-exposing a saved secret. Credential
- *  edits are write-only, the same principle as a password field. */
+type DecodedIntegration = { settings: Record<string, string>; decryptFailed: boolean };
+
+function decodeIntegrationRow(encryptedConfig: string | null | undefined): DecodedIntegration {
+  if (!encryptedConfig) return { settings: {}, decryptFailed: false };
+  try { return { settings: decryptJson(encryptedConfig), decryptFailed: false }; } catch { return { settings: {}, decryptFailed: true }; }
+}
+
+/** Never returns a secret to the caller -- only which keys are set, plus the
+ *  values of plain `url`/`text` fields (a server address is not a secret,
+ *  and the form is useless if it cannot show the current one). Secrets and
+ *  ntfy topics are write-only, the same principle as a password field. */
 export async function getAdminIntegrations() {
   const db = await getDb();
   if (!db) return [];
@@ -4674,38 +4714,179 @@ export async function getAdminIntegrations() {
   const byProvider = new Map(rows.map(row => [row.provider, row]));
   return INTEGRATION_PROVIDERS.map(provider => {
     const row = byProvider.get(provider);
-    let configuredKeys: string[] = [];
-    if (row?.encryptedConfig) {
-      try { configuredKeys = Object.keys(decryptJson(row.encryptedConfig)); } catch { configuredKeys = ["(тайлж чадсангүй)"]; }
-    }
+    const { settings, decryptFailed } = decodeIntegrationRow(row?.encryptedConfig);
+    const meta = INTEGRATION_META[provider];
+    const knownKeys = new Set(meta.fields.map(field => field.key));
+    const fields = [
+      ...meta.fields.map(field => ({
+        key: field.key,
+        isSet: Boolean(settings[field.key]),
+        value: field.kind === "url" || field.kind === "text" ? (settings[field.key] ?? null) : null,
+      })),
+      // Free-form providers: keys typed in by hand, never their values.
+      ...Object.keys(settings).filter(key => !knownKeys.has(key)).map(key => ({ key, isSet: true, value: null })),
+    ];
     return {
       provider,
       isActive: row?.isActive ?? false,
       hasCredentials: Boolean(row?.encryptedConfig),
-      configuredKeys,
+      configuredKeys: decryptFailed ? ["(тайлж чадсангүй)"] : Object.keys(settings),
+      decryptFailed,
+      fields,
       updatedAt: row?.updatedAt ?? null,
     };
   });
 }
 
-export async function updateAdminIntegration(input: { provider: IntegrationProvider; isActive?: boolean; config?: Record<string, string> }, updatedByUserId: number) {
+const integrationCacheKey = (provider: IntegrationProvider) => `integration-settings:${provider}`;
+
+/** Decrypted settings for runtime use, whether or not the provider is
+ *  switched on (the "send a test" button must work before activation).
+ *  Cached 30s per process; saving through updateAdminIntegration clears it. */
+export async function getIntegrationSettings(provider: IntegrationProvider): Promise<{ isActive: boolean; settings: Record<string, string> } | null> {
+  return getOrSetCached(integrationCacheKey(provider), 30_000, async () => {
+    const db = await getDb();
+    if (!db) return null;
+    const rows = await db.select().from(integrationConfigs).where(eq(integrationConfigs.provider, provider)).limit(1);
+    if (!rows[0]) return null;
+    const { settings, decryptFailed } = decodeIntegrationRow(rows[0].encryptedConfig);
+    if (decryptFailed) {
+      console.error(`[integrations] ${provider}: stored settings could not be decrypted (INTEGRATIONS_ENCRYPTION_KEY changed?)`);
+      return null;
+    }
+    return { isActive: rows[0].isActive, settings };
+  });
+}
+
+/** The first runtime reader of this table (2026-09-11): the decrypted
+ *  settings of a provider that is switched ON, else null. */
+export async function getActiveIntegrationConfig(provider: IntegrationProvider): Promise<Record<string, string> | null> {
+  const current = await getIntegrationSettings(provider);
+  return current?.isActive ? current.settings : null;
+}
+
+export type IntegrationUpdateInput = {
+  provider: IntegrationProvider;
+  isActive?: boolean;
+  /** Adds/overwrites these keys; an empty value clears that key. */
+  set?: Record<string, string>;
+  clearKeys?: string[];
+  /** Start from an empty config instead of the stored one. Required when the
+   *  stored settings can no longer be decrypted, so they are never discarded
+   *  by accident. */
+  replaceAll?: boolean;
+};
+
+/**
+ * 2026-09-11: merges instead of replacing. The previous version encrypted
+ * exactly the keys typed into the form and wrote that over the stored
+ * config -- adding a single key silently deleted every other one. See
+ * mergeIntegrationSettings in shared/integrations.ts.
+ */
+export async function updateAdminIntegration(input: IntegrationUpdateInput, updatedByUserId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  const existing = await db.select({ id: integrationConfigs.id }).from(integrationConfigs).where(eq(integrationConfigs.provider, input.provider)).limit(1);
-  // Empty object from the client means "no new credentials typed this time"
-  // — leave whatever's already encrypted-and-stored untouched rather than
-  // wiping it, so toggling isActive alone never accidentally erases saved keys.
-  const encryptedConfig = input.config && Object.keys(input.config).length > 0 ? encryptJson(input.config) : undefined;
+  const existing = await db.select().from(integrationConfigs).where(eq(integrationConfigs.provider, input.provider)).limit(1);
+  const touchesSettings = Boolean(input.replaceAll || (input.set && Object.keys(input.set).length) || input.clearKeys?.length);
+  let encryptedConfig: string | null | undefined;
+  if (touchesSettings) {
+    const validationError = validateIntegrationSettings(input.provider, input.set ?? {});
+    if (validationError) throw new Error(validationError);
+    const decoded = decodeIntegrationRow(existing[0]?.encryptedConfig);
+    if (decoded.decryptFailed && !input.replaceAll) {
+      throw new Error("Хадгалсан тохиргоог тайлж чадсангүй (шифрлэлтийн түлхүүр өөрчлөгдсөн байж магадгүй). Бүх утгыг шинээр оруулж \"Бүгдийг солих\" горимоор хадгална уу.");
+    }
+    const merged = mergeIntegrationSettings(input.replaceAll ? {} : decoded.settings, input.set, input.clearKeys);
+    encryptedConfig = Object.keys(merged).length ? encryptJson(merged) : null;
+  }
   if (existing[0]) {
-    const patch: { isActive?: boolean; encryptedConfig?: string; updatedByUserId: number; updatedAt: Date } = { updatedByUserId, updatedAt: new Date() };
+    const patch: { isActive?: boolean; encryptedConfig?: string | null; updatedByUserId: number; updatedAt: Date } = { updatedByUserId, updatedAt: new Date() };
     if (input.isActive !== undefined) patch.isActive = input.isActive;
     if (encryptedConfig !== undefined) patch.encryptedConfig = encryptedConfig;
     await db.update(integrationConfigs).set(patch).where(eq(integrationConfigs.id, existing[0].id));
   } else {
     await db.insert(integrationConfigs).values({ provider: input.provider, isActive: input.isActive ?? false, encryptedConfig: encryptedConfig ?? null, updatedByUserId });
   }
+  invalidateCached(integrationCacheKey(input.provider));
   const [result] = await getAdminIntegrations().then(rows => rows.filter(row => row.provider === input.provider));
   return result;
+}
+
+/** Queues a notification outside any transaction -- for events that happen
+ *  in code with no transaction of its own (a webhook, a scheduled job).
+ *  Never throws: a notification must not fail the thing it reports on. */
+export async function recordNotification<K extends NotificationEventType>(type: K, payload: NotificationPayloads[K], dedupeKey?: string | null): Promise<void> {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    await enqueueNotification(db, type, payload, { dedupeKey });
+  } catch (error) {
+    console.error(`[notifications] could not queue ${type}`, error);
+  }
+}
+
+/** Most recent outbox rows for the admin Integrations screen. The message
+ *  text carries no customer PII by construction, so showing it is safe. */
+export async function getRecentNotificationOutbox(limit = 50) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    id: notificationOutbox.id, eventType: notificationOutbox.eventType, groupKey: notificationOutbox.groupKey,
+    title: notificationOutbox.title, status: notificationOutbox.status, attempts: notificationOutbox.attempts,
+    lastError: notificationOutbox.lastError, createdAt: notificationOutbox.createdAt, sentAt: notificationOutbox.sentAt,
+  }).from(notificationOutbox)
+    .where(or(isNull(notificationOutbox.lastError), ne(notificationOutbox.lastError, TEST_SUPPRESSED_MARKER)))
+    .orderBy(desc(notificationOutbox.id)).limit(limit);
+}
+
+/**
+ * Daily outbox housekeeping, run by the scheduler on EVERY machine (the
+ * dispatcher only runs where NOTIFICATIONS_DISPATCH=1, which today is
+ * nowhere). Deletes rows the test suite wrote once they are a day old --
+ * a full suite run leaves ~70 of them -- and anything finished more than 90
+ * days ago, so the table stays small without a separate retention policy.
+ */
+export async function purgeNotificationOutbox(): Promise<{ testRows: number; oldRows: number }> {
+  const db = await getDb();
+  if (!db) return { testRows: 0, oldRows: 0 };
+  const test = await db.delete(notificationOutbox).where(and(eq(notificationOutbox.status, "suppressed"), eq(notificationOutbox.lastError, TEST_SUPPRESSED_MARKER), sql`${notificationOutbox.createdAt} < NOW() - INTERVAL 1 DAY`));
+  const old = await db.delete(notificationOutbox).where(and(inArray(notificationOutbox.status, ["sent", "failed", "expired", "suppressed"]), sql`${notificationOutbox.createdAt} < NOW() - INTERVAL 90 DAY`));
+  return { testRows: Number(test[0].affectedRows ?? 0), oldRows: Number(old[0].affectedRows ?? 0) };
+}
+
+/**
+ * The admin top bar's bell (2026-09-11): the same notifications the user's
+ * group gets on their phones, newest first, plus how many are newer than
+ * what they last marked as seen. Every status counts -- a notification that
+ * failed or expired on its way to a phone still describes something real
+ * that happened -- except rows the test suite wrote.
+ */
+export async function getNotificationFeed(userId: number, group: string, limit = 30) {
+  const db = await getDb();
+  if (!db) return { items: [], unreadCount: 0, lastSeenId: null as number | null };
+  const notTestRow = or(isNull(notificationOutbox.lastError), ne(notificationOutbox.lastError, TEST_SUPPRESSED_MARKER));
+  const [items, seenRows] = await Promise.all([
+    db.select({
+      id: notificationOutbox.id, eventType: notificationOutbox.eventType, title: notificationOutbox.title,
+      message: notificationOutbox.message, clickPath: notificationOutbox.clickPath, priority: notificationOutbox.priority,
+      createdAt: notificationOutbox.createdAt,
+    }).from(notificationOutbox).where(and(eq(notificationOutbox.groupKey, group), notTestRow)).orderBy(desc(notificationOutbox.id)).limit(limit),
+    db.select({ lastSeen: users.lastSeenNotificationId }).from(users).where(eq(users.id, userId)).limit(1),
+  ]);
+  const lastSeenId = seenRows[0]?.lastSeen ?? null;
+  const [unread] = await db.select({ count: sql<number>`COUNT(*)` }).from(notificationOutbox)
+    .where(and(eq(notificationOutbox.groupKey, group), notTestRow, lastSeenId === null ? sql`1 = 1` : sql`${notificationOutbox.id} > ${lastSeenId}`));
+  return { items, unreadCount: Number(unread?.count ?? 0), lastSeenId };
+}
+
+/** Marks everything up to `upToId` as seen. Never moves the marker
+ *  backwards (a stale tab must not resurrect already-read items). */
+export async function markNotificationsSeen(userId: number, upToId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users)
+    .set({ lastSeenNotificationId: upToId })
+    .where(and(eq(users.id, userId), or(isNull(users.lastSeenNotificationId), lt(users.lastSeenNotificationId, upToId))));
 }
 
 /**
