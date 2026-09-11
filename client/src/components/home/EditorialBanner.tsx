@@ -27,7 +27,10 @@ export default function EditorialBanner({
 }: {
   variant: "image-right" | "image-left" | "full-bleed-dark";
   tag?: string;
-  eyebrow: string;
+  /** Optional since 2026-09-11: the homepage banner dropped its eyebrow
+   *  (the heading already said it). Kept for any future caller that has a
+   *  label carrying information the heading does not. */
+  eyebrow?: string;
   headingLine1: string;
   headingLine2?: string;
   description: string;
@@ -45,7 +48,7 @@ export default function EditorialBanner({
       <section className={`editorial-banner editorial-banner--full-bleed`} style={imageStyle} aria-label={imageAlt} data-reveal>
         <div className="editorial-banner-shade" />
         <div className="editorial-banner-copy">
-          <p className="eyebrow"><span /> {eyebrow}</p>
+          {eyebrow ? <p className="eyebrow"><span /> {eyebrow}</p> : null}
           {heading}
           <p>{description}</p>
           {points?.length ? <ul className="editorial-banner-points">{points.map(point => <li key={point}>{point}</li>)}</ul> : null}
@@ -61,7 +64,7 @@ export default function EditorialBanner({
         {tag ? <span className="editorial-banner-tag">{tag}</span> : null}
       </div>
       <div className="editorial-banner-copy">
-        <p className="eyebrow"><span /> {eyebrow}</p>
+        {eyebrow ? <p className="eyebrow"><span /> {eyebrow}</p> : null}
         {heading}
         <p>{description}</p>
         {points?.length ? <ul className="editorial-banner-points">{points.map(point => <li key={point}>{point}</li>)}</ul> : null}

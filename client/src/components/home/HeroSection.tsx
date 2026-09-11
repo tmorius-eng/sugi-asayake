@@ -58,7 +58,11 @@ export default function HeroSection({ heroImageStyle, productCountLabel }: { her
             a restrained rectangular pill (design-review consolidation). */}
         <div className="hero-image-badge" aria-hidden="true"><span>{productCountLabel}</span><small>{textFor("home-text-hero-badge-label", "DAILY CHOICES")}</small></div>
         <div className="hero-image-marker" aria-hidden="true"><Sparkles size={15} /><span>{textFor("home-text-hero-marker-label", "THE MORNING OF CARE")}</span></div>
-        <div className="hero-image-label"><span>JAPAN QUALITY</span><strong>01</strong></div>
+        {/* 2026-09-11 audit: the circled "01" that sat opposite this label was
+            removed. It was the first of seventeen two-digit markers on the page
+            and, like the rest, numbered nothing -- there was no 02 to follow it
+            here. "JAPAN QUALITY" is the claim; the counter added no meaning. */}
+        <div className="hero-image-label"><span>JAPAN QUALITY</span></div>
         <div className="hero-image-caption">{textFor("home-text-hero-image-caption", "Өдөр бүрийн арчилгаа, илүү ойрхон")}</div>
       </div>
     </section>

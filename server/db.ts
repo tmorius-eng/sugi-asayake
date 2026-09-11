@@ -873,7 +873,7 @@ export async function getBestsellingProducts(limit = 8) {
    * 2026-09-11 (Tom): with 3 settled orders in the whole catalogue this rail
    * rendered a single card in a full-width band -- a real empty-state defect,
    * not a data problem that fixes itself. Same remedy, and the same ordering
-   * contract, as getCategoryShelfProducts below: genuinely sold products keep
+   * contract the removed category shelves used: genuinely sold products keep
    * the top slots and their real sold counts, then the remaining slots fill
    * from the brands an admin has already marked featured (/admin -> Брэнд,
    * the `featured_brands` table that also backs the Топ брэнд rail), in that
@@ -937,79 +937,12 @@ export async function getBestsellingProducts(limit = 8) {
   return picked.slice(0, limit);
 }
 
-/**
- * NEWVISION.md §7/§11: one category's shelf for the new homepage
- * CarouselShelf rail. "нөөцтэй эхэлж, борлуулалтаар эрэмбэлнэ" (in-stock
- * first, then by sales) -- but real paid-order volume is near zero today
- * (same reality getRecommendedProducts' cold-start tier already handles),
- * so this ranks by real sold quantity where it exists, then fills any
- * remaining slots with other published, in-stock products in the category
- * (newest first) rather than returning a half-empty shelf. Never returns an
- * out-of-stock product ahead of an in-stock one.
- */
-export async function getCategoryShelfProducts(categoryId: number, limit = 12) {
-  const db = await getDb();
-  if (!db) return [];
-
-  const soldQtyExpr = sql<number>`SUM(${orderItems.quantity})`;
-  const soldRows = await db
-    .select({ productId: orderItems.productId, soldQuantity: soldQtyExpr })
-    .from(orderItems)
-    .innerJoin(orders, eq(orderItems.orderId, orders.id))
-    .innerJoin(products, eq(orderItems.productId, products.id))
-    .where(and(settledSaleSql, eq(products.categoryId, categoryId), eq(products.isPublished, true)))
-    .groupBy(orderItems.productId)
-    .orderBy(desc(soldQtyExpr))
-    .limit(limit);
-  const soldQuantityByProduct = new Map(soldRows.map(row => [row.productId, Number(row.soldQuantity)]));
-
-  const catalogColumns = {
-    id: products.id, name: products.name, slug: products.slug, brand: products.brand,
-    priceMnt: products.priceMnt, compareAtPriceMnt: products.compareAtPriceMnt, imageUrl: products.imageUrl,
-    stockQuantity: products.stockQuantity, avgRating: avgRatingExpr, reviewCount: reviewCountExpr,
-  };
-
-  const soldProductIds = soldRows.map(row => row.productId).filter((id): id is number => id != null);
-  const soldCatalogRows = soldProductIds.length
-    ? await db.select(catalogColumns).from(products).leftJoin(productReviews, eq(productReviews.productId, products.id))
-        .where(inArray(products.id, soldProductIds)).groupBy(products.id)
-    : [];
-
-  const picked = soldCatalogRows
-    .map(row => ({ ...row, soldQuantity: soldQuantityByProduct.get(row.id) ?? 0 }))
-    .sort((a, b) => b.soldQuantity - a.soldQuantity);
-
-  if (picked.length < limit) {
-    const excludeIds = picked.map(row => row.id);
-    const fillerRows = await db.select({ ...catalogColumns, createdAt: products.createdAt }).from(products)
-      .leftJoin(productReviews, eq(productReviews.productId, products.id))
-      .where(and(
-        eq(products.categoryId, categoryId),
-        eq(products.isPublished, true),
-        excludeIds.length ? sql`${products.id} NOT IN (${sql.join(excludeIds, sql`, `)})` : sql`1=1`,
-      ))
-      .groupBy(products.id)
-      .orderBy(desc(sql`${products.stockQuantity} > 0`), desc(products.createdAt))
-      .limit(limit - picked.length);
-    picked.push(...fillerRows.map(({ createdAt: _createdAt, ...row }) => ({ ...row, soldQuantity: 0 })));
-  }
-
-  return picked.slice(0, limit);
-}
-
-/** All 6 real, active categories with their shelf products -- backs the
- *  homepage's category CarouselShelf rails (NEWVISION.md §7). */
-export async function getHomeCategoryShelves(limitPerShelf = 12) {
-  const db = await getDb();
-  if (!db) return [];
-  const categories = await db.select({ id: productCategories.id, name: productCategories.name, slug: productCategories.slug })
-    .from(productCategories).where(eq(productCategories.isActive, true)).orderBy(asc(productCategories.sortOrder));
-  const shelves = await Promise.all(categories.map(async category => ({
-    category,
-    products: await getCategoryShelfProducts(category.id, limitPerShelf),
-  })));
-  return shelves.filter(shelf => shelf.products.length > 0);
-}
+/* 2026-09-11: getCategoryShelfProducts + getHomeCategoryShelves removed here.
+ * They backed catalog.categoryShelves, the six homepage category rails that the
+ * 2026-09-06 consolidation cut. The procedure stayed public and unauthenticated
+ * long after its last caller went away, running 1 + 6 + 6 queries per request
+ * against a 10-connection pool. getBestsellingProducts above keeps the one part
+ * worth keeping -- rank by real sales, then fill the remaining slots. */
 
 /**
  * ROADMAP.md TIER 2: server-side catalog search, replacing a client-side
@@ -3157,13 +3090,40 @@ export async function getFeaturedBrands() {
   const db = await getDb();
   if (!db) return [];
   const brands = await db.select().from(featuredBrands).where(eq(featuredBrands.isActive, true)).orderBy(asc(featuredBrands.sortOrder));
-  return Promise.all(brands.map(async brand => {
-    if (brand.photoUrl) return brand;
-    const fallbackPhoto = await db.select({ imageUrl: products.imageUrl }).from(products)
-      .where(and(eq(products.brand, brand.brandName), eq(products.isPublished, true), sql`${products.imageUrl} IS NOT NULL`))
-      .orderBy(desc(products.createdAt)).limit(1);
-    return { ...brand, photoUrl: fallbackPhoto[0]?.imageUrl ?? null };
-  }));
+
+  /*
+   * 2026-09-11: this used to run one fallback query PER brand inside a
+   * Promise.all -- nine active brands, most without an uploaded photo, meant
+   * up to nine extra connections opened on every single homepage render
+   * against a pool of ten (mysql2's default), with Aiven ~174ms away. On a
+   * warm homepage that was the most expensive thing the page did.
+   *
+   * Now it is one query for all of them. MySQL has no DISTINCT ON, so the
+   * "newest imaged product per brand" pick is done here instead: order by
+   * createdAt descending and keep the first row seen for each brand. The
+   * result is identical to the old per-brand `ORDER BY createdAt DESC LIMIT 1`.
+   */
+  const needsFallback = brands.filter(brand => !brand.photoUrl).map(brand => brand.brandName);
+  if (!needsFallback.length) return brands;
+
+  const fallbackRows = await db
+    .select({ brand: products.brand, imageUrl: products.imageUrl, createdAt: products.createdAt })
+    .from(products)
+    .where(and(
+      inArray(products.brand, needsFallback),
+      eq(products.isPublished, true),
+      isNotNull(products.imageUrl),
+      ne(products.imageUrl, ""),
+    ))
+    .orderBy(desc(products.createdAt), desc(products.id));
+
+  const newestByBrand = new Map<string, string>();
+  for (const row of fallbackRows) {
+    if (row.brand && !newestByBrand.has(row.brand)) newestByBrand.set(row.brand, row.imageUrl ?? "");
+  }
+  return brands.map(brand => brand.photoUrl
+    ? brand
+    : { ...brand, photoUrl: newestByBrand.get(brand.brandName) || null });
 }
 
 export async function getAdminFeaturedBrands() {

@@ -49,7 +49,6 @@ import {
   getBrandDirectory,
   getFeaturedBrands,
   getFeaturedReviews,
-  getHomeCategoryShelves,
   createAdminSitePromotion,
   createOrderFromActiveCart,
   createProductReview,
@@ -1018,10 +1017,6 @@ export const appRouter = router({
     // — a single-variant product (the common case) looks exactly as it did
     // before variants existed.
     variants: publicProcedure.input(z.object({ productId: z.number().int().positive() })).query(({ input }) => getPublicProductVariants(input.productId)),
-    // NEWVISION.md §7/§11: the 6 category CarouselShelf rails on the
-    // redesigned homepage. Filters out any category with zero real
-    // products (never renders an empty shelf) inside getHomeCategoryShelves.
-    categoryShelves: publicProcedure.query(() => getHomeCategoryShelves()),
     // NEWVISION.md §5: real, admin-curated "Топ брэндүүд" tiles.
     featuredBrands: publicProcedure.query(() => getFeaturedBrands()),
     // 2026-09-10: backs /brands, the "View Full Brand List" destination.

@@ -36,7 +36,14 @@ export default function BrandStorySection({ branchCount, productCountLabel, feat
   const [headingLine1, headingLine2] = textFor("home-text-wcu-heading", "Япон чанарыг\nтанд ойртуулна.").split("\n");
   return (
     <section className="wcu-section" data-reveal aria-label="Бидний ялгаа, яагаад биднийг сонгох вэ">
-      <p className="eyebrow"><span /> {textFor("home-text-wcu-eyebrow-label", "ЯАГААД БИДНИЙГ СОНГОХ ВЭ")}</p>
+      {/* 2026-09-11 audit: the repeated eyebrow was removed here. Eight of nine
+          homepage sections opened with the same all-caps label + heading pair,
+          which is the strongest single reason the page read as templated. The
+          label also said nothing the heading below it did not already say.
+          Three eyebrows survive sitewide, each carrying real information:
+          the hero's brand line, the membership label, and the locator's live
+          branch count. The `home-text-*` CMS slot stays in shared/site-text.ts
+          so nothing breaks if this is ever reinstated. */}
       <div className="wcu-heading-row">
         <SectionHeading tone="onDark">{headingLine1}<br /><em>{headingLine2}</em></SectionHeading>
         {/* 2 lede paragraphs where there used to be 1 -- the old Story

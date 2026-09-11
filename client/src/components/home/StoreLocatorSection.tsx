@@ -1,7 +1,6 @@
 import { ArrowUpRight, Clock3, MapPin, Navigation, Phone } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useSiteText } from "@/hooks/useSiteText";
-import SectionEyebrow from "./SectionEyebrow";
 import SectionHeading from "./SectionHeading";
 import { BRANCH_HOURS } from "./locations-data";
 
@@ -52,7 +51,9 @@ export default function StoreLocatorSection() {
     <section className="locator-section page-section" id="stores" data-reveal>
       <div className="locator-grid">
         <div className="locator-copy">
-          <SectionEyebrow number={textFor("home-text-locator-number", "04")} label={textFor("home-text-locator-eyebrow-label", "FIND YOUR ASAYAKE")} />
+          {/* 2026-09-11 audit: the "04 / FIND YOUR ASAYAKE" marker went; the
+              live branch count directly below it is kept, because that one
+              reports a real number from the database. */}
           {/* locations.length is real data (see the file-level comment
               above) -- stays code, followed by an editable text slot. */}
           <p className="eyebrow"><Navigation size={14} /> {locations.length} {textFor("home-text-locator-count-suffix", "БАЙРШИЛ")}</p>

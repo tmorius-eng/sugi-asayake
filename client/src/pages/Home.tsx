@@ -30,9 +30,7 @@ import { Fragment, useMemo, useState } from "react";
 import { Link } from "wouter";
 import {
   ArrowUpRight,
-  Sparkles,
   Star,
-  TrendingUp,
 } from "lucide-react";
 import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
@@ -248,7 +246,7 @@ export default function Home() {
         {bestsellersQuery.isLoading ? (
           <section className="bestseller-section" data-reveal aria-busy="true" aria-label="Онцлох сонголтуудыг бэлдэж байна">
             <div className="bestseller-heading">
-              <div><p className="shop-kicker"><TrendingUp size={12} /> {textFor("home-text-bestseller-kicker", "ОНЦЛОХ СОНГОЛТ")}</p><h2>{bestsellerHeadingLine1}<br /><em>{bestsellerHeadingLine2}</em></h2></div>
+              <div><h2>{bestsellerHeadingLine1}<br /><em>{bestsellerHeadingLine2}</em></h2></div>
               <p>{textFor("home-text-bestseller-description", "Манай захиалгын бодит түүхээр эрэмбэлсэн, хамгийн их итгэл олсон сонголтууд.")}</p>
             </div>
             <div className="bestseller-grid">{Array.from({ length: 6 }, (_, index) => <BestsellerCardSkeleton key={index} />)}</div>
@@ -256,7 +254,7 @@ export default function Home() {
         ) : bestsellers.length > 0 && (
           <section className="bestseller-section" data-reveal>
             <div className="bestseller-heading">
-              <div><p className="shop-kicker"><TrendingUp size={12} /> {textFor("home-text-bestseller-kicker", "ОНЦЛОХ СОНГОЛТ")}</p><h2>{bestsellerHeadingLine1}<br /><em>{bestsellerHeadingLine2}</em></h2></div>
+              <div><h2>{bestsellerHeadingLine1}<br /><em>{bestsellerHeadingLine2}</em></h2></div>
               <p>{textFor("home-text-bestseller-description", "Манай захиалгын бодит түүхээр эрэмбэлсэн, хамгийн их итгэл олсон сонголтууд.")}</p>
             </div>
             <div className="bestseller-grid">
@@ -276,7 +274,7 @@ export default function Home() {
             {(() => {
               const [line1, line2] = textFor("home-text-recommended-heading", "Танд санал\nболгож байна.").split("\n");
               return <div className="bestseller-heading">
-                <div><p className="shop-kicker"><Sparkles size={12} /> {textFor("home-text-recommended-kicker", "ТАНД ЗОРИУЛАН")}</p><h2>{line1}<br /><em>{line2}</em></h2></div>
+                <div><h2>{line1}<br /><em>{line2}</em></h2></div>
                 <p>{textFor("home-text-recommended-description", "Таны профайл дээр хадгалсан тохиргоо, эсвэл манай хамгийн эрэлттэй сонголтуудад тулгуурласан жагсаалт.")}</p>
               </div>;
             })()}
@@ -287,7 +285,7 @@ export default function Home() {
             {(() => {
               const [line1, line2] = textFor("home-text-recommended-heading", "Танд санал\nболгож байна.").split("\n");
               return <div className="bestseller-heading">
-                <div><p className="shop-kicker"><Sparkles size={12} /> {textFor("home-text-recommended-kicker", "ТАНД ЗОРИУЛАН")}</p><h2>{line1}<br /><em>{line2}</em></h2></div>
+                <div><h2>{line1}<br /><em>{line2}</em></h2></div>
                 <p>{textFor("home-text-recommended-description", "Таны профайл дээр хадгалсан тохиргоо, эсвэл манай хамгийн эрэлттэй сонголтуудад тулгуурласан жагсаалт.")}</p>
               </div>;
             })()}
@@ -304,10 +302,13 @@ export default function Home() {
             ever called it) -- same real content (heading/description/3
             points, all still admin-editable via the same site-text slots),
             no decorative circle badge. */}
+        {/* 2026-09-11 audit: this band carried three stacked labels above one
+            heading -- "03 / FAMILY CARE", then "ГЭР БҮЛИЙН ӨДӨР БҮРТ", then the
+            heading itself. The "03" belonged to a section numbering that no
+            longer exists, and the eyebrow repeated the heading. One tag now. */}
         <EditorialBanner
           variant="image-left"
-          tag={textFor("home-text-care-tag", "03 / FAMILY CARE")}
-          eyebrow={textFor("home-text-care-eyebrow", "ГЭР БҮЛИЙН ӨДӨР БҮРТ")}
+          tag={textFor("home-text-care-tag", "FAMILY CARE")}
           headingLine1={careHeadingLine1}
           headingLine2={careHeadingLine2}
           description={textFor("home-text-care-description", "Бидний сонголт зөвхөн бүтээгдэхүүн биш. Таны гэр бүлийн өдөр тутмын амар тайван байдал, итгэл, халамж юм.")}

@@ -3,7 +3,6 @@ import { Link } from "wouter";
 import { ArrowUpRight } from "lucide-react";
 import { getCategoryPlaceholderImage } from "@shared/catalog-filter";
 import { useSiteText } from "@/hooks/useSiteText";
-import SectionEyebrow from "./SectionEyebrow";
 import SectionHeading from "./SectionHeading";
 
 export type HomeCategory = {
@@ -65,7 +64,14 @@ export default function CategoryMasonry({
   const [anchorLine1, anchorLine2] = textFor("home-text-cat-anchor-heading", "Нэг өдөрт\nхэрэгтэй бүх зүйл.").split("\n");
   return (
     <section className="cat-mosaic-section page-section" id="collection" data-reveal>
-      <SectionEyebrow number={textFor("home-text-cat-number", "02")} label={textFor("home-text-cat-eyebrow-label", "EVERYDAY JAPAN")} />
+      {/* 2026-09-11 audit: the repeated eyebrow was removed here. Eight of nine
+          homepage sections opened with the same all-caps label + heading pair,
+          which is the strongest single reason the page read as templated. The
+          label also said nothing the heading below it did not already say.
+          Three eyebrows survive sitewide, each carrying real information:
+          the hero's brand line, the membership label, and the locator's live
+          branch count. The `home-text-*` CMS slot stays in shared/site-text.ts
+          so nothing breaks if this is ever reinstated. */}
 
       <div className="cat-mosaic-top">
         <div className="cat-mosaic-heading-block">
@@ -118,14 +124,12 @@ export default function CategoryMasonry({
                 <img src={imageSrc} alt={category.title} loading="lazy" />
               </span>
               <span className="cat-mosaic-item-body">
-                <span className="cat-mosaic-item-top">
-                  {/* Purely decorative index ("01".."06") -- the real,
-                      meaningful label is category.title right below it, so
-                      hiding this from assistive tech (2026-09-06 a11y audit)
-                      is correct rather than darkening it to meet a text-
-                      contrast threshold it was never meant to carry. */}
-                  <span className="cat-mosaic-item-number" aria-hidden="true">{category.number}</span>
-                </span>
+                {/* 2026-09-11 audit: the "01".."06" index was removed. The six
+                    categories are not a sequence, so numbering them encoded
+                    nothing a reader could use -- ornament in the costume of
+                    information, and one of the clearest dated-design tells on
+                    the page. `category.number` stays in categories-data.ts;
+                    nothing else reads it. */}
                 <span className="cat-mosaic-item-title">{category.title}</span>
                 <span className="cat-mosaic-item-detail">{detail}</span>
                 <ArrowUpRight size={16} className="cat-mosaic-item-arrow" />

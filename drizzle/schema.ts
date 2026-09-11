@@ -360,6 +360,9 @@ export const products = mysqlTable("products", {
 }, table => [
   index("products_category_idx").on(table.categoryId),
   index("products_published_idx").on(table.isPublished),
+  // 2026-09-11: join key for the featured-brand bestseller filler, the brand
+  // photo fallback, and the admin brand dropdown (migration 0060).
+  index("products_brand_idx").on(table.brand),
 ]);
 
 /**

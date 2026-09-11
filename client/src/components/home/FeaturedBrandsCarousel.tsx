@@ -241,7 +241,22 @@ export default function FeaturedBrandsCarousel({ brands, heading }: { brands: Fe
   // under the strip on a catalogue where no logo exists yet -- caught by
   // looking at the rendered page, not by any of the geometry numbers, which
   // were all correct. It reappears by itself the moment a logo is added.
-  const anyLogo = brands.some(brand => Boolean(brand.logoUrl));
+  /*
+   * 2026-09-11 (Tom: "ene ontsloh branduud zurag logo ygd haragdhgu tsagaan
+   * baigaan be?"). This was `brands.some(...)` -- the band appeared as soon as
+   * ONE brand had a logo. In production exactly one of nine does (Cocochi), so
+   * eight cards were reserving a 100px blank strip each and a third of every
+   * tile rendered as empty space. The "leave it blank rather than invent a
+   * wordmark" rule below is still Tom's call and still holds; what was wrong
+   * was letting a single logo impose that blank on everyone else.
+   *
+   * Majority instead of `some`: with most brands unlogo'd the band collapses
+   * and the strip is all product photography, and it comes back on its own
+   * once logos are uploaded in /admin -> Брэнд. No content is invented either
+   * way.
+   */
+  const logoCount = brands.filter(brand => Boolean(brand.logoUrl)).length;
+  const anyLogo = brands.length > 0 && logoCount * 2 >= brands.length;
   const logoBand = anyLogo ? metrics.logo : 0;
   // The scaled slide sets the section's height: both the square photo and
   // the logo band live inside the scaled box, so both scale with it.

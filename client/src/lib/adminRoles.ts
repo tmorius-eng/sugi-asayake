@@ -3,7 +3,7 @@
 // the admin Users list badge, AdminUserDetailDrawer, and the sidebar/topbar
 // footer -- previously a 3-way ternary hand-copied in each of those places,
 // which only ever covered user/staff/admin. Badge colors reuse this
-// codebase's own existing AdminStatCard icon palette (Захиалга's green,
+// codebase's own admin KPI icon palette (Захиалга's green,
 // Хөрвүүлэлт's purple, Дундаж сессийн хугацаа's amber) rather than
 // inventing new ones.
 const ROLE_LABELS: Record<string, string> = { user: "User", staff: "Staff", finance: "Finance", marketing: "Marketing", warehouse: "Warehouse", admin: "Admin" };
