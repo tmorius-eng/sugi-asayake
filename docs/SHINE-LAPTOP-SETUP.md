@@ -105,21 +105,22 @@ Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 
 ---
 
-## Алхам 4. Зөв салбар руу шилжих (ЭНЭ АЛХМЫГ БҮҮ АЛГАС)
+## Алхам 4. Зөв салбар дээр байгаагаа шалгах
 
-Хамгийн сүүлийн ажлууд (дэлгүүрийн шинэ карт, аюулгүй байдлын засварууд)
-`main` дээр биш, **`audit-2026-09-09-order-unwind`** салбар дээр байгаа.
+Бүх ажил **`main`** дээр байна — 2026-09-11-ний байдлаар
+`audit-2026-09-09-order-unwind` болон бусад ажлын салбарууд `main`-д merge
+хийгдсэн. `git clone` хийхэд анхнаасаа `main` дээр буудаг тул ихэвчлэн юу ч
+хийх шаардлагагүй.
 
-```powershell
-git checkout audit-2026-09-09-order-unwind
-git pull
-```
-
-Одоо хаана байгаагаа шалгах:
+Шалгах:
 ```powershell
 git branch --show-current
 ```
-`audit-2026-09-09-order-unwind` гэж гарах ёстой.
+`main` гэж гарах ёстой. Хэрэв өөр нэр гарвал:
+```powershell
+git checkout main
+git pull
+```
 
 ---
 
