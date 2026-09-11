@@ -1,8 +1,9 @@
-import { Bell, ChevronDown, CircleUserRound, Command, Home, LogOut, Menu, Moon, Store, Sun } from "lucide-react";
+import { Bell, ChevronDown, CircleUserRound, Command, Home, Lightbulb, LogOut, Menu, Moon, Store, Sun } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toggleAdminTheme, useAdminTheme } from "@/lib/adminTheme";
+import { toggleAdminTips, useAdminTipsEnabled } from "@/lib/adminTips";
 
 /**
  * The reference's top bar: a rounded search field on the left, a row of
@@ -29,6 +30,7 @@ export default function AdminTopBar({ sectionLabel, onOpenMobileSidebar, searchS
   onLogout: () => void;
 }) {
   const theme = useAdminTheme();
+  const tipsEnabled = useAdminTipsEnabled();
 
   return (
     <div className="sticky top-0 z-30 flex flex-wrap items-center gap-3 border-b border-[var(--a-border)] bg-[var(--a-canvas)]/85 px-4 py-3 backdrop-blur-md sm:flex-nowrap sm:gap-4 sm:px-7">
@@ -47,6 +49,19 @@ export default function AdminTopBar({ sectionLabel, onOpenMobileSidebar, searchS
       <div className="ml-auto flex shrink-0 items-center gap-2">
         <Link href="/" className="admin-icon-btn hidden sm:grid" title="Дэлгүүрийн сайт нээх" aria-label="Дэлгүүрийн сайт нээх"><Store size={17} /></Link>
         <button type="button" onClick={onOpenCommandPalette} className="admin-icon-btn hidden sm:grid" title="Хайх (Ctrl+K)" aria-label="Командын хайлт нээх"><Command size={17} /></button>
+        {/* Brings back the per-section help panels after someone has closed
+            them. Sits next to the theme switch because it is the same kind of
+            thing: a personal view preference, remembered per browser. */}
+        <button
+          type="button"
+          onClick={toggleAdminTips}
+          className="admin-icon-btn"
+          title={tipsEnabled ? "Хэсгийн зааврыг унтраах" : "Хэсгийн зааврыг асаах"}
+          aria-label={tipsEnabled ? "Хэсгийн зааврыг унтраах" : "Хэсгийн зааврыг асаах"}
+          aria-pressed={tipsEnabled}
+        >
+          <Lightbulb size={17} className={tipsEnabled ? "admin-pop text-[#f0b52d]" : undefined} />
+        </button>
         <button
           type="button"
           onClick={toggleAdminTheme}
