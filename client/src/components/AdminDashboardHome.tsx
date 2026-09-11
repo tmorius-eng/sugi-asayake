@@ -259,6 +259,12 @@ function SystemHealthCard() {
             badLabel={`${health.storeCredit.driftedAccounts} данс зөрүүтэй`}
             error={health.storeCredit.ok ? undefined : "users.storeCreditMnt нь store_credit_ledger-ийн нийлбэртэй таарахгүй байна"} />
         )}
+        {health.stockLedger && (
+          <HealthRow icon={Database} label="Нөөцийн хөдөлгөөний бүртгэл" ok={health.stockLedger.ok}
+            okLabel="Үлдэгдэлтэй таарч байна"
+            badLabel={`${health.stockLedger.driftCount} салбар/бараа зөрүүтэй`}
+            error={health.stockLedger.ok ? undefined : "branch_stock бүртгэлгүйгээр өөрчлөгдсөн (хуучин код эсвэл гар засвар) — scripts/stock-ledger-rebaseline.ts"} />
+        )}
       </div>
     </section>
   );

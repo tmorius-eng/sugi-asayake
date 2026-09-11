@@ -46,6 +46,8 @@ import {
   deleteBranch,
   getBranchStockForVariant,
   setBranchStock,
+  getStockMovementsForVariant,
+  getStockLedgerHealth,
   recordInStoreSale,
   searchVariantsForBranch,
   getDistinctRealBrands,
@@ -1725,12 +1727,18 @@ export const appRouter = router({
       // Audit 2026-09-09 (architecture debt #3): the store-credit invariant
       // check rides on this same card. Cached for a minute -- it scans the
       // ledger, and the dashboard polls this query every 60s.
-      const [db, storage, storeCredit] = await Promise.all([
+      const [db, storage, storeCredit, stockLedger] = await Promise.all([
         dbPing(),
         storagePing(),
         getOrSetCached("storeCreditDrift", 60_000, () => getStoreCreditDrift()).catch(() => null),
+        // 2026-09-11: same idea for the stock ledger (server/stockLedger.ts).
+        getOrSetCached("stockLedgerDrift", 60_000, () => getStockLedgerHealth()).catch(() => null),
       ]);
-      return { db, storage, storeCredit: storeCredit ? { ok: storeCredit.driftedAccounts === 0, ...storeCredit } : null };
+      return {
+        db, storage,
+        storeCredit: storeCredit ? { ok: storeCredit.driftedAccounts === 0, ...storeCredit } : null,
+        stockLedger: stockLedger ? { ok: stockLedger.driftCount === 0, driftCount: stockLedger.driftCount } : null,
+      };
     }),
     // Same idea for search: staff can look up products/orders, but user
     // records (and thus any way to reach user management from a search hit)
@@ -2143,7 +2151,7 @@ export const appRouter = router({
     updateOrder: warehouseProcedure.input(orderUpdateSchema).mutation(async ({ ctx, input }) => {
       let order;
       try {
-        order = await updateAdminOrder(input);
+        order = await updateAdminOrder({ ...input, actorUserId: ctx.user.id });
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to update order." });
       }
@@ -2172,7 +2180,7 @@ export const appRouter = router({
       const failed: { id: number; message: string }[] = [];
       for (const id of input.ids) {
         try {
-          const order = await updateAdminOrder({ id, status: input.status });
+          const order = await updateAdminOrder({ id, status: input.status, actorUserId: ctx.user.id });
           await logAdminAction({ actorUserId: ctx.user.id, action: "order.updated", entityType: "order", entityId: order.id, metadata: { status: order.status, bulk: true } });
           succeeded.push(id);
           try {
@@ -2197,7 +2205,7 @@ export const appRouter = router({
     })).mutation(async ({ ctx, input }) => {
       let order;
       try {
-        order = await refundOrder({ id: input.id, refundAmountMnt: input.refundAmountMnt, refundNote: input.refundNote ?? null, restockItems: input.restockItems });
+        order = await refundOrder({ id: input.id, refundAmountMnt: input.refundAmountMnt, refundNote: input.refundNote ?? null, restockItems: input.restockItems, actorUserId: ctx.user.id });
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to refund order." });
       }
@@ -2362,11 +2370,16 @@ export const appRouter = router({
     // variant endpoints above (stock-keeping, not a merchandising or
     // financial decision).
     branchStock: warehouseProcedure.input(z.object({ variantId: z.number().int().positive() })).query(({ input }) => getBranchStockForVariant(input.variantId)),
-    setBranchStock: warehouseProcedure.input(z.object({ branchId: z.number().int().positive(), variantId: z.number().int().positive(), quantity: z.number().int().min(0) })).mutation(async ({ ctx, input }) => {
-      const result = await setBranchStock(input.branchId, input.variantId, input.quantity);
-      await logAdminAction({ actorUserId: ctx.user.id, action: "branchStock.updated", entityType: "product_variant", entityId: input.variantId, metadata: { branchId: input.branchId, quantity: input.quantity } });
+    // 2026-09-11: `note` (why the count changed) goes onto the stock ledger
+    // movement next to the before/after numbers.
+    setBranchStock: warehouseProcedure.input(z.object({ branchId: z.number().int().positive(), variantId: z.number().int().positive(), quantity: z.number().int().min(0), note: z.string().trim().max(300).optional() })).mutation(async ({ ctx, input }) => {
+      const result = await setBranchStock(input.branchId, input.variantId, input.quantity, { actorUserId: ctx.user.id, note: input.note || null });
+      await logAdminAction({ actorUserId: ctx.user.id, action: "branchStock.updated", entityType: "product_variant", entityId: input.variantId, metadata: { branchId: input.branchId, quantity: input.quantity, note: input.note ?? null } });
       return result;
     }),
+    // The stock ledger for one variant (2026-09-11): every change to every
+    // branch's shelf, who made it and why.
+    stockMovements: warehouseProcedure.input(z.object({ variantId: z.number().int().positive() })).query(({ input }) => getStockMovementsForVariant(input.variantId)),
     // "Controls everything" admin overhaul (2026-09-08, Phase M): the POS
     // in-person-sale tool. Same warehouseProcedure weight as the stock
     // endpoints above -- recording a sale is stock-adjacent, not a
@@ -2381,7 +2394,7 @@ export const appRouter = router({
     })).mutation(async ({ ctx, input }) => {
       let order;
       try {
-        order = await recordInStoreSale(input);
+        order = await recordInStoreSale({ ...input, actorUserId: ctx.user.id });
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to record this sale." });
       }

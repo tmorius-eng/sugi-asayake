@@ -81,7 +81,10 @@ describeWithDatabase("order unwind integration (cancel / refund / late webhook)"
     if (warehouseId) await db.delete(adminAuditLogs).where(eq(adminAuditLogs.actorUserId, warehouseId));
     if (financeId) await db.delete(adminAuditLogs).where(eq(adminAuditLogs.actorUserId, financeId));
     for (const id of [customerId, warehouseId, financeId]) if (id) await db.delete(users).where(eq(users.id, id));
-  });
+    // ~50 sequential round trips to Aiven (170-330ms each) -- the default
+    // 10s hook budget was always borderline and started timing out on
+    // 2026-09-11, after the suite grew. Cleanup must finish, not race a clock.
+  }, 60_000);
 
   const baseUser = () => ({ emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
   const customerUser = () => ({ ...baseUser(), id: customerId, email: customerEmail, name: "Unwind Test Customer", role: "user" as const });

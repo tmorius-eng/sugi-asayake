@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lt, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { describeTransport, planMysqlConnection } from "./_core/dbConnection";
-import { adminAuditLogs, branches, branchStock, cartItems, carts, discountCodes, faceAttempts, faceChallenges, faceEnrollments, featuredBrands, InsertProduct, InsertProductCategory, integrationConfigs, loginAttempts, notificationOutbox, loyaltyTiers, marketingSpend, mediaLibrary, orderItems, orders, paymentAttempts, phoneVerificationSessions, postCategories, postCategoryLinks, posts, postTagLinks, postTags, productCategories, productReviews, productVariants, products, routines, routineSteps, scheduledJobRuns, siteDocuments, siteMedia, siteText, sitePromotions, storeCreditLedger, storeSettings, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
+import { adminAuditLogs, branches, branchStock, cartItems, carts, discountCodes, faceAttempts, faceChallenges, faceEnrollments, featuredBrands, InsertProduct, InsertProductCategory, integrationConfigs, loginAttempts, notificationOutbox, stockMovements,loyaltyTiers, marketingSpend, mediaLibrary, orderItems, orders, paymentAttempts, phoneVerificationSessions, postCategories, postCategoryLinks, posts, postTagLinks, postTags, productCategories, productReviews, productVariants, products, routines, routineSteps, scheduledJobRuns, siteDocuments, siteMedia, siteText, sitePromotions, storeCreditLedger, storeSettings, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
 import { slugify } from "../shared/slugify";
 import { looksLikeBarcode, normaliseBarcode } from "../shared/barcode";
 import { expandQueryGroups, normaliseSearchText } from "../shared/search-synonyms";
@@ -12,6 +12,7 @@ import { getStoreSettingSlot, type StoreSettingKey } from "../shared/store-setti
 import { decryptJson, encryptJson } from "./_core/crypto";
 import { getOrSetCached, invalidateCached } from "./_core/ttlCache";
 import { enqueueNotification, TEST_SUPPRESSED_MARKER } from "./notificationOutbox";
+import { applyBranchStockDelta, getStockLedgerDrift, recomputeVariantStockTotal, recordStockMovement, setBranchStockAbsolute } from "./stockLedger";
 import { INTEGRATION_META, INTEGRATION_PROVIDERS, mergeIntegrationSettings, validateIntegrationSettings, type IntegrationProvider } from "../shared/integrations";
 import type { NotificationEventType, NotificationPayloads } from "../shared/notification-events";
 import { sqlQueryLogger } from "./_core/sqlQueryLog";
@@ -1714,12 +1715,15 @@ export async function createOrderFromActiveCart(input: {
   // generateOrderNumber / isDuplicateOrderNumberError. A failed attempt has
   // been fully rolled back (stock, coupon, credit), so re-running is safe.
   const placeOrderTransaction = (orderNumber: string) => db.transaction(async tx => {
+    const trackedItems: { variantId: number; quantity: number }[] = [];
     for (const item of cart.items) {
       // "Controls everything" admin overhaul (2026-09-08, Phase L): decrements
       // the SPECIFIC fulfilling branch's shelf now, not one shared global
       // pool -- see decrementBranchStock's own doc-comment for the full
       // reasoning (race-proof guard, legacy fallback, isPublished check).
-      await decrementBranchStock(tx, fulfillingBranchId, item.variantId, item.quantity, { requirePublished: true, itemLabel: item.name });
+      if (await decrementBranchStock(tx, fulfillingBranchId, item.variantId, item.quantity, { requirePublished: true, itemLabel: item.name })) {
+        trackedItems.push({ variantId: item.variantId, quantity: item.quantity });
+      }
     }
     if (couponResult) {
       // Same WHERE-guard technique as the stock decrement above: atomic, so
@@ -1775,6 +1779,11 @@ export async function createOrderFromActiveCart(input: {
       unitPriceMnt: item.priceMnt,
       quantity: item.quantity,
     })));
+    // Stock ledger (2026-09-11): the decrements above, now that the order id
+    // exists to point them at. Same transaction, so they roll back together.
+    for (const item of trackedItems) {
+      await recordStockMovement(tx, fulfillingBranchId, item.variantId, -item.quantity, { type: "sale_online", refType: "order", refId: orderId, actorUserId: null });
+    }
     // Phone push to the warehouse (2026-09-11). Inside the transaction, so a
     // checkout that fails further down (coupon race, credit race) never
     // announced an order that does not exist. No customer PII in it.
@@ -1849,6 +1858,8 @@ export type InStoreSaleInput = {
   userId?: number | null;
   customerName?: string | null;
   customerPhone?: string | null;
+  /** The cashier -- recorded on the stock ledger movements. */
+  actorUserId?: number | null;
 };
 
 export async function recordInStoreSale(input: InStoreSaleInput) {
@@ -1880,9 +1891,12 @@ export async function recordInStoreSale(input: InStoreSaleInput) {
   // raw ER_DUP_ENTRY to the cashier. Same generator + retry as checkout.
   let orderId = 0;
   const recordSale = (orderNumber: string) => db.transaction(async tx => {
+    const trackedItems: { variantId: number; quantity: number }[] = [];
     for (const item of input.items) {
       const variant = variantsById.get(item.variantId)!;
-      await decrementBranchStock(tx, input.branchId, item.variantId, item.quantity, { requirePublished: false, itemLabel: variant.productName });
+      if (await decrementBranchStock(tx, input.branchId, item.variantId, item.quantity, { requirePublished: false, itemLabel: variant.productName })) {
+        trackedItems.push({ variantId: item.variantId, quantity: item.quantity });
+      }
     }
     const inserted = await tx.insert(orders).values({
       userId: input.userId ?? null,
@@ -1911,6 +1925,9 @@ export async function recordInStoreSale(input: InStoreSaleInput) {
         unitPriceMnt: variant.priceMnt, quantity: item.quantity,
       };
     }));
+    for (const item of trackedItems) {
+      await recordStockMovement(tx, input.branchId, item.variantId, -item.quantity, { type: "sale_pos", refType: "order", refId: orderId, actorUserId: input.actorUserId ?? null });
+    }
   });
   for (let attempt = 1; ; attempt++) {
     try {
@@ -2707,32 +2724,9 @@ export type OrderTx = Parameters<Parameters<NonNullable<Awaited<ReturnType<typeo
 // server/notificationOutbox.ts.
 export type DbOrTx = OrderTx | NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
-/**
- * "Controls everything" admin overhaul (2026-09-08, Phase K/L): the one
- * place that keeps 3 numbers honest after ANY branch_stock write --
- * productVariants.stockQuantity (a derived, cached SUM across every
- * branch -- every existing reader keeps working off this one column
- * unmodified) and, when this variant is its product's ONLY one,
- * products.stockQuantity too (mirrors syncSoleVariantFromProduct's own
- * established scope -- catalog list/ProductDetail/recommendation-candidate
- * queries read THAT column directly, never joining to variants, so it must
- * reflect the real post-sale number just as promptly). Every write path
- * that touches branch_stock (checkout's decrement, cancellation's restore,
- * the admin per-branch editor, POS) calls this immediately after.
- */
-async function recomputeVariantStockTotal(db: DbOrTx, variantId: number) {
-  const [totalRow] = await db.select({ total: sql<number>`COALESCE(SUM(${branchStock.stockQuantity}), 0)` }).from(branchStock).where(eq(branchStock.variantId, variantId));
-  const total = Number(totalRow?.total ?? 0);
-  await db.update(productVariants).set({ stockQuantity: total, updatedAt: new Date() }).where(eq(productVariants.id, variantId));
-  const [variantRow] = await db.select({ productId: productVariants.productId }).from(productVariants).where(eq(productVariants.id, variantId)).limit(1);
-  if (variantRow) {
-    const siblings = await db.select({ id: productVariants.id }).from(productVariants).where(eq(productVariants.productId, variantRow.productId));
-    if (siblings.length === 1) {
-      await db.update(products).set({ stockQuantity: total, updatedAt: new Date() }).where(eq(products.id, variantRow.productId));
-    }
-  }
-  return total;
-}
+// recomputeVariantStockTotal (the cached per-variant / per-product totals
+// kept in step with branch_stock) moved to server/stockLedger.ts on
+// 2026-09-11, next to the ledger helpers that call it.
 
 /**
  * "Controls everything" admin overhaul (2026-09-08, Phase L/M): the one
@@ -2756,7 +2750,9 @@ async function recomputeVariantStockTotal(db: DbOrTx, variantId: number) {
  * productVariants (a different table); the legacy productVariants UPDATE
  * has to subquery only `products`.
  */
-async function decrementBranchStock(tx: OrderTx, branchId: number, variantId: number, quantity: number, options: { requirePublished: boolean; itemLabel: string }) {
+// Returns whether the variant is on per-branch tracking -- the caller then
+// records the ledger movement once it knows the order id (2026-09-11).
+async function decrementBranchStock(tx: OrderTx, branchId: number, variantId: number, quantity: number, options: { requirePublished: boolean; itemLabel: string }): Promise<boolean> {
   const hasPerBranchTracking = (await tx.select({ id: branchStock.id }).from(branchStock).where(eq(branchStock.variantId, variantId)).limit(1)).length > 0;
   const update = hasPerBranchTracking
     ? await tx.update(branchStock).set({
@@ -2782,6 +2778,7 @@ async function decrementBranchStock(tx: OrderTx, branchId: number, variantId: nu
       : `${options.itemLabel} is no longer available in the requested quantity. Please refresh your cart.`);
   }
   if (hasPerBranchTracking) await recomputeVariantStockTotal(tx, variantId);
+  return hasPerBranchTracking;
 }
 
 // Extracted from updateAdminOrder's inline loop (Phase E) so refundOrder can
@@ -2807,7 +2804,7 @@ async function decrementBranchStock(tx: OrderTx, branchId: number, variantId: nu
 // legacy aggregate path because no branch_stock rows existed for this
 // variant, restoring via branch_stock here would credit a row that was
 // never actually debited, inflating stock).
-async function restoreStockForOrder(tx: OrderTx, orderId: number) {
+async function restoreStockForOrder(tx: OrderTx, orderId: number, movement: { type: "order_restock" | "refund_restock"; actorUserId?: number | null }) {
   const [orderRow] = await tx.select({ fulfillingBranchId: orders.fulfillingBranchId }).from(orders).where(eq(orders.id, orderId)).limit(1);
   const lineItems = await tx.select({ variantId: orderItems.variantId, quantity: orderItems.quantity }).from(orderItems).where(eq(orderItems.orderId, orderId));
   const affectedVariantIds = new Set<number>();
@@ -2815,14 +2812,10 @@ async function restoreStockForOrder(tx: OrderTx, orderId: number) {
     if (item.variantId === null) continue;
     const hasPerBranchTracking = (await tx.select({ id: branchStock.id }).from(branchStock).where(eq(branchStock.variantId, item.variantId)).limit(1)).length > 0;
     if (orderRow?.fulfillingBranchId && hasPerBranchTracking) {
-      const updated = await tx.update(branchStock).set({ stockQuantity: sql`${branchStock.stockQuantity} + ${item.quantity}`, updatedAt: new Date() }).where(and(eq(branchStock.branchId, orderRow.fulfillingBranchId), eq(branchStock.variantId, item.variantId)));
-      if (Number(updated[0].affectedRows ?? 0) === 0) {
-        // No branch_stock row exists yet for this specific (branch, variant)
-        // pair (e.g. this branch was created after the variant already had
-        // rows at other branches) -- insert one rather than silently losing
-        // the restored quantity.
-        await tx.insert(branchStock).values({ branchId: orderRow.fulfillingBranchId, variantId: item.variantId, stockQuantity: item.quantity });
-      }
+      // Upserts (a branch created after this variant already had rows
+      // elsewhere has no row yet -- the quantity must not be lost) and
+      // records the movement against the order (2026-09-11).
+      await applyBranchStockDelta(tx, orderRow.fulfillingBranchId, item.variantId, item.quantity, { type: movement.type, refType: "order", refId: orderId, actorUserId: movement.actorUserId ?? null }, { recompute: false });
       affectedVariantIds.add(item.variantId);
     } else {
       await tx.update(productVariants).set({ stockQuantity: sql`${productVariants.stockQuantity} + ${item.quantity}`, updatedAt: new Date() }).where(eq(productVariants.id, item.variantId));
@@ -2859,7 +2852,7 @@ async function reverseStoreCreditForOrder(tx: OrderTx, orderId: number, reason: 
   return orderRow.storeCreditAppliedMnt;
 }
 
-export async function updateAdminOrder(input: { id: number; status?: FulfilmentStatus; deliveryTrackingRef?: string | null; adminNote?: string | null }) {
+export async function updateAdminOrder(input: { id: number; status?: FulfilmentStatus; deliveryTrackingRef?: string | null; adminNote?: string | null; actorUserId?: number | null }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const current = await db.select().from(orders).where(eq(orders.id, input.id)).limit(1);
@@ -2893,7 +2886,7 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
       if (Number(flipped[0].affectedRows ?? 0) !== 1) throw new Error("This order was changed by someone else just now. Refresh and try again.");
     }
     if (shouldRestoreStock(current[0].status as FulfilmentStatus, input.status)) {
-      await restoreStockForOrder(tx, input.id);
+      await restoreStockForOrder(tx, input.id, { type: "order_restock", actorUserId: input.actorUserId ?? null });
     }
     if (input.status === "cancelled") {
       await reverseStoreCreditForOrder(tx, input.id, "цуцлагдсан");
@@ -2926,7 +2919,7 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
 // updateAdminOrder stays warehouseProcedure (moving an order through
 // fulfilment). Guards enforce: only a "returned" order can be refunded, never
 // twice, and the refund can never exceed what the customer actually paid.
-export async function refundOrder(input: { id: number; refundAmountMnt: number; refundNote: string | null; restockItems: boolean }) {
+export async function refundOrder(input: { id: number; refundAmountMnt: number; refundNote: string | null; restockItems: boolean; actorUserId?: number | null }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const current = await db.select().from(orders).where(eq(orders.id, input.id)).limit(1);
@@ -2958,7 +2951,7 @@ export async function refundOrder(input: { id: number; refundAmountMnt: number; 
     }).where(and(eq(orders.id, input.id), eq(orders.paymentStatus, "paid")));
     if (Number(flipped[0].affectedRows ?? 0) !== 1) throw new Error("This order has already been refunded.");
     if (input.restockItems) {
-      await restoreStockForOrder(tx, input.id);
+      await restoreStockForOrder(tx, input.id, { type: "refund_restock", actorUserId: input.actorUserId ?? null });
     }
     await reverseStoreCreditForOrder(tx, input.id, "буцаагдсан");
     await enqueueNotification(tx, "refund.recorded", { orderNumber: current[0].orderNumber, refundMnt: input.refundAmountMnt, restocked: input.restockItems }, { dedupeKey: `order:${input.id}` });
@@ -3468,9 +3461,22 @@ export async function updateBranch(input: { id: number } & Partial<BranchWriteIn
   return updated[0];
 }
 
+/**
+ * 2026-09-11: refuses to delete a branch that still matters. Deleting one
+ * cascade-deleted its branch_stock rows WITHOUT recomputing the variants'
+ * cached totals (so the storefront kept selling stock that no longer existed
+ * anywhere), and would now also erase its stock history. A branch that has
+ * ever held stock is deactivated instead, which keeps both.
+ */
 export async function deleteBranch(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
+  const [branch] = await db.select({ isFulfillmentDefault: branches.isFulfillmentDefault }).from(branches).where(eq(branches.id, id)).limit(1);
+  if (!branch) return { id };
+  if (branch.isFulfillmentDefault) throw new Error("Онлайн захиалгын үндсэн салбарыг устгах боломжгүй. Эхлээд өөр салбарыг үндсэн болгоно уу.");
+  const [stock] = await db.select({ total: sql<number>`COALESCE(SUM(ABS(${branchStock.stockQuantity})), 0)` }).from(branchStock).where(eq(branchStock.branchId, id));
+  const [history] = await db.select({ id: stockMovements.id }).from(stockMovements).where(eq(stockMovements.branchId, id)).limit(1);
+  if (Number(stock?.total ?? 0) > 0 || history) throw new Error("Энэ салбарт нөөц эсвэл нөөцийн түүх байгаа тул устгах боломжгүй. Оронд нь идэвхгүй болгоно уу.");
   await db.delete(branches).where(eq(branches.id, id));
   return { id };
 }
@@ -4235,17 +4241,16 @@ export async function getProductStockQuantity(id: number): Promise<number | null
  * nowhere real to attribute the number to), matching pre-Phase-K behavior
  * for that edge case.
  */
-async function setFulfillmentBranchStock(db: DbOrTx, variantId: number, quantity: number) {
+async function setFulfillmentBranchStock(db: DbOrTx, variantId: number, quantity: number, actorUserId: number | null = null) {
   const [fulfillmentBranch] = await db.select({ id: branches.id }).from(branches).where(eq(branches.isFulfillmentDefault, true)).limit(1);
   if (!fulfillmentBranch) {
     await db.update(productVariants).set({ stockQuantity: quantity, updatedAt: new Date() }).where(eq(productVariants.id, variantId));
     return;
   }
-  const updated = await db.update(branchStock).set({ stockQuantity: quantity, updatedAt: new Date() }).where(and(eq(branchStock.branchId, fulfillmentBranch.id), eq(branchStock.variantId, variantId)));
-  if (Number(updated[0].affectedRows ?? 0) === 0) {
-    await db.insert(branchStock).values({ branchId: fulfillmentBranch.id, variantId, stockQuantity: quantity });
-  }
-  await recomputeVariantStockTotal(db, variantId);
+  // 2026-09-11: recorded on the ledger as the difference from what was there.
+  await db.transaction(async tx => {
+    await setBranchStockAbsolute(tx, fulfillmentBranch.id, variantId, quantity, { type: "product_form_set", refType: "manual", actorUserId, note: "Бүтээгдэхүүний маягтаас үлдэгдэл засав" });
+  });
 }
 
 async function syncSoleVariantFromProduct(productId: number, changes: { priceMnt?: number; compareAtPriceMnt?: number | null; sku?: string; stockQuantity?: number; imageUrl?: string | null }) {
@@ -4969,18 +4974,38 @@ export async function getBranchStockForVariant(variantId: number) {
  *  operation, distinct from setFulfillmentBranchStock (which always targets
  *  whichever branch is the fulfillment default) since this lets an admin
  *  edit ANY branch, not just the default one. */
-export async function setBranchStock(branchId: number, variantId: number, quantity: number) {
+export async function setBranchStock(branchId: number, variantId: number, quantity: number, meta: { actorUserId?: number | null; note?: string | null } = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   if (quantity < 0) throw new Error("Stock quantity cannot be negative.");
   await db.transaction(async tx => {
-    const updated = await tx.update(branchStock).set({ stockQuantity: quantity, updatedAt: new Date() }).where(and(eq(branchStock.branchId, branchId), eq(branchStock.variantId, variantId)));
-    if (Number(updated[0].affectedRows ?? 0) === 0) {
-      await tx.insert(branchStock).values({ branchId, variantId, stockQuantity: quantity });
-    }
-    await recomputeVariantStockTotal(tx, variantId);
+    await setBranchStockAbsolute(tx, branchId, variantId, quantity, { type: "admin_set", refType: "manual", actorUserId: meta.actorUserId ?? null, note: meta.note ?? null });
   });
   return getBranchStockForVariant(variantId);
+}
+
+/** One variant's ledger, newest first, with branch names -- the admin
+ *  per-branch editor's "Хөдөлгөөн" history (2026-09-11). */
+export async function getStockMovementsForVariant(variantId: number, limit = 50) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    id: stockMovements.id, branchId: stockMovements.branchId, branchName: branches.name, type: stockMovements.type,
+    delta: stockMovements.delta, balanceAfter: stockMovements.balanceAfter, refType: stockMovements.refType, refId: stockMovements.refId,
+    note: stockMovements.note, actorName: users.name, createdAt: stockMovements.createdAt,
+  }).from(stockMovements)
+    .innerJoin(branches, eq(branches.id, stockMovements.branchId))
+    .leftJoin(users, eq(users.id, stockMovements.actorUserId))
+    .where(eq(stockMovements.variantId, variantId))
+    .orderBy(desc(stockMovements.id))
+    .limit(limit);
+}
+
+/** System Health: branch shelves whose ledger does not add up. */
+export async function getStockLedgerHealth() {
+  const db = await getDb();
+  if (!db) return { driftCount: 0, examples: [] as { branchId: number; variantId: number; shelf: number; ledger: number }[] };
+  return getStockLedgerDrift(db);
 }
 
 export type ProductVariantWriteInput = {
@@ -5016,6 +5041,9 @@ async function seedBranchStockForNewVariant(tx: OrderTx, variantId: number, init
     branchId: branch.id, variantId,
     stockQuantity: branch.id === fulfillmentBranchId ? initialStockQuantity : 0,
   })));
+  if (fulfillmentBranchId && initialStockQuantity) {
+    await recordStockMovement(tx, fulfillmentBranchId, variantId, initialStockQuantity, { type: "variant_seed", refType: "manual", note: "Шинэ бараа/variant үүсэхэд оруулсан эхний үлдэгдэл" });
+  }
   await recomputeVariantStockTotal(tx, variantId);
 }
 

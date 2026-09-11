@@ -29,6 +29,18 @@
 
 **Баталгаажуулалт**: `pnpm check` цэвэр; шинэ тест `ntfy.test.ts` (6), `notification-events.test.ts` (19), `notifications.integration.test.ts` (6), `integrations.integration.test.ts` (4→10), admin-tips; Playwright (3100 порт, face gate унтраалттай, throwaway admin+staff, дараа нь устгасан): интеграцийн хуудас, хонх (admin 2 мөр, staff зөвхөн store 1 мөр), "Утасны мэдэгдэл" (admin 4 QR, staff 1), 1440/1024/390-д overflow 0, console алдаа 0.
 
+### Phase 2 — нөөцийн хөдөлгөөний ledger (мөн шөнө)
+
+- Migration `0063` (Aiven дээр ажилласан): `stock_movements` (append-only; `delta`, `balanceAfter`, `sku` хуулбар, `refType/refId`, `actorUserId`, `note`). Одоогийн бүх тэг биш `branch_stock` мөрт `opening` мөр бичигдэв → ledger анхны өдрөөсөө **зөрүү 0** (rebaseline dry-run баталгаажуулав).
+- `server/stockLedger.ts` (leaf модуль): `recordStockMovement` (аль хэдийн хийгдсэн өөрчлөлтийг бүртгэнэ — checkout/POS-ийн race-proof guarded decrement өөрчлөгдөөгүй), `applyBranchStockDelta` (хамгаалалттай +/−, upsert, `StockShortageError`), `setBranchStockAbsolute` (FOR UPDATE lock, зөрүүг бүртгэнэ), `getStockLedgerDrift`, мөн `recomputeVariantStockTotal` энд зөөгдөв.
+- Холбосон газрууд: checkout (`sale_online`, order id мэдэгдсэний дараа ижил transaction-д), POS (`sale_pos`, кассчин actor), цуцлалт (`order_restock`), буцаалт (`refund_restock`), admin салбарын засагч (`admin_set` + шалтгаан), бүтээгдэхүүний маягт (`product_form_set`), шинэ variant (`variant_seed`). Хуучин "branch_stock мөргүй" legacy зам (зөвхөн тестийн fixture) хэвээр, бүртгэгдэхгүй.
+- `deleteBranch` одоо үндсэн салбар, нөөцтэй эсвэл түүхтэй салбарыг устгахаас татгалзана ("идэвхгүй болгоно уу") — өмнө нь cascade устгалт variant-ийн нийт нөөцийг дахин тооцоолдоггүй тул сайт байхгүй нөөц зарсаар байх bug байв.
+- FK: `branchId`/`variantId` **ON DELETE CASCADE** (тестүүд бодит салбар 1 дээр түр бараа үүсгэж устгадаг — SET NULL байсан бол ledger-т хог үлдэх байв).
+- UI: салбарын нөөц засагчид шалтгааны талбар + "Хөдөлгөөн" түүх (Playwright-ээр бодит бараа дээр "Эхний үлдэгдэл +16 → 16" харагдав); хянах самбарын Системийн байдал картанд "Нөөцийн хөдөлгөөний бүртгэл" мөр.
+- `scripts/stock-ledger-rebaseline.ts` (dry-run, `--apply`) — нөгөө лаптопын хуучин код бүртгэлгүй өөрчилсөн тохиолдолд засварын мөр нэмнэ (түүхийг дахин бичихгүй).
+- Тест: `stock-ledger.integration.test.ts` (5: гараар засвар = зөрүү, POS + 5 зэрэгцээ кассчин 3 нөөцөөс яг 3 амжилттай, онлайн худалдаа + цуцлалт = 0, drift илрүүлэлт + rebaseline, салбар устгах хамгаалалт).
+- ⚠️ **Олдсон хуучин асуудал**: `order-unwind.integration.test.ts`-ийн `afterAll` (~50 дараалсан Aiven хүсэлт) 10с hook хязгаарт тогтмол багтахаа больж, цэвэрлэгээ дундаа тасарч **тестийн хэрэглэгч + 5,500₮ зээлтэй данс** үлдээж, дараагийн run-ы зээлийн тэнцлийн шалгалтыг унагаадаг байв (өнөө өглөөний "Unwind Test Finance" үлдэгдэл үүнээс). Hook-д 60с өгч, 7 үлдэгдэл хэрэглэгчийг цэвэрлэв.
+
 **Ажлын лаптопоос татсан 9 commit** (энэ session-ий эхэнд, `d30dc06` хүртэл): баркод сканнераар сайтын аль ч хуудаснаас бараа руу үсрэх, Монгол хайлтын synonym, featured брэнд → брэндийн хуудас, README, /admin хэсэг бүрийн Монгол тайлбар (tip), SEO/cookie текст DB-ээс, хууль эрх зүйн 3 хуудас + лоялти түвшин + footer/холбоо барих /admin-аар засагдах (migration `0061`, Aiven дээр аль хэдийн ажилласан), hero 3 слайд, 42 ашиглагдаагүй компонент + 25 package устгав. Тэр ажлын CLAUDE.md/HISTORY.md тэмдэглэл ирээгүй — дэлгэрэнгүйг `git log f7b6563..d30dc06`-оос. ⚠️ Лоялти босго DB дээр 300k/500k/5M болсон (migration-ий seed 500k/1M/10M) — /admin-аар өөрчилсөн бололтой.
 
 ---

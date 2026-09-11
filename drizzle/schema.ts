@@ -459,6 +459,45 @@ export const branchStock = mysqlTable("branch_stock", {
 export type BranchStock = typeof branchStock.$inferSelect;
 export type InsertBranchStock = typeof branchStock.$inferInsert;
 
+/**
+ * 2026-09-11 (migration 0063): the stock movement ledger. branch_stock is
+ * the current count; this is HOW it got there -- one append-only row per
+ * change to one branch's shelf of one variant, written in the same
+ * transaction as that change by server/stockLedger.ts. `delta` is signed,
+ * `balanceAfter` is the shelf right after, `sku` is copied at the time.
+ * `refType`/`refId` point at what caused it (order, transfer, receipt,
+ * count). Cascades with its branch/variant exactly like branch_stock -- the
+ * app refuses to delete a branch that has history (deleteBranch), so that
+ * only ever fires for test fixtures. Drift between SUM(delta) and
+ * branch_stock (older code on the other laptop, a manual SQL edit) is shown
+ * on System Health and re-based by scripts/stock-ledger-rebaseline.ts.
+ */
+export const STOCK_MOVEMENT_TYPES = [
+  "opening", "sale_online", "sale_pos", "order_restock", "refund_restock", "admin_set", "product_form_set", "variant_seed",
+  "receipt", "transfer_out", "transfer_in", "transfer_return", "transfer_writeoff", "count_adjust", "rebaseline",
+] as const;
+export const stockMovements = mysqlTable("stock_movements", {
+  id: int("id").autoincrement().primaryKey(),
+  branchId: int("branchId").notNull().references(() => branches.id, { onDelete: "cascade" }),
+  variantId: int("variantId").notNull().references(() => productVariants.id, { onDelete: "cascade" }),
+  sku: varchar("sku", { length: 100 }).notNull(),
+  type: mysqlEnum("type", STOCK_MOVEMENT_TYPES).notNull(),
+  delta: int("delta").notNull(),
+  balanceAfter: int("balanceAfter").notNull(),
+  refType: varchar("refType", { length: 20 }),
+  refId: int("refId"),
+  actorUserId: int("actorUserId").references(() => users.id, { onDelete: "set null" }),
+  note: varchar("note", { length: 300 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  index("stock_movements_branch_variant_idx").on(table.branchId, table.variantId, table.id),
+  index("stock_movements_variant_idx").on(table.variantId, table.id),
+  index("stock_movements_ref_idx").on(table.refType, table.refId),
+  index("stock_movements_created_idx").on(table.createdAt),
+]);
+export type StockMovement = typeof stockMovements.$inferSelect;
+export type StockMovementType = (typeof STOCK_MOVEMENT_TYPES)[number];
+
 export const carts = mysqlTable("carts", {
   id: int("id").autoincrement().primaryKey(),
   // Exactly one of userId / guestToken is set. Nullable (guest checkout):
