@@ -74,6 +74,21 @@ export default function FeaturedBrandsCarousel({ brands, heading }: { brands: Fe
   const [isDragging, setIsDragging] = useState(false);
   const dragStartX = useRef(0);
   const dragTravel = useRef(0);
+  /**
+   * Whether this gesture has actually become a drag and taken the pointer.
+   *
+   * 2026-09-12, Tom: "онцлох брэндүүд дээр дархаар тэр брэндийн барааны page
+   * руу явахгүй байна". Confirmed with a real mouse click in a browser: the
+   * slide's href was correct and hovering showed it, but clicking navigated
+   * nowhere. The cause was setPointerCapture() being called on pointerdown —
+   * once an element captures the pointer, the browser dispatches the
+   * following `click` to the CAPTURING element rather than to whatever was
+   * pressed, so the <Link> inside the slide never saw it. Capture is only
+   * needed once a finger is genuinely dragging, so it is deferred until the
+   * pointer has moved past the drag threshold; a plain click never captures
+   * and reaches the link normally.
+   */
+  const dragCaptured = useRef(false);
 
   // NOTE: autoplay deliberately does NOT check prefers-reduced-motion.
   // The first cut of this component did, and Tom -- whose machine has the OS
@@ -168,21 +183,31 @@ export default function FeaturedBrandsCarousel({ brands, heading }: { brands: Fe
     if (event.pointerType === "mouse" && event.button !== 0) return;
     dragStartX.current = event.clientX;
     dragTravel.current = 0;
+    dragCaptured.current = false;
     setIsDragging(true);
-    event.currentTarget.setPointerCapture(event.pointerId);
+    // Deliberately NOT capturing here -- see dragCaptured above.
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!isDragging) return;
     const delta = event.clientX - dragStartX.current;
     dragTravel.current = Math.max(dragTravel.current, Math.abs(delta));
+    // Take the pointer the moment this stops being a click and becomes a
+    // swipe, so the gesture keeps tracking even if it leaves the carousel.
+    if (!dragCaptured.current && dragTravel.current > DRAG_CLICK_SUPPRESS_PX) {
+      dragCaptured.current = true;
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
     setDragDx(delta);
   };
 
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!isDragging) return;
     setIsDragging(false);
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    if (dragCaptured.current && event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    dragCaptured.current = false;
     // Snap by whole slides: a short tug rounds to 0 and springs back, a real
     // swipe advances as many slides as it actually covered.
     const stride = metrics.base + metrics.gap;
