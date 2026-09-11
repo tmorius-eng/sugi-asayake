@@ -1,4 +1,4 @@
-import { getActiveBranches, getSiteText, getStoreSettingValue } from "../db";
+import { getSiteText, getStoreSettingValue, getStorefrontBranches } from "../db";
 import { getSiteTextSlot, type SiteTextSlotKey } from "../../shared/site-text";
 import { ENV } from "./env";
 
@@ -53,7 +53,7 @@ async function resolveValues(): Promise<Map<string, string>> {
 
   const [rows, branches, phoneDigits, facebookUrl, instagramUrl] = await Promise.all([
     getSiteText(),
-    getActiveBranches(),
+    getStorefrontBranches(),
     getStoreSettingValue("contact-phone-tel"),
     getStoreSettingValue("contact-facebook-url"),
     getStoreSettingValue("contact-instagram-url"),

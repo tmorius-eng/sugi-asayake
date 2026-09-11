@@ -1,5 +1,5 @@
 import { and, eq, gte, sql } from "drizzle-orm";
-import { branchStock, products, productVariants, stockMovements, type StockMovementType } from "../drizzle/schema";
+import { branches, branchStock, products, productVariants, stockMovements, type StockMovementType } from "../drizzle/schema";
 import type { DbOrTx } from "./db";
 
 /**
@@ -33,8 +33,15 @@ export type MovementMeta = {
  * column directly). Called after every branch_stock write.
  * (Moved here from db.ts, 2026-09-11, unchanged.)
  */
+//
+// 2026-09-11 (Phase 3): only branches with countsTowardOnlineStock add up to
+// the online number. The stores ring sales up in Smart POS, not here, so
+// their shelves in this system only ever grow; once they are switched off,
+// what the website offers is exactly what the warehouse holds.
 export async function recomputeVariantStockTotal(db: DbOrTx, variantId: number) {
-  const [totalRow] = await db.select({ total: sql<number>`COALESCE(SUM(${branchStock.stockQuantity}), 0)` }).from(branchStock).where(eq(branchStock.variantId, variantId));
+  const [totalRow] = await db.select({ total: sql<number>`COALESCE(SUM(${branchStock.stockQuantity}), 0)` }).from(branchStock)
+    .innerJoin(branches, eq(branches.id, branchStock.branchId))
+    .where(and(eq(branchStock.variantId, variantId), eq(branches.countsTowardOnlineStock, true)));
   const total = Number(totalRow?.total ?? 0);
   await db.update(productVariants).set({ stockQuantity: total, updatedAt: new Date() }).where(eq(productVariants.id, variantId));
   const [variantRow] = await db.select({ productId: productVariants.productId }).from(productVariants).where(eq(productVariants.id, variantId)).limit(1);
@@ -45,6 +52,30 @@ export async function recomputeVariantStockTotal(db: DbOrTx, variantId: number) 
     }
   }
   return total;
+}
+
+/**
+ * The same recompute for every variant stocked at one branch, as two
+ * set-based statements instead of ~4 round trips per variant (937 variants
+ * x Aiven latency would take minutes). Used when a branch's
+ * countsTowardOnlineStock flag flips.
+ */
+export async function recomputeVariantTotalsForBranch(db: DbOrTx, branchId: number) {
+  await db.execute(sql`
+    UPDATE product_variants pv
+    SET pv.stockQuantity = (
+      SELECT COALESCE(SUM(bs.stockQuantity), 0) FROM branch_stock bs JOIN branches b ON b.id = bs.branchId
+      WHERE bs.variantId = pv.id AND b.countsTowardOnlineStock = 1
+    ), pv.updatedAt = NOW()
+    WHERE pv.id IN (SELECT x.variantId FROM branch_stock x WHERE x.branchId = ${branchId})
+  `);
+  await db.execute(sql`
+    UPDATE products p
+    JOIN product_variants pv ON pv.productId = p.id
+    JOIN (SELECT productId, COUNT(*) AS n FROM product_variants GROUP BY productId) vc ON vc.productId = p.id AND vc.n = 1
+    JOIN (SELECT DISTINCT variantId FROM branch_stock WHERE branchId = ${branchId}) touched ON touched.variantId = pv.id
+    SET p.stockQuantity = pv.stockQuantity, p.updatedAt = NOW()
+  `);
 }
 
 async function shelfCount(db: DbOrTx, branchId: number, variantId: number): Promise<number> {

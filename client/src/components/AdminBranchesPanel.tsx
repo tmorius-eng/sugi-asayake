@@ -2,6 +2,7 @@ import { useState, type ChangeEvent } from "react";
 import { ArrowDown, ArrowUp, ImageUp, LoaderCircle, MapPin, Pencil, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { GenericListView } from "./admin/GenericListView";
 
 // "Controls everything" admin overhaul (2026-09-08, Phase J): replaces
@@ -27,13 +28,21 @@ type BranchRow = {
   sortOrder: number;
   isActive: boolean;
   isFulfillmentDefault: boolean;
+  kind: "store" | "warehouse";
+  countsTowardOnlineStock: boolean;
+  lowStockThreshold: number | null;
 };
 
-type BranchForm = { id: number | null; name: string; slug: string; address: string; phone: string; mapUrl: string; photoUrl: string; isActive: boolean; isFulfillmentDefault: boolean };
-const emptyForm = (): BranchForm => ({ id: null, name: "", slug: "", address: "", phone: "", mapUrl: "", photoUrl: "", isActive: true, isFulfillmentDefault: false });
+type BranchForm = { id: number | null; name: string; slug: string; address: string; phone: string; mapUrl: string; photoUrl: string; isActive: boolean; isFulfillmentDefault: boolean; kind: "store" | "warehouse"; countsTowardOnlineStock: boolean; lowStockThreshold: string };
+const emptyForm = (): BranchForm => ({ id: null, name: "", slug: "", address: "", phone: "", mapUrl: "", photoUrl: "", isActive: true, isFulfillmentDefault: false, kind: "store", countsTowardOnlineStock: true, lowStockThreshold: "" });
 
 export default function AdminBranchesPanel() {
   const utils = trpc.useUtils();
+  // 2026-09-11: the stock-related fields (online fulfilment branch, kind,
+  // counts-as-online-stock, low-stock level) are admin-only on the server;
+  // marketing still edits addresses, phones and photos.
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const branchesQuery = trpc.admin.branches.useQuery();
 
   const [composerOpen, setComposerOpen] = useState(false);
@@ -59,7 +68,7 @@ export default function AdminBranchesPanel() {
   const branches = ((branchesQuery.data ?? []) as BranchRow[]).slice().sort((a, b) => a.sortOrder - b.sortOrder);
 
   const openComposer = (branch?: BranchRow) => {
-    setForm(branch ? { id: branch.id, name: branch.name, slug: branch.slug, address: branch.address, phone: branch.phone ?? "", mapUrl: branch.mapUrl ?? "", photoUrl: branch.photoUrl ?? "", isActive: branch.isActive, isFulfillmentDefault: branch.isFulfillmentDefault } : emptyForm());
+    setForm(branch ? { id: branch.id, name: branch.name, slug: branch.slug, address: branch.address, phone: branch.phone ?? "", mapUrl: branch.mapUrl ?? "", photoUrl: branch.photoUrl ?? "", isActive: branch.isActive, isFulfillmentDefault: branch.isFulfillmentDefault, kind: branch.kind, countsTowardOnlineStock: branch.countsTowardOnlineStock, lowStockThreshold: branch.lowStockThreshold === null ? "" : String(branch.lowStockThreshold) } : emptyForm());
     setComposerOpen(true);
   };
   const closeComposer = () => { setComposerOpen(false); setForm(emptyForm()); };
@@ -108,11 +117,21 @@ export default function AdminBranchesPanel() {
       mapUrl: form.mapUrl.trim() || null,
       photoUrl: form.photoUrl.trim() || null,
       isActive: form.isActive,
-      isFulfillmentDefault: form.isFulfillmentDefault,
     };
+    // Stock fields only when an admin actually changed them -- sending them
+    // unchanged would still trip the server's admin-only check for marketing.
+    const original = form.id ? branches.find(row => row.id === form.id) : undefined;
+    const threshold = form.lowStockThreshold.trim() === "" ? null : Math.max(0, Math.floor(Number(form.lowStockThreshold)));
+    const stockFields: { isFulfillmentDefault?: boolean; kind?: "store" | "warehouse"; countsTowardOnlineStock?: boolean; lowStockThreshold?: number | null } = {};
+    if (isAdmin) {
+      if (!original || original.isFulfillmentDefault !== form.isFulfillmentDefault) stockFields.isFulfillmentDefault = form.isFulfillmentDefault;
+      if (!original || original.kind !== form.kind) stockFields.kind = form.kind;
+      if (!original || original.countsTowardOnlineStock !== form.countsTowardOnlineStock) stockFields.countsTowardOnlineStock = form.countsTowardOnlineStock;
+      if (!original || original.lowStockThreshold !== threshold) stockFields.lowStockThreshold = threshold;
+    }
     try {
-      if (form.id) await updateBranch.mutateAsync({ id: form.id, ...payload });
-      else await createBranch.mutateAsync({ ...payload, sortOrder: branches.length });
+      if (form.id) await updateBranch.mutateAsync({ id: form.id, ...payload, ...stockFields });
+      else await createBranch.mutateAsync({ ...payload, ...stockFields, sortOrder: branches.length });
       toast.success(form.id ? "Салбар шинэчлэгдлээ." : "Салбар нэмэгдлээ.");
       utils.admin.branches.invalidate();
       utils.content.branches.invalidate();
@@ -144,6 +163,8 @@ export default function AdminBranchesPanel() {
                     <div className="flex items-center gap-1.5">
                       <strong className="block truncate text-sm">{branch.name}</strong>
                       {branch.isFulfillmentDefault && <Star size={13} className="shrink-0 fill-[#f0b52d] text-[#f0b52d]" aria-label="Хүргэлтийн үндсэн салбар" />}
+                      {branch.kind === "warehouse" && <span className="shrink-0 rounded-full bg-[var(--a-info-soft)] px-2 py-0.5 text-[9px] font-extrabold text-[var(--a-info)]">АГУУЛАХ</span>}
+                      {!branch.countsTowardOnlineStock && <span className="shrink-0 rounded-full bg-[var(--a-soft)] px-2 py-0.5 text-[9px] font-extrabold text-[var(--a-muted)]">онлайн нөөцөд ороогүй</span>}
                     </div>
                     <span className="mt-0.5 block truncate text-xs text-[var(--a-muted)]">{branch.address}</span>
                   </div>
@@ -186,7 +207,13 @@ export default function AdminBranchesPanel() {
             </div>
           </div>
           <label className="flex items-center gap-3 rounded-xl bg-[var(--a-card)] px-3 py-3 text-sm font-bold"><input type="checkbox" checked={form.isActive} onChange={event => setForm(current => ({ ...current, isActive: event.target.checked }))} className="size-4 accent-[#df1f3d]" />Идэвхтэй (сайт дээр харагдана)</label>
-          <label className="flex items-center gap-3 rounded-xl bg-[var(--a-card)] px-3 py-3 text-sm font-bold"><input type="checkbox" checked={form.isFulfillmentDefault} onChange={event => setForm(current => ({ ...current, isFulfillmentDefault: event.target.checked }))} className="size-4 accent-[#df1f3d]" />Хүргэлтийн үндсэн салбар (зөвхөн 1 байх ёстой)</label>
+          <fieldset disabled={!isAdmin} className="grid gap-3 rounded-2xl border border-[var(--a-border)] p-3 sm:col-span-2 sm:grid-cols-2 disabled:opacity-60">
+            <legend className="px-1 text-[10px] font-extrabold tracking-[.1em] text-[var(--a-info)]">НӨӨЦ {!isAdmin && "· зөвхөн админ өөрчилнө"}</legend>
+            <label className="grid gap-1.5 text-xs font-bold">Төрөл<select value={form.kind} onChange={event => setForm(current => ({ ...current, kind: event.target.value as "store" | "warehouse" }))} className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]"><option value="store">Дэлгүүр (сайт дээр харагдана, очиж авах боломжтой)</option><option value="warehouse">Агуулах (сайт дээр харагдахгүй)</option></select></label>
+            <label className="grid gap-1.5 text-xs font-bold">Нөөц бага гэж анхааруулах босго (заавал биш)<input type="number" min="0" value={form.lowStockThreshold} onChange={event => setForm(current => ({ ...current, lowStockThreshold: event.target.value }))} placeholder="Жишээ: 5" className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" /></label>
+            <label className="flex items-start gap-3 rounded-xl bg-[var(--a-card)] px-3 py-3 text-sm font-bold"><input type="checkbox" checked={form.isFulfillmentDefault} onChange={event => setForm(current => ({ ...current, isFulfillmentDefault: event.target.checked, countsTowardOnlineStock: event.target.checked ? true : current.countsTowardOnlineStock }))} className="mt-0.5 size-4 accent-[#df1f3d]" /><span>Онлайн захиалгын үндсэн салбар<span className="block text-[11px] font-normal text-[var(--a-muted)]">УБ хүргэлтийн бараа эндээс гарна. Зөвхөн 1 байна.</span></span></label>
+            <label className="flex items-start gap-3 rounded-xl bg-[var(--a-card)] px-3 py-3 text-sm font-bold"><input type="checkbox" checked={form.countsTowardOnlineStock} disabled={form.isFulfillmentDefault} onChange={event => setForm(current => ({ ...current, countsTowardOnlineStock: event.target.checked }))} className="mt-0.5 size-4 accent-[#df1f3d]" /><span>Онлайн нөөцөд тооцох<span className="block text-[11px] font-normal text-[var(--a-muted)]">Унтраавал энэ салбарын үлдэгдэл сайт дээрх тоонд орохгүй (дэлгүүрүүд Smart POS-оор зардаг тул).</span></span></label>
+          </fieldset>
         </div>
 
         <button type="submit" disabled={isSaving} className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#df1f3d] px-5 py-3 text-xs font-bold text-white disabled:opacity-60">{isSaving && <LoaderCircle className="animate-spin" size={15} />}{form.id ? "Өөрчлөлт хадгалах" : "Салбар нэмэх"}</button>

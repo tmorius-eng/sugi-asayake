@@ -145,6 +145,18 @@ export const usersReadProcedure = protectedProcedure.use(({ ctx, next }) => {
   return next({ ctx });
 });
 
+// 2026-09-11 (Phase 3, "Бараа хүлээн авах"): receiving goods and counting
+// shelves by barcode scan. Opens to store staff as well as warehouse --
+// the store consultants are the ones who receive deliveries. Which BRANCH
+// each may act on (staff: only their own) is checked per call in
+// server/inventory.ts (assertCanOperateOnBranch), not here.
+export const inventoryProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role !== "admin" && ctx.user.role !== "warehouse" && ctx.user.role !== "staff") {
+    throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+  }
+  return next({ ctx });
+});
+
 function requestKey(ctx: TrpcContext): string {
   return ctx.req.ip || ctx.req.socket.remoteAddress || "unknown";
 }

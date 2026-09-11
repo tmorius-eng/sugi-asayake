@@ -22,6 +22,9 @@ const samples: { [K in NotificationEventType]: NotificationPayloads[K] } = {
   "order.cancelled_by_customer": { orderNumber: "SG-ABC123", totalMnt: 125000, itemCount: 3 },
   "refund.recorded": { orderNumber: "SG-ABC123", refundMnt: 50000, restocked: true },
   "stock.low_digest": { count: 12, items: Array.from({ length: 12 }, (_, i) => ({ sku: `49000000000${i}`, name: `Бараа ${i}`, quantity: i })) },
+  "receipt.posted": { code: "RC-260911-7Q4K", branchName: "Их наяд плаза", supplierName: "Kao Mongolia", lineCount: 12, pieces: 240, unknownCount: 1 },
+  "count.submitted": { code: "CT-260911-AB23", branchName: "Их наяд плаза", lineCount: 80, varianceLines: 3 },
+  "count.posted": { code: "CT-260911-AB23", branchName: "Агуулах", adjustedLines: 3, netDelta: -2, isOpening: false },
   "integration.test": { groupLabel: "Агуулах" },
 };
 

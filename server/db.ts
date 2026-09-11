@@ -12,7 +12,7 @@ import { getStoreSettingSlot, type StoreSettingKey } from "../shared/store-setti
 import { decryptJson, encryptJson } from "./_core/crypto";
 import { getOrSetCached, invalidateCached } from "./_core/ttlCache";
 import { enqueueNotification, TEST_SUPPRESSED_MARKER } from "./notificationOutbox";
-import { applyBranchStockDelta, getStockLedgerDrift, recomputeVariantStockTotal, recordStockMovement, setBranchStockAbsolute } from "./stockLedger";
+import { applyBranchStockDelta, getStockLedgerDrift, recomputeVariantStockTotal, recomputeVariantTotalsForBranch, recordStockMovement, setBranchStockAbsolute } from "./stockLedger";
 import { INTEGRATION_META, INTEGRATION_PROVIDERS, mergeIntegrationSettings, validateIntegrationSettings, type IntegrationProvider } from "../shared/integrations";
 import type { NotificationEventType, NotificationPayloads } from "../shared/notification-events";
 import { sqlQueryLogger } from "./_core/sqlQueryLog";
@@ -1647,13 +1647,24 @@ export async function createOrderFromActiveCart(input: {
   // change to which branch is the default never misattributes an already-
   // placed order's stock effect.
   const activeBranchesForOrder = await getActiveBranches();
+  const fulfillmentBranch = activeBranchesForOrder.find(branch => branch.isFulfillmentDefault);
   let fulfillingBranchId: number | null = null;
   if (input.deliveryMethod === "store_pickup") {
-    const matchedBranch = input.pickupBranch ? activeBranchesForOrder.find(branch => branch.name === input.pickupBranch) : undefined;
+    // Pickup is only ever at a STORE (2026-09-11) -- a warehouse is not a
+    // place a shopper can walk into, even if someone posts its name.
+    const matchedBranch = input.pickupBranch ? activeBranchesForOrder.find(branch => branch.name === input.pickupBranch && branch.kind === "store") : undefined;
     if (!matchedBranch) throw new Error("Select a valid SUGI branch for store pickup.");
-    fulfillingBranchId = matchedBranch.id;
+    if (matchedBranch.countsTowardOnlineStock) {
+      fulfillingBranchId = matchedBranch.id;
+    } else {
+      // This store's shelf is not what the website sells (its sales go
+      // through Smart POS, not here), so the goods come from the warehouse
+      // and are brought to the store; the order still records the store the
+      // customer picks up from in pickupBranch.
+      if (!fulfillmentBranch) throw new Error("No fulfilment branch is configured. Please contact support.");
+      fulfillingBranchId = fulfillmentBranch.id;
+    }
   } else {
-    const fulfillmentBranch = activeBranchesForOrder.find(branch => branch.isFulfillmentDefault);
     if (!fulfillmentBranch) throw new Error("No fulfilment branch is configured. Please contact support.");
     fulfillingBranchId = fulfillmentBranch.id;
   }
@@ -3408,6 +3419,27 @@ export async function getActiveBranches() {
   return db.select().from(branches).where(eq(branches.isActive, true)).orderBy(asc(branches.sortOrder));
 }
 
+/** The branches a shopper sees: active STORES only (2026-09-11). A
+ *  warehouse is a stock location -- never listed, never a pickup point. */
+export async function getStorefrontBranches() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(branches).where(and(eq(branches.isActive, true), eq(branches.kind, "store"))).orderBy(asc(branches.sortOrder));
+}
+
+/** Assigns (or clears) the location a staff member works at. */
+export async function updateAdminUserBranch(userId: number, branchId: number | null) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  if (branchId !== null) {
+    const [branch] = await db.select({ id: branches.id }).from(branches).where(and(eq(branches.id, branchId), eq(branches.isActive, true))).limit(1);
+    if (!branch) throw new Error("Идэвхтэй салбар сонгоно уу.");
+  }
+  const updated = await db.update(users).set({ branchId, updatedAt: new Date() }).where(eq(users.id, userId));
+  if (Number(updated[0].affectedRows ?? 0) !== 1) throw new Error("Хэрэглэгч олдсонгүй.");
+  return { userId, branchId };
+}
+
 export async function getAdminBranches() {
   const db = await getDb();
   if (!db) return [];
@@ -3424,13 +3456,25 @@ export type BranchWriteInput = {
   sortOrder?: number;
   isActive?: boolean;
   isFulfillmentDefault?: boolean;
+  kind?: "store" | "warehouse";
+  countsTowardOnlineStock?: boolean;
+  lowStockThreshold?: number | null;
 };
+
+/** The branch every online delivery ships from must be a real, active shelf
+ *  whose stock is what the website sells -- otherwise the storefront would
+ *  show one number and checkout would draw from another (2026-09-11). */
+function assertValidFulfillmentBranch(branch: { isFulfillmentDefault: boolean; isActive: boolean; countsTowardOnlineStock: boolean }) {
+  if (!branch.isFulfillmentDefault) return;
+  if (!branch.isActive) throw new Error("Онлайн захиалгын үндсэн салбар идэвхтэй байх ёстой.");
+  if (!branch.countsTowardOnlineStock) throw new Error("Онлайн захиалгын үндсэн салбарын нөөц онлайн нөөцөд тооцогдох ёстой.");
+}
 
 /** At most one branch can be the fulfillment default (Phase L reads exactly
  *  one row for UB-delivery stock decrements) -- setting one on clears it
  *  from every other row in the same write, so the admin toggle behaves like
  *  a radio button, not an independent checkbox per row. */
-async function clearOtherFulfillmentDefaults(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, exceptId?: number) {
+async function clearOtherFulfillmentDefaults(db: DbOrTx, exceptId?: number) {
   const condition = exceptId ? and(eq(branches.isFulfillmentDefault, true), sql`${branches.id} <> ${exceptId}`) : eq(branches.isFulfillmentDefault, true);
   await db.update(branches).set({ isFulfillmentDefault: false, updatedAt: new Date() }).where(condition);
 }
@@ -3438,13 +3482,21 @@ async function clearOtherFulfillmentDefaults(db: NonNullable<Awaited<ReturnType<
 export async function createBranch(input: BranchWriteInput) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  const inserted = await db.insert(branches).values({
-    name: input.name, slug: input.slug, address: input.address,
-    phone: input.phone ?? null, mapUrl: input.mapUrl ?? null, photoUrl: input.photoUrl ?? null,
-    sortOrder: input.sortOrder ?? 0, isActive: input.isActive ?? true, isFulfillmentDefault: input.isFulfillmentDefault ?? false,
+  assertValidFulfillmentBranch({ isFulfillmentDefault: input.isFulfillmentDefault ?? false, isActive: input.isActive ?? true, countsTowardOnlineStock: input.countsTowardOnlineStock ?? true });
+  let id = 0;
+  // One transaction (2026-09-11): the "only one default" swap used to run as
+  // two separate writes, so a crash between them could leave no default --
+  // and every UB delivery checkout failing.
+  await db.transaction(async tx => {
+    const inserted = await tx.insert(branches).values({
+      name: input.name, slug: input.slug, address: input.address,
+      phone: input.phone ?? null, mapUrl: input.mapUrl ?? null, photoUrl: input.photoUrl ?? null,
+      sortOrder: input.sortOrder ?? 0, isActive: input.isActive ?? true, isFulfillmentDefault: input.isFulfillmentDefault ?? false,
+      kind: input.kind ?? "store", countsTowardOnlineStock: input.countsTowardOnlineStock ?? true, lowStockThreshold: input.lowStockThreshold ?? null,
+    });
+    id = Number(inserted[0].insertId);
+    if (input.isFulfillmentDefault) await clearOtherFulfillmentDefaults(tx, id);
   });
-  const id = Number(inserted[0].insertId);
-  if (input.isFulfillmentDefault) await clearOtherFulfillmentDefaults(db, id);
   const created = await db.select().from(branches).where(eq(branches.id, id)).limit(1);
   return created[0];
 }
@@ -3455,8 +3507,19 @@ export async function updateBranch(input: { id: number } & Partial<BranchWriteIn
   const existing = await db.select().from(branches).where(eq(branches.id, input.id)).limit(1);
   if (!existing[0]) throw new Error("Branch not found.");
   const { id, ...changes } = input;
-  await db.update(branches).set({ ...changes, updatedAt: new Date() }).where(eq(branches.id, id));
-  if (changes.isFulfillmentDefault) await clearOtherFulfillmentDefaults(db, id);
+  const next = { ...existing[0], ...changes };
+  assertValidFulfillmentBranch(next);
+  if (existing[0].isFulfillmentDefault && changes.isFulfillmentDefault === false) {
+    throw new Error("Онлайн захиалгын үндсэн салбарыг шууд унтраах боломжгүй — өөр салбарыг үндсэн болгоход энэ нь автоматаар солигдоно.");
+  }
+  const countingChanged = changes.countsTowardOnlineStock !== undefined && changes.countsTowardOnlineStock !== existing[0].countsTowardOnlineStock;
+  await db.transaction(async tx => {
+    await tx.update(branches).set({ ...changes, updatedAt: new Date() }).where(eq(branches.id, id));
+    if (changes.isFulfillmentDefault) await clearOtherFulfillmentDefaults(tx, id);
+  });
+  // Whether this shelf counts as online stock changes every cached variant
+  // total that includes it -- recompute them, so the storefront reflects it now.
+  if (countingChanged) await recomputeVariantTotalsForBranch(db, id);
   const updated = await db.select().from(branches).where(eq(branches.id, id)).limit(1);
   return updated[0];
 }
@@ -4417,6 +4480,7 @@ export async function getAdminUserDetail(userId: number) {
     suspendedReason: users.suspendedReason,
     loyaltyManualAdjustmentMnt: users.loyaltyManualAdjustmentMnt,
     storeCreditMnt: users.storeCreditMnt,
+    branchId: users.branchId,
   }).from(users).where(eq(users.id, userId)).limit(1);
   const user = rows[0];
   if (!user) return null;

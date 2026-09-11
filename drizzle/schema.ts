@@ -171,6 +171,14 @@ export const users = mysqlTable("users", {
    * owner's phone agree on what has been seen. NULL = never opened.
    */
   lastSeenNotificationId: int("lastSeenNotificationId"),
+  /**
+   * 2026-09-11 (migration 0064): the location a staff member works at. A
+   * store consultant (role 'staff') can only receive goods or count stock at
+   * this branch (server/inventory.ts). NULL for everyone else. The FK
+   * (SET NULL) is in the migration; declared loosely here because `branches`
+   * is defined further down this file.
+   */
+  branchId: int("branchId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -300,6 +308,16 @@ export const branches = mysqlTable("branches", {
   sortOrder: int("sortOrder").notNull().default(0),
   isActive: boolean("isActive").notNull().default(true),
   isFulfillmentDefault: boolean("isFulfillmentDefault").notNull().default(false),
+  // 2026-09-11 (migration 0064). `kind`: a 'warehouse' is a stock location,
+  // never a store -- not offered for pickup, not listed on the storefront.
+  // `countsTowardOnlineStock`: whether this shelf is part of what the website
+  // sells. The stores ring sales up in Smart POS, not here, so until that is
+  // synced their counts here only ever go up; switching this off for them
+  // makes online stock = warehouse stock. `lowStockThreshold`: per-location
+  // low-stock alert level (NULL = no alerts there).
+  kind: mysqlEnum("kind", ["store", "warehouse"]).notNull().default("store"),
+  countsTowardOnlineStock: boolean("countsTowardOnlineStock").notNull().default(true),
+  lowStockThreshold: int("lowStockThreshold"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -497,6 +515,71 @@ export const stockMovements = mysqlTable("stock_movements", {
 ]);
 export type StockMovement = typeof stockMovements.$inferSelect;
 export type StockMovementType = (typeof STOCK_MOVEMENT_TYPES)[number];
+
+/**
+ * 2026-09-11 (migration 0064): goods arriving at a location, recorded by
+ * barcode scan (server/inventory.ts) -- replaces the handwritten A4 list
+ * photographed into the work group chat. Lines are saved while scanning;
+ * nothing touches stock until the receipt is posted, exactly once.
+ * `scannedCode` is what the scanner read; `variantId` NULL = not in the
+ * catalogue (yet).
+ */
+export const stockReceipts = mysqlTable("stock_receipts", {
+  id: int("id").autoincrement().primaryKey(),
+  code: varchar("code", { length: 24 }).notNull().unique(),
+  branchId: int("branchId").notNull().references(() => branches.id, { onDelete: "cascade" }),
+  supplierName: varchar("supplierName", { length: 160 }),
+  supplierInvoiceNo: varchar("supplierInvoiceNo", { length: 80 }),
+  invoicePhotoUrl: varchar("invoicePhotoUrl", { length: 500 }),
+  status: mysqlEnum("status", ["draft", "posted", "cancelled"]).notNull().default("draft"),
+  note: varchar("note", { length: 500 }),
+  createdByUserId: int("createdByUserId").references(() => users.id, { onDelete: "set null" }),
+  postedByUserId: int("postedByUserId").references(() => users.id, { onDelete: "set null" }),
+  postedAt: timestamp("postedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [index("stock_receipts_branch_status_idx").on(table.branchId, table.status)]);
+
+export const stockReceiptLines = mysqlTable("stock_receipt_lines", {
+  id: int("id").autoincrement().primaryKey(),
+  receiptId: int("receiptId").notNull().references(() => stockReceipts.id, { onDelete: "cascade" }),
+  variantId: int("variantId").references(() => productVariants.id, { onDelete: "set null" }),
+  scannedCode: varchar("scannedCode", { length: 80 }).notNull(),
+  quantity: int("quantity").notNull(),
+}, table => [uniqueIndex("stock_receipt_lines_unique").on(table.receiptId, table.scannedCode)]);
+
+/**
+ * 2026-09-11 (migration 0064): stocktakes, including a location's opening
+ * count. The adjustment per line is counted - systemQtyAtFirstScan (the
+ * shelf when that line was FIRST scanned), so sales during a long count are
+ * not erased. A 'full' count also zeroes items nobody scanned. Store staff
+ * submit; warehouse/admin post.
+ */
+export const stockCounts = mysqlTable("stock_counts", {
+  id: int("id").autoincrement().primaryKey(),
+  code: varchar("code", { length: 24 }).notNull().unique(),
+  branchId: int("branchId").notNull().references(() => branches.id, { onDelete: "cascade" }),
+  isOpening: boolean("isOpening").notNull().default(false),
+  scope: mysqlEnum("scope", ["partial", "full"]).notNull().default("partial"),
+  status: mysqlEnum("status", ["draft", "submitted", "posted", "cancelled"]).notNull().default("draft"),
+  note: varchar("note", { length: 500 }),
+  createdByUserId: int("createdByUserId").references(() => users.id, { onDelete: "set null" }),
+  submittedAt: timestamp("submittedAt"),
+  postedByUserId: int("postedByUserId").references(() => users.id, { onDelete: "set null" }),
+  postedAt: timestamp("postedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [index("stock_counts_branch_status_idx").on(table.branchId, table.status)]);
+
+export const stockCountLines = mysqlTable("stock_count_lines", {
+  id: int("id").autoincrement().primaryKey(),
+  countId: int("countId").notNull().references(() => stockCounts.id, { onDelete: "cascade" }),
+  variantId: int("variantId").references(() => productVariants.id, { onDelete: "set null" }),
+  scannedCode: varchar("scannedCode", { length: 80 }).notNull(),
+  countedQty: int("countedQty").notNull(),
+  systemQtyAtFirstScan: int("systemQtyAtFirstScan"),
+  postedDelta: int("postedDelta"),
+}, table => [uniqueIndex("stock_count_lines_unique").on(table.countId, table.scannedCode)]);
 
 export const carts = mysqlTable("carts", {
   id: int("id").autoincrement().primaryKey(),

@@ -46,6 +46,8 @@ import {
   deleteBranch,
   getBranchStockForVariant,
   setBranchStock,
+  getStorefrontBranches,
+  updateAdminUserBranch,
   getStockMovementsForVariant,
   getStockLedgerHealth,
   recordInStoreSale,
@@ -209,6 +211,8 @@ import { IMAGE_MAX_DIMENSION, processUploadedImage, processUploadedImageVariants
 import { createQPayInvoice, getQPayAvailability } from "./qpay";
 import { sendNtfyTest } from "./notifications";
 import { notificationsRouter } from "./notificationsRouter";
+import { inventoryRouter } from "./inventoryRouter";
+import { assertImageSignature, imageContentTypes, processUploadedImageOrThrow } from "./_core/imageUpload";
 import { INTEGRATION_PROVIDERS } from "../shared/integrations";
 import { buildNotificationMessage, NOTIFICATION_GROUP_LABELS, NOTIFICATION_GROUPS, NTFY_TOPIC_FIELD } from "../shared/notification-events";
 import { createNoOpVerificationSession, createVerificationSession, getSessionStatus, isNoOpSessionExpired, normalizePhoneForVerifyMn } from "./verifyMn";
@@ -222,6 +226,28 @@ import { formatMnt } from "@shared/format";
 
 const slugSchema = z.string().trim().min(2).max(200).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens only.");
 const nullableText = (max: number) => z.string().trim().max(max).nullable().optional();
+
+/**
+ * `schema.partial()` for UPDATE endpoints, minus every `.default()`.
+ *
+ * 2026-09-11, found by server/inventory.integration.test.ts: in zod 4 a
+ * `.default()` still fires inside `.partial()` when the key is omitted. So
+ * every partial update silently wrote the create-time defaults for fields
+ * it never mentioned -- moving a branch up the list (which sends only
+ * sortOrder) also set isFulfillmentDefault=false, which turned off online
+ * delivery if it was the fulfilment branch; editing a news post reset its
+ * format to "standard"; reordering a featured brand re-activated it. The
+ * posts schema had already been bitten once (see its categoryIds comment).
+ * An update must only ever touch the fields it was given.
+ */
+function partialForUpdate<Shape extends z.ZodRawShape>(schema: z.ZodObject<Shape>) {
+  const shape: Record<string, z.ZodType> = {};
+  for (const [key, field] of Object.entries(schema.shape)) {
+    const base = field instanceof z.ZodDefault ? (field.unwrap() as z.ZodType) : (field as z.ZodType);
+    shape[key] = base.optional();
+  }
+  return z.object(shape) as unknown as z.ZodObject<{ [K in keyof Shape]: z.ZodOptional<Shape[K] extends z.ZodDefault<infer Inner extends z.ZodType> ? Inner : Shape[K]> }>;
+}
 // Shared between profile.updatePreferences (what a shopper says about
 // themselves) and the admin product form (what a product is tagged with) —
 // see PREMIUM-FEATURES.md TIER 1. Same vocabulary on both sides is what
@@ -296,7 +322,7 @@ const productVariantBaseSchema = z.object({
   isDefault: z.boolean().optional(),
 });
 const productVariantWriteSchema = productVariantBaseSchema;
-const productVariantUpdateSchema = productVariantBaseSchema.partial().extend({ id: z.number().int().positive() }).refine(
+const productVariantUpdateSchema = partialForUpdate(productVariantBaseSchema).extend({ id: z.number().int().positive() }).refine(
   value => Object.keys(value).some(key => key !== "id"),
   { message: "Provide at least one variant field to update." },
 );
@@ -310,12 +336,12 @@ const categoryWriteSchema = z.object({
   isActive: z.boolean(),
 });
 
-const productUpdateSchema = productWriteSchema.partial().extend({ id: z.number().int().positive() }).refine(
+const productUpdateSchema = partialForUpdate(productWriteSchema).extend({ id: z.number().int().positive() }).refine(
   value => Object.keys(value).some(key => key !== "id"),
   { message: "Provide at least one product field to update." },
 );
 
-const categoryUpdateSchema = categoryWriteSchema.partial().extend({ id: z.number().int().positive() }).refine(
+const categoryUpdateSchema = partialForUpdate(categoryWriteSchema).extend({ id: z.number().int().positive() }).refine(
   value => Object.keys(value).some(key => key !== "id"),
   { message: "Provide at least one category field to update." },
 );
@@ -353,7 +379,7 @@ const postWriteSchema = z.object({
   // no cron/worker involved.
   publishAt: z.coerce.date().nullable().optional(),
 });
-const postUpdateSchema = postWriteSchema.partial().extend({ id: z.number().int().positive() }).refine(
+const postUpdateSchema = partialForUpdate(postWriteSchema).extend({ id: z.number().int().positive() }).refine(
   value => Object.keys(value).some(key => key !== "id"),
   { message: "Provide at least one post field to update." },
 );
@@ -370,7 +396,7 @@ const featuredBrandWriteSchema = z.object({
   sortOrder: z.number().int().default(0),
   isActive: z.boolean().default(true),
 });
-const featuredBrandUpdateSchema = featuredBrandWriteSchema.partial().extend({ id: z.number().int().positive() }).refine(
+const featuredBrandUpdateSchema = partialForUpdate(featuredBrandWriteSchema).extend({ id: z.number().int().positive() }).refine(
   value => Object.keys(value).some(key => key !== "id"),
   { message: "Provide at least one brand field to update." },
 );
@@ -388,11 +414,30 @@ const branchWriteSchema = z.object({
   sortOrder: z.number().int().default(0),
   isActive: z.boolean().default(true),
   isFulfillmentDefault: z.boolean().default(false),
+  // 2026-09-11 (migration 0064) -- see the `branches` schema comment.
+  kind: z.enum(["store", "warehouse"]).default("store"),
+  countsTowardOnlineStock: z.boolean().default(true),
+  lowStockThreshold: z.number().int().min(0).max(100_000).nullable().optional(),
 });
-const branchUpdateSchema = branchWriteSchema.partial().extend({ id: z.number().int().positive() }).refine(
+const branchUpdateSchema = partialForUpdate(branchWriteSchema).extend({ id: z.number().int().positive() }).refine(
   value => Object.keys(value).some(key => key !== "id"),
   { message: "Provide at least one branch field to update." },
 );
+
+/**
+ * 2026-09-11: branch CRUD is marketing's (address, phone, photo), but which
+ * location online orders ship from, whether a location is a warehouse, and
+ * whether its shelf counts as online stock decide what the website sells.
+ * Those stay admin-only -- before this, marketing could re-point online
+ * fulfilment with one click.
+ */
+function assertBranchStockFieldsAllowed(role: string, input: { isFulfillmentDefault?: boolean; kind?: string; countsTowardOnlineStock?: boolean; lowStockThreshold?: number | null }, creating: boolean) {
+  if (role === "admin") return;
+  const touches = creating
+    ? input.isFulfillmentDefault === true || (input.kind !== undefined && input.kind !== "store") || input.countsTowardOnlineStock === false || (input.lowStockThreshold !== undefined && input.lowStockThreshold !== null)
+    : input.isFulfillmentDefault !== undefined || input.kind !== undefined || input.countsTowardOnlineStock !== undefined || input.lowStockThreshold !== undefined;
+  if (touches) throw new TRPCError({ code: "FORBIDDEN", message: "Онлайн захиалгын үндсэн салбар, агуулах, онлайн нөөц болон нөөцийн босгыг зөвхөн админ өөрчилнө." });
+}
 // PREMIUM-FEATURES.md TIER 4.
 const routineWriteSchema = z.object({
   name: z.string().trim().min(2).max(180),
@@ -401,7 +446,7 @@ const routineWriteSchema = z.object({
   discountPercent: z.number().int().min(0).max(100),
   isPublished: z.boolean(),
 });
-const routineUpdateSchema = routineWriteSchema.partial().extend({ id: z.number().int().positive() }).refine(
+const routineUpdateSchema = partialForUpdate(routineWriteSchema).extend({ id: z.number().int().positive() }).refine(
   value => Object.keys(value).some(key => key !== "id"),
   { message: "Provide at least one routine field to update." },
 );
@@ -418,7 +463,7 @@ const promotionWriteSchema = z.object({
   startsAt: z.coerce.date().nullable().optional(),
   endsAt: z.coerce.date().nullable().optional(),
 });
-const promotionUpdateSchema = promotionWriteSchema.partial().extend({ id: z.number().int().positive() }).refine(
+const promotionUpdateSchema = partialForUpdate(promotionWriteSchema).extend({ id: z.number().int().positive() }).refine(
   value => Object.keys(value).some(key => key !== "id"),
   { message: "Provide at least one promotion field to update." },
 );
@@ -439,7 +484,7 @@ const discountCodeWriteSchema = discountCodeBaseSchema.refine(
   value => (value.type === "percent" ? Boolean(value.percentValue) : Boolean(value.fixedAmountMnt)),
   { message: "percent төрөлд хувь, fixed төрөлд дүн заавал шаардлагатай.", path: ["percentValue"] },
 );
-const discountCodeUpdateSchema = discountCodeBaseSchema.partial().extend({ id: z.number().int().positive() }).refine(
+const discountCodeUpdateSchema = partialForUpdate(discountCodeBaseSchema).extend({ id: z.number().int().positive() }).refine(
   value => Object.keys(value).some(key => key !== "id"),
   { message: "Provide at least one discount code field to update." },
 );
@@ -454,7 +499,6 @@ const orderUpdateSchema = z.object({
   { message: "Provide an order update." },
 );
 
-const imageContentTypes = ["image/jpeg", "image/png", "image/webp"] as const;
 // 2026-09-08 (Admin overhaul, Phase A): 3 -> 6 roles, see drizzle/schema.ts's
 // `role` column comment and server/_core/trpc.ts for what each one can do.
 const staffRoleSchema = z.enum(["user", "staff", "finance", "marketing", "warehouse", "admin"]);
@@ -573,31 +617,11 @@ async function sendOrderStatusUpdateEmail(order: { orderNumber: string; customer
   });
 }
 
-function assertImageSignature(buffer: Buffer, contentType: (typeof imageContentTypes)[number]) {
-  const isJpeg = buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
-  const isPng = buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
-  const isWebp = buffer.length >= 12 && buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP";
-  const matches = (contentType === "image/jpeg" && isJpeg) || (contentType === "image/png" && isPng) || (contentType === "image/webp" && isWebp);
+// assertImageSignature / processUploadedImageOrThrow moved to
+// server/_core/imageUpload.ts (2026-09-11) so the inventory router can
+// accept supplier-invoice photos too.
 
-  if (!matches) {
-    throw new TRPCError({ code: "BAD_REQUEST", message: "The file content does not match the selected image type." });
-  }
-}
-
-// assertImageSignature above only checks the first few magic bytes, which a
-// truncated/otherwise-corrupt upload can still satisfy; sharp's actual
-// decode (inside processUploadedImage) is the real validity check. Wrapping
-// it here turns a raw decoder exception into a clean, translated
-// BAD_REQUEST instead of leaking an internal stack trace to the client.
-async function processUploadedImageOrThrow(buffer: Buffer, contentType: (typeof imageContentTypes)[number], maxDimension: number): Promise<Buffer> {
-  try {
-    return await processUploadedImage(buffer, contentType, maxDimension);
-  } catch {
-    throw new TRPCError({ code: "BAD_REQUEST", message: "Зургийг уншиж чадсангүй. Файл гэмтсэн эсвэл дэмжигдээгүй байж магадгүй." });
-  }
-}
-
-/** Same BAD_REQUEST translation as above, for the WebP + grid-derivative path. */
+/** Same BAD_REQUEST translation as processUploadedImageOrThrow, for the WebP + grid-derivative path. */
 async function processUploadedImageVariantsOrThrow(buffer: Buffer, maxDimension: number) {
   try {
     return await processUploadedImageVariants(buffer, maxDimension);
@@ -756,6 +780,7 @@ export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   notifications: notificationsRouter,
+  inventory: inventoryRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     // 2026-09-06: there is no more single-step auth.register. Tom initially
@@ -1122,7 +1147,9 @@ export const appRouter = router({
     // client/src/components/home/locations-data.ts's pure hardcoded array
     // -- StoreLocatorSection/SiteFooter/Checkout's pickup-branch picker all
     // read this live query now instead of importing that file.
-    branches: publicProcedure.query(() => getActiveBranches()),
+    // Stores only (2026-09-11): a warehouse is a stock location, never a
+    // place a shopper can pick up from or visit.
+    branches: publicProcedure.query(() => getStorefrontBranches()),
     // 2026-09-12: the storefront's single source for catalogue categories.
     // Home, /shop's discovery cards, the header drawer and the footer read
     // this instead of the old hardcoded categories-data.ts array, so an
@@ -1800,6 +1827,17 @@ export const appRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: error instanceof Error ? error.message : "Unable to update user role." });
       }
     }),
+    // 2026-09-11: which location a staff member works at -- a store
+    // consultant can only receive goods or count stock there.
+    updateUserBranch: adminProcedure.input(z.object({ userId: z.number().int().positive(), branchId: z.number().int().positive().nullable() })).mutation(async ({ ctx, input }) => {
+      try {
+        const updated = await updateAdminUserBranch(input.userId, input.branchId);
+        await logAdminAction({ actorUserId: ctx.user.id, action: "user.branch_updated", entityType: "user", entityId: input.userId, metadata: { branchId: input.branchId } });
+        return updated;
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Салбар оноож чадсангүй." });
+      }
+    }),
     // 2026-09-05: the admin-side half of "phone is now required for
     // everyone" (Tom's explicit choice) -- the account-recovery path for a
     // legacy account with no phone on file, or a mistyped one, since there
@@ -2274,17 +2312,34 @@ export const appRouter = router({
     // decrements stay warehouseProcedure-gated separately).
     branches: marketingProcedure.query(() => getAdminBranches()),
     createBranch: marketingProcedure.input(branchWriteSchema).mutation(async ({ ctx, input }) => {
-      const branch = await createBranch(input);
+      assertBranchStockFieldsAllowed(ctx.user.role, input, true);
+      let branch;
+      try {
+        branch = await createBranch(input);
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Салбар үүсгэж чадсангүй." });
+      }
       await logAdminAction({ actorUserId: ctx.user.id, action: "branch.created", entityType: "branch", entityId: branch.id, metadata: { name: branch.name } });
       return branch;
     }),
     updateBranch: marketingProcedure.input(branchUpdateSchema).mutation(async ({ ctx, input }) => {
-      const branch = await updateBranch(input);
+      assertBranchStockFieldsAllowed(ctx.user.role, input, false);
+      let branch;
+      try {
+        branch = await updateBranch(input);
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Салбарыг шинэчилж чадсангүй." });
+      }
       await logAdminAction({ actorUserId: ctx.user.id, action: "branch.updated", entityType: "branch", entityId: branch.id, metadata: { name: branch.name } });
       return branch;
     }),
     deleteBranch: marketingProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
-      const result = await deleteBranch(input.id);
+      let result;
+      try {
+        result = await deleteBranch(input.id);
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Салбарыг устгаж чадсангүй." });
+      }
       await logAdminAction({ actorUserId: ctx.user.id, action: "branch.deleted", entityType: "branch", entityId: input.id });
       return result;
     }),

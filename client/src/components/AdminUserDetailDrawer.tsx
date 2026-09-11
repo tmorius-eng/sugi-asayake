@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CreditCard, LoaderCircle, LogOut, Phone, ScanFace, ShieldAlert, ShieldCheck, Wallet, X } from "lucide-react";
+import { CreditCard, LoaderCircle, LogOut, Phone, ScanFace, ShieldAlert, ShieldCheck, Store, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { roleBadgeClass, roleLabel } from "@/lib/adminRoles";
@@ -46,6 +46,18 @@ export default function AdminUserDetailDrawer({ userId, role, onClose }: { userI
   // as opposed to the ADMIN_FACE_GATE_ENABLED env switch, which is the fix
   // for it misbehaving for everyone.
   const resetFace = trpc.admin.resetUserFaceEnrollment.useMutation({ onSuccess: refresh });
+
+  // 2026-09-11: staff -> branch assignment (see server/inventory.ts).
+  const branchesQuery = trpc.admin.branches.useQuery(undefined, { enabled: isAdmin });
+  const updateBranch = trpc.admin.updateUserBranch.useMutation({ onSuccess: refresh });
+  const onSaveBranch = async (branchId: number | null) => {
+    try {
+      await updateBranch.mutateAsync({ userId, branchId });
+      toast.success(branchId ? "Салбар оноолоо." : "Салбарыг цуцаллаа.");
+    } catch (error) {
+      toast.error(messageFrom(error));
+    }
+  };
   const onResetFace = async () => {
     try {
       await resetFace.mutateAsync({ userId });
@@ -239,6 +251,17 @@ export default function AdminUserDetailDrawer({ userId, role, onClose }: { userI
               actually applies to -- a plain customer has no /admin access and
               therefore never enrolls a face, so the control would be
               meaningless noise on their drawer. */}
+          {/* 2026-09-11: where this staff member works. A store consultant
+              (staff) can only receive goods and count stock at this branch. */}
+          {isAdmin && (detail.role === "staff" || detail.role === "warehouse") && <div className="mt-4 rounded-2xl border border-[var(--a-border)] p-4">
+            <p className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-[.13em] text-[var(--a-faint)]"><Store size={13} /> АЖИЛЛАДАГ САЛБАР</p>
+            <p className="mt-1 text-[11px] leading-4 text-[var(--a-faint)]">{detail.role === "staff" ? "Дэлгүүрийн зөвлөх зөвхөн энэ салбарын барааг хүлээн авч, тоолж чадна." : "Агуулахын ажилтан бүх салбарт ажиллаж болно; энд зөвхөн үндсэн байршлыг заана."}</p>
+            <select value={detail.branchId ?? ""} disabled={updateBranch.isPending} onChange={event => void onSaveBranch(event.target.value ? Number(event.target.value) : null)} className="mt-3 h-10 w-full rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-xs outline-none focus:border-[#df1f3d]" aria-label="Ажилладаг салбар">
+              <option value="">Салбар оноогоогүй</option>
+              {(branchesQuery.data ?? []).filter(branch => branch.isActive).map(branch => <option key={branch.id} value={branch.id}>{branch.name}{branch.kind === "warehouse" ? " (агуулах)" : ""}</option>)}
+            </select>
+          </div>}
+
           {isAdmin && detail.role !== "user" && <div className="mt-4 rounded-2xl border border-[var(--a-border)] p-4">
             <p className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-[.13em] text-[var(--a-faint)]"><ScanFace size={13} /> ЦАРАЙН БҮРТГЭЛ</p>
             <p className="mt-1 text-[11px] leading-4 text-[var(--a-faint)]">Админ хэсэгт нэвтрэхэд царайгаар нэмэлт баталгаажуулалт хийгддэг. Хэрэв тухайн хүнийг таньж чадахгүй болсон бол (нүдний шил, сахал, камер солигдсон гэх мэт) бүртгэлийг нь цуцлаад дахин бүртгүүлж болно. Нууц үгэнд нөлөөлөхгүй.</p>

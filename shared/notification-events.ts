@@ -72,6 +72,9 @@ export type NotificationPayloads = {
   "order.cancelled_by_customer": { orderNumber: string; totalMnt: number; itemCount: number };
   "refund.recorded": { orderNumber: string; refundMnt: number; restocked: boolean };
   "stock.low_digest": { count: number; items: { sku: string; name: string; quantity: number }[] };
+  "receipt.posted": { code: string; branchName: string; supplierName: string | null; lineCount: number; pieces: number; unknownCount: number };
+  "count.submitted": { code: string; branchName: string; lineCount: number; varianceLines: number };
+  "count.posted": { code: string; branchName: string; adjustedLines: number; netDelta: number; isOpening: boolean };
   "integration.test": { groupLabel: string };
 };
 export type NotificationEventType = keyof NotificationPayloads;
@@ -96,6 +99,9 @@ export const NOTIFICATION_EVENTS: Record<NotificationEventType, EventSpec> = {
   "order.cancelled_by_customer": { label: "Харилцагч захиалгаа цуцалсан", groups: ["warehouse", "admin"], priority: 4, tags: ["x"], clickSection: "orders" },
   "refund.recorded": { label: "Буцаан олголт бүртгэгдсэн", groups: ["finance", "admin"], priority: 3, tags: ["money_with_wings"], clickSection: "orders" },
   "stock.low_digest": { label: "Нөөц дуусч буй бараа (өдрийн тойм)", groups: ["warehouse", "admin"], priority: 3, tags: ["chart_with_downwards_trend"], clickSection: "products" },
+  "receipt.posted": { label: "Бараа хүлээн авсан", groups: ["warehouse", "admin"], priority: 3, tags: ["inbox_tray"], clickSection: "receiving" },
+  "count.submitted": { label: "Тооллого батлуулахаар ирсэн", groups: ["warehouse", "admin"], priority: 4, tags: ["clipboard"], clickSection: "receiving" },
+  "count.posted": { label: "Тооллого батлагдсан", groups: ["admin"], priority: 3, tags: ["white_check_mark"], clickSection: "receiving" },
   "integration.test": { label: "Туршилтын мэдэгдэл", groups: [], priority: 3, tags: ["bell"], clickSection: "notifications" },
 };
 
@@ -142,6 +148,18 @@ export function buildNotificationMessage<K extends NotificationEventType>(type: 
       const shown = p.items.slice(0, 8).map(item => `• ${item.name} (${item.sku}) — ${item.quantity}`).join("\n");
       const more = p.count > 8 ? `\n… болон өөр ${p.count - 8}` : "";
       return { title: `Нөөц дуусч буй ${p.count} бараа`, message: `${shown}${more}` };
+    }
+    case "receipt.posted": {
+      const p = payload as NotificationPayloads["receipt.posted"];
+      return { title: `Бараа хүлээн авлаа ${p.code}`, message: `${p.branchName}: ${p.lineCount} төрөл · ${pieces(p.pieces)}${p.supplierName ? `\nНийлүүлэгч: ${p.supplierName}` : ""}${p.unknownCount ? `\n⚠ ${p.unknownCount} бүртгэлгүй код нөөцөд ороогүй` : ""}` };
+    }
+    case "count.submitted": {
+      const p = payload as NotificationPayloads["count.submitted"];
+      return { title: `Тооллого батлах ${p.code}`, message: `${p.branchName}: ${p.lineCount} бараа тоолсон, ${p.varianceLines} нь системээс зөрүүтэй. Батлахыг хүлээж байна.` };
+    }
+    case "count.posted": {
+      const p = payload as NotificationPayloads["count.posted"];
+      return { title: `${p.isOpening ? "Эхний үлдэгдэл" : "Тооллого"} батлагдлаа ${p.code}`, message: `${p.branchName}: ${p.adjustedLines} бараа засагдсан, нийт ${p.netDelta > 0 ? "+" : ""}${p.netDelta} ширхэг.` };
     }
     case "integration.test": {
       const p = payload as NotificationPayloads["integration.test"];
