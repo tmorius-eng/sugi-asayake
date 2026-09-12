@@ -343,6 +343,10 @@ Tom утсаараа (192.168.88.6, LAN) туршихад /shop-ийн "Дара
 
 Засвар: `catalog.list`-д `placeholderData: keepPreviousData` (grid унмаунт болохгүй, 24 карт хэвээр), pager render-ийн ДАРАА `useEffect`-ээр **instant** scroll (`client/src/lib/scroll.ts` `scrollToNow` — `html{scroll-behavior:smooth}`-ыг нэг frame override), sticky header-ийн өндрийг хасна; `client/src/hooks/useScrollToTopOnNavigate.ts` Router-т — forward navigation бүр 0-ээс эхэлнэ, **back/forward-д хүрэхгүй** (popstate flag), hash-тай бол хүрэхгүй. Хэмжсэн: Дараах → grid header-ийн доор 75px-д тогтвортой; footer линк → /privacy scrollY 0.
 
+## 📱 Демо / утсаар турших (2026-09-12) — `scripts/demo.ps1`
+
+`.\scripts\demo.ps1` = production build + `NODE_ENV=production node dist/index.js` (3000 порт, LAN IP-г хэвлэнэ, access log асаалттай). `-Tunnel` нэмбэл Cloudflare quick tunnel (`https://<random>.trycloudflare.com`) — **ямар ч сүлжээнээс, HTTPS тул утсан дээр камер/царайны хаалга ажиллана**; оффисын Wi-Fi ихэвчлэн төхөөрөмж хоорондын холболтыг хаадаг тул LAN IP оффист ажиллахгүй байж болно. cloudflared суулгах (нэг удаа, Tom өөрөө): `winget install --id Cloudflare.cloudflared`. ⚠️ Tunnel нээлттэй байхад сайт интернэтэд ил (хамгаалалтууд бүгд асаалттай: face gate, rate limit, CSRF, probe blocker); demo дуусмагц `Ctrl+C`. Demo-ийн захиалгууд **бодит Aiven**-д орно — бэлнээр захиалуулж, дараа нь /admin-аас цуцлах. `pnpm start` скрипт нь bash синтакс (`NODE_ENV=…`) тул Windows дээр ажиллахгүй — demo.ps1 ашигла.
+
 ## ⚠️ (2026-09-12) LAN/http дээр туршихад олдсон 2 алдаа — "localhost дээр ажилласан" гэдэг нь хангалтгүй
 
 1. **`crypto.randomUUID()` зөвхөн secure context-д байдаг** (https эсвэл localhost). Утаснаас `http://192.168.88.6`-ээр /checkout нээхэд render дээр унасан. Localhost-ын бүх тест үүнийг харуулдаггүй. Одоо `client/src/lib/requestId.ts` `newRequestId()` (randomUUID → getRandomValues v4 → Math.random). **Шинэ код secure-context-only API (`randomUUID`, `navigator.clipboard`, `navigator.share`, `getUserMedia`) ашиглавал заавал fallback/guard тавь.** Царайны камер нь HTTPS-гүйгээр утсан дээр ажиллахгүй — энэ нь шийдэгдэхгүй, HTTPS л хэрэгтэй.
