@@ -100,7 +100,6 @@ export default function CarouselShelf({
           {title ? <h2>{title}</h2> : null}
           {description ? <p className="carousel-shelf-description">{description}</p> : null}
         </div>
-        {viewAllHref ? <a className="carousel-shelf-all-link" href={viewAllHref}>{viewAllLabel} <ChevronRight size={16} /></a> : null}
       </div>
       {loading ? (
         <div className="carousel-shelf-track" aria-busy="true" aria-label="Ачаалж байна">
@@ -117,6 +116,10 @@ export default function CarouselShelf({
           <button type="button" className="carousel-shelf-btn next" onClick={() => scrollBy(1)} disabled={!canScrollNext} aria-label="Дараагийн бараанууд"><ChevronRight size={18} /></button>
         </div>
       )}
+      {/* 2026-09-12: the "see all" link sits UNDER the rail as a bordered
+          pill, where the reference puts it -- above the rail it competed
+          with the heading for the eye. */}
+      {viewAllHref ? <div className="carousel-shelf-footer"><a className="carousel-shelf-all-link" href={viewAllHref}>{viewAllLabel} <ChevronRight size={16} /></a></div> : null}
     </section>
   );
 }

@@ -95,31 +95,33 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
               <img src="/cdn/sugi-logo-transparent-clean_fee66cad.png" alt="SUGI ASAYAKE" />
               {!marketingNav && backLabel ? <span>{backLabel}</span> : null}
             </Link>
-            {/* Moved to sit directly beside the logo instead of its own
-                full-width row below the header -- same nav, same items. */}
-            {marketingNav && (
-              <nav className="commerce-marketing-nav" aria-label="Нүүр хуудасны цэс">
-                {navItems.map(item => item.anchor
-                  ? <a href={item.href} key={item.slot}>{item.label}</a>
-                  : <Link href={item.href} key={item.slot}>{item.label}</Link>)}
-              </nav>
-            )}
           </div>
+          {/* 2026-09-12 (Cosme Kitchen restyle): the nav is its own middle
+              column of the header rather than a run of links beside the
+              logo, so it sits centred in the row the way the reference's
+              does. It is still opt-in per caller (Home only). */}
+          {marketingNav && (
+            <nav className="commerce-marketing-nav" aria-label="Нүүр хуудасны цэс">
+              {navItems.map(item => item.anchor
+                ? <a href={item.href} key={item.slot}>{item.label}</a>
+                : <Link href={item.href} key={item.slot}>{item.label}</Link>)}
+            </nav>
+          )}
           <div className="commerce-header-actions">
             <HeaderSearch />
-            {/* 2026-09-07: real duplicate, caught live (Tom's own screenshot) --
-                marketingNavItems (Home only) already leads with "Дэлгүүр" on
-                the left; this plain-text link is only needed on every OTHER
-                page, where there's no marketing nav to provide it. The mobile
-                drawer already avoided this exact duplication (its own
-                marketingNavItems.filter(item => item.label !== "Дэлгүүр")
-                below) -- this brings desktop in line with that, rather than
-                inventing a new pattern. */}
-            {!marketingNav && <Link href="/shop" className={location.startsWith("/shop") ? "is-current" : ""}>Дэлгүүр</Link>}
+            {/* 2026-09-12 (Tom): the plain-text "Дэлгүүр" link is gone from
+                the header entirely. On Home the marketing nav already leads
+                with it; on every other page the bottom bar (phone) and the
+                drawer carry it, and the reference header this was restyled
+                against has no text link beside its icons. */}
             {user && (
               <Link href="/profile?tab=wishlist" className="wishlist-link" aria-label={wishlistCount > 0 ? `Хүслийн жагсаалт, ${wishlistCount} бараатай` : "Хүслийн жагсаалт"}>
-                <Heart size={15} aria-hidden="true" /> Хүслийн жагсаалт
-                {wishlistCount > 0 && <span className="grid size-5 place-items-center rounded-full bg-[#f0b52d] text-[10px] text-[#17181b]">{wishlistCount}</span>}
+                <Heart size={19} aria-hidden="true" />
+                {/* The label stays in the DOM for a screen reader and for
+                    the mobile drawer; the header itself shows icons only,
+                    as the reference does. */}
+                <span className="header-action-label">Хүслийн жагсаалт</span>
+                {wishlistCount > 0 && <span className="header-action-count">{wishlistCount}</span>}
               </Link>
             )}
             {/* Order history lives inside Профайл -> Захиалга (with a
@@ -130,18 +132,26 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
               {user ? (
                 <span className="profile-avatar-chip">{user.avatarUrl ? <img src={user.avatarUrl} alt="" /> : initial}</span>
               ) : (
-                <User size={15} aria-hidden="true" />
+                <User size={19} aria-hidden="true" />
               )}
-              <span>Профайл</span>
+              <span className="header-action-label">Профайл</span>
             </Link>
             <button type="button" onClick={onCartOpen} aria-label={cartCount > 0 ? `Сагс нээх, ${cartCount} бараатай` : "Сагс нээх"}>
-              <ShoppingBag size={15} aria-hidden="true" /> Сагс
-              {cartCount > 0 && <span className="grid size-5 place-items-center rounded-full bg-[#f0b52d] text-[10px] text-[#17181b]">{cartCount}</span>}
+              <ShoppingBag size={19} aria-hidden="true" />
+              <span className="header-action-label">Сагс</span>
+              {cartCount > 0 && <span className="header-action-count">{cartCount}</span>}
             </button>
             <button type="button" className="commerce-menu-toggle" aria-expanded={menuOpen} aria-label={menuOpen ? "Цэс хаах" : "Цэс нээх"} onClick={() => setMenuOpen(open => !open)}>
               {menuOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
           </div>
+        </div>
+        {/* The reference's second header row: one real, always-visible
+            search field, centred. Same HeaderSearch component (and the same
+            catalog.search call) as the magnifier in the row above -- only
+            the trigger differs. */}
+        <div className="commerce-header-searchrow">
+          <HeaderSearch variant="inline" />
         </div>
         <div className={`commerce-mobile-menu ${menuOpen ? "open" : ""}`}>
           {/* 2026-09-07 (bsb.mn mobile-UX pass): now that BottomNavBar.tsx

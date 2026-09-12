@@ -2733,3 +2733,575 @@ html[data-admin-theme="dark"] .tox .tox-edit-area__iframe { background-color: #1
    is tracked there, so there is nothing for a staff member to consent to. Set
    by client/src/pages/AdminDashboard.tsx. */
 body.admin-route #stcm-wrapper { display: none !important; }
+
+/* ============================================================================
+   COSME KITCHEN RESTYLE -- 2026-09-12
+   ----------------------------------------------------------------------------
+   Tom chose cosmekitchen-webstore.jp (now MASH GO GREEN STORE) as the
+   direction for the homepage and asked for everything useful from it:
+   "premium, professional". Every number below was MEASURED on that site with
+   Playwright (computed styles and bounding boxes at 1440px), not eyeballed:
+
+     type      Inter, body 16px, headings 26px / weight 400 / .1em tracking,
+               centred, 35px of air to their content
+     colour    page #fff, cream band #fafaf5, chip #f8f7ef, ink #212121,
+               muted #6e6e6e, hairline #e5e5e5, gold #93781e for ranks
+     layout    1108px container, ~80px between sections
+     surface   1px hairline borders, 4px radius, NO shadows anywhere
+
+   This is a layer at the end of the file on purpose: every rule here
+   overrides an earlier one by source order, so the whole restyle can be
+   lifted out in one block, and the pre-restyle homepage is one checkout away
+   at git tag backup/pre-cosmekitchen-2026-09-12.
+
+   Scope: the storefront chrome (header, footer) and the homepage. /shop,
+   product pages and /admin keep their own palette -- nothing here changes
+   :root, so no shadcn/admin token is touched. The font is re-pointed by
+   redefining --font-body/--font-display on the storefront roots only, which
+   every var() inside them inherits.
+   ========================================================================= */
+
+:root {
+  --ck-ink: #212121;
+  --ck-muted: #6e6e6e;
+  --ck-line: #e5e5e5;
+  --ck-cream: #fafaf5;
+  --ck-chip: #f8f7ef;
+  --ck-gold: #93781e;
+  --ck-container: 1108px;
+  --ck-gap: clamp(48px, 5.6vw, 80px);
+}
+
+.sugi-site,
+.commerce-header,
+.site-footer,
+.mobile-sticky-bar {
+  --font-body: "Inter", "Golos Text", sans-serif;
+  --font-display: "Inter", "Golos Text", sans-serif;
+  font-family: var(--font-body);
+}
+.sugi-site { background: #fff; color: var(--ck-ink); }
+/* The page itself, not just the wrapper -- the body paints the area beyond
+   the last section and behind any overscroll. :has() keeps this to the
+   homepage; /shop and the rest keep the Linen palette they were tuned for. */
+body:has(.sugi-site) { background: #fff; }
+
+/* --- Header ------------------------------------------------------------- */
+/* Reference: 65px white bar, hairline underneath, logo left, nav centred at
+   15px/400/.05em, icon actions right. The 4px brand gradient stripe and the
+   translucent blur are gone -- both read as 2015 chrome next to it. */
+.commerce-header {
+  padding: 0 max(20px, calc((100% - 1340px) / 2));
+  border-bottom: 1px solid var(--ck-line);
+  background: #fff;
+  backdrop-filter: none;
+}
+.commerce-header::before { display: none; }
+.commerce-header-inner {
+  display: grid;
+  width: 100%;
+  min-height: 65px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+/* Without a marketing nav there is no middle column to hold; the actions
+   still sit hard right. */
+.commerce-header-inner:not(:has(.commerce-marketing-nav)) { grid-template-columns: minmax(0, 1fr) auto; }
+.commerce-brand img { width: 160px; }
+.commerce-brand > span:last-child { border-left-color: var(--ck-line); color: var(--ck-muted); font-weight: 500; letter-spacing: .1em; }
+.commerce-marketing-nav { justify-content: center; gap: clamp(14px, 2.2vw, 34px); }
+.commerce-marketing-nav a {
+  color: var(--ck-ink);
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: .05em;
+  white-space: nowrap;
+}
+.commerce-marketing-nav a:hover { color: var(--ck-muted); }
+.commerce-header-actions { justify-content: flex-end; gap: 18px; }
+/* Icons only, the reference's own four. The words stay in the DOM for
+   assistive technology (and for the mobile drawer, which shows them). */
+.header-action-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.commerce-header-actions > a,
+.commerce-header-actions .wishlist-link,
+.commerce-header-actions .profile-link {
+  position: relative;
+  display: inline-grid;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  place-items: center;
+  color: var(--ck-ink);
+  font-size: 14px;
+  font-weight: 400;
+}
+.commerce-header-actions > a::after { display: none; }
+.commerce-header-actions > a:hover,
+.commerce-header-actions .wishlist-link:hover,
+.commerce-header-actions .profile-link:hover { color: var(--ck-muted); }
+/* The cart pill becomes the fourth icon. */
+.commerce-header-actions button {
+  display: inline-grid;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  place-items: center;
+  border-radius: 0;
+  background: none;
+  color: var(--ck-ink);
+}
+.commerce-header-actions button:hover { background: none; color: var(--ck-muted); transform: none; }
+.commerce-header-actions button span:not(.header-action-label):not(.header-action-count) { display: none; }
+.header-action-count {
+  position: absolute;
+  top: -7px;
+  right: -9px;
+  display: grid;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+}
+.header-search .header-search-trigger { width: 24px; height: 24px; color: var(--ck-ink); }
+.header-search .header-search-trigger:hover { background: none; color: var(--ck-muted); }
+/* Second row: one real search field, centred, 380x40 as measured. */
+.commerce-header-searchrow { display: flex; justify-content: center; padding: 0 0 14px; }
+.header-search--inline { width: min(380px, 100%); }
+.header-search-field { display: flex; align-items: center; height: 40px; border: 1px solid var(--ck-line); border-radius: 4px; background: #fff; }
+.header-search--inline .header-search-input {
+  height: 38px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--ck-ink);
+  font-size: 14px;
+}
+.header-search--inline .header-search-input::placeholder { color: #9a9a9a; }
+.header-search-submit { display: grid; width: 40px; height: 38px; flex: 0 0 auto; place-items: center; border: 0; background: none; color: var(--ck-muted); cursor: pointer; }
+.header-search-submit:hover { color: var(--ck-ink); }
+.header-search--inline .header-search-panel { top: calc(100% + 6px); right: 0; left: 0; width: auto; border: 1px solid var(--ck-line); border-radius: 4px; background: #fff; box-shadow: 0 10px 30px rgba(0, 0, 0, .07); }
+.header-search-panel { border-radius: 4px; background: #fff; box-shadow: 0 10px 30px rgba(0, 0, 0, .07); }
+.header-search-result:hover { background: var(--ck-chip); }
+.header-search-viewall { border-radius: 4px; background: var(--ck-chip); color: var(--ck-ink); font-weight: 500; }
+.header-search-viewall:hover { background: var(--ck-line); color: var(--ck-ink); }
+
+/* --- Shared section rhythm ---------------------------------------------- */
+/* Every homepage heading: centred, light, tracked, with 35px to its content
+   -- the single strongest signal of the reference's register. The <em>
+   accent keeps this site's red (Tom's own call on the "why choose us"
+   title), so the restyle never silently drops brand colour. */
+.sugi-site .editorial-heading,
+.sugi-site .carousel-shelf-heading h2,
+.sugi-site .fbrand-title,
+.sugi-site .kw-box h2,
+.sugi-site .footer-cta-banner h2 {
+  font-family: var(--font-display);
+  font-size: clamp(21px, 2vw, 26px);
+  font-weight: 400;
+  letter-spacing: .1em;
+  line-height: 1.5;
+  color: var(--ck-ink);
+  text-align: center;
+}
+.sugi-site .editorial-heading em,
+.sugi-site .carousel-shelf-heading h2 em { color: var(--primary-text); font-style: normal; text-decoration: none; }
+.sugi-site .page-section { width: min(var(--ck-container), calc(100% - 40px)); }
+.sugi-site .eyebrow { color: var(--ck-muted); font-size: 11px; font-weight: 500; letter-spacing: .18em; }
+.sugi-site .eyebrow span { display: none; }
+.sugi-site p { color: var(--ck-ink); }
+
+/* Buttons: the reference's pill outline, and one filled brand button. */
+.sugi-site .button { min-height: 44px; padding: 0 26px; border-radius: 999px; font-size: 14px; font-weight: 400; letter-spacing: .06em; }
+.sugi-site .button:hover { transform: none; }
+.sugi-site .button-primary { background: var(--primary); box-shadow: none; }
+.sugi-site .quiet-link,
+.sugi-site .inline-link { color: var(--ck-ink); font-size: 14px; font-weight: 400; letter-spacing: .04em; }
+.sugi-site .quiet-link:hover,
+.sugi-site .inline-link:hover { color: var(--ck-muted); }
+
+/* --- Hero: a row of square feature tiles -------------------------------- */
+.sugi-site .hero-section {
+  display: block;
+  min-height: 0;
+  padding: clamp(24px, 3vw, 40px) 0 0;
+  background: #fff;
+}
+.hero-rail-wrap { position: relative; }
+.hero-rail {
+  display: flex;
+  gap: 16px;
+  padding: 0 max(16px, calc((100% - 1380px) / 2));
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.hero-rail::-webkit-scrollbar { display: none; }
+.hero-rail-slide {
+  flex: 0 0 min(450px, 74vw);
+  margin: 0;
+  scroll-snap-align: center;
+}
+.hero-rail-link { display: block; overflow: hidden; background: var(--ck-chip); }
+.hero-rail-slide img { width: 100%; aspect-ratio: 1; object-fit: cover; transition: opacity .25s var(--ease-out); }
+.hero-rail-link:hover img { opacity: .88; }
+.hero-rail-slide figcaption { margin-top: 14px; color: var(--ck-ink); font-size: 14px; text-align: center; }
+.hero-rail-dots { display: flex; justify-content: center; gap: 10px; margin-top: 18px; }
+.hero-rail-dot { width: 8px; height: 8px; padding: 0; border: 0; border-radius: 50%; background: #d8d8d8; cursor: pointer; transition: background .18s var(--ease-out); }
+.hero-rail-dot.is-active { background: var(--ck-ink); }
+
+/* Hero copy, now centred under the photographs. */
+.sugi-site .hero-copy {
+  width: min(var(--ck-container), calc(100% - 40px));
+  margin: clamp(40px, 4.6vw, 64px) auto 0;
+  padding: 0;
+  text-align: center;
+}
+.sugi-site .hero-copy h1 {
+  max-width: 22ch;
+  margin: 14px auto 0;
+  font-size: clamp(26px, 3vw, 38px);
+  font-weight: 400;
+  letter-spacing: .04em;
+  line-height: 1.45;
+  text-shadow: none;
+}
+.sugi-site .hero-copy h1 strong::after { display: none; }
+.sugi-site .hero-description { max-width: 60ch; margin: 18px auto 0; color: var(--ck-muted); font-size: 15px; font-weight: 400; line-height: 1.9; }
+.sugi-site .hero-actions { justify-content: center; margin-top: 28px; gap: 22px; }
+.sugi-site .hero-trust { justify-content: center; margin-top: 30px; color: var(--ck-muted); }
+.sugi-site .hero-trust strong { color: var(--ck-ink); font-size: 14px; font-weight: 500; }
+.sugi-site .hero-trust span { font-size: 12px; }
+.sugi-site .hero-trust div { text-align: left; }
+
+/* --- Popular keywords ---------------------------------------------------- */
+.kw-section { width: min(var(--ck-container), calc(100% - 40px)); margin: var(--ck-gap) auto 0; }
+.kw-box { padding: clamp(24px, 3vw, 36px) clamp(18px, 3vw, 40px); border: 1px solid var(--ck-line); border-radius: 4px; background: var(--ck-cream); }
+.kw-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 26px 0 0; padding: 0; list-style: none; }
+.kw-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 16px;
+  border: 1px solid var(--ck-line);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--ck-ink);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background .16s var(--ease-out), border-color .16s var(--ease-out);
+}
+.kw-chip:hover { border-color: var(--ck-ink); background: var(--ck-chip); }
+
+/* --- Product rails ------------------------------------------------------- */
+.sugi-site .carousel-shelf-section { width: min(var(--ck-container), calc(100% - 40px)); margin: 0 auto; padding: var(--ck-gap) 0 0; }
+.sugi-site .carousel-shelf-heading { display: block; margin-bottom: 35px; text-align: center; }
+.sugi-site .carousel-shelf-heading h2 { margin: 0; }
+.sugi-site .carousel-shelf-description { max-width: 60ch; margin: 12px auto 0; color: var(--ck-muted); font-size: 14px; font-weight: 400; text-align: center; }
+/* The "see all" link moves below the rail as a bordered pill, where the
+   reference puts it. */
+.sugi-site .carousel-shelf-heading .carousel-shelf-all-link {
+  display: inline-flex;
+  min-height: 44px;
+  margin-top: 26px;
+  padding: 0 40px;
+  border: 1px solid var(--ck-line);
+  border-radius: 999px;
+  color: var(--ck-ink);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: .06em;
+}
+.sugi-site .carousel-shelf-heading .carousel-shelf-all-link:hover { gap: 6px; border-color: var(--ck-ink); color: var(--ck-ink); background: var(--ck-chip); }
+.sugi-site .carousel-shelf-track { gap: 14px; }
+.sugi-site .shelf-card-slot { width: 207px !important; }
+.sugi-site .carousel-shelf-btn { top: 38%; width: 34px; height: 34px; border: 1px solid var(--ck-line); background: #fff; color: var(--ck-ink); box-shadow: none; }
+.sugi-site .carousel-shelf-btn.prev { left: -17px; }
+.sugi-site .carousel-shelf-btn.next { right: -17px; }
+.sugi-site .carousel-shelf-empty { border-radius: 4px; background: var(--ck-cream); color: var(--ck-muted); }
+
+/* The card itself -- shared with ProductDetail's related-products rail, so
+   one treatment site-wide, as the reference has. */
+.shelf-card {
+  display: block;
+  overflow: visible;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.shelf-card:hover { box-shadow: none; transform: none; }
+.shelf-card-rank { position: static; display: block; width: auto; height: auto; margin-bottom: 6px; background: none; color: var(--ck-gold); font-size: 15px; font-weight: 300; letter-spacing: .04em; }
+.shelf-card-frame { display: block; border: 1px solid var(--ck-line); border-radius: 4px; background: #fff; transition: border-color .18s var(--ease-out); }
+.shelf-card:hover .shelf-card-frame { border-color: #cfcfcf; }
+.shelf-card-image { position: relative; display: block; }
+.shelf-card-image img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #fff; }
+.shelf-card-body { display: block; padding: 10px 12px 14px; }
+.shelf-card-body p { margin: 0 -12px 8px; padding: 4px 12px; background: var(--ck-chip); color: var(--ck-muted); font-size: 11px; font-weight: 400; letter-spacing: .04em; text-transform: none; }
+.shelf-card-body h3 {
+  margin: 0;
+  color: var(--ck-ink);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.55;
+}
+.shelf-card-price { display: block; margin-top: 10px; }
+.shelf-card-price strong { color: var(--ck-ink); font-size: 18px; font-weight: 300; letter-spacing: .02em; }
+.shelf-card-price s { margin-left: 8px; color: #9a9a9a; font-size: 12px; }
+.shelf-card-rating { display: flex; align-items: center; gap: 5px; margin: 8px 0 0; color: var(--ck-muted); font-size: 11px; font-weight: 400; }
+.shelf-card-stars { display: inline-flex; gap: 1px; color: #e0b93c; }
+.shelf-card-rating em { color: var(--ck-muted); font-style: normal; }
+.sugi-site .shop-sale-badge { top: 6px; right: 6px; border-radius: 3px; font-size: 10px; }
+
+/* --- Featured brands ----------------------------------------------------- */
+.sugi-site .fbrand-section { padding: var(--ck-gap) 0 0; }
+.sugi-site .fbrand-header { padding-left: 0; }
+.sugi-site .fbrand-title { margin: 0 auto; }
+.sugi-site .fbrand-viewport { margin-top: 35px; }
+.sugi-site .fbrand-photo { background: var(--ck-chip); }
+.sugi-site .fbrand-logo { background: #fff; }
+.sugi-site .fbrand-arrow { color: #c8c8c8; }
+.sugi-site .fbrand-arrow:hover { color: var(--ck-ink); }
+.sugi-site .fbrand-all {
+  min-height: 44px;
+  padding: 0 40px;
+  border: 1px solid var(--ck-line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ck-ink);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: .06em;
+}
+.sugi-site .fbrand-all:hover { border-color: var(--ck-ink); background: var(--ck-chip); color: var(--ck-ink); transform: none; }
+
+/* --- Categories ---------------------------------------------------------- */
+/* The reference shows categories as small round photographs with a 13px
+   label under each -- our own endless swipe rail keeps that behaviour, the
+   tile just gets the reference's shape. The big "anchor" photo block and
+   the footnote below the rail go: neither exists in the reference, and both
+   were what made this section read as a template. */
+.sugi-site .cat-mosaic-section { width: min(var(--ck-container), calc(100% - 40px)); margin: 0 auto; padding: var(--ck-gap) 0 0; }
+.sugi-site .cat-mosaic-top { display: block; margin: 0; text-align: center; }
+.sugi-site .cat-mosaic-heading-block { display: block; padding: 0; background: none; }
+.sugi-site .cat-mosaic-heading-block > p { max-width: 60ch; margin: 12px auto 0; color: var(--ck-muted); font-size: 14px; font-weight: 400; }
+.sugi-site .cat-mosaic-heading-block .quiet-link { display: none; }
+.sugi-site .cat-mosaic-anchor { display: none; }
+.sugi-site .cat-mosaic-note { display: none; }
+.sugi-site .cat-rail-wrap { margin-top: 35px; }
+.sugi-site .cat-rail { gap: 8px; }
+.sugi-site .cat-rail-card { flex: 0 0 129px; }
+.sugi-site .cat-mosaic-item {
+  align-items: center;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  text-align: center;
+}
+.sugi-site .cat-mosaic-item:hover { box-shadow: none; }
+.sugi-site .cat-mosaic-item-photo {
+  width: 110px;
+  height: 110px;
+  padding: 12px;
+  border: 1px solid var(--ck-line);
+  border-radius: 50%;
+  background: #fff;
+  transition: border-color .18s var(--ease-out);
+}
+.sugi-site .cat-mosaic-item:hover .cat-mosaic-item-photo { border-color: #cfcfcf; }
+.sugi-site .cat-mosaic-item-body { padding: 12px 4px 0; text-align: center; }
+.sugi-site .cat-mosaic-item-title { font-size: 13px; font-weight: 400; letter-spacing: .02em; }
+.sugi-site .cat-mosaic-item-detail { display: none; }
+.sugi-site .cat-mosaic-item-arrow { display: none; }
+.sugi-site .cat-rail-arrows { justify-content: center; gap: 40px; margin-top: 24px; }
+
+/* --- Why choose us / membership / locator / editorial ------------------- */
+.sugi-site .wcu-section { padding: var(--ck-gap) max(20px, 7vw) 0; background: #fff; }
+.sugi-site .wcu-grid { margin-top: 35px; }
+.sugi-site .wcu-item-title { font-size: 16px; font-weight: 500; letter-spacing: .04em; }
+.sugi-site .wcu-item-desc { color: var(--ck-muted); font-size: 14px; font-weight: 400; line-height: 1.8; }
+.sugi-site .wcu-reviews { margin-top: var(--ck-gap); padding-top: 32px; border-top: 1px solid var(--ck-line); }
+.sugi-site .wcu-reviews-kicker { color: var(--ck-muted); font-size: 11px; font-weight: 500; letter-spacing: .14em; text-align: center; }
+.sugi-site .wcu-review-card { border: 1px solid var(--ck-line); border-radius: 4px; background: var(--ck-cream); }
+.sugi-site .wcu-review-card p { color: var(--ck-ink); font-size: 13px; line-height: 1.85; }
+.sugi-site .wcu-review-footer strong { font-weight: 500; }
+
+.sugi-site .qs-section { padding: var(--ck-gap) max(20px, 7vw) 0; background: #fff; }
+.sugi-site .qs-desc, .sugi-site .qs-subtitle { color: var(--ck-muted); font-size: 14px; font-weight: 400; }
+.sugi-site .qs-guest-tier { border: 1px solid var(--ck-line); border-radius: 4px; background: var(--ck-cream); }
+.sugi-site .qs-guest-tier strong { color: var(--ck-ink); font-size: 18px; font-weight: 300; }
+.sugi-site .qs-guest-tier span { color: var(--ck-muted); font-size: 13px; font-weight: 400; }
+.sugi-site .qs-meta { border-top-color: var(--ck-line); }
+.sugi-site .qs-meta-row { font-size: 14px; font-weight: 400; }
+.sugi-site .qs-cta { color: var(--ck-ink); font-size: 14px; font-weight: 400; }
+.sugi-site .qs-savings strong { font-weight: 300; }
+.sugi-site .qs-skeleton-block { border-radius: 4px; background: var(--ck-cream); }
+
+.sugi-site .editorial-banner { min-height: 0; margin-top: var(--ck-gap); background: var(--ck-cream); }
+.sugi-site .editorial-banner-image { min-height: 360px; background-color: var(--ck-chip); }
+.sugi-site .editorial-banner-tag { border-radius: 3px; background: rgba(33, 33, 33, .72); font-size: 10px; font-weight: 400; letter-spacing: .14em; }
+.sugi-site .editorial-banner-copy { padding: clamp(36px, 5vw, 64px) clamp(24px, 5vw, 72px); background: var(--ck-cream); }
+.sugi-site .editorial-banner-copy h2 { font-size: clamp(21px, 2vw, 26px); font-weight: 400; letter-spacing: .1em; line-height: 1.5; color: var(--ck-ink); }
+.sugi-site .editorial-banner-copy > p:not(.eyebrow) { color: var(--ck-muted); font-size: 14px; font-weight: 400; line-height: 1.9; }
+.sugi-site .editorial-banner-points { color: var(--ck-ink); font-size: 14px; font-weight: 400; }
+.sugi-site .editorial-banner-points li::before { background: var(--ck-gold); }
+
+.sugi-site .locator-section { width: min(var(--ck-container), calc(100% - 40px)); margin: 0 auto; padding: var(--ck-gap) 0 0; background: #fff; }
+.sugi-site .locator-section::before { display: none; }
+.sugi-site .locator-lede { color: var(--ck-muted); font-size: 14px; font-weight: 400; }
+.sugi-site .locator-map { border-radius: 4px; background: var(--ck-cream); }
+.sugi-site .location-list, .sugi-site .location-row { border-color: var(--ck-line); }
+.sugi-site .location-row:hover { transform: none; color: var(--ck-ink); }
+.sugi-site .location-row > span { color: var(--ck-gold); font-weight: 400; }
+.sugi-site .location-row strong { font-size: 15px; font-weight: 500; }
+.sugi-site .location-row small, .sugi-site .location-row .location-meta { color: var(--ck-muted); font-size: 13px; font-weight: 400; }
+.sugi-site .location-note { color: var(--ck-muted); font-size: 13px; font-weight: 400; }
+
+/* --- Footer -------------------------------------------------------------- */
+/* Reference: a cream footer, ink text, hairline rules -- not a dark slab. */
+.site-footer { margin-top: var(--ck-gap, 80px); background: var(--ck-cream); color: var(--ck-ink); border-top: 1px solid var(--ck-line); }
+.footer-cta-banner { justify-content: center; gap: 20px 40px; padding: 36px 20px; border-bottom: 1px solid var(--ck-line); background: var(--ck-cream); color: var(--ck-ink); text-align: center; }
+.footer-cta-banner .eyebrow { color: var(--ck-muted); font-size: 11px; font-weight: 500; letter-spacing: .18em; }
+.footer-cta-banner .eyebrow span { display: none; }
+.footer-cta-banner h2 { font-size: clamp(19px, 1.8vw, 24px); font-weight: 400; letter-spacing: .1em; line-height: 1.5; color: var(--ck-ink); }
+.footer-cta-banner h2 em { color: var(--primary-text); font-style: normal; }
+.footer-cta-banner .button-light { border: 1px solid var(--ck-line); background: #fff; color: var(--ck-ink); font-size: 14px; font-weight: 400; }
+.footer-cta-banner .button-light:hover { border-color: var(--ck-ink); background: var(--ck-chip); }
+.footer-grid { width: min(var(--ck-container), calc(100% - 40px)); margin: 0 auto; padding: 48px 0 40px; gap: 32px; }
+.footer-logo { width: 150px; filter: none; }
+.footer-grid > div:first-child p { color: var(--ck-muted); font-size: 13px; }
+.footer-social-link { border-color: var(--ck-line); background: #fff; color: var(--ck-ink); font-size: 12px; font-weight: 400; }
+.footer-social-link:hover { border-color: var(--ck-ink); background: var(--ck-chip); color: var(--ck-ink); transform: none; }
+.footer-social-link:hover svg { transform: none; }
+.footer-column > span { color: var(--ck-muted); font-size: 11px; font-weight: 500; letter-spacing: .14em; }
+.footer-column a, .footer-column-button { color: var(--ck-ink); font-size: 13px; font-weight: 400; }
+.footer-column a:hover, .footer-column-button:hover { color: var(--ck-muted); }
+.footer-column small { color: var(--ck-muted); }
+.footer-bottom { width: min(var(--ck-container), calc(100% - 40px)); margin: 0 auto; padding: 18px 0 26px; border-top-color: var(--ck-line); color: var(--ck-muted); font-size: 11px; }
+
+/* --- Chrome that must follow the new palette ----------------------------- */
+.mobile-sticky-bar { border-top-color: var(--ck-line); background: rgba(255, 255, 255, .94); }
+.sugi-site .back-to-top { border-radius: 50%; box-shadow: none; }
+
+/* --- Responsive ---------------------------------------------------------- */
+@media (max-width: 1023px) {
+  .commerce-marketing-nav a { font-size: 13px; }
+  .sugi-site .shelf-card-slot { width: 180px !important; }
+}
+@media (max-width: 760px) {
+  .commerce-header { padding: 0 16px; }
+  .commerce-header-inner { min-height: 56px; grid-template-columns: minmax(0, 1fr) auto; }
+  .commerce-brand img { width: 128px; }
+  .commerce-header-actions { gap: 14px; }
+  .commerce-header-searchrow { padding-bottom: 10px; }
+  .header-search--inline { width: 100%; }
+  /* With a real field on its own row, the magnifier in the icon row is a
+     second door to the same thing -- one is enough on a phone. */
+  .commerce-header-actions .header-search { display: none; }
+  .commerce-mobile-menu { background: #fff; }
+  .hero-rail { gap: 12px; padding: 0 16px; }
+  .hero-rail-slide { flex: 0 0 min(450px, 82vw); }
+  .sugi-site .hero-copy h1 { font-size: clamp(22px, 6vw, 28px); }
+  .sugi-site .carousel-shelf-btn { display: none; }
+  .sugi-site .shelf-card-slot { width: 160px !important; }
+  .sugi-site .cat-rail-card { flex: 0 0 110px; }
+  .sugi-site .cat-mosaic-item-photo { width: 92px; height: 92px; }
+  .sugi-site .editorial-banner { flex-direction: column; }
+  .sugi-site .editorial-banner--image-right { flex-direction: column; }
+  .sugi-site .editorial-banner-image { min-height: 240px; }
+  .footer-grid { grid-template-columns: 1fr 1fr; }
+  .footer-bottom { flex-direction: column; gap: 8px; }
+}
+@media (max-width: 420px) {
+  .sugi-site .shelf-card-slot { width: 150px !important; }
+  .kw-chip { min-height: 32px; padding: 0 12px; font-size: 12px; }
+  .footer-grid { grid-template-columns: 1fr; }
+}
+
+/* --- Restyle corrections (measured on the running page, 2026-09-12) ------ */
+/* The font swap has to reach the chrome that lives OUTSIDE .sugi-site on the
+   homepage too -- the promo ticker and the consent banner sit in <body>. */
+body:has(.sugi-site) { font-family: "Inter", "Golos Text", sans-serif; }
+/* Three sections put their heading beside their content rather than above
+   it (membership, store locator, the editorial band). A centred heading in
+   a left-hand column reads as a mistake, so those keep their own alignment
+   while still taking the new size, weight and tracking. */
+.sugi-site .qs-copy .editorial-heading,
+.sugi-site .locator-copy .editorial-heading,
+.sugi-site .editorial-banner-copy h2 { text-align: left; }
+.sugi-site .qs-copy .eyebrow,
+.sugi-site .locator-copy .eyebrow { justify-content: flex-start; }
+/* The "see all" pill, now a row of its own under each rail. */
+.sugi-site .carousel-shelf-footer { display: flex; justify-content: center; margin-top: 32px; }
+.sugi-site .carousel-shelf-footer .carousel-shelf-all-link {
+  display: inline-flex;
+  min-height: 44px;
+  padding: 0 44px;
+  border: 1px solid var(--ck-line);
+  border-radius: 999px;
+  color: var(--ck-ink);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: .06em;
+}
+.sugi-site .carousel-shelf-footer .carousel-shelf-all-link:hover { border-color: var(--ck-ink); background: var(--ck-chip); color: var(--ck-ink); gap: 6px; }
+/* Featured brands: the reference's own shape -- one uniform row of tiles
+   inside the page container, no zoomed "active" slide. The carousel's own
+   JS reads these custom properties (see FeaturedBrandsCarousel.tsx), so a
+   scale of 1 is all it takes to flatten it; the endless drag, the arrows and
+   the logo band under each photo are untouched. */
+.sugi-site .fbrand-section {
+  --fbrand-scale: 1;
+  --fbrand-left: 0;
+  --fbrand-gap: 16px;
+  --fbrand-w-min: 120px;
+  --fbrand-w-max: 190px;
+  --fbrand-logo-h: 58px;
+  width: min(var(--ck-container), calc(100% - 40px));
+  margin: 0 auto;
+}
+.sugi-site .fbrand-controls { margin: 32px 0 0; }
+.sugi-site .fbrand-photo { border: 1px solid var(--ck-line); border-bottom: 0; }
+.sugi-site .fbrand-logo { border: 1px solid var(--ck-line); border-top: 0; }
+@media (max-width: 760px) {
+  .sugi-site .fbrand-section { --fbrand-gap: 10px; --fbrand-w-max: 150px; --fbrand-logo-h: 46px; }
+  .sugi-site .carousel-shelf-footer .carousel-shelf-all-link { padding: 0 28px; }
+}
+/* Membership and why-choose-us share the page container with everything
+   else -- at 1600px+ they were the only two bands still running the full
+   width of the window, which broke the column the rest of the page keeps. */
+.sugi-site .qs-section,
+.sugi-site .wcu-section { width: min(var(--ck-container), calc(100% - 40px)); margin: 0 auto; padding: var(--ck-gap) 0 0; }
+.sugi-site .qs-grid { width: 100%; gap: 40px; }
+/* The last section before the footer needs its own floor; the footer's
+   margin alone would let the final row sit flush against the rule. */
+.sugi-site .locator-section { padding-bottom: 8px; }
+/* Measured at 1024px: the five centred nav labels and the logo collided --
+   the grid's middle column simply has no room between them there. Below
+   1100px the nav folds into the drawer, which already carries the same
+   items, and the drawer toggle appears with it. */
+@media (max-width: 1100px) {
+  .commerce-marketing-nav { display: none; }
+  .commerce-header-inner { grid-template-columns: minmax(0, 1fr) auto; }
+  .commerce-header-actions .commerce-menu-toggle { display: inline-flex; }
+}

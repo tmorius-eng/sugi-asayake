@@ -527,6 +527,17 @@ export const siteTextSlots = [
     fallbackValue: "Бүх бүтээгдэхүүн үзэх",
   },
 
+  // ---- "Түгээмэл хайлт" keyword chips under the opening photographs
+  //      (2026-09-12 Cosme Kitchen restyle; the chips themselves are the
+  //      real categories and featured brands, not editable text) ----------
+  {
+    key: "home-text-keywords-heading",
+    group: "Түгээмэл хайлт",
+    label: "Гарчиг",
+    description: "Нүүрний эхний зургуудын доорх түлхүүр үгийн хайрцгийн гарчиг.",
+    fallbackValue: "Түгээмэл хайлт",
+  },
+
   // ---- "Танд санал болгож байна" rail (Preference Profile v2, 2026-09-01) --
   {
     key: "home-text-recommended-kicker",

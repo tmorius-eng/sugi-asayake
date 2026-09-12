@@ -182,7 +182,7 @@ browser → /api/trpc/<router>.<procedure>
 - **`App.tsx`** — wouter route + нэг MutationObserver/IntersectionObserver (scroll reveal) бүх route-д.
 - **`pages/`** — Home, Shop, ProductDetail, Checkout, Profile (914 мөр: хаягийн дэвтэр, тохиргоо, аюулгүй байдал), Login, ForgotPassword, MyOrders, TrackOrder, Journal/PostDetail, RoutineDetail, Brands, Legal, NotFound, **AdminDashboard** (→ `AdminWorkspace`).
 - **`components/`**
-  - Дэлгүүрийн нүүр: `home/*` (HeroImageSlideshow, QuickStatsSection, CategoryMasonry, FeaturedBrandsCarousel, JournalSection, StoreLocatorSection …).
+  - Дэлгүүрийн нүүр: `home/*` (HeroImageSlideshow, KeywordChips, CarouselShelf + ShelfProductCard, CategoryMasonry + CategoryRail, FeaturedBrandsCarousel, BrandStorySection, QuickStatsSection, EditorialBanner, StoreLocatorSection). 2026-09-12-нээс нүүрний харагдах байдал нь `client/src/index.css`-ийн ТӨГСГӨЛД байрлах "COSME KITCHEN RESTYLE" давхаргаар тодорхойлогдоно — хэсгийн CSS засахдаа тэр давхаргад мөн шалгах (эс бөгөөс засвар дарагдана). `ShelfProductCard`-ыг ProductDetail мөн ашигладаг.
   - Админ: `AdminWorkspace.tsx` (816 мөр — хэсгүүдийн router), `admin/AdminSidebar.tsx`, `admin/AdminTopBar.tsx`, `admin/AdminNotificationBell.tsx`, `admin/AdminCommandPalette.tsx`, `admin/GenericListView.tsx`, панель бүр (`AdminProductsPanel`, `AdminOrdersPanel`, `AdminIntegrationsPanel`, `AdminReceivingPanel`, `AdminAnalyticsPanel`, `AdminSecurityCenter`, `AdminPosPanel` …).
   - Нөөц: `inventory/ScanSession.tsx` (сканы дэлгэц), `inventory/TransfersView.tsx`.
   - `ui/*` — shadcn маягийн суурь элементүүд.

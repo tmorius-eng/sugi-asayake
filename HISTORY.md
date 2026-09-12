@@ -4,6 +4,30 @@
 
 ---
 
+## Нүүр хуудасны Cosme Kitchen редизайн (2026-09-12, гэрийн лаптоп)
+
+Tom: "https://www.cosmekitchen-webstore.jp/ ene website playwright aar buh design sudalj tern manaid heregtei gesen bugdiin huulaad hiiged uz!!! goln premium baih ystoi professional !!! het basic baiwal butsaand eniigee hereglne!!!" — өмнөх өдөр нүүрийг "10 настай хүүхэд хийсэн юм шиг, дэндүү basic" гэж үнэлсний дараа.
+
+**Лавлагааг хэмжсэн арга** (Playwright, 1440px, Cloudflare challenge-ийг 9 секунд хүлээж давсан): computed style болон bounding box-оор — Inter, гарчиг 26px/400/.1em төвлөрсөн, гарчгаас контент хүртэл 35px, хэсэг хооронд ~80px, хуудас цагаан, band #fafaf5, чип #f8f7ef, бэх #212121, муут #6e6e6e, hairline #e5e5e5, rank алт #93781e, контейнер 1108px, барааны карт 207px (дөрвөлжин зураг, 1px хүрээ, radius 4, **сүүдэргүй**), header 65px цагаан + доор нь 380×40 хайлтын мөр.
+
+**Хийсэн зүйл**
+- `client/index.html`: Inter (300–600, кирилл subset-тэй) нэмэв; Golos Text fallback хэвээр. Шрифтийг `:root`-д биш, `.sugi-site/.commerce-header/.site-footer`-т `--font-body/--font-display`-ыг дахин тодорхойлж сольсон тул **admin болон shadcn токен огт хөндөгдөөгүй**.
+- `client/src/index.css`-ийн **төгсгөлд** "COSME KITCHEN RESTYLE" давхарга (≈520 мөр). Бүх дүрэм эх файлын өмнөх дүрмийг source order-оор дардаг тул бүхэлд нь нэг блокоор буцаах боломжтой. `@layer components` 2631-р мөрт хаагддаг тул давхарга layer-ийн ГАДНА байна (unlayered = илүү хүчтэй).
+- **Hero**: 3 слайдын cross-fade (badge/marker/caption overlay-тэй) → лавлагааны **450px дөрвөлжин зургийн эгнээ** (`HeroImageSlideshow.tsx` дахин бичигдсэн: scroll-snap, утсан дээр native swipe, багтахгүй үед л 5 секунд тутам автоматаар гүйж, цэгүүд гарна). Гарчиг/CTA/итгэлийн мөр зургийн доор **төвлөрсөн**. Зургийн slot-ууд (home-hero/-2/-3) болон текстийн slot-ууд ижил хэвээр; 4 overlay slot бүртгэлтэй ч рендерлэгдэхээ больсон.
+- **Шинэ "Түгээмэл хайлт"** (`KeywordChips.tsx`): cream хайрцаг, чип бүр бодит ангилал эсвэл admin-ий онцлох брэнд рүү шүүсэн /shop холбоос. Ганц шинэ site-text slot: `home-text-keywords-heading`.
+- **Барааны rail**: `bestseller-grid` (6 карт, сүүдэртэй, хар/шар rank badge) → `CarouselShelf` + `ShelfProductCard` (ProductDetail аль хэдийн ашигладаг primitive). Карт лавлагааныхаар дахин бичигдэв: rank нь картны ДЭЭР "No.1" алтан нимгэн, дараа нь hairline хүрээтэй цагаан frame, чипэн дэвсгэр дээр брэнд, 12px нэр, 18px/300 үнэ, алтан од. "Бүгдийг үзэх" нь rail-ийн ДООР pill болов.
+- **Header**: 4px градиент зурвас, blur, хар pill сагс, "Дэлгүүр" текст линк бүгд хасагдав → 65px цагаан, hairline, лого зүүн, цэс **төвд** (grid 1fr/auto/1fr), баруун талд 4 дүрс (24px, тоо нь улаан badge), доор нь бүх хуудсанд **бодит хайлтын талбар** (`HeaderSearch variant="inline"`, ижил `catalog.search`). 1100px-ээс доош цэс drawer руу ордог (1024-т логотой мөргөлдөж байсныг хэмжиж олов).
+- **Ангилал**: карт → лавлагааны **110px дугуй зураг + 13px шошго**; том anchor фото болон доод тайлбар хасагдав (endless swipe rail хэвээр). **Онцлох брэнд**: `--fbrand-scale: 1` болгож нэг жигд эгнээ болов (JS нь CSS хувьсагчийг уншдаг тул логик хөндөөгүй) + hairline хүрээ.
+- **Footer** харанхуй (#17181b) → cream (#fafaf5), бэх текст, hairline. Sunrise ribbon (хар/шар marquee) нүүрнээс хасагдав.
+- **Дараалал** лавлагаагаар өөрчлөгдөв: hero → түлхүүр үг → их зарагддаг → санал болгох → брэнд → ангилал → яагаад бид → гишүүнчлэл → editorial → салбар. Өмнө нь худалдан авагч эхний бараагаа хармагцаа 2 story хэсэг дамждаг байв.
+- **Tom-ийн 2 засвар (турших явцад)**: header доорх брэндийн логоны зурвас ("uneheer muuhai, delete them") болон header-ийн "Дэлгүүр" текст линк хоёуланг устгав.
+
+**Баталгаажуулалт**: `pnpm check`, `pnpm lint`, `pnpm build` цэвэр. Playwright 1440/1024/390/320 (бодит CSS өргөнийг давталтаар тааруулж хэмжсэн — энэ машин дээр setViewportSize нь ~10% зөрдөг): хэвтээ overflow **0**, console алдаа **0**, эвдэрсэн зураг **0**, `<h1>` 1. Нийт нүүр 6612 → **6010px**. /shop, /journal, барааны хуудас (хуваалцсан карт/header/footer) дээр ч overflow 0, алдаа 0.
+
+**Буцаах**: `git checkout backup/pre-cosmekitchen-2026-09-12 -- client/src/index.css client/src/pages/Home.tsx client/src/components/CommerceHeader.tsx client/src/components/HeaderSearch.tsx client/src/components/home/ client/index.html`.
+
+---
+
 ## Forensic аудит — scaffold-оос production руу (2026-09-12, гэрийн лаптоп, 4 commit: `618eeec` → `3d3b05a`)
 
 Tom 27 үе шаттай "FULL-STACK FORENSIC AUDIT + SCAFFOLD-TO-PRODUCTION REFINEMENT" playbook илгээж, "do not skip anything", "deep dig, fix everything, no basic shits" гэв. Арга: код бүрийг уншиж, сэжигтэй зүйл бүрийг **тестээр нотолж** байж л засав; Playwright-ээр 1152/768/390/320 өргөнд storefront + 23 admin хэсгийг бүгдийг үзэв. Эцсийн тайлан (health score, scaffold/AI-slop inventory, P0–P4 bug register): artifact (доор CLAUDE.md-д линк).
