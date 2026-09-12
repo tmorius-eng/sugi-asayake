@@ -42,9 +42,11 @@ export type HeroSlide = {
  * site-text slot.
  */
 /** One photograph passes every this many milliseconds. Tom tuned this by
- *  eye: 4000 stepped ("too slow"), 2500 drifting ("too fast"), 3500 ("still
- *  fast"), 5000 -- a calm, premium drift rather than a scroller. */
-const MS_PER_SLIDE = 5000;
+ *  eye, each step slower than the last: 4000 stepped ("too slow"), then as a
+ *  drift 2500 -> 3500 -> 5000 -> 10000. At ten seconds the row reads as a
+ *  slow tide rather than a scroller, which is the register the reference
+ *  site sits in. */
+const MS_PER_SLIDE = 10000;
 const COPIES = 3;
 
 export default function HeroImageSlideshow({ slides, imageAlt }: { slides: HeroSlide[]; imageAlt: string }) {
