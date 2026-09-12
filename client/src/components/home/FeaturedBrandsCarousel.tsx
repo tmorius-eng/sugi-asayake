@@ -382,6 +382,18 @@ export default function FeaturedBrandsCarousel({ brands, heading }: { brands: Fe
                         {...(srcSet ? { srcSet, sizes: `${Math.round(metrics.base * metrics.scale) || 512}px` } : {})}
                       />
                     ) : null}
+                    {/* 2026-09-12 (Tom: "Логотой гэсэн мөртлөө лого гарахгүй
+                        байна"): while the band below is collapsed because
+                        most brands have no logo, a brand that DOES have one
+                        still shows it -- as a small badge over its own photo,
+                        which changes no slide's height and reserves nothing
+                        on the brands without one. The band takes over again
+                        once logos are the majority. */}
+                    {!anyLogo && brand.logoUrl ? (
+                      <span className="fbrand-logo-badge">
+                        <img src={brand.logoUrl} alt={brand.brandName} loading="lazy" draggable={false} />
+                      </span>
+                    ) : null}
                   </span>
                   {/* Logo-images-only, by Tom's explicit choice: a brand with
                       no uploaded logo leaves this band empty rather than
