@@ -140,7 +140,7 @@ browser → /api/trpc/<router>.<procedure>
 | Файл | Урсгал |
 |---|---|
 | `qpay.ts` | Basic auth → `/v2/auth/token` → `/v2/invoice` → харилцагч төлнө → callback (`POST`/`GET`, **`"SUCCESS"` биетээр хариулна**) → `checkQPayPayment`-ээр **бид өөрсдөө шалгана** → `decideCallbackOutcome` (дутуу төлбөрийг хэзээ ч баталгаажуулахгүй) |
-| `storepay.ts` | 2 хос credential (query дээр app хос, Basic-д үндсэн хос) → `/merchant/loan` → харилцагч StorePay апп дээрээ зөвшөөрнө → callback → `/merchant/loan/check/{id}`-ээр бид өөрсдөө шалгана. ⚠️ **HTTP 200 = амжилт биш**: `status` талбарыг шалгана (`readStorepayEnvelope`) |
+| `storepay.ts` | 2 хос credential (query дээр app хос, Basic-д үндсэн хос) → `/user/possibleAmount` (checkout дээр сонгомогц боломжит дүнг асууна) → `/merchant/loan` → харилцагч StorePay апп дээрээ зөвшөөрнө → callback → `/merchant/loan/check/{id}`-ээр бид өөрсдөө шалгана. ⚠️ **HTTP 200 = амжилт биш**: `status` талбарыг шалгана (`readStorepayEnvelope`) |
 
 Хоёулаа: **callback-ийн биед хэзээ ч итгэхгүй** — тэр зөвхөн "аль гүйлгээг шалгах вэ" гэдгийг л хэлнэ.
 
@@ -166,6 +166,7 @@ browser → /api/trpc/<router>.<procedure>
 | `catalog-filter.ts`, `search-synonyms.ts`, `product-tagging.ts` | хайлт/шүүлт/таг |
 | `site-text.ts`, `site-media.ts`, `store-settings.ts`, `legal-documents.ts`, `admin-tips.ts` | админаар засварлагддаг бүх текст/зураг/тохиргоо |
 | `delivery.ts`, `districts.ts`, `orders.ts`, `loyalty.ts`, `format.ts`, `slugify.ts` | нэг мөр бизнес дүрэм тус бүр |
+| `mobile.ts` | `normaliseMongolianMobile` — checkout StorePay-ийн хариуг бичсэн дугаартай тулгадаг тул хоёр тал ижил дүрэмтэй байх ёстой |
 | `face-auth.ts` | descriptor-ийн зай тооцоолол (браузер+сервер ижил) |
 
 ---
