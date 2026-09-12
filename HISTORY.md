@@ -30,6 +30,12 @@ Tom 27 үе шаттай "FULL-STACK FORENSIC AUDIT + SCAFFOLD-TO-PRODUCTION REF
 - **Tooling**: `tsconfig.json` target ES2022; `tsconfig.tests.json` тест/скриптийг type-check хийнэ (`pnpm check` = 2 tsc) → **90 хуучирсан fake session user** 31 файлд олдов → `server/_test-helpers.ts` `testSessionUser()`; `faceAuth.integration.test` hash биш plaintext нууц үг дамжуулж байсан (бодит bug). ESLint flat config (`pnpm lint`, CI-д Lint алхам) — hooks dep дутуу (AdminFaceGate), тогтворгүй useMemo input, dialog Enter-ийн IME composition bug.
 - Цэвэрлэгээ: QA admin (`qa-admin-tmp@example.invalid`, id 6490) Aiven-ээс устгасан; gate-off 3101 dev server зогсоосон; `scripts/tmp-*.ts` gitignore.
 
+### Мөн орой — iPhone дээр доод navigation bar scroll хийхэд жижигэрдэг байв
+`.mobile-sticky-bar` нь `height: 64px` (border-box) + `padding-bottom: env(safe-area-inset-bottom)` байсан тул Safari-ийн toolbar scroll хийхэд эвхэгдэж safe-area ~34px болоход icon+label 30px-д шахагдаж байв. Одоо `height: calc(64px + safe)`; label 10→11px. Бусад бүх offset (footer, toast, back-to-top, cookie icon) аль хэдийн bar+safe гэж тооцдог байсан тул зөрөхгүй.
+
+### Мөн орой — production cookie banner CSP-д хаагдсан байсныг tunnel-ээр олов
+Tom `scripts/demo.ps1 -Tunnel` ажиллуулж `https://….trycloudflare.com` гаргав. Tunnel-ийн ард бүгд зөв (secure context, CSRF, API, probe 404, HSTS/CSP). Console-ийн ганц алдаа = CSP inline script → banner production-д огт байгаагүй (`bannerInDom:false`). JSON data block + external init файл; production build-ийг 3210 порт дээр ажиллуулж banner гарсныг баталгаажуулав. Дэлгэрэнгүй CLAUDE.md.
+
 ### Мөн орой — LAN/http checkout crash + scanner-blocker-ийн регресс
 Tom утаснаас checkout нээхэд "An unexpected error occurred". Playwright-аар `http://192.168.88.6:3000/checkout` (insecure context) дээр давтаж: `crypto.randomUUID is not a function` — миний 3d3b05a-д нэмсэн idempotency түлхүүр render дээр дуудагддаг байв. `newRequestId()` fallback. Мөн console-д `/vendor/silktide-consent-manager.js` 404 — f4555cb-ийн probe-blocker `vendor`-ыг блоклож cookie banner үхсэн байсныг олж засав (public 71 файлыг matcher-оор audit хийсэн скрипт). Дэлгэрэнгүй CLAUDE.md.
 

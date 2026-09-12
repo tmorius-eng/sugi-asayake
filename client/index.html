@@ -57,44 +57,25 @@
          this codebase to gate). -->
     <link rel="stylesheet" href="/vendor/silktide-consent-manager.css">
     <script src="/vendor/silktide-consent-manager.js"></script>
-    <script>
-      window.silktideConsentManager.init({
-        prompt: { position: "bottomRight" },
-        icon: { position: "bottomLeft" },
-        backdrop: { show: false },
-        consentTypes: [
-          {
-            id: "essential",
-            label: "%COOKIE_ESSENTIAL_LABEL%",
-            description: "%COOKIE_ESSENTIAL_DESCRIPTION%",
-            required: true,
-          },
-          {
-            id: "analytics",
-            label: "%COOKIE_ANALYTICS_LABEL%",
-            description: "%COOKIE_ANALYTICS_DESCRIPTION%",
-            required: false,
-            defaultValue: false,
-          },
-        ],
-        text: {
-          prompt: {
-            description: "%COOKIE_PROMPT_DESCRIPTION%",
-            acceptAllButtonText: "%COOKIE_ACCEPT_ALL%",
-            rejectNonEssentialButtonText: "%COOKIE_REJECT%",
-            preferencesButtonText: "%COOKIE_PREFERENCES_BUTTON%",
-            // Accessible name for the icon-only "close preferences" button;
-            // without it the vendor renders an unlabeled <button>.
-            preferencesButtonAccessibleLabel: "Күүкийн тохиргоог хаах",
-          },
-          preferences: {
-            title: "%COOKIE_PREFERENCES_TITLE%",
-            description: "%COOKIE_PREFERENCES_DESCRIPTION%",
-            saveButtonText: "%COOKIE_SAVE%",
-          },
-        },
-      });
-    </script>
+    <!-- Cookie-consent wording, rendered by the server from admin-editable
+         site text. A JSON data block is not executed, so the production CSP
+         (script-src 'self') allows it; the init itself lives in
+         /vendor/silktide-consent-init.js. An inline init script here was
+         silently blocked in production (2026-09-12). -->
+    <script type="application/json" id="cookie-consent-config">{
+      "essentialLabel": "%COOKIE_ESSENTIAL_LABEL%",
+      "essentialDescription": "%COOKIE_ESSENTIAL_DESCRIPTION%",
+      "analyticsLabel": "%COOKIE_ANALYTICS_LABEL%",
+      "analyticsDescription": "%COOKIE_ANALYTICS_DESCRIPTION%",
+      "promptDescription": "%COOKIE_PROMPT_DESCRIPTION%",
+      "acceptAll": "%COOKIE_ACCEPT_ALL%",
+      "reject": "%COOKIE_REJECT%",
+      "preferencesButton": "%COOKIE_PREFERENCES_BUTTON%",
+      "preferencesTitle": "%COOKIE_PREFERENCES_TITLE%",
+      "preferencesDescription": "%COOKIE_PREFERENCES_DESCRIPTION%",
+      "save": "%COOKIE_SAVE%"
+    }</script>
+    <script src="/vendor/silktide-consent-init.js"></script>
   </head>
 
   <body>

@@ -695,11 +695,17 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    treatment (rgba(255,249,242,.88) + blur, index.css's .commerce-header)
    for visual consistency, and both stay hidden above 760px -- the same
    breakpoint every other header/nav swap in this file already uses. */
-.mobile-sticky-bar { display: none; position: fixed; right: 0; bottom: 0; left: 0; z-index: 40; height: var(--mobile-sticky-bar-h); padding-bottom: var(--safe-bottom); border-top: 1px solid rgba(23,24,27,.1); background: rgba(255,249,242,.88); backdrop-filter: blur(16px) saturate(150%); }
+/* 2026-09-12 (Tom, iPhone): the bar was `height: 64px` INCLUDING its
+   safe-area padding (border-box). When Safari's toolbar collapses on scroll,
+   env(safe-area-inset-bottom) grows to ~34px, so the icons and labels were
+   squeezed into the remaining 30px -- "the icons get tiny when I scroll
+   down". The content stays 64px now; the safe-area padding is added below
+   it. Every offset that stacks on this bar already adds --safe-bottom. */
+.mobile-sticky-bar { display: none; position: fixed; right: 0; bottom: 0; left: 0; z-index: 40; height: calc(var(--mobile-sticky-bar-h) + var(--safe-bottom)); padding-bottom: var(--safe-bottom); border-top: 1px solid rgba(23,24,27,.1); background: rgba(255,249,242,.88); backdrop-filter: blur(16px) saturate(150%); }
 @media (max-width: 760px) { .mobile-sticky-bar { display: flex; } }
 
 .bottom-nav-bar { align-items: stretch; justify-content: space-around; }
-.bottom-nav-item { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border: 0; background: none; color: #545958; font-size: 10px; font-weight: 700; }
+.bottom-nav-item { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: 0; background: none; color: #545958; font-size: 11px; font-weight: 700; }
 .bottom-nav-item.is-current { color: var(--primary-text); }
 .bottom-nav-item-icon { position: relative; }
 .bottom-nav-item-badge { position: absolute; top: -6px; right: -9px; display: grid; width: 16px; height: 16px; place-items: center; border-radius: 50%; background: #f0b52d; color: #17181b; font-size: 9px; font-weight: 800; }

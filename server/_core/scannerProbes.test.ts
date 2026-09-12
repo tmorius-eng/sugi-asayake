@@ -23,7 +23,7 @@ const REAL = [
   "/favicon.ico", "/robots.txt", "/sitemap.xml", "/manifest.webmanifest", "/.well-known/acme-challenge/token", "/.well-known/apple-app-site-association",
   // The cookie banner's own files (client/public/vendor). Blocking these
   // silently killed consent on every page once -- keep them here.
-  "/vendor/silktide-consent-manager.js", "/vendor/silktide-consent-manager.css",
+  "/vendor/silktide-consent-manager.js", "/vendor/silktide-consent-manager.css", "/vendor/silktide-consent-init.js",
   "/@vite/client", "/src/main.tsx", "/node_modules/.vite/deps/react.js",
 ];
 
