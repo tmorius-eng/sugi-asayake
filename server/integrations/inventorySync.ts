@@ -1,5 +1,6 @@
 import { and, asc, eq, gt, inArray, lt, ne, or, isNull, sql } from "drizzle-orm";
 import { branches, branchStock, externalRefs, integrationSyncState, stockMovements } from "../../drizzle/schema";
+import { normaliseBarcode } from "../../shared/barcode";
 import { getDb, getActiveIntegrationConfig, getIntegrationSettings } from "../db";
 import { createSnapshotCount, resolveCodes } from "../inventory";
 import { applyBranchStockDelta } from "../stockLedger";
@@ -201,13 +202,16 @@ export async function runPullSnapshot(provider: InventorySyncProvider, options: 
   const resolved = await resolveCodes(snapshot.products.map(product => product.sku));
   const skuByVariant = new Map<number, string>();
   const unknownSkus: string[] = [];
-  // barcode -> our variant, once for the whole snapshot
+  // barcode -> our variant, once for the whole snapshot. The key must be
+  // normalised exactly as resolveCodes normalised it (shared/barcode.ts
+  // strips the spaces and hyphens a code picks up in a spreadsheet) -- a
+  // plain trim here would report "8000 040 002 509" as an unknown product.
   const matched = new Map<string, number>();
   for (const product of snapshot.products) {
-    const variantId = resolved.get(product.sku.trim());
+    const variantId = resolved.get(normaliseBarcode(product.sku));
     if (variantId === undefined) { unknownSkus.push(product.sku); continue; }
     matched.set(product.sku, variantId);
-    if (!skuByVariant.has(variantId)) skuByVariant.set(variantId, product.sku.trim());
+    if (!skuByVariant.has(variantId)) skuByVariant.set(variantId, normaliseBarcode(product.sku));
   }
 
   const stamp = snapshot.fetchedAt.toISOString().slice(0, 16).replace("T", " ");

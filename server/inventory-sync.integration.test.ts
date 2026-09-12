@@ -157,6 +157,23 @@ describeWithDatabase("inventory sync runners (fake provider)", () => {
     expect(open[0].id).toBe(second.branches[0].countId);
   });
 
+  it("matches a barcode the vendor spaced or hyphenated, rather than calling it unknown", async () => {
+    const provider = new FakeInventorySyncProvider();
+    // The same barcode as skuA, formatted the way a code picked out of a
+    // spreadsheet or a printed list arrives.
+    const spaced = `${skuA.slice(0, 4)} ${skuA.slice(4, 8)}-${skuA.slice(8)}`;
+    provider.snapshot = snapshotOf({ [spaced]: { [locationId]: 21 } });
+    const result = await runPullSnapshot(provider, options);
+    expect(result.ran).toBe(true);
+    if (!result.ran) return;
+    expect(result.unknownSkuCount).toBe(0);
+    expect(result.matchedProducts).toBe(1);
+    expect(result.branches[0].countId).toBeGreaterThan(0);
+    const lines = await (await db()).select().from(stockCountLines).where(eq(stockCountLines.countId, result.branches[0].countId!));
+    // Stored under OUR barcode, not the vendor's spacing.
+    expect(lines[0]).toMatchObject({ scannedCode: skuA, countedQty: 21 });
+  });
+
   it("pushes only movements at a mapped branch, never the ones that came from the vendor", async () => {
     const database = await db();
     // Start the stream at "now": a fresh namespace must not begin by walking
