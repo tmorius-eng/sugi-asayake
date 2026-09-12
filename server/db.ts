@@ -3112,20 +3112,22 @@ async function resolveTagIdsByName(names: string[]): Promise<number[]> {
 }
 
 export async function getPublishedPosts() {
-  const db = await getDb();
-  if (!db) return [];
-  const rows = await db.select({ id: posts.id, title: posts.title, slug: posts.slug, excerpt: posts.excerpt, coverImageUrl: posts.coverImageUrl, publishedAt: posts.publishedAt })
-    .from(posts)
-    // 2026-09-07: added `publishedAt <= NOW()` -- a post with isPublished
-    // true but a future publishedAt (an admin-scheduled post) must stay
-    // invisible here until that moment actually passes. No cron/worker
-    // needed: this WHERE clause re-evaluates on every normal page-load
-    // query, so a scheduled post simply starts appearing the next time
-    // anyone loads a page after its publish time.
-    .where(and(eq(posts.isPublished, true), isNull(posts.deletedAt), lte(posts.publishedAt, new Date())))
-    .orderBy(desc(posts.publishedAt));
-  const taxonomy = await getPostTaxonomyMap(rows.map(row => row.id));
-  return rows.map(row => ({ ...row, ...(taxonomy.get(row.id) ?? emptyTaxonomy) }));
+  return getOrSetCached(STOREFRONT_CACHE_KEYS.posts, STOREFRONT_CACHE_TTL_MS, async () => {
+    const db = await getDb();
+    if (!db) return [];
+    const rows = await db.select({ id: posts.id, title: posts.title, slug: posts.slug, excerpt: posts.excerpt, coverImageUrl: posts.coverImageUrl, publishedAt: posts.publishedAt })
+      .from(posts)
+      // 2026-09-07: added `publishedAt <= NOW()` -- a post with isPublished
+      // true but a future publishedAt (an admin-scheduled post) must stay
+      // invisible here until that moment actually passes. No cron/worker
+      // needed: this WHERE clause re-evaluates on every normal page-load
+      // query, so a scheduled post simply starts appearing the next time
+      // anyone loads a page after its publish time.
+      .where(and(eq(posts.isPublished, true), isNull(posts.deletedAt), lte(posts.publishedAt, new Date())))
+      .orderBy(desc(posts.publishedAt));
+    const taxonomy = await getPostTaxonomyMap(rows.map(row => row.id));
+    return rows.map(row => ({ ...row, ...(taxonomy.get(row.id) ?? emptyTaxonomy) }));
+  });
 }
 
 /**
@@ -3170,6 +3172,7 @@ export async function postSlugExists(slug: string, excludeId?: number) {
 }
 
 export async function createAdminPost(input: PostWriteInput & { createdByUserId: number }) {
+  invalidateStorefront("posts");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const { categoryIds, tagNames, publishAt, ...postFields } = input;
@@ -3190,6 +3193,7 @@ export async function createAdminPost(input: PostWriteInput & { createdByUserId:
 }
 
 export async function updateAdminPost(input: { id: number } & Partial<PostWriteInput>) {
+  invalidateStorefront("posts");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const existing = await db.select().from(posts).where(eq(posts.id, input.id)).limit(1);
@@ -3217,6 +3221,7 @@ export async function updateAdminPost(input: { id: number } & Partial<PostWriteI
 
 /** Soft-delete (WordPress "Move to Trash") -- restorable via restoreAdminPost, not visible in getPublishedPosts/getAdminPosts's public-facing queries. */
 export async function trashAdminPost(id: number) {
+  invalidateStorefront("posts");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.update(posts).set({ deletedAt: new Date() }).where(eq(posts.id, id));
@@ -3224,6 +3229,7 @@ export async function trashAdminPost(id: number) {
 }
 
 export async function restoreAdminPost(id: number) {
+  invalidateStorefront("posts");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.update(posts).set({ deletedAt: null }).where(eq(posts.id, id));
@@ -3232,6 +3238,7 @@ export async function restoreAdminPost(id: number) {
 
 /** WordPress's "Delete Permanently" -- only allowed on a post already in Trash, matching WP's own 2-step flow (no one-click permanent delete from the main list). */
 export async function permanentlyDeleteAdminPost(id: number) {
+  invalidateStorefront("posts");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const existing = await db.select({ deletedAt: posts.deletedAt }).from(posts).where(eq(posts.id, id)).limit(1);
@@ -3435,10 +3442,47 @@ export async function getActiveBranches() {
 
 /** The branches a shopper sees: active STORES only (2026-09-11). A
  *  warehouse is a stock location -- never listed, never a pickup point. */
+/**
+ * Storefront reads that every page load performs and almost nobody changes
+ * (2026-09-12 performance pass). A homepage view used to make ~11 separate
+ * trips to Aiven, which sits ~174ms away in Bangalore -- so the first paint
+ * waited on a round trip per widget even when the answer had been identical
+ * all week.
+ *
+ * A short TTL rather than a long one with perfect invalidation: the writers
+ * drop their own key immediately, so an admin edit shows at once, and the TTL
+ * is only the backstop for a path that forgets to (the second laptop writing
+ * to the same database, a script, a manual SQL fix).
+ *
+ * Per-process, like every other cache here -- see _core/ttlCache.ts on why
+ * there is no Redis. With one process that IS the cache; with several, each
+ * keeps its own copy for 30 seconds.
+ */
+const STOREFRONT_CACHE_TTL_MS = 30_000;
+const STOREFRONT_CACHE_KEYS = {
+  branches: "storefront:branches",
+  siteMedia: "storefront:siteMedia",
+  siteText: "storefront:siteText",
+  siteDocuments: "storefront:siteDocuments",
+  storeSettings: "storefront:storeSettings",
+  categories: "storefront:categories",
+  loyaltyTiers: "storefront:loyaltyTiers",
+  posts: "storefront:posts",
+} as const;
+
+type StorefrontCacheKey = keyof typeof STOREFRONT_CACHE_KEYS;
+
+/** Called by every writer that can change what a storefront page shows. */
+function invalidateStorefront(...keys: StorefrontCacheKey[]) {
+  for (const key of keys) invalidateCached(STOREFRONT_CACHE_KEYS[key]);
+}
+
 export async function getStorefrontBranches() {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(branches).where(and(eq(branches.isActive, true), eq(branches.kind, "store"))).orderBy(asc(branches.sortOrder));
+  return getOrSetCached(STOREFRONT_CACHE_KEYS.branches, STOREFRONT_CACHE_TTL_MS, async () => {
+    const db = await getDb();
+    if (!db) return [];
+    return db.select().from(branches).where(and(eq(branches.isActive, true), eq(branches.kind, "store"))).orderBy(asc(branches.sortOrder));
+  });
 }
 
 /** Assigns (or clears) the location a staff member works at. */
@@ -3494,6 +3538,7 @@ async function clearOtherFulfillmentDefaults(db: DbOrTx, exceptId?: number) {
 }
 
 export async function createBranch(input: BranchWriteInput) {
+  invalidateStorefront("branches");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   assertValidFulfillmentBranch({ isFulfillmentDefault: input.isFulfillmentDefault ?? false, isActive: input.isActive ?? true, countsTowardOnlineStock: input.countsTowardOnlineStock ?? true });
@@ -3516,6 +3561,7 @@ export async function createBranch(input: BranchWriteInput) {
 }
 
 export async function updateBranch(input: { id: number } & Partial<BranchWriteInput>) {
+  invalidateStorefront("branches");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const existing = await db.select().from(branches).where(eq(branches.id, input.id)).limit(1);
@@ -3546,6 +3592,7 @@ export async function updateBranch(input: { id: number } & Partial<BranchWriteIn
  * ever held stock is deactivated instead, which keeps both.
  */
 export async function deleteBranch(id: number) {
+  invalidateStorefront("branches");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const [branch] = await db.select({ isFulfillmentDefault: branches.isFulfillmentDefault }).from(branches).where(eq(branches.id, id)).limit(1);
@@ -3559,15 +3606,18 @@ export async function deleteBranch(id: number) {
 }
 
 export async function getSiteMedia() {
-  const db = await getDb();
-  if (!db) return [];
-  return db
-    .select({ slotKey: siteMedia.slotKey, imageUrl: siteMedia.imageUrl, altText: siteMedia.altText, updatedAt: siteMedia.updatedAt })
-    .from(siteMedia)
-    .orderBy(asc(siteMedia.slotKey));
+  return getOrSetCached(STOREFRONT_CACHE_KEYS.siteMedia, STOREFRONT_CACHE_TTL_MS, async () => {
+    const db = await getDb();
+    if (!db) return [];
+    return db
+      .select({ slotKey: siteMedia.slotKey, imageUrl: siteMedia.imageUrl, altText: siteMedia.altText, updatedAt: siteMedia.updatedAt })
+      .from(siteMedia)
+      .orderBy(asc(siteMedia.slotKey));
+  });
 }
 
 export async function upsertSiteMedia(input: { slotKey: string; imageUrl: string; altText?: string | null; updatedByUserId: number }) {
+  invalidateStorefront("siteMedia");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const normalizedAltText = input.altText?.trim() || null;
@@ -3584,6 +3634,7 @@ export async function upsertSiteMedia(input: { slotKey: string; imageUrl: string
 }
 
 export async function deleteSiteMedia(slotKey: string) {
+  invalidateStorefront("siteMedia");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.delete(siteMedia).where(eq(siteMedia.slotKey, slotKey));
@@ -3593,15 +3644,18 @@ export async function deleteSiteMedia(slotKey: string) {
 /** Text-equivalent of the 3 functions above -- see drizzle/schema.ts's
  *  siteText table and shared/site-text.ts's slot registry. */
 export async function getSiteText() {
-  const db = await getDb();
-  if (!db) return [];
-  return db
-    .select({ slotKey: siteText.slotKey, textValue: siteText.textValue, updatedAt: siteText.updatedAt })
-    .from(siteText)
-    .orderBy(asc(siteText.slotKey));
+  return getOrSetCached(STOREFRONT_CACHE_KEYS.siteText, STOREFRONT_CACHE_TTL_MS, async () => {
+    const db = await getDb();
+    if (!db) return [];
+    return db
+      .select({ slotKey: siteText.slotKey, textValue: siteText.textValue, updatedAt: siteText.updatedAt })
+      .from(siteText)
+      .orderBy(asc(siteText.slotKey));
+  });
 }
 
 export async function upsertSiteText(input: { slotKey: string; textValue: string; updatedByUserId: number }) {
+  invalidateStorefront("siteText");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.insert(siteText).values({
@@ -3616,6 +3670,7 @@ export async function upsertSiteText(input: { slotKey: string; textValue: string
 }
 
 export async function deleteSiteText(slotKey: string) {
+  invalidateStorefront("siteText");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.delete(siteText).where(eq(siteText.slotKey, slotKey));
@@ -3629,19 +3684,21 @@ export async function deleteSiteText(slotKey: string) {
  * never been edited simply isn't here.
  */
 export async function getSiteDocuments() {
-  const db = await getDb();
-  if (!db) return [];
-  return db
-    .select({
-      documentKey: siteDocuments.documentKey,
-      title: siteDocuments.title,
-      lead: siteDocuments.lead,
-      contentHtml: siteDocuments.contentHtml,
-      updatedLabel: siteDocuments.updatedLabel,
-      updatedAt: siteDocuments.updatedAt,
-    })
-    .from(siteDocuments)
-    .orderBy(asc(siteDocuments.documentKey));
+  return getOrSetCached(STOREFRONT_CACHE_KEYS.siteDocuments, STOREFRONT_CACHE_TTL_MS, async () => {
+    const db = await getDb();
+    if (!db) return [];
+    return db
+      .select({
+        documentKey: siteDocuments.documentKey,
+        title: siteDocuments.title,
+        lead: siteDocuments.lead,
+        contentHtml: siteDocuments.contentHtml,
+        updatedLabel: siteDocuments.updatedLabel,
+        updatedAt: siteDocuments.updatedAt,
+      })
+      .from(siteDocuments)
+      .orderBy(asc(siteDocuments.documentKey));
+  });
 }
 
 export async function upsertSiteDocument(input: {
@@ -3652,6 +3709,7 @@ export async function upsertSiteDocument(input: {
   updatedLabel: string | null;
   updatedByUserId: number;
 }) {
+  invalidateStorefront("siteDocuments");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   // Same trust boundary as posts.content: the admin editor's "Text" tab can
@@ -3680,6 +3738,7 @@ export async function upsertSiteDocument(input: {
 }
 
 export async function deleteSiteDocument(documentKey: string) {
+  invalidateStorefront("siteDocuments");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.delete(siteDocuments).where(eq(siteDocuments.documentKey, documentKey));
@@ -3698,13 +3757,15 @@ export async function deleteSiteDocument(documentKey: string) {
  * order and takes the last tier the shopper qualifies for.
  */
 export async function getLoyaltyTierTable(): Promise<LoyaltyTier[]> {
-  const db = await getDb();
-  if (!db) return LOYALTY_TIERS;
-  const rows = await db
-    .select({ name: loyaltyTiers.name, discountPercent: loyaltyTiers.discountPercent, minSpendMnt: loyaltyTiers.minSpendMnt })
-    .from(loyaltyTiers)
-    .orderBy(asc(loyaltyTiers.minSpendMnt), asc(loyaltyTiers.sortOrder));
-  return rows.length ? rows : LOYALTY_TIERS;
+  return getOrSetCached(STOREFRONT_CACHE_KEYS.loyaltyTiers, STOREFRONT_CACHE_TTL_MS, async () => {
+    const db = await getDb();
+    if (!db) return LOYALTY_TIERS;
+    const rows = await db
+      .select({ name: loyaltyTiers.name, discountPercent: loyaltyTiers.discountPercent, minSpendMnt: loyaltyTiers.minSpendMnt })
+      .from(loyaltyTiers)
+      .orderBy(asc(loyaltyTiers.minSpendMnt), asc(loyaltyTiers.sortOrder));
+    return rows.length ? rows : LOYALTY_TIERS;
+  });
 }
 
 export async function getAdminLoyaltyTiers() {
@@ -3721,6 +3782,7 @@ export async function upsertLoyaltyTier(input: {
   sortOrder: number;
   updatedByUserId: number;
 }) {
+  invalidateStorefront("loyaltyTiers");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   if (input.id) {
@@ -3753,6 +3815,7 @@ export async function upsertLoyaltyTier(input: {
  * original tiers on the storefront -- the most confusing possible outcome.
  */
 export async function deleteLoyaltyTier(id: number) {
+  invalidateStorefront("loyaltyTiers");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const remaining = await db.select({ id: loyaltyTiers.id }).from(loyaltyTiers);
@@ -3773,31 +3836,33 @@ export async function deleteLoyaltyTier(id: number) {
  * the storefront never read before) finally reach the page.
  */
 export async function getPublishedCategories() {
-  const db = await getDb();
-  if (!db) return [];
-  // Active AND actually stocked. The live database has an empty leftover
-  // category ("Shampoo", 0 products, still flagged active) which the old
-  // hardcoded array simply never listed; reading the table naively would
-  // have put it on the homepage, in the header drawer and in the footer as
-  // a link to an empty shelf. Requiring at least one published product is
-  // the same rule the rest of this storefront already follows -- rails and
-  // sections hide themselves rather than render an empty state.
-  const rows = await db
-    .select({
-      id: productCategories.id,
-      name: productCategories.name,
-      slug: productCategories.slug,
-      description: productCategories.description,
-      imageUrl: productCategories.imageUrl,
-      sortOrder: productCategories.sortOrder,
-      productCount: sql<number>`count(${products.id})`,
-    })
-    .from(productCategories)
-    .innerJoin(products, and(eq(products.categoryId, productCategories.id), eq(products.isPublished, true)))
-    .where(eq(productCategories.isActive, true))
-    .groupBy(productCategories.id)
-    .orderBy(asc(productCategories.sortOrder), asc(productCategories.name));
-  return rows.map(row => ({ ...row, productCount: Number(row.productCount) }));
+  return getOrSetCached(STOREFRONT_CACHE_KEYS.categories, STOREFRONT_CACHE_TTL_MS, async () => {
+    const db = await getDb();
+    if (!db) return [];
+    // Active AND actually stocked. The live database has an empty leftover
+    // category ("Shampoo", 0 products, still flagged active) which the old
+    // hardcoded array simply never listed; reading the table naively would
+    // have put it on the homepage, in the header drawer and in the footer as
+    // a link to an empty shelf. Requiring at least one published product is
+    // the same rule the rest of this storefront already follows -- rails and
+    // sections hide themselves rather than render an empty state.
+    const rows = await db
+      .select({
+        id: productCategories.id,
+        name: productCategories.name,
+        slug: productCategories.slug,
+        description: productCategories.description,
+        imageUrl: productCategories.imageUrl,
+        sortOrder: productCategories.sortOrder,
+        productCount: sql<number>`count(${products.id})`,
+      })
+      .from(productCategories)
+      .innerJoin(products, and(eq(products.categoryId, productCategories.id), eq(products.isPublished, true)))
+      .where(eq(productCategories.isActive, true))
+      .groupBy(productCategories.id)
+      .orderBy(asc(productCategories.sortOrder), asc(productCategories.name));
+    return rows.map(row => ({ ...row, productCount: Number(row.productCount) }));
+  });
 }
 
 /**
@@ -3811,12 +3876,14 @@ export async function getPublishedCategories() {
  * site_media/site_text's imageFor()/textFor().
  */
 export async function getStoreSettings() {
-  const db = await getDb();
-  if (!db) return [];
-  return db
-    .select({ settingKey: storeSettings.settingKey, settingValue: storeSettings.settingValue, updatedAt: storeSettings.updatedAt })
-    .from(storeSettings)
-    .orderBy(asc(storeSettings.settingKey));
+  return getOrSetCached(STOREFRONT_CACHE_KEYS.storeSettings, STOREFRONT_CACHE_TTL_MS, async () => {
+    const db = await getDb();
+    if (!db) return [];
+    return db
+      .select({ settingKey: storeSettings.settingKey, settingValue: storeSettings.settingValue, updatedAt: storeSettings.updatedAt })
+      .from(storeSettings)
+      .orderBy(asc(storeSettings.settingKey));
+  });
 }
 
 export async function getStoreSettingValue(key: StoreSettingKey): Promise<string> {
@@ -3832,6 +3899,7 @@ export async function getStoreSettingNumber(key: StoreSettingKey): Promise<numbe
 }
 
 export async function upsertStoreSetting(input: { settingKey: string; settingValue: string; updatedByUserId: number }) {
+  invalidateStorefront("storeSettings");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.insert(storeSettings).values({
@@ -3846,6 +3914,7 @@ export async function upsertStoreSetting(input: { settingKey: string; settingVal
 }
 
 export async function deleteStoreSetting(settingKey: string) {
+  invalidateStorefront("storeSettings");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.delete(storeSettings).where(eq(storeSettings.settingKey, settingKey));
@@ -4403,6 +4472,7 @@ export type CategoryWriteInput = {
 };
 
 export async function createAdminCategory(input: CategoryWriteInput) {
+  invalidateStorefront("categories");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
 
@@ -4420,6 +4490,7 @@ export async function createAdminCategory(input: CategoryWriteInput) {
 }
 
 export async function updateAdminCategory(input: { id: number } & Partial<CategoryWriteInput>) {
+  invalidateStorefront("categories");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
 

@@ -6,6 +6,7 @@ import { jwtVerify } from "jose";
 import { COOKIE_NAME } from "@shared/const";
 import { ENV } from "./env";
 import { getUserById } from "../db";
+import { getOrSetCached } from "./ttlCache";
 import type { User } from "../../drizzle/schema";
 
 // Audit finding BUG-001: called once at process startup (see
@@ -63,8 +64,35 @@ export async function signSessionToken(userId: number, sessionVersion: number): 
     .sign(secretKey());
 }
 
+/**
+ * How long a verified session is trusted without re-reading the user row
+ * (2026-09-12 performance pass).
+ *
+ * Every authenticated request used to cost one round trip to Aiven -- ~170ms
+ * from Bangalore -- purely to re-read the same row, BEFORE any of the work
+ * the request actually came to do. In /admin, where a screen fires several
+ * calls, that was the single largest cost on the page.
+ *
+ * The window is deliberately seconds, not minutes: this row is what carries
+ * suspension, role and sessionVersion, so a suspended account, a demoted one
+ * or a "sign out everywhere" must still take effect while somebody is
+ * standing there watching it happen. Five seconds is short enough to feel
+ * immediate and long enough that a burst of calls from one screen costs one
+ * lookup instead of a dozen.
+ *
+ * Keyed by the token, so it cannot outlive the session it belongs to, and
+ * per-process like every other cache here (see _core/ttlCache.ts).
+ */
+const SESSION_CACHE_TTL_MS = 5_000;
+
 async function userFromToken(token: string | undefined): Promise<SessionUser | null> {
   if (!token) return null;
+  // A rejected token is cached as `null` too -- otherwise a stale cookie in
+  // some background tab would hammer the database on every poll.
+  return getOrSetCached(`session:${token}`, SESSION_CACHE_TTL_MS, () => resolveUserFromToken(token));
+}
+
+async function resolveUserFromToken(token: string): Promise<SessionUser | null> {
   try {
     const { payload } = await jwtVerify(token, secretKey());
     const userId = Number(payload.sub);
