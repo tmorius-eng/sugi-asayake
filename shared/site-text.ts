@@ -266,7 +266,7 @@ export const siteTextSlots = [
     key: "home-text-wcu-eyebrow-label",
     group: "Яагаад биднийг сонгох вэ",
     label: "Эйброу текст",
-    description: "Гарчгийн дээрх төвлөрсөн, жижиг улаан шошго.",
+    description: "(2026-09-12-оос нүүрэнд харагдахгүй -- Tom-ийн хүсэлтээр хасагдсан; хадгалсан утга алдагдахгүй.)",
     fallbackValue: "ЯАГААД БИДНИЙГ СОНГОХ ВЭ",
   },
   {

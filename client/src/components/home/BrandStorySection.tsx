@@ -75,11 +75,12 @@ export default function BrandStorySection({ branchCount, productCountLabel, feat
   return (
     <section className="wcu-section" data-reveal aria-label="Бидний ялгаа, яагаад биднийг сонгох вэ">
       <div className="wcu-head">
-        {/* The site's own eyebrow and heading styles (Tom, 2026-09-12: "the
-            text must look like the rest of the website"), only centred. */}
-        <p className="eyebrow wcu-eyebrow"><span /> {textFor("home-text-wcu-eyebrow-label", "ЯАГААД БИДНИЙГ СОНГОХ ВЭ")}</p>
+        {/* Tom, 2026-09-12: no eyebrow (the slot stays registered, unused),
+            and the whole heading in the site's red accent -- the same <em>
+            treatment every other section heading uses for its accent phrase,
+            here applied to the full title like "Онцлох брэндүүд". */}
         <SectionHeading>
-          {headingLines.map((line, index) => <Fragment key={index}>{index > 0 && <br />}{line}</Fragment>)}
+          <em>{headingLines.map((line, index) => <Fragment key={index}>{index > 0 && <br />}{line}</Fragment>)}</em>
         </SectionHeading>
       </div>
       {/* The reference numbers its columns 01/02/03; Tom asked for those to
