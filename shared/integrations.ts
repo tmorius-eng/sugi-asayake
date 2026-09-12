@@ -7,11 +7,11 @@
  * which keys it needed. Now the schema enum, the server's validation and the
  * admin form all read the definitions below.
  *
- * Only ntfy is actually wired to runtime code today (see server/_core/ntfy.ts
- * and server/notifications.ts). The other five record credentials for
- * integrations whose business side is still open; `wiredUp: false` makes the
- * admin screen say so instead of letting an "Идэвхтэй" toggle look like a
- * live integration.
+ * Three are wired to runtime code today: ntfy (server/_core/ntfy.ts),
+ * Smart Software (server/integrations/smartSoftware.ts) and StorePay
+ * (server/storepay.ts). The rest only record credentials while a business
+ * decision is pending; `wiredUp: false` makes the admin screen say so
+ * instead of letting an "Идэвхтэй" toggle look like a live integration.
  */
 
 export const INTEGRATION_PROVIDERS = ["ebarimt", "storepay", "card_golomt", "courier_ebuuhia", "ntfy", "smartsoftware"] as const;
@@ -58,24 +58,28 @@ export const SMART_SOFTWARE_DEFAULT_INVENTORY_URL = "https://retailapiv2.smartlo
 export const SMART_SOFTWARE_DEFAULT_POS_URL = "https://smartposapi.smartapp.mn";
 
 export const INTEGRATION_META: Record<IntegrationProvider, IntegrationMeta> = {
-  // 2026-09-04: read the developer.smartsoftware.mn page Tom pointed at --
-  // it's a marketing/company-overview page with zero API/webhook docs, not
-  // a technical integration guide. Separately confirmed (3 independent
-  // open-source ebarimt client libraries, incl. a Node.js one) that
-  // Mongolia's underlying POS API 3.0 -- which every ebarimt POS vendor,
-  // SmartSoftware included, is built on -- requires a "PosService" process
-  // running LOCALLY on the merchant's own network (e.g. 127.0.0.1:7080),
-  // registered with an 8-digit POS number, not a plain cloud REST call our
-  // Aiven-hosted server could dial from anywhere. Writing server/ebarimt.ts
-  // against a guessed cloud shape would risk shipping something that looks
-  // configured but can never actually reach the tax system -- see
-  // EBARIMT.md's open questions for exactly what to ask SmartSoftware
-  // support before any code here can be real.
+  // CORRECTION (2026-09-12): a note here used to say developer.smartsoftware.mn
+  // carried "zero API docs". That was wrong, and it cost two sessions --
+  // the site is an Apidog app that renders with JavaScript, so it looks
+  // empty to curl and to a plain page fetch. Its real content is at
+  // /llms.txt with every page fetchable as /api-<id>.md, and it documents a
+  // full REST API (see server/integrations/smartSoftware.ts).
+  //
+  // What still holds: Mongolia's POS API 3.0, which every ebarimt vendor is
+  // built on, needs a "PosService" running on the merchant's OWN network
+  // (127.0.0.1:7080) -- three independent client libraries confirm it, most
+  // recently github.com/hurelhuyag/ebarimt and PyPI's ebarimt-pos-sdk. Our
+  // Aiven-hosted server cannot dial that. But Smart POS's own
+  // /api/sale/sale returns the tax receipt (ДДТД, QR, lottery) for a sale we
+  // send it, and QPay can issue one for what it collects -- so there are two
+  // cloud paths that do not need a machine in the shop. No credentials
+  // belong in this card for either; see EBARIMT.md for which questions are
+  // left (they are for the accountant, not the vendor).
   ebarimt: {
     label: "И-баримт",
     note: "Татварын албаны цахим баримт (SmartSoftware эсвэл POS API 3.0)",
     wiredUp: false,
-    guidance: "developer.smartsoftware.mn-д техникийн API баримт бичиг байхгүй байсныг баталгаажуулсан. EBARIMT.md-д SmartSoftware-аас тодруулах асуултууд бэлэн байгаа -- ялангуяа: манай сервер таны PosService-тэй нэг сүлжээнд байх ёстой юу, эсвэл хаанаас ч дуудаж болох cloud endpoint байгаа юу? Хариу ирмэгц энд бодит талбарууд (жишээ нь posServiceUrl/posNumber) нэмэгдэнэ.",
+    guidance: "2026-09-12: гурван зам тодорхой боллоо. (A) Smart POS-ын /api/sale/sale нь борлуулалт илгээхэд И-БАРИМТЫГ ӨӨРӨӨ гаргаж ДДТД/QR/сугалааг буцаадаг -- энэ тохиолдолд ЭНД юу ч оруулах шаардлагагүй, зөвхөн Smart Software картыг тохируулна. (B) Татварын албаны POS API 3.0 -- дэлгүүрийн өөрийн машин дээр PosService (127.0.0.1:7080) ажиллуулахыг шаарддаг тул манай cloud серверээс дуудагдахгүй. (C) QPay-ээр төлсөн захиалгад QPay өөрөө и-баримт гаргаж чадна. Аль замыг сонгохоос өмнө EBARIMT.md-ийн нягтлангийн 2 асуултад (НӨАТ/НХАТ, иргэн vs байгууллагын баримт) хариу хэрэгтэй.",
     fields: [],
     freeForm: true,
     testable: false,
@@ -100,8 +104,8 @@ export const INTEGRATION_META: Record<IntegrationProvider, IntegrationMeta> = {
     freeForm: false,
     testable: false,
   },
-  card_golomt: { label: "Голомт банк (карт)", note: "Visa/Mastercard шууд төлбөр (e-Merchant)", wiredUp: false, fields: [], freeForm: true, testable: false },
-  courier_ebuuhia: { label: "eBuuhia хүргэлт", note: "Эльчийн хүргэлтийн үйлчилгээ", wiredUp: false, fields: [], freeForm: true, testable: false },
+  card_golomt: { label: "Голомт банк (карт)", note: "Visa/Mastercard шууд төлбөр (e-Merchant)", wiredUp: false, guidance: "Кодыг бичихийн өмнө Голомтоос дараахыг авна: e-Merchant гэрээ, мерчант ID, нууц түлхүүр, туршилтын (sandbox) орчны хаяг, төлбөр амжилттай болоход манай сервер рүү мэдэгдэх callback-ийн бүтэц. Эдгээр ирмэгц QPay/StorePay-тэй ижил хэлбэрээр (claim → callback → бид өөрсдөө шалгах) хийгдэнэ.", fields: [], freeForm: true, testable: false },
+  courier_ebuuhia: { label: "eBuuhia хүргэлт", note: "Эльчийн хүргэлтийн үйлчилгээ", wiredUp: false, guidance: "Хүргэлтийн компаниас авах зүйлс: гэрээ, API түлхүүр, захиалга үүсгэх endpoint, хүргэлтийн төлөв мэдэгдэх webhook, дүүрэг тус бүрийн тариф. Тариф ирвэл shared/delivery.ts дэх одоогийн нэг үнийн дүрмийг дүүргээр өргөтгөнө.", fields: [], freeForm: true, testable: false },
   ntfy: {
     label: "Утасны мэдэгдэл (ntfy)",
     note: "Захиалга, төлбөр, нөөцийн мэдэгдлийг ажилтнуудын утас руу push-ээр илгээнэ",

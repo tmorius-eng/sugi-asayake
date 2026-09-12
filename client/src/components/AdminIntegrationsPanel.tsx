@@ -385,7 +385,7 @@ export default function AdminIntegrationsPanel() {
       <div className="rounded-3xl border border-dashed border-[var(--a-border)] bg-[var(--a-card)] p-5">
         <p className="text-[10px] font-extrabold tracking-[.14em] text-[var(--a-muted)]">REST API / OAUTH2</p>
         <h3 className="mt-1 font-bold">Гадны системд зориулсан API — одоогоор байхгүй (зориуд)</h3>
-        <p className="mt-1 text-xs leading-5 text-[var(--a-muted)]">Энэ сайт гадны программд нээлттэй REST API болон OAuth2 нэвтрэлт гаргадаггүй. Гадагшаа холбогддог цэгүүд нь зөвхөн QPay болон verify.mn-ийн callback. Smart Software-ийн нөөц, гишүүнчлэлийн API-ийн хэлбэр тодорхой болмогц тохирох аргыг сонгоно: тэд манай руу өгөгдөл илгээдэг бол гарын үсэгтэй (HMAC) webhook, тэд манайхаас татдаг бол хэш-ээр хадгалсан API түлхүүр, OAuth2-ийг зөвхөн тэд шаардвал.</p>
+        <p className="mt-1 text-xs leading-5 text-[var(--a-muted)]">Энэ сайт гадны программд нээлттэй REST API болон OAuth2 нэвтрэлт гаргадаггүй — ингэх шаардлага гарсангүй. Smart Software-ийн API-ийн хэлбэр 2026-09-12-нд тодорхой болсон: холболт нь нэг чиглэлтэй, МАНАЙ сервер тэдэн рүү залгаж (OAuth2 нэр/нууц үгээр) үлдэгдлээ татдаг тул тэдэнд манай руу хандах эрх хэрэггүй. Гадагшаа нээлттэй цэгүүд нь зөвхөн QPay, StorePay, verify.mn-ийн callback бөгөөд тэдгээр нь "төлбөр төллөө" гэдэгт callback-ийн үгээр итгэдэггүй, өөрсдөө эргэж шалгадаг. Хэрэв ирээдүйд гадны систем манай руу өгөгдөл илгээх шаардлага гарвал HMAC гарын үсэгтэй webhook нэмнэ.</p>
       </div>
     </div>
   );
