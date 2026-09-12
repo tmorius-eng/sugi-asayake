@@ -821,7 +821,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    spec'd as non-scrollable paint-only clipping, so it does not break
    position:sticky for CommerceHeader. Fixes the sticky gap without needing
    to first chase down Checkout's separate overflow source. */
-.sugi-commerce { min-height: 100vh; overflow-x: clip; background: #f2f5f2; color: #17181b; }
+.sugi-commerce { min-height: 100vh; overflow-x: clip; background: var(--ck-page, #f2f5f2); color: var(--ck-ink, #17181b); }
 .shop-main { width: min(1380px, calc(100% - 68px)); margin: 0 auto; padding: 64px 0 96px; }
 .shop-hero { position: relative; display: grid; grid-template-columns: 1fr .88fr; gap: 8%; align-items: end; padding: 42px clamp(26px,5vw,74px) 40px; overflow: hidden; background: #d3dad4; }
 .shop-hero::after { content: ""; position: absolute; top: -145px; right: -136px; width: 400px; height: 400px; border: 1px solid rgba(57,112,167,.35); border-radius: 50%; box-shadow: 0 0 0 38px rgba(57,112,167,.08), 0 0 0 76px rgba(57,112,167,.045); }
@@ -2770,17 +2770,41 @@ body.admin-route #stcm-wrapper { display: none !important; }
   --ck-gold: #93781e;
   --ck-container: 1108px;
   --ck-gap: clamp(48px, 5.6vw, 80px);
+  /* The page behind everything, and the surface a card or the header sits
+     on. Split so a dark palette can move them independently. */
+  --ck-page: #fff;
+  --ck-surface: #fff;
+}
+
+/* --- Dark theme (2026-09-12, Tom) ---------------------------------------
+   Scoped to the attribute client/public/vendor/theme-init.js and
+   useStorefrontTheme.ts set on <html>, never to the `.dark` class -- that
+   class drives Tailwind's dark: utilities across the whole codebase, /admin
+   included, and the admin panel has its own switch.
+
+   Product photographs are shot on white, so every image tile deliberately
+   keeps a white ground in both themes; only the furniture around them
+   changes. */
+html[data-storefront-theme="dark"] {
+  --ck-page: #131313;
+  --ck-surface: #1b1b1b;
+  --ck-cream: #191917;
+  --ck-chip: #232323;
+  --ck-ink: #ededed;
+  --ck-muted: #a6a6a6;
+  --ck-line: #333333;
+  --ck-gold: #d9b45c;
 }
 
 /* The typeface stays the site's own Golos Text (Tom, 2026-09-12: use the
    font from before this restyle). Inter was briefly swapped in to match the
    reference; it reads smaller at the same pixel size and Tom found it hard
    to read, so only the reference's LAYOUT was kept, not its typeface. */
-.sugi-site { background: #fff; color: var(--ck-ink); }
+.sugi-site { background: var(--ck-page); color: var(--ck-ink); }
 /* The page itself, not just the wrapper -- the body paints the area beyond
    the last section and behind any overscroll. :has() keeps this to the
    homepage; /shop and the rest keep the Linen palette they were tuned for. */
-body:has(.sugi-site) { background: #fff; }
+body:has(.sugi-site) { background: var(--ck-page); }
 
 /* --- Header ------------------------------------------------------------- */
 /* Reference: 65px white bar, hairline underneath, logo left, nav centred at
@@ -2789,7 +2813,7 @@ body:has(.sugi-site) { background: #fff; }
 .commerce-header {
   padding: 0 max(20px, calc((100% - 1340px) / 2));
   border-bottom: 1px solid var(--ck-line);
-  background: #fff;
+  background: var(--ck-surface);
   backdrop-filter: none;
 }
 .commerce-header::before { display: none; }
@@ -2888,7 +2912,7 @@ body:has(.sugi-site) { background: #fff; }
 .header-search .header-search-trigger:hover { background: none; color: var(--ck-muted); }
 /* The search field itself: 380x40 as measured on the reference. */
 .header-search--inline { width: min(380px, 100%); }
-.header-search-field { display: flex; align-items: center; height: 40px; border: 1px solid var(--ck-line); border-radius: 4px; background: #fff; }
+.header-search-field { display: flex; align-items: center; height: 40px; border: 1px solid var(--ck-line); border-radius: 4px; background: var(--ck-surface); }
 .header-search--inline .header-search-input {
   height: 38px;
   border: 0;
@@ -2899,8 +2923,8 @@ body:has(.sugi-site) { background: #fff; }
 .header-search--inline .header-search-input::placeholder { color: #9a9a9a; }
 .header-search-submit { display: grid; width: 40px; height: 38px; flex: 0 0 auto; place-items: center; border: 0; background: none; color: var(--ck-muted); cursor: pointer; }
 .header-search-submit:hover { color: var(--ck-ink); }
-.header-search--inline .header-search-panel { top: calc(100% + 6px); right: 0; left: 0; width: auto; border: 1px solid var(--ck-line); border-radius: 4px; background: #fff; box-shadow: 0 10px 30px rgba(0, 0, 0, .07); }
-.header-search-panel { border-radius: 4px; background: #fff; box-shadow: 0 10px 30px rgba(0, 0, 0, .07); }
+.header-search--inline .header-search-panel { top: calc(100% + 6px); right: 0; left: 0; width: auto; border: 1px solid var(--ck-line); border-radius: 4px; background: var(--ck-surface); box-shadow: 0 10px 30px rgba(0, 0, 0, .07); }
+.header-search-panel { border-radius: 4px; background: var(--ck-surface); box-shadow: 0 10px 30px rgba(0, 0, 0, .07); }
 .header-search-result:hover { background: var(--ck-chip); }
 .header-search-viewall { border-radius: 4px; background: var(--ck-chip); color: var(--ck-ink); font-weight: 700; }
 .header-search-viewall:hover { background: var(--ck-line); color: var(--ck-ink); }
@@ -2944,7 +2968,7 @@ body:has(.sugi-site) { background: #fff; }
   display: block;
   min-height: 0;
   padding: clamp(24px, 3vw, 40px) 0 0;
-  background: #fff;
+  background: var(--ck-page);
 }
 .hero-rail-wrap { position: relative; }
 .hero-rail {
@@ -3005,7 +3029,7 @@ body:has(.sugi-site) { background: #fff; }
   padding: 0 16px;
   border: 1px solid var(--ck-line);
   border-radius: 5px;
-  background: #fff;
+  background: var(--ck-surface);
   color: var(--ck-ink);
   font-size: 15px;
   font-weight: 700;
@@ -3035,7 +3059,7 @@ body:has(.sugi-site) { background: #fff; }
 .sugi-site .carousel-shelf-heading .carousel-shelf-all-link:hover { gap: 6px; border-color: var(--ck-ink); color: var(--ck-ink); background: var(--ck-chip); }
 .sugi-site .carousel-shelf-track { gap: 14px; }
 .sugi-site .shelf-card-slot { width: 232px !important; }
-.sugi-site .carousel-shelf-btn { top: 38%; width: 34px; height: 34px; border: 1px solid var(--ck-line); background: #fff; color: var(--ck-ink); box-shadow: none; }
+.sugi-site .carousel-shelf-btn { top: 38%; width: 34px; height: 34px; border: 1px solid var(--ck-line); background: var(--ck-surface); color: var(--ck-ink); box-shadow: none; }
 .sugi-site .carousel-shelf-btn.prev { left: -17px; }
 .sugi-site .carousel-shelf-btn.next { right: -17px; }
 .sugi-site .carousel-shelf-empty { border-radius: 4px; background: var(--ck-cream); color: var(--ck-muted); }
@@ -3051,10 +3075,10 @@ body:has(.sugi-site) { background: #fff; }
 }
 .shelf-card:hover { box-shadow: none; transform: none; }
 .shelf-card-rank { position: static; display: block; width: auto; height: auto; margin-bottom: 6px; background: none; color: var(--ck-gold); font-size: 17px; font-weight: 700; letter-spacing: .04em; }
-.shelf-card-frame { display: block; border: 1px solid var(--ck-line); border-radius: 4px; background: #fff; transition: border-color .18s var(--ease-out); }
+.shelf-card-frame { display: block; border: 1px solid var(--ck-line); border-radius: 4px; background: var(--ck-surface); transition: border-color .18s var(--ease-out); }
 .shelf-card:hover .shelf-card-frame { border-color: #cfcfcf; }
 .shelf-card-image { position: relative; display: block; }
-.shelf-card-image img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #fff; }
+.shelf-card-image img { width: 100%; aspect-ratio: 1; object-fit: contain; background: var(--ck-surface); }
 .shelf-card-body { display: block; padding: 10px 12px 14px; }
 .shelf-card-body p { margin: 0 -12px 8px; padding: 4px 12px; background: var(--ck-chip); color: var(--ck-muted); font-size: 13px; font-weight: 500; letter-spacing: .04em; text-transform: none; }
 .shelf-card-body h3 {
@@ -3079,7 +3103,7 @@ body:has(.sugi-site) { background: #fff; }
 .sugi-site .fbrand-title { margin: 0 auto; }
 .sugi-site .fbrand-viewport { margin-top: 35px; }
 .sugi-site .fbrand-photo { background: var(--ck-chip); }
-.sugi-site .fbrand-logo { background: #fff; }
+.sugi-site .fbrand-logo { background: var(--ck-surface); }
 .sugi-site .fbrand-arrow { color: #c8c8c8; }
 .sugi-site .fbrand-arrow:hover { color: var(--ck-ink); }
 .sugi-site .fbrand-all {
@@ -3087,7 +3111,7 @@ body:has(.sugi-site) { background: #fff; }
   padding: 0 40px;
   border: 1px solid var(--ck-line);
   border-radius: 999px;
-  background: #fff;
+  background: var(--ck-surface);
   color: var(--ck-ink);
   font-size: 16px;
   font-weight: 700;
@@ -3128,7 +3152,7 @@ body:has(.sugi-site) { background: #fff; }
   padding: 12px;
   border: 1px solid var(--ck-line);
   border-radius: 50%;
-  background: #fff;
+  background: var(--ck-surface);
   transition: border-color .18s var(--ease-out);
 }
 .sugi-site .cat-mosaic-item:hover .cat-mosaic-item-photo { border-color: #cfcfcf; }
@@ -3139,7 +3163,7 @@ body:has(.sugi-site) { background: #fff; }
 .sugi-site .cat-rail-arrows { justify-content: center; gap: 40px; margin-top: 24px; }
 
 /* --- Why choose us / membership / locator / editorial ------------------- */
-.sugi-site .wcu-section { padding: var(--ck-gap) max(20px, 7vw) 0; background: #fff; }
+.sugi-site .wcu-section { padding: var(--ck-gap) max(20px, 7vw) 0; background: var(--ck-page); }
 .sugi-site .wcu-grid { margin-top: 35px; }
 .sugi-site .wcu-item-title { font-size: 17px; font-weight: 700; letter-spacing: .04em; }
 .sugi-site .wcu-item-desc { color: var(--ck-muted); font-size: 16px; font-weight: 500; line-height: 1.8; }
@@ -3149,7 +3173,7 @@ body:has(.sugi-site) { background: #fff; }
 .sugi-site .wcu-review-card p { color: var(--ck-ink); font-size: 15px; line-height: 1.85; }
 .sugi-site .wcu-review-footer strong { font-weight: 700; }
 
-.sugi-site .qs-section { padding: var(--ck-gap) max(20px, 7vw) 0; background: #fff; }
+.sugi-site .qs-section { padding: var(--ck-gap) max(20px, 7vw) 0; background: var(--ck-page); }
 .sugi-site .qs-desc, .sugi-site .qs-subtitle { color: var(--ck-muted); font-size: 16px; font-weight: 500; }
 .sugi-site .qs-guest-tier { border: 1px solid var(--ck-line); border-radius: 4px; background: var(--ck-cream); }
 .sugi-site .qs-guest-tier strong { color: var(--ck-ink); font-size: 21px; font-weight: 700; }
@@ -3169,7 +3193,7 @@ body:has(.sugi-site) { background: #fff; }
 .sugi-site .editorial-banner-points { color: var(--ck-ink); font-size: 16px; font-weight: 700; }
 .sugi-site .editorial-banner-points li::before { background: var(--ck-gold); }
 
-.sugi-site .locator-section { width: min(var(--ck-container), calc(100% - 40px)); margin: 0 auto; padding: var(--ck-gap) 0 0; background: #fff; }
+.sugi-site .locator-section { width: min(var(--ck-container), calc(100% - 40px)); margin: 0 auto; padding: var(--ck-gap) 0 0; background: var(--ck-page); }
 .sugi-site .locator-section::before { display: none; }
 .sugi-site .locator-lede { color: var(--ck-muted); font-size: 16px; font-weight: 500; }
 .sugi-site .locator-map { border-radius: 4px; background: var(--ck-cream); }
@@ -3188,12 +3212,12 @@ body:has(.sugi-site) { background: #fff; }
 .footer-cta-banner .eyebrow span { display: none; }
 .footer-cta-banner h2 { font-size: clamp(22px, 2.1vw, 28px); font-weight: 700; letter-spacing: .1em; line-height: 1.5; color: var(--ck-ink); }
 .footer-cta-banner h2 em { color: var(--primary-text); font-style: normal; }
-.footer-cta-banner .button-light { border: 1px solid var(--ck-line); background: #fff; color: var(--ck-ink); font-size: 16px; font-weight: 700; }
+.footer-cta-banner .button-light { border: 1px solid var(--ck-line); background: var(--ck-surface); color: var(--ck-ink); font-size: 16px; font-weight: 700; }
 .footer-cta-banner .button-light:hover { border-color: var(--ck-ink); background: var(--ck-chip); }
 .footer-grid { width: min(var(--ck-container), calc(100% - 40px)); margin: 0 auto; padding: 48px 0 40px; gap: 32px; }
 .footer-logo { width: 150px; filter: none; }
 .footer-grid > div:first-child p { color: var(--ck-muted); font-size: 15px; }
-.footer-social-link { border-color: var(--ck-line); background: #fff; color: var(--ck-ink); font-size: 15px; font-weight: 700; }
+.footer-social-link { border-color: var(--ck-line); background: var(--ck-surface); color: var(--ck-ink); font-size: 15px; font-weight: 700; }
 .footer-social-link:hover { border-color: var(--ck-ink); background: var(--ck-chip); color: var(--ck-ink); transform: none; }
 .footer-social-link:hover svg { transform: none; }
 .footer-column > span { color: var(--ck-muted); font-size: 13px; font-weight: 700; letter-spacing: .14em; }
@@ -3227,7 +3251,7 @@ body:has(.sugi-site) { background: #fff; }
   .commerce-brand img { width: 128px; max-width: 100%; }
   .commerce-header-actions { gap: 12px; margin-left: 0; }
   .header-search--inline { width: 100%; }
-  .commerce-mobile-menu { background: #fff; }
+  .commerce-mobile-menu { background: var(--ck-surface); }
   .hero-rail { gap: 12px; padding: 0 16px; }
   .hero-rail-slide { flex: 0 0 min(450px, 82vw); }
   .sugi-site .hero-copy h1 { font-size: clamp(26px, 6.4vw, 32px); }
@@ -3336,8 +3360,8 @@ body:has(.sugi-site) { background: #fff; }
    162px around a 318px card. The page also still wore the old Linen palette
    under the restyled white header and cream footer, which read as a stray
    grey band. */
-body:has(.auth-shell) { background: #fff; }
-.auth-shell { min-height: 0; background: #fff; color: var(--ck-ink); }
+body:has(.auth-shell) { background: var(--ck-page); }
+.auth-shell { min-height: 0; background: var(--ck-page); color: var(--ck-ink); }
 /* The two decorative rings bleeding off the right edge belong to the old
    look; the reference has no ornament of that kind. */
 .auth-shell::before { display: none; }
@@ -3347,10 +3371,10 @@ body:has(.auth-shell) { background: #fff; }
 .auth-head h1 { margin: 12px 0 0; font-size: clamp(24px, 2.4vw, 32px); font-weight: 700; letter-spacing: .08em; line-height: 1.45; color: var(--ck-ink); }
 .auth-head h1 em { color: var(--primary-text); font-style: normal; }
 .auth-head p.auth-lede { max-width: none; margin: 12px auto 0; color: var(--ck-muted); font-size: 16px; line-height: 1.8; font-weight: 500; }
-.auth-card { padding: clamp(20px, 2.6vw, 28px); border: 1px solid var(--ck-line); border-radius: 4px; background: #fff; box-shadow: none; }
+.auth-card { padding: clamp(20px, 2.6vw, 28px); border: 1px solid var(--ck-line); border-radius: 4px; background: var(--ck-surface); box-shadow: none; }
 .auth-card::before { display: none; }
 .auth-field { font-size: 15px; font-weight: 700; color: var(--ck-muted); }
-.auth-field-shell { border: 1px solid var(--ck-line); border-radius: 4px; background: #fff; }
+.auth-field-shell { border: 1px solid var(--ck-line); border-radius: 4px; background: var(--ck-surface); }
 .auth-field-shell:focus-within { border-color: var(--ck-ink); }
 .auth-field-shell input, .auth-field-shell textarea { color: var(--ck-ink); font-weight: 500; }
 .auth-submit { border-radius: 999px; font-size: 16px; font-weight: 700; letter-spacing: .06em; }
@@ -3395,13 +3419,13 @@ body:has(.auth-shell) { background: #fff; }
 .sugi-site .shop-kicker span { display: none; }
 .sugi-site .shop-hero-copy > p:not(.shop-kicker) { color: var(--ck-muted); font-size: 16px; font-weight: 500; }
 .sugi-site .shop-hero-signature,
-.sugi-site .shop-hero-delivery { border: 1px solid var(--ck-line); border-radius: 999px; background: #fff; font-size: 13px; font-weight: 700; }
-.sugi-site .shop-search-panel { padding: clamp(20px, 2.4vw, 30px); border: 1px solid var(--ck-line); border-radius: 4px; background: #fff; }
+.sugi-site .shop-hero-delivery { border: 1px solid var(--ck-line); border-radius: 999px; background: var(--ck-surface); font-size: 13px; font-weight: 700; }
+.sugi-site .shop-search-panel { padding: clamp(20px, 2.4vw, 30px); border: 1px solid var(--ck-line); border-radius: 4px; background: var(--ck-surface); }
 /* The black-and-gold marquee under the shop hero belongs to the old look. */
 .sugi-site .shop-ribbon { display: none; }
 .sugi-site .shop-filter { border-color: var(--ck-line); }
 .sugi-site .shop-discovery { padding: clamp(28px, 3.4vw, 48px) clamp(20px, 3vw, 40px); border: 1px solid var(--ck-line); border-radius: 4px; background: var(--ck-cream); }
-.sugi-site .shop-product-card { border: 1px solid var(--ck-line); border-radius: 4px; background: #fff; }
+.sugi-site .shop-product-card { border: 1px solid var(--ck-line); border-radius: 4px; background: var(--ck-surface); }
 .sugi-site .shop-product-card:hover { border-color: #cfcfcf; box-shadow: none; transform: none; }
 .sugi-site .shop-product-copy h2 { font-size: 15px; font-weight: 700; line-height: 1.55; color: var(--ck-ink); }
 .sugi-site .shop-product-prices strong { font-size: 21px; font-weight: 700; color: var(--ck-ink); }
@@ -3412,7 +3436,7 @@ body:has(.auth-shell) { background: #fff; }
 .sugi-site .shop-filter-pills a { border-radius: 999px; font-size: 14px; font-weight: 700; }
 
 /* --- /privacy, /terms, /returns ------------------------------------------ */
-.sugi-site .doc-shell { min-height: 0; background: #fff; color: var(--ck-ink); }
+.sugi-site .doc-shell { min-height: 0; background: var(--ck-page); color: var(--ck-ink); }
 .sugi-site .doc-main { width: min(760px, calc(100% - 40px)); padding: clamp(28px, 3vw, 44px) 0 clamp(56px, 6vw, 88px); }
 .sugi-site .doc-back { color: var(--ck-ink); font-size: 14px; font-weight: 700; }
 .sugi-site .doc-head { margin-top: 28px; padding-bottom: 24px; border-bottom-color: var(--ck-line); }
@@ -3435,7 +3459,7 @@ body:has(.auth-shell) { background: #fff; }
 .sugi-site .profile-main { width: min(920px, calc(100% - 40px)); padding: clamp(28px, 3vw, 44px) 0 clamp(56px, 6vw, 88px); }
 .sugi-site .profile-head { border-bottom-color: var(--ck-line); }
 .sugi-site .notfound-card,
-.sugi-site .notfound-section { border: 1px solid var(--ck-line); border-radius: 4px; background: #fff; }
+.sugi-site .notfound-section { border: 1px solid var(--ck-line); border-radius: 4px; background: var(--ck-surface); }
 /* Checkout is Tailwind-utility markup, so its surfaces are reached through
    the two sweeps at the top of this block plus the shared button rules. */
 .sugi-site .order-summary-scroll { border-color: var(--ck-line); }
@@ -3452,7 +3476,7 @@ body:has(.auth-shell) { background: #fff; }
    rather than by rewriting the page. Dark slab -> cream panel, gold CTA ->
    the brand red every other primary action on the site uses, heavy red
    scaffolding -> hairlines. */
-.sugi-site [class*="bg-[#f8f5ef]"] { background: #fff; }
+.sugi-site [class*="bg-[#f8f5ef]"] { background: var(--ck-page); }
 .sugi-site [class*="bg-[#17181b]"]:not(button) { border: 1px solid var(--ck-line); background: var(--ck-cream); color: var(--ck-ink); }
 .sugi-site [class*="bg-[#17181b]"]:not(button) [class*="text-white"],
 .sugi-site [class*="bg-[#17181b]"]:not(button) [class*="text-[#fffdf9]"] { color: var(--ck-ink); }
@@ -3495,7 +3519,7 @@ body:has(.auth-shell) { background: #fff; }
   padding: 0 16px;
   border: 1px solid var(--ck-line);
   border-radius: 999px;
-  background: #fff;
+  background: var(--ck-surface);
   color: var(--ck-ink);
   font-size: 14px;
   font-weight: 700;
@@ -3600,3 +3624,232 @@ body:has(.auth-shell) { background: #fff; }
 .sugi-site .hero-eyebrow .hero-eyebrow-sep { display: inline-flex; width: auto; height: auto; padding: 0 7px; align-items: center; background: none; color: var(--ck-ink); font-family: inherit; font-size: 1.9em; font-weight: 700; letter-spacing: 0; line-height: 1; }
 .sugi-site .hero-eyebrow .hero-eyebrow-brand { background: var(--primary); }
 .sugi-site .hero-eyebrow .hero-eyebrow-place { background: var(--sky); }
+
+/* --- Dark theme: the furniture the tokens alone cannot reach ------------- */
+/* The header's own switch. */
+.header-theme-toggle { display: inline-grid; min-width: 24px; min-height: 24px; padding: 0; place-items: center; border: 0; background: none; color: var(--ck-ink); cursor: pointer; }
+.header-theme-toggle:hover { color: var(--ck-muted); background: none; transform: none; }
+
+html[data-storefront-theme="dark"] .sugi-site,
+html[data-storefront-theme="dark"] .auth-shell { color: var(--ck-ink); }
+/* Packshots are photographed on white, so their tile stays white in both
+   themes; only the furniture around them changes. */
+html[data-storefront-theme="dark"] .shelf-card-image img,
+html[data-storefront-theme="dark"] .sugi-site .shop-product-media,
+html[data-storefront-theme="dark"] .sugi-site .cat-mosaic-item-photo { background: #fff; }
+/* Text still painted with a literal light-theme value further up the file. */
+html[data-storefront-theme="dark"] .sugi-site p,
+html[data-storefront-theme="dark"] .sugi-site h1,
+html[data-storefront-theme="dark"] .sugi-site h2,
+html[data-storefront-theme="dark"] .sugi-site h3,
+html[data-storefront-theme="dark"] .sugi-site strong,
+html[data-storefront-theme="dark"] .sugi-site .shop-product-copy h2,
+html[data-storefront-theme="dark"] .sugi-site .location-row strong,
+html[data-storefront-theme="dark"] .sugi-site .qs-meta-row strong { color: var(--ck-ink); }
+html[data-storefront-theme="dark"] .sugi-site .shop-product-prices s,
+html[data-storefront-theme="dark"] .sugi-site .shelf-card-price s { color: #8d8d8d; }
+html[data-storefront-theme="dark"] .site-footer,
+html[data-storefront-theme="dark"] .footer-cta-banner { background: var(--ck-cream); color: var(--ck-ink); border-color: var(--ck-line); }
+html[data-storefront-theme="dark"] .footer-column a,
+html[data-storefront-theme="dark"] .footer-column-button,
+html[data-storefront-theme="dark"] .footer-bottom span { color: var(--ck-ink); }
+html[data-storefront-theme="dark"] .footer-grid > div:first-child p,
+html[data-storefront-theme="dark"] .footer-column > span,
+html[data-storefront-theme="dark"] .footer-bottom { color: var(--ck-muted); }
+html[data-storefront-theme="dark"] .footer-logo { filter: brightness(0) invert(1); }
+html[data-storefront-theme="dark"] .footer-social-link { background: var(--ck-chip); border-color: var(--ck-line); color: var(--ck-ink); }
+html[data-storefront-theme="dark"] .commerce-header { background: var(--ck-surface); border-bottom-color: var(--ck-line); }
+html[data-storefront-theme="dark"] .commerce-mobile-menu { background: var(--ck-surface); }
+html[data-storefront-theme="dark"] .commerce-marketing-nav a,
+html[data-storefront-theme="dark"] .commerce-header-actions > a,
+html[data-storefront-theme="dark"] .commerce-header-actions button,
+html[data-storefront-theme="dark"] .header-search .header-search-trigger { color: var(--ck-ink); }
+html[data-storefront-theme="dark"] .header-search-field,
+html[data-storefront-theme="dark"] .header-search-panel,
+html[data-storefront-theme="dark"] .header-search-input { background: var(--ck-surface); color: var(--ck-ink); border-color: var(--ck-line); }
+html[data-storefront-theme="dark"] .header-search-result:hover,
+html[data-storefront-theme="dark"] .header-search-viewall { background: var(--ck-chip); color: var(--ck-ink); }
+html[data-storefront-theme="dark"] .mobile-sticky-bar { background: rgba(19, 19, 19, .94); border-top-color: var(--ck-line); }
+html[data-storefront-theme="dark"] .bottom-nav-item { color: var(--ck-muted); }
+html[data-storefront-theme="dark"] .sugi-site .editorial-banner,
+html[data-storefront-theme="dark"] .sugi-site .editorial-banner-copy { background: var(--ck-cream); }
+html[data-storefront-theme="dark"] .sugi-site .shop-hero,
+html[data-storefront-theme="dark"] .sugi-site .shop-discovery,
+html[data-storefront-theme="dark"] .sugi-site .kw-box,
+html[data-storefront-theme="dark"] .sugi-site .wcu-review-card,
+html[data-storefront-theme="dark"] .sugi-site .qs-guest-tier,
+html[data-storefront-theme="dark"] .sugi-site .locator-map { background: var(--ck-cream); border-color: var(--ck-line); }
+html[data-storefront-theme="dark"] .sugi-site .shop-skin-filter button { background: var(--ck-chip); border-color: var(--ck-line); }
+html[data-storefront-theme="dark"] .sugi-site .shop-filter-pills button.active,
+html[data-storefront-theme="dark"] .sugi-site .shop-skin-filter button.active,
+html[data-storefront-theme="dark"] .sugi-site .shop-grid-toolbar button.active,
+html[data-storefront-theme="dark"] .sugi-site .stock-toggle input:checked + span { background: var(--ck-ink); color: var(--ck-page); border-color: var(--ck-ink); }
+html[data-storefront-theme="dark"] .sugi-site .shop-applied-chip { background: var(--ck-chip); border-color: var(--ck-ink); }
+html[data-storefront-theme="dark"] .sugi-site .shop-applied-chip:hover { background: var(--ck-ink); color: var(--ck-page); }
+html[data-storefront-theme="dark"] .sugi-site .hero-eyebrow .hero-eyebrow-sep { color: var(--ck-ink); }
+html[data-storefront-theme="dark"] .sugi-site [class*="bg-[#17181b]"]:not(button) { background: var(--ck-cream); color: var(--ck-ink); }
+html[data-storefront-theme="dark"] .sugi-site input,
+html[data-storefront-theme="dark"] .sugi-site select,
+html[data-storefront-theme="dark"] .sugi-site textarea,
+html[data-storefront-theme="dark"] .auth-field-shell { background: var(--ck-surface); color: var(--ck-ink); border-color: var(--ck-line); }
+/* Brand logos are dark artwork blended with `mix-blend-mode: multiply`, so
+   on a dark band they multiply away to nothing (Tom: "dark bolhoor brandiin
+   doorh logo haragdhgui baina"). Their band keeps a light ground in dark
+   mode, exactly as the product tiles do. */
+html[data-storefront-theme="dark"] .fbrand-logo { background: #f4f4f4; }
+html[data-storefront-theme="dark"] .brand-strip img { background: #f4f4f4; }
+/* Small colour-on-dark type from the pre-restyle palette. */
+html[data-storefront-theme="dark"] .sugi-site .shop-hero h1 em,
+html[data-storefront-theme="dark"] .sugi-site .editorial-heading em,
+html[data-storefront-theme="dark"] .sugi-site .carousel-shelf-heading h2 em,
+html[data-storefront-theme="dark"] .sugi-site .shop-applied-clear,
+html[data-storefront-theme="dark"] .footer-cta-banner h2 em { color: #ff6b81; }
+html[data-storefront-theme="dark"] .sugi-site .shop-hero-signature { color: #7fb0e0; }
+html[data-storefront-theme="dark"] .sugi-site .shop-hero-delivery { color: #7bc99a; }
+html[data-storefront-theme="dark"] .sugi-site .shop-hero-signature,
+html[data-storefront-theme="dark"] .sugi-site .shop-hero-delivery { background: var(--ck-chip); border-color: var(--ck-line); }
+html[data-storefront-theme="dark"] .sugi-site .shop-product-prices strong { color: var(--ck-ink); }
+html[data-storefront-theme="dark"] .sugi-site .shop-brand-chip { background: var(--ck-chip); color: var(--ck-muted); }
+html[data-storefront-theme="dark"] .sugi-site .shelf-card-body p { background: var(--ck-chip); color: var(--ck-muted); }
+html[data-storefront-theme="dark"] .sugi-site .shelf-card-frame,
+html[data-storefront-theme="dark"] .sugi-site .shop-product-card,
+html[data-storefront-theme="dark"] .sugi-site .cat-mosaic-item-photo { border-color: var(--ck-line); }
+
+/* --- Dark theme, second pass: measured defects, not guesses --------------
+   An audit across seven routes in both themes (contrast against each
+   element's real painted background, WCAG thresholds by size and weight)
+   turned up one root cause behind most of the dark-mode failures: hundreds
+   of rules written before this restyle still read the Linen tokens
+   (--card, --background, --foreground, --muted-foreground, --border), which
+   stayed light. Re-pointing those tokens inside the storefront fixes them
+   all at once instead of chasing each rule. */
+html[data-storefront-theme="dark"] .sugi-site,
+html[data-storefront-theme="dark"] .auth-shell,
+html[data-storefront-theme="dark"] .commerce-header,
+html[data-storefront-theme="dark"] .site-footer,
+html[data-storefront-theme="dark"] .mobile-sticky-bar {
+  --background: var(--ck-page);
+  --card: var(--ck-surface);
+  --popover: var(--ck-surface);
+  --foreground: var(--ck-ink);
+  --card-foreground: var(--ck-ink);
+  --muted: var(--ck-chip);
+  --muted-foreground: var(--ck-muted);
+  --secondary: var(--ck-cream);
+  --surface-tint: var(--ck-cream);
+  --border: var(--ck-line);
+  --input: var(--ck-line);
+}
+
+/* The category tile is a circle; its photograph is a square with a white
+   ground, so without clipping the corners show through on a dark page
+   (Tom: "durvuljin 4 bulan untsug haragdaj baina"). */
+.sugi-site .cat-mosaic-item-photo { overflow: hidden; }
+html[data-storefront-theme="dark"] .sugi-site .cat-mosaic-item-title { color: var(--ck-ink); }
+html[data-storefront-theme="dark"] .sugi-site .cat-mosaic-item-detail { color: var(--ck-muted); }
+
+/* Accent words inside headings: the small-text red is tuned for a light
+   ground and measures 2.5:1 on this one. */
+html[data-storefront-theme="dark"] .sugi-site em,
+html[data-storefront-theme="dark"] .sugi-site .shop-kicker,
+html[data-storefront-theme="dark"] .sugi-site .doc-kicker,
+html[data-storefront-theme="dark"] .auth-head p.auth-kicker,
+html[data-storefront-theme="dark"] .sugi-site .qs-cta { color: #ff6b81; }
+html[data-storefront-theme="dark"] .sugi-site .eyebrow { color: var(--ck-muted); }
+
+/* Leftover literal light grounds: Tailwind's bg-white and the pale note
+   panels on checkout, and the white pill controls on /shop. */
+html[data-storefront-theme="dark"] .sugi-site [class*="bg-white"],
+html[data-storefront-theme="dark"] .sugi-site [class*="bg-[#fff"],
+html[data-storefront-theme="dark"] .sugi-site [class*="bg-[#f8f"],
+html[data-storefront-theme="dark"] .sugi-site [class*="bg-[var(--a-card)"] { background: var(--ck-surface); }
+html[data-storefront-theme="dark"] .sugi-site [class*="bg-[#fff2f4]"],
+html[data-storefront-theme="dark"] .sugi-site [class*="bg-[#fff5dd]"],
+html[data-storefront-theme="dark"] .sugi-site [class*="bg-[#e7f2ec]"] { background: var(--ck-chip); }
+html[data-storefront-theme="dark"] .sugi-site .stock-toggle span,
+html[data-storefront-theme="dark"] .sugi-site .sort-control,
+html[data-storefront-theme="dark"] .sugi-site .price-range-filter,
+html[data-storefront-theme="dark"] .sugi-site .shop-grid-toolbar button,
+html[data-storefront-theme="dark"] .sugi-site .carousel-shelf-btn,
+html[data-storefront-theme="dark"] .sugi-site .fbrand-all,
+html[data-storefront-theme="dark"] .sugi-site .brands-search input { background: var(--ck-surface); color: var(--ck-ink); border-color: var(--ck-line); }
+html[data-storefront-theme="dark"] .sugi-site .sort-control select,
+html[data-storefront-theme="dark"] .sugi-site .price-range-filter input { color: var(--ck-ink); }
+html[data-storefront-theme="dark"] .sugi-site .brands-letters button { color: var(--ck-ink); }
+html[data-storefront-theme="dark"] .sugi-site .brands-letters button:disabled { color: #5a5a5a; }
+html[data-storefront-theme="dark"] .sugi-site .brand-card-count,
+html[data-storefront-theme="dark"] .sugi-site .qs-example-tag,
+html[data-storefront-theme="dark"] .sugi-site .qs-savings span,
+html[data-storefront-theme="dark"] .sugi-site .location-row small,
+html[data-storefront-theme="dark"] .sugi-site .location-note { color: var(--ck-muted); }
+html[data-storefront-theme="dark"] .sugi-site .shop-hero-signature span,
+html[data-storefront-theme="dark"] .sugi-site .shop-hero-signature svg { color: #7fb0e0; }
+html[data-storefront-theme="dark"] .sugi-site .shop-hero-delivery span,
+html[data-storefront-theme="dark"] .sugi-site .shop-hero-delivery svg { color: #7bc99a; }
+html[data-storefront-theme="dark"] .sugi-site .shop-search-panel,
+html[data-storefront-theme="dark"] .sugi-site .shop-search-panel input { background: var(--ck-surface); color: var(--ck-ink); }
+html[data-storefront-theme="dark"] .sugi-site .shop-search-panel span { color: var(--ck-muted); }
+
+/* --- Light theme corrections from the same audit ------------------------- */
+/* The reference's gold measured 4.25:1 behind 17px rank numbers, just under
+   the 4.5 small-text threshold; a shade darker clears it without changing
+   the character. */
+:root { --ck-gold: #7a6318; }
+/* The price-range dash and the brands-page clear button sat at 3.22:1. */
+.sugi-site .price-range-filter span,
+.sugi-site .brands-search > button,
+.sugi-site .brands-letters button { color: #5f645f; }
+html[data-storefront-theme="dark"] .sugi-site .price-range-filter span,
+html[data-storefront-theme="dark"] .sugi-site .brands-search > button { color: var(--ck-muted); }
+/* --- Dark theme, third pass (measured on /shop) -------------------------- */
+/* The wordmark is dark artwork on transparency, so half of it disappears on
+   a dark header. Same treatment the footer logo already uses. */
+html[data-storefront-theme="dark"] .commerce-brand img { filter: brightness(0) invert(1); }
+/* Panels and controls that still carried literal light hex values. */
+html[data-storefront-theme="dark"] .sugi-site .shop-search-panel label,
+html[data-storefront-theme="dark"] .sugi-site .shop-search-panel > div,
+html[data-storefront-theme="dark"] .sugi-site .shop-wishlist-toggle,
+html[data-storefront-theme="dark"] .sugi-site .shop-quick-view,
+html[data-storefront-theme="dark"] .sugi-site .shop-pagination button,
+html[data-storefront-theme="dark"] .sugi-site .quick-view-dialog,
+html[data-storefront-theme="dark"] .sugi-site .recently-viewed-card { background: var(--ck-surface); color: var(--ck-ink); border-color: var(--ck-line); }
+html[data-storefront-theme="dark"] .sugi-site .recently-viewed-section { background: var(--ck-cream); border-color: var(--ck-line); }
+html[data-storefront-theme="dark"] .sugi-site .recently-viewed-card h3,
+html[data-storefront-theme="dark"] .sugi-site .recently-viewed-card strong { color: var(--ck-ink); }
+html[data-storefront-theme="dark"] .sugi-site .recently-viewed-card p,
+html[data-storefront-theme="dark"] .sugi-site .recently-viewed-notice { color: var(--ck-muted); }
+html[data-storefront-theme="dark"] .sugi-site .shop-stock-flag { background: var(--ck-chip); color: var(--ck-muted); }
+html[data-storefront-theme="dark"] .sugi-site .shop-search-panel input { background: var(--ck-surface); color: var(--ck-ink); }
+html[data-storefront-theme="dark"] .sugi-site .shop-search-panel input::placeholder,
+html[data-storefront-theme="dark"] .header-search-input::placeholder { color: #8a8a8a; }
+
+/* --- Dark theme, fourth pass: the wrapper that held the whole shop light -- */
+/* .sugi-commerce is the page shell Shop, Checkout and Profile share and it
+   paints its own #f2f5f2 over everything -- which is why /shop stayed light
+   however many inner rules were repainted (Tom: "shop yaaltchgu dark
+   bolhgu baina"). It follows the palette in both themes now. */
+.sugi-site .sugi-commerce { background: var(--ck-page); color: var(--ck-ink); }
+html[data-storefront-theme="dark"] .sugi-site .sugi-commerce { background: var(--ck-page); color: var(--ck-ink); }
+html[data-storefront-theme="dark"] .commerce-back { background: var(--ck-surface); border-color: var(--ck-line); }
+/* The mobile drawer's rows, the skeletons and the journal's image wells. */
+html[data-storefront-theme="dark"] .commerce-mobile-menu a,
+html[data-storefront-theme="dark"] .commerce-mobile-menu span { color: var(--ck-ink); }
+html[data-storefront-theme="dark"] .commerce-mobile-menu-heading { color: var(--ck-muted); }
+html[data-storefront-theme="dark"] .sugi-site .skeleton,
+html[data-storefront-theme="dark"] .sugi-site [class*="aspect-["] { background: var(--ck-chip); }
+html[data-storefront-theme="dark"] .sugi-site .brand-card-mark { background: var(--ck-chip); color: var(--ck-ink); }
+/* A search highlight inside a light tile keeps the light-theme accent. */
+html[data-storefront-theme="dark"] .sugi-site .brand-card-mark em,
+html[data-storefront-theme="dark"] .sugi-site .brands-letters em { color: #ff6b81; }
+html[data-storefront-theme="dark"] .sugi-site .brands-letters button:disabled { color: #8a8a8a; }
+html[data-storefront-theme="dark"] .sugi-site small,
+html[data-storefront-theme="dark"] .sugi-site .qs-example-note,
+html[data-storefront-theme="dark"] .sugi-site .qs-sr-summary,
+html[data-storefront-theme="dark"] .sugi-site [class*="text-[#6f7076]"],
+html[data-storefront-theme="dark"] .sugi-site [class*="text-[#545958]"] { color: var(--ck-muted); }
+html[data-storefront-theme="dark"] .sugi-site [class*="text-[#c81b34]"],
+html[data-storefront-theme="dark"] .sugi-site [class*="text-[#df1f3d]"] { color: #ff6b81; }
+/* QuickStats' graph labels are drawn straight onto the page. */
+html[data-storefront-theme="dark"] .sugi-site .qs-stage span,
+html[data-storefront-theme="dark"] .sugi-site .qs-savings strong { color: var(--ck-ink); }
+html[data-storefront-theme="dark"] .sugi-site .qs-stage small { color: var(--ck-muted); }

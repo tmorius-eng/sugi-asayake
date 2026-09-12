@@ -307,6 +307,18 @@ Tom лавлагаа screenshot (SHARP шүүлтүүрийн карт) илгэ
 
 ⚠️ **Tom-д**: одоогоор **937 бараанаас 0-д нь "Хуучин үнэ" тавигдаагүй** тул улбар шар **-N% badge бодит сайт дээр хараахан харагдахгүй**. Badge ажиллаж байгааг нэг бараан дээр түр 309,900→30,900 тавьж (-90%) баталгаажуулаад **шууд буцаасан** (одоо дахин 19,000₮, хуучин үнэ NULL). Хямдрал харуулах бол /admin → Бүтээгдэхүүн → **Хуучин үнэ** талбарыг бөглөнө.
 
+## ✅ (2026-09-12) Storefront-ийн Dark theme (header дээрх товч)
+
+Tom: "website iin frontend deer dark theme on off bolgodog bolgo, headeriin tend button nem". Хэрэгжүүлэлт:
+
+- **Өөрийн атрибут**: `html[data-storefront-theme="dark|light"]`. ⚠️ Tailwind-ийн `.dark` класс ХЭРЭГЛЭЭГҮЙ — тэр класс нь /admin доторх `dark:` utility бүрийг мөн асаадаг тул storefront-оос дарахад админ панель хамт өнгөө сольдог болно. Бүх dark дүрэм `html[data-storefront-theme="dark"]`-аар эхэлнэ.
+- `client/src/hooks/useStorefrontTheme.ts` (localStorage `sugi-storefront-theme`, системийн `prefers-color-scheme` анхдагч) + header-ийн нар/сар товч (`.header-theme-toggle`).
+- **FOUC**: `client/public/vendor/theme-init.js` нь React ачаалахаас өмнө атрибутыг тавина. ⚠️ index.html-д inline script БИЧИХГҮЙ (CSP `script-src 'self'`) — тиймээс тусдаа файл.
+- **Токен**: `--ck-page` (хуудас) ба `--ck-surface` (карт/header) салсан; dark-д `--ck-*` бүгд дахин тодорхойлогдоно. **Хуучин Linen токенууд** (`--card`, `--background`, `--foreground`, `--muted-foreground`, `--border`, `--secondary`, `--muted`, `--surface-tint`) storefront доторх dark-д `--ck-*` руу заана — үүгээр restyle-аас өмнөх олон зуун дүрэм нэг дор зөв болсон.
+- ⚠️ **Барааны зураг, брэндийн логоны талбар цагаан хэвээр** (packshot цагаан дэвсгэртэй, `mix-blend-mode: multiply` тул харанхуй дээр алга болно). Ангиллын дугуй зурагт `overflow: hidden` заавал (эс бөгөөс дөрвөлжин булан харагдана). Header-ийн лого dark-д `filter: brightness(0) invert(1)`.
+- 🔴 **Хамгийн том алдаа байсан**: `.sugi-commerce` (Shop/Checkout/Profile-ийн нийтлэг бүрхүүл) өөрөө `#f2f5f2` будаж, /shop бүхэлдээ цайвар хэвээр үлдэж байв. Одоо `var(--ck-page)`.
+- **Баталгаажуулалт**: 8 маршрут × 2 загвар × 1440/390 = **32/32 хослол цэвэр** — WCAG босго (жижиг 4.5:1, том 3:1) зөрчсөн текст 0, dark дээр үлдсэн цайвар самбар 0, хэвтээ overflow 0, эвдэрсэн зураг 0. (Аудитын явцад өөрийн rate limiter 429 өгсөн нь тестийн олон хүсэлтээс, сайтын алдаа биш.)
+
 ## ✅ (2026-09-12) Нүүр хуудас cosmekitchen-webstore.jp лавлагаагаар бүрэн шинэчлэгдэв
 
 Tom лавлагаа сонгов: "buh design sudalj ... bugdiin huulaad hiiged uz!!! premium baih ystoi professional!!!". Playwright-ээр тэр сайтын computed style/bounding box-ыг хэмжиж (Inter; гарчиг 26px/400/.1em төвлөрсөн, доош 35px; хэсэг хооронд 80px; цагаан хуудас, cream #fafaf5, чип #f8f7ef, бэх #212121, hairline #e5e5e5, rank алт #93781e; контейнер 1108px; карт 207px, дөрвөлжин зураг, **сүүдэргүй**, radius 4; header 65px + 380×40 хайлтын мөр) нүүрийг дахин зохион байгуулав. Дэлгэрэнгүй: [HISTORY.md](HISTORY.md) "Нүүр хуудасны Cosme Kitchen редизайн".

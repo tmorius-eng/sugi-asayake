@@ -4,6 +4,24 @@
 
 ---
 
+## Storefront-ийн dark theme (2026-09-12, гэрийн лаптоп)
+
+Tom: "dark theme on off bolgodog bolgo!! headeriin tend button nem!". Дараа нь "buh ym dark theme adapt boldog boloh hurtel zogsoltgui ajil hiii!!" гэж шаардсаны дагуу хуудас бүрийг хэмжиж дуустал давтав.
+
+**Бүтэц**: `html[data-storefront-theme]` атрибут (Tailwind-ийн `.dark` класс БИШ — тэр нь /admin-ы `dark:` utility-үүдийг хамт асаана); `useStorefrontTheme.ts` (localStorage + системийн сонголт); header-ийн нар/сар товч; `vendor/theme-init.js` нь эхний зурагдахаас өмнө атрибутыг тавьж цагаан анивчилтыг арилгана (CSP-ийн улмаас inline биш, тусдаа файл).
+
+**Палитр**: `--ck-page` #131313 · `--ck-surface` #1b1b1b · `--ck-cream` #191917 · `--ck-chip` #232323 · `--ck-ink` #ededed · `--ck-muted` #a6a6a6 · `--ck-line` #333 · `--ck-gold` #d9b45c.
+
+**Дөрвөн давталтаар олж зассан зүйлс (бүгд хэмжсэн, таамаглаагүй)**
+1. Restyle-аас өмнөх олон зуун дүрэм Linen токенуудыг уншсаар байсан → storefront доторх dark-д `--card/--background/--foreground/--muted-foreground/--border/--secondary/--muted/--surface-tint`-ийг `--ck-*` руу заалгав. Нэг блокоор checkout, journal, brands, shop-ийн панелиуд зэрэг зассан.
+2. 🔴 `.sugi-commerce` бүрхүүл өөрөө `#f2f5f2` будаж /shop-ийг бүхэлд нь цайвар байлгаж байсан (Tom 3 удаа "shop dark bolhgu baina" гэсэн) → `var(--ck-page)`.
+3. Брэндийн лого `mix-blend-mode: multiply`-тай тул харанхуй зурвас дээр бүрмөсөн алга болж байв → логоны зурвас dark-д цайвар хэвээр. Ангиллын дугуй зураг `overflow: hidden`-гүй байсан тул дөрвөлжин цагаан булан гарч байсныг зассан. Header-ийн лого dark-д инверт.
+4. Жижиг өнгөт текстүүд (улаан em, цэнхэр/ногоон badge, алтан rank, огнооны улаан) харанхуй дээр 2.1–3.4:1 болж унасныг тус бүрд нь тохируулав; цайвар загварт алтан rank 4.25:1 байсныг 5.2 болгов.
+
+**Эцсийн баталгаажуулалт**: 8 маршрут (нүүр, /shop, /checkout, /login, /journal, /brands, /track-order, /privacy) × 2 загвар × 1440/390 = **32/32 цэвэр**: контрастын зөрчил 0, dark дээр үлдсэн цайвар самбар 0, overflow 0, эвдэрсэн зураг 0. Аудитын үед гарсан 429 нь өөрийн rate limiter (300 хүсэлт/15 мин) — тестийн ачааллаас, сайтын алдаа биш.
+
+---
+
 ## Нүүр хуудасны Cosme Kitchen редизайн (2026-09-12, гэрийн лаптоп)
 
 Tom: "https://www.cosmekitchen-webstore.jp/ ene website playwright aar buh design sudalj tern manaid heregtei gesen bugdiin huulaad hiiged uz!!! goln premium baih ystoi professional !!! het basic baiwal butsaand eniigee hereglne!!!" — өмнөх өдөр нүүрийг "10 настай хүүхэд хийсэн юм шиг, дэндүү basic" гэж үнэлсний дараа.

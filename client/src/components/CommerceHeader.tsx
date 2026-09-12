@@ -1,10 +1,11 @@
-import { ArrowLeft, ArrowUpRight, ChevronRight, Heart, Menu, ShoppingBag, User, X } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, ChevronRight, Heart, Menu, Moon, ShoppingBag, Sun, User, X } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import HeaderSearch from "@/components/HeaderSearch";
 import { useCategories } from "@/hooks/useCategories";
 import { useSiteText } from "@/hooks/useSiteText";
+import { toggleStorefrontTheme, useStorefrontTheme } from "@/hooks/useStorefrontTheme";
 import { trpc } from "@/lib/trpc";
 
 type CommerceHeaderProps = {
@@ -51,6 +52,7 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
   const [location] = useLocation();
   const textFor = useSiteText();
   const categories = useCategories();
+  const theme = useStorefrontTheme();
   // Resolved once so the desktop nav and the mobile drawer can never show
   // two different labels for the same link.
   const navItems = marketingNavItems.map(item => ({ ...item, label: textFor(item.slot, item.fallback) }));
@@ -112,6 +114,19 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
                 decides which of the two is on screen; they are the same
                 component and the same catalog.search call. */}
             <div className="header-search-compact"><HeaderSearch /></div>
+            {/* Light/dark for the storefront (Tom). It carries its own
+                attribute on <html>, not the `.dark` class every Tailwind
+                `dark:` utility keys off, so /admin keeps its own theme. */}
+            <button
+              type="button"
+              className="header-theme-toggle"
+              onClick={toggleStorefrontTheme}
+              aria-label={theme === "dark" ? "Цайвар загвар руу шилжих" : "Харанхуй загвар руу шилжих"}
+              title={theme === "dark" ? "Цайвар загвар" : "Харанхуй загвар"}
+              aria-pressed={theme === "dark"}
+            >
+              {theme === "dark" ? <Sun size={19} aria-hidden="true" /> : <Moon size={19} aria-hidden="true" />}
+            </button>
             {/* 2026-09-12 (Tom): the plain-text "Дэлгүүр" link is gone from
                 the header entirely. On Home the marketing nav already leads
                 with it; on every other page the bottom bar (phone) and the
