@@ -1601,9 +1601,11 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .fbrand-link { display: block; color: inherit; text-decoration: none; }
 .fbrand-photo { position: relative; display: block; width: 100%; aspect-ratio: 1; overflow: hidden; background: #e4e8e4; }
 .fbrand-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
-/* Rendered only under a photo whose brand has a logo (2026-09-12). White,
-   like Tom's reference (photo, then a white band with the logo centred) --
-   the same product-platform white the packshots use. */
+/* Rendered only under a photo whose brand has a logo (2026-09-12). Painted
+   in the PAGE colour, not white: Tom wants no visible band, only the logo
+   itself on the page ("background-гүй, зөвхөн лого"). The paint is still
+   needed -- see the blend note below -- so it is the page's own colour,
+   which is invisible against the page. */
 /* The explicit background is what makes the logo's multiply blend below do
    anything at all: mix-blend-mode composites an element against whatever is
    PAINTED behind it inside the same stacking context, and .fbrand-scale's
@@ -1611,7 +1613,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    to work against (exactly the trap documented on .cat-mosaic-item-photo).
    Painting the page's own colour here is invisible against the page and gives
    the blend a surface. */
-.fbrand-logo { display: flex; width: 100%; height: var(--fbrand-logo-h); align-items: center; justify-content: center; overflow: hidden; background: #fff; }
+.fbrand-logo { display: flex; width: 100%; height: var(--fbrand-logo-h); align-items: center; justify-content: center; overflow: hidden; background: var(--background); }
 /* Brand logos arrive as whatever the brand supplies -- Cocochi's is a WebP on
    a solid white field, which read as a white card floating on the warm page.
    Same fix, and same reasoning, as .cat-mosaic-item-photo img (index.css
