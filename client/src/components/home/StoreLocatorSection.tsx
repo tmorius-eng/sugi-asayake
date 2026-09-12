@@ -1,6 +1,7 @@
 import { ArrowUpRight, Clock3, MapPin, Navigation, Phone } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useSiteText } from "@/hooks/useSiteText";
+import { useT } from "@/hooks/useLocale";
 import SectionHeading from "./SectionHeading";
 import { useShopContact } from "@/hooks/useShopContact";
 
@@ -37,6 +38,7 @@ const PIN_POSITIONS: Record<string, { x: number; y: number }> = {
  */
 export default function StoreLocatorSection() {
   const textFor = useSiteText();
+  const t = useT();
   const contact = useShopContact();
   const branchesQuery = trpc.content.branches.useQuery();
   const locations = (branchesQuery.data ?? []).map((branch, index) => ({
@@ -60,7 +62,7 @@ export default function StoreLocatorSection() {
           <p className="eyebrow"><Navigation size={14} /> {locations.length} {textFor("home-text-locator-count-suffix", "БАЙРШИЛ")}</p>
           <SectionHeading>{headingLine1}<br /><em>{headingLine2}</em></SectionHeading>
           <p className="locator-lede">{textFor("home-text-locator-description", "Улаанбаатарын өөр өөр цэгүүдэд япон чанарыг танд ойртуулж байна.")}</p>
-          <a className="button button-primary" href={`tel:${contact.phoneHref}`}>{contact.phone} руу залгах <Phone size={15} /></a>
+          <a className="button button-primary" href={`tel:${contact.phoneHref}`}>{t("руу залгах")} {contact.phone} <Phone size={15} /></a>
         </div>
 
         {/* 2026-09-06 (real a11y-audit finding, axe-core aria-hidden-focus +

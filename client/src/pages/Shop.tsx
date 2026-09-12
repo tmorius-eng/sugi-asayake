@@ -23,6 +23,7 @@ import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { rememberRecentlyViewed, resolveRecentlyViewed } from "@shared/recently-viewed";
 import { UB_DELIVERY_FEE_MNT } from "@shared/const";
 import { useSiteText } from "@/hooks/useSiteText";
+import { useT } from "@/hooks/useLocale";
 import { useStoreSetting } from "@/hooks/useStoreSetting";
 import { formatMnt } from "@shared/format";
 // 2026-09-04 cohesion audit: this used to be a locally hardcoded 4-of-6-category
@@ -67,6 +68,7 @@ export default function Shop() {
   const qaHistoryMode = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("historyQa") : null;
   const initialParams = new URLSearchParams(window.location.search);
   const textFor = useSiteText();
+  const t = useT();
   useDocumentMeta(
     textFor("seo-text-shop-title", "Дэлгүүр — SUGI ASAYAKE"),
     textFor("seo-text-shop-description", "Японоос албан ёсоор нийлүүлсэн арьс арчилгаа, эрүүл мэнд, гэр бүлийн хэрэгцээний 900+ бүтээгдэхүүн."),
@@ -327,25 +329,25 @@ export default function Shop() {
             up directly under category pills regardless of how much room
             .shop-control-row needs on the line below. */}
         <div className="shop-filter-facets">
-          <div className="shop-filter-pills"><button type="button" onClick={() => setCategory("all")} className={category === "all" ? "active" : ""}>Бүгд</button>{categories.map(item => <button type="button" key={item} onClick={() => setCategory(item)} className={category === item ? "active" : ""}>{item}</button>)}</div>
-          {skinTypes.length ? <div className="shop-filter-pills shop-skin-filter"><button type="button" onClick={() => setSkinTypeFilter("all")} className={skinTypeFilter === "all" ? "active" : ""}>Арьсны төрөл: Бүгд</button>{skinTypes.map(type => <button type="button" key={type} onClick={() => setSkinTypeFilter(type)} className={skinTypeFilter === type ? "active" : ""}>{skinTypeLabels[type]}</button>)}</div> : null}
+          <div className="shop-filter-pills"><button type="button" onClick={() => setCategory("all")} className={category === "all" ? "active" : ""}>{t("Бүгд")}</button>{categories.map(item => <button type="button" key={item} onClick={() => setCategory(item)} className={category === item ? "active" : ""}>{item}</button>)}</div>
+          {skinTypes.length ? <div className="shop-filter-pills shop-skin-filter"><button type="button" onClick={() => setSkinTypeFilter("all")} className={skinTypeFilter === "all" ? "active" : ""}>{t("Арьсны төрөл: Бүгд")}</button>{skinTypes.map(type => <button type="button" key={type} onClick={() => setSkinTypeFilter(type)} className={skinTypeFilter === type ? "active" : ""}>{skinTypeLabels[type]}</button>)}</div> : null}
         </div>
         <div className="shop-control-row">
           {/* NEWVISION.md §14 (Phase 2): Isetan's deep faceted filter --
               price range, either bound optional. Text inputs (not
               type="number" state) so an in-progress empty field never
               silently becomes "0" -- see minPrice/maxPrice's own comment. */}
-          <div className="price-range-filter"><Wallet size={14} /><input type="number" inputMode="numeric" min={0} step={1000} placeholder="Доод" value={minPrice} onChange={event => setMinPrice(event.target.value)} aria-label="Доод үнэ (₮)" /><span aria-hidden="true">–</span><input type="number" inputMode="numeric" min={0} step={1000} placeholder="Дээд" value={maxPrice} onChange={event => setMaxPrice(event.target.value)} aria-label="Дээд үнэ (₮)" /></div>
-          <label className="stock-toggle"><input type="checkbox" checked={inStockOnly} onChange={event => setInStockOnly(event.target.checked)} /><span><PackageCheck size={14} /> Бэлэн нөөцтэй</span></label><label className="sort-control"><ArrowDownUp size={14} /><span>Эрэмбэ</span><select value={sort} onChange={event => setSort(event.target.value as CatalogSortOption)}><option value="featured">Онцлох</option><option value="price-low">Үнэ: багаас</option><option value="price-high">Үнэ: ихээс</option><option value="name-asc">Нэр: A–Я</option></select></label></div>
+          <div className="price-range-filter"><Wallet size={14} /><input type="number" inputMode="numeric" min={0} step={1000} placeholder={t("Доод")} value={minPrice} onChange={event => setMinPrice(event.target.value)} aria-label="Доод үнэ (₮)" /><span aria-hidden="true">–</span><input type="number" inputMode="numeric" min={0} step={1000} placeholder={t("Дээд")} value={maxPrice} onChange={event => setMaxPrice(event.target.value)} aria-label="Дээд үнэ (₮)" /></div>
+          <label className="stock-toggle"><input type="checkbox" checked={inStockOnly} onChange={event => setInStockOnly(event.target.checked)} /><span><PackageCheck size={14} /> Бэлэн нөөцтэй</span></label><label className="sort-control"><ArrowDownUp size={14} /><span>{t("Эрэмбэ")}</span><select value={sort} onChange={event => setSort(event.target.value as CatalogSortOption)}><option value="featured">{t("Онцлох")}</option><option value="price-low">{t("Үнэ: багаас")}</option><option value="price-high">{t("Үнэ: ихээс")}</option><option value="name-asc">{t("Нэр: A–Я")}</option></select></label></div>
         {appliedFilters.length > 0 && (
           <div className="shop-applied" role="status" aria-live="polite">
-            <span className="shop-applied-label">Сонгосон:</span>
+            <span className="shop-applied-label">{t("Сонгосон:")}</span>
             {appliedFilters.map(chip => (
               <button type="button" key={chip.key} className="shop-applied-chip" onClick={chip.clear} aria-label={`${chip.label} шүүлтүүрийг хасах`}>
                 {chip.label} <X size={14} aria-hidden="true" />
               </button>
             ))}
-            <button type="button" className="shop-applied-clear" onClick={resetControls}>Бүгдийг цэвэрлэх</button>
+            <button type="button" className="shop-applied-clear" onClick={resetControls}>{t("Бүгдийг цэвэрлэх")}</button>
           </div>
         )}
       </section>
@@ -378,7 +380,7 @@ export default function Shop() {
           {salePercent ? <span className="shop-sale-badge">-{salePercent}<i>%</i></span> : null}
           <Link href={`/product/${product.slug}`} onClick={() => rememberProduct(product.id)} className="shop-product-link" tabIndex={-1} aria-hidden="true"><img src={product.imageUrl ?? getCategoryPlaceholderImage(product.categorySlug)} alt="" loading="lazy" {...responsive} /></Link>
           <button type="button" className={`shop-wishlist-toggle${wishlistIds.has(product.id) ? " active" : ""}`} onClick={() => onToggleWishlist(product.id)} aria-label={wishlistIds.has(product.id) ? `${product.name}-г хүслийн жагсаалтаас хасах` : `${product.name}-г хүслийн жагсаалтад нэмэх`}><Heart size={15} /></button>
-          {outOfStock ? <span className="shop-stock-flag is-out">Нөөц дууссан</span> : lowStock ? <span className="shop-stock-flag">{product.stockQuantity} ширхэг үлдсэн</span> : null}
+          {outOfStock ? <span className="shop-stock-flag is-out">{t("Нөөц дууссан")}</span> : lowStock ? <span className="shop-stock-flag">{product.stockQuantity} ширхэг үлдсэн</span> : null}
           <button type="button" className="shop-quick-view" onClick={() => openQuickView(product)}><Eye size={13} /> Шуурхай</button>
         </div>
         <div className="shop-product-copy">
@@ -398,9 +400,9 @@ export default function Shop() {
         </div>
       </article>;
       })}</section>{totalPages > 1 ? <nav className="shop-pagination" aria-label="Хуудаслалт">
-        <button type="button" onClick={() => { pagerJump.current = true; setPage(current => Math.max(1, current - 1)); }} disabled={page === 1}><ChevronLeft size={16} /> Өмнөх</button>
-        <span>{page} / {totalPages} хуудас <em>({resultCount} бүтээгдэхүүн)</em></span>
-        <button type="button" onClick={() => { pagerJump.current = true; setPage(current => Math.min(totalPages, current + 1)); }} disabled={page === totalPages}>Дараах <ChevronRight size={16} /></button>
+        <button type="button" onClick={() => { pagerJump.current = true; setPage(current => Math.max(1, current - 1)); }} disabled={page === 1}><ChevronLeft size={16} /> {t("Өмнөх")}</button>
+        <span>{page} / {totalPages} {t("хуудас")} <em>({resultCount} {t("бүтээгдэхүүн")})</em></span>
+        <button type="button" onClick={() => { pagerJump.current = true; setPage(current => Math.min(totalPages, current + 1)); }} disabled={page === totalPages}>{t("Дараах")} <ChevronRight size={16} /></button>
       </nav> : null}</> : <section className="shop-status-card" data-reveal><Search size={26} /><h2>Энэ удаа тохирох бүтээгдэхүүн олдсонгүй.</h2><p>Өөр хайлтын үг хэрэглэж үзэх эсвэл бүх ангиллыг дахин хараарай.</p><button type="button" onClick={resetControls}><RotateCcw size={14} /> Шүүлтүүр арилгах</button></section>}
       {recommended.data?.length ? <RecommendedForYou products={recommended.data} onRemember={rememberProduct} onQuickView={openQuickView} /> : null}
       {/* A premium site doesn't show a "recently viewed" module with nothing

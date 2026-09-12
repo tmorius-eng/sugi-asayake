@@ -10,6 +10,7 @@ import BottomNavBar from "./components/BottomNavBar";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SitePromo from "./components/SitePromo";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import TranslateSurface from "@/components/TranslateSurface";
 import Home from "./pages/Home";
 import { PageviewTracker } from "./lib/pageviewTracking";
 import { useConsentIconAutoHide } from "./lib/consentIconAutoHide";
@@ -92,6 +93,8 @@ function App() {
       <TooltipProvider>
         <Toaster />
         <PageviewTracker />
+        {/* Translates whatever the storefront renders; see the component. */}
+        <TranslateSurface />
         <BarcodeScanNavigator />
         <SitePromo />
         <BottomNavBar />

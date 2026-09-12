@@ -5,6 +5,7 @@ import { LOYALTY_TIERS, getLoyaltyTier, getNextLoyaltyTier } from "@shared/loyal
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { useSiteText } from "@/hooks/useSiteText";
+import { useT } from "@/hooks/useLocale";
 import SectionHeading from "./SectionHeading";
 import InfinityGraph from "./InfinityGraph";
 import { formatMnt } from "@shared/format";
@@ -80,6 +81,7 @@ export default function QuickStatsSection() {
     };
   }, [tiers]);
   const textFor = useSiteText();
+  const t = useT();
   const [headingLine1, headingLine2] = textFor("home-text-qs-heading", "Quick\nStats").split("\n");
 
   return (
@@ -104,9 +106,9 @@ export default function QuickStatsSection() {
 
           {user && statusQuery.data && (
             <div className="qs-meta">
-              <div className="qs-meta-row"><span>Одоогийн зэрэглэл</span><strong>{statusQuery.data.currentTier.name}</strong></div>
+              <div className="qs-meta-row"><span>{t("Одоогийн зэрэглэл")}</span><strong>{t(statusQuery.data.currentTier.name)}</strong></div>
               <div className="qs-meta-row">
-                <span>Дараагийн зэрэглэл</span>
+                <span>{t("Дараагийн зэрэглэл")}</span>
                 <strong>
                   {statusQuery.data.nextTier
                     ? `${statusQuery.data.nextTier.name} — ${formatMnt(statusQuery.data.amountToNextTierMnt ?? 0)} дутуу`
@@ -137,9 +139,13 @@ export default function QuickStatsSection() {
             const status = statusQuery.data;
             const leftRatio = status.nextTier ? status.totalSpendMnt / status.nextTier.minSpendMnt : 1;
             const rightRatio = example.maxDiscountPercent > 0 ? status.currentTier.discountPercent / example.maxDiscountPercent : 0;
+            // Built from a translated template rather than concatenated, so
+            // it reads correctly in English and Japanese too.
             const nextTierSummary = status.nextTier
-              ? `дараагийн "${status.nextTier.name}" зэрэглэлд хүрэхэд ${formatMnt(status.amountToNextTierMnt ?? 0)} дутуу байна`
-              : "хамгийн дээд зэрэглэлд хүрсэн байна";
+              ? t('дараагийн "{tier}" зэрэглэлд хүрэхэд {left} дутуу байна')
+                  .replace("{tier}", t(status.nextTier.name))
+                  .replace("{left}", formatMnt(status.amountToNextTierMnt ?? 0))
+              : t("хамгийн дээд зэрэглэлд хүрсэн байна");
             return (
               <>
                 <InfinityGraph
@@ -148,7 +154,7 @@ export default function QuickStatsSection() {
                   leftLabel="Нийт худалдан авалт"
                   rightRatio={rightRatio}
                   rightValue={`${status.currentTier.discountPercent}%`}
-                  rightLabel="Одоогийн хөнгөлөлт"
+                  rightLabel={t("Одоогийн хөнгөлөлт")}
                 />
                 <div className="qs-savings">
                   <strong>{formatMnt(status.totalLoyaltySavingsMnt)}</strong>
@@ -163,19 +169,27 @@ export default function QuickStatsSection() {
 
           {!user && !authLoading && (
             <>
-              <p className="qs-example-tag">ЖИШЭЭ ХАРУУЛАЛТ</p>
+              <p className="qs-example-tag">{t("ЖИШЭЭ ХАРУУЛАЛТ")}</p>
               <InfinityGraph
                 leftRatio={example.leftRatio}
                 leftValue={formatMntCompact(EXAMPLE_SPEND_MNT)}
-                leftLabel="Жишээ: нийт худалдан авалт"
+                leftLabel={t("Жишээ: нийт худалдан авалт")}
                 rightRatio={example.rightRatio}
                 rightValue={`${example.tier.discountPercent}%`}
-                rightLabel="Жишээ: хөнгөлөлт"
+                rightLabel={t("Жишээ: хөнгөлөлт")}
               />
               <p className="qs-example-note">
                 {example.nextTier
-                  ? `Жишээ нь: ${formatMnt(EXAMPLE_SPEND_MNT)} худалдан авалттай гишүүн "${example.tier.name}" зэрэглэлд ${example.tier.discountPercent}% хөнгөлөлт эдэлж, "${example.nextTier.name}" зэрэглэл хүртэл ${formatMnt(example.nextTier.minSpendMnt - EXAMPLE_SPEND_MNT)} дутуу байна.`
-                  : `Жишээ нь: ${formatMnt(EXAMPLE_SPEND_MNT)} худалдан авалттай гишүүн "${example.tier.name}" зэрэглэлд ${example.tier.discountPercent}% хөнгөлөлт эдэлнэ.`}
+                  ? t('Жишээ нь: {spend} худалдан авалттай гишүүн "{tier}" зэрэглэлд {discount}% хөнгөлөлт эдэлж, "{next}" зэрэглэл хүртэл {left} дутуу байна.')
+                      .replace("{spend}", formatMnt(EXAMPLE_SPEND_MNT))
+                      .replace("{tier}", t(example.tier.name))
+                      .replace("{discount}", String(example.tier.discountPercent))
+                      .replace("{next}", t(example.nextTier.name))
+                      .replace("{left}", formatMnt(Math.max(0, example.nextTier.minSpendMnt - EXAMPLE_SPEND_MNT)))
+                  : t('Жишээ нь: {spend} худалдан авалттай гишүүн "{tier}" зэрэглэлд {discount}% хөнгөлөлт эдэлнэ.')
+                      .replace("{spend}", formatMnt(EXAMPLE_SPEND_MNT))
+                      .replace("{tier}", t(example.tier.name))
+                      .replace("{discount}", String(example.tier.discountPercent))}
               </p>
               <div className="qs-guest-tiers">
                 {tiers.map((tier) => (
