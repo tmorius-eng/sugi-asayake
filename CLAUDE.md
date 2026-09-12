@@ -31,7 +31,10 @@ VERIFY_MN_API_KEY=
 # сертификат (PEM, Aiven Console → service → Overview → "CA certificate"). Байвал сервер
 # сертификатыг шалгана; байхгүй бол TLS ажиллах ч сертификат шалгагдахгүй (startup-д warning).
 # Эсвэл файлын зам: DATABASE_CA_CERT_PATH=./aiven-ca.pem (файлыг commit хийхгүй).
-DATABASE_CA_CERT=
+# ✅ 2026-09-12: ГЭРИЙН лаптоп дээр ./aiven-ca.pem + DATABASE_CA_CERT_PATH тавигдаж, бодитоор шалгасан
+#    (TLSv1.3, буруу CA-г татгалзсан). АЖЛЫН лаптоп + production host дээр ижил файлыг гараар хуулна
+#    (Aiven Console → Overview → CA certificate) — .env болон *.pem хоёулаа gitignore тул git-ээр ирэхгүй.
+DATABASE_CA_CERT_PATH=./aiven-ca.pem
 # Сонголттой (2026-09-11): утасны push мэдэгдлийг ЭНЭ машинаас илгээх эсэх. Хоёр лаптоп нэг DB
 # хуваалцдаг тул зөвхөн НЭГ машин (production host) дээр 1 болгоно. ntfy-ийн token/сэдвүүд .env-д
 # БИШ, /admin → Интеграцууд-д шифрлэгдэж хадгалагдана.
@@ -322,7 +325,7 @@ Tom лавлагаа screenshot (SHARP шүүлтүүрийн карт) илгэ
 3. ✅ **Амьд Aiven дээрх тестийн үлдэгдэл ЦЭВЭРЛЭГДЛЭЭ (2026-09-12, Tom зөвшөөрсөн)** — `scripts/test-residue-report.ts` (зөвхөн уншина) + `scripts/test-residue-purge.ts --apply`. Устгасан: 3 тестийн хэрэглэгч (⚠️ тэдгээрийн **2 нь admin эрхтэй** байсан: `Order Notify Admin`, `Telemetry Test Admin`), `Telemetry Test Shopper`-ийн 2 захиалга (тус бүр 22,000₮ борлуулалтад тоологдож байсан), 887 `suppressed` мэдэгдлийн мөр. Бараа/ангилал үлдээгүй байв. **Үлдсэн хэрэглэгч: bataa (admin), zulaa (staff) — өөр данс байхгүй.** Ledger drift 0 хэвээр. ⚠️ Скрипт нь `%test%`-ээр хайдаггүй (каталогт жинхэнэ `Honey amproom tester` гэх бараа бий) бөгөөд сүүлийн 1 цагт үүссэн мөрийг алгасдаг (тест яг ажиллаж байж болзошгүй).
 4. ⚠️ **`a { color: inherit }` cascade-layer bug** — зөвхөн 5 баталгаажсан тохиолдол `!`-ээр засагдсан; `index.css`-ийн reset дүрмийг `@layer base`-д шилжүүлж сайт даяар засах (screenshot баталгаажуулалттай).
 5. **Product Variants** — олон variant-тай бодит бараагаар Playwright screenshot баталгаажуулалт хараахан хийгдээгүй (автомат тест + DB probe л).
-16. ⚠️ **Tom-оос хүлээж буй (2026-09-12)**: (a) `posts`-ийн 5 junk нийтлэл ("diane shampoo", "lofi cityaidhas", "asdsad", "assasafaregrheta", "qedqwds") — устгах уу; (b) chat-д нэг удаа бичигдсэн ntfy access token-ийг ntfy.sh дээр **rotate** хийж /admin → Интеграцууд-д шинээр хадгалах; (c) Smart Logic username/password, StorePay 7 утга, QPay sandbox эрх; (d) нягтлангаас НӨАТ/НХАТ хариу (EBARIMT.md); (e) production host дээр `NOTIFICATIONS_DISPATCH=1`.
+16. ⚠️ **Tom-оос хүлээж буй (2026-09-12)**: (a) `posts`-ийн 5 junk нийтлэл болон 8 брэндийн лого — **Tom өөрөө хийнэ гэсэн**; (b) chat-д нэг удаа бичигдсэн ntfy access token-ийг ntfy.sh дээр **rotate** хийж /admin → Интеграцууд-д шинээр хадгалах; (c) Smart Logic username/password, StorePay 7 утга, QPay sandbox эрх; (d) нягтлангаас НӨАТ/НХАТ хариу (EBARIMT.md); (e) production host дээр `NOTIFICATIONS_DISPATCH=1`.
 6. **Admin face gate** — Tom 50 хүнээр false-reject rate хэмжих; `ADMIN_FACE_LIVENESS_ENFORCED`-ийг бодит тоон дээр шийдэх. Aiven байршил Бангалор (median 174ms) → Токио (Console → Change cloud).
 7. **NEWVISION §14 / PREMIUM TIER 5 үлдэгдэл**: density toggle, үнийн faceted filter, "Pairs well with" cross-sell; referral, abandoned-cart имэйл.
 8. **Купоны per-customer cap race**: нэг хэрэглэгч сүүлчийн зөвшөөрөгдсөн ашиглалтыг 2 зэрэгцээ checkout-оор давж болно (global `maxUses` атомик хэвээр) — хэрэгтэй бол (code, customer, n) unique key.

@@ -31,7 +31,7 @@ Security 9 · Documentation 9 · Dependencies 9 · Architecture 8 · API 8 · Da
 
 ## Still open (P3/P4)
 
-Skip link + admin `--a-faint` contrast; coupon per-customer cap race; `a { color: inherit }` outside the cascade layer; variants/analytics screenshot verification on real data; split `db.ts`/`routers.ts` by domain; Aiven region + pool once hosting is chosen. Tom: CA cert, ntfy token rotation, 5 junk posts, brand logos, payment credentials, eBarimt decision, warehouse cutover.
+Skip link + admin `--a-faint` contrast; coupon per-customer cap race; `a { color: inherit }` outside the cascade layer; variants/analytics screenshot verification on real data; split `db.ts`/`routers.ts` by domain; Aiven region + pool once hosting is chosen. Tom: ntfy token rotation, payment credentials, eBarimt decision, warehouse cutover. Done the same evening: Aiven CA certificate installed on the home laptop and verified (TLSv1.3, bogus CA refused) — the work laptop and the production host need the same file; Tom is handling the 5 junk posts and the 8 brand logos himself.
 
 ## Intentionally not changed
 
