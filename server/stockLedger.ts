@@ -19,7 +19,8 @@ import type { DbOrTx } from "./db";
  * using the old aggregate path in db.ts and are not recorded here.
  */
 
-export type MovementRefType = "order" | "transfer" | "receipt" | "count" | "manual";
+// "external": came from the POS vendor's sync -- never pushed back to it.
+export type MovementRefType = "order" | "transfer" | "receipt" | "count" | "manual" | "external";
 
 export type MovementMeta = {
   type: StockMovementType;
@@ -139,9 +140,16 @@ export class StockShortageError extends Error {
  * Positive deltas upsert, so a branch with no row yet for this variant gets
  * one instead of the quantity being silently lost.
  */
-export async function applyBranchStockDelta(db: DbOrTx, branchId: number, variantId: number, delta: number, meta: MovementMeta, options: { itemLabel?: string; recompute?: boolean } = {}): Promise<{ after: number }> {
+export async function applyBranchStockDelta(db: DbOrTx, branchId: number, variantId: number, delta: number, meta: MovementMeta, options: { itemLabel?: string; recompute?: boolean; allowNegative?: boolean } = {}): Promise<{ after: number }> {
   if (!Number.isInteger(delta)) throw new Error("Stock change must be a whole number.");
-  if (delta < 0) {
+  if (delta < 0 && options.allowNegative) {
+    // A sale that already happened elsewhere (the vendor's POS) is recorded
+    // exactly as it was, even past zero -- a negative shelf is the honest
+    // signal that this location needs a count, where refusing the sale
+    // would silently lose it.
+    await db.insert(branchStock).values({ branchId, variantId, stockQuantity: delta })
+      .onDuplicateKeyUpdate({ set: { stockQuantity: sql`${branchStock.stockQuantity} + ${delta}`, updatedAt: new Date() } });
+  } else if (delta < 0) {
     const need = -delta;
     const updated = await db.update(branchStock)
       .set({ stockQuantity: sql`${branchStock.stockQuantity} - ${need}`, updatedAt: new Date() })

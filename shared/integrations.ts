@@ -52,6 +52,10 @@ export type IntegrationMeta = {
 /** ntfy topic names: letters, digits, `_` and `-`, at most 64 characters. */
 export const NTFY_TOPIC_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 export const NTFY_DEFAULT_SERVER_URL = "https://ntfy.sh";
+/** From developer.smartsoftware.mn (2026-09-12): the Inventory/Retail/Loyalty
+ *  family and the Smart POS family live on different hosts. */
+export const SMART_SOFTWARE_DEFAULT_INVENTORY_URL = "https://retailapiv2.smartlogic.mn";
+export const SMART_SOFTWARE_DEFAULT_POS_URL = "https://smartposapi.smartapp.mn";
 
 export const INTEGRATION_META: Record<IntegrationProvider, IntegrationMeta> = {
   // 2026-09-04: read the developer.smartsoftware.mn page Tom pointed at --
@@ -96,20 +100,24 @@ export const INTEGRATION_META: Record<IntegrationProvider, IntegrationMeta> = {
     freeForm: false,
     testable: true,
   },
-  // The shop's POS vendor. Their inventory/loyalty/management APIs are the
-  // plan's Phase 6; until real documentation arrives this only stores
-  // whatever the vendor issues, and nothing reads it.
+  // The shop's POS vendor (2026-09-12): read by server/integrations/
+  // smartSoftware.ts. Their API is OAuth2 password grant -- a username and a
+  // password issued after the API contract, not an API key -- against the
+  // hosts below (from developer.smartsoftware.mn). Products are matched by
+  // barcode; each store's location code is mapped on the same card.
   smartsoftware: {
     label: "Smart Software (Smart POS)",
-    note: "Дэлгүүрийн касс -- нөөц, гишүүнчлэл, удирдлагын API (ирээдүйд)",
-    wiredUp: false,
-    guidance: "Smart Software-ийн нөөц, гишүүнчлэл, удирдлагын API-ийн техникийн баримт хараахан ирээгүй. Ирмэгц салбарын кодын холбоос, синкийн төлөв энд нэмэгдэнэ. Одоогоор барааг баркод (SKU)-оор нь холбоно.",
+    note: "Дэлгүүрийн касс -- байршил бүрийн нөөцийг татаж, батлах тооллого болгоно",
+    wiredUp: true,
+    guidance: "Смарт Ложик ХХК-тай API холболтын гэрээ хийсний дараа имэйлээр ирэх НЭВТРЭХ НЭР, НУУЦ ҮГ-ийг энд оруулна (API түлхүүр биш). Дараа нь \"Холболт шалгах\" дарж байршлуудыг татаад, дэлгүүр бүрийн Smart POS байршлыг доор сонгоно. 15 минут тутам (эсвэл \"Одоо синк\" дарахад) байршил бүрийн үлдэгдэл татагдаж, зөрүүтэй бараа нь Бараа хүлээн авах → Тооллого хэсэгт БАТЛАХ хүлээсэн тооллого болно -- нөөц хэзээ ч шууд дарж бичигдэхгүй. Бараа баркодоор таардаг тул Smart POS дахь баркод манай SKU-тэй ижил байх ёстой.",
     fields: [
-      { key: "baseUrl", label: "API хаяг", kind: "url" },
-      { key: "apiKey", label: "API түлхүүр", kind: "secret" },
+      { key: "username", label: "Нэвтрэх нэр", kind: "text", help: "Смарт Ложикоос олгосон API хэрэглэгчийн нэр." },
+      { key: "password", label: "Нууц үг", kind: "secret" },
+      { key: "inventoryBaseUrl", label: "Inventory API хаяг", kind: "url", defaultValue: SMART_SOFTWARE_DEFAULT_INVENTORY_URL, help: "Хоосон бол баримтад заасан хаяг. Смарт Ложик өөр сервер өгсөн үед л солино." },
+      { key: "posBaseUrl", label: "POS API хаяг", kind: "url", defaultValue: SMART_SOFTWARE_DEFAULT_POS_URL, help: "Борлуулалт илгээх (и-баримт) ирээдүйн алхамд зориулсан; одоогоор уншдаггүй." },
     ],
-    freeForm: true,
-    testable: false,
+    freeForm: false,
+    testable: true,
   },
 };
 

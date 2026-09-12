@@ -212,6 +212,9 @@ import { createQPayInvoice, getQPayAvailability } from "./qpay";
 import { sendNtfyTest } from "./notifications";
 import { notificationsRouter } from "./notificationsRouter";
 import { inventoryRouter } from "./inventoryRouter";
+import { getInventorySyncProvider, getInventorySyncStatus, runInventorySync, runPullSnapshot, setBranchExternalId } from "./integrations/inventorySync";
+// Registers the Smart Software adapter on import (side effect).
+import "./integrations/smartSoftware";
 import { assertImageSignature, imageContentTypes, processUploadedImageOrThrow } from "./_core/imageUpload";
 import { INTEGRATION_PROVIDERS } from "../shared/integrations";
 import { buildNotificationMessage, NOTIFICATION_GROUP_LABELS, NOTIFICATION_GROUPS, NTFY_TOPIC_FIELD } from "../shared/notification-events";
@@ -1943,12 +1946,24 @@ export const appRouter = router({
       await logAdminAction({ actorUserId: ctx.user.id, action: "integration.updated", entityType: "integration", metadata: { provider: input.provider, isActive: input.isActive, keysSet: Object.keys(set), keysCleared: input.clearKeys ?? [], replaceAll: Boolean(input.replaceAll) } });
       return result;
     }),
-    // Sends one ntfy message to a group's topic immediately (not queued), so
-    // an admin can check the setup from a phone before switching it on.
-    testIntegration: adminProcedure.input(z.object({ provider: z.literal("ntfy"), group: z.enum(NOTIFICATION_GROUPS) })).mutation(async ({ ctx, input }) => {
+    // Checks one provider against the real service, right now, so an admin
+    // can see it work before switching it on: ntfy sends one message to a
+    // group's topic (not queued); Smart Software asks the vendor for its
+    // location list, which is also what the branch mapping below needs.
+    testIntegration: adminProcedure.input(z.discriminatedUnion("provider", [
+      z.object({ provider: z.literal("ntfy"), group: z.enum(NOTIFICATION_GROUPS) }),
+      z.object({ provider: z.literal("smartsoftware") }),
+    ])).mutation(async ({ ctx, input }) => {
+      if (input.provider === "smartsoftware") {
+        const provider = await getInventorySyncProvider({ requireActive: false });
+        const result = provider?.testConnection ? await provider.testConnection() : { ok: false, detail: "Нэвтрэх нэр, нууц үгээ оруулаад хадгална уу." };
+        const locations = result.ok && provider?.listLocations ? await provider.listLocations().catch(() => []) : [];
+        await logAdminAction({ actorUserId: ctx.user.id, action: "integration.tested", entityType: "integration", metadata: { provider: input.provider, ok: result.ok } });
+        return { ok: result.ok, status: null, error: result.ok ? null : result.detail, detail: result.detail, locations };
+      }
       const result = await sendNtfyTest(input.group, { ...buildNotificationMessage("integration.test", { groupLabel: NOTIFICATION_GROUP_LABELS[input.group] }), priority: 3, tags: ["bell"] });
       await logAdminAction({ actorUserId: ctx.user.id, action: "integration.tested", entityType: "integration", metadata: { provider: input.provider, group: input.group, ok: result.ok, status: result.status } });
-      return { ok: result.ok, status: result.status, error: result.error };
+      return { ok: result.ok, status: result.status, error: result.error, detail: result.error ?? "Илгээлээ.", locations: [] as { id: string; name: string }[] };
     }),
     // A long random topic generated on the server (never typed in, never
     // guessable). Also how a topic is ROTATED when a staff member leaves:
@@ -1981,6 +1996,39 @@ export const appRouter = router({
       ];
     }),
     notificationOutbox: adminProcedure.query(() => getRecentNotificationOutbox(50)),
+    // Phase 6 (2026-09-11): the Smart Software sync seam -- stream status,
+    // and each branch's store code in Smart POS (server/integrations/inventorySync.ts).
+    inventorySyncStatus: adminProcedure.query(() => getInventorySyncStatus()),
+    setBranchExternalId: adminProcedure.input(z.object({ branchId: z.number().int().positive(), externalId: z.string().trim().max(120).nullable() })).mutation(async ({ ctx, input }) => {
+      try {
+        const result = await setBranchExternalId(input.branchId, input.externalId);
+        await logAdminAction({ actorUserId: ctx.user.id, action: "integration.branch_code_set", entityType: "branch", entityId: input.branchId, metadata: { provider: "smartsoftware", externalId: input.externalId } });
+        return result;
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Кодыг хадгалж чадсангүй." });
+      }
+    }),
+    runInventorySync: adminProcedure.mutation(async ({ ctx }) => {
+      const result = await runInventorySync();
+      await logAdminAction({ actorUserId: ctx.user.id, action: "integration.sync_run", entityType: "integration", metadata: { provider: "smartsoftware", ran: result.ran } });
+      return result;
+    }),
+    // "Pull stock now": reads the vendor's figures and files a stocktake per
+    // mapped branch for warehouse/admin approval. Works while the
+    // integration is still switched off, so the mapping can be checked
+    // before the 15-minute job starts running on its own. Never writes stock.
+    pullVendorStock: adminProcedure.mutation(async ({ ctx }) => {
+      const provider = await getInventorySyncProvider({ requireActive: false });
+      if (!provider) throw new TRPCError({ code: "BAD_REQUEST", message: "Smart Software-ийн нэвтрэх нэр, нууц үгээ оруулаад хадгална уу." });
+      let result;
+      try {
+        result = await runPullSnapshot(provider);
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Үлдэгдэл татаж чадсангүй." });
+      }
+      await logAdminAction({ actorUserId: ctx.user.id, action: "integration.stock_pulled", entityType: "integration", metadata: { provider: "smartsoftware", counts: result.ran ? result.branches.filter(branch => branch.countId).length : 0 } });
+      return result;
+    }),
     // Sales/customer/district analytics for the people running the
     // business -- adminProcedure like Security Center/Integrations
     // (revenue + customer data, not everyday staff-level). Note this is

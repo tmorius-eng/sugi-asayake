@@ -493,6 +493,8 @@ export type InsertBranchStock = typeof branchStock.$inferInsert;
 export const STOCK_MOVEMENT_TYPES = [
   "opening", "sale_online", "sale_pos", "order_restock", "refund_restock", "admin_set", "product_form_set", "variant_seed",
   "receipt", "transfer_out", "transfer_in", "transfer_return", "transfer_writeoff", "count_adjust", "rebaseline",
+  // Migration 0066: a sale rung up in the vendor's POS (Smart Software) and pulled in.
+  "sale_pos_external",
 ] as const;
 export const stockMovements = mysqlTable("stock_movements", {
   id: int("id").autoincrement().primaryKey(),
@@ -1518,6 +1520,34 @@ export const notificationOutbox = mysqlTable("notification_outbox", {
   index("notification_outbox_group_id_idx").on(table.groupKey, table.id),
 ]);
 export type NotificationOutboxRow = typeof notificationOutbox.$inferSelect;
+
+/**
+ * 2026-09-11 (migration 0066): our id <-> a vendor's id (Smart Software, see
+ * server/integrations/inventorySync.ts). Products need no row -- the JAN
+ * barcode is already the shared key. Unique both ways.
+ */
+export const externalRefs = mysqlTable("external_refs", {
+  id: int("id").autoincrement().primaryKey(),
+  provider: varchar("provider", { length: 40 }).notNull(),
+  entityType: mysqlEnum("entityType", ["branch", "variant", "user", "sale"]).notNull(),
+  entityId: int("entityId").notNull(),
+  externalId: varchar("externalId", { length: 120 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  uniqueIndex("external_refs_ours_unique").on(table.provider, table.entityType, table.entityId),
+  uniqueIndex("external_refs_theirs_unique").on(table.provider, table.entityType, table.externalId),
+]);
+
+/** One row per (provider, stream): cursor + last run/success/error. */
+export const integrationSyncState = mysqlTable("integration_sync_state", {
+  id: int("id").autoincrement().primaryKey(),
+  provider: varchar("provider", { length: 40 }).notNull(),
+  stream: varchar("stream", { length: 40 }).notNull(),
+  cursor: varchar("cursor", { length: 200 }),
+  lastRunAt: timestamp("lastRunAt"),
+  lastOkAt: timestamp("lastOkAt"),
+  lastError: varchar("lastError", { length: 500 }),
+}, table => [uniqueIndex("integration_sync_state_unique").on(table.provider, table.stream)]);
 
 /**
  * "Controls everything" admin overhaul (2026-09-08, Phase D): the only

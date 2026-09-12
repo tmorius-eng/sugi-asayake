@@ -46,6 +46,24 @@ Tom-ийн компани аль хэдийн SmartSoftware-той гэрээт�
 
 **Хараахан хийгдээгүй**: `server/ebarimt.ts` файл, баримт үүсгэх бодит дуудалт, захиалга paid болох мөчид залгах hook — эдгээр бүгд доорх SmartSoftware ярилцлагын хариунаас хамаарна.
 
+## ✅ (2026-09-12) Зам A-ийн ХАРИУ ОЛДЛОО — Smart POS API нь и-баримтыг өөрөө буцаадаг
+
+⚠️ Доорх 2026-09-04-ний "баримт бичиг байхгүй" гэсэн дүгнэлт **БУРУУ БАЙСАН**: `developer.smartsoftware.mn` нь Apidog-оор JavaScript-ээр зурагддаг тул curl/WebFetch-д хоосон харагддаг байжээ. Бүх хуудас `https://developer.smartsoftware.mn/llms.txt` дээр жагсаалттай, тус бүр нь `/api-<id>.md`-ээр татагдана (2026-09-12-нд 40 гаруй хуудсыг уншсан).
+
+**Зам A-ийн бодит endpoint**: `POST https://smartposapi.smartapp.mn/api/sale/sale` (Smart POS API → "Борлуулалт илгээх"). Bearer token (OAuth2 password grant, `GET|POST {host}/oauth/token`, username/password — Смарт Ложикоос гэрээний дараа имэйлээр ирнэ).
+
+Хүсэлт: `SaleHeaderModel` (documentDate, documentNumber, documentDesc, taxCustomerType/Id/Name, totalPayAmount, cashAmount, totalCardUsedBonus, totalCardAddedBonus, totalDiscountAmount, сонголтоор retailId/posId/cashierId, email) + `SaleLineModel[]` (itemId, itemName, barcode, baseprice, price, qty, payAmount, cardAddedBonus, cardUsedBonus, **hasVat**, **hasCityTax**) + `SalePayment[]` (paymentType, amount, bankId).
+
+**Хариу нь яг и-баримт**: `Data.TaxBillNo` (ДДТД), `Data.TaxBillDate`, `Data.QRData`, `Data.LotteryText`, `Data.DocumentPkId`. Манай `orders` хүснэгтэд `ebarimtReceiptId` / `ebarimtQrData` / `ebarimtLotteryNumber` / `ebarimtStatus` багана 2026-08-26-наас хойш бэлэн байгаа — тэдгээрийг бөглөх эх сурвалж нь ЭНЭ хариу. Буцаалт: `POST /api/sale/saleRefund` (`documentPkId`), шалгах: `GET /api/sale/checkdocument`.
+
+**Тиймээс Зам B (шууд POS API 3.0, локал PosService) шаардлагагүй болж магадгүй** — Smart POS өөрөө и-баримтаа гаргаад, бид зөвхөн борлуулалтаа илгээнэ. Гэхдээ **энэ нь татварын бодит баримт үүсгэдэг тул код хараахан бичээгүй** (2026-09-12-ны adapter зөвхөн УНШИНА: байршил, үлдэгдэл). Бичихээсээ өмнө:
+
+1. **Нягтлангаас**: `hasVat` (НӨАТ) ба `hasCityTax` (НХАТ) манай барааны хувьд ямар утгатай байх ёстой вэ? `taxCustomerType` = `P` (иргэн) зөв үү, байгууллагын РД-тай баримт хэрэгтэй юу?
+2. **Смарт Ложикоос**: ECommerce борлуулалтын байршил/пос/кассын код (retailId/posId/cashierId) аль нь вэ? Хүргэлтийн төлбөрийг ямар барааны кодоор (itemId) илгээх вэ? `paymentType` ба QPay-д тохирох `bankId` ямар кодтой вэ?
+3. **Манай тал**: илгээхийн өмнө claim (давхар илгээхээс сэргийлэх), зөвхөн төлөгдсөн онлайн захиалга, эхлэх огноо (буцаж түүх илгээхгүй), алдаа гарвал admin-д харагдах, харилцагчид ДДТД/QR-ийг захиалгын хуудас/имэйлээр үзүүлэх.
+
+Доорх 2026-09-04-ний асуултуудаас **1, 2, 4, 5 нь хариулагдсан** (endpoint байна; зөвхөн онлайн захиалгад дуудна; ДДТД/QR/сугалаа тусад нь ирнэ; `Success`/`Message`/`ErrorCode` буцаана). **3 нь**: username + password (OAuth2 password grant), API key биш. **7 нь**: cloud endpoint — манай сервер хаана ч байрлаж болно, локал PosService шаардахгүй. Үлдсэн асуултууд дээрх 1–2-т жагсаав.
+
 ## Tom-ий SmartSoftware нийлүүлэгчтэй тодруулах ёстой тодорхой асуултууд
 
 Дараах асуултууд одоогоор ХАРИУЛАГДААГҮЙ — Зам A/B аль нэгийг сонгохын өмнө SmartSoftware-аас бодит хариу авах шаардлагатай:

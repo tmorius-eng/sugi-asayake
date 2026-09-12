@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, like, sql } from "drizzle-orm";
 import { branches, branchStock, products, productVariants, stockCountLines, stockCounts, stockReceiptLines, stockReceipts, users } from "../drizzle/schema";
 import { normaliseBarcode } from "../shared/barcode";
 import { getDb } from "./db";
@@ -437,6 +437,40 @@ export async function postCount(actor: InventoryActor, id: number) {
     await enqueueNotification(tx, "count.posted", { code: count.code, branchName: detail.branchName, adjustedLines, netDelta, isOpening: count.isOpening }, { dedupeKey: `count:${id}` });
   });
   return { ...(await getCount(actor, id)), adjustedLines, netDelta, skippedUnknown: unknown.length };
+}
+
+/**
+ * A stocktake nobody scanned: the vendor's own stock figures for one
+ * location, waiting for warehouse/admin approval exactly like a counted one
+ * (2026-09-12, Smart Software sync). Written here rather than through
+ * saveCountLines because a snapshot line may legitimately be ZERO ("the
+ * vendor says this shelf is empty"), which the scan path drops on purpose.
+ *
+ * Scope stays 'partial': the vendor's feed can be filtered to e-commerce
+ * products by a setting on their side, so items missing from it must never
+ * be zeroed here. Any older unapproved snapshot for the branch is cancelled
+ * first, so the queue holds one current proposal per location, not a pile.
+ */
+export const SNAPSHOT_COUNT_NOTE_PREFIX = "Smart POS-ын үлдэгдлээс";
+
+export async function createSnapshotCount(input: { branchId: number; sourceLabel: string; lines: { variantId: number; sku: string; countedQty: number; systemQty: number }[] }) {
+  const db = await requireDb();
+  const name = await branchName(input.branchId);
+  const code = generateInventoryCode("CT");
+  const note = `${SNAPSHOT_COUNT_NOTE_PREFIX} (${input.sourceLabel})`;
+  const varianceLines = input.lines.filter(line => line.countedQty !== line.systemQty).length;
+  let countId = 0;
+  await db.transaction(async tx => {
+    await tx.update(stockCounts).set({ status: "cancelled" })
+      .where(and(eq(stockCounts.branchId, input.branchId), inArray(stockCounts.status, ["draft", "submitted"]), like(stockCounts.note, `${SNAPSHOT_COUNT_NOTE_PREFIX}%`)));
+    const inserted = await tx.insert(stockCounts).values({ code, branchId: input.branchId, scope: "partial", status: "submitted", note, submittedAt: new Date() });
+    countId = Number(inserted[0].insertId);
+    if (input.lines.length) {
+      await tx.insert(stockCountLines).values(input.lines.map(line => ({ countId, scannedCode: line.sku, variantId: line.variantId, countedQty: line.countedQty, systemQtyAtFirstScan: line.systemQty })));
+    }
+    await enqueueNotification(tx, "count.submitted", { code, branchName: name, lineCount: input.lines.length, varianceLines }, { dedupeKey: `count:${countId}` });
+  });
+  return { id: countId, code, branchName: name, lineCount: input.lines.length, varianceLines };
 }
 
 export async function cancelCount(actor: InventoryActor, id: number) {

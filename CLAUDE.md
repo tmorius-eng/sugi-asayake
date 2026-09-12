@@ -76,7 +76,7 @@ pnpm exec tsx scripts/db-apply-migration.ts drizzle/0056_discount_code_per_custo
 $env:RUN_AUTH_INTEGRATION_TESTS="1"; $env:COMMERCE_INTEGRATION_TESTS="1"; $env:RUN_MEDIA_INTEGRATION_TESTS="1"
 pnpm exec vitest run --no-file-parallelism
 ```
-Одоогийн бүрэн тоо (2026-09-11, шөнө): **676/676 ✅ (70/70 файл)** — ntfy Phase 1-ийн шинэ тестүүд + ажлын лаптопын тестүүд, регресс 0 (~13 минут) (CI горимд gate-үүд идэвхгүй тул ихэнх integration файл skip болно — хэвийн). ⚠️ Strict rate-limit tier-үүд одоо DB дээр тоолдог (`rate_limit_buckets`) тул тестэд **тогтмол IP** ашиглавал 15 минутын дотор дахин ажиллуулахад блоклогдоно — `callerFor`-ийн санамсаргүй/per-run IP загварыг дага.
+Сүүлд БОДИТООР хэмжсэн бүрэн тоо: **726/726 ✅ (77/77 файл)**, `311a00f` дээр (2026-09-11, ~17 минут). Дараа нь Smart Software-ийн **19 шинэ тест** нэмэгдсэн (`smart-software.test.ts` 11 + `inventory-sync.integration.test.ts` 8) — тэд дангаараа ногоон, бүрэн suite-ийг Phase 6 commit дээр дахин хэмжинэ (CI горимд gate-үүд идэвхгүй тул ихэнх integration файл skip болно — хэвийн). ⚠️ Strict rate-limit tier-үүд одоо DB дээр тоолдог (`rate_limit_buckets`) тул тестэд **тогтмол IP** ашиглавал 15 минутын дотор дахин ажиллуулахад блоклогдоно — `callerFor`-ийн санамсаргүй/per-run IP загварыг дага.
 
 ✅ **CI-ийн `INTEGRATIONS_ENCRYPTION_KEY` цоорхой ШИЙДЭГДСЭН (2026-09-01)**: `server/integrations.integration.test.ts`-ийн "encryption (unit)" 2 тест gate-гүйгээр ажилладаг ба `server/_core/crypto.ts`-ийн `getKey()` нь 64-тэмдэгт hex түлхүүргүй бол шууд шатдаг тул бодит GitHub Actions дээр улаан гарч байв. Эдгээр нь **зөвхөн round-trip болон tamper-detection шалгадаг цэвэр unit тест** бөгөөд түлхүүрийн утга нь огт хамаагүй. Тиймээс `server/_test-setup.ts` орчинд түлхүүр байхгүй үед л **түр зуурын түлхүүр өгдөг** болгов (бодит `.env` утга байвал үргэлж түүнийг хүндэтгэнэ). **Аппликейшний код (`env.ts`/`crypto.ts`) огт хөндөгдөөгүй** — жинхэнэ сервер бодит түлхүүргүйгээр юу ч шифрлэхээс татгалзсан хэвээр, өөрөөр хэлбэл аюултай "insecure dev fallback" НЭМЭЭГҮЙ. Улмаар `ci.yml`-д repo secret огт хэрэггүй болж, шинэ clone дээр `pnpm test` тохиргоогүйгээр ногоон гарна.
 
@@ -211,11 +211,17 @@ Tom: "chinii hiij ugsun code edr bugd zunduu har myngan aldaa baina!! ... deep a
 
 ⚠️ 3–5-ын хооронд нийт тоо давхар тоологдоно — нэг өдөр дотор дуусгах. Дэлгүүрүүдэд онлайнаас очиж авах захиалга ирвэл бараа агуулахаас очно (систем автоматаар).
 
-## ✅ (2026-09-11, шөнө) Утасны push мэдэгдэл (ntfy) + нөөцийн ledger + сканнераар хүлээн авах + шилжүүлэг + нөөцийн alert — Phase 1–5 ДУУССАН, Phase 6 хүлээгдэж байна
+## ✅ (2026-09-11 → 09-12) Утасны push мэдэгдэл (ntfy) + нөөцийн ledger + сканнераар хүлээн авах + шилжүүлэг + нөөцийн alert + Smart Software синк — Phase 1–6 ДУУССАН
 
 **Phase 5 (нөөцийн alert)**: салбарын **"Нөөц бага гэж анхааруулах босго"** тавьсан байршилд л борлуулалт/шилжүүлэг босгыг доошоо огтлох үед нэг удаа (өдөрт) push очно; 0 болбол "дууслаа"; нийтлэгдсэн барааны онлайн нийт 0 болбол admin+warehouse-д. Admin-ий засвар, тооллого alert өгөхгүй. Cutover-ийн дараа агуулахад босго (жишээ нь 5) тавих, дэлгүүрүүдэд Smart POS синк хүртэл хоосон үлдээх.
 
 **Phase 4 (шилжүүлэг)**: /admin → Бараа хүлээн авах → **Шилжүүлэг**. Агуулах скан хийж "Илгээх" (агуулахаас шууд хасагдана, дэлгүүрт push) → дэлгүүр **blind** скан (илгээсэн тоо харагдахгүй) → "Хүлээн авах" (дэлгүүрт нэмэгдэнэ) → зөрүү байвал admin-д priority-5 push, admin мөр бүрийг шийднэ. Код: `server/transfers.ts`, `shared/transfer-reconcile.ts`, `client/src/components/inventory/TransfersView.tsx`. ⚠️ Бүртгэлгүй кодтой шилжүүлгийг илгээх боломжгүй (эхлээд бараа үүсгэх).
+
+**Phase 6 (Smart Software синк, 2026-09-12)**: `server/integrations/smartSoftware.ts` нь вендорын **REST/JSON API**-тай холбогдоно (баримт: `developer.smartsoftware.mn` — Apidog тул JS-ээр зурагддаг, `llms.txt` + `/api-<id>.md`-ээр уншина). **Auth нь API key БИШ** — OAuth2 password grant (`GET|POST {host}/oauth/token`, username/password; Смарт Ложик гэрээний дараа имэйлээр илгээнэ). Хостууд: Inventory/Retail/Loyalty `https://retailapiv2.smartlogic.mn`, POS `https://smartposapi.smartapp.mn`, Accounting `https://accountingAPI.smartlogic.mn`. Ашиглаж буй: `/api/inventory/stock_locations`, `/api/inventory/products` (байршил бүрийн `count_on_hand`, баркодоор таарна).
+
+**Урсгал**: /admin → Интеграцууд → Smart Software дээр нэр/нууц үг → "Холболт шалгах" (байршлын жагсаалт гарна) → салбар бүрт Smart POS код → "Үлдэгдэл татах" (эсвэл идэвхжүүлбэл 15 мин тутам). Үр дүн нь **нөөц шууд бичихгүй**: салбар бүрт зөвхөн зөрүүтэй мөрүүдтэй `submitted` тооллого үүсч, Бараа хүлээн авах → Тооллого дээр warehouse/admin **батлах** үед л ledger-ээр нөөц хөдөлнө. Шинэ таталт өмнөх батлагдаагүйг цуцална. ⚠️ Вендорын тоо бол **санхүүгийн үлдэгдэл** (дэлгүүрийн постлогдоогүй борлуулалтыг тооцоогүй) гэдгийг тэдний баримт өөрөө анхааруулдаг тул `scope:"partial"` — вендор илгээгээгүй барааг хэзээ ч 0 болгохгүй.
+
+⚠️ **Borлуулалт илгээх (`POST /api/sale/sale`) нь И-БАРИМТ гаргадаг** (хариунд ДДТД/QR/сугалаа) — [EBARIMT.md](EBARIMT.md)-ийн Зам A яг энэ. Код хараахан бичээгүй: нягтлангийн (НӨАТ/НХАТ) болон вендорын (retailId/posId/cashierId, хүргэлтийн барааны код, paymentType/bankId) баталгаа шаардана.
 
 🔴 **zod 4 урхи (2026-09-11 бодит incident)**: `.partial()` дотор `.default()` ОДОО Ч хэрэгждэг — update schema-д заавал `partialForUpdate()` (server/routers.ts) ашигла. Эс бөгөөс орхигдсон талбарууд create-ийн анхдагч утгаар дарагдана (салбар зөөхөд онлайн хүргэлт унтарч байсан; тестийн явцад бодит үндсэн салбар хэдэн минут алга болсон, сэргээсэн).
 
@@ -228,7 +234,7 @@ Tom: "chinii hiij ugsun code edr bugd zunduu har myngan aldaa baina!! ... deep a
 - ntfy тохиргоо (token + 4 бүлгийн сэдэв) `integration_configs`-д **шифрлэгдсэн**, идэвхтэй. Tom-ийн iPhone admin сэдэвт бүртгэлтэй, **бодитоор ирж байгааг баталгаажуулсан**. Ажилтан гарвал тухайн бүлгийн сэдвийг "Шинэчлэх" дарж солино.
 - `server/_test-setup.ts` нь `NOTIFICATIONS_SUPPRESS=1` тавьдаг — тест бодит Aiven дээр захиалга үүсгэсэн ч мэдэгдэл `suppressed` болж утас руу **хэзээ ч** явахгүй.
 - **Dedupe түлхүүр үйл явдлын төрлөөр namespace хийгдсэн** (`outboxDedupeKey`) — нэг захиалгын "шинэ", "төлөгдсөн", "цуцлагдсан" бүгд `order:<id>`-ээр дуудагддаг; namespace-гүй бол unique index тэднийг чимээгүй залгидаг байсан (тестээр олдсон).
-- Интеграцийн тохиргоо одоо **merge** хийгдэнэ (өмнө нь нэг түлхүүр хадгалахад бусад нь устдаг байв). REST API / OAuth2 **зориуд байхгүй** — Smart Software-ийн API хэлбэр тодорхой болсны дараа.
+- Интеграцийн тохиргоо одоо **merge** хийгдэнэ (өмнө нь нэг түлхүүр хадгалахад бусад нь устдаг байв). Гадагшаа нээлттэй REST API / OAuth2 **зориуд байхгүй** (Smart Software-той бид өөрсдөө холбогддог, тэд манай руу хандахгүй).
 - Шинэ admin хэсэг "Утасны мэдэгдэл" (`notifications`) — хэсэг нэмэхдээ `AdminSection` union, `adminSectionKeys`, `SECTION_ROLES`, 3 гарчгийн ternary chain, `shared/admin-tips.ts` + `server/admin-tips.test.ts` бүгдийг шинэчлэх.
 
 ## ⚠️ ХОЁР ЛАПТОП — session бүрийн эхэнд ЗААВАЛ `git fetch` (2026-09-11 бодит incident)

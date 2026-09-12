@@ -193,6 +193,7 @@ function ProviderCard({ row }: { row: IntegrationRow }) {
       )}
 
       {row.provider === "ntfy" && <NotificationOutboxLog />}
+      {row.provider === "smartsoftware" && <SmartSoftwareSyncPanel />}
     </div>
   );
 }
@@ -226,6 +227,110 @@ function NotificationOutboxLog() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Phase 6 (2026-09-12): the Smart Software sync. "Холболт шалгах" asks the
+ * vendor for its location list (which doubles as the picker for the branch
+ * mapping below), and "Үлдэгдэл татах" turns their stock figures into a
+ * stocktake per branch that warehouse/admin approve in Бараа хүлээн авах →
+ * Тооллого. Stock is never written from here -- see
+ * server/integrations/inventorySync.ts's runPullSnapshot.
+ */
+function SmartSoftwareSyncPanel() {
+  const utils = trpc.useUtils();
+  const statusQuery = trpc.admin.inventorySyncStatus.useQuery();
+  const setCode = trpc.admin.setBranchExternalId.useMutation();
+  const testConnection = trpc.admin.testIntegration.useMutation();
+  const pullStock = trpc.admin.pullVendorStock.useMutation();
+  const [drafts, setDrafts] = useState<Record<number, string>>({});
+  const [locations, setLocations] = useState<{ id: string; name: string }[]>([]);
+  const [pulled, setPulled] = useState<Awaited<ReturnType<typeof pullStock.mutateAsync>> | null>(null);
+  const data = statusQuery.data;
+  if (statusQuery.isLoading || !data) return <p className="mt-3 flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={13} />Уншиж байна…</p>;
+
+  const save = async (branchId: number) => {
+    try {
+      await setCode.mutateAsync({ branchId, externalId: drafts[branchId]?.trim() || null });
+      setDrafts(current => { const next = { ...current }; delete next[branchId]; return next; });
+      await utils.admin.inventorySyncStatus.invalidate();
+      toast.success("Салбарын код хадгалагдлаа.");
+    } catch (error) { toast.error(messageFrom(error)); }
+  };
+
+  const test = async () => {
+    try {
+      const result = await testConnection.mutateAsync({ provider: "smartsoftware" });
+      setLocations(result.locations ?? []);
+      if (result.ok) toast.success(`Холбогдлоо · ${result.detail}`);
+      else toast.error(result.detail ?? "Холбогдсонгүй.");
+    } catch (error) { toast.error(messageFrom(error)); }
+  };
+
+  const pull = async () => {
+    try {
+      const result = await pullStock.mutateAsync();
+      setPulled(result);
+      await Promise.all([utils.admin.inventorySyncStatus.invalidate(), utils.inventory.counts.invalidate()]);
+      const created = result.ran ? result.branches.filter(branch => branch.countId).length : 0;
+      toast.success(created ? `${created} салбарт батлах тооллого үүслээ.` : "Зөрүү олдсонгүй — Smart POS-той таарч байна.");
+    } catch (error) { toast.error(messageFrom(error)); }
+  };
+
+  const busy = testConnection.isPending || pullStock.isPending;
+  return (
+    <div className="mt-4 grid gap-3">
+      <p className={`rounded-xl p-3 text-[11px] leading-4 ${data.credentialsSet ? "bg-[var(--a-pos-soft)] text-[var(--a-pos)]" : "bg-[var(--a-soft)] text-[var(--a-muted)]"}`}>
+        {data.credentialsSet
+          ? data.isActive ? "Нэвтрэх мэдээлэл тохирсон, идэвхтэй — 15 минут тутам үлдэгдэл татаж, зөрүүг батлах тооллого болгоно." : "Нэвтрэх мэдээлэл тохирсон. Автомат синк эхлэхийн тулд дээрх \"Идэвхтэй\" товчийг асаана уу (одоо ч гараар татаж болно)."
+          : "Смарт Ложикоос ирсэн нэвтрэх нэр, нууц үгээ дээр оруулаад хадгална уу."}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" onClick={test} disabled={busy} className="inline-flex items-center gap-1.5 rounded-full border border-[var(--a-border)] bg-[var(--a-card)] px-3 py-1.5 text-[10px] font-extrabold text-[var(--a-text-soft)] hover:border-[var(--a-info)] hover:text-[var(--a-info)] disabled:opacity-50">
+          {testConnection.isPending ? <LoaderCircle className="animate-spin" size={11} /> : <RefreshCw size={11} />}Холболт шалгах
+        </button>
+        <button type="button" onClick={pull} disabled={busy} className="inline-flex items-center gap-1.5 rounded-full bg-[#3970a7] px-3 py-1.5 text-[10px] font-extrabold text-white disabled:opacity-50">
+          {pullStock.isPending ? <LoaderCircle className="animate-spin" size={11} /> : <Send size={11} />}Үлдэгдэл татах
+        </button>
+      </div>
+      {locations.length > 0 && <p className="text-[11px] text-[var(--a-muted)]">Smart POS байршлууд: {locations.map(location => `${location.id} · ${location.name}`).join(" | ")}</p>}
+      <div className="rounded-2xl bg-[var(--a-soft)] p-3">
+        <p className="text-[10px] font-extrabold tracking-[.08em] text-[var(--a-info)]">САЛБАРЫН КОД (SMART POS)</p>
+        <div className="mt-2 grid gap-1.5">
+          {data.branches.filter(branch => branch.isActive).map(branch => {
+            const draft = drafts[branch.id];
+            const dirty = draft !== undefined && draft.trim() !== (branch.externalId ?? "");
+            return (
+              <div key={branch.id} className="flex items-center gap-2 rounded-lg bg-[var(--a-card)] px-2.5 py-1.5">
+                <span className="min-w-0 flex-1 truncate text-[11px] font-bold">{branch.name}{branch.kind === "warehouse" ? " (агуулах)" : ""}</span>
+                <input list="smart-locations" value={draft ?? branch.externalId ?? ""} onChange={event => setDrafts(current => ({ ...current, [branch.id]: event.target.value }))} placeholder="Smart POS дахь код" className="h-8 w-40 rounded-md border border-[var(--a-border)] bg-[var(--a-card)] px-2 text-xs outline-none focus:border-[var(--a-info)]" />
+                <button type="button" disabled={!dirty || setCode.isPending} onClick={() => save(branch.id)} className="rounded-md bg-[#3970a7] px-2.5 py-1.5 text-[10px] font-extrabold text-white disabled:opacity-40">Хадгалах</button>
+              </div>
+            );
+          })}
+        </div>
+        <datalist id="smart-locations">{locations.map(location => <option key={location.id} value={location.id}>{location.name}</option>)}</datalist>
+      </div>
+      {pulled?.ran && (
+        <div className="rounded-2xl bg-[var(--a-soft)] p-3 text-[11px] leading-4">
+          <p className="font-bold">{pulled.products} бараанаас {pulled.matchedProducts} нь манай баркодтой таарлаа.</p>
+          {pulled.branches.map(branch => (
+            <p key={branch.branchId} className="mt-1 text-[var(--a-muted)]">{branch.branchName} ({branch.locationId}): {branch.countId ? <span className="font-bold text-[var(--a-info)]">{branch.code} — {branch.lines} зөрүүтэй бараа, батлахыг хүлээж байна</span> : "зөрүүгүй"}</p>
+          ))}
+          {pulled.unmappedLocations.length > 0 && <p className="mt-1 text-[var(--a-warn)]">Салбарт холбоогүй байршил: {pulled.unmappedLocations.join(", ")}</p>}
+          {pulled.unknownSkuCount > 0 && <p className="mt-1 text-[var(--a-muted)]">Манайд байхгүй {pulled.unknownSkuCount} баркод алгаслаа{pulled.unknownSkus.length ? ` (${pulled.unknownSkus.slice(0, 5).join(", ")}…)` : ""}.</p>}
+          {pulled.problems.map(problem => <p key={problem} className="mt-1 text-[var(--a-neg)]">{problem}</p>)}
+        </div>
+      )}
+      {data.streams.length > 0 && (
+        <div className="grid gap-1.5">
+          {data.streams.map(stream => (
+            <p key={stream.stream} className="text-[11px] text-[var(--a-muted)]"><strong className="text-[var(--a-text)]">{stream.stream}</strong> · сүүлд {stream.lastRunAt ? new Date(stream.lastRunAt).toLocaleString("mn-MN") : "—"}{stream.lastError ? <span className="text-[var(--a-neg)]"> · {stream.lastError}</span> : " · амжилттай"}</p>
+          ))}
         </div>
       )}
     </div>

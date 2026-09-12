@@ -128,7 +128,19 @@ describe("integration settings", () => {
     for (const provider of INTEGRATION_PROVIDERS) {
       expect(INTEGRATION_META[provider].label.length, provider).toBeGreaterThan(2);
     }
+    // The two providers real runtime code reads (ntfy: server/_core/ntfy.ts,
+    // Smart Software: server/integrations/smartSoftware.ts). The rest only
+    // store credentials, and the admin card says so.
     expect(INTEGRATION_META.ntfy.wiredUp).toBe(true);
-    expect(INTEGRATION_META.smartsoftware.wiredUp).toBe(false);
+    expect(INTEGRATION_META.smartsoftware.wiredUp).toBe(true);
+    expect(INTEGRATION_META.ebarimt.wiredUp).toBe(false);
+    // Smart Software authenticates with a username and password (OAuth2
+    // password grant), never an API key -- a field named apiKey here would
+    // mean someone mis-read the vendor's docs again.
+    const smartFields = INTEGRATION_META.smartsoftware.fields.map(field => field.key);
+    expect(smartFields).toContain("username");
+    expect(smartFields).toContain("password");
+    expect(smartFields).not.toContain("apiKey");
+    expect(INTEGRATION_META.smartsoftware.fields.find(field => field.key === "password")?.kind).toBe("secret");
   });
 });

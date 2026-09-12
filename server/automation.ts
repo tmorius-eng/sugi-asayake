@@ -1,5 +1,6 @@
 import { getAbandonedCartsNeedingReminder, getLowStockProducts, getStockLedgerHealth, markCartReminderSent, getStoreSettingValue, purgeNotificationOutbox, recordNotification } from "./db";
 import { getStaleTransfers } from "./transfers";
+import { runInventorySync } from "./integrations/inventorySync";
 import { fillTemplate } from "../shared/store-settings";
 import { ubDateKey } from "../shared/notification-events";
 import { sendAccountEmail, notifyOwner } from "./_core/notification";
@@ -89,6 +90,12 @@ export async function runStaleTransferJob(): Promise<void> {
 
 export function registerStaleTransferJob() {
   registerJob({ name: "stale-transfer-reminder", intervalMs: 6 * 60 * 60 * 1000, run: runStaleTransferJob });
+}
+
+// Phase 6: the Smart Software sync -- a no-op until an adapter is
+// registered and the integration is switched on (server/integrations/inventorySync.ts).
+export function registerInventorySyncJob() {
+  registerJob({ name: "inventory-sync-smartsoftware", intervalMs: 15 * 60 * 1000, run: async () => { await runInventorySync(); } });
 }
 
 // 2026-09-11: keeps notification_outbox small -- see purgeNotificationOutbox.
