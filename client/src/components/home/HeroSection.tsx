@@ -22,11 +22,11 @@ import HeroImageSlideshow, { type HeroSlide } from "./HeroImageSlideshow";
  * The previous version is one checkout away at git tag
  * backup/pre-cosmekitchen-2026-09-12.
  */
-export default function HeroSection({ imageFor, productCountLabel, branchCount }: {
+export default function HeroSection({ imageFor, mediaReady = true }: {
   /** Resolves a site_media slot to an uploaded URL, or its brand default. */
   imageFor: (slotKey: string, fallbackUrl: string | null) => string | null;
-  productCountLabel: string;
-  branchCount: number;
+  /** False while the admin's uploads are still loading -- see Home.tsx. */
+  mediaReady?: boolean;
 }) {
   const textFor = useSiteText();
   // Admins type the heading as up to three lines; here they read as one
@@ -34,22 +34,21 @@ export default function HeroSection({ imageFor, productCountLabel, branchCount }
   const heading = textFor("home-text-hero-heading", "ГЭР БҮЛИЙН\nГИШҮҮН БҮРТ\nЯПОН ЧАНАР").split("\n").filter(Boolean).join(" ");
 
   /**
-   * Keeps a headline number true while leaving the words around it
-   * editable: an admin types {бараа} or {салбар}, the live count lands here.
-   */
-  const withCounts = (value: string) =>
-    value.replaceAll("{бараа}", productCountLabel).replaceAll("{салбар}", String(branchCount));
-
-  /**
    * Each tile takes the admin's uploaded photo for its slot, falling back
    * to the brand default registered for that slot in shared/site-media.ts,
    * so the row runs with three real photographs from the first deploy. A
    * tile with no resolvable image is dropped rather than shown empty.
+   *
+   * 2026-09-12 (Tom): the caption under each photograph is gone, and with
+   * it the per-slide text slots in /admin. A photograph now carries no
+   * words, so `label` is what names its link for a screen reader -- derived
+   * from where the tile leads rather than from editable copy, so the link
+   * can never end up nameless.
    */
-  const slideFor = (slotKey: SiteMediaSlotKey, prefix: string, defaultCaption: string, href: string): HeroSlide | null => {
+  const slideFor = (slotKey: SiteMediaSlotKey, href: string, label: string): HeroSlide | null => {
     const imageUrl = imageFor(slotKey, getSiteMediaSlot(slotKey).fallbackUrl);
     if (!imageUrl) return null;
-    return { key: slotKey, imageUrl, caption: withCounts(textFor(`${prefix}image-caption`, defaultCaption)), href };
+    return { key: slotKey, imageUrl, href, label };
   };
 
   /**
@@ -59,18 +58,21 @@ export default function HeroSection({ imageFor, productCountLabel, branchCount }
    * blank frame -- so the row is three tiles today and up to six the moment
    * /admin -> Зураг has more.
    */
+  const shopLabel = "Бүтээгдэхүүн үзэх";
   const slides = [
-    slideFor("home-hero", "home-text-hero-", "Өдөр бүрийн арчилгаа, илүү ойрхон", "/shop"),
-    slideFor("home-hero-2", "home-text-hero-2-", "Захиалгаа хоёр өдрийн дотор гартаа", "/shop"),
-    slideFor("home-hero-3", "home-text-hero-3-", "Улаанбаатарын салбаруудаас өөрөө аваарай", "#stores"),
-    slideFor("home-hero-4", "home-text-hero-4-", "SUGI ASAYAKE", "/shop"),
-    slideFor("home-hero-5", "home-text-hero-5-", "SUGI ASAYAKE", "/shop"),
-    slideFor("home-hero-6", "home-text-hero-6-", "SUGI ASAYAKE", "/shop"),
+    slideFor("home-hero", "/shop", shopLabel),
+    slideFor("home-hero-2", "/shop", shopLabel),
+    slideFor("home-hero-3", "#stores", "Салбар олох"),
+    slideFor("home-hero-4", "/shop", shopLabel),
+    slideFor("home-hero-5", "/shop", shopLabel),
+    slideFor("home-hero-6", "/shop", shopLabel),
   ].filter((slide): slide is HeroSlide => slide !== null);
 
   return (
     <section className="hero-section" aria-labelledby="hero-title">
-      <HeroImageSlideshow slides={slides} imageAlt="SUGI ASAYAKE everyday-care products" />
+      {mediaReady
+        ? <HeroImageSlideshow slides={slides} imageAlt="SUGI ASAYAKE everyday-care products" />
+        : <div className="hero-rail-reserve" aria-hidden="true" />}
       <div className="hero-copy">
         <p className="eyebrow">{textFor("home-text-hero-eyebrow", "SUGI ASAYAKE / MONGOLIA")}</p>
         <h1 id="hero-title">{heading}</h1>

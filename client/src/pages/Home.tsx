@@ -40,6 +40,7 @@ import FeaturedBrandsCarousel from "@/components/home/FeaturedBrandsCarousel";
 import KeywordChips from "@/components/home/KeywordChips";
 import CarouselShelf from "@/components/home/CarouselShelf";
 import ShelfProductCard from "@/components/home/ShelfProductCard";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { useCategories } from "@/hooks/useCategories";
 import { useShopContact } from "@/hooks/useShopContact";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
@@ -58,6 +59,7 @@ const familyImage = null;
 const symbolImage = "/cdn/sugi-symbol_0a534a76.png";
 
 export default function Home() {
+  const { user } = useAuth();
   const [cartOpen, setCartOpen] = useState(false);
   // NEWVISION.md §8: Home used to have no cart integration in its header at
   // all -- a signed-in shopper browsing the homepage had no way to see
@@ -77,7 +79,13 @@ export default function Home() {
   // reuses the bestseller rail's own card markup rather than /shop's
   // Recently-Viewed-style interactive card (no quick-view/remember affordance
   // exists on this page), so it reads as one consistent product-rail family.
-  const recommendedQuery = trpc.catalog.recommended.useQuery();
+  // 2026-09-12 (Tom: "bi login hiij account burtguuleegui baij ene tanid
+  // sanal bolgoh buteegdehuund garj irj baina"): the rail is headed "Танд
+  // санал болгож байна" -- addressed to a person -- so it only runs for a
+  // signed-in shopper now. The endpoint stays public (that is /shop's own
+  // rail too, and its bestseller-backed fallback is what makes it useful
+  // there), but the query does not even fire for a guest here.
+  const recommendedQuery = trpc.catalog.recommended.useQuery({ personalOnly: true }, { enabled: Boolean(user) });
   const recommended = recommendedQuery.data ?? [];
   // 2026-09-04 cohesion audit: the hero badge's "800+" used to be hardcoded
   // directly in HeroSection.tsx with no way to update it short of a code
@@ -133,7 +141,13 @@ export default function Home() {
       <CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="SUGI ASAYAKE" marketingNav />
 
       <main>
-        <HeroSection imageFor={imageFor} productCountLabel={productCountLabel} branchCount={branchCount} />
+        {/* mediaReady: the hero must not paint its row until it knows how
+            many photographs there are. Slots 4-6 have no brand default, so
+            while this query is in flight the row would be three tiles wide,
+            then grow to five and visibly jump (Tom: "refresh hiiheer ehnii 3
+            slide ... daraa n suuld nemegdsen slide garj irj baina, lag").
+            The hero reserves the exact height meanwhile, so nothing shifts. */}
+        <HeroSection imageFor={imageFor} mediaReady={!siteMediaQuery.isLoading} />
 
         {/* The reference's popular-keyword box, built from this shop's own
             real categories and featured brands rather than invented terms. */}
@@ -165,7 +179,7 @@ export default function Home() {
             fallback server-side, so this hides only on a genuinely failed
             request rather than on "no preferences yet". No rank number here:
             a recommendation is not a ranking. */}
-        {(recommendedQuery.isLoading || recommended.length > 0) && (
+        {user && (recommendedQuery.isLoading || recommended.length > 0) && (
           <CarouselShelf
             title={textFor("home-text-recommended-heading", "Танд санал\nболгож байна.").split("\n").join(" ")}
             loading={recommendedQuery.isLoading}

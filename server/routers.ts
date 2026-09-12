@@ -1062,7 +1062,13 @@ export const appRouter = router({
     // or a shopper with no preferences/history yet, so the section is
     // never silently hidden the way it was under TIER 1's original
     // protected-only, empty-array-if-no-preferences version.
-    recommended: publicProcedure.query(({ ctx }) => getRecommendedProducts(ctx.user?.id ?? null)),
+    // personalOnly (2026-09-12): Home's rail passes it so a signed-in
+    // shopper with nothing on file sees no rail at all, rather than
+    // bestsellers under a heading addressed to them personally. /shop calls
+    // this without it and keeps the bestseller-backed fallback.
+    recommended: publicProcedure
+      .input(z.object({ personalOnly: z.boolean().optional() }).optional())
+      .query(({ ctx, input }) => getRecommendedProducts(ctx.user?.id ?? null, 8, input?.personalOnly ?? false)),
     // Preference Profile v2 (2026-09-01): ProductDetail's related-products
     // rail -- product-to-product tag overlap, no user/auth concept at all
     // (see getRelatedProducts), so this is always public.

@@ -96,19 +96,15 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
               {!marketingNav && backLabel ? <span>{backLabel}</span> : null}
             </Link>
           </div>
-          {/* 2026-09-12 (Cosme Kitchen restyle): the nav is its own middle
-              column of the header rather than a run of links beside the
-              logo, so it sits centred in the row the way the reference's
-              does. It is still opt-in per caller (Home only). */}
-          {marketingNav && (
-            <nav className="commerce-marketing-nav" aria-label="Нүүр хуудасны цэс">
-              {navItems.map(item => item.anchor
-                ? <a href={item.href} key={item.slot}>{item.label}</a>
-                : <Link href={item.href} key={item.slot}>{item.label}</Link>)}
-            </nav>
-          )}
+          {/* Tom, 2026-09-12: the search field sits on the logo's own line
+              ("ene search bariig logo giin neg shugamnd bailga") -- it was a
+              row of its own underneath, which left the logo and the field on
+              two different lines. The marketing nav takes the row below
+              instead, centred. */}
+          <div className="commerce-header-search-slot">
+            <HeaderSearch variant="inline" />
+          </div>
           <div className="commerce-header-actions">
-            <HeaderSearch />
             {/* 2026-09-12 (Tom): the plain-text "Дэлгүүр" link is gone from
                 the header entirely. On Home the marketing nav already leads
                 with it; on every other page the bottom bar (phone) and the
@@ -146,13 +142,13 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
             </button>
           </div>
         </div>
-        {/* The reference's second header row: one real, always-visible
-            search field, centred. Same HeaderSearch component (and the same
-            catalog.search call) as the magnifier in the row above -- only
-            the trigger differs. */}
-        <div className="commerce-header-searchrow">
-          <HeaderSearch variant="inline" />
-        </div>
+        {marketingNav && (
+          <nav className="commerce-header-navrow commerce-marketing-nav" aria-label="Нүүр хуудасны цэс">
+            {navItems.map(item => item.anchor
+              ? <a href={item.href} key={item.slot}>{item.label}</a>
+              : <Link href={item.href} key={item.slot}>{item.label}</Link>)}
+          </nav>
+        )}
         <div className={`commerce-mobile-menu ${menuOpen ? "open" : ""}`}>
           {/* 2026-09-07 (bsb.mn mobile-UX pass): now that BottomNavBar.tsx
               handles primary nav (Home/Shop/Cart/Wishlist/Profile) on every

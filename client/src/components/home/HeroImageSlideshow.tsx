@@ -5,8 +5,9 @@ import { createTimer } from "animejs";
 export type HeroSlide = {
   key: string;
   imageUrl: string;
-  caption: string;
   href: string;
+  /** Names the tile's link; the photographs carry no visible words. */
+  label: string;
 };
 
 /**
@@ -43,16 +44,28 @@ export type HeroSlide = {
  */
 /** One photograph passes every this many milliseconds. Tom tuned this by
  *  eye, each step slower than the last: 4000 stepped ("too slow"), then as a
- *  drift 2500 -> 3500 -> 5000 -> 10000. At ten seconds the row reads as a
- *  slow tide rather than a scroller, which is the register the reference
- *  site sits in. */
-const MS_PER_SLIDE = 10000;
+ *  drift 2500 -> 3500 -> 5000 -> 10000 -> 15000. At fifteen seconds the row
+ *  barely reads as moving at all until you watch it, which is the register
+ *  the reference site sits in. */
+const MS_PER_SLIDE = 15000;
 const COPIES = 3;
 
 export default function HeroImageSlideshow({ slides, imageAlt }: { slides: HeroSlide[]; imageAlt: string }) {
   const railRef = useRef<HTMLDivElement>(null);
   const setWidth = useRef(0);
-  const [active, setActive] = useState(0);
+  /**
+   * The drift's own position, in floating-point pixels.
+   *
+   * It cannot be read back from the element each frame: a scroll offset is
+   * quantised (measured here -- assigning 1000.4 reads back as 1000.5), so
+   * at a slow drift on a fast display each frame's fraction is smaller than
+   * one quantum, gets rounded away, and the row sits still. Measured at 15s
+   * per photograph and 165fps: 93px of intended travel produced 0.5px of
+   * actual movement. Keeping the exact position here and writing it out
+   * each frame makes the speed independent of both the refresh rate and the
+   * quantum.
+   */
+  const position = useRef<number | null>(null);
   const [held, setHeld] = useState(false);
   const [hidden, setHidden] = useState(false);
   const count = slides.length;
@@ -75,8 +88,13 @@ export default function HeroImageSlideshow({ slides, imageAlt }: { slides: HeroS
     const rail = railRef.current;
     const width = setWidth.current;
     if (!rail || !loop || !width) return;
-    if (rail.scrollLeft < width * 0.5) rail.scrollLeft += width;
-    else if (rail.scrollLeft > width * 1.5) rail.scrollLeft -= width;
+    const at = position.current ?? rail.scrollLeft;
+    let next = at;
+    if (at < width * 0.5) next = at + width;
+    else if (at > width * 1.5) next = at - width;
+    if (next === at) return;
+    position.current = next;
+    rail.scrollLeft = next;
   }, [loop]);
 
   // Start on the middle copy, and re-measure when the layout changes.
@@ -84,10 +102,12 @@ export default function HeroImageSlideshow({ slides, imageAlt }: { slides: HeroS
     const rail = railRef.current;
     if (!rail || !loop) return;
     rail.scrollLeft = measure();
+    position.current = rail.scrollLeft;
     const onResize = () => {
       const before = setWidth.current || 1;
-      const ratio = rail.scrollLeft / before;
+      const ratio = (position.current ?? rail.scrollLeft) / before;
       rail.scrollLeft = ratio * measure();
+      position.current = rail.scrollLeft;
     };
     window.addEventListener("resize", onResize);
     // The photographs load lazily; their arrival can change the set width.
@@ -119,50 +139,32 @@ export default function HeroImageSlideshow({ slides, imageAlt }: { slides: HeroS
         const gap = Number.parseFloat(styles.columnGap || styles.gap || "0") || 0;
         const pitch = first.getBoundingClientRect().width + gap;
         // Right-drifting content means a decreasing scroll position.
-        rail.scrollLeft -= (pitch * elapsed) / MS_PER_SLIDE;
+        position.current = (position.current ?? rail.scrollLeft) - (pitch * elapsed) / MS_PER_SLIDE;
+        rail.scrollLeft = position.current;
         wrap();
       },
     });
     return () => { timer.pause(); timer.revert(); };
   }, [loop, held, hidden, measure, wrap]);
 
-  // Which photograph is nearest the centre, for the dots.
+  // A finger, a swipe or the keyboard can move the row; adopt where it
+  // actually is so the next frame carries on from there instead of yanking
+  // it back to where the drift thought it was.
   useEffect(() => {
     const rail = railRef.current;
     if (!rail) return;
-    let frame = 0;
-    const settle = () => {
-      frame = 0;
-      const centre = rail.scrollLeft + rail.clientWidth / 2;
-      let best = 0;
-      let bestDistance = Number.POSITIVE_INFINITY;
-      rail.querySelectorAll<HTMLElement>("[data-hero-tile]").forEach((tile, index) => {
-        const distance = Math.abs(tile.offsetLeft + tile.clientWidth / 2 - centre);
-        if (distance < bestDistance) { bestDistance = distance; best = index; }
-      });
-      setActive(best % count);
+    const onScroll = () => {
+      if (position.current === null || Math.abs(rail.scrollLeft - position.current) > 1.5) position.current = rail.scrollLeft;
     };
-    const onScroll = () => { if (!frame) frame = requestAnimationFrame(settle); };
     rail.addEventListener("scroll", onScroll, { passive: true });
-    settle();
-    return () => { rail.removeEventListener("scroll", onScroll); if (frame) cancelAnimationFrame(frame); };
-  }, [count]);
+    return () => rail.removeEventListener("scroll", onScroll);
+  }, []);
 
   useEffect(() => {
     const sync = () => setHidden(document.hidden);
     document.addEventListener("visibilitychange", sync);
     return () => document.removeEventListener("visibilitychange", sync);
   }, []);
-
-  /** A dot jumps the drift to that photograph and lets it carry on. */
-  const goTo = (index: number) => {
-    const rail = railRef.current;
-    if (!rail) return;
-    const tiles = rail.querySelectorAll<HTMLElement>("[data-hero-tile]");
-    const tile = tiles[loop ? count + index : index];
-    if (!tile) return;
-    rail.scrollTo({ left: tile.offsetLeft - (rail.clientWidth - tile.clientWidth) / 2, behavior: "smooth" });
-  };
 
   if (!count) return null;
 
@@ -186,33 +188,18 @@ export default function HeroImageSlideshow({ slides, imageAlt }: { slides: HeroS
               data-slot={slide.key}
               aria-hidden={clone || undefined}
             >
-              <Link href={slide.href} className="hero-rail-link" draggable={false} tabIndex={clone ? -1 : undefined}>
+              <Link href={slide.href} className="hero-rail-link" draggable={false} aria-label={slide.label} tabIndex={clone ? -1 : undefined}>
                 <img
                   src={slide.imageUrl}
-                  alt={slide.caption}
+                  alt=""
                   draggable={false}
                   {...(copy === 0 && index === 0 ? { fetchPriority: "high" as const } : { loading: "lazy" as const })}
                 />
               </Link>
-              <figcaption>{slide.caption}</figcaption>
             </figure>
           );
         }))}
       </div>
-      {loop && (
-        <div className="hero-rail-dots" role="group" aria-label="Зураг сонгох">
-          {slides.map((slide, index) => (
-            <button
-              key={slide.key}
-              type="button"
-              className={`hero-rail-dot${index === active ? " is-active" : ""}`}
-              onClick={() => goTo(index)}
-              aria-label={`${index + 1}-р зураг`}
-              aria-current={index === active}
-            />
-          ))}
-        </div>
-      )}
     </div>
   );
 }

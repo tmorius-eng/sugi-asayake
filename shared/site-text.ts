@@ -48,7 +48,6 @@ const WCU_ICON_DESCRIPTION = `Icon-ий нэр. Боломжит утга: ${WCU
 const WCU_COLOR_DESCRIPTION = "Tile-ийн дэвсгэр өнгө, hex хэлбэрээр (жишээ: #e94e3c). Icon нь цагаан тул тод, бараавтар өнгө сонго. Буруу утга бол анхдагч өнгө харагдана.";
 
 export const siteTextSlots = [
-  // ---- Hero -------------------------------------------------------------
   {
     key: "home-text-hero-eyebrow",
     group: "Hero",
@@ -70,43 +69,6 @@ export const siteTextSlots = [
     description: "Гол гарчигийн доорх тайлбар мөр.",
     fallbackValue: "Японоос баталгаат бүтээгдэхүүнүүдийг албан ёсны эрхтэйгээр танд хүргэж байна.",
   },
-  // ---- Hero-гийн зургийн slideshow (3 слайд) -----------------------------
-  // 2026-09-12, Tom: "нүүрний хамгийн эхэнд байдаг энэ зургийг 3 өөр зургаар
-  // slide-аар болгож болох уу? … хамгийн гол нь зураг бүрийн badge, marker,
-  // label, caption бас давхар зэрэгцээд солигдмоор байна".
-  //
-  // Each slide owns its own four overlay texts, so the words change WITH the
-  // photo instead of one caption sitting over three different pictures.
-  // Slide 1 deliberately keeps the original slot keys (badge-label,
-  // marker-label, image-caption) so any edit an admin has already saved
-  // survives untouched.
-  //
-  // The badge VALUE accepts two tokens so a headline number can stay true
-  // while the words around it stay editable: {бараа} is the live count of
-  // published products and {салбар} the live count of active branches --
-  // same discipline as the SEO slots, and the reason this project has never
-  // printed a hand-typed catalogue size.
-  {
-    key: "home-text-hero-badge-value",
-    group: "Hero — 1-р слайд",
-    label: "Тэмдгийн том тоо",
-    description: "{бараа} = нийтлэгдсэн барааны бодит тоо (зуугаар дугуйрсан), {салбар} = идэвхтэй салбарын тоо.",
-    fallbackValue: "{бараа}",
-  },
-  {
-    key: "home-text-hero-badge-label",
-    group: "Hero — 1-р слайд",
-    label: "Тэмдгийн доорх тайлбар",
-    description: "Дээрх тооны доор гарах жижиг тайлбар.",
-    fallbackValue: "DAILY CHOICES",
-  },
-  {
-    key: "home-text-hero-marker-label",
-    group: "Hero — 1-р слайд",
-    label: "Оч тэмдэгтэй жижиг бичээс",
-    description: "Зургийн зүүн доод хэсэгт байрлах жижиг тэмдэглэгээ.",
-    fallbackValue: "THE MORNING OF CARE",
-  },
   {
     key: "home-text-hero-signature",
     group: "Hero",
@@ -114,94 +76,12 @@ export const siteTextSlots = [
     description: "Hero copy-ийн хамгийн доод жижиг өгүүлбэр.",
     fallbackValue: "Өглөөнөөс орой хүртэл таны өдөр тутмын сонголт.",
   },
-  {
-    key: "home-text-hero-image-caption",
-    group: "Hero — 1-р слайд",
-    label: "Зургийн доод тайлбар",
-    description: "Зургийн доод талд гарах мөр.",
-    fallbackValue: "Өдөр бүрийн арчилгаа, илүү ойрхон",
-  },
-  {
-    key: "home-text-hero-label",
-    group: "Hero — 1-р слайд",
-    label: "Булангийн бичээс",
-    description: "Зургийн буланд байрлах богино бичээс.",
-    fallbackValue: "JAPAN QUALITY",
-  },
 
-  // Slides 2 and 3. A slide only appears when its IMAGE exists (see
-  // shared/site-media.ts), so leaving those unuploaded runs the hero as a
-  // single still picture and none of the text below is ever seen.
-  {
-    key: "home-text-hero-2-badge-value",
-    group: "Hero — 2-р слайд",
-    label: "Тэмдгийн том тоо",
-    description: "{бараа} болон {салбар} орлуулга энд ч ажиллана.",
-    fallbackValue: "24–48",
-  },
-  {
-    key: "home-text-hero-2-badge-label",
-    group: "Hero — 2-р слайд",
-    label: "Тэмдгийн доорх тайлбар",
-    description: "",
-    fallbackValue: "ЦАГТ ХҮРГЭНЭ",
-  },
-  {
-    key: "home-text-hero-2-marker-label",
-    group: "Hero — 2-р слайд",
-    label: "Оч тэмдэгтэй жижиг бичээс",
-    description: "",
-    fallbackValue: "DELIVERED IN ULAANBAATAR",
-  },
-  {
-    key: "home-text-hero-2-label",
-    group: "Hero — 2-р слайд",
-    label: "Булангийн бичээс",
-    description: "",
-    fallbackValue: "FAST DELIVERY",
-  },
-  {
-    key: "home-text-hero-2-image-caption",
-    group: "Hero — 2-р слайд",
-    label: "Зургийн доод тайлбар",
-    description: "",
-    fallbackValue: "Захиалгаа хоёр өдрийн дотор гартаа",
-  },
-  {
-    key: "home-text-hero-3-badge-value",
-    group: "Hero — 3-р слайд",
-    label: "Тэмдгийн том тоо",
-    description: "{бараа} болон {салбар} орлуулга энд ч ажиллана.",
-    fallbackValue: "{салбар}",
-  },
-  {
-    key: "home-text-hero-3-badge-label",
-    group: "Hero — 3-р слайд",
-    label: "Тэмдгийн доорх тайлбар",
-    description: "",
-    fallbackValue: "САЛБАР",
-  },
-  {
-    key: "home-text-hero-3-marker-label",
-    group: "Hero — 3-р слайд",
-    label: "Оч тэмдэгтэй жижиг бичээс",
-    description: "",
-    fallbackValue: "ALWAYS CLOSE TO YOU",
-  },
-  {
-    key: "home-text-hero-3-label",
-    group: "Hero — 3-р слайд",
-    label: "Булангийн бичээс",
-    description: "",
-    fallbackValue: "NEAR YOU",
-  },
-  {
-    key: "home-text-hero-3-image-caption",
-    group: "Hero — 3-р слайд",
-    label: "Зургийн доод тайлбар",
-    description: "",
-    fallbackValue: "Улаанбаатарын салбаруудаас өөрөө аваарай",
-  },
+  // 2026-09-12: the per-slide text (badge, marker, corner label, caption --
+  // 18 slots across six slides) was deleted outright at Tom's request. The
+  // hero row is photographs only now, so those slots had nothing left to
+  // render and only cluttered /admin. A slide still appears purely because
+  // its IMAGE slot has an upload (see shared/site-media.ts).
   {
     key: "home-text-hero-trust-title",
     group: "Hero",
@@ -527,27 +407,6 @@ export const siteTextSlots = [
     fallbackValue: "Бүх бүтээгдэхүүн үзэх",
   },
 
-  {
-    key: "home-text-hero-4-image-caption",
-    group: "Hero — 4-р слайд",
-    label: "Зургийн доод тайлбар",
-    description: "Энэ слайдын зургийн доорх мөр. Слайд нь Зураг таб дээр 4-р слайдын зураг оруулсан үед л харагдана.",
-    fallbackValue: "SUGI ASAYAKE",
-  },
-  {
-    key: "home-text-hero-5-image-caption",
-    group: "Hero — 5-р слайд",
-    label: "Зургийн доод тайлбар",
-    description: "Энэ слайдын зургийн доорх мөр. Слайд нь Зураг таб дээр 5-р слайдын зураг оруулсан үед л харагдана.",
-    fallbackValue: "SUGI ASAYAKE",
-  },
-  {
-    key: "home-text-hero-6-image-caption",
-    group: "Hero — 6-р слайд",
-    label: "Зургийн доод тайлбар",
-    description: "Энэ слайдын зургийн доорх мөр. Слайд нь Зураг таб дээр 6-р слайдын зураг оруулсан үед л харагдана.",
-    fallbackValue: "SUGI ASAYAKE",
-  },
 
   // ---- "Түгээмэл хайлт" keyword chips under the opening photographs
   //      (2026-09-12 Cosme Kitchen restyle; the chips themselves are the

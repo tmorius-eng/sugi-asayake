@@ -1188,7 +1188,16 @@ export async function searchPublishedCatalog(query: string) {
 //     preferences/history yet) — so the section never renders empty.
 // Public-facing (routers.ts's catalog.recommended is now a publicProcedure):
 // userId is null for a guest, who still gets a bestseller-backed list.
-export async function getRecommendedProducts(userId: number | null, limit = 8) {
+/**
+ * `personalOnly` (2026-09-12, Tom: "zaawal login hiij profile aa iinhaa
+ * reference hiisen hun deer garga") -- with it set, a shopper who has no
+ * preferences and no history gets an EMPTY list instead of the
+ * bestseller-backed fallback, so a rail headed "Танд санал болгож байна"
+ * can hide itself rather than show strangers' bestsellers under a heading
+ * addressed to that person. /shop's own rail keeps the fallback: there the
+ * rail is a discovery aid, and empty would be worse than generic.
+ */
+export async function getRecommendedProducts(userId: number | null, limit = 8, personalOnly = false) {
   const db = await getDb();
   if (!db) return [];
 
@@ -1232,6 +1241,7 @@ export async function getRecommendedProducts(userId: number | null, limit = 8) {
   const hasAnyPreference = Boolean(preferences.skinType || preferences.skinConcerns || preferences.hairType || preferences.hairConcerns || preferences.fragrancePreference || preferences.wellnessInterests || preferences.interiorStyle || preferences.hasYoungChildren);
   const hasAnyHistory = categoryAffinity.size > 0 || wishlistCategoryIds.size > 0;
   if (!hasAnyPreference && !hasAnyHistory) {
+    if (personalOnly) return [];
     // Cold start: a guest, or a shopper who has stated nothing and bought
     // nothing. Bestsellers are the right answer WHEN THERE ARE ANY -- but
     // this catalog currently has ~0 paid orders, so bestsellers() came back
