@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { eq } from "drizzle-orm";
 import { orderItems, orders, productCategories, productVariants, products, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
@@ -62,8 +63,8 @@ describeWithDatabase("order self-cancellation integration", () => {
     if (otherId) await db.delete(users).where(eq(users.id, otherId));
   });
 
-  const ownerUser = () => ({ id: ownerId, email: ownerEmail, name: "Cancel Test Owner", role: "user" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
-  const otherUser = () => ({ id: otherId, email: otherEmail, name: "Cancel Test Other", role: "user" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+  const ownerUser = () => testSessionUser({ id: ownerId, email: ownerEmail, name: "Cancel Test Owner", role: "user" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+  const otherUser = () => testSessionUser({ id: otherId, email: otherEmail, name: "Cancel Test Other", role: "user" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
 
   async function insertOrder(status: "pending" | "confirmed" | "packed", quantity = 1) {
     const db = await getDb();

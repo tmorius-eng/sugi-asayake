@@ -237,7 +237,7 @@ export default function Shop() {
     if (page > 1) params.set("page", String(page)); else params.delete("page");
     window.history.replaceState(null, "", `${window.location.pathname}${params.toString() ? `?${params}` : ""}`);
   }, [page]);
-  const effectiveRecentIds = qaHistoryMode === "unavailable" ? [999_999] : recentlyViewedIds;
+  const effectiveRecentIds = useMemo(() => qaHistoryMode === "unavailable" ? [999_999] : recentlyViewedIds, [qaHistoryMode, recentlyViewedIds]);
   const forceZeroResults = qaHistoryMode === "zero-filter";
   // Frontend performance audit (2026-09-02): catalog.list no longer ships
   // the full catalog for the client to resolve arbitrary recently-viewed

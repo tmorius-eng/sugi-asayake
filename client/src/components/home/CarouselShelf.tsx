@@ -80,7 +80,6 @@ export default function CarouselShelf({
     const observer = new ResizeObserver(updateEdges);
     observer.observe(el);
     return () => { el.removeEventListener("scroll", updateEdges); observer.disconnect(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [children.length, loading]);
 
   const scrollBy = (direction: 1 | -1) => {

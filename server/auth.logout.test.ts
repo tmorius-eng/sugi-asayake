@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { appRouter } from "./routers";
 import { ADMIN_FACE_COOKIE_NAME, COOKIE_NAME } from "../shared/const";
 import type { TrpcContext } from "./_core/context";
@@ -13,7 +14,7 @@ type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
 function createAuthContext(): { ctx: TrpcContext; clearedCookies: CookieCall[] } {
   const clearedCookies: CookieCall[] = [];
 
-  const user: AuthenticatedUser = {
+  const user: AuthenticatedUser = testSessionUser({
     id: 1,
     email: "sample@example.com",
     name: "Sample User",
@@ -23,19 +24,19 @@ function createAuthContext(): { ctx: TrpcContext; clearedCookies: CookieCall[] }
     createdAt: new Date(),
     updatedAt: new Date(),
     lastSignedIn: new Date(),
-  };
+  });
 
   const ctx: TrpcContext = {
     user,
     req: {
       protocol: "https",
       headers: {},
-    } as TrpcContext["req"],
+    } as unknown as TrpcContext["req"],
     res: {
       clearCookie: (name: string, options: Record<string, unknown>) => {
         clearedCookies.push({ name, options });
       },
-    } as TrpcContext["res"],
+    } as unknown as TrpcContext["res"],
   };
 
   return { ctx, clearedCookies };

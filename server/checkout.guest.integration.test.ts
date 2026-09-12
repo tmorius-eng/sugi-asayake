@@ -4,7 +4,6 @@ import { GUEST_CART_COOKIE_NAME } from "../shared/const";
 import { carts, cartItems, orderItems, orders, phoneVerificationSessions, productCategories, productVariants, products, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
 import { getDb } from "./db";
-import { hashPassword } from "./_core/password";
 import type { TrpcContext } from "./_core/context";
 
 // UX-RESEARCH.md priority #1: guest checkout. This suite exercises the real

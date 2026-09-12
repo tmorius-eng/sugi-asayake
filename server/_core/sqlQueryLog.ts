@@ -40,7 +40,11 @@ const MAX_PARAM_LENGTH = 300;
 function stringifyParam(value: unknown): string {
   let text: string;
   try {
-    text = typeof value === "string" ? value : JSON.stringify(value);
+    // JSON.stringify(undefined) is undefined, not a string -- and this runs
+    // inside the driver's logging hook, where a thrown TypeError surfaces
+    // as a failed query (2026-09-12 audit: a test that passed `undefined`
+    // as a bind parameter died here, not in the driver).
+    text = typeof value === "string" ? value : (JSON.stringify(value) ?? String(value));
   } catch {
     text = String(value);
   }

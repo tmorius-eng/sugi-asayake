@@ -105,14 +105,20 @@ export async function createQPayInvoice(input: QPayInvoiceInput): Promise<QPayIn
       callback_url: input.callbackUrl,
     }),
   });
-  const invoiceId = typeof payload.invoice_id === "string" ? payload.invoice_id : "";
-  if (!invoiceId) throw new Error("QPay did not return an invoice ID.");
+  const parsed = parseQPayInvoicePayload(payload);
+  if (!parsed.invoiceId) throw new Error("QPay did not return an invoice ID.");
+  return { ...parsed, raw: payload };
+}
 
+/** The parts of a QPay invoice response the checkout page needs. Pure, so
+ *  the same reading serves a fresh invoice and one replayed from
+ *  payment_attempts.responseJson (2026-09-12: a second click no longer mints
+ *  a second, equally payable invoice). */
+export function parseQPayInvoicePayload(payload: Record<string, unknown>): Omit<QPayInvoiceResponse, "raw"> {
   return {
-    invoiceId,
+    invoiceId: typeof payload.invoice_id === "string" ? payload.invoice_id : "",
     qrText: typeof payload.qr_text === "string" ? payload.qr_text : null,
     urls: Array.isArray(payload.urls) ? payload.urls.filter((value): value is { name?: string; description?: string; logo?: string; link?: string } => Boolean(value && typeof value === "object")) : [],
-    raw: payload,
   };
 }
 

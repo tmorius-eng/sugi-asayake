@@ -21,7 +21,7 @@ export default function AdminRoutinesPanel() {
   const utils = trpc.useUtils();
   const routinesQuery = trpc.admin.routines.useQuery();
   const productsQuery = trpc.admin.products.useQuery();
-  const products = productsQuery.data ?? [];
+  const products = useMemo(() => productsQuery.data ?? [], [productsQuery.data]);
 
   const [composerOpen, setComposerOpen] = useState(false);
   const [form, setForm] = useState<RoutineForm>(emptyForm());

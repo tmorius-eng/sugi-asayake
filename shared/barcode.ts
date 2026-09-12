@@ -29,6 +29,7 @@ export const MAX_BARCODE_LENGTH = 14;
  * appear when a code is copied out of a PDF or a spreadsheet.
  */
 export const normaliseBarcode = (raw: string) =>
+  // eslint-disable-next-line no-irregular-whitespace -- the class lists the thin and no-break spaces a copied code carries; that is the point
   raw.replace(/[\s  -​\-_]/g, "");
 
 /**

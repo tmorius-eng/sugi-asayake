@@ -59,7 +59,6 @@ import { formatMnt } from "@shared/format";
 // gradient show through instead of a broken <img>. Upload real photos via
 // /admin -> Content & Media for slots: home-hero, home-categories,
 // home-family.
-const heroImage = null;
 const assortmentImage = "/product-placeholder.svg";
 const familyImage = null;
 const symbolImage = "/cdn/sugi-symbol_0a534a76.png";

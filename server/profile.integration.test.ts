@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { eq } from "drizzle-orm";
 import { adminAuditLogs, productCategories, products, userAddresses, users, wishlistItems } from "../drizzle/schema";
 import { appRouter } from "./routers";
@@ -52,7 +53,7 @@ describeWithDatabase("customer profile integration", () => {
       emailVerifiedAt: new Date(),
     });
     userId = Number(inserted[0].insertId);
-    sessionUser = { id: userId, email: `${marker}@example.invalid`, name: "Profile Test User", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, phone, avatarUrl: null, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
+    sessionUser = testSessionUser({ id: userId, email: `${marker}@example.invalid`, name: "Profile Test User", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, phone, avatarUrl: null, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
 
     const insertedOther = await db.insert(users).values({
       email: `${marker}-other@example.invalid`,
@@ -62,7 +63,7 @@ describeWithDatabase("customer profile integration", () => {
       emailVerifiedAt: new Date(),
     });
     otherUserId = Number(insertedOther[0].insertId);
-    otherSessionUser = { ...sessionUser, id: otherUserId, email: `${marker}-other@example.invalid`, name: "Other Test User" };
+    otherSessionUser = testSessionUser({ ...sessionUser, id: otherUserId, email: `${marker}-other@example.invalid`, name: "Other Test User" });
   });
 
   afterAll(async () => {
@@ -219,7 +220,7 @@ describeWithDatabase("customer profile — change password & delete account", ()
       emailVerifiedAt: new Date(),
     });
     userId = Number(inserted[0].insertId);
-    sessionUser = { id: userId, email: `${marker}@example.invalid`, name: "Security Test User", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, phone, avatarUrl: null, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
+    sessionUser = testSessionUser({ id: userId, email: `${marker}@example.invalid`, name: "Security Test User", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, phone, avatarUrl: null, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
   });
 
   afterAll(async () => {
@@ -255,7 +256,7 @@ describeWithDatabase("customer profile — change password & delete account", ()
     await expect(caller.profile.deleteAccount({ password: "WrongPassword!" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
 
     await caller.profile.deleteAccount({ password: "BrandNewPassw0rd!" });
-    const gone = await getUserByEmail(sessionUser!.email);
+    const gone = await getUserByEmail(sessionUser!.email!);
     expect(gone).toBeUndefined();
   });
 });
@@ -280,7 +281,7 @@ describeWithDatabase("customer wishlist + back-in-stock alerts", () => {
       emailVerifiedAt: new Date(),
     });
     userId = Number(inserted[0].insertId);
-    sessionUser = { id: userId, email: `${marker}@example.invalid`, name: "Wishlist Test User", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, phone: null, avatarUrl: null, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
+    sessionUser = testSessionUser({ id: userId, email: `${marker}@example.invalid`, name: "Wishlist Test User", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, phone: null, avatarUrl: null, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
 
     // admin.updateProduct writes an admin_audit_logs row whose actorUserId is
     // a RESTRICT foreign key to users.id, so the acting "admin" here has to
@@ -293,7 +294,7 @@ describeWithDatabase("customer wishlist + back-in-stock alerts", () => {
       emailVerifiedAt: new Date(),
     });
     adminUserId = Number(insertedAdmin[0].insertId);
-    adminSessionUser = { ...sessionUser, id: adminUserId, role: "admin", email: `${marker}-admin@example.invalid` };
+    adminSessionUser = testSessionUser({ ...sessionUser, id: adminUserId, role: "admin", email: `${marker}-admin@example.invalid` });
 
     const categoryResult = await db.insert(productCategories).values({ name: "Wishlist test category", slug: `${marker}-category`, sortOrder: 99999, isActive: true });
     categoryId = Number(categoryResult[0].insertId);

@@ -65,6 +65,13 @@ export default function Checkout() {
   const [storepayLimit, setStorepayLimit] = useState<{ mobileNumber: string; possibleAmountMnt: number } | null>(null);
   const savedAddresses = trpc.profile.addresses.list.useQuery(undefined, { enabled: isAuthenticated });
   const createOrder = trpc.checkout.createOrder.useMutation();
+  // One random id per checkout ATTEMPT (2026-09-12). Sent with the order so
+  // the server can recognise a retry -- a request that timed out after the
+  // server had committed, a browser resend, a second tab -- and return the
+  // same order instead of placing the basket twice. Rotated only after a
+  // success: a failed attempt must keep its id, or the retry would count as
+  // a new attempt.
+  const checkoutRequestIdRef = useRef(crypto.randomUUID());
   const createInvoice = trpc.payments.qpayCreateInvoice.useMutation();
   // Prefill from the profile page once its data arrives, without ever
   // clobbering something the shopper already typed — each effect fires at
@@ -141,7 +148,6 @@ export default function Checkout() {
 
   useEffect(() => {
     if (couponQuery.isError) toast.error(messageFrom(couponQuery.error));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [couponQuery.isError, couponQuery.error]);
 
   const applyCoupon = () => {
@@ -182,13 +188,14 @@ export default function Checkout() {
       return;
     }
     try {
-      const order = await createOrder.mutateAsync({ customerName: customerName.trim(), customerPhone: customerPhone.trim(), customerEmail: customerEmail.trim() || null, deliveryMethod: delivery === "delivery" ? "ub_delivery" : "store_pickup", deliveryAddress: delivery === "delivery" ? deliveryAddress.trim() : null, district: delivery === "delivery" && district ? district : null, pickupBranch: delivery === "pickup" ? pickupBranch : null, paymentMethod: payment === "qpay" ? "qpay" : payment === "storepay" ? "storepay" : "cash_on_delivery", couponCode: appliedCoupon || null, applyStoreCreditMnt: appliedStoreCreditMnt || undefined, trafficSource: getStoredTrafficSource() ?? null });
+      const order = await createOrder.mutateAsync({ clientRequestId: checkoutRequestIdRef.current, customerName: customerName.trim(), customerPhone: customerPhone.trim(), customerEmail: customerEmail.trim() || null, deliveryMethod: delivery === "delivery" ? "ub_delivery" : "store_pickup", deliveryAddress: delivery === "delivery" ? deliveryAddress.trim() : null, district: delivery === "delivery" && district ? district : null, pickupBranch: delivery === "pickup" ? pickupBranch : null, paymentMethod: payment === "qpay" ? "qpay" : payment === "storepay" ? "storepay" : "cash_on_delivery", couponCode: appliedCoupon || null, applyStoreCreditMnt: appliedStoreCreditMnt || undefined, trafficSource: getStoredTrafficSource() ?? null });
       await utils.cart.current.invalidate();
       await utils.cart.applicableRoutineDiscount.invalidate();
       await utils.loyalty.myStatus.invalidate();
       await utils.cart.myStoreCreditBalance.invalidate();
       removeCoupon();
       setUseStoreCredit(false);
+      checkoutRequestIdRef.current = crypto.randomUUID();
       setPlacedOrder(order);
       // Cash/pickup orders are confirmed the instant they're placed — see
       // isOrderConfirmed above, which renders OrderConfirmation once this

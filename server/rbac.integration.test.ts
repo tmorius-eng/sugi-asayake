@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 import { NOT_ADMIN_ERR_MSG } from "../shared/const";
@@ -30,7 +31,7 @@ const ALL_ROLES: Role[] = ["user", "staff", "finance", "marketing", "warehouse",
 
 function callerFor(role: Role): ReturnType<typeof appRouter.createCaller> {
   const ctx: TrpcContext = {
-    user: {
+    user: testSessionUser({
       id: 1,
       email: "rbac-test@example.invalid",
       name: "RBAC Test User",
@@ -40,7 +41,7 @@ function callerFor(role: Role): ReturnType<typeof appRouter.createCaller> {
       createdAt: new Date(),
       updatedAt: new Date(),
       lastSignedIn: new Date(),
-    },
+    }),
     req: { protocol: "https", headers: {}, ip: `192.0.2.${Math.floor(Math.random() * 250) + 1}`, socket: { remoteAddress: "192.0.2.1" } } as unknown as TrpcContext["req"],
     res: { cookie: () => undefined, clearCookie: () => undefined } as unknown as TrpcContext["res"],
   };

@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { eq, inArray, like } from "drizzle-orm";
 import { appRouter } from "./routers";
 import { getDb } from "./db";
@@ -13,12 +14,12 @@ const maybeDescribe = runIntegration ? describe : describe.skip;
 
 function createAdminContext(): TrpcContext {
   return {
-    user: {
+    user: testSessionUser({
       id: 1, email: "owner@example.com", name: "Branches Integration Admin", role: "admin",
       emailVerifiedAt: null, sessionVersion: 0, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date(),
-    },
-    req: { protocol: "https", headers: {} } as TrpcContext["req"],
-    res: { clearCookie: () => undefined } as TrpcContext["res"],
+    }),
+    req: { protocol: "https", headers: {} } as unknown as TrpcContext["req"],
+    res: { clearCookie: () => undefined } as unknown as TrpcContext["res"],
   };
 }
 

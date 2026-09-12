@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { eq } from "drizzle-orm";
 import { adminAuditLogs, productCategories, productVariants, products, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
@@ -69,10 +70,10 @@ describeWithDatabase("product variants (phase 1) integration", () => {
   });
 
   function warehouse() {
-    return callerFor({ id: warehouseId, email: warehouseEmail, name: "Variant Test Warehouse", role: "warehouse", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+    return callerFor(testSessionUser({ id: warehouseId, email: warehouseEmail, name: "Variant Test Warehouse", role: "warehouse", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }));
   }
   function plainUser() {
-    return callerFor({ id: userId, email: userEmail, name: "Variant Test User", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+    return callerFor(testSessionUser({ id: userId, email: userEmail, name: "Variant Test User", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }));
   }
 
   it("rejects a plain user (non-warehouse) from viewing or writing variants", async () => {

@@ -1,20 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
+import { testSessionUser } from "./_test-helpers";
 import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from "../shared/const";
 
 function createContext(role: "user" | "staff" | "finance" | "marketing" | "warehouse" | "admin" | null): TrpcContext {
-  const user = role ? {
-    id: 1,
-    email: "test@example.com",
-    name: "Commerce Test User",
-    role,
-    emailVerifiedAt: null,
-    sessionVersion: 0,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    lastSignedIn: new Date(),
-  } : null;
+  const user = role ? testSessionUser({ id: 1, email: "test@example.com", name: "Commerce Test User", role, emailVerifiedAt: null }) : null;
 
   return {
     user,
@@ -24,7 +15,7 @@ function createContext(role: "user" | "staff" | "finance" | "marketing" | "wareh
       ip: `198.51.100.${Math.floor(Math.random() * 250) + 1}`,
       socket: { remoteAddress: "198.51.100.1" },
     } as unknown as TrpcContext["req"],
-    res: { cookie: () => undefined, clearCookie: () => undefined } as TrpcContext["res"],
+    res: { cookie: () => undefined, clearCookie: () => undefined } as unknown as TrpcContext["res"],
   };
 }
 

@@ -154,6 +154,23 @@ export function getIntegrationField(provider: IntegrationProvider, key: string):
  *  whitespace into a key that later ends up in a log line or a form label. */
 const SETTING_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,79}$/;
 
+/** Providers whose base URLs the server calls and which live on the public
+ *  internet by definition. */
+const CLOUD_VENDOR_PROVIDERS = new Set<IntegrationProvider>(["smartsoftware", "storepay"]);
+
+/** Loopback, link-local, RFC 1918, cloud-metadata and bare-IP hosts. A static
+ *  check (no DNS): it stops the obvious mistakes and the obvious attack, and
+ *  the vendors in question are only ever reached by public hostname. */
+export function isPrivateHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
+  if (host === "::1" || host.startsWith("fe80:") || host.startsWith("fc") || host.startsWith("fd")) return true;
+  const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!v4) return !host.includes(".");
+  const [a, b] = [Number(v4[1]), Number(v4[2])];
+  return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+}
+
 /**
  * Validates the keys and values an admin is about to SAVE (not the whole
  * stored config -- a value saved under older rules is never retro-rejected).
@@ -175,6 +192,15 @@ export function validateIntegrationSettings(provider: IntegrationProvider, setti
       let parsed: URL;
       try { parsed = new URL(value); } catch { return `${field.label}: зөв хаяг биш байна.`; }
       if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return `${field.label}: http(s):// хаяг байх ёстой.`;
+      // The server itself dials these. For a cloud vendor that must be a public
+      // https host: an admin-typed address pointing at localhost, the LAN or a
+      // cloud metadata endpoint would turn the vendor adapter into a way to
+      // read this server's own network (SSRF). ntfy is exempt on purpose -- a
+      // self-hosted ntfy on the shop's LAN over http is a supported setup.
+      if (CLOUD_VENDOR_PROVIDERS.has(provider)) {
+        if (parsed.protocol !== "https:") return `${field.label}: зөвхөн https:// хаяг зөвшөөрнө.`;
+        if (isPrivateHost(parsed.hostname)) return `${field.label}: дотоод сүлжээний хаяг зөвшөөрөгдөхгүй.`;
+      }
     }
     if (field.kind === "topic" && !NTFY_TOPIC_PATTERN.test(value)) return `${field.label}: зөвхөн латин үсэг, тоо, "_" болон "-" (64 хүртэл тэмдэгт).`;
     if (field.kind === "topic" && value.length < 16) return `${field.label}: хэт богино байна -- таамаглахад хэцүү байхын тулд 16-аас дээш тэмдэгт хэрэгтэй ("Сэдэв үүсгэх" товчийг ашиглана уу).`;

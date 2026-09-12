@@ -13,7 +13,7 @@ import "dotenv/config";
 import { readFileSync } from "node:fs";
 import { extname } from "node:path";
 import sharp from "sharp";
-import mysql from "mysql2/promise";
+import mysql, { type RowDataPacket } from "mysql2/promise";
 import { planMysqlConnection } from "../server/_core/dbConnection";
 import { storagePut } from "../server/storage";
 
@@ -40,11 +40,11 @@ async function main() {
   // a bare URL string let mysql2 talk to Aiven in plaintext.
   const conn = await mysql.createConnection(planMysqlConnection(process.env.DATABASE_URL ?? "").options);
   try {
-    const [rows] = await conn.execute<any[]>(
+    const [rows] = await conn.execute<RowDataPacket[]>(
       "SELECT id, name, imageUrl FROM products WHERE id = ?",
       [productId],
     );
-    const product = (rows as any[])[0];
+    const product = rows[0];
     if (!product) {
       console.error(`No product with id=${productId}`);
       process.exit(1);

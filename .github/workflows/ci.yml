@@ -34,6 +34,9 @@ jobs:
       - name: Type-check
         run: pnpm check
 
+      - name: Lint
+        run: pnpm lint
+
       # No env block needed. The "integration config encryption (unit)"
       # tests in server/integrations.integration.test.ts run ungated and
       # need SOME 64-char hex INTEGRATIONS_ENCRYPTION_KEY; server/

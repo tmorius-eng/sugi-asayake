@@ -59,13 +59,19 @@ export function generateOrderNumber(): string {
   return `SA${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 }
 
-function isDuplicateOrderNumberError(error: unknown): boolean {
+/** MySQL's duplicate-key error, for one named unique key. mysql2 wraps the
+ *  driver error, so the cause is checked as well as the error itself. */
+function isDuplicateKeyError(error: unknown, keyName: string): boolean {
   const candidates = [error, (error as { cause?: unknown } | null)?.cause];
   return candidates.some(candidate => {
     if (!candidate || typeof candidate !== "object") return false;
     const { code, errno, message } = candidate as { code?: string; errno?: number; message?: string };
-    return (code === "ER_DUP_ENTRY" || errno === 1062) && typeof message === "string" && message.includes("orderNumber");
+    return (code === "ER_DUP_ENTRY" || errno === 1062) && typeof message === "string" && message.includes(keyName);
   });
+}
+
+function isDuplicateOrderNumberError(error: unknown): boolean {
+  return isDuplicateKeyError(error, "orderNumber");
 }
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
@@ -1636,6 +1642,27 @@ export async function mergeGuestCartIntoUserCart(guestToken: string, userId: num
   await db.update(carts).set({ status: "converted", updatedAt: new Date() }).where(eq(carts.id, guestCart.id));
 }
 
+/**
+ * The order an earlier submission of this checkout attempt produced, or null.
+ * The key is a random UUID the browser made, so it cannot be guessed; the
+ * owner check is for the signed-in case regardless, so a shopper can never
+ * be handed somebody else's order. Items come from order_items because the
+ * cart that produced them has already been converted.
+ */
+async function findOrderForClientRequest(db: DbOrTx, clientRequestId: string, expectedUserId: number | null | undefined) {
+  const [existing] = await db.select().from(orders).where(eq(orders.clientRequestId, clientRequestId)).limit(1);
+  if (!existing) return null;
+  // `undefined` = no account to compare against (a guest, or a cashier).
+  if (expectedUserId !== undefined && existing.userId !== expectedUserId) return null;
+  const items = await db.select({ productName: orderItems.productName, quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt }).from(orderItems).where(eq(orderItems.orderId, existing.id));
+  return {
+    ...existing,
+    items: items.map(item => ({ name: item.productName, quantity: item.quantity, priceMnt: item.unitPriceMnt, attributesJson: null as string | null })),
+    routineName: null as string | null,
+    replayed: true as const,
+  };
+}
+
 export async function createOrderFromActiveCart(input: {
   owner: CartOwner;
   customerName: string;
@@ -1650,6 +1677,8 @@ export async function createOrderFromActiveCart(input: {
   trafficSource?: string | null;
   deviceType?: "mobile" | "tablet" | "desktop" | "unknown";
   visitorSessionId?: number | null;
+  /** Idempotency key from the browser (see orders.clientRequestId). */
+  clientRequestId?: string | null;
   // "Controls everything" admin overhaul (2026-09-08, Phase I): how much of
   // the customer's own store credit balance they opted to apply, requested
   // by the client -- re-validated against their REAL balance below, never
@@ -1660,6 +1689,14 @@ export async function createOrderFromActiveCart(input: {
 }, options?: { generateOrderNumber?: () => string }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
+  // A retry of an attempt the server already committed -- a request that
+  // timed out on a mobile connection after the commit, a browser resend, a
+  // second tab -- returns the order that attempt produced instead of placing
+  // the basket again (2026-09-12).
+  if (input.clientRequestId) {
+    const replay = await findOrderForClientRequest(db, input.clientRequestId, input.owner.userId);
+    if (replay) return replay;
+  }
   const cart = await getActiveCartForOwner(input.owner);
   if (!cart?.items.length) throw new Error("Your cart is empty.");
   const availabilityFailure = getInventoryReservationFailure(cart.items);
@@ -1798,6 +1835,7 @@ export async function createOrderFromActiveCart(input: {
       trafficSource: input.trafficSource ?? null,
       deviceType: input.deviceType ?? "unknown",
       visitorSessionId: input.visitorSessionId ?? null,
+      clientRequestId: input.clientRequestId ?? null,
       subtotalMnt,
       deliveryFeeMnt,
       discountMnt,
@@ -1864,6 +1902,12 @@ export async function createOrderFromActiveCart(input: {
       break;
     } catch (error) {
       if (attempt < 3 && isDuplicateOrderNumberError(error)) continue;
+      // Two submissions of the same attempt raced and the other one won:
+      // hand back its order rather than an error.
+      if (input.clientRequestId && isDuplicateKeyError(error, "orders_client_request_unique")) {
+        const replay = await findOrderForClientRequest(db, input.clientRequestId, input.owner.userId);
+        if (replay) return replay;
+      }
       throw error;
     }
   }
@@ -1873,7 +1917,7 @@ export async function createOrderFromActiveCart(input: {
   // decrement) — reuse them here instead of a redundant order_items query,
   // so the caller (checkout.createOrder) can build a confirmation email
   // without a second round trip.
-  return { ...order[0], items: cart.items.map(item => ({ name: item.name, quantity: item.quantity, priceMnt: item.priceMnt, attributesJson: item.attributesJson })), routineName: routineDiscount?.routineName ?? null };
+  return { ...order[0], items: cart.items.map(item => ({ name: item.name, quantity: item.quantity, priceMnt: item.priceMnt, attributesJson: item.attributesJson })), routineName: routineDiscount?.routineName ?? null, replayed: false as const };
 }
 
 /**
@@ -1903,11 +1947,19 @@ export type InStoreSaleInput = {
   customerPhone?: string | null;
   /** The cashier -- recorded on the stock ledger movements. */
   actorUserId?: number | null;
+  /** Idempotency key from the register screen (2026-09-12 audit) -- the same
+   *  key always returns the same sale, so a resent request after a timeout or
+   *  a double tap cannot ring the basket up twice. Same rule as checkout. */
+  clientRequestId?: string | null;
 };
 
 export async function recordInStoreSale(input: InStoreSaleInput) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
+  if (input.clientRequestId) {
+    const replay = await findOrderForClientRequest(db, input.clientRequestId, undefined);
+    if (replay) return { ...replay, replayed: true as const };
+  }
   if (!input.items.length) throw new Error("Add at least one item to record a sale.");
   for (const item of input.items) {
     if (item.quantity < 1) throw new Error("Quantity must be at least 1 for every item.");
@@ -1944,6 +1996,7 @@ export async function recordInStoreSale(input: InStoreSaleInput) {
     const inserted = await tx.insert(orders).values({
       userId: input.userId ?? null,
       orderNumber,
+      clientRequestId: input.clientRequestId ?? null,
       status: "completed",
       paymentMethod: "in_store",
       paymentStatus: "paid",
@@ -1978,12 +2031,18 @@ export async function recordInStoreSale(input: InStoreSaleInput) {
       break;
     } catch (error) {
       if (attempt < 3 && isDuplicateOrderNumberError(error)) continue;
+      // Two copies of one request raced past the check at the top; the
+      // loser's insert hit the unique key, its stock decrement rolled back.
+      if (input.clientRequestId && isDuplicateKeyError(error, "orders_client_request_unique")) {
+        const replay = await findOrderForClientRequest(db, input.clientRequestId, undefined);
+        if (replay) return { ...replay, replayed: true as const };
+      }
       throw error;
     }
   }
 
   const order = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
-  return order[0];
+  return { ...order[0], replayed: false as const };
 }
 
 /**
@@ -4155,6 +4214,17 @@ export async function getVisitorSessionIdByToken(sessionToken: string): Promise<
   return rows[0]?.id ?? null;
 }
 
+/** The most recent campaign send with this fingerprint inside the window,
+ *  or null -- see admin.sendCampaign's double-send guard. */
+export async function findRecentCampaignSend(fingerprint: string, windowMinutes: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const [row] = await db.select({ id: adminAuditLogs.id, createdAt: adminAuditLogs.createdAt }).from(adminAuditLogs)
+    .where(and(eq(adminAuditLogs.action, "campaign.sent"), like(adminAuditLogs.metadataJson, `%"fingerprint":"${fingerprint}"%`), sql`${adminAuditLogs.createdAt} > NOW() - INTERVAL ${sql.raw(String(Math.floor(windowMinutes)))} MINUTE`))
+    .orderBy(desc(adminAuditLogs.createdAt)).limit(1);
+  return row ?? null;
+}
+
 export async function logAdminAction(input: { actorUserId: number; action: string; entityType: string; entityId?: number | null; metadata?: Record<string, unknown> }) {
   const db = await getDb();
   if (!db) return;
@@ -5034,6 +5104,25 @@ export async function getRecentNotificationOutbox(limit = 50) {
  * a full suite run leaves ~70 of them -- and anything finished more than 90
  * days ago, so the table stays small without a separate retention policy.
  */
+/**
+ * Data retention (2026-09-12 audit): two tables grew without bound.
+ *  - visitor_sessions: one row per anonymous browsing session, forever. The
+ *    analytics that read it (conversion rate, traffic sources) look back at
+ *    most a couple of years; older rows are weight with no reader. Orders
+ *    keep their link via SET NULL, so an old order is never touched.
+ *  - login_attempts: the security log behind rate limiting and the
+ *    Security Center's history. A year is plenty for both.
+ * Nothing with a legal retention promise (orders, receipts, audit logs) is
+ * touched here -- the privacy page promises those for 10 years.
+ */
+export async function purgeStaleTelemetry() {
+  const db = await getDb();
+  if (!db) return { visitorSessions: 0, loginAttempts: 0 };
+  const sessions = await db.delete(visitorSessions).where(sql`${visitorSessions.lastSeenAt} < NOW() - INTERVAL 24 MONTH`);
+  const logins = await db.delete(loginAttempts).where(sql`${loginAttempts.createdAt} < NOW() - INTERVAL 12 MONTH`);
+  return { visitorSessions: Number(sessions[0].affectedRows ?? 0), loginAttempts: Number(logins[0].affectedRows ?? 0) };
+}
+
 export async function purgeNotificationOutbox(): Promise<{ testRows: number; oldRows: number }> {
   const db = await getDb();
   if (!db) return { testRows: 0, oldRows: 0 };

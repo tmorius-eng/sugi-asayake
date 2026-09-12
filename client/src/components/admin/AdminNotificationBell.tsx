@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Bell, BellRing, CheckCheck, LoaderCircle, Smartphone, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -59,7 +59,7 @@ export default function AdminNotificationBell({ preview, attentionCount, attenti
   const rootRef = useRef<HTMLDivElement>(null);
   const newestSeenRef = useRef<number | null>(null);
 
-  const items = feedQuery.data?.items ?? [];
+  const items = useMemo(() => feedQuery.data?.items ?? [], [feedQuery.data?.items]);
   const unreadCount = feedQuery.data?.unreadCount ?? 0;
   const lastSeenId = feedQuery.data?.lastSeenId ?? null;
 

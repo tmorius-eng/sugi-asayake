@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { eq } from "drizzle-orm";
 import { adminAuditLogs, orderItems, orders, productCategories, productReviews, products, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
@@ -24,7 +25,7 @@ function callerFor(user: TrpcContext["user"]): ReturnType<typeof appRouter.creat
 }
 
 function userRecord(id: number, email: string, name: string, role: "user" | "marketing"): NonNullable<TrpcContext["user"]> {
-  return { id, email, name, role, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
+  return testSessionUser({ id, email, name, role });
 }
 
 describeWithDatabase("product reviews integration", () => {

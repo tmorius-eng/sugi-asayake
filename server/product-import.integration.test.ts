@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { eq, like } from "drizzle-orm";
 import { adminAuditLogs, productCategories, products, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
@@ -49,7 +50,7 @@ describeWithDatabase("bulk CSV product import integration", () => {
     if (warehouseId) await db.delete(users).where(eq(users.id, warehouseId));
   });
 
-  const warehouseUser = () => ({ id: warehouseId, email: warehouseEmail, name: "CSV Import Warehouse", role: "warehouse" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+  const warehouseUser = () => testSessionUser({ id: warehouseId, email: warehouseEmail, name: "CSV Import Warehouse", role: "warehouse" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
 
   it("dryRun validates but writes nothing to the database", async () => {
     const caller = callerFor(warehouseUser());
@@ -131,7 +132,7 @@ describeWithDatabase("bulk CSV product import integration", () => {
   });
 
   it("rejects a non-warehouse role", async () => {
-    const marketing = callerFor({ id: warehouseId, email: warehouseEmail, name: "x", role: "marketing", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+    const marketing = callerFor(testSessionUser({ id: warehouseId, email: warehouseEmail, name: "x", role: "marketing", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }));
     await expect(marketing.admin.importProductsCsv({ rows: [{ sku: "x", name: "x", category: categoryName, priceMnt: "1000", stockQuantity: "1" }], allowUpdateExisting: false, dryRun: true })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });

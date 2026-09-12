@@ -3,7 +3,7 @@ import {
   buildNotificationMessage, feedGroupForRole, groupsForRole, NOTIFICATION_EVENTS, NOTIFICATION_GROUPS,
   parseDisabledEvents, ubDateKey, type NotificationEventType, type NotificationPayloads,
 } from "@shared/notification-events";
-import { INTEGRATION_META, INTEGRATION_PROVIDERS, mergeIntegrationSettings, validateIntegrationSettings } from "@shared/integrations";
+import { INTEGRATION_META, INTEGRATION_PROVIDERS, isPrivateHost, mergeIntegrationSettings, validateIntegrationSettings } from "@shared/integrations";
 
 /**
  * The privacy rule for phone notifications: ntfy.sh topics are readable by
@@ -122,6 +122,20 @@ describe("integration settings", () => {
     expect(validateIntegrationSettings("ntfy", { topicStore: "has space in the topic name" })).toMatch(/латин/);
     expect(validateIntegrationSettings("ntfy", { topicStore: "sugi-store-AbCdEfGhIjKlMnOp" })).toBeNull();
     expect(validateIntegrationSettings("ntfy", { topicStore: "" })).toBeNull(); // empty = clear
+  });
+
+  it("refuses a private or plain-http address for a cloud vendor the server dials (SSRF)", () => {
+    // A vendor adapter that can be pointed at localhost or the LAN by a
+    // settings form is a way to read this server's own network.
+    for (const bad of ["http://retailapiv2.smartlogic.mn", "https://localhost/api", "https://127.0.0.1", "https://10.0.0.5", "https://192.168.1.20", "https://169.254.169.254/latest/meta-data", "https://172.16.0.1", "https://[::1]", "https://intranet"]) {
+      expect(validateIntegrationSettings("smartsoftware", { inventoryBaseUrl: bad }), bad).not.toBeNull();
+      expect(validateIntegrationSettings("storepay", { baseUrl: bad }), bad).not.toBeNull();
+    }
+    expect(validateIntegrationSettings("smartsoftware", { inventoryBaseUrl: "https://retailapiv2.smartlogic.mn" })).toBeNull();
+    // ntfy may be self-hosted on the shop's LAN over http -- deliberately allowed.
+    expect(validateIntegrationSettings("ntfy", { serverUrl: "http://192.168.1.10:8080" })).toBeNull();
+    expect(isPrivateHost("ntfy.sh")).toBe(false);
+    expect(isPrivateHost("100.64.0.1")).toBe(true);
   });
 
   it("describes every provider", () => {

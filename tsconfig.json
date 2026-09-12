@@ -6,6 +6,12 @@
     "tsBuildInfoFile": "./node_modules/typescript/tsbuildinfo",
     "noEmit": true,
     "module": "ESNext",
+    // 2026-09-12: no target used to mean ES5 for type-checking, so iterating
+    // a Map or Set needed Array.from() workarounds and top-level await in
+    // scripts could not be checked at all. Nothing is emitted from here
+    // (Vite/esbuild compile with their own targets), so this only widens
+    // what the checker accepts.
+    "target": "ES2022",
     "strict": true,
     "lib": ["esnext", "dom", "dom.iterable"],
     "jsx": "preserve",

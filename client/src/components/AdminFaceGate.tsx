@@ -503,6 +503,9 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
     return { poses, frontal };
   }, [collectSamples]);
 
+  // Kept deliberately (2026-09-09): the turn/flash liveness sequences are
+  // unwired until ADMIN_FACE_LIVENESS_ENFORCED is decided on real numbers.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const runTurnSequence = useCallback(async (video: HTMLVideoElement): Promise<{ passed: boolean; maxYaw: number }> => {
     const steps: { dir: "right" | "left"; label: string }[] = [
       { dir: "right", label: "Толгойгоо БАРУУН тийш эргүүлнэ үү" },
@@ -593,6 +596,7 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
     return { passed: true, maxYaw };
   }, []);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- see runTurnSequence above
   const runFlashChallenge = useCallback(async (video: HTMLVideoElement): Promise<{ passed: boolean; score: number; brightened: boolean; samples: number }> => {
     const sequence = randomFlashSequence();
     const samples: { color: FlashColor; sample: FaceColorSample }[] = [];
@@ -790,7 +794,7 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
     } finally {
       setChallenge(null);
     }
-  }, [needsEnrollment, waitForVideo, collectSamples, enroll, startVerification, completeVerification, cleanup, onPassed]);
+  }, [needsEnrollment, waitForVideo, collectSamples, runGuidedEnrollment, enroll, startVerification, completeVerification, cleanup, onPassed]);
 
   // Auto-start for the verify-only path. Enrollment waits for explicit
   // consent first -- capturing a face before someone has agreed to it being

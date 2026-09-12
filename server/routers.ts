@@ -8,7 +8,7 @@ import { invalidateIndexHtmlCache } from "./_core/indexHtml";
 import { legalDocumentKeys } from "@shared/legal-documents";
 import { TRPCError } from "@trpc/server";
 import { parse as parseCookieHeader } from "cookie";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { getGuestCartCookieOptions, getSessionCookieOptions, getVisitorSessionCookieOptions } from "./_core/cookies";
 import { listRecentHoneybadgerFaults } from "./_core/honeybadgerReadApi";
@@ -39,7 +39,6 @@ import {
   updateFeaturedBrand,
   deleteFeaturedBrand,
   getAdminFeaturedBrands,
-  getActiveBranches,
   getAdminBranches,
   createBranch,
   updateBranch,
@@ -146,6 +145,7 @@ import {
   resolvePageviewSession,
   getWishlistWatchersForProduct,
   logAdminAction,
+  findRecentCampaignSend,
   mergeGuestCartIntoUserCart,
   postSlugExists,
   postCategoryNameExists,
@@ -208,8 +208,8 @@ import { clearFaceProofCookie, completeFaceVerification, hasValidFaceProof, isFa
 import { FACE_DESCRIPTOR_LENGTH, FACE_DIAGNOSTIC_MAX, FACE_IDLE_TIMEOUT_MS, FACE_MODEL_VERSION, isAdminPanelRole, isValidFaceDescriptor } from "../shared/face-auth";
 import { adminProcedure, anyStaffProcedure, catalogReadProcedure, contentReadProcedure, financeProcedure, lenientRateLimitedProcedure, marketingProcedure, moderateRateLimitedProcedure, ordersReadProcedure, phoneVerifyRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure, usersReadProcedure, warehouseProcedure } from "./_core/trpc";
 import { storagePing, storagePut, storagePutImageVariants } from "./storage";
-import { IMAGE_MAX_DIMENSION, processUploadedImage, processUploadedImageVariants } from "./_core/imageProcessing";
-import { createQPayInvoice, getQPayAvailability } from "./qpay";
+import { IMAGE_MAX_DIMENSION, processUploadedImageVariants } from "./_core/imageProcessing";
+import { createQPayInvoice, parseQPayInvoicePayload, getQPayAvailability } from "./qpay";
 import { sendNtfyTest } from "./notifications";
 import { notificationsRouter } from "./notificationsRouter";
 import { inventoryRouter } from "./inventoryRouter";
@@ -870,7 +870,7 @@ export const appRouter = router({
     startPhoneVerification: phoneVerifyRateLimitedProcedure
       .input(z.object({ phone: phoneSchema, purpose: z.enum(["register", "password_reset"]) }))
       .mutation(async ({ ctx, input }) => {
-        let userId: number | null = null;
+        let userId: number | null;
         if (input.purpose === "register") {
           // A phone already tied to an account can't start a fresh register
           // session -- unlike password_reset below, this is NOT an
@@ -1276,6 +1276,9 @@ export const appRouter = router({
     // createOrderFromActiveCart), so it needs the same tight cap as
     // login/register rather than the browsing-friendly cart limit.
     createOrder: strictRateLimitedProcedure.input(z.object({
+      // Idempotency key, one per checkout attempt (see orders.clientRequestId).
+      // Optional so an older client keeps working; the browser always sends it.
+      clientRequestId: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
       customerName: z.string().trim().min(2).max(160),
       customerPhone: z.string().trim().min(6).max(40).regex(/^[0-9+()\-\s]{6,40}$/, "Утасны дугаараа зөв оруулна уу.").refine(value => value.replace(/\D/g, "").length >= 8, "Утасны дугаараа зөв оруулна уу."),
       customerEmail: z.string().trim().email().max(320).nullable().optional(),
@@ -1320,11 +1323,14 @@ export const appRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to place this order." });
       }
       // Best-effort: a failed confirmation email should never undo an
-      // already-placed (and stock-decremented) order.
-      try {
-        await sendOrderConfirmationEmail(order);
-      } catch (error) {
-        console.error("[checkout.createOrder] Failed to send order confirmation email", error);
+      // already-placed (and stock-decremented) order. A replayed attempt
+      // already sent its email the first time.
+      if (!order.replayed) {
+        try {
+          await sendOrderConfirmationEmail(order);
+        } catch (error) {
+          console.error("[checkout.createOrder] Failed to send order confirmation email", error);
+        }
       }
       return order;
     }),
@@ -1576,6 +1582,18 @@ export const appRouter = router({
       // markQPayPaymentAttemptPaid now refuses to touch a closed order too;
       // this is the earlier, friendlier stop.
       if (order.status === "cancelled" || order.status === "returned") throw new TRPCError({ code: "BAD_REQUEST", message: "This order is closed and can no longer be paid." });
+      // A second click, a retry, a reload: hand back the invoice this order
+      // already has rather than minting another one that is just as payable
+      // (2026-09-12 audit). Only an attempt still awaiting payment counts.
+      const previous = await getLatestQPayPaymentAttemptForOrder(order.id);
+      if (previous && previous.provider === "qpay" && previous.status === "created" && previous.responseJson) {
+        try {
+          const parsed = parseQPayInvoicePayload(JSON.parse(previous.responseJson) as Record<string, unknown>);
+          if (parsed.invoiceId === previous.providerInvoiceId) return { orderId: order.id, orderNumber: order.orderNumber, invoiceId: previous.providerInvoiceId, qrText: parsed.qrText, urls: parsed.urls };
+        } catch {
+          // An unreadable stored response is not a reason to fail: mint afresh.
+        }
+      }
       const invoice = await createQPayInvoice({
         senderInvoiceNo: order.orderNumber,
         amountMnt: order.totalMnt,
@@ -1618,6 +1636,13 @@ export const appRouter = router({
       if (order.paymentMethod !== "storepay") throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ захиалга StorePay-ээр төлөхөөр үүсээгүй байна." });
       if (order.paymentStatus === "paid") throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ захиалга аль хэдийн төлөгдсөн." });
       if (order.status === "cancelled" || order.status === "returned") throw new TRPCError({ code: "BAD_REQUEST", message: "Хаагдсан захиалгыг төлөх боломжгүй." });
+      // Same rule as QPay above: one open loan request per order. StorePay
+      // has already pushed it to the shopper's app; asking twice would leave
+      // two requests open.
+      const previous = await getLatestQPayPaymentAttemptForOrder(order.id);
+      if (previous && previous.provider === "storepay" && previous.status === "created") {
+        return { orderId: order.id, orderNumber: order.orderNumber, loanId: previous.providerInvoiceId };
+      }
       let loan;
       try {
         loan = await createStorepayLoan({
@@ -2182,6 +2207,18 @@ export const appRouter = router({
       if (input.channel === "sms" && !ENV.smsCampaignsEnabled) {
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "SMS кампанит ажил идэвхжээгүй байна. Тохиргоог админтай холбогдоно уу." });
       }
+      // 2026-09-12 audit: a double click, a retried request or a second tab
+      // used to send the whole campaign twice -- up to 2,000 people, each
+      // getting the same SMS at 150₮ a message. The same recipients + same
+      // text within ten minutes is refused; the fingerprint is kept on the
+      // audit row, so this holds across both laptops (an in-memory guard
+      // would not).
+      const fingerprint = createHash("sha256").update(`${input.channel}|${input.subject}|${input.body}|${[...input.userIds].sort((a, b) => a - b).join(",")}`).digest("hex").slice(0, 32);
+      const recent = await findRecentCampaignSend(fingerprint, 10);
+      if (recent) {
+        const minutesAgo = Math.max(1, Math.round((Date.now() - recent.createdAt.getTime()) / 60_000));
+        throw new TRPCError({ code: "CONFLICT", message: `Яг энэ кампанит ажлыг ${minutesAgo} минутын өмнө аль хэдийн илгээсэн байна. Дахин илгээх бол 10 минутын дараа оролдоно уу.` });
+      }
       const recipients = await getUsersForCampaignSend(input.userIds);
       const eligible = recipients.filter(user => input.channel === "email" ? user.emailOptIn && Boolean(user.email) : user.smsOptIn && Boolean(user.phone));
 
@@ -2202,7 +2239,7 @@ export const appRouter = router({
         actorUserId: ctx.user.id,
         action: "campaign.sent",
         entityType: "campaign",
-        metadata: { source: input.sourceLabel ?? null, channel: input.channel, recipientCount: input.userIds.length, eligibleCount: eligible.length, skippedOptOutCount, subject: input.subject, sentCount, failedCount },
+        metadata: { fingerprint, source: input.sourceLabel ?? null, channel: input.channel, recipientCount: input.userIds.length, eligibleCount: eligible.length, skippedOptOutCount, subject: input.subject, sentCount, failedCount },
       });
       return { recipientCount: input.userIds.length, eligibleCount: eligible.length, skippedOptOutCount, sentCount, failedCount };
     }),
@@ -2560,6 +2597,7 @@ export const appRouter = router({
       userId: z.number().int().positive().nullable().optional(),
       customerName: nullableText(160),
       customerPhone: nullableText(40),
+      clientRequestId: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
     })).mutation(async ({ ctx, input }) => {
       let order;
       try {
@@ -2567,6 +2605,7 @@ export const appRouter = router({
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to record this sale." });
       }
+      if (order.replayed) return order;
       await logAdminAction({ actorUserId: ctx.user.id, action: "pos.sale_recorded", entityType: "order", entityId: order.id, metadata: { branchId: input.branchId, totalMnt: order.totalMnt, itemCount: input.items.length } });
       return order;
     }),

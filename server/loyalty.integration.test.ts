@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { eq } from "drizzle-orm";
 import { adminAuditLogs, cartItems, carts, loyaltyTiers, orderItems, orders, productCategories, productVariants, products, routineSteps, routines, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
@@ -28,7 +29,7 @@ describeWithDatabase("loyalty tier discount integration", () => {
   let shopperId = 0;
   let adminId = 0;
   let productId = 0;
-  let createdOrderIds: number[] = [];
+  const createdOrderIds: number[] = [];
   /**
    * 2026-09-12: the tier ladder moved out of a code constant and into the
    * admin-editable `loyalty_tiers` table, so these tests started failing the
@@ -52,10 +53,10 @@ describeWithDatabase("loyalty tier discount integration", () => {
 
     // Snapshot the shop's real tier ladder, then install the canonical one
     // the assertions below are written against.
+    if (!db) throw new Error("DATABASE_URL is required for loyalty integration tests.");
     tierSnapshot = await db.select().from(loyaltyTiers);
     await db.delete(loyaltyTiers);
     for (const tier of CANONICAL_TIERS) await db.insert(loyaltyTiers).values(tier);
-    if (!db) throw new Error("DATABASE_URL is required for loyalty integration tests.");
 
     const shopperInsert = await db.insert(users).values({ email: shopperEmail, passwordHash: await hashPassword("ShopperPassw0rd!"), name: "Loyalty Test Shopper", phone: "99112233", role: "user", emailVerifiedAt: new Date() });
     shopperId = Number(shopperInsert[0].insertId);
@@ -98,10 +99,10 @@ describeWithDatabase("loyalty tier discount integration", () => {
   });
 
   function shopper() {
-    return callerFor({ id: shopperId, email: shopperEmail, name: "Loyalty Test Shopper", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+    return callerFor(testSessionUser({ id: shopperId, email: shopperEmail, name: "Loyalty Test Shopper", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }));
   }
   function admin() {
-    return callerFor({ id: adminId, email: adminEmail, name: "Loyalty Test Admin", role: "admin", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+    return callerFor(testSessionUser({ id: adminId, email: adminEmail, name: "Loyalty Test Admin", role: "admin", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }));
   }
 
   it("starts every shopper at the zero-discount Стандарт tier with no orders", async () => {
@@ -246,7 +247,7 @@ describeWithDatabase("loyalty total savings (Quick Stats totalLoyaltySavingsMnt)
   });
 
   function shopper() {
-    return callerFor({ id: shopperId, email: shopperEmail, name: "Loyalty Savings Test Shopper", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+    return callerFor(testSessionUser({ id: shopperId, email: shopperEmail, name: "Loyalty Savings Test Shopper", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }));
   }
 
   // Direct inserts (same technique the "climbs to a higher tier" test above

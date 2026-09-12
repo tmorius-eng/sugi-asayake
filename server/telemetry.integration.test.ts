@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { eq, inArray } from "drizzle-orm";
 import { orderItems, orders, productCategories, productVariants, products, users, visitorSessions } from "../drizzle/schema";
 import { VISITOR_SESSION_COOKIE_NAME } from "../shared/const";
@@ -38,7 +39,6 @@ describeWithDatabase("telemetry pageview integration (Tier E)", () => {
   const orderIds: number[] = [];
   let userId = 0;
   let productId = 0;
-  let variantId = 0;
 
   afterAll(async () => {
     const db = await getDb();
@@ -111,12 +111,11 @@ describeWithDatabase("telemetry pageview integration (Tier E)", () => {
     if (!category) throw new Error("No product category exists to attach the test product to.");
     const productInsert = await db.insert(products).values({ categoryId: category.id, name: "Telemetry Test Product", slug: `${marker}-product`, priceMnt: 22_000, sku: `${marker}-sku`, stockQuantity: 10, isPublished: true });
     productId = Number(productInsert[0].insertId);
-    const variantInsert = await db.insert(productVariants).values({ productId, sku: `${marker}-sku`, priceMnt: 22_000, stockQuantity: 10, isDefault: true });
-    variantId = Number(variantInsert[0].insertId);
+    await db.insert(productVariants).values({ productId, sku: `${marker}-sku`, priceMnt: 22_000, stockQuantity: 10, isDefault: true });
 
     const userInsert = await db.insert(users).values({ email: `${marker}-user@example.invalid`, passwordHash: await hashPassword("TelemetryTest1!"), name: "Telemetry Test User", role: "user", emailVerifiedAt: new Date() });
     userId = Number(userInsert[0].insertId);
-    const shopperUser: TrpcContext["user"] = { id: userId, email: `${marker}-user@example.invalid`, name: "Telemetry Test User", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
+    const shopperUser: TrpcContext["user"] = testSessionUser({ id: userId, email: `${marker}-user@example.invalid`, name: "Telemetry Test User", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
     // Same session cookie the pageview beacon set above -- this is the
     // whole point: checkout.createOrder must read it from the request
     // itself (httpOnly, no client-side involvement needed), not have it
@@ -151,7 +150,7 @@ describeWithDatabase("telemetry pageview integration (Tier E)", () => {
     const adminId = Number(adminInsert[0].insertId);
     try {
       const adminCtx: TrpcContext = {
-        user: { id: adminId, email: `${marker}-admin@example.invalid`, name: "Telemetry Test Admin", role: "admin", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() },
+        user: testSessionUser({ id: adminId, email: `${marker}-admin@example.invalid`, name: "Telemetry Test Admin", role: "admin", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }),
         req: { protocol: "https", headers: {}, ip: "203.0.113.60", socket: { remoteAddress: "203.0.113.60" } } as unknown as TrpcContext["req"],
         res: { cookie: () => undefined, clearCookie: () => undefined } as unknown as TrpcContext["res"],
       };

@@ -17,14 +17,15 @@ for (const [name, value] of Object.entries(schema)) {
   if (!value || typeof value !== "object" || !("_" in (value as object))) continue;
   let table: string;
   try { table = getTableName(value as never); } catch { continue; }
-  const cols = Object.values(getTableColumns(value as never)).map((c: { name: string }) => c.name);
+  const cols = Object.values(getTableColumns(value as never) as Record<string, { name: string }>).map(c => c.name);
   const liveCols = live.get(table);
   if (!liveCols) { console.log(`MISSING TABLE in DB: ${table} (${name})`); problems++; continue; }
   const codeOnly = cols.filter(c => !liveCols.has(c));
   const dbOnly = Array.from(liveCols).filter(c => !cols.includes(c));
   if (codeOnly.length || dbOnly.length) { problems++; console.log(`${table}: code-only=${JSON.stringify(codeOnly)} db-only=${JSON.stringify(dbOnly)}`); }
 }
-const codeTables = new Set(Object.values(schema).map(v => { try { return getTableName(v as never); } catch { return null; } }).filter(Boolean));
+const codeTables = new Set<string>();
+for (const value of Object.values(schema)) { try { codeTables.add(getTableName(value as never)); } catch { /* not a table export */ } }
 for (const table of live.keys()) if (!codeTables.has(table)) console.log(`DB table not in schema.ts: ${table}`);
 console.log(problems ? `${problems} drift(s)` : "schema.ts matches the live database");
 // Are the FK columns schema.ts declares without an explicit index actually

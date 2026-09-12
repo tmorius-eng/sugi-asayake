@@ -1,3 +1,4 @@
+import { hashPassword } from "./_core/password";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { appRouter } from "./routers";
@@ -38,7 +39,10 @@ async function makeUser(role: "user" | "staff" | "admin"): Promise<number> {
   // Random 8-digit phone in a range no real Mongolian mobile uses, so a
   // throwaway can never collide with (or be mistaken for) a real account.
   const phone = `7${Math.floor(1_000_000 + Math.random() * 8_999_999)}`;
-  const user = await createUserWithPassword({ phone, password: "test-password-12345", name: `${MARKER} ${role}` });
+  // createUserWithPassword takes a HASH. This used to pass `password`, which
+  // the type does not have, so the row was written with no usable hash --
+  // invisible while test files were excluded from type-checking.
+  const user = await createUserWithPassword({ phone, passwordHash: await hashPassword("test-password-12345"), name: `${MARKER} ${role}` });
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.update(users).set({ role }).where(eq(users.id, user.id));

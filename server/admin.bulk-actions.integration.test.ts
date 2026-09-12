@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { eq } from "drizzle-orm";
 import { adminAuditLogs, orderItems, orders, productCategories, products, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
@@ -38,7 +39,7 @@ describeWithDatabase("admin bulk actions integration", () => {
 
     const adminInsert = await db.insert(users).values({ email: `${marker}-admin@example.invalid`, passwordHash: await hashPassword("AdminPassw0rd!"), name: "Bulk Actions Admin", role: "admin", emailVerifiedAt: new Date() });
     adminUserId = Number(adminInsert[0].insertId);
-    adminCaller = callerFor({ id: adminUserId, email: `${marker}-admin@example.invalid`, name: "Bulk Actions Admin", role: "admin", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+    adminCaller = callerFor(testSessionUser({ id: adminUserId, email: `${marker}-admin@example.invalid`, name: "Bulk Actions Admin", role: "admin", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }));
 
     const categoryInsert = await db.insert(productCategories).values({ name: `${marker} category`, slug: `${marker}-category` });
     categoryId = Number(categoryInsert[0].insertId);

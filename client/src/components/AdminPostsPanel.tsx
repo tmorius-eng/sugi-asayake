@@ -110,7 +110,7 @@ export default function AdminPostsPanel({ preview = false }: { preview?: boolean
   const [viewMode, setViewMode] = useState<"list" | "board">("board");
   const mediaResolveRef = useRef<((url: string | null) => void) | null>(null);
 
-  const posts = (preview ? [] : postsQuery.data ?? []) as AdminPost[];
+  const posts = useMemo(() => (preview ? [] : postsQuery.data ?? []) as AdminPost[], [preview, postsQuery.data]);
   const categories = preview ? [] : categoriesQuery.data ?? [];
   const savingPost = createPost.isPending || updatePost.isPending;
 

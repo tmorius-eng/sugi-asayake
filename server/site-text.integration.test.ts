@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 
@@ -8,7 +9,7 @@ const slotKey = "home-text-hero-eyebrow" as const;
 
 function createAdminContext(): TrpcContext {
   return {
-    user: {
+    user: testSessionUser({
       id: 1,
       email: "owner@example.com",
       name: "Site Text Integration Admin",
@@ -18,9 +19,9 @@ function createAdminContext(): TrpcContext {
       createdAt: new Date(),
       updatedAt: new Date(),
       lastSignedIn: new Date(),
-    },
-    req: { protocol: "https", headers: {} } as TrpcContext["req"],
-    res: { clearCookie: () => undefined } as TrpcContext["res"],
+    }),
+    req: { protocol: "https", headers: {} } as unknown as TrpcContext["req"],
+    res: { clearCookie: () => undefined } as unknown as TrpcContext["res"],
   };
 }
 

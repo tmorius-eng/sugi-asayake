@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { eq } from "drizzle-orm";
 import { adminAuditLogs, integrationConfigs, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
@@ -77,10 +78,10 @@ describeWithDatabase("integration config admin API", () => {
   });
 
   function admin() {
-    return callerFor({ id: adminId, email: adminEmail, name: "Integration Test Admin", role: "admin", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+    return callerFor(testSessionUser({ id: adminId, email: adminEmail, name: "Integration Test Admin", role: "admin", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }));
   }
   function staff() {
-    return callerFor({ id: staffId, email: staffEmail, name: "Integration Test Staff", role: "staff", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+    return callerFor(testSessionUser({ id: staffId, email: staffEmail, name: "Integration Test Staff", role: "staff", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }));
   }
 
   it("rejects staff (not just guests) from viewing or editing integrations -- these are admin-only, unlike most admin.* endpoints", async () => {

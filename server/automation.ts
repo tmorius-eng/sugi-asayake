@@ -1,4 +1,4 @@
-import { getAbandonedCartsNeedingReminder, getLowStockProducts, getStockLedgerHealth, markCartReminderSent, getStoreSettingValue, purgeNotificationOutbox, recordNotification } from "./db";
+import { getAbandonedCartsNeedingReminder, getLowStockProducts, getStockLedgerHealth, markCartReminderSent, getStoreSettingValue, purgeNotificationOutbox, purgeStaleTelemetry, recordNotification } from "./db";
 import { getStaleTransfers } from "./transfers";
 import { runInventorySync } from "./integrations/inventorySync";
 import { fillTemplate } from "../shared/store-settings";
@@ -102,6 +102,17 @@ export function registerInventorySyncJob() {
 export async function runNotificationOutboxPurgeJob(): Promise<void> {
   const { testRows, oldRows } = await purgeNotificationOutbox();
   if (testRows || oldRows) console.log(`[notifications] outbox purge: ${testRows} test row(s), ${oldRows} row(s) older than 90 days`);
+}
+
+// 2026-09-12: bounded growth for the two tables that had none -- see
+// purgeStaleTelemetry for the retention periods and why they are safe.
+export async function runDataRetentionJob(): Promise<void> {
+  const { visitorSessions, loginAttempts } = await purgeStaleTelemetry();
+  if (visitorSessions || loginAttempts) console.log(`[retention] removed ${visitorSessions} visitor session(s) older than 24 months, ${loginAttempts} login attempt(s) older than 12 months`);
+}
+
+export function registerDataRetentionJob() {
+  registerJob({ name: "data-retention", intervalMs: 24 * 60 * 60 * 1000, run: runDataRetentionJob });
 }
 
 export function registerNotificationOutboxPurgeJob() {

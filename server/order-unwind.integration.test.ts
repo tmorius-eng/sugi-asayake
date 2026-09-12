@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { and, eq, sql } from "drizzle-orm";
 import { adminAuditLogs, cartItems, carts, orderItems, orders, paymentAttempts, productCategories, productVariants, products, storeCreditLedger, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
@@ -87,9 +88,9 @@ describeWithDatabase("order unwind integration (cancel / refund / late webhook)"
   }, 60_000);
 
   const baseUser = () => ({ emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
-  const customerUser = () => ({ ...baseUser(), id: customerId, email: customerEmail, name: "Unwind Test Customer", role: "user" as const });
-  const warehouseUser = () => ({ ...baseUser(), id: warehouseId, email: warehouseEmail, name: "Unwind Test Warehouse", role: "warehouse" as const });
-  const financeUser = () => ({ ...baseUser(), id: financeId, email: financeEmail, name: "Unwind Test Finance", role: "finance" as const });
+  const customerUser = () => testSessionUser({ ...baseUser(), id: customerId, email: customerEmail, name: "Unwind Test Customer", role: "user" as const });
+  const warehouseUser = () => testSessionUser({ ...baseUser(), id: warehouseId, email: warehouseEmail, name: "Unwind Test Warehouse", role: "warehouse" as const });
+  const financeUser = () => testSessionUser({ ...baseUser(), id: financeId, email: financeEmail, name: "Unwind Test Finance", role: "finance" as const });
 
   type Seed = {
     status: "pending" | "confirmed" | "packed" | "completed";

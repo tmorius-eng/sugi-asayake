@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FilePenLine, LoaderCircle, Megaphone, Package, Receipt, Tag, UserRound } from "lucide-react";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
 import { trpc } from "@/lib/trpc";
@@ -48,11 +48,17 @@ export default function AdminCommandPalette({ preview, role, open: controlledOpe
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
 
+  // The Ctrl/Cmd+K listener is registered once; it reads the CURRENT setOpen
+  // through a ref, since setOpen closes over `open` and is rebuilt each
+  // render (re-registering a document listener per render was the
+  // alternative).
+  const setOpenRef = useRef(setOpen);
+  setOpenRef.current = setOpen;
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        setOpen(current => !current);
+        setOpenRef.current(current => !current);
       }
     };
     document.addEventListener("keydown", onKeyDown);

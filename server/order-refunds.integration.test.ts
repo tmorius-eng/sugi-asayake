@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { eq } from "drizzle-orm";
 import { adminAuditLogs, orderItems, orders, productCategories, productVariants, products, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
@@ -74,8 +75,8 @@ describeWithDatabase("order refunds integration", () => {
     if (warehouseId) await db.delete(users).where(eq(users.id, warehouseId));
   });
 
-  const financeUser = () => ({ id: financeId, email: financeEmail, name: "Refund Test Finance", role: "finance" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
-  const warehouseUser = () => ({ id: warehouseId, email: warehouseEmail, name: "Refund Test Warehouse", role: "warehouse" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+  const financeUser = () => testSessionUser({ id: financeId, email: financeEmail, name: "Refund Test Finance", role: "finance" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+  const warehouseUser = () => testSessionUser({ id: warehouseId, email: warehouseEmail, name: "Refund Test Warehouse", role: "warehouse" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
 
   async function insertReturnedOrder(quantity: number) {
     const db = await getDb();

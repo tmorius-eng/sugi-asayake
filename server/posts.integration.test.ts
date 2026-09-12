@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { eq } from "drizzle-orm";
 import { adminAuditLogs, mediaLibrary, postCategories, postCategoryLinks, posts, postTagLinks, postTags, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
@@ -65,10 +66,10 @@ describeWithDatabase("WordPress-parity post editor integration", () => {
   });
 
   function staff() {
-    return callerFor({ id: staffId, email: staffEmail, name: "Post Test Staff", role: "staff", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+    return callerFor(testSessionUser({ id: staffId, email: staffEmail, name: "Post Test Staff", role: "staff", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }));
   }
   function shopper() {
-    return callerFor({ id: shopperId, email: shopperEmail, name: "Post Test Shopper", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+    return callerFor(testSessionUser({ id: shopperId, email: shopperEmail, name: "Post Test Shopper", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }));
   }
   function guest() {
     return callerFor(null);

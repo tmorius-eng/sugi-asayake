@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { eq } from "drizzle-orm";
 import { adminAuditLogs, orderItems, orders, productCategories, productVariants, products, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
@@ -40,7 +41,7 @@ describeWithDatabase("order notification integration", () => {
 
     const adminInsert = await db.insert(users).values({ email: `${marker}-admin@example.invalid`, passwordHash: await hashPassword("AdminPassw0rd!"), name: "Order Notify Admin", role: "admin", emailVerifiedAt: new Date() });
     adminUserId = Number(adminInsert[0].insertId);
-    adminCaller = callerFor({ id: adminUserId, email: `${marker}-admin@example.invalid`, name: "Order Notify Admin", role: "admin", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+    adminCaller = callerFor(testSessionUser({ id: adminUserId, email: `${marker}-admin@example.invalid`, name: "Order Notify Admin", role: "admin", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }));
 
     // A stable logged-in identity (not an anonymous guest) so the two
     // separate calls below (cart.addItem, then checkout.createOrder) agree
@@ -50,7 +51,7 @@ describeWithDatabase("order notification integration", () => {
     // cookie-capturing version guest checkout itself needs).
     const shopperInsert = await db.insert(users).values({ email: `${marker}-shopper@example.invalid`, passwordHash: await hashPassword("ShopperPassw0rd!"), name: "Order Notify Shopper", role: "user", emailVerifiedAt: new Date() });
     shopperUserId = Number(shopperInsert[0].insertId);
-    shopperCaller = callerFor({ id: shopperUserId, email: `${marker}-shopper@example.invalid`, name: "Order Notify Shopper", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+    shopperCaller = callerFor(testSessionUser({ id: shopperUserId, email: `${marker}-shopper@example.invalid`, name: "Order Notify Shopper", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }));
 
     const categoryInsert = await db.insert(productCategories).values({ name: `${marker} category`, slug: `${marker}-category` });
     categoryId = Number(categoryInsert[0].insertId);

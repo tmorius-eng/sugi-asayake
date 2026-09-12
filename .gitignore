@@ -121,3 +121,6 @@ backups/
 # Aiven CA certificate (per CLAUDE.md: never commit)
 aiven-ca.pem
 *.pem
+
+# throwaway helper scripts a session writes and deletes
+scripts/tmp-*.ts

@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { eq } from "drizzle-orm";
 import { cartItems, carts, orderItems, orders, productCategories, productVariants, products, routineSteps, routines, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
@@ -29,7 +30,7 @@ describeWithDatabase("routine bundle discount integration", () => {
   let tonerProductId = 0;
   let unrelatedProductId = 0;
   let routineId = 0;
-  let createdOrderIds: number[] = [];
+  const createdOrderIds: number[] = [];
 
   beforeAll(async () => {
     const db = await getDb();
@@ -89,7 +90,7 @@ describeWithDatabase("routine bundle discount integration", () => {
   });
 
   function shopper() {
-    return callerFor({ id: shopperId, email: shopperEmail, name: "Routine Test Shopper", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+    return callerFor(testSessionUser({ id: shopperId, email: shopperEmail, name: "Routine Test Shopper", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }));
   }
 
   it("applies no discount when the cart has only part of the routine", async () => {

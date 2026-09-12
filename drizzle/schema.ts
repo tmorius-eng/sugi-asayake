@@ -819,6 +819,14 @@ export const orders = mysqlTable("orders", {
    * integration code sets these — never populate ebarimtReceiptId by hand;
    * a manually-typed value here would be a fabricated legal tax record.
    */
+  /**
+   * 2026-09-12 (migration 0069): the checkout's idempotency key. One random
+   * id per checkout attempt, generated in the browser; the same id always
+   * resolves to the same order, so a timed-out request that the server had
+   * in fact committed, a browser retry, or a second tab cannot place the
+   * basket twice. Nullable: orders predating this, and POS sales, have none.
+   */
+  clientRequestId: varchar("clientRequestId", { length: 64 }),
   ebarimtStatus: mysqlEnum("ebarimtStatus", ["not_issued", "issued", "failed"]).notNull().default("not_issued"),
   ebarimtReceiptId: varchar("ebarimtReceiptId", { length: 128 }),
   ebarimtQrData: text("ebarimtQrData"),
@@ -837,6 +845,7 @@ export const orders = mysqlTable("orders", {
   // today's ~4 real orders; cheap to add now, before it isn't.
   index("orders_payment_status_idx").on(table.paymentStatus),
   index("orders_created_at_idx").on(table.createdAt),
+  uniqueIndex("orders_client_request_unique").on(table.clientRequestId),
 ]);
 
 export const orderItems = mysqlTable("order_items", {

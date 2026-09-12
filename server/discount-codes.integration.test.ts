@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { eq, inArray } from "drizzle-orm";
 import { adminAuditLogs, cartItems, carts, discountCodes, orderItems, orders, productCategories, productVariants, products, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
@@ -93,10 +94,10 @@ describeWithDatabase("discount code integration", () => {
   });
 
   function admin() {
-    return callerFor({ id: adminId, email: adminEmail, name: "Coupon Test Admin", role: "admin", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+    return callerFor(testSessionUser({ id: adminId, email: adminEmail, name: "Coupon Test Admin", role: "admin", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }));
   }
   function shopper() {
-    return callerFor({ id: shopperId, email: shopperEmail, name: "Coupon Test Shopper", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+    return callerFor(testSessionUser({ id: shopperId, email: shopperEmail, name: "Coupon Test Shopper", role: "user", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }));
   }
 
   it("rejects a non-staff user from creating discount codes", async () => {

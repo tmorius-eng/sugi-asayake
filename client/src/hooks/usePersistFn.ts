@@ -1,11 +1,13 @@
 import { useRef } from "react";
 
-type noop = (...args: any[]) => any;
+// Any function shape; `never[]` (not `any[]`) keeps the generic accepting
+// every parameter list without loosening what the caller gets back.
+type AnyFunction = (...args: never[]) => unknown;
 
 /**
  * usePersistFn instead of useCallback to reduce cognitive load
  */
-export function usePersistFn<T extends noop>(fn: T) {
+export function usePersistFn<T extends AnyFunction>(fn: T) {
   const fnRef = useRef<T>(fn);
   fnRef.current = fn;
 

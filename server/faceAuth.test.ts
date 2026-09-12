@@ -184,6 +184,9 @@ describe("evaluateFlashResponse (colour-flash liveness)", () => {
       case "green": return { r: base.r, g: base.g + boost, b: base.b };
       case "blue": return { r: base.r, g: base.g, b: base.b + boost };
       case "yellow": return { r: base.r + boost, g: base.g + boost, b: base.b };
+      // orange and violet exist in FLASH_COLORS but no test lights a face with
+      // them; an unlit face is the honest stand-in.
+      default: return base;
     }
   }
 

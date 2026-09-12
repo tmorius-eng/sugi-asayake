@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { eq, inArray } from "drizzle-orm";
 import { appRouter } from "./routers";
 import { getDb } from "./db";
@@ -17,7 +18,7 @@ const textKey = "email-order-status-confirmed" as const;
 
 function createAdminContext(): TrpcContext {
   return {
-    user: {
+    user: testSessionUser({
       id: 1,
       email: "owner@example.com",
       name: "Store Settings Integration Admin",
@@ -27,9 +28,9 @@ function createAdminContext(): TrpcContext {
       createdAt: new Date(),
       updatedAt: new Date(),
       lastSignedIn: new Date(),
-    },
-    req: { protocol: "https", headers: {} } as TrpcContext["req"],
-    res: { clearCookie: () => undefined } as TrpcContext["res"],
+    }),
+    req: { protocol: "https", headers: {} } as unknown as TrpcContext["req"],
+    res: { clearCookie: () => undefined } as unknown as TrpcContext["res"],
   };
 }
 

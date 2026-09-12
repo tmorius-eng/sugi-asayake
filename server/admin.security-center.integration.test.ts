@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { eq } from "drizzle-orm";
 import { adminAuditLogs, loginAttempts, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
@@ -59,7 +60,7 @@ describeWithDatabase("admin security center integration", () => {
     await expect(anon.auth.login({ phone: targetPhone, password: "WrongPassword!" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     await anon.auth.login({ phone: targetPhone, password: "TargetPassw0rd!" });
 
-    const admin = callerFor({ id: adminUserId, email: adminEmail, name: "Security Center Admin", role: "admin", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+    const admin = callerFor(testSessionUser({ id: adminUserId, email: adminEmail, name: "Security Center Admin", role: "admin", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }));
     // Phase M: admin.loginHistory now returns { rows, totalCount } (real
     // server-side pagination) instead of a plain array.
     const history = await admin.admin.loginHistory({ email: targetPhone, outcome: "all" });
@@ -83,7 +84,7 @@ describeWithDatabase("admin security center integration", () => {
   });
 
   it("surfaces a real admin action via admin.auditLogs, filterable by action/actor/date", async () => {
-    const admin = callerFor({ id: adminUserId, email: adminEmail, name: "Security Center Admin", role: "admin", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+    const admin = callerFor(testSessionUser({ id: adminUserId, email: adminEmail, name: "Security Center Admin", role: "admin", emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }));
     await admin.admin.suspendUser({ userId: targetUserId, reason: "audit log integration test" });
 
     const byAction = await admin.admin.auditLogs({ action: "user.suspended", actorEmail: adminEmail });

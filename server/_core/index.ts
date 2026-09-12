@@ -20,7 +20,7 @@ import { registerStorepayCallbackRoute } from "../storepay";
 import { registerVerifyMnCallbackRoute } from "../verifyMn";
 import { dbPing } from "../db";
 import { startScheduler } from "./scheduler";
-import { registerAbandonedCartReminderJob, registerLowStockDigestJob, registerInventorySyncJob, registerNotificationOutboxPurgeJob, registerStaleTransferJob, registerStockLedgerDriftJob } from "../automation";
+import { registerAbandonedCartReminderJob, registerDataRetentionJob, registerLowStockDigestJob, registerInventorySyncJob, registerNotificationOutboxPurgeJob, registerStaleTransferJob, registerStockLedgerDriftJob } from "../automation";
 import { startNotificationDispatcher } from "../notifications";
 import { notifyError, registerHoneybadgerErrorMiddleware, registerHoneybadgerMiddleware } from "./honeybadger";
 import { limitApiTraffic, protectStateChangingApiRequests, setSecurityHeaders } from "./security";
@@ -143,6 +143,7 @@ async function startServer() {
   registerAbandonedCartReminderJob();
   registerLowStockDigestJob();
   registerNotificationOutboxPurgeJob();
+  registerDataRetentionJob();
   registerStockLedgerDriftJob();
   registerStaleTransferJob();
   registerInventorySyncJob();

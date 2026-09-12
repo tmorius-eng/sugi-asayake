@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { eq, inArray } from "drizzle-orm";
 import { adminAuditLogs, orderItems, orders, productCategories, products, productVariants, storeCreditLedger, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
@@ -47,8 +48,8 @@ describeWithDatabase("store credit integration", () => {
     if (customerId) await db.delete(users).where(eq(users.id, customerId));
   });
 
-  const financeUser = () => ({ id: financeId, email: `${marker}-finance@example.invalid`, name: "Store Credit Test Finance", role: "finance" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
-  const warehouseUser = () => ({ ...financeUser(), id: warehouseId, role: "warehouse" as const });
+  const financeUser = () => testSessionUser({ id: financeId, email: `${marker}-finance@example.invalid`, name: "Store Credit Test Finance", role: "finance" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+  const warehouseUser = () => testSessionUser({ ...financeUser(), id: warehouseId, role: "warehouse" as const });
 
   it("issuing credit updates the cached balance and writes a ledger row; a delta that would go negative is rejected", async () => {
     const finance = callerFor(financeUser());
@@ -112,8 +113,8 @@ maybeDescribeCheckout("store credit checkout consumption integration", () => {
     };
     return appRouter.createCaller(ctx);
   }
-  const customerUser = () => ({ id: customerId, email: `${marker}-customer@example.invalid`, name: "Store Credit Checkout Test Customer", role: "user" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
-  const financeUser = () => ({ ...customerUser(), id: financeId, role: "finance" as const });
+  const customerUser = () => testSessionUser({ id: customerId, email: `${marker}-customer@example.invalid`, name: "Store Credit Checkout Test Customer", role: "user" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+  const financeUser = () => testSessionUser({ ...customerUser(), id: financeId, role: "finance" as const });
 
   async function checkoutAsCustomer(applyStoreCreditMnt: number) {
     return callerFor(customerUser()).checkout.createOrder({

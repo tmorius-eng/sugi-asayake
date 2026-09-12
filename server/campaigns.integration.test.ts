@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { eq, like } from "drizzle-orm";
 import { adminAuditLogs, users } from "../drizzle/schema";
 
@@ -61,7 +62,7 @@ describeWithDatabase("mass campaign integration", () => {
     if (noEmailId) await db.delete(users).where(eq(users.id, noEmailId));
   });
 
-  const marketingUser = () => ({ id: marketingId, email: `${marker}-marketing@example.invalid`, name: "Campaign Test Marketing", role: "marketing" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+  const marketingUser = () => testSessionUser({ id: marketingId, email: `${marker}-marketing@example.invalid`, name: "Campaign Test Marketing", role: "marketing" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
 
   it("filters out opted-out and email-less recipients before sending, and reports accurate counts", async () => {
     const marketing = callerFor(marketingUser());
@@ -77,6 +78,15 @@ describeWithDatabase("mass campaign integration", () => {
     expect(result.skippedOptOutCount).toBe(2);
     expect(result.sentCount).toBe(1);
     expect(result.failedCount).toBe(0);
+  });
+
+  it("refuses to send the identical campaign again within ten minutes (double click / second tab), but allows a changed one", async () => {
+    const marketing = callerFor(marketingUser());
+    const campaign = { userIds: [optedInId, optedOutId], channel: "email" as const, subject: "QA dedupe subject", body: "QA dedupe body." };
+    await marketing.admin.sendCampaign(campaign);
+    await expect(marketing.admin.sendCampaign({ ...campaign, userIds: [optedOutId, optedInId] })).rejects.toMatchObject({ code: "CONFLICT" });
+    const changed = await marketing.admin.sendCampaign({ ...campaign, body: "QA dedupe body, corrected." });
+    expect(changed.sentCount).toBe(1);
   });
 
   it("blocks SMS campaigns while SMS_CAMPAIGNS_ENABLED is unset", async () => {

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, like } from "drizzle-orm";
+import { testSessionUser } from "./_test-helpers";
+import { like } from "drizzle-orm";
 import { users } from "../drizzle/schema";
 import { appRouter } from "./routers";
 import { getDb } from "./db";
@@ -50,7 +51,7 @@ describeWithDatabase("customer segments integration", () => {
     await db.delete(users).where(like(users.email, `${marker}-%`));
   });
 
-  const marketingUser = () => ({ id: marketingId, email: `${marker}-marketing@example.invalid`, name: "Segments Test Marketing", role: "marketing" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
+  const marketingUser = () => testSessionUser({ id: marketingId, email: `${marker}-marketing@example.invalid`, name: "Segments Test Marketing", role: "marketing" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
 
   it("drill-down row count matches the aggregate count for the same segment (skinConcerns comma-list)", async () => {
     const marketing = callerFor(marketingUser());

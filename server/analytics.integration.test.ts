@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { testSessionUser } from "./_test-helpers";
 import { eq, inArray } from "drizzle-orm";
 import { adminAuditLogs, marketingSpend, orderItems, orders, productCategories, productVariants, products, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
@@ -93,12 +94,12 @@ describeWithDatabase("admin analytics integration", () => {
 
   it("rejects staff (not just anonymous) from the analytics report and export", async () => {
     await expect(callerFor(null as unknown as TrpcContext["user"]).admin.analyticsReport({})).rejects.toMatchObject({ code: "UNAUTHORIZED" });
-    const staffUser = { id: staffId, email: `${marker}-staff@example.invalid`, name: "Analytics Test Staff", role: "staff" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
+    const staffUser = testSessionUser({ id: staffId, email: `${marker}-staff@example.invalid`, name: "Analytics Test Staff", role: "staff" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
     await expect(callerFor(staffUser).admin.analyticsReport({})).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("computes real revenue/order totals and finds the test order's district", async () => {
-    const adminUser = { id: adminId, email: `${marker}-admin@example.invalid`, name: "Analytics Test Admin", role: "admin" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
+    const adminUser = testSessionUser({ id: adminId, email: `${marker}-admin@example.invalid`, name: "Analytics Test Admin", role: "admin" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
     const report = await callerFor(adminUser).admin.analyticsReport({});
 
     expect(report.overview.revenueMnt).toBeGreaterThanOrEqual(60_000);
@@ -129,7 +130,7 @@ describeWithDatabase("admin analytics integration", () => {
   });
 
   it("exports a non-empty Excel and PDF file for the same report", async () => {
-    const adminUser = { id: adminId, email: `${marker}-admin@example.invalid`, name: "Analytics Test Admin", role: "admin" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
+    const adminUser = testSessionUser({ id: adminId, email: `${marker}-admin@example.invalid`, name: "Analytics Test Admin", role: "admin" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
     const caller = callerFor(adminUser);
 
     const xlsx = await caller.admin.analyticsExport({ format: "xlsx" });
@@ -166,7 +167,7 @@ describeWithDatabase("admin analytics integration", () => {
   });
 
   it("captures trafficSource (client-sent) and deviceType (parsed from User-Agent) at checkout, and both show up in the report", async () => {
-    const adminUser = { id: adminId, email: `${marker}-admin@example.invalid`, name: "Analytics Test Admin", role: "admin" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
+    const adminUser = testSessionUser({ id: adminId, email: `${marker}-admin@example.invalid`, name: "Analytics Test Admin", role: "admin" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
     const mobileUa = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148";
     // Randomized IP, same reasoning as the other integration test files that
     // hit rate-limited procedures -- avoids colliding with another test
@@ -203,7 +204,7 @@ describeWithDatabase("admin analytics integration", () => {
   });
 
   it("computes a real period-over-period comparison (Tier D), and reports unavailable for all-time", async () => {
-    const adminUser = { id: adminId, email: `${marker}-admin@example.invalid`, name: "Analytics Test Admin", role: "admin" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
+    const adminUser = testSessionUser({ id: adminId, email: `${marker}-admin@example.invalid`, name: "Analytics Test Admin", role: "admin" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
     const adminCaller = callerFor(adminUser);
 
     // "All time" has no equal-length prior window -- same rule getSalesOverview
@@ -234,7 +235,7 @@ describeWithDatabase("admin analytics integration", () => {
   });
 
   it("computes a real CAC once spend is entered for every touched month, and reports unavailable when it's missing (Tier F)", async () => {
-    const adminUser = { id: adminId, email: `${marker}-admin@example.invalid`, name: "Analytics Test Admin", role: "admin" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
+    const adminUser = testSessionUser({ id: adminId, email: `${marker}-admin@example.invalid`, name: "Analytics Test Admin", role: "admin" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
     const adminCaller = callerFor(adminUser);
 
     // A month far enough in the past that nothing else in a shared dev DB
@@ -270,7 +271,7 @@ describeWithDatabase("admin analytics integration", () => {
   });
 
   it("marks a non-QPay order paid the moment it's completed (Tier I fix), and computes return rate (Tier G)", async () => {
-    const adminUser = { id: adminId, email: `${marker}-admin@example.invalid`, name: "Analytics Test Admin", role: "admin" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
+    const adminUser = testSessionUser({ id: adminId, email: `${marker}-admin@example.invalid`, name: "Analytics Test Admin", role: "admin" as const, emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
     const adminCaller = callerFor(adminUser);
     const db = await getDb();
     if (!db) throw new Error("Database unavailable");

@@ -10,7 +10,7 @@
 
 import "dotenv/config";
 import { S3Client, ListObjectsV2Command } from "@aws-sdk/client-s3";
-import mysql from "mysql2/promise";
+import mysql, { type RowDataPacket } from "mysql2/promise";
 import { planMysqlConnection } from "../server/_core/dbConnection";
 
 const ENV = {
@@ -67,15 +67,15 @@ async function main() {
   // 2026-09-09: same TLS rules as the app (server/_core/dbConnection.ts).
   const conn = await mysql.createConnection(planMysqlConnection(ENV.databaseUrl).options);
   try {
-    const [rows] = await conn.execute<any[]>(
+    const [rows] = await conn.execute<RowDataPacket[]>(
       "SELECT id, imageUrl FROM products WHERE id IN (" +
         Array.from(latestByProductId.keys()).join(",") +
         ")",
     );
     const dbState = new Map<number, string | null>();
-    for (const row of rows as any[]) dbState.set(row.id, row.imageUrl);
+    for (const row of rows) dbState.set(row.id, row.imageUrl);
 
-    let toUpdate: { id: number; url: string }[] = [];
+    const toUpdate: { id: number; url: string }[] = [];
     for (const [id, { key }] of latestByProductId) {
       const url = `/cdn/${key}`;
       const current = dbState.get(id);
@@ -97,9 +97,10 @@ async function main() {
       console.log(`Updated ${toUpdate.length} rows.`);
     }
 
-    const [[{ remaining }]] = (await conn.execute(
+    const [countRows] = await conn.execute<RowDataPacket[]>(
       "SELECT COUNT(*) AS remaining FROM products WHERE imageUrl IS NULL",
-    )) as any;
+    );
+    const remaining = countRows[0]?.remaining;
     console.log(`Remaining imageUrl IS NULL: ${remaining}`);
   } finally {
     await conn.end();

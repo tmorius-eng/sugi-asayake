@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { and, eq, inArray } from "drizzle-orm";
+import { testSessionUser } from "./_test-helpers";
+import { eq, inArray } from "drizzle-orm";
 import { cartItems, carts, orderItems, orders, productCategories, productVariants, products, users } from "../drizzle/schema";
 import { createOrderFromActiveCart, getAdminProducts, getDb, getPublishedCatalog, updateAdminOrder } from "./db";
 import { appRouter } from "./routers";
@@ -10,12 +11,12 @@ import type { TrpcContext } from "./_core/context";
 // staffContext when staff still owned the catalog; renamed to match.
 function warehouseContext(): TrpcContext {
   return {
-    user: {
+    user: testSessionUser({
       id: 1, email: "warehouse-test@example.com", name: "Phase 2 Test Warehouse", role: "warehouse",
       emailVerifiedAt: null, sessionVersion: 0, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date(),
-    },
+    }),
     req: { protocol: "https", headers: {}, ip: "198.51.100.9", socket: { remoteAddress: "198.51.100.9" } } as unknown as TrpcContext["req"],
-    res: { cookie: () => undefined, clearCookie: () => undefined } as TrpcContext["res"],
+    res: { cookie: () => undefined, clearCookie: () => undefined } as unknown as TrpcContext["res"],
   };
 }
 
