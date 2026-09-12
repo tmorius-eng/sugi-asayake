@@ -186,8 +186,8 @@ browser → /api/trpc/<router>.<procedure>
   - Админ: `AdminWorkspace.tsx` (816 мөр — хэсгүүдийн router), `admin/AdminSidebar.tsx`, `admin/AdminTopBar.tsx`, `admin/AdminNotificationBell.tsx`, `admin/AdminCommandPalette.tsx`, `admin/GenericListView.tsx`, панель бүр (`AdminProductsPanel`, `AdminOrdersPanel`, `AdminIntegrationsPanel`, `AdminReceivingPanel`, `AdminAnalyticsPanel`, `AdminSecurityCenter`, `AdminPosPanel` …).
   - Нөөц: `inventory/ScanSession.tsx` (сканы дэлгэц), `inventory/TransfersView.tsx`.
   - `ui/*` — shadcn маягийн суурь элементүүд.
-- **`hooks/`** — `useBarcodeScanner` (⚠️ input дээр focus байхад зогсдог), `useScanDraft` (localStorage + 700мс сервер рүү хадгалалт), `useSiteText`, `useStoreSetting`, `useScrollReveal`, `useCategories`, `useMobile`, `useComposition`, `usePersistFn`, `useShopContact`.
-- **`lib/`** — `trpc.ts` (client), `faceEngine.ts`, `pageviewTracking.ts`, `trafficSource.ts`, `cookieConsent.ts`, `csv.ts`, `adminTheme.ts`, `scanSounds.ts` …
+- **`hooks/`** — `useScrollToTopOnNavigate` (Router-т: forward navigation 0-ээс, back/forward-д хүрэхгүй), `useBarcodeScanner` (⚠️ input дээр focus байхад зогсдог), `useScanDraft` (localStorage + 700мс сервер рүү хадгалалт), `useSiteText`, `useStoreSetting`, `useScrollReveal`, `useCategories`, `useMobile`, `useComposition`, `usePersistFn`, `useShopContact`.
+- **`lib/`** — `scroll.ts` (`scrollToNow` — global smooth rule-ийг override хийсэн instant scroll; яг тодорхой газар буух бүх scroll үүгээр), `trpc.ts` (client), `faceEngine.ts`, `pageviewTracking.ts`, `trafficSource.ts`, `cookieConsent.ts`, `csv.ts`, `adminTheme.ts`, `scanSounds.ts` …
 
 **Шинэ админ хэсэг нэмэх** = 6 газар: `AdminSection` union, `adminSectionKeys`, `SECTION_ROLES`, 3 гарчгийн ternary, `shared/admin-tips.ts`, `server/admin-tips.test.ts`.
 

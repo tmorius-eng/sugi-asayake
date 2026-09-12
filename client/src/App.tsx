@@ -1,4 +1,5 @@
 import { Toaster } from "@/components/ui/sonner";
+import { useScrollToTopOnNavigate } from "./hooks/useScrollToTopOnNavigate";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { lazy, Suspense } from "react";
 import { Route, Switch } from "wouter";
@@ -49,6 +50,9 @@ function Router() {
   // Retires the permanently-parked cookie button 10s after a choice is made
   // (the footer's "Күкийн тохиргоо" is the way back). See the hook.
   useConsentIconAutoHide();
+  // 2026-09-12: a forward navigation starts at the top of the new page;
+  // without this the old scroll offset carried over (see the hook).
+  useScrollToTopOnNavigate();
   return <Suspense fallback={<RouteLoadingFallback />}><Switch>
     <Route path={"/"} component={Home} />
     <Route path={"/product/:slug"} component={ProductDetail} />

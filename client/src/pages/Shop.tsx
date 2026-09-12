@@ -1,4 +1,6 @@
 import { ArrowDownUp, ArrowUpRight, ChevronLeft, ChevronRight, Eye, Grid3x3, Heart, LayoutGrid, MapPin, PackageCheck, Phone, RotateCcw, LoaderCircle, Search, ShoppingCart, SlidersHorizontal, Sparkles, Star, Truck, Wallet } from "lucide-react";
+import { keepPreviousData } from "@tanstack/react-query";
+import { scrollElementToTopNow } from "@/lib/scroll";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import CartDrawer from "@/components/CartDrawer";
@@ -182,6 +184,13 @@ export default function Shop() {
     sort,
     page,
     pageSize: SHOP_PAGE_SIZE,
+  }, {
+    // 2026-09-12 (phone): the previous page's cards stay on screen while the
+    // next page loads. Before, a page change unmounted the grid into an
+    // 8-card skeleton, the document shrank by half, and the browser clamped
+    // or cancelled the scroll that was meant to land on the grid -- on
+    // Safari the reader ended up in the footer.
+    placeholderData: keepPreviousData,
   });
   const searchResults = trpc.catalog.search.useQuery({ query: debouncedSearch }, { enabled: isSearching });
   const wishlist = trpc.profile.wishlist.list.useQuery(undefined, { enabled: isAuthenticated });
@@ -232,6 +241,17 @@ export default function Shop() {
     window.history.replaceState(null, "", `${window.location.pathname}${params.toString() ? `?${params}` : ""}`);
   }, [search, category, brand, minPrice, maxPrice, skinTypeFilter, inStockOnly, sort]);
   useEffect(() => { if (!catalogLoading && page > totalPages) setPage(totalPages); }, [catalogLoading, totalPages, page]);
+  // Scroll to the grid AFTER the new page has rendered, instantly (the
+  // global smooth rule is overridden for this one jump). Only for the pager
+  // buttons -- a filter change or the URL's ?page= on first load must not
+  // yank the viewport.
+  const pagerJump = useRef(false);
+  useEffect(() => {
+    if (!pagerJump.current) return;
+    pagerJump.current = false;
+    const grid = document.getElementById("shop-product-grid");
+    if (grid) scrollElementToTopNow(grid);
+  }, [page]);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (page > 1) params.set("page", String(page)); else params.delete("page");
@@ -347,9 +367,9 @@ export default function Shop() {
         </div>
       </article>;
       })}</section>{totalPages > 1 ? <nav className="shop-pagination" aria-label="Хуудаслалт">
-        <button type="button" onClick={() => { setPage(current => Math.max(1, current - 1)); document.getElementById("shop-product-grid")?.scrollIntoView({ block: "start", behavior: "smooth" }); }} disabled={page === 1}><ChevronLeft size={16} /> Өмнөх</button>
+        <button type="button" onClick={() => { pagerJump.current = true; setPage(current => Math.max(1, current - 1)); }} disabled={page === 1}><ChevronLeft size={16} /> Өмнөх</button>
         <span>{page} / {totalPages} хуудас <em>({resultCount} бүтээгдэхүүн)</em></span>
-        <button type="button" onClick={() => { setPage(current => Math.min(totalPages, current + 1)); document.getElementById("shop-product-grid")?.scrollIntoView({ block: "start", behavior: "smooth" }); }} disabled={page === totalPages}>Дараах <ChevronRight size={16} /></button>
+        <button type="button" onClick={() => { pagerJump.current = true; setPage(current => Math.min(totalPages, current + 1)); }} disabled={page === totalPages}>Дараах <ChevronRight size={16} /></button>
       </nav> : null}</> : <section className="shop-status-card" data-reveal><Search size={26} /><h2>Энэ удаа тохирох бүтээгдэхүүн олдсонгүй.</h2><p>Өөр хайлтын үг хэрэглэж үзэх эсвэл бүх ангиллыг дахин хараарай.</p><button type="button" onClick={resetControls}><RotateCcw size={14} /> Шүүлтүүр арилгах</button></section>}
       {recommended.data?.length ? <RecommendedForYou products={recommended.data} onRemember={rememberProduct} onQuickView={openQuickView} /> : null}
       {/* A premium site doesn't show a "recently viewed" module with nothing
