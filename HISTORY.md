@@ -4,6 +4,34 @@
 
 ---
 
+## Forensic аудит — scaffold-оос production руу (2026-09-12, гэрийн лаптоп, 4 commit: `618eeec` → `3d3b05a`)
+
+Tom 27 үе шаттай "FULL-STACK FORENSIC AUDIT + SCAFFOLD-TO-PRODUCTION REFINEMENT" playbook илгээж, "do not skip anything", "deep dig, fix everything, no basic shits" гэв. Арга: код бүрийг уншиж, сэжигтэй зүйл бүрийг **тестээр нотолж** байж л засав; Playwright-ээр 1152/768/390/320 өргөнд storefront + 23 admin хэсгийг бүгдийг үзэв. Эцсийн тайлан (health score, scaffold/AI-slop inventory, P0–P4 bug register): artifact (доор CLAUDE.md-д линк).
+
+### `618eeec` — /admin 25 минут idle → lock, царайг дахин асуух (Tom-ийн хүсэлт + "world standard"-ыг судал)
+- **Юу нь activity вэ** гэдэг нь чухал: панель өөрөө хонх/outbox-оор polling хийдэг тул request бүр session-ийг сунгавал лангуун дээр нээлттэй орхисон самбар хэзээ ч түгжигдэхгүй. Зөвхөн **бодит оролт** (pointer/key/touch/scroll) тоологдоно; browser хамгийн ихдээ 2 минут тутам heartbeat илгээнэ.
+- **Сервер талын хэрэгжилт**: proof cookie-д 2 deadline — sliding idle (`exp`) + absolute 8 цаг (`abs` claim). Хугацаа дууссан proof-ыг сунгах боломжгүй, зөвхөн камер. Бүх tab `BroadcastChannel`-ээр хамт түгжигдэнэ; 2 минутын өмнө анхааруулга; lock нь `face_attempts`-д `idle_locked` гэж бүртгэгдэнэ (migration `0068`).
+- Стандарт: NIST SP 800-63B AAL2 30 мин idle / 12 ц; PCI DSS 4.0 8.2.8 admin 15 мин; OWASP 15–30. 25 мин + 8 ц absolute сонгов. 7 unit тест (fake timer).
+
+### `28774f3` — Бангалор руу хэрэггүй round trip бүрийг хасав (Tom: "cookie сайтыг удаашруулж байвал зас")
+- Storefront контент (site_text, media, салбар, ангилал, тохиргоо, баримт, loyalty tier, post) хуудас бүрт DB-ээс дахин уншигддаг байв → **30 с cache**, бичигч бүр өөрийн түлхүүрээ хүчингүй болгоно (21 газар). Хэмжсэн: 163мс → 2мс.
+- **Session cookie**: authenticated request бүр эхлээд user мөрийг уншдаг байв (~170мс), /admin нэг дэлгэц хэд хэдэн удаа төлдөг → 5 секунд итгэнэ. Хэмжсэн: 173мс → 2мс. 5 секунд л, учир нь мөрөнд suspension/role/sessionVersion бий.
+- **Race**: бичихийн өмнө invalidate хийхэд аль хэдийн явж байсан read хуучин хариуг 30 с хадгалдаг байв → `ttlCache` одоо сүүлийн invalidation-оос ӨМНӨ тооцоолсон үр дүнг хадгалахгүй (`invalidatedAt`), тест read-ийг write-ийн дундуур барьж нотолно.
+
+### `6653fff` — Audit batch 1: бүрэн suite өөрийн регрессийг барив + утас юу харуулав
+- 🔴 **P0, өөрийн алдаа**: session cache-ийг **token-оор** түлхүүрлэсэн тул юу ч хүчингүй болгож чадахгүй — "бүх төхөөрөмжөөс гарах"/нууц үг солиход хуучин token 5 с ажилласаар байв. 2 тест унасан. Одоо **user id-аар** (`getSessionUserById`) + session-ийн эрхийг өөрчилдөг бүх бичигч (`changeUserPassword`, `bumpUserSessionVersion`, `resetPasswordViaPhoneSession`, `suspendUser`, `unsuspendUser`, `updateAdminUserRole`, `deleteUserAccount`) `forgetSessionUser` дуудна.
+- 390px: admin 4 хэсэг хэвтээ scroll (Security tab bar `w-fit` grid дотор max-content; Brands/Branches үйлдлийн товч мөр буудаггүй; Integrations 560px хүснэгт + truncate нэр `min-w-0`-гүй grid item-ээр дээшээ тархдаг); /shop filter pill-үүд clip хийгдэж сүүлийнх нь хүрэхгүй (`.shop-filter-pills` `min-width:0`).
+- Admin `<title>` тавьдаггүй (2 tab ижил), h1-гүй; cookie banner /admin дотор гардаг (`body.admin-route`); login redirect guard `//host` хүлээн авдаг; тохиргоо/хэрэглэгч/интеграцийн input-ууд aria-label-гүй; POS дэлгэц "дэлгүүрийн борлуулалт Smart POS-т" гэж хэлдэггүй (давхар тоологдоно). Хэрэггүй 3 dev dep (`add` нь typo-оор орж ирсэн floating-point сан).
+
+### `3d3b05a` — Audit batch 2: idempotent checkout/POS, кампанит ажлын давхар илгээлт, тестүүд type-check + lint
+- **Checkout idempotency**: `orders.clientRequestId` (migration `0069`, unique). Товч disable нь нэг tab, нэг click-ийг л хамгаалдаг — timeout-ын дараа browser resend, 2 дахь tab → **2 захиалга, нөөц 2 удаа хасагддаг байв**. Одоо browser attempt бүрт UUID үүсгэж илгээнэ, ижил түлхүүр = ижил захиалга (`replayed:true`, имэйл дахин явахгүй). Race-д unique key-г алдагч replay авна. POS-ын `recordInStoreSale` мөн адил (`AdminPosPanel` UUID). Тест: `checkout-idempotency.integration.test.ts` (5: resend, race, өөр хэрэглэгчийн түлхүүр, POS, шинэ түлхүүр).
+- **Кампанит ажил**: ижил channel+subject+body+recipient set-ийг **10 минутын дотор дахин илгээхээс татгалзана** (CONFLICT). Fingerprint нь `admin_audit_logs.metadataJson`-д (`campaign.sent`) хадгалагддаг тул хоёр лаптопт хүчинтэй. Өмнө нь double click = 2,000 SMS × 2.
+- `qpayCreateInvoice`/`storepayCreateLoan` нээлттэй attempt-ыг дахин ашиглана (click бүрт төлж болох шинэ invoice гаргадаггүй); QPay callback `200 "SUCCESS"` + GET; cloud вендор (Smart Software, StorePay) https + private host хориглоно (SSRF, ntfy LAN exempt); `sqlQueryLog` string биш утгад унадаг байв; `data-retention` job (visitor_sessions 24 сар, login_attempts 12 сар).
+- **Tooling**: `tsconfig.json` target ES2022; `tsconfig.tests.json` тест/скриптийг type-check хийнэ (`pnpm check` = 2 tsc) → **90 хуучирсан fake session user** 31 файлд олдов → `server/_test-helpers.ts` `testSessionUser()`; `faceAuth.integration.test` hash биш plaintext нууц үг дамжуулж байсан (бодит bug). ESLint flat config (`pnpm lint`, CI-д Lint алхам) — hooks dep дутуу (AdminFaceGate), тогтворгүй useMemo input, dialog Enter-ийн IME composition bug.
+- Цэвэрлэгээ: QA admin (`qa-admin-tmp@example.invalid`, id 6490) Aiven-ээс устгасан; gate-off 3101 dev server зогсоосон; `scripts/tmp-*.ts` gitignore.
+
+**Санаатайгаар ХИЙГЭЭГҮЙ**: React Compiler eslint дүрмүүд (39 ажилладаг pattern-ийг flag хийдэг, унтраасан); AdminFaceGate-ийн liveness функцууд (санаатай хадгалсан); 5 junk post (Tom-ийн шийдвэр); ntfy token rotate (Tom).
+
 ## Амьд DB дээрх тестийн үлдэгдлийг цэвэрлэв (2026-09-12, Tom: "delete them")
 
 CLAUDE.md-д удаан хугацаанд нээлттэй байсан зүйл. Эхлээд **зөвхөн уншдаг** тайлан (`scripts/test-residue-report.ts`), дараа нь `scripts/test-residue-purge.ts --apply`.

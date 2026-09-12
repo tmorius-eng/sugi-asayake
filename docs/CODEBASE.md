@@ -8,6 +8,8 @@
 
 ---
 
+> 🗺️ Энэ файлын визуал хувилбар (давхаргууд, нэг захиалгын аялал, нөөцийн ledger, эрхүүд, дүрмүүд): https://claude.ai/code/artifact/fed0a0dd-1d77-4d09-a99b-8e3f6cf0908d (2026-09-12)
+
 ## 0. Нэг догол мөрөөр
 
 SUGI ASAYAKE бол **нэг Node процесс** дээр ажилладаг онлайн дэлгүүр: Express сервер нь (1) `/api/trpc` дээр tRPC API, (2) production-д статик файл / dev-д Vite, (3) хэдэн тусгай route (`/health`, төлбөрийн callback, `/cdn/*` зургийн proxy)-г үйлчилдэг. Өгөгдөл нь **Aiven дээрх MySQL** (drizzle ORM), зургийн байт нь **Cloudflare R2**. Клиент нь **React + Vite + wouter + TanStack Query (tRPC client)**. Хоёр лаптоп нэг DB, нэг R2-г хуваалцдаг.
@@ -55,7 +57,7 @@ browser → /api/trpc/<router>.<procedure>
 | Файл | Юу хийдэг | Мэдэх ёстой нарийн зүйл |
 |---|---|---|
 | `index.ts` | процессын эхлэл (§1) | ажлын бүртгэл, dispatcher энд эхэлдэг |
-| `context.ts` | tRPC контекст: cookie → user | `assertProductionSecrets()` энд; session token JWT |
+| `context.ts` | tRPC контекст: cookie → user | `assertProductionSecrets()` энд; session token JWT. User мөр **5 с cache** (`getSessionUserById`, түлхүүр = user id, token БИШ) — session-ийн эрхийг өөрчилдөг бичигч бүр `forgetSessionUser` дуудна (§8 дүрэм 10) |
 | `trpc.ts` | procedure-ийн төрлүүд | `publicProcedure`, `protectedProcedure`, `adminProcedure`, `financeProcedure`, `staffProcedure`, **`inventoryProcedure`** (admin+warehouse+staff), `strictRateLimitedProcedure`. Эрхийн шалгалт бүхэлдээ ЭНД, дэд router-үүд өөрсдөө эрх шалгадаггүй |
 | `security.ts` | header, rate limit tier, CSRF | `limitApiTraffic` (IP тутам 300/15мин), `protectStateChangingApiRequests`, `limitQPayCallbackTraffic` |
 | `persistentRateLimit.ts` | strict tier-ийн тоолуур **DB дээр** (`rate_limit_buckets`) | олон instance-д ч хүчинтэй, **fail-open** (DB унавал блоклохгүй). Cart/telemetry tier нь санаатайгаар санах ойд |
@@ -63,7 +65,7 @@ browser → /api/trpc/<router>.<procedure>
 | `crypto.ts` | AES-GCM шифрлэлт | `INTEGRATIONS_ENCRYPTION_KEY` (64 hex) шаардана, байхгүй бол шатна — интеграцийн нууц үг энүүгээр хадгалагдана |
 | `password.ts` | `hashPassword` / `verifyPassword` | |
 | `cookies.ts` | session cookie-ийн тохиргоо | |
-| `ttlCache.ts` | процессын доторх TTL cache | `getOrSetCached`, **`invalidateCached`** (интеграц хадгалахад дуудагдана) |
+| `ttlCache.ts` | процессын доторх TTL cache | `getOrSetCached`, **`invalidateCached`**. `invalidatedAt` тэмдэг: invalidation-оос ӨМНӨ тооцоолж эхэлсэн үр дүнг хадгалахгүй (write-ийн дундуур явж байсан read хуучин утгыг 30 с "царцаадаг" race). Storefront контент (`STOREFRONT_CACHE_KEYS`, 30 с) + session user (5 с) энд |
 | `scheduler.ts` | цорын ганц job хуваарь | нэг `setInterval`, `scheduled_job_runs` хүснэгтээр `lastRunAt`-ыг хардаг. Cron парсер байхгүй |
 | `notification.ts` | имэйл илгээх (Brevo) | `deliverEmail` нь **хэзээ ч throw хийхгүй** — үр дүнг буцаана. `notifyOwner`, `sendAccountEmail` |
 | `ntfy.ts` | утасны push (ntfy.sh) | JSON POST (кирилл header найдваргүй), 5с timeout, ~3.8KB тайралт, хэзээ ч throw хийхгүй |
@@ -80,12 +82,13 @@ browser → /api/trpc/<router>.<procedure>
 
 ## 3. `server/` — домэйн модулиуд
 
-### 3.1 `db.ts` (5,334 мөр) — өгөгдлийн үндсэн давхарга
+### 3.1 `db.ts` (5,528 мөр) — өгөгдлийн үндсэн давхарга
 Бүх бизнес query энд. Гол бүлгүүд:
 
 - **Хэрэглэгч/auth**: `createUserWithPassword` (⚠️ хамгийн эхний хэрэглэгч эсвэл `OWNER_EMAIL`-тэй таарвал л admin болно), `findUserByPhone`, session, нууц үг сэргээх, `recordLoginAttempt`.
 - **Каталог**: бүтээгдэхүүн/variant/ангилал/брэнд, FULLTEXT хайлт, `getBestsellingProducts` (бодит борлуулалт дуусмагц featured брэндээр дүүргэдэг), `getRecommendedProducts`.
 - **Сагс/checkout**: `createOrderFromActiveCart` — энэ функц бол **системийн зүрх**. Хямдралын дараалал: routine → coupon → loyalty → дараа нь дэлгүүрийн зээл (мөнгөтэй адил, хамгийн сүүлд). Нөөцийг `WHERE stockQuantity >= ?` + `affectedRows` шалгалтаар атомикоор хасна; захиалгын дугаар давхцвал 3 хүртэл дахин оролдоно.
+- **Idempotency** (2026-09-12): `orders.clientRequestId` (unique) — checkout болон POS (`recordInStoreSale`) хоёулаа browser-ийн UUID авч, ижил түлхүүрт ижил захиалга буцаана (`replayed:true`). `findOrderForClientRequest(db, key, expectedUserId)` эхэнд + `orders_client_request_unique` dup-key дээр (race-ийн алдагч). `findRecentCampaignSend(fingerprint, minutes)` — кампанит ажлын давхар илгээлтийн хамгаалалт (audit log дээр).
 - **Захиалгын буцалт**: `updateAdminOrder`, `cancelOwnOrder`, `refundOrder`, `reverseStoreCreditForOrder`. **`settledSaleSql`** (`paid AND status<>'cancelled'`) — орлого гэж юуг тооцохын ЦОРЫН ГАНЦ тодорхойлолт (db.ts 8 газар, analytics.ts 17 газар).
 - **Төлбөрийн оролдлого**: `createQPayPaymentAttempt`, `createStorepayPaymentAttempt`, `markQPayPaymentAttemptPaid` (нэр нь түүхэн — **provider-аас хамааралгүй**: хаагдсан/цуцлагдсан захиалгыг сэргээхээс татгалздаг хамгаалалт нь QPay, StorePay хоёуланд хүчинтэй).
 - **Салбар/нөөц**: `getStorefrontBranches` (зөвхөн `kind='store'`), `setBranchStock`, `setFulfillmentBranchStock`, `deleteBranch`-ийн хамгаалалт.
@@ -93,7 +96,7 @@ browser → /api/trpc/<router>.<procedure>
 - **Мэдэгдэл**: `recordNotification`, `getNotificationFeed`, `markNotificationsSeen`, `purgeNotificationOutbox`.
 - **Ledger унших**: `getStockMovementsForVariant`, `getStockLedgerHealth` (drift).
 
-### 3.2 `routers.ts` (2,906 мөр) — API-ийн гадаргуу
+### 3.2 `routers.ts` (2,970 мөр) — API-ийн гадаргуу
 `appRouter` = 16 нэрийн зай: `auth`, `catalog`, `loyalty`, `routines`, `promotions`, `reviews`, `content`, `cart`, `checkout`, `telemetry`, `orders`, `profile`, `payments`, `faceAuth`, `admin`, + дэд router `notifications` (`notificationsRouter.ts`), `inventory` (`inventoryRouter.ts`).
 
 🔴 **zod 4 урхи**: `.partial()` дотор `.default()` ХЭРЭГЖДЭГ. Update schema бүр `partialForUpdate()`-ийг ашиглах ёстой — эс бөгөөс илгээгээгүй талбар create-ийн анхдагчаар дарагдана (2026-09-11-нд бодит үндсэн салбарыг хэдэн минут алга болгосон).
@@ -150,7 +153,7 @@ browser → /api/trpc/<router>.<procedure>
 - **`smartSoftware.ts`** — бодит adapter. OAuth2 password grant; `fetch` БИШ `node:http(s)` (баримтын token дуудлага GET дээр body явуулдаг); token cache; `listLocations`, `pullStockSnapshot`. Вендорын POS API-д **борлуулалтын жагсаалт байхгүй** тул `pullSales` хэрэгждэггүй — шударгаар тэмдэглэсэн.
 
 ### 3.7 Бусад
-`analytics.ts` (29 экспорт: борлуулалт, дүүрэг, ашиг, CAC, хөрвүүлэлт, буцаалтын хувь, Excel/PDF export), `faceAuth.ts` (админы царайны хаалга — descriptor л сервер рүү ирнэ, гадны API байхгүй), `verifyMn.ts` (SMS баталгаажуулалт), `storage.ts` (S3/R2), `automation.ts` (доорх §7), `notificationOutbox.ts`, `notificationsRouter.ts`, `catalog-validation.ts`, `commerce-lifecycle.ts`.
+`analytics.ts` (29 экспорт: борлуулалт, дүүрэг, ашиг, CAC, хөрвүүлэлт, буцаалтын хувь, Excel/PDF export), `faceAuth.ts` (админы царайны хаалга — proof cookie 2 deadline-тай: sliding idle 25 мин `exp` + absolute 8 ц `abs`; `refreshFaceProof` зөвхөн бодит оролтын heartbeat-аар, `lockFaceSession` → `face_attempts.idle_locked`; descriptor л сервер рүү ирнэ, гадны API байхгүй), `verifyMn.ts` (SMS баталгаажуулалт), `storage.ts` (S3/R2), `automation.ts` (доорх §7), `notificationOutbox.ts`, `notificationsRouter.ts`, `catalog-validation.ts`, `commerce-lifecycle.ts`.
 
 ---
 
@@ -213,6 +216,7 @@ browser → /api/trpc/<router>.<procedure>
 | `stock-ledger-drift` | 1 цаг | ledger ≠ тавиур бол admin-д мэдэгдэнэ |
 | `stale-transfer-reminder` | 6 цаг | 48ц хүлээн аваагүй шилжүүлэг |
 | `inventory-sync-smartsoftware` | 15 мин | Smart POS-ын үлдэгдэл → батлах тооллого (идэвхтэй үед л) |
+| `data-retention` | 24 цаг | `visitor_sessions` 24 сараас, `login_attempts` 12 сараас хуучин мөрийг устгана (`purgeStaleTelemetry`) |
 | `notification-outbox-purge` | 20 цаг | тестийн болон 90 хоногоос хуучин мөрүүд |
 
 ---
@@ -227,15 +231,22 @@ browser → /api/trpc/<router>.<procedure>
 6. **Update schema бүр `partialForUpdate()`** (zod 4 урхи).
 7. **Integration тест бодит мөрийг устгахгүй** — snapshot-restore, эсвэл throwaway marker.
 8. **Тестийн өгөгдөл `%test%`-ээр хайж болохгүй** — каталогт жинхэнэ `Honey amproom tester` бий (`scripts/test-residue-report.ts`).
+9. **Захиалга бичдэг шинэ зам бүр `clientRequestId` авна** (checkout, POS шиг) — эс бөгөөс timeout/resend/2 дахь tab давхар захиалга, давхар нөөц хасалт үүсгэнэ.
+10. **`users` мөрийн эрх/sessionVersion/suspend-ийг өөрчилдөг шинэ функц бүр `forgetSessionUser(id)` дуудна** — эс бөгөөс "бүх төхөөрөмжөөс гарах" 5 с хоцорно (2026-09-12-нд бодитоор гарсан P0).
+11. **Cloud вендорын URL https + public host** (`validateIntegrationSettings`, `isPrivateHost`) — ntfy л LAN-д зөвшөөрөгдөнө.
 
 ---
 
-## 9. Тест (80 файл, 754 тест — 2026-09-12, `139ec5b`)
+## 9. Тест (83 файл, 774 тест — 2026-09-12, `3d3b05a`, 17.1 минут)
 
 ```powershell
 $env:RUN_AUTH_INTEGRATION_TESTS="1"; $env:COMMERCE_INTEGRATION_TESTS="1"; $env:RUN_MEDIA_INTEGRATION_TESTS="1"
 pnpm exec vitest run --no-file-parallelism   # ~17 минут, бодит Aiven дээр
+pnpm check   # tsc (app) + tsc -p tsconfig.tests.json (тест/скрипт) — 2026-09-12-оос тестүүд ч type-check хийгдэнэ
+pnpm lint    # ESLint flat config: typescript-eslint recommended + react-hooks (rules-of-hooks, exhaustive-deps). CI-д ч ажиллана
 ```
+
+**`server/_test-helpers.ts` `testSessionUser({id, ...overrides})`** — appRouter.createCaller-т өгөх бүрэн session user. Тест бүр өөрийн fake user бичдэг байсан нь `users`-т багана нэмэгдэх бүрт хоцордог байв (type-check асаахад 90 алдаа). Шинэ integration тест ЭНИЙГ ашиглана.
 
 Хоёр төрөл: **unit** (gate-гүй, сүлжээгүй — `ntfy.test.ts`, `smart-software.test.ts`, `storepay.test.ts`, `qpay.test.ts`, `scan-session.test.ts`, `transfer-reconcile.test.ts`, `stock-alerts.test.ts` …) ба **integration** (env gate-тэй, бодит DB — `inventory.integration.test.ts`, `inventory-sync.integration.test.ts`, `stock-ledger.integration.test.ts`, `transfers.integration.test.ts`, `order-unwind.integration.test.ts` …). Integration файл бүр өөрийн throwaway өгөгдлийг `afterAll`-д устгана.
 
@@ -243,7 +254,7 @@ pnpm exec vitest run --no-file-parallelism   # ~17 минут, бодит Aiven 
 
 ## 10. Скриптүүд (`scripts/`)
 
-`db-apply-migration.ts` (migration), `db-backup.ps1` / `db-restore.ps1`, `stock-ledger-rebaseline.ts` (drift засах), `test-residue-report.ts` / `test-residue-purge.ts` (амьд DB-ийн тестийн үлдэгдэл), зураг/брэндийн seed скриптүүд.
+`db-apply-migration.ts` (migration), `db-backup.ps1` / `db-restore.ps1`, `stock-ledger-rebaseline.ts` (drift засах), `test-residue-report.ts` / `test-residue-purge.ts` (амьд DB-ийн тестийн үлдэгдэл), `schema-drift-check.ts` (`drizzle/schema.ts` vs бодит `information_schema` + FK индекс — нөгөө лаптопын migration-ыг илрүүлнэ), `tmp-*.ts` (gitignore, нэг удаагийн), зураг/брэндийн seed скриптүүд.
 
 ---
 
