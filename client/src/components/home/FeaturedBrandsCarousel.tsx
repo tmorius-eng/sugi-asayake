@@ -275,13 +275,14 @@ export default function FeaturedBrandsCarousel({ brands, heading }: { brands: Fe
    * wordmark" rule below is still Tom's call and still holds; what was wrong
    * was letting a single logo impose that blank on everyone else.
    *
-   * Majority instead of `some`: with most brands unlogo'd the band collapses
-   * and the strip is all product photography, and it comes back on its own
-   * once logos are uploaded in /admin -> Брэнд. No content is invented either
-   * way.
+   * 2026-09-12: resolved differently. The band is rendered per brand (only
+   * under a photo that has a logo), so nobody reserves a blank strip and the
+   * one logo'd brand still shows its logo. `anyLogo` is now only the height
+   * budget: the viewport must be tall enough for a logo'd slide when one
+   * exists at all.
    */
   const logoCount = brands.filter(brand => Boolean(brand.logoUrl)).length;
-  const anyLogo = brands.length > 0 && logoCount * 2 >= brands.length;
+  const anyLogo = logoCount > 0;
   const logoBand = anyLogo ? metrics.logo : 0;
   // The scaled slide sets the section's height: both the square photo and
   // the logo band live inside the scaled box, so both scale with it.
@@ -382,26 +383,17 @@ export default function FeaturedBrandsCarousel({ brands, heading }: { brands: Fe
                         {...(srcSet ? { srcSet, sizes: `${Math.round(metrics.base * metrics.scale) || 512}px` } : {})}
                       />
                     ) : null}
-                    {/* 2026-09-12 (Tom: "Логотой гэсэн мөртлөө лого гарахгүй
-                        байна"): while the band below is collapsed because
-                        most brands have no logo, a brand that DOES have one
-                        still shows it -- as a small badge over its own photo,
-                        which changes no slide's height and reserves nothing
-                        on the brands without one. The band takes over again
-                        once logos are the majority. */}
-                    {!anyLogo && brand.logoUrl ? (
-                      <span className="fbrand-logo-badge">
-                        <img src={brand.logoUrl} alt={brand.brandName} loading="lazy" draggable={false} />
-                      </span>
-                    ) : null}
                   </span>
-                  {/* Logo-images-only, by Tom's explicit choice: a brand with
-                      no uploaded logo leaves this band empty rather than
-                      showing a wordmark the brand never approved. The band
-                      still reserves its height so slides stay aligned. */}
-                  {anyLogo ? (
+                  {/* 2026-09-12 (Tom, with a reference: photo, then a white
+                      band with the logo centred under it): the band belongs
+                      to the brands that have a logo, and only to them. A
+                      brand without one ends at its photo -- no blank strip
+                      (the 2026-09-11 complaint), and no wordmark the brand
+                      never approved. Photo tops stay aligned; a logo'd card
+                      simply runs longer. */}
+                  {brand.logoUrl ? (
                     <span className="fbrand-logo">
-                      {brand.logoUrl ? <img src={brand.logoUrl} alt={brand.brandName} loading="lazy" draggable={false} /> : null}
+                      <img src={brand.logoUrl} alt={brand.brandName} loading="lazy" draggable={false} />
                     </span>
                   ) : null}
                 </Link>
