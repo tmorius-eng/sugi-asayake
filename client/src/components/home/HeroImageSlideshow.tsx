@@ -34,8 +34,14 @@ export type HeroSlide = {
  *   - Nothing pauses on hover. An earlier version did, and since a
  *     visitor's cursor usually rests over the hero, it looked frozen. It
  *     pauses only while a finger is on it (otherwise the drift fights the
- *     swipe) and while the browser tab is hidden, and it does not run at all
- *     for a visitor whose system asks for reduced motion.
+ *     swipe) and while the browser tab is hidden.
+ *   - It also used to stop for `prefers-reduced-motion: reduce`, the
+ *     accessible default -- and that is why Tom saw a frozen row in Edge
+ *     while the same build drifted elsewhere (reproduced by emulating the
+ *     query: 0px of travel against 9px over the same three seconds). His
+ *     call is that the row always moves, so the query no longer stops it.
+ *     The drift is slow, loops seamlessly, and a finger on it still halts
+ *     it -- but there is no permanent pause control on the page.
  *
  * The clones are aria-hidden and untabbable, so a screen reader and the
  * keyboard meet each photograph exactly once. The photographs are the
@@ -119,7 +125,6 @@ export default function HeroImageSlideshow({ slides, imageAlt }: { slides: HeroS
   // The drift itself.
   useEffect(() => {
     if (!loop || held || hidden) return;
-    if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     let last = 0;
     const timer = createTimer({
       duration: Infinity,

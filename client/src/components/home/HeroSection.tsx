@@ -74,7 +74,22 @@ export default function HeroSection({ imageFor, mediaReady = true }: {
         ? <HeroImageSlideshow slides={slides} imageAlt="SUGI ASAYAKE everyday-care products" />
         : <div className="hero-rail-reserve" aria-hidden="true" />}
       <div className="hero-copy">
-        <p className="eyebrow">{textFor("home-text-hero-eyebrow", "SUGI ASAYAKE / MONGOLIA")}</p>
+        {/* Tom, 2026-09-12: the brand half sits on the house red and the
+            place half on the house blue, same typeface and size as before.
+            The slash in the admin's own text is what separates them, so an
+            admin can retitle either half (or drop the slash, in which case
+            the whole line renders as one red mark). */}
+        <p className="eyebrow hero-eyebrow">
+          {(() => {
+            const raw = textFor("home-text-hero-eyebrow", "SUGI ASAYAKE / MONGOLIA");
+            const [brandPart, ...rest] = raw.split("/");
+            const placePart = rest.join("/").trim();
+            return <>
+              <span className="hero-eyebrow-brand">{brandPart.trim()}</span>
+              {placePart ? <span className="hero-eyebrow-place">{placePart}</span> : null}
+            </>;
+          })()}
+        </p>
         <h1 id="hero-title">{heading}</h1>
         <p className="hero-description">{textFor("home-text-hero-description", "Японоос баталгаат бүтээгдэхүүнүүдийг албан ёсны эрхтэйгээр танд хүргэж байна.")}</p>
         <div className="hero-actions">

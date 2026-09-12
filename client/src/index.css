@@ -3570,3 +3570,27 @@ body:has(.auth-shell) { background: #fff; }
   .header-search-compact { display: block; }
   .commerce-header-actions { margin-left: auto; }
 }
+/* The hero's brand line: "SUGI ASAYAKE" on the house red, "MONGOLIA" on the
+   house blue (Tom). Same family, size and tracking as the eyebrow it
+   replaces -- only the ground changes. The generic ".sugi-site .eyebrow
+   span { display: none }" above hides the little dot some eyebrows carry,
+   so these two marks opt back in explicitly. */
+.sugi-site .hero-eyebrow { display: inline-flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.sugi-site .hero-eyebrow .hero-eyebrow-brand,
+.sugi-site .hero-eyebrow .hero-eyebrow-place {
+  display: inline-flex;
+  /* .eyebrow span is the little 7x7 dot some eyebrows carry, and it sets a
+     fixed width and height -- which squeezed these two marks down to 7px
+     and cut their words off. They size to their text. */
+  width: auto;
+  height: auto;
+  align-items: center;
+  padding: 5px 11px;
+  border-radius: 3px;
+  color: #fff;
+  font: inherit;
+  letter-spacing: inherit;
+  white-space: nowrap;
+}
+.sugi-site .hero-eyebrow .hero-eyebrow-brand { background: var(--primary); }
+.sugi-site .hero-eyebrow .hero-eyebrow-place { background: var(--sky); }
