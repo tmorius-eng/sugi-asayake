@@ -32,6 +32,7 @@
     "@trpc/react-query": "^11.6.0",
     "@trpc/server": "^11.6.0",
     "@vladmandic/face-api": "^1.7.15",
+    "animejs": "^4.5.0",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "compression": "^1.8.1",

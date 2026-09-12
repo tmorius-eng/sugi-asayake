@@ -2949,7 +2949,12 @@ body:has(.sugi-site) { background: #fff; }
   gap: 16px;
   padding: 0 max(16px, calc((100% - 1380px) / 2));
   overflow-x: auto;
-  scroll-snap-type: x mandatory;
+  /* No scroll snapping here, deliberately: the row is a continuous marquee
+     that moves a fraction of a pixel per frame, and a mandatory snap point
+     drags every one of those fractions straight back to the nearest tile --
+     measured, the position never budged from its start value. Snapping
+     stays on the category rail, which advances a whole card at a time. */
+  scroll-snap-type: none;
   scrollbar-width: none;
   overscroll-behavior-x: contain;
 }
@@ -2957,7 +2962,6 @@ body:has(.sugi-site) { background: #fff; }
 .hero-rail-slide {
   flex: 0 0 min(450px, 74vw);
   margin: 0;
-  scroll-snap-align: center;
 }
 .hero-rail-link { display: block; overflow: hidden; background: var(--ck-chip); }
 .hero-rail-slide img { width: 100%; aspect-ratio: 1; object-fit: cover; transition: opacity .25s var(--ease-out); }

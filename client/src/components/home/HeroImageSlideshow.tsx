@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
+import { createTimer } from "animejs";
 
 export type HeroSlide = {
   key: string;
@@ -11,34 +12,47 @@ export type HeroSlide = {
 /**
  * The homepage's opening row of square feature tiles -- built 2026-09-12
  * against cosmekitchen-webstore.jp, the reference Tom chose: 450px square
- * photographs, one short caption under each, a line of dots.
+ * photographs with one short caption under each.
  *
- * It slides for real, always (Tom: "eniiig slide hiideg bolgoo") -- the
- * first version only moved when the tiles happened to overflow, so on a
- * wide screen with three tiles it sat still. The row is now the same
- * endless rail CategoryRail uses: the list is laid out three times over,
- * the view starts on the middle copy, and whenever scrolling drifts more
- * than half a set into the first or last copy the position jumps by exactly
- * one set width -- onto the identical tile, so the jump is invisible. That
- * guarantees there is always somewhere to advance to, at any width and with
- * any number of photographs.
+ * Motion, after three rounds of Tom's feedback ("hudluhgui baina",
+ * "animejs ees heregtei animation code av", "zuunees baruun tiishee
+ * ursahgui baina zogsoltgui"): the row is a **continuous marquee**, not a
+ * slideshow that jumps every few seconds. The photographs drift steadily to
+ * the right and never stop.
+ *
+ *   - The ticker is anime.js (`createTimer`, an infinite timer). Each frame
+ *     it moves the rail's own scrollLeft by speed x elapsed time, so the
+ *     travel is a constant number of pixels per second regardless of the
+ *     display's refresh rate. It is a real scroll position, not a
+ *     transform, so a finger can still grab the row and the browser's own
+ *     momentum takes over.
+ *   - "Endless" is three copies of the list laid end to end. The view
+ *     starts on the middle copy, and whenever the drift carries it more
+ *     than half a set out of that copy the position shifts by exactly one
+ *     set width -- onto the identical photograph, so nothing visibly jumps.
+ *   - Nothing pauses on hover. An earlier version did, and since a
+ *     visitor's cursor usually rests over the hero, it looked frozen. It
+ *     pauses only while a finger is on it (otherwise the drift fights the
+ *     swipe) and while the browser tab is hidden, and it does not run at all
+ *     for a visitor whose system asks for reduced motion.
  *
  * The clones are aria-hidden and untabbable, so a screen reader and the
- * keyboard meet each photograph exactly once. Auto-advance is one tile
- * every four seconds (Tom); it pauses under the pointer or a finger, while the
- * tab is hidden, and entirely for a visitor who asked for reduced motion.
- *
- * The photographs are the admin's own hero slots (up to six, see
- * HeroSection) and each caption is a site-text slot.
+ * keyboard meet each photograph exactly once. The photographs are the
+ * admin's own hero slots (up to six, see HeroSection) and each caption is a
+ * site-text slot.
  */
-const SLIDE_MS = 4000;
+/** One photograph passes every this many milliseconds. Tom tuned this by
+ *  eye: 4000 stepped ("too slow"), 2500 drifting ("too fast"), 3500 ("still
+ *  fast"), 5000 -- a calm, premium drift rather than a scroller. */
+const MS_PER_SLIDE = 5000;
 const COPIES = 3;
 
 export default function HeroImageSlideshow({ slides, imageAlt }: { slides: HeroSlide[]; imageAlt: string }) {
   const railRef = useRef<HTMLDivElement>(null);
   const setWidth = useRef(0);
   const [active, setActive] = useState(0);
-  const [paused, setPaused] = useState(false);
+  const [held, setHeld] = useState(false);
+  const [hidden, setHidden] = useState(false);
   const count = slides.length;
   const loop = count > 1;
 
@@ -54,27 +68,7 @@ export default function HeroImageSlideshow({ slides, imageAlt }: { slides: HeroS
     return setWidth.current;
   }, []);
 
-  // Start on the middle copy, before the first paint.
-  useEffect(() => {
-    const rail = railRef.current;
-    if (!rail || !loop) return;
-    const width = measure();
-    rail.scrollLeft = width;
-    const onResize = () => {
-      const before = setWidth.current || 1;
-      const ratio = rail.scrollLeft / before;
-      rail.scrollLeft = ratio * measure();
-    };
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [loop, measure, count]);
-
-  /**
-   * Shift the view by exactly one set, onto the identical tile. Only ever
-   * called when no animation is running: doing it mid-glide fought the
-   * in-flight smooth scroll and made the row jump backwards (measured --
-   * the position oscillated instead of advancing).
-   */
+  /** Keep the view inside the middle copy; the shift lands on a twin tile. */
   const wrap = useCallback(() => {
     const rail = railRef.current;
     const width = setWidth.current;
@@ -83,13 +77,58 @@ export default function HeroImageSlideshow({ slides, imageAlt }: { slides: HeroS
     else if (rail.scrollLeft > width * 1.5) rail.scrollLeft -= width;
   }, [loop]);
 
-  // Track which photograph is nearest the centre so the dots can follow it,
-  // and wrap back into the middle copy once scrolling has actually stopped.
+  // Start on the middle copy, and re-measure when the layout changes.
+  useEffect(() => {
+    const rail = railRef.current;
+    if (!rail || !loop) return;
+    rail.scrollLeft = measure();
+    const onResize = () => {
+      const before = setWidth.current || 1;
+      const ratio = rail.scrollLeft / before;
+      rail.scrollLeft = ratio * measure();
+    };
+    window.addEventListener("resize", onResize);
+    // The photographs load lazily; their arrival can change the set width.
+    const observer = new ResizeObserver(() => { measure(); });
+    observer.observe(rail);
+    return () => { window.removeEventListener("resize", onResize); observer.disconnect(); };
+  }, [loop, measure, count]);
+
+  // The drift itself.
+  useEffect(() => {
+    if (!loop || held || hidden) return;
+    if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let last = 0;
+    const timer = createTimer({
+      duration: Infinity,
+      onUpdate: self => {
+        const rail = railRef.current;
+        if (!rail) return;
+        const now = self.currentTime;
+        const elapsed = last ? Math.min(now - last, 100) : 0;
+        last = now;
+        if (!setWidth.current) measure();
+        // Speed is derived from the tile pitch rather than fixed in pixels,
+        // so one photograph passes every MS_PER_SLIDE at any width
+        // -- on a phone the tiles are smaller and the drift slows to match.
+        const first = rail.querySelector<HTMLElement>("[data-hero-tile]");
+        if (!first) return;
+        const styles = getComputedStyle(rail);
+        const gap = Number.parseFloat(styles.columnGap || styles.gap || "0") || 0;
+        const pitch = first.getBoundingClientRect().width + gap;
+        // Right-drifting content means a decreasing scroll position.
+        rail.scrollLeft -= (pitch * elapsed) / MS_PER_SLIDE;
+        wrap();
+      },
+    });
+    return () => { timer.pause(); timer.revert(); };
+  }, [loop, held, hidden, measure, wrap]);
+
+  // Which photograph is nearest the centre, for the dots.
   useEffect(() => {
     const rail = railRef.current;
     if (!rail) return;
     let frame = 0;
-    let idle = 0;
     const settle = () => {
       frame = 0;
       const centre = rail.scrollLeft + rail.clientWidth / 2;
@@ -101,49 +140,19 @@ export default function HeroImageSlideshow({ slides, imageAlt }: { slides: HeroS
       });
       setActive(best % count);
     };
-    const onScroll = () => {
-      if (!frame) frame = requestAnimationFrame(settle);
-      window.clearTimeout(idle);
-      // 140ms of stillness means the glide (or the finger) is done.
-      idle = window.setTimeout(wrap, 140);
-    };
+    const onScroll = () => { if (!frame) frame = requestAnimationFrame(settle); };
     rail.addEventListener("scroll", onScroll, { passive: true });
     settle();
-    return () => { rail.removeEventListener("scroll", onScroll); window.clearTimeout(idle); if (frame) cancelAnimationFrame(frame); };
-  }, [loop, count, wrap]);
-
-  /** One tile, plus the gap between tiles. */
-  const step = () => {
-    const rail = railRef.current;
-    const first = rail?.querySelector<HTMLElement>("[data-hero-tile]");
-    if (!rail || !first) return 0;
-    const styles = getComputedStyle(rail);
-    const gap = Number.parseFloat(styles.columnGap || styles.gap || "0") || 0;
-    return first.getBoundingClientRect().width + gap;
-  };
+    return () => { rail.removeEventListener("scroll", onScroll); if (frame) cancelAnimationFrame(frame); };
+  }, [count]);
 
   useEffect(() => {
-    if (!loop || paused) return;
-    if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const timer = window.setTimeout(() => {
-      const rail = railRef.current;
-      if (!rail) return;
-      const distance = step();
-      // Wrap first if the next tile would leave the middle copy, so the
-      // glide itself never crosses the seam.
-      if (setWidth.current && rail.scrollLeft + distance > setWidth.current * 1.5) rail.scrollLeft -= setWidth.current;
-      rail.scrollBy({ left: distance, behavior: "smooth" });
-    }, SLIDE_MS);
-    return () => window.clearTimeout(timer);
-  }, [loop, paused, active]);
-
-  useEffect(() => {
-    const sync = () => setPaused(document.hidden);
+    const sync = () => setHidden(document.hidden);
     document.addEventListener("visibilitychange", sync);
     return () => document.removeEventListener("visibilitychange", sync);
   }, []);
 
-  /** Scroll to a photograph by its position in the real (middle) copy. */
+  /** A dot jumps the drift to that photograph and lets it carry on. */
   const goTo = (index: number) => {
     const rail = railRef.current;
     if (!rail) return;
@@ -160,12 +169,9 @@ export default function HeroImageSlideshow({ slides, imageAlt }: { slides: HeroS
   return (
     <div
       className="hero-rail-wrap"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-      onTouchStart={() => setPaused(true)}
-      onTouchEnd={() => setPaused(false)}
-      onFocusCapture={() => setPaused(true)}
-      onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setPaused(false); }}
+      onTouchStart={() => setHeld(true)}
+      onTouchEnd={() => setHeld(false)}
+      onTouchCancel={() => setHeld(false)}
     >
       <div ref={railRef} className="hero-rail" role="group" aria-roledescription="слайд шоу" aria-label={imageAlt}>
         {Array.from({ length: copies }, (_, copy) => slides.map((slide, index) => {
