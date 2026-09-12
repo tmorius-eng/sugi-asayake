@@ -45,7 +45,10 @@ export default function Login() {
   const redirectTarget = (() => {
     const params = new URLSearchParams(search);
     const target = params.get("redirect");
-    return target && target.startsWith("/") ? target : "/";
+    // Same-site paths only. "//evil.example" also starts with "/" and is a
+    // protocol-relative URL to another host -- wouter would refuse it (a
+    // cross-origin pushState throws), but the guard should not rely on that.
+    return target && target.startsWith("/") && !target.startsWith("//") ? target : "/";
   })();
 
   const loginMutation = trpc.auth.login.useMutation();

@@ -183,7 +183,7 @@ export default function AdminUserDetailDrawer({ userId, role, onClose }: { userI
             {isAdmin ? <>
               <label className="mt-3 grid gap-1.5 text-xs font-bold">Дэлгүүрт биечлэн худалдан авсан урьдчилсан дүн (₮)
                 <div className="flex gap-2">
-                  <input type="number" min="0" value={loyaltyAdjustment} onChange={event => setLoyaltyAdjustment(event.target.value)} className="h-10 flex-1 rounded-xl border border-[var(--a-border)] px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" />
+                  <input type="number" min="0" aria-label="Оноо" value={loyaltyAdjustment} onChange={event => setLoyaltyAdjustment(event.target.value)} className="h-10 flex-1 rounded-xl border border-[var(--a-border)] px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" />
                   <button type="button" disabled={updateLoyaltyAdjustment.isPending} onClick={onSaveLoyaltyAdjustment} className="shrink-0 rounded-xl bg-[var(--a-btn-dark)] px-4 text-xs font-bold text-white disabled:opacity-60">{updateLoyaltyAdjustment.isPending ? <LoaderCircle className="animate-spin" size={14} /> : "Хадгалах"}</button>
                 </div>
               </label>

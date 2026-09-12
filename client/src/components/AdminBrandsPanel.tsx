@@ -148,7 +148,7 @@ export default function AdminBrandsPanel() {
             renderRow={brand => {
               const index = brands.findIndex(row => row.id === brand.id);
               return (
-                <div className="flex items-center gap-3 rounded-2xl border border-[var(--a-border)] bg-[var(--a-card)] p-3">
+                <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[var(--a-border)] bg-[var(--a-card)] p-3 sm:flex-nowrap">
                   <img src={brand.photoUrl ?? "/product-placeholder.svg"} alt="" className="size-14 shrink-0 rounded-xl bg-[var(--a-soft)] object-cover" />
                   <div className="min-w-0 flex-1">
                     <strong className="block truncate text-sm">{brand.brandName}</strong>

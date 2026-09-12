@@ -99,6 +99,15 @@ export default function AdminPosPanel() {
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
       <div>
+        {/* 2026-09-12 audit: since Tom's decision that the shops ring up every
+            sale in Smart POS (and its stock is pulled back as a stocktake),
+            a sale entered here for a store branch is counted twice -- once
+            here, once in Smart POS -- and the next stock pull would then
+            propose "correcting" it away. The tool stays for locations
+            without a register; the screen has to say so. */}
+        <p className="mb-4 rounded-2xl bg-[var(--a-warn-soft)] p-3 text-[11px] leading-4 text-[var(--a-warn)]">
+          <strong>Дэлгүүрүүд Smart POS-оор зардаг.</strong> Дэлгүүрийн салбарт энд бүртгэсэн борлуулалт Smart POS-тэй давхардаж, дараагийн үлдэгдэл татахад зөрүү болж гарна. Энэ хэрэгслийг зөвхөн кассгүй байршилд (агуулах, түр цэг) ашиглана уу.
+        </p>
         <label className="grid gap-1.5 text-xs font-bold">
           <span className="flex items-center gap-1.5"><Store size={13} />Салбар</span>
           <select value={branchId ?? ""} onChange={event => { setBranchId(event.target.value ? Number(event.target.value) : null); setLineItems([]); }} className="h-11 w-full max-w-sm rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]">

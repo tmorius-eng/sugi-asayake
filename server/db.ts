@@ -158,6 +158,33 @@ export async function getUserById(id: number) {
   return result[0];
 }
 
+/**
+ * The user row as the SESSION sees it, held for a few seconds
+ * (2026-09-12 performance pass). Every authenticated request used to re-read
+ * this row before doing any work -- one round trip to Aiven, ~170ms from
+ * Bangalore, per call.
+ *
+ * Keyed by user id, not by session token, so that the writers below can drop
+ * it the instant something security-relevant changes: a "sign out
+ * everywhere" or password reset (sessionVersion), a suspension, a role
+ * change, an account deletion. The first version of this cache was keyed by
+ * token and could not be invalidated -- server/auth.session-versioning
+ * caught it: a bumped sessionVersion was still honoured for up to five
+ * seconds. Now those take effect on the very next request, and the TTL only
+ * bounds staleness for fields nobody enforces access on (name, avatar).
+ */
+const SESSION_USER_TTL_MS = 5_000;
+const sessionUserKey = (id: number) => `session-user:${id}`;
+
+export async function getSessionUserById(id: number) {
+  return getOrSetCached(sessionUserKey(id), SESSION_USER_TTL_MS, () => getUserById(id));
+}
+
+/** Every write that changes what a session is allowed to do calls this. */
+function forgetSessionUser(id: number) {
+  invalidateCached(sessionUserKey(id));
+}
+
 // 2026-09-05 ("remove email!!! only phone number!!!" -- Tom, explicit):
 // phone is now the required, unique account identifier (see users.phone's
 // own comment in drizzle/schema.ts) -- email is optional and only ever
@@ -322,6 +349,7 @@ export async function changeUserPassword(userId: number, passwordHash: string) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.update(users).set({ passwordHash, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: new Date() }).where(eq(users.id, userId));
+  forgetSessionUser(userId);
   const updated = await getUserById(userId);
   if (!updated) throw new Error("Хэрэглэгч олдсонгүй.");
   return updated;
@@ -342,6 +370,7 @@ export async function deleteUserAccount(userId: number) {
   if (!db) throw new Error("Database is not available");
   try {
     await db.delete(users).where(eq(users.id, userId));
+    forgetSessionUser(userId);
   } catch {
     throw new Error("Энэ акаунт агуулга (пост, лог г.м.) үүсгэсэн байгаа тул автоматаар устгах боломжгүй. Дэлгүүрийн админтай холбогдоно уу.");
   }
@@ -411,6 +440,7 @@ export async function bumpUserSessionVersion(id: number) {
   const db = await getDb();
   if (!db) return;
   await db.update(users).set({ sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: new Date() }).where(eq(users.id, id));
+  forgetSessionUser(id);
 }
 
 // Tom, 2026-09-05 ("we do not need brevo at all"): the email-OTP password
@@ -542,6 +572,7 @@ export async function resetPasswordViaPhoneSession(input: { sessionId: number; p
 
   try {
     await db.update(users).set({ passwordHash: input.passwordHash, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: new Date() }).where(eq(users.id, session.userId));
+  forgetSessionUser(session.userId);
   } catch (error) {
     // Claimed the session but the actual password update failed (a genuine
     // DB error) -- release the claim so the shopper isn't left with a
@@ -4779,6 +4810,7 @@ export async function suspendUser(input: { userId: number; reason?: string | nul
   const current = await db.select({ id: users.id }).from(users).where(eq(users.id, input.userId)).limit(1);
   if (!current[0]) throw new Error("User not found.");
   await db.update(users).set({ suspendedAt: new Date(), suspendedReason: input.reason?.trim() || null, updatedAt: new Date() }).where(eq(users.id, input.userId));
+  forgetSessionUser(input.userId);
   const updated = await db.select().from(users).where(eq(users.id, input.userId)).limit(1);
   const { passwordHash: _passwordHash, ...safeUser } = updated[0];
   return safeUser;
@@ -4790,6 +4822,7 @@ export async function unsuspendUser(userId: number) {
   const current = await db.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1);
   if (!current[0]) throw new Error("User not found.");
   await db.update(users).set({ suspendedAt: null, suspendedReason: null, updatedAt: new Date() }).where(eq(users.id, userId));
+  forgetSessionUser(userId);
   const updated = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   const { passwordHash: _passwordHash, ...safeUser } = updated[0];
   return safeUser;
@@ -4814,6 +4847,7 @@ export async function updateAdminUserRole(input: { userId: number; role: "user" 
   const user = await db.select({ id: users.id, name: users.name, email: users.email, role: users.role }).from(users).where(eq(users.id, input.userId)).limit(1);
   if (!user[0]) throw new Error("User not found.");
   await db.update(users).set({ role: input.role, updatedAt: new Date() }).where(eq(users.id, input.userId));
+  forgetSessionUser(input.userId);
   return { ...user[0], role: input.role };
 }
 

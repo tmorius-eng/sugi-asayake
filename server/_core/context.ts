@@ -5,8 +5,7 @@ import { parse as parseCookieHeader } from "cookie";
 import { jwtVerify } from "jose";
 import { COOKIE_NAME } from "@shared/const";
 import { ENV } from "./env";
-import { getUserById } from "../db";
-import { getOrSetCached } from "./ttlCache";
+import { getSessionUserById } from "../db";
 import type { User } from "../../drizzle/schema";
 
 // Audit finding BUG-001: called once at process startup (see
@@ -64,32 +63,9 @@ export async function signSessionToken(userId: number, sessionVersion: number): 
     .sign(secretKey());
 }
 
-/**
- * How long a verified session is trusted without re-reading the user row
- * (2026-09-12 performance pass).
- *
- * Every authenticated request used to cost one round trip to Aiven -- ~170ms
- * from Bangalore -- purely to re-read the same row, BEFORE any of the work
- * the request actually came to do. In /admin, where a screen fires several
- * calls, that was the single largest cost on the page.
- *
- * The window is deliberately seconds, not minutes: this row is what carries
- * suspension, role and sessionVersion, so a suspended account, a demoted one
- * or a "sign out everywhere" must still take effect while somebody is
- * standing there watching it happen. Five seconds is short enough to feel
- * immediate and long enough that a burst of calls from one screen costs one
- * lookup instead of a dozen.
- *
- * Keyed by the token, so it cannot outlive the session it belongs to, and
- * per-process like every other cache here (see _core/ttlCache.ts).
- */
-const SESSION_CACHE_TTL_MS = 5_000;
-
 async function userFromToken(token: string | undefined): Promise<SessionUser | null> {
   if (!token) return null;
-  // A rejected token is cached as `null` too -- otherwise a stale cookie in
-  // some background tab would hammer the database on every poll.
-  return getOrSetCached(`session:${token}`, SESSION_CACHE_TTL_MS, () => resolveUserFromToken(token));
+  return resolveUserFromToken(token);
 }
 
 async function resolveUserFromToken(token: string): Promise<SessionUser | null> {
@@ -97,7 +73,11 @@ async function resolveUserFromToken(token: string): Promise<SessionUser | null> 
     const { payload } = await jwtVerify(token, secretKey());
     const userId = Number(payload.sub);
     if (!Number.isFinite(userId)) return null;
-    const user = await getUserById(userId);
+    // The row comes from a per-user cache (server/db.ts getSessionUserById)
+    // that every security-relevant writer invalidates, so a suspension, a
+    // role change or a sessionVersion bump is seen on the very next request
+    // while an ordinary request no longer pays a database round trip.
+    const user = await getSessionUserById(userId);
     if (!user) return null;
     // A token signed before the user's last "sign out everywhere" or
     // password reset carries the old sessionVersion — reject it just like an

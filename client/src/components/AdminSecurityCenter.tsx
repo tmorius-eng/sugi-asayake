@@ -22,8 +22,8 @@ export default function AdminSecurityCenter() {
   const [tab, setTab] = useState<"audit" | "logins" | "face" | "errors" | "sql">("audit");
 
   return (
-    <div className="grid gap-5">
-      <div className="inline-flex w-fit flex-wrap gap-1 rounded-full bg-[var(--a-soft)] p-1">
+    <div className="grid gap-5 [&>*]:min-w-0">
+      <div className="inline-flex w-fit max-w-full flex-wrap gap-1 rounded-full bg-[var(--a-soft)] p-1">
         <button type="button" onClick={() => setTab("audit")} className={`rounded-full px-4 py-2 text-xs font-bold transition ${tab === "audit" ? "bg-[var(--a-card)] shadow-sm" : "text-[var(--a-muted)]"}`}>Аудит лог</button>
         <button type="button" onClick={() => setTab("logins")} className={`rounded-full px-4 py-2 text-xs font-bold transition ${tab === "logins" ? "bg-[var(--a-card)] shadow-sm" : "text-[var(--a-muted)]"}`}>Нэвтрэлтийн түүх</button>
         <button type="button" onClick={() => setTab("face")} className={`rounded-full px-4 py-2 text-xs font-bold transition ${tab === "face" ? "bg-[var(--a-card)] shadow-sm" : "text-[var(--a-muted)]"}`}>Царайн шалгалт</button>

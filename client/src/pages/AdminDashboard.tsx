@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { LoaderCircle, LogIn } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
@@ -30,6 +31,13 @@ import AdminFaceGate from "@/components/AdminFaceGate";
 const ADMIN_PANEL_ROLES = new Set(["staff", "finance", "marketing", "warehouse", "admin"]);
 
 export default function AdminDashboard() {
+  // Marks the document so the storefront's cookie-consent widget stays hidden
+  // here (client/src/index.css, body.admin-route). Pageview tracking already
+  // ignores /admin, so a staff member has nothing to consent to on this screen.
+  useEffect(() => {
+    document.body.classList.add("admin-route");
+    return () => document.body.classList.remove("admin-route");
+  }, []);
   const { user, loading } = useAuth();
   const hasAccess = Boolean(user?.role && ADMIN_PANEL_ROLES.has(user.role));
 

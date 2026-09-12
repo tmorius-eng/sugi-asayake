@@ -114,12 +114,14 @@ export default function AdminStoreSettingsPanel({ preview = false }: { preview?:
                         <input
                           type="number"
                           min={0}
+                          aria-label={slot.label}
                           value={value}
                           onChange={event => setDrafts(current => ({ ...current, [slot.key]: event.target.value }))}
                           className="mt-3 h-11 w-full max-w-xs rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#3970a7]"
                         />
                       ) : (
                         <textarea
+                          aria-label={slot.label}
                           value={value}
                           onChange={event => setDrafts(current => ({ ...current, [slot.key]: event.target.value }))}
                           rows={2}

@@ -151,6 +151,7 @@ function ProviderCard({ row }: { row: IntegrationRow }) {
                     value={drafts[field.key] ?? ""}
                     onChange={event => setDrafts(current => ({ ...current, [field.key]: event.target.value }))}
                     type={isSecret ? "password" : "text"}
+                    aria-label={field.label}
                     autoComplete="off"
                     placeholder={state?.value ?? (state?.isSet ? "•••••••• (шинэ утга бичвэл солигдоно)" : field.defaultValue ?? "")}
                     className="mt-2 h-9 w-full rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] px-2.5 text-xs outline-none focus:border-[#df1f3d]"
@@ -283,7 +284,7 @@ function SmartSoftwareSyncPanel() {
 
   const busy = testConnection.isPending || pullStock.isPending;
   return (
-    <div className="mt-4 grid gap-3">
+    <div className="mt-4 grid gap-3 [&>*]:min-w-0">
       <p className={`rounded-xl p-3 text-[11px] leading-4 ${data.credentialsSet ? "bg-[var(--a-pos-soft)] text-[var(--a-pos)]" : "bg-[var(--a-soft)] text-[var(--a-muted)]"}`}>
         {data.credentialsSet
           ? data.isActive ? "Нэвтрэх мэдээлэл тохирсон, идэвхтэй — 15 минут тутам үлдэгдэл татаж, зөрүүг батлах тооллого болгоно." : "Нэвтрэх мэдээлэл тохирсон. Автомат синк эхлэхийн тулд дээрх \"Идэвхтэй\" товчийг асаана уу (одоо ч гараар татаж болно)."
@@ -300,7 +301,7 @@ function SmartSoftwareSyncPanel() {
       {locations.length > 0 && <p className="text-[11px] text-[var(--a-muted)]">Smart POS байршлууд: {locations.map(location => `${location.id} · ${location.name}`).join(" | ")}</p>}
       <div className="rounded-2xl bg-[var(--a-soft)] p-3">
         <p className="text-[10px] font-extrabold tracking-[.08em] text-[var(--a-info)]">САЛБАРЫН КОД (SMART POS)</p>
-        <div className="mt-2 grid gap-1.5">
+        <div className="mt-2 grid gap-1.5 [&>*]:min-w-0">
           {data.branches.filter(branch => branch.isActive).map(branch => {
             const draft = drafts[branch.id];
             const dirty = draft !== undefined && draft.trim() !== (branch.externalId ?? "");
@@ -368,7 +369,7 @@ export default function AdminIntegrationsPanel() {
   const ordered = [...integrations].sort((a, b) => Number(INTEGRATION_META[b.provider].wiredUp) - Number(INTEGRATION_META[a.provider].wiredUp));
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-4 [&>*]:min-w-0">
       <div className="rounded-3xl border border-[var(--a-border)] bg-[var(--a-card)] p-5">
         <div className="flex items-center justify-between gap-3">
           <div><p className="text-[10px] font-extrabold tracking-[.14em] text-[var(--a-info)]">QPAY</p><h3 className="mt-1 font-bold">QPay төлбөр</h3><p className="mt-1 text-xs text-[var(--a-muted)]">Тохиргоог `.env`-ээр удирддаг, энэ дэлгэцээс өөрчлөх боломжгүй.</p></div>
