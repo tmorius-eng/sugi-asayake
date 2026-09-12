@@ -194,11 +194,15 @@ export default function Shop() {
   });
   const searchResults = trpc.catalog.search.useQuery({ query: debouncedSearch }, { enabled: isSearching });
   const wishlist = trpc.profile.wishlist.list.useQuery(undefined, { enabled: isAuthenticated });
-  // Preference Profile v2 (2026-09-01): catalog.recommended is now public --
-  // always fetches, no isAuthenticated gate. A guest or never-tagged
-  // shopper still gets a bestseller-backed list server-side (see
-  // getRecommendedProducts), so this section is never silently hidden.
-  const recommended = trpc.catalog.recommended.useQuery();
+  // 2026-09-12 (Tom: "bi login hiigegui baihad ... tanid sanal bolgoj baina
+  // geed ... bi profile preference hiisen login hiisen hund l iimerduu ym
+  // garga"): the rail is headed "Танд санал болгож байна" and describes the
+  // reader's own saved skin type and interests, so it is shown to exactly
+  // the people that sentence is true for -- signed in, with preferences or
+  // a purchase history on file. personalOnly makes the server return
+  // nothing rather than the bestseller-backed fallback, and the query does
+  // not fire at all for a guest.
+  const recommended = trpc.catalog.recommended.useQuery({ personalOnly: true }, { enabled: isAuthenticated });
   const wishlistIds = useMemo(() => new Set(wishlist.data?.map(item => item.productId) ?? []), [wishlist.data]);
   const toggleWishlist = trpc.profile.wishlist.toggle.useMutation({ onSuccess: () => utils.profile.wishlist.list.invalidate() });
   const onToggleWishlist = (productId: number) => {
