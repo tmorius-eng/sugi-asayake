@@ -424,7 +424,7 @@ export async function getUsersByLoyaltyTier(tierName: string) {
     .map(row => ({ id: row.id, name: row.name, phone: row.phone, email: row.email }));
 }
 
-const CHANNEL_LABELS: Record<string, string> = { ub_delivery: "УБ хүргэлт", store_pickup: "Салбараас авах", qpay: "QPay", bank_transfer: "Банкны шилжүүлэг", card: "Карт", cash_on_delivery: "Бэлэн мөнгө" };
+const CHANNEL_LABELS: Record<string, string> = { ub_delivery: "УБ хүргэлт", store_pickup: "Салбараас авах", qpay: "QPay", storepay: "StorePay", bank_transfer: "Банкны шилжүүлэг", card: "Карт", cash_on_delivery: "Бэлэн мөнгө" };
 
 /** "Orders by channel" adapted to what this business actually has, rather
  *  than a generic marketplace/shop/store split that doesn't apply here:

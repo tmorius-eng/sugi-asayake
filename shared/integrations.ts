@@ -80,7 +80,26 @@ export const INTEGRATION_META: Record<IntegrationProvider, IntegrationMeta> = {
     freeForm: true,
     testable: false,
   },
-  storepay: { label: "StorePay", note: "Хэсэгчилсэн төлбөр (BNPL)", wiredUp: false, fields: [], freeForm: true, testable: false },
+  // 2026-09-12: read by server/storepay.ts. StorePay issue TWO credential
+  // pairs -- an app pair that signs the password grant and a Basic-auth pair
+  // -- plus the store id; their own Go SDK takes exactly these seven values.
+  storepay: {
+    label: "StorePay",
+    note: "Хэсэгчилсэн төлбөр (BNPL) — харилцагч StorePay апп дээрээ зөвшөөрнө",
+    wiredUp: true,
+    guidance: "StorePay-ээс мерчантын мэдээлэл авахдаа ХОЁР хос нэр/нууц үг (апп-ын болон үндсэн), дэлгүүрийн код (storeId), мөн auth/api хаягийг асууна. Долоо нь бүгд бөглөгдөж, \"Идэвхтэй\" болсон үед л худалдан авагчид төлбөрийн сонголт болж харагдана. Захиалгын дүнг StorePay руу илгээхэд харилцагч апп дээрээ зөвшөөрч, бид зөвшөөрснийг нь өөрсдөө шалгаад захиалгыг баталгаажуулна.",
+    fields: [
+      { key: "authUrl", label: "Auth хаяг", kind: "url", help: "Token авах сервер (StorePay өгнө)." },
+      { key: "baseUrl", label: "API хаяг", kind: "url", help: "/merchant/loan, /user/possibleAmount дуудагдах сервер." },
+      { key: "appUsername", label: "Апп-ын нэвтрэх нэр", kind: "text" },
+      { key: "appPassword", label: "Апп-ын нууц үг", kind: "secret" },
+      { key: "username", label: "Үндсэн нэвтрэх нэр", kind: "text" },
+      { key: "password", label: "Үндсэн нууц үг", kind: "secret" },
+      { key: "storeId", label: "Дэлгүүрийн код (storeId)", kind: "text" },
+    ],
+    freeForm: false,
+    testable: false,
+  },
   card_golomt: { label: "Голомт банк (карт)", note: "Visa/Mastercard шууд төлбөр (e-Merchant)", wiredUp: false, fields: [], freeForm: true, testable: false },
   courier_ebuuhia: { label: "eBuuhia хүргэлт", note: "Эльчийн хүргэлтийн үйлчилгээ", wiredUp: false, fields: [], freeForm: true, testable: false },
   ntfy: {

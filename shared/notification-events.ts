@@ -127,7 +127,7 @@ const deliveryLabel = (method: DeliveryMethod, pickupBranchName: string | null) 
   method === "store_pickup" ? `Очиж авах${pickupBranchName ? ` · ${pickupBranchName}` : ""}` : "УБ хүргэлт";
 
 const paymentLabel = (method: string) =>
-  method === "qpay" ? "QPay" : method === "bank_transfer" ? "Дансаар" : method === "card" ? "Карт" : method === "cash_on_delivery" ? "Хүргэлтээр бэлнээр" : method;
+  method === "qpay" ? "QPay" : method === "storepay" ? "StorePay" : method === "bank_transfer" ? "Дансаар" : method === "card" ? "Карт" : method === "cash_on_delivery" ? "Хүргэлтээр бэлнээр" : method;
 
 const pieces = (count: number) => `${count} ширхэг`;
 

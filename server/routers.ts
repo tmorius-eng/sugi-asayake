@@ -64,6 +64,7 @@ import {
   getApplicableRoutineDiscount,
   getUserLoyaltyStatus,
   createQPayPaymentAttempt,
+  createStorepayPaymentAttempt,
   createUserAddress,
   dbPing,
   deleteAdminDiscountCode,
@@ -213,6 +214,7 @@ import { sendNtfyTest } from "./notifications";
 import { notificationsRouter } from "./notificationsRouter";
 import { inventoryRouter } from "./inventoryRouter";
 import { getInventorySyncProvider, getInventorySyncStatus, runInventorySync, runPullSnapshot, setBranchExternalId } from "./integrations/inventorySync";
+import { createStorepayLoan, getStorepayAvailability, normaliseMobileNumber, storepayPossibleAmount } from "./storepay";
 // Registers the Smart Software adapter on import (side effect).
 import "./integrations/smartSoftware";
 import { assertImageSignature, imageContentTypes, processUploadedImageOrThrow } from "./_core/imageUpload";
@@ -1288,7 +1290,7 @@ export const appRouter = router({
       // "validate against real DB state in the resolver, not a static zod
       // enum" pattern as couponCode.
       pickupBranch: z.string().trim().max(160).or(z.literal("")).nullable().optional(),
-      paymentMethod: z.enum(["qpay", "bank_transfer", "card", "cash_on_delivery"]),
+      paymentMethod: z.enum(["qpay", "storepay", "bank_transfer", "card", "cash_on_delivery"]),
       couponCode: z.string().trim().min(1).max(40).nullable().optional(),
       trafficSource: z.string().trim().min(1).max(200).nullable().optional(),
       // "Controls everything" admin overhaul (2026-09-08, Phase I): re-
@@ -1590,6 +1592,45 @@ export const appRouter = router({
       if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found." });
       const attempt = await getLatestQPayPaymentAttemptForOrder(order.id);
       return { orderId: order.id, paymentStatus: order.paymentStatus, orderStatus: order.status, invoiceId: attempt?.providerInvoiceId ?? null, attemptStatus: attempt?.status ?? null };
+    }),
+    // StorePay (2026-09-12). Same three-step shape as QPay above: is it
+    // configured, open the request, then poll our own order row -- never the
+    // provider's word from the browser.
+    storepayAvailability: publicProcedure.query(() => getStorepayAvailability()),
+    // What this shopper may borrow, asked before they commit to the option.
+    // A phone number is personal data, so this is deliberately not public:
+    // only a signed-in shopper can ask, and only about one number at a time.
+    storepayLimit: protectedProcedure.input(z.object({ mobileNumber: z.string().trim().min(6).max(20) })).mutation(async ({ input }) => {
+      const mobileNumber = normaliseMobileNumber(input.mobileNumber);
+      if (!mobileNumber) throw new TRPCError({ code: "BAD_REQUEST", message: "Утасны дугаараа зөв оруулна уу (8 орон)." });
+      try {
+        return { mobileNumber, possibleAmountMnt: await storepayPossibleAmount(mobileNumber) };
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "StorePay-ээс хариу ирсэнгүй." });
+      }
+    }),
+    storepayCreateLoan: protectedProcedure.input(z.object({ orderId: z.number().int().positive(), mobileNumber: z.string().trim().min(6).max(20) })).mutation(async ({ ctx, input }) => {
+      if (!(await getStorepayAvailability()).configured) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "StorePay-ийн тохиргоо хараахан ороогүй байна." });
+      const mobileNumber = normaliseMobileNumber(input.mobileNumber);
+      if (!mobileNumber) throw new TRPCError({ code: "BAD_REQUEST", message: "Утасны дугаараа зөв оруулна уу (8 орон)." });
+      const order = await getOrderForUser(input.orderId, ctx.user.id);
+      if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found." });
+      if (order.paymentMethod !== "storepay") throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ захиалга StorePay-ээр төлөхөөр үүсээгүй байна." });
+      if (order.paymentStatus === "paid") throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ захиалга аль хэдийн төлөгдсөн." });
+      if (order.status === "cancelled" || order.status === "returned") throw new TRPCError({ code: "BAD_REQUEST", message: "Хаагдсан захиалгыг төлөх боломжгүй." });
+      let loan;
+      try {
+        loan = await createStorepayLoan({
+          mobileNumber,
+          description: `SUGI ASAYAKE ${order.orderNumber}`,
+          amountMnt: order.totalMnt,
+          callbackUrl: `${ENV.publicBaseUrl || `${ctx.req.protocol}://${ctx.req.get("host")}`}/api/payments/storepay/callback`,
+        });
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "StorePay зээл үүсгэж чадсангүй." });
+      }
+      await createStorepayPaymentAttempt({ orderId: order.id, providerInvoiceId: loan.loanId, responseJson: JSON.stringify(loan.raw) });
+      return { orderId: order.id, orderNumber: order.orderNumber, loanId: loan.loanId };
     }),
   }),
   /**

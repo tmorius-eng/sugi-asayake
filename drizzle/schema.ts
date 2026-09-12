@@ -683,7 +683,7 @@ export const orders = mysqlTable("orders", {
   // "Controls everything" admin overhaul (2026-09-08, Phase M): "in_store"
   // added for the POS tool (recordInStoreSale) -- a real register sale
   // collected in person, distinct from every online method above.
-  paymentMethod: mysqlEnum("paymentMethod", ["qpay", "bank_transfer", "card", "cash_on_delivery", "in_store"]).notNull(),
+  paymentMethod: mysqlEnum("paymentMethod", ["qpay", "storepay", "bank_transfer", "card", "cash_on_delivery", "in_store"]).notNull(),
   paymentStatus: mysqlEnum("paymentStatus", ["unpaid", "paid", "refunded"]).notNull().default("unpaid"),
   deliveryMethod: mysqlEnum("deliveryMethod", ["ub_delivery", "store_pickup"]).notNull(),
   // Phase M: a genuine online-vs-physical channel signal -- today's channel
@@ -932,7 +932,9 @@ export type InsertRoutineStep = typeof routineSteps.$inferInsert;
 export const paymentAttempts = mysqlTable("payment_attempts", {
   id: int("id").autoincrement().primaryKey(),
   orderId: int("orderId").notNull().references(() => orders.id, { onDelete: "cascade" }),
-  provider: mysqlEnum("provider", ["qpay"]).notNull(),
+  // 2026-09-12 (migration 0067): StorePay joins QPay. A StorePay loan id
+  // lives in providerInvoiceId, so every attempt lookup stays provider-agnostic.
+  provider: mysqlEnum("provider", ["qpay", "storepay"]).notNull(),
   providerInvoiceId: varchar("providerInvoiceId", { length: 128 }).notNull().unique(),
   providerPaymentId: varchar("providerPaymentId", { length: 128 }).unique(),
   status: mysqlEnum("status", ["created", "paid", "failed", "cancelled"]).notNull().default("created"),

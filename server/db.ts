@@ -1614,7 +1614,7 @@ export async function createOrderFromActiveCart(input: {
   deliveryAddress?: string | null;
   district?: UbDistrict | null;
   pickupBranch?: string | null;
-  paymentMethod: "qpay" | "bank_transfer" | "card" | "cash_on_delivery";
+  paymentMethod: "qpay" | "storepay" | "bank_transfer" | "card" | "cash_on_delivery";
   couponCode?: string | null;
   trafficSource?: string | null;
   deviceType?: "mobile" | "tablet" | "desktop" | "unknown";
@@ -2410,6 +2410,16 @@ export async function createQPayPaymentAttempt(input: { orderId: number; provide
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.insert(paymentAttempts).values({ orderId: input.orderId, provider: "qpay", providerInvoiceId: input.providerInvoiceId, responseJson: input.responseJson });
+  const attempt = await db.select().from(paymentAttempts).where(eq(paymentAttempts.providerInvoiceId, input.providerInvoiceId)).limit(1);
+  return attempt[0];
+}
+
+/** 2026-09-12: the StorePay equivalent -- one row per loan request, with the
+ *  loan id in providerInvoiceId so every attempt lookup stays shared. */
+export async function createStorepayPaymentAttempt(input: { orderId: number; providerInvoiceId: string; responseJson: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.insert(paymentAttempts).values({ orderId: input.orderId, provider: "storepay", providerInvoiceId: input.providerInvoiceId, responseJson: input.responseJson });
   const attempt = await db.select().from(paymentAttempts).where(eq(paymentAttempts.providerInvoiceId, input.providerInvoiceId)).limit(1);
   return attempt[0];
 }

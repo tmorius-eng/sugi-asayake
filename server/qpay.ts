@@ -196,17 +196,28 @@ function callbackInvoiceId(req: Request) {
 }
 
 export function registerQPayCallbackRoute(app: Express) {
-  app.post("/api/payments/qpay/callback", limitQPayCallbackTraffic, async (req: Request, res: Response) => {
+  const handler = async (req: Request, res: Response) => {
     const invoiceId = callbackInvoiceId(req);
     if (!invoiceId) return res.status(400).json({ ok: false, error: "Missing QPay invoice ID." });
     if (!getQPayAvailability().configured) return res.status(503).json({ ok: false, error: "QPay is not configured." });
 
     try {
-      const result = await verifyQPayCallback(invoiceId);
-      return res.status(200).json({ ok: true, paid: result.paid });
+      await verifyQPayCallback(invoiceId);
+      // QPay's own contract: a callback is only considered delivered when it
+      // answers 200 with the body "SUCCESS" -- anything else (JSON included,
+      // which is what this returned before 2026-09-12) leaves QPay retrying
+      // the callback. The work above is idempotent either way, so a retry
+      // was survivable, just noisy.
+      return res.status(200).type("text/plain").send("SUCCESS");
     } catch (error) {
+      // Deliberately NOT "SUCCESS": we could not verify the payment, so QPay
+      // should try again.
       console.error("[QPay] Callback verification failed", error);
       return res.status(500).json({ ok: false, error: "Payment verification failed." });
     }
-  });
+  };
+  // QPay has been seen calling the callback both ways (their own examples
+  // append the reference as a query string), so accept either.
+  app.post("/api/payments/qpay/callback", limitQPayCallbackTraffic, handler);
+  app.get("/api/payments/qpay/callback", limitQPayCallbackTraffic, handler);
 }
