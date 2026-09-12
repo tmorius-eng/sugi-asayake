@@ -39,6 +39,14 @@
  *    excerpts (content.latestPosts / the Posts admin panel), product
  *    names/descriptions (the Products admin panel).
  */
+/** Icon names an admin may type into the "Яагаад биднийг сонгох вэ" icon
+ *  slots (2026-09-12). The storefront maps each to a lucide icon
+ *  (BrandStorySection.tsx); anything else falls back to the item's default. */
+export const WCU_ICON_NAMES = ["shopping-bag", "shield-check", "map-pin", "star", "heart", "truck", "sparkles", "badge-check", "leaf", "gift", "package", "smile"] as const;
+export type WcuIconName = (typeof WCU_ICON_NAMES)[number];
+const WCU_ICON_DESCRIPTION = `Icon-ий нэр. Боломжит утга: ${WCU_ICON_NAMES.join(", ")}. Буруу нэр бичвэл анхдагч icon харагдана.`;
+const WCU_COLOR_DESCRIPTION = "Tile-ийн дэвсгэр өнгө, hex хэлбэрээр (жишээ: #e94e3c). Icon нь цагаан тул тод, бараавтар өнгө сонго. Буруу утга бол анхдагч өнгө харагдана.";
+
 export const siteTextSlots = [
   // ---- Hero -------------------------------------------------------------
   {
@@ -249,26 +257,24 @@ export const siteTextSlots = [
     fallbackValue: "CURATED IN JAPAN\nFIND YOUR DAILY CARE\nУЛААНБААТАР / MONGOLIA",
   },
 
-  // ---- Why Choose Us (2026-09-06: absorbed the old standalone "Бидний
-  // ялгаа" story section and the customer-voices review strip -- see
-  // BrandStorySection.tsx. home-text-story-number/-eyebrow-label/-heading/
-  // -link-label were retired (fully redundant with this section's own
-  // eyebrow/heading once merged, and -link-label pointed at a "#collection"
-  // anchor that no longer exists) -- only -description survived, repurposed
-  // below as this section's first lede paragraph. ------------------------
+  // ---- Why Choose Us (2026-09-12: rebuilt against Tom's reference -- a
+  // light panel, centred eyebrow + title, three numbered columns; see
+  // BrandStorySection.tsx). The eyebrow slot is rendered again; the two
+  // lede paragraphs below are no longer shown but stay registered so a
+  // saved override is never lost. No key was added or removed. ----------
   {
     key: "home-text-wcu-eyebrow-label",
     group: "Яагаад биднийг сонгох вэ",
     label: "Эйброу текст",
-    description: "Хэсгийн дээд жижиг тэмдэглэгээ.",
+    description: "Гарчгийн дээрх төвлөрсөн, жижиг улаан шошго.",
     fallbackValue: "ЯАГААД БИДНИЙГ СОНГОХ ВЭ",
   },
   {
     key: "home-text-wcu-heading",
     group: "Яагаад биднийг сонгох вэ",
-    label: "Гарчиг (2 мөр)",
-    description: "Хэсгийн гарчиг.",
-    fallbackValue: "Япон чанарыг\nтанд ойртуулна.",
+    label: "Гарчиг",
+    description: "Төв гарчиг. Ихэвчлэн 1 мөр; Enter дарж 2 мөр болгож болно.",
+    fallbackValue: "Яагаад SUGI ASAYAKE вэ?",
   },
   {
     // Was "home-text-story-heading" + the old standalone Story section's
@@ -278,14 +284,14 @@ export const siteTextSlots = [
     key: "home-text-story-description",
     group: "Яагаад биднийг сонгох вэ",
     label: "Танилцуулга догол мөр (1)",
-    description: "Гарчигийн доорх эхний параграф -- \"бид хэн бэ\" гэсэн танилцуулга.",
+    description: "(2026-09-12-оос нүүрэнд харагдахгүй -- хадгалсан утга алдагдахгүй.) Гарчигийн доорх эхний параграф -- \"бид хэн бэ\" гэсэн танилцуулга.",
     fallbackValue: "SUGI ASAYAKE нь Японы SUGI Drug Store-ийн албан ёсны охин компани. Өдөр тутмын эрүүл мэнд, гоо сайхан, арчилгааг Монголын гэр бүл бүрт илүү ойртуулна.",
   },
   {
     key: "home-text-wcu-description",
     group: "Яагаад биднийг сонгох вэ",
     label: "Танилцуулга догол мөр (2)",
-    description: "Гарчигийн доорх хоёр дахь параграф.",
+    description: "(2026-09-12-оос нүүрэнд харагдахгүй -- хадгалсан утга алдагдахгүй.) Гарчигийн доорх хоёр дахь параграф.",
     fallbackValue: "SUGI ASAYAKE-ийг сонгох гурван шалтгаан — өргөн сонголт, баталгаат импорт, ойрхон салбарууд.",
   },
   {
@@ -298,9 +304,9 @@ export const siteTextSlots = [
   {
     key: "home-text-wcu-card1-desc",
     group: "Яагаад биднийг сонгох вэ",
-    label: "1-р картын тайлбар",
-    description: "800+ тоо энэ мөрөнд шууд бичигдсэн текст -- өөрчлөх бол энд шууд засна уу.",
-    fallbackValue: "Арчилгаа, гоо сайхан, эрүүл ахуйн 800+ төрөл",
+    label: "1-р зүйлийн тайлбар",
+    description: "{N} гэж бичсэн газар бодит барааны тоо (жишээ: 900+) автоматаар орно -- тоог гараар бичихгүй.",
+    fallbackValue: "Арчилгаа, гоо сайхан, эрүүл ахуйн {N} төрөл",
   },
   {
     key: "home-text-wcu-card2-title",
@@ -336,6 +342,52 @@ export const siteTextSlots = [
     label: "3-р картын тайлбар (тооны дараах текст)",
     description: "Бодит салбарын тооны дараа харагдах текст.",
     fallbackValue: "байршилд таныг хүлээнэ",
+  },
+  // 2026-09-12: the icon and tile colour of each of the three items are
+  // admin-editable too (Tom: "бүгд /admin дээр тохируулагддаг байг").
+  // Icon names come from WCU_ICON_NAMES below; an unknown name or an
+  // invalid colour falls back to the default, never to a broken tile.
+  {
+    key: "home-text-wcu-card1-icon",
+    group: "Яагаад биднийг сонгох вэ",
+    label: "1-р зүйлийн icon",
+    description: WCU_ICON_DESCRIPTION,
+    fallbackValue: "shopping-bag",
+  },
+  {
+    key: "home-text-wcu-card1-color",
+    group: "Яагаад биднийг сонгох вэ",
+    label: "1-р зүйлийн tile өнгө",
+    description: WCU_COLOR_DESCRIPTION,
+    fallbackValue: "#e94e3c",
+  },
+  {
+    key: "home-text-wcu-card2-icon",
+    group: "Яагаад биднийг сонгох вэ",
+    label: "2-р зүйлийн icon",
+    description: WCU_ICON_DESCRIPTION,
+    fallbackValue: "shield-check",
+  },
+  {
+    key: "home-text-wcu-card2-color",
+    group: "Яагаад биднийг сонгох вэ",
+    label: "2-р зүйлийн tile өнгө",
+    description: WCU_COLOR_DESCRIPTION,
+    fallbackValue: "#2b1d9e",
+  },
+  {
+    key: "home-text-wcu-card3-icon",
+    group: "Яагаад биднийг сонгох вэ",
+    label: "3-р зүйлийн icon",
+    description: WCU_ICON_DESCRIPTION,
+    fallbackValue: "map-pin",
+  },
+  {
+    key: "home-text-wcu-card3-color",
+    group: "Яагаад биднийг сонгох вэ",
+    label: "3-р зүйлийн tile өнгө",
+    description: WCU_COLOR_DESCRIPTION,
+    fallbackValue: "#12b76a",
   },
 
   // ---- Category Masonry ---------------------------------------------------

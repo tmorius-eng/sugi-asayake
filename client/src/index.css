@@ -1868,61 +1868,73 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
   .cat-mosaic-item-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 }
 
-/* --- Tier 4: BrandStorySection (formerly WhyChooseUs) --------------------
-   Dark editorial section with 3 horizontal ivory cards -- same dark canvas
-   + light card contrast already established elsewhere on this page
-   (JournalSection's dark tone-1 cards, the sunrise ribbon), so dark
-   sections read as one deliberate mood rather than unrelated one-offs.
-   Copy is unchanged from the old
-   .trust-grid cells (Сонголт/Баталгаа/Ойрхон), which are real,
-   business-approved claims -- no new claims introduced.
-   2026-09-06: this section absorbed the old standalone .story-section and
-   .customer-voices-section (see BrandStorySection.tsx) -- .wcu-lede/
-   .wcu-reviews* below are new for that merge, everything above them in this
-   block is unchanged from the original WhyChooseUs-only version. */
-.wcu-section { padding: clamp(52px, 5.6vw, 84px) max(34px, 7vw); background: var(--surface-dark); color: var(--foreground-inverse); }
-.wcu-section .eyebrow { color: var(--accent); }
-.wcu-heading-row { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 24px; margin: 14px 0 34px; }
-.wcu-heading-row > p, .wcu-lede { max-width: 380px; margin: 0; color: rgba(255, 255, 255, .6); font-size: 15px; line-height: 1.7; }
-.wcu-lede { display: grid; gap: 14px; }
-.wcu-lede p { margin: 0; }
-/* Real reviews, folded in from the old standalone customer-voices-section --
-   same "hidden entirely with 0 qualifying reviews" discipline, see
-   BrandStorySection.tsx. Dark-canvas card treatment (this section's own
-   surface-dark-raised token) rather than reusing .customer-voice-card's
-   light-background styling verbatim. */
-.wcu-reviews { margin-top: var(--space-7); padding-top: var(--space-6); border-top: 1px solid rgba(255, 255, 255, .12); }
-.wcu-reviews-kicker { margin: 0 0 var(--space-5); color: rgba(255, 255, 255, .5); font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+/* --- Tier 4: BrandStorySection ("Яагаад биднийг сонгох вэ") ---------------
+   2026-09-12: rebuilt against Tom's reference screenshot -- light panel,
+   centred eyebrow + title, three numbered columns with colour tiles, the
+   middle column dropped 46px and given a larger tile. Was a dark
+   (--surface-dark) band with a "900+" stat card + 2 icon cards since
+   2026-08-28; that version is one checkout away at git tag
+   backup/pre-wcu-redesign-2026-09-12. Tile colours are section-scoped
+   custom properties, not global tokens -- nothing else should use them.
+   The reviews strip below the columns is the same real-data block as
+   before, restyled for the light surface.
+   Numbers that come straight from the reference: 245/355/245 columns with
+   90px gaps (a 1040px row), 44px tiles (90px for the featured middle one),
+   48px from tile to title, 46px stagger. Not from the reference, by Tom's
+   call: no 01/02/03 numbers, and the site's own eyebrow/heading/card type. Vertical padding is the one
+   value deliberately below the reference (which has ~200/250px): Tom asked
+   for this exact section to be shorter on 2026-09-11. */
+.wcu-section {
+  --wcu-tile-1: #e94e3c;
+  --wcu-tile-2: #2b1d9e;
+  --wcu-tile-3: #12b76a;
+  /* Tom, 2026-09-12: the panel blends with the site background instead of
+     being a white card on grey like the reference; everything else follows
+     the reference, including its ~200/240px vertical whitespace. */
+  padding: clamp(88px, 13.9vw, 200px) max(34px, 7vw) clamp(96px, 16.6vw, 240px);
+  background: var(--background);
+  color: var(--foreground);
+}
+.wcu-head { max-width: 760px; margin: 0 auto; text-align: center; }
+/* Tom, 2026-09-12: the site's own .eyebrow and .editorial-heading, not the
+   reference's tracked label and condensed bold -- only centred here. */
+.wcu-section .wcu-eyebrow { justify-content: center; margin: 0 0 20px; }
+.wcu-grid { display: grid; grid-template-columns: minmax(0, 245fr) minmax(0, 355fr) minmax(0, 245fr); gap: clamp(32px, 6.25vw, 90px); width: min(1040px, 100%); margin: clamp(64px, 7.6vw, 110px) auto 0; padding: 0; list-style: none; }
+.wcu-item { min-width: 0; }
+.wcu-tile { display: grid; flex: 0 0 auto; width: 44px; height: 44px; place-items: center; border-radius: 8px; color: #fff; }
+/* Each item sets --wcu-tile inline from its admin-editable colour slot
+   (BrandStorySection.tsx); the section-level defaults above are what an
+   unset or invalid slot falls back to. */
+.wcu-item:nth-child(1) .wcu-tile { background: var(--wcu-tile, var(--wcu-tile-1)); }
+.wcu-item:nth-child(2) .wcu-tile { background: var(--wcu-tile, var(--wcu-tile-2)); }
+.wcu-item:nth-child(3) .wcu-tile { background: var(--wcu-tile, var(--wcu-tile-3)); }
+.wcu-item-title { margin: 48px 0 0; font-family: var(--font-display); font-size: 19px; font-weight: 600; line-height: 1.3; color: var(--foreground); }
+.wcu-item-desc { margin: 12px 0 0; color: var(--muted-foreground); font-size: 16px; font-weight: 600; line-height: 1.65; overflow-wrap: break-word; }
+.wcu-item--featured .wcu-tile { width: 90px; height: 90px; border-radius: 12px; }
+/* Real reviews, folded in from the old standalone customer-voices-section
+   (2026-09-06) -- same "hidden entirely with 0 qualifying reviews"
+   discipline, see BrandStorySection.tsx. Light-surface treatment since
+   2026-09-12: --card cards with a hairline on the site background. */
+.wcu-reviews { margin-top: clamp(64px, 7vw, 96px); padding-top: var(--space-6); border-top: 1px solid var(--border); }
+.wcu-reviews-kicker { margin: 0 0 var(--space-5); color: var(--muted-foreground); font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
 .wcu-reviews-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-4); }
-.wcu-review-card { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-5); border-radius: 16px; background: var(--surface-dark-raised); }
+.wcu-review-card { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-5); border: 1px solid var(--border); border-radius: 16px; background: var(--card); }
 .wcu-review-stars { display: flex; gap: 2px; }
-.wcu-review-card p { margin: 0; flex: 1 1 auto; color: rgba(255, 255, 255, .82); font-size: 13px; line-height: 1.6; }
+.wcu-review-card p { margin: 0; flex: 1 1 auto; color: #2b2c30; font-size: 13px; line-height: 1.6; }
 .wcu-review-footer { display: flex; align-items: center; gap: 10px; }
 .wcu-review-avatar { display: grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: var(--accent); color: #17181b; font-family: var(--font-display); font-size: 12px; font-weight: 700; }
-.wcu-review-footer strong { display: block; font-size: 11px; font-weight: 700; color: #fff; }
-.wcu-review-footer span { display: block; margin-top: 1px; color: rgba(255, 255, 255, .5); font-size: 10px; }
-/* 2026-09-04 (Phase C): asymmetric 2-row layout instead of 3 equal columns
-   -- the stat card anchors the left side across both rows, the other 2
-   stack on the right, so this no longer reads as "3 identical cards" at a
-   glance the way an even 3-up grid does. */
-.wcu-cards { display: grid; grid-template-columns: 1.1fr 1fr; grid-template-rows: repeat(2, 1fr); gap: var(--space-5); }
-.wcu-card { display: flex; flex-direction: column; gap: 14px; padding: 24px 24px; border-radius: 16px; background: var(--card); color: var(--foreground); box-shadow: var(--shadow-lg); }
-.wcu-card-icon { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 50%; background: var(--muted); color: var(--primary); }
-.wcu-card strong { font-family: var(--font-display); font-size: 19px; font-weight: 600; }
-.wcu-card span { color: #545958; font-size: 16px; font-weight: 600; line-height: 1.65; }
-/* The anchor card: reuses the hero badge's big-number treatment (this
-   site's own established "large stat" signature) instead of the
-   icon-in-circle format the other 2 cards keep. */
-.wcu-card-stat { grid-row: 1 / 3; justify-content: center; gap: 10px; background: linear-gradient(155deg, var(--card) 0%, #e8ece8 100%); }
-.wcu-stat-number { font-family: var(--font-display); font-size: clamp(40px, 4vw, 58px); font-weight: 700; letter-spacing: -.04em; line-height: .95; color: var(--primary); }
-.wcu-stat-label { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-display); font-size: 19px; font-weight: 600; color: var(--foreground); }
-.wcu-stat-label svg { color: var(--primary); }
-.wcu-card-stat p { margin: 0; color: #545958; font-size: 16px; font-weight: 600; line-height: 1.65; }
+.wcu-review-footer strong { display: block; font-size: 11px; font-weight: 700; color: var(--foreground); }
+.wcu-review-footer span { display: block; margin-top: 1px; color: var(--muted-foreground); font-size: 10px; }
 
-@media (max-width: 820px) {
-  .wcu-cards { grid-template-columns: 1fr; gap: 16px; }
-  .wcu-card-stat { grid-row: auto; }
-  .wcu-heading-row { margin-bottom: 36px; }
+/* Desktop only: the middle column sits 46px lower than its neighbours. */
+@media (min-width: 1024px) {
+  .wcu-item--featured { margin-top: 46px; }
+}
+/* Phone: one column, no offset, uniform 56px tiles. */
+@media (max-width: 759px) {
+  .wcu-grid { grid-template-columns: minmax(0, 1fr); gap: 36px; }
+  .wcu-tile, .wcu-item--featured .wcu-tile { width: 56px; height: 56px; border-radius: 10px; }
+  .wcu-item-title { margin-top: 22px; }
 }
 
 /* --- Tier 5: JournalSection ----------------------------------------------

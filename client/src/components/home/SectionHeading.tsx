@@ -11,7 +11,8 @@ import type { ReactNode } from "react";
  * convention the existing headings already use, e.g.:
  *   <SectionHeading>Японы чанарыг<br /><em>ойртуулна.</em></SectionHeading>
  *
- * tone="onDark" is for dark-canvas sections (Why Choose Us, Journal) --
+ * tone="onDark" is for dark-canvas sections (Journal; Why Choose Us was
+ * one until its 2026-09-12 light rebuild) --
  * flips the base text to ivory and the <em> accent to gold instead of
  * vermilion, matching .final-cta h2's existing dark-section treatment.
  */

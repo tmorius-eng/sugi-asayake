@@ -1,6 +1,19 @@
-import { Star, MapPin, ShieldCheck, ShoppingBag } from "lucide-react";
+import { Fragment, type CSSProperties } from "react";
+import { BadgeCheck, Gift, Heart, Leaf, MapPin, Package, ShieldCheck, ShoppingBag, Smile, Sparkles, Star, Truck, type LucideIcon } from "lucide-react";
 import { useSiteText } from "@/hooks/useSiteText";
+import type { WcuIconName } from "@shared/site-text";
 import SectionHeading from "./SectionHeading";
+
+/** Every name in shared/site-text.ts WCU_ICON_NAMES, and nothing else --
+ *  the Record type makes a missing entry a compile error. */
+const WCU_ICONS: Record<WcuIconName, LucideIcon> = {
+  "shopping-bag": ShoppingBag, "shield-check": ShieldCheck, "map-pin": MapPin, star: Star, heart: Heart, truck: Truck,
+  sparkles: Sparkles, "badge-check": BadgeCheck, leaf: Leaf, gift: Gift, package: Package, smile: Smile,
+};
+const iconFor = (name: string, fallback: WcuIconName): LucideIcon => WCU_ICONS[name.trim().toLowerCase() as WcuIconName] ?? WCU_ICONS[fallback];
+/** A 6-digit hex colour or the default -- an admin typo must not paint a
+ *  transparent tile. */
+const colorFor = (value: string, fallback: string) => (/^#[0-9a-f]{6}$/i.test(value.trim()) ? value.trim() : fallback);
 
 export type FeaturedReview = {
   id: number;
@@ -11,66 +24,75 @@ export type FeaturedReview = {
 };
 
 /**
- * 2026-09-06 homepage consolidation (external design review + Tom's
- * "cut to ~6 sections" call, see CLAUDE.md): merges what used to be 3
- * separate sections doing overlapping trust-building work --
- * `.story-section` ("Бидний ялгаа", now-dead inline Home.tsx JSX),
- * `WhyChooseUs.tsx` (this file's direct predecessor, whose 3-card/anchor-
- * stat layout survives here unchanged), and the standalone
- * `customer-voices-section` (real reviews, previously its own full-width
- * cream section). One background, one heading, no redundant "who we are"
- * messaging repeated twice in two different sections with two near-
- * identical headings ("Японы чанарыг ойртуулна." vs "Япон чанарыг танд
- * ойртуулна.").
+ * "Яагаад биднийг сонгох вэ" -- rebuilt on 2026-09-12 against Tom's
+ * reference screenshot: a light panel, a centred tracked eyebrow over a
+ * centred bold title, then three numbered columns, each a colour tile with
+ * a line icon, the item number on the same row, a title and a two-line
+ * description. The middle column sits lower than its neighbours and has a
+ * larger tile -- that stagger is the whole character of the reference.
  *
- * Card content/layout is carried over verbatim from WhyChooseUs.tsx (real,
- * business-approved claims -- see that file's history for why card 1 is a
- * distinct anchor stat instead of a 3rd identical icon card). No page-
- * number badge here (Story's old "01" is retired, not moved) -- this
- * section never had one before the merge (WhyChooseUs didn't), and the
- * reviewer's core complaint was too much chapter-signposting, not too
- * little; CategoryMasonry ("02") and StoreLocatorSection keep theirs.
+ * What changed from the 2026-09-06 version (a dark band with a "900+" stat
+ * card, two icon cards and two lede paragraphs): the lede paragraphs are
+ * gone (their site-text slots stay registered, nothing else reads them),
+ * the stat card is gone and the live product count now lands inside item
+ * 01's sentence through a `{N}` token, same pattern Home.tsx and Shop.tsx
+ * already use for branch counts. The customer reviews strip below is the
+ * same real-data block, restyled for the light surface. The dark version is
+ * one checkout away at git tag backup/pre-wcu-redesign-2026-09-12.
+ *
+ * Every string is a site-text slot (editable in /admin); none of the slot
+ * keys changed, so saved overrides survive.
  */
 export default function BrandStorySection({ branchCount, productCountLabel, featuredReviews }: { branchCount: number; productCountLabel: string; featuredReviews: FeaturedReview[] }) {
   const textFor = useSiteText();
-  const [headingLine1, headingLine2] = textFor("home-text-wcu-heading", "Япон чанарыг\nтанд ойртуулна.").split("\n");
+  // One centred line by default; an admin can still press Enter for two.
+  const headingLines = textFor("home-text-wcu-heading", "Яагаад SUGI ASAYAKE вэ?").split("\n").filter(Boolean);
+  // Everything visible on an item -- icon, tile colour, title, description --
+  // is a site-text slot in the "Яагаад биднийг сонгох вэ" group of /admin.
+  const items = [
+    {
+      key: "selection",
+      Icon: iconFor(textFor("home-text-wcu-card1-icon", "shopping-bag"), "shopping-bag"),
+      color: colorFor(textFor("home-text-wcu-card1-color", "#e94e3c"), "#e94e3c"),
+      title: textFor("home-text-wcu-card1-title", "Сонголт"),
+      description: textFor("home-text-wcu-card1-desc", "Арчилгаа, гоо сайхан, эрүүл ахуйн {N} төрөл").replace("{N}", productCountLabel),
+    },
+    {
+      key: "guarantee",
+      Icon: iconFor(textFor("home-text-wcu-card2-icon", "shield-check"), "shield-check"),
+      color: colorFor(textFor("home-text-wcu-card2-color", "#2b1d9e"), "#2b1d9e"),
+      title: textFor("home-text-wcu-card2-title", "Баталгаа"),
+      description: textFor("home-text-wcu-card2-desc", "Японоос баталгаат, албан ёсны бүтээгдэхүүн"),
+    },
+    {
+      key: "nearby",
+      Icon: iconFor(textFor("home-text-wcu-card3-icon", "map-pin"), "map-pin"),
+      color: colorFor(textFor("home-text-wcu-card3-color", "#12b76a"), "#12b76a"),
+      title: textFor("home-text-wcu-card3-title", "Ойрхон"),
+      description: `${textFor("home-text-wcu-card3-prefix", "Улаанбаатарын")} ${branchCount} ${textFor("home-text-wcu-card3-suffix", "байршилд таныг хүлээнэ")}`,
+    },
+  ];
   return (
     <section className="wcu-section" data-reveal aria-label="Бидний ялгаа, яагаад биднийг сонгох вэ">
-      {/* 2026-09-11 audit: the repeated eyebrow was removed here. Eight of nine
-          homepage sections opened with the same all-caps label + heading pair,
-          which is the strongest single reason the page read as templated. The
-          label also said nothing the heading below it did not already say.
-          Three eyebrows survive sitewide, each carrying real information:
-          the hero's brand line, the membership label, and the locator's live
-          branch count. The `home-text-*` CMS slot stays in shared/site-text.ts
-          so nothing breaks if this is ever reinstated. */}
-      <div className="wcu-heading-row">
-        <SectionHeading tone="onDark">{headingLine1}<br /><em>{headingLine2}</em></SectionHeading>
-        {/* 2 lede paragraphs where there used to be 1 -- the old Story
-            section's "who we are" sentence, now folded in ahead of this
-            section's own "3 reasons" sentence, rather than dropped. */}
-        <div className="wcu-lede">
-          <p>{textFor("home-text-story-description", "SUGI ASAYAKE нь Японы SUGI Drug Store-ийн албан ёсны охин компани. Өдөр тутмын эрүүл мэнд, гоо сайхан, арчилгааг Монголын гэр бүл бүрт илүү ойртуулна.")}</p>
-          <p>{textFor("home-text-wcu-description", "SUGI ASAYAKE-ийг сонгох гурван шалтгаан — өргөн сонголт, баталгаат импорт, ойрхон салбарууд.")}</p>
-        </div>
+      <div className="wcu-head">
+        {/* The site's own eyebrow and heading styles (Tom, 2026-09-12: "the
+            text must look like the rest of the website"), only centred. */}
+        <p className="eyebrow wcu-eyebrow"><span /> {textFor("home-text-wcu-eyebrow-label", "ЯАГААД БИДНИЙГ СОНГОХ ВЭ")}</p>
+        <SectionHeading>
+          {headingLines.map((line, index) => <Fragment key={index}>{index > 0 && <br />}{line}</Fragment>)}
+        </SectionHeading>
       </div>
-      <div className="wcu-cards">
-        <div className="wcu-card wcu-card-stat">
-          <strong className="wcu-stat-number">{productCountLabel}</strong>
-          <span className="wcu-stat-label"><ShoppingBag size={16} /> {textFor("home-text-wcu-card1-title", "Сонголт")}</span>
-          <p>{textFor("home-text-wcu-card1-desc", "Арчилгаа, гоо сайхан, эрүүл ахуйн 900+ төрөл")}</p>
-        </div>
-        <div className="wcu-card">
-          <span className="wcu-card-icon"><ShieldCheck size={20} /></span>
-          <strong>{textFor("home-text-wcu-card2-title", "Баталгаа")}</strong>
-          <span>{textFor("home-text-wcu-card2-desc", "Японоос баталгаат, албан ёсны бүтээгдэхүүн")}</span>
-        </div>
-        <div className="wcu-card">
-          <span className="wcu-card-icon"><MapPin size={20} /></span>
-          <strong>{textFor("home-text-wcu-card3-title", "Ойрхон")}</strong>
-          <span>{textFor("home-text-wcu-card3-prefix", "Улаанбаатарын")} {branchCount} {textFor("home-text-wcu-card3-suffix", "байршилд таныг хүлээнэ")}</span>
-        </div>
-      </div>
+      {/* The reference numbers its columns 01/02/03; Tom asked for those to
+          go ("muuhai" -- ugly), so this is a plain list. */}
+      <ul className="wcu-grid">
+        {items.map(({ key, Icon, color, title, description }, index) => (
+          <li className={index === 1 ? "wcu-item wcu-item--featured" : "wcu-item"} key={key} style={{ "--wcu-tile": color } as CSSProperties}>
+            <span className="wcu-tile" aria-hidden="true"><Icon size={index === 1 ? 40 : 22} strokeWidth={1.75} /></span>
+            <h3 className="wcu-item-title">{title}</h3>
+            <p className="wcu-item-desc">{description}</p>
+          </li>
+        ))}
+      </ul>
       {/* Absorbed customer-voices-section (2026-09-06): same "hidden
           entirely when there are no real qualifying reviews yet" discipline
           as the standalone section this replaces -- never padded with
@@ -81,7 +103,7 @@ export default function BrandStorySection({ branchCount, productCountLabel, feat
           <div className="wcu-reviews-grid">
             {featuredReviews.slice(0, 3).map(review => (
               <div className="wcu-review-card" key={review.id}>
-                <div className="wcu-review-stars">{Array.from({ length: 5 }, (_, index) => <Star key={index} size={12} fill={index < review.rating ? "#f0b52d" : "none"} stroke={index < review.rating ? "#f0b52d" : "rgba(255,255,255,.3)"} />)}</div>
+                <div className="wcu-review-stars">{Array.from({ length: 5 }, (_, index) => <Star key={index} size={12} fill={index < review.rating ? "#f0b52d" : "none"} stroke={index < review.rating ? "#f0b52d" : "#b7beb9"} />)}</div>
                 {/* getFeaturedReviews already filters comment IS NOT NULL AND
                     <> '' at the DB level -- Drizzle's inferred type just
                     can't encode that SQL WHERE clause, so this is a
