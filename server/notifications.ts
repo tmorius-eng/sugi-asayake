@@ -1,4 +1,5 @@
 import { and, eq, lte, sql } from "drizzle-orm";
+import { sqlInt } from "./_core/sqlSafe";
 import { notificationOutbox } from "../drizzle/schema";
 import { NTFY_TOPIC_FIELD, parseDisabledEvents, type NotificationGroup } from "../shared/notification-events";
 import { getDb, getIntegrationSettings } from "./db";
@@ -67,10 +68,10 @@ export async function dispatchPendingNotifications(): Promise<DispatchSummary> {
   // Housekeeping first, so the batch below only sees rows worth sending.
   await db.update(notificationOutbox)
     .set({ status: "expired", lastError: `not delivered within ${EXPIRE_AFTER_MINUTES} minutes` })
-    .where(and(eq(notificationOutbox.status, "pending"), sql`${notificationOutbox.createdAt} < NOW() - INTERVAL ${sql.raw(String(EXPIRE_AFTER_MINUTES))} MINUTE`));
+    .where(and(eq(notificationOutbox.status, "pending"), sql`${notificationOutbox.createdAt} < NOW() - INTERVAL ${sqlInt(EXPIRE_AFTER_MINUTES)} MINUTE`));
   await db.update(notificationOutbox)
     .set({ status: "pending" })
-    .where(and(eq(notificationOutbox.status, "sending"), sql`${notificationOutbox.claimedAt} < NOW() - INTERVAL ${sql.raw(String(STUCK_CLAIM_MINUTES))} MINUTE`));
+    .where(and(eq(notificationOutbox.status, "sending"), sql`${notificationOutbox.claimedAt} < NOW() - INTERVAL ${sqlInt(STUCK_CLAIM_MINUTES)} MINUTE`));
   // (Deleting old and test rows is a daily scheduler job on every machine --
   // purgeNotificationOutbox in db.ts -- not this loop, which only runs where
   // NOTIFICATIONS_DISPATCH=1.)
@@ -126,7 +127,7 @@ export async function dispatchPendingNotifications(): Promise<DispatchSummary> {
     } else {
       const delaySeconds = Math.max(RETRY_DELAYS_S[attempts - 1] ?? 1800, Math.ceil((result.retryAfterMs ?? 0) / 1000));
       await db.update(notificationOutbox)
-        .set({ status: "pending", lastError: (result.error ?? "unknown error").slice(0, 300), nextAttemptAt: sql`NOW() + INTERVAL ${sql.raw(String(Math.floor(delaySeconds)))} SECOND` })
+        .set({ status: "pending", lastError: (result.error ?? "unknown error").slice(0, 300), nextAttemptAt: sql`NOW() + INTERVAL ${sqlInt(delaySeconds)} SECOND` })
         .where(eq(notificationOutbox.id, row.id));
       summary.retried++;
     }

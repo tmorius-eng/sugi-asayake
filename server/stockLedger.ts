@@ -1,4 +1,5 @@
 import { and, eq, gte, sql } from "drizzle-orm";
+import { sqlInt } from "./_core/sqlSafe";
 import { branches, branchStock, products, productVariants, stockMovements, type StockMovementType } from "../drizzle/schema";
 import { ubDateKey, type NotificationGroup } from "../shared/notification-events";
 import { ALERTING_MOVEMENT_TYPES, classifyStockCrossing } from "../shared/stock-alerts";
@@ -210,7 +211,7 @@ export async function getStockLedgerDrift(db: DbOrTx, limit = 20) {
       GROUP BY sm.branchId, sm.variantId
     ) s
     WHERE s.shelf <> s.ledger
-    LIMIT ${sql.raw(String(Math.max(1, Math.floor(limit))))}
+    LIMIT ${sqlInt(Math.max(1, limit))}
   `) as unknown as [{ branchId: number; variantId: number; shelf: number; ledger: string | number }[]];
   const [countRows] = await db.execute(sql`
     SELECT COUNT(*) AS n FROM branch_stock bs

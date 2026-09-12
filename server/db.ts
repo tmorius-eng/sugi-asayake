@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { sqlInt } from "./_core/sqlSafe";
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lt, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { describeTransport, planMysqlConnection } from "./_core/dbConnection";
@@ -4220,7 +4221,7 @@ export async function findRecentCampaignSend(fingerprint: string, windowMinutes:
   const db = await getDb();
   if (!db) return null;
   const [row] = await db.select({ id: adminAuditLogs.id, createdAt: adminAuditLogs.createdAt }).from(adminAuditLogs)
-    .where(and(eq(adminAuditLogs.action, "campaign.sent"), like(adminAuditLogs.metadataJson, `%"fingerprint":"${fingerprint}"%`), sql`${adminAuditLogs.createdAt} > NOW() - INTERVAL ${sql.raw(String(Math.floor(windowMinutes)))} MINUTE`))
+    .where(and(eq(adminAuditLogs.action, "campaign.sent"), like(adminAuditLogs.metadataJson, `%"fingerprint":"${fingerprint}"%`), sql`${adminAuditLogs.createdAt} > NOW() - INTERVAL ${sqlInt(windowMinutes)} MINUTE`))
     .orderBy(desc(adminAuditLogs.createdAt)).limit(1);
   return row ?? null;
 }

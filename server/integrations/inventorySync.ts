@@ -1,4 +1,5 @@
 import { and, asc, eq, gt, inArray, lt, ne, or, isNull, sql } from "drizzle-orm";
+import { sqlInt } from "../_core/sqlSafe";
 import { branches, branchStock, externalRefs, integrationSyncState, stockMovements } from "../../drizzle/schema";
 import { normaliseBarcode } from "../../shared/barcode";
 import { getDb, getActiveIntegrationConfig, getIntegrationSettings } from "../db";
@@ -128,7 +129,7 @@ export async function runPushMovements(provider: InventorySyncProvider, options:
   const refs = await branchExternalIds(namespace);
   const rows = await db.select({ id: stockMovements.id, branchId: stockMovements.branchId, sku: stockMovements.sku, delta: stockMovements.delta, type: stockMovements.type, createdAt: stockMovements.createdAt })
     .from(stockMovements)
-    .where(and(gt(stockMovements.id, after), lt(stockMovements.createdAt, sql`NOW() - INTERVAL ${sql.raw(String(lagSeconds))} SECOND`), or(isNull(stockMovements.refType), ne(stockMovements.refType, "external"))))
+    .where(and(gt(stockMovements.id, after), lt(stockMovements.createdAt, sql`NOW() - INTERVAL ${sqlInt(lagSeconds)} SECOND`), or(isNull(stockMovements.refType), ne(stockMovements.refType, "external"))))
     .orderBy(asc(stockMovements.id)).limit(PUSH_BATCH);
   const batch: ExternalMovement[] = [];
   let cursor = after;

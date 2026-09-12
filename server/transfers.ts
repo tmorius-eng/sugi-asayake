@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { sqlInt } from "./_core/sqlSafe";
 import { alias } from "drizzle-orm/mysql-core";
 import { branches, branchStock, products, productVariants, stockTransferLines, stockTransfers } from "../drizzle/schema";
 import { normaliseBarcode } from "../shared/barcode";
@@ -358,7 +359,7 @@ export async function getStaleTransfers(hours: number) {
   const toBranch = alias(branches, "to_branch");
   const rows = await db.select({ id: stockTransfers.id, code: stockTransfers.code, toBranchName: toBranch.name, sentAt: stockTransfers.sentAt })
     .from(stockTransfers).innerJoin(toBranch, eq(toBranch.id, stockTransfers.toBranchId))
-    .where(and(eq(stockTransfers.status, "sent"), sql`${stockTransfers.sentAt} < NOW() - INTERVAL ${sql.raw(String(Math.floor(hours)))} HOUR`));
+    .where(and(eq(stockTransfers.status, "sent"), sql`${stockTransfers.sentAt} < NOW() - INTERVAL ${sqlInt(hours)} HOUR`));
   return rows.map(row => ({ ...row, hours: row.sentAt ? Math.floor((Date.now() - new Date(row.sentAt).getTime()) / 3_600_000) : hours }));
 }
 
