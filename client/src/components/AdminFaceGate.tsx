@@ -57,7 +57,12 @@ export default function AdminFaceGate({ children }: { children: React.ReactNode 
     // The gate decides whether the admin panel renders at all, so a stale
     // cached "verified" must never be what lets someone in.
     staleTime: 0,
-    refetchOnWindowFocus: false,
+    // 2026-09-12: re-check when the tab comes back (a laptop lid opening is
+    // exactly the moment an idle lock should show) and once a minute while
+    // open, so a proof that lapsed server-side is noticed even if this tab's
+    // own timer was frozen. Cheap: one indexed lookup plus a signature check.
+    refetchOnWindowFocus: true,
+    refetchInterval: 60_000,
   });
 
   if (statusQuery.isLoading) {

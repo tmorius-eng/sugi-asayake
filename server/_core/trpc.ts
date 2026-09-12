@@ -4,6 +4,7 @@ import { UNAUTHED_ERR_MSG, NOT_ADMIN_ERR_MSG } from "@shared/const";
 import type { TrpcContext } from "./context";
 import { checkRateLimit } from "./security";
 import { checkPersistentRateLimit } from "./persistentRateLimit";
+import { assertFaceProofForPanelRole } from "./faceProof";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
@@ -19,11 +20,21 @@ export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
   return next({ ctx: { ...ctx, user: ctx.user } });
 });
 
+// Every admin-panel procedure runs behind the face proof (2026-09-12). Until
+// then the gate was a screen: the panel asked for the face, but the API it
+// called did not, so an expired proof (or none) still let every call through.
+// See server/_core/faceProof.ts for the incident. Customer-facing procedures
+// stay on protectedProcedure -- a shopper never has a proof and never needs one.
+const panelProcedure = protectedProcedure.use(async ({ ctx, next }) => {
+  await assertFaceProofForPanelRole({ req: ctx.req, user: ctx.user });
+  return next({ ctx });
+});
+
 // Full admin only — user management (role changes, suspend, force logout,
 // staff invitations) and anything financial (revenue, active-user counts).
 // TIER 3: `staff` is a separate, narrower role (see staffProcedure below),
 // not a synonym for admin.
-export const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
+export const adminProcedure = panelProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== "admin") {
     throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
   }
@@ -35,7 +46,7 @@ export const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
 // no longer the catch-all "anyone but admin" role. Its middleware LOGIC is
 // unchanged (still exactly "admin or staff"); what changes is which router
 // procedures use it.
-export const staffProcedure = protectedProcedure.use(({ ctx, next }) => {
+export const staffProcedure = panelProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== "admin" && ctx.user.role !== "staff") {
     throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
   }
@@ -47,7 +58,7 @@ export const staffProcedure = protectedProcedure.use(({ ctx, next }) => {
 // paymentStatus to "refunded"). Deliberately separate from warehouseProcedure
 // below: moving an order through its fulfillment ladder is not the same
 // trust boundary as actually sending money back out.
-export const financeProcedure = protectedProcedure.use(({ ctx, next }) => {
+export const financeProcedure = panelProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== "admin" && ctx.user.role !== "finance") {
     throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
   }
@@ -58,7 +69,7 @@ export const financeProcedure = protectedProcedure.use(({ ctx, next }) => {
 // featured brands, homepage site media/text, customer segments, campaigns.
 // Anything that's a customer-facing content/merchandising lever, but not
 // money (financeProcedure) or stock-keeping (warehouseProcedure).
-export const marketingProcedure = protectedProcedure.use(({ ctx, next }) => {
+export const marketingProcedure = panelProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== "admin" && ctx.user.role !== "marketing") {
     throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
   }
@@ -69,7 +80,7 @@ export const marketingProcedure = protectedProcedure.use(({ ctx, next }) => {
 // status/fulfillment, CSV import. The old staffProcedure's catalog/order
 // scope, minus posts/media (now staff-only) and minus financial figures
 // (never in scope for staff and still isn't here).
-export const warehouseProcedure = protectedProcedure.use(({ ctx, next }) => {
+export const warehouseProcedure = panelProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== "admin" && ctx.user.role !== "warehouse") {
     throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
   }
@@ -81,7 +92,7 @@ export const warehouseProcedure = protectedProcedure.use(({ ctx, next }) => {
 // financial/user figures per-role internally (ctx.user.role === "admin" ?
 // full : null, see server/routers.ts) — this middleware only gates entry,
 // not what's inside the response.
-export const anyStaffProcedure = protectedProcedure.use(({ ctx, next }) => {
+export const anyStaffProcedure = panelProcedure.use(({ ctx, next }) => {
   if (ctx.user.role === "user") {
     throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
   }
@@ -93,7 +104,7 @@ export const anyStaffProcedure = protectedProcedure.use(({ ctx, next }) => {
 // product picker, and whose homepage category tiles reference categories).
 // Writes stay warehouseProcedure-only — this never grants marketing a way to
 // create/edit/delete a product or category, only to read the list.
-export const catalogReadProcedure = protectedProcedure.use(({ ctx, next }) => {
+export const catalogReadProcedure = panelProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== "admin" && ctx.user.role !== "warehouse" && ctx.user.role !== "marketing") {
     throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
   }
@@ -106,7 +117,7 @@ export const catalogReadProcedure = protectedProcedure.use(({ ctx, next }) => {
 // stay staffProcedure-only for posts, marketingProcedure-only for
 // promotions — this never grants marketing a way to create/edit/delete a
 // post, only to read the list.
-export const contentReadProcedure = protectedProcedure.use(({ ctx, next }) => {
+export const contentReadProcedure = panelProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== "admin" && ctx.user.role !== "staff" && ctx.user.role !== "marketing") {
     throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
   }
@@ -121,7 +132,7 @@ export const contentReadProcedure = protectedProcedure.use(({ ctx, next }) => {
 // never able to see which order to call it on). Writes (updateOrder/
 // bulkUpdateOrderStatus) stay warehouseProcedure-only -- this never grants
 // finance a way to change fulfillment status, only to read the list.
-export const ordersReadProcedure = protectedProcedure.use(({ ctx, next }) => {
+export const ordersReadProcedure = panelProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== "admin" && ctx.user.role !== "warehouse" && ctx.user.role !== "finance") {
     throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
   }
@@ -138,7 +149,7 @@ export const ordersReadProcedure = protectedProcedure.use(({ ctx, next }) => {
 // role changes, phone edits, the loyalty-adjustment bridge) stay
 // adminProcedure-only -- this never grants finance a way to change a user
 // account, only to read it.
-export const usersReadProcedure = protectedProcedure.use(({ ctx, next }) => {
+export const usersReadProcedure = panelProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== "admin" && ctx.user.role !== "finance") {
     throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
   }
@@ -150,7 +161,7 @@ export const usersReadProcedure = protectedProcedure.use(({ ctx, next }) => {
 // the store consultants are the ones who receive deliveries. Which BRANCH
 // each may act on (staff: only their own) is checked per call in
 // server/inventory.ts (assertCanOperateOnBranch), not here.
-export const inventoryProcedure = protectedProcedure.use(({ ctx, next }) => {
+export const inventoryProcedure = panelProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== "admin" && ctx.user.role !== "warehouse" && ctx.user.role !== "staff") {
     throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
   }

@@ -32,6 +32,10 @@ vi.mock("./db", () => ({
 }));
 
 const { hasValidFaceProof, issueFaceProof, lockFaceSession, refreshFaceProof } = await import("./faceAuth");
+const { assertFaceProofForPanelRole } = await import("./_core/faceProof");
+const { ENV } = await import("./_core/env");
+const { SignJWT } = await import("jose");
+const { FACE_REQUIRED_ERR_MSG } = await import("../shared/const");
 
 const USER = 42;
 const SESSION_VERSION = 3;
@@ -131,5 +135,43 @@ describe("admin face gate idle timeout", () => {
     await expect(hasValidFaceProof(requestWith(new Map()), USER, SESSION_VERSION)).resolves.toBe(false);
     const tampered = new Map([[ADMIN_FACE_COOKIE_NAME, "not.a.jwt"]]);
     await expect(hasValidFaceProof(requestWith(tampered), USER, SESSION_VERSION)).resolves.toBe(false);
+  });
+
+  it("refuses a proof minted before the idle lock existed (flat 8-hour exp, no abs claim)", async () => {
+    // The 2026-09-12 incident: a cookie from the previous deploy was honoured
+    // until its own deadline, so a two-hour absence changed nothing.
+    const key = new TextEncoder().encode(ENV.cookieSecret);
+    const legacy = await new SignJWT({ sub: String(USER), sv: SESSION_VERSION })
+      .setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime(new Date(Date.now() + FACE_VERIFICATION_TTL_MS)).sign(key);
+    const jar = new Map([[ADMIN_FACE_COOKIE_NAME, legacy]]);
+    expect(await hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION)).toBe(false);
+    // ...and it cannot be renewed into a proper one either.
+    const { res } = fakeResponse();
+    expect((await refreshFaceProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION })).ok).toBe(false);
+  });
+
+  describe("server-side enforcement on admin-panel procedures", () => {
+    const previous = process.env.ADMIN_FACE_GATE_ENABLED;
+    beforeEach(() => { process.env.ADMIN_FACE_GATE_ENABLED = "1"; });
+    afterEach(() => { process.env.ADMIN_FACE_GATE_ENABLED = previous; });
+    const panelUser = { id: USER, role: "admin", sessionVersion: SESSION_VERSION };
+
+    it("refuses a panel role with no proof, with the message the client maps to the camera", async () => {
+      await expect(assertFaceProofForPanelRole({ req: requestWith(new Map()), user: panelUser })).rejects.toMatchObject({ code: "FORBIDDEN", message: FACE_REQUIRED_ERR_MSG });
+    });
+
+    it("lets a live proof through, and refuses it again 25 idle minutes later", async () => {
+      const { res, jar } = fakeResponse();
+      await issueProof(jar, res);
+      await expect(assertFaceProofForPanelRole({ req: requestWith(jar), user: panelUser })).resolves.toBeUndefined();
+      vi.advanceTimersByTime(FACE_IDLE_TIMEOUT_MS + 1_000);
+      await expect(assertFaceProofForPanelRole({ req: requestWith(jar), user: panelUser })).rejects.toMatchObject({ message: FACE_REQUIRED_ERR_MSG });
+    });
+
+    it("never asks a plain customer, and does nothing with the gate off", async () => {
+      await expect(assertFaceProofForPanelRole({ req: requestWith(new Map()), user: { ...panelUser, role: "user" } })).resolves.toBeUndefined();
+      process.env.ADMIN_FACE_GATE_ENABLED = "0";
+      await expect(assertFaceProofForPanelRole({ req: requestWith(new Map()), user: panelUser })).resolves.toBeUndefined();
+    });
   });
 });

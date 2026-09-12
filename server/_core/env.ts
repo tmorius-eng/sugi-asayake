@@ -130,7 +130,9 @@ export const ENV = {
   // To unblock ONE person rather than everyone (new glasses, a beard, a
   // camera that died), prefer the per-user reset in the admin Users drawer,
   // which clears just that account's enrollment so they re-enroll next visit.
-  adminFaceGateEnabled: process.env.ADMIN_FACE_GATE_ENABLED === "1",
+  // A getter, not a value: read at call time so a test file can switch the
+  // gate on for itself (server/_test-setup.ts turns it off for the suite).
+  get adminFaceGateEnabled() { return process.env.ADMIN_FACE_GATE_ENABLED === "1"; },
 
   // Admin face gate: whether a FAILED liveness check blocks entry.
   //

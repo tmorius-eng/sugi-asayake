@@ -58,10 +58,11 @@ browser → /api/trpc/<router>.<procedure>
 |---|---|---|
 | `index.ts` | процессын эхлэл (§1) | ажлын бүртгэл, dispatcher энд эхэлдэг |
 | `context.ts` | tRPC контекст: cookie → user | `assertProductionSecrets()` энд; session token JWT. User мөр **5 с cache** (`getSessionUserById`, түлхүүр = user id, token БИШ) — session-ийн эрхийг өөрчилдөг бичигч бүр `forgetSessionUser` дуудна (§8 дүрэм 10) |
-| `trpc.ts` | procedure-ийн төрлүүд | `publicProcedure`, `protectedProcedure`, `adminProcedure`, `financeProcedure`, `staffProcedure`, **`inventoryProcedure`** (admin+warehouse+staff), `strictRateLimitedProcedure`. Эрхийн шалгалт бүхэлдээ ЭНД, дэд router-үүд өөрсдөө эрх шалгадаггүй |
+| `trpc.ts` | procedure-ийн төрлүүд (**panel builder бүр face proof шаардана**) | `publicProcedure`, `protectedProcedure`, `adminProcedure`, `financeProcedure`, `staffProcedure`, **`inventoryProcedure`** (admin+warehouse+staff), `strictRateLimitedProcedure`. Эрхийн шалгалт бүхэлдээ ЭНД, дэд router-үүд өөрсдөө эрх шалгадаггүй |
 | `security.ts` | header, rate limit tier, CSRF | `limitApiTraffic` (IP тутам 300/15мин), `protectStateChangingApiRequests`, `limitQPayCallbackTraffic` |
 | `persistentRateLimit.ts` | strict tier-ийн тоолуур **DB дээр** (`rate_limit_buckets`) | олон instance-д ч хүчинтэй, **fail-open** (DB унавал блоклохгүй). Cart/telemetry tier нь санаатайгаар санах ойд |
 | `dbConnection.ts` | `planMysqlConnection` — TLS төлөвлөгөө | loopback-оос бусад бүх host-д TLS; `DATABASE_CA_CERT` байвал сертификат шалгана, байхгүй бол шифрлээд warning |
+| `faceProof.ts` | админы царайны **proof cookie** (sign/read/refresh/clear) + `assertFaceProofForPanelRole` | Домэйнгүй тул `trpc.ts` бүх panel procedure дээр ажиллуулна. `abs`-гүй (2026-09-12-оос өмнөх) token хүчингүй. `faceAuth.ts` эндээс re-export хийдэг |
 | `crypto.ts` | AES-GCM шифрлэлт | `INTEGRATIONS_ENCRYPTION_KEY` (64 hex) шаардана, байхгүй бол шатна — интеграцийн нууц үг энүүгээр хадгалагдана |
 | `password.ts` | `hashPassword` / `verifyPassword` | |
 | `cookies.ts` | session cookie-ийн тохиргоо | |
@@ -233,6 +234,7 @@ browser → /api/trpc/<router>.<procedure>
 8. **Тестийн өгөгдөл `%test%`-ээр хайж болохгүй** — каталогт жинхэнэ `Honey amproom tester` бий (`scripts/test-residue-report.ts`).
 9. **Захиалга бичдэг шинэ зам бүр `clientRequestId` авна** (checkout, POS шиг) — эс бөгөөс timeout/resend/2 дахь tab давхар захиалга, давхар нөөц хасалт үүсгэнэ.
 10. **`users` мөрийн эрх/sessionVersion/suspend-ийг өөрчилдөг шинэ функц бүр `forgetSessionUser(id)` дуудна** — эс бөгөөс "бүх төхөөрөмжөөс гарах" 5 с хоцорно (2026-09-12-нд бодитоор гарсан P0).
+12. **Шинэ admin procedure = role builder** (`adminProcedure`, `staffProcedure`…), `protectedProcedure` БИШ — эс бөгөөс царайны proof шалгагдахгүй (2026-09-12-ны incident: gate зөвхөн дэлгэц байсан).
 11. **Cloud вендорын URL https + public host** (`validateIntegrationSettings`, `isPrivateHost`) — ntfy л LAN-д зөвшөөрөгдөнө.
 
 ---

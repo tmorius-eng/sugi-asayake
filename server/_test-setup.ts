@@ -49,3 +49,9 @@ if (!process.env.INTEGRATIONS_ENCRYPTION_KEY) {
 //    DOES override the environment, on purpose -- no test run should ever
 //    page a real person.
 process.env.NOTIFICATIONS_SUPPRESS = "1";
+
+// 4. Admin face gate (2026-09-12). Every admin-panel procedure now refuses a
+//    call without a live face-proof cookie, and the integration suites build
+//    callers with no cookies at all. Off by default here; the face suites
+//    switch it on for themselves (ENV.adminFaceGateEnabled is a getter).
+process.env.ADMIN_FACE_GATE_ENABLED = "0";

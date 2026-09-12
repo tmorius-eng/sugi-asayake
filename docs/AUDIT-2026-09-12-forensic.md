@@ -29,6 +29,10 @@ Ready to launch the storefront with cash-on-delivery and store pickup. **Not yet
 
 Security 9 · Documentation 9 · Dependencies 9 · Architecture 8 · API 8 · Database 8 · Performance 8 · Edge cases 8 · Testing 8 · Responsive 8 · Frontend code 7 · UX and content 7 · Design system 7 · Accessibility 7 · Product logic 7. Reasons for each are in the report.
 
+## Found after the report, same evening (P1, fixed)
+
+Tom left the laptop for two hours and /admin still worked. Two causes: the proof cookie from before the idle-lock deploy carried a flat 8-hour expiry and no `abs` claim, and the new reader honoured it until its own deadline; and the gate was a screen only, the tRPC procedures behind the panel never checked the proof. Fixed in `server/_core/faceProof.ts` (legacy proofs refused) and `server/_core/trpc.ts` (every panel procedure runs `assertFaceProofForPanelRole`; client maps the error to the camera). Tests: face-idle 11, faceAuth.integration 20, rbac 180.
+
 ## Still open (P3/P4)
 
 Skip link + admin `--a-faint` contrast; coupon per-customer cap race; `a { color: inherit }` outside the cascade layer; variants/analytics screenshot verification on real data; split `db.ts`/`routers.ts` by domain; Aiven region + pool once hosting is chosen. Tom: ntfy token rotation, payment credentials, eBarimt decision, warehouse cutover. Done the same evening: Aiven CA certificate installed on the home laptop and verified (TLSv1.3, bogus CA refused) — the work laptop and the production host need the same file; Tom is handling the 5 junk posts and the 8 brand logos himself.

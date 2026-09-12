@@ -1,5 +1,5 @@
 import { trpc } from "@/lib/trpc";
-import { UNAUTHED_ERR_MSG } from '@shared/const';
+import { FACE_REQUIRED_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, TRPCClientError } from "@trpc/client";
 import { Honeybadger, HoneybadgerErrorBoundary } from "@honeybadger-io/react";
@@ -33,6 +33,15 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 30
 const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;
   if (typeof window === "undefined") return;
+
+  // 2026-09-12: the server now refuses admin-panel calls without a live
+  // face proof (idle lock lapsed, or a proof from before the lock existed).
+  // Re-asking faceAuth.status is what puts the camera back on screen; the
+  // AdminFaceGate renders from that query alone.
+  if (error.message === FACE_REQUIRED_ERR_MSG) {
+    void queryClient.invalidateQueries({ predicate: query => Array.isArray(query.queryKey[0]) && (query.queryKey[0] as unknown[])[0] === "faceAuth" });
+    return;
+  }
 
   const isUnauthorized = error.message === UNAUTHED_ERR_MSG;
   if (!isUnauthorized) return;

@@ -1,5 +1,7 @@
 import { hashPassword } from "./_core/password";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { FACE_REQUIRED_ERR_MSG } from "../shared/const";
+import { issueFaceProof } from "./faceAuth";
 import { eq } from "drizzle-orm";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
@@ -50,7 +52,7 @@ async function makeUser(role: "user" | "staff" | "admin"): Promise<number> {
   return user.id;
 }
 
-function callerFor(userId: number, role: string, sessionVersion = 0) {
+function callerFor(userId: number, role: string, sessionVersion = 0, cookie?: string) {
   const ip = `203.0.113.${Math.floor(Math.random() * 200) + 1}`;
   const ctx: TrpcContext = {
     user: {
@@ -65,7 +67,7 @@ function callerFor(userId: number, role: string, sessionVersion = 0) {
       updatedAt: new Date(),
       lastSignedIn: new Date(),
     } as unknown as TrpcContext["user"],
-    req: { protocol: "https", headers: {}, cookies: {}, ip, socket: { remoteAddress: ip } } as unknown as TrpcContext["req"],
+    req: { protocol: "https", headers: cookie ? { cookie } : {}, cookies: {}, ip, socket: { remoteAddress: ip } } as unknown as TrpcContext["req"],
     res: { cookie: () => undefined, clearCookie: () => undefined } as unknown as TrpcContext["res"],
   };
   return appRouter.createCaller(ctx);
@@ -74,6 +76,11 @@ function callerFor(userId: number, role: string, sessionVersion = 0) {
 describeWithDatabase("admin face gate (real DB)", () => {
   let staffUserId = 0;
   let customerUserId = 0;
+
+  // The suite setup turns the gate off for every other file (their callers
+  // carry no proof cookie); this file is about the gate, so it turns it on.
+  beforeAll(() => { process.env.ADMIN_FACE_GATE_ENABLED = "1"; });
+  afterAll(() => { process.env.ADMIN_FACE_GATE_ENABLED = "0"; });
 
   beforeAll(async () => {
     staffUserId = await makeUser("staff");
@@ -173,6 +180,23 @@ describeWithDatabase("admin face gate (real DB)", () => {
       expect(status.enrolled).toBe(false);
       expect(status.verified).toBe(false);
     }
+  });
+
+  it("the API itself refuses an admin-panel call without a live proof, and accepts one with it", async () => {
+    // 2026-09-12 incident: the gate used to be a screen. The panel asked for
+    // the face; the procedures it called did not, so an expired (or absent)
+    // proof still let every admin call through.
+    const adminId = await makeUser("admin");
+    await expect(callerFor(adminId, "admin").admin.integrations()).rejects.toMatchObject({ code: "FORBIDDEN", message: FACE_REQUIRED_ERR_MSG });
+
+    const jar = new Map<string, string>();
+    const res = { cookie: (name: string, value: string) => { jar.set(name, value); }, clearCookie: () => undefined } as unknown as TrpcContext["res"];
+    const req = { headers: {}, protocol: "https" } as unknown as TrpcContext["req"];
+    await issueFaceProof({ req, res, userId: adminId, sessionVersion: 0 });
+    const cookie = Array.from(jar, ([name, value]) => `${name}=${value}`).join("; ");
+    await expect(callerFor(adminId, "admin", 0, cookie).admin.integrations()).resolves.toBeDefined();
+    // A proof for a superseded session is no proof.
+    await expect(callerFor(adminId, "admin", 1, cookie).admin.integrations()).rejects.toMatchObject({ message: FACE_REQUIRED_ERR_MSG });
   });
 
   it("reports the gate as satisfied for a plain customer, so no shopper is ever prompted", async () => {
