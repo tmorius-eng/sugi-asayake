@@ -4,6 +4,19 @@
 
 ---
 
+## Амьд DB дээрх тестийн үлдэгдлийг цэвэрлэв (2026-09-12, Tom: "delete them")
+
+CLAUDE.md-д удаан хугацаанд нээлттэй байсан зүйл. Эхлээд **зөвхөн уншдаг** тайлан (`scripts/test-residue-report.ts`), дараа нь `scripts/test-residue-purge.ts --apply`.
+
+**Замдаа олдсон 3 зүйл**:
+1. **`%test%`-ээр хайж болохгүй** — каталогт жинхэнэ 13 оронтой JAN баркодтой `Honey amproom tester`, `Ceramid amproom test` гэх 6 бараа байна. Тиймээс зөвхөн мэдэгдэж буй fixture-ийн нэрсээр таарна.
+2. **Тестийн захиалгууд нэрээр нь л олдоно** — `order_items.productId` нь SET NULL тул тестийн бараа устсаны дараа захиалга нь "жинхэнэ" мэт харагддаг. `Telemetry Test Shopper`-ийн 2 захиалга (2×22,000₮) ингэж борлуулалтын тоонд үлдсэн байжээ.
+3. ⚠️ **Устгасан 3 тестийн хэрэглэгчийн 2 нь `admin` эрхтэй** байв (`Order Notify Admin`, `Telemetry Test Admin`) — CLAUDE.md-ийн "admin 3" гэсэн тоо эндээс гарч байсан. Одоо амьд DB-д **ердөө 2 хэрэглэгч**: bataa (admin), zulaa (staff).
+
+**Устгасан**: 3 хэрэглэгч, 2 захиалга (+ мөрүүд), 887 `suppressed` мэдэгдэл. Бараа/ангилал аль хэдийн цэвэр байв. **Шалгасан**: үлдэгдэл 0, ledger drift 0, борлуулалт 248,400₮ (дэлгүүрийн бодит POS борлуулалт) хэвээр.
+
+**Хийгээгүй, Tom-оос асуух**: `posts` дээр туршилтын 5 нийтлэл нийтлэгдсэн хэвээр — "diane shampoo", "lofi cityaidhas", "asdsad", "assasafaregrheta", "qedqwds" (#37 "CU дэлгүүрийн тендер" бол жинхэнэ мэдээ). Эдгээр нь Tom-ийн өөрийн бичсэн контент тул устгах эсэхийг асуусан.
+
 ## StorePay төлбөр + QPay callback-ийн засвар + и-баримтын 3 дахь зам (2026-09-12, гэрийн лаптоп)
 
 Tom: `https://github.com/techpartners-asia/storepay-go` "manai 4 salbar 4 uulee storepay demjdeg shww!!", дараа нь `https://pypi.org/project/ebarimt-pos-sdk/`, `https://pypi.org/project/qpay-client/`, `https://github.com/hurelhuyag/ebarimt`.

@@ -36,6 +36,17 @@ export const TEST_PRODUCT_PATTERNS = [
 
 export const TEST_USER_PATTERNS = ["%@example.invalid", "guest-checkout-test-%"];
 
+/**
+ * Orders a test wrote directly. Matched by the CUSTOMER NAME a fixture used,
+ * because the products they referenced are long deleted (order_items.productId
+ * is SET NULL) -- which is exactly how two "Telemetry Test Shopper" orders
+ * stayed in the live revenue figures unnoticed.
+ *
+ * Every pattern here is a fixture name no shopper would type. "%tester%" is
+ * NOT among them: the catalogue really does sell "Honey amproom tester".
+ */
+export const TEST_ORDER_CUSTOMER_PATTERNS = ["Telemetry Test %", "Analytics Test %", "Order Notify %", "Bulk Test Customer%", "Inventory test %", "Sync test %"];
+
 export const TEST_CATEGORY_PATTERNS = ["Telemetry Test%", "Order Notify Test%", "Analytics Test%", "Inventory test category", "%test category%"];
 
 export async function collectResidue() {
@@ -57,16 +68,19 @@ export async function collectResidue() {
     ? await db.select({ orderId: orderItems.orderId, productId: orderItems.productId, name: orderItems.productName }).from(orderItems).where(inArray(orderItems.productId, productIds))
     : [];
   const touchedOrderIds = Array.from(new Set(orderItemRows.map(row => row.orderId)));
-  const orderRows = touchedOrderIds.length || userIds.length
-    ? await db.select({ id: orders.id, orderNumber: orders.orderNumber, userId: orders.userId, customerName: orders.customerName, status: orders.status, paymentStatus: orders.paymentStatus, totalMnt: orders.totalMnt, createdAt: orders.createdAt })
-        .from(orders).where(or(touchedOrderIds.length ? inArray(orders.id, touchedOrderIds) : sql`0 = 1`, userIds.length ? inArray(orders.userId, userIds) : sql`0 = 1`))
-        .orderBy(desc(orders.id))
-    : [];
+  const orderRows = await db.select({ id: orders.id, orderNumber: orders.orderNumber, userId: orders.userId, customerName: orders.customerName, status: orders.status, paymentStatus: orders.paymentStatus, totalMnt: orders.totalMnt, createdAt: orders.createdAt })
+    .from(orders).where(or(
+      touchedOrderIds.length ? inArray(orders.id, touchedOrderIds) : sql`0 = 1`,
+      userIds.length ? inArray(orders.userId, userIds) : sql`0 = 1`,
+      ...TEST_ORDER_CUSTOMER_PATTERNS.map(pattern => like(orders.customerName, pattern)),
+    ))
+    .orderBy(desc(orders.id));
   const mixedOrders: number[] = [];
   for (const order of orderRows) {
     const [{ total }] = await db.select({ total: sql<number>`COUNT(*)` }).from(orderItems).where(eq(orderItems.orderId, order.id));
     const [{ test }] = await db.select({ test: sql<number>`COUNT(*)` }).from(orderItems).where(and(eq(orderItems.orderId, order.id), productIds.length ? inArray(orderItems.productId, productIds) : sql`0 = 1`));
-    if (Number(total) !== Number(test) && !userIds.includes(order.userId ?? -1)) mixedOrders.push(order.id);
+    const byName = TEST_ORDER_CUSTOMER_PATTERNS.some(pattern => new RegExp(`^${pattern.replace(/%/g, ".*")}$`, "i").test(order.customerName));
+    if (!byName && Number(total) !== Number(test) && !userIds.includes(order.userId ?? -1)) mixedOrders.push(order.id);
   }
 
   const categoryRows = await db.select({ id: productCategories.id, name: productCategories.name, slug: productCategories.slug })
