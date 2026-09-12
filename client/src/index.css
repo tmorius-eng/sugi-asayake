@@ -1767,7 +1767,19 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    Tom asked directly for this to just be pushed down instead of patched
    again. Simple, robust positive gap now -- no more overlap trick to
    re-break. */
-.cat-mosaic-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 28px; }
+/* 2026-09-12 (Tom): the 3x2 grid became one endless, swipeable row --
+   CategoryRail.tsx. A real scroll container with snap (native finger swipe
+   on phones), mouse drag added in JS, three copies of the list for the
+   wrap-around. Cards keep their design; only their width is now fixed so
+   the row scrolls, and the scrollbar is hidden because the arrows and the
+   swipe are the controls. */
+.cat-rail-wrap { margin-top: 28px; }
+.cat-rail { display: flex; gap: 24px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scroll-behavior: smooth; overscroll-behavior-x: contain; cursor: grab; -webkit-user-select: none; user-select: none; scrollbar-width: none; -ms-overflow-style: none; padding-bottom: 4px; }
+.cat-rail::-webkit-scrollbar { display: none; }
+.cat-rail.is-dragging { cursor: grabbing; scroll-snap-type: none; scroll-behavior: auto; }
+.cat-rail-card { flex: 0 0 clamp(240px, 26vw, 320px); scroll-snap-align: start; }
+.cat-rail-card > .cat-mosaic-item { height: 100%; }
+.cat-rail-arrows { margin-top: 18px; }
 
 .cat-mosaic-item { position: relative; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: var(--card); box-shadow: var(--shadow-sm); transition: box-shadow .22s var(--ease-out); }
 .cat-mosaic-item:hover { box-shadow: var(--shadow-md); }
@@ -1859,7 +1871,9 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
      overlap/offset classes (see the .cat-mosaic-grid comment above), so
      there's nothing left to reset here, just the column count/gap and a
      uniform card height, same as desktop's own uniform-height approach. */
-  .cat-mosaic-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 20px; }
+  .cat-rail-wrap { margin-top: 20px; }
+  .cat-rail { gap: 16px; }
+  .cat-rail-card { flex-basis: min(74vw, 300px); }
   /* v6: the photo is now a fixed-height zone (client/src/index.css's
      .cat-mosaic-item-photo, not the whole card), so there's no aspect-ratio
      crowding to compensate for here anymore -- just a slightly shorter

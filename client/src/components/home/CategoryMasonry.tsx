@@ -4,6 +4,7 @@ import { ArrowUpRight } from "lucide-react";
 import { getCategoryPlaceholderImage } from "@shared/catalog-filter";
 import { useSiteText } from "@/hooks/useSiteText";
 import SectionHeading from "./SectionHeading";
+import CategoryRail from "./CategoryRail";
 
 // 2026-09-12: this shape is now produced by useCategories() from the real
 // product_categories table plus the admin's image slots, instead of a
@@ -92,8 +93,13 @@ export default function CategoryMasonry({
         </a>
       </div>
 
-      <div className="cat-mosaic-grid">
-        {categories.map((category) => {
+      {/* 2026-09-12 (Tom): one endless, swipeable row instead of the 3x2
+          grid -- see CategoryRail.tsx. The card itself is unchanged. */}
+      <CategoryRail
+        items={categories}
+        keyOf={category => category.slug}
+        ariaLabel="Ангиллууд"
+        renderCard={(category, clone) => {
           const imageSrc = category.imageUrl || getCategoryPlaceholderImage(category.slug);
           // The description an admin types in /admin -> Ангилал is the
           // card's second line; the per-card text slot stays as an override
@@ -109,7 +115,8 @@ export default function CategoryMasonry({
             <Link
               href={`/shop?category=${encodeURIComponent(category.name)}`}
               className="cat-mosaic-item"
-              key={category.slug}
+              tabIndex={clone ? -1 : undefined}
+              draggable={false}
             >
               {/* v9 (2026-09-01): a real <img> (not a background-image span)
                   inside a neutral "shelf" panel (.cat-mosaic-item-photo,
@@ -128,7 +135,7 @@ export default function CategoryMasonry({
                   means a real alt text instead of a decorative
                   background-image with no accessible name. */}
               <span className="cat-mosaic-item-photo">
-                <img src={imageSrc} alt={category.name} loading="lazy" />
+                <img src={imageSrc} alt={category.name} loading="lazy" draggable={false} />
               </span>
               <span className="cat-mosaic-item-body">
                 {/* 2026-09-11 audit: the "01".."06" index was removed. The six
@@ -143,8 +150,8 @@ export default function CategoryMasonry({
               </span>
             </Link>
           );
-        })}
-      </div>
+        }}
+      />
 
       <div className="cat-mosaic-note">
         <img src={symbolImage} alt="" />
