@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { useCategories } from "@/hooks/useCategories";
 import { useShopContact } from "@/hooks/useShopContact";
 import { useSiteText } from "@/hooks/useSiteText";
+import { useT } from "@/hooks/useLocale";
 import { footerLogoUrl } from "@/components/site-footer-data";
 
 // NEWVISION.md §9: replaces Home.tsx's old single-row footer (logo + one
@@ -40,6 +41,7 @@ export type FooterCtaBanner = { eyebrow: string; headingLine1: string; headingLi
 
 export default function SiteFooter({ ctaBanner }: { ctaBanner?: FooterCtaBanner }) {
   const textFor = useSiteText();
+  const t = useT();
   const contact = useShopContact();
   const categories = useCategories();
   const socials = [
@@ -81,10 +83,10 @@ export default function SiteFooter({ ctaBanner }: { ctaBanner?: FooterCtaBanner 
         </div>
         <div className="footer-column">
           <span>{textFor("footer-text-column-legal", "Нөхцөл ба бодлого")}</span>
-          <Link href="/privacy">Хувийн нууцлал</Link>
-          <Link href="/terms">Үйлчилгээний нөхцөл</Link>
-          <Link href="/returns">Буцаалт, солилцоо</Link>
-          <Link href="/track-order">Захиалгаа хянах</Link>
+          <Link href="/privacy">{t("Хувийн нууцлал")}</Link>
+          <Link href="/terms">{t("Үйлчилгээний нөхцөл")}</Link>
+          <Link href="/returns">{t("Буцаалт, солилцоо")}</Link>
+          <Link href="/track-order">{t("Захиалгаа хянах")}</Link>
           {/* 2026-09-06: resetConsent() is Silktide Consent Manager's own
               documented public method (client/public/vendor/silktide-consent-
               manager.js) -- re-shows the initial Accept/Reject/Preferences
@@ -95,7 +97,7 @@ export default function SiteFooter({ ctaBanner }: { ctaBanner?: FooterCtaBanner 
               future Silktide version. A <button>, not a <Link>: this
               triggers JS, not navigation. Optional chaining throughout so a
               blocked/failed script load never throws here. */}
-          <button type="button" onClick={() => window.silktideConsentManager?.resetConsent?.()} className="footer-column-button">Күкийн тохиргоо</button>
+          <button type="button" onClick={() => window.silktideConsentManager?.resetConsent?.()} className="footer-column-button">{t("Күкийн тохиргоо")}</button>
         </div>
         <div className="footer-column">
           <span>{textFor("footer-text-column-contact", "Холбоо барих")}</span>

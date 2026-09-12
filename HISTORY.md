@@ -4,6 +4,16 @@
 
 ---
 
+## Хэл солих товч (2026-09-12, гэрийн лаптоп)
+
+Tom глоб товч + English/Japanese хүссэн. `shared/i18n.ts` (түлхүүр нь монгол өгүүлбэр өөрөө — орчуулга байхгүй бол эх үг нь харагдана), `useLocale.ts` (localStorage + `<html lang>`), `LocaleSwitch.tsx` (header-ийн глоб цэс), `useSiteText` нь буцаах бүх утгаа хэлээр дамжуулна, `useCategories` ангиллын нэрийг орчуулна (slug хэвээр тул холбоос эвдрэхгүй).
+
+**Хэмжсэн**: en → цэс "Shop/Top brands/Membership/Stores/Journal", CTA "Browse products", гарчиг "Popular searches/Best sellers/Featured brands", footer "Shop/Stores/Terms & policies/Contact", ангилал "Skincare/Beauty/Wellness"; ja → "ショップ/人気ブランド/…", "商品を見る", "人気キーワード/売れ筋商品/ピックアップブランド", "スキンケア/コスメ/健康・インナーケア". Reload-ийн дараа сонголт хадгалагдана. Console алдаа 0.
+
+⚠️ **Каталогийн өгөгдөл (барааны нэр, тайлбар, брэнд) орчуулагдахгүй** — DB-д нэг хэлээр хадгалагддаг; хэл тус бүрийн багана + admin дэлгэц шаардана.
+
+---
+
 ## Storefront-ийн dark theme (2026-09-12, гэрийн лаптоп)
 
 Tom: "dark theme on off bolgodog bolgo!! headeriin tend button nem!". Дараа нь "buh ym dark theme adapt boldog boloh hurtel zogsoltgui ajil hiii!!" гэж шаардсаны дагуу хуудас бүрийг хэмжиж дуустал давтав.

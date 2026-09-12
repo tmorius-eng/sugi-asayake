@@ -1,5 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
+import { useLocale } from "@/hooks/useLocale";
+import { translate } from "@shared/i18n";
 
 const CACHE_KEY = "sugi-site-text-cache-v1";
 
@@ -54,6 +56,7 @@ function writeCachedSlotMap(rows: { slotKey: string; textValue: string | null }[
  */
 export function useSiteText() {
   const cached = useMemo(readCachedSlotMap, []);
+  const locale = useLocale();
   const query = trpc.content.siteText.useQuery();
 
   useEffect(() => {
@@ -65,5 +68,10 @@ export function useSiteText() {
     return cached ?? new Map<string, string | null>();
   }, [query.data, cached]);
 
-  return (slotKey: string, fallback: string) => bySlot.get(slotKey) || fallback;
+  // 2026-09-12: every admin-editable string passes through the storefront's
+  // language before it reaches the page. An entry exists for the copy this
+  // site ships with; anything an admin has since rewritten falls through
+  // unchanged, which is the honest outcome -- a machine guess at their own
+  // wording would be worse than showing it as they wrote it.
+  return (slotKey: string, fallback: string) => translate(bySlot.get(slotKey) || fallback, locale);
 }

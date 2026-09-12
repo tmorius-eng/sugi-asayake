@@ -1,5 +1,7 @@
 import { useMemo } from "react";
 import { trpc } from "@/lib/trpc";
+import { useLocale } from "@/hooks/useLocale";
+import { translate } from "@shared/i18n";
 import { categoryPresentation } from "@/components/home/categories-data";
 import { getCategoryPlaceholderImage } from "@shared/catalog-filter";
 import { getSiteMediaSlot, siteMediaSlotKeys } from "@shared/site-media";
@@ -39,6 +41,10 @@ export type StorefrontCategory = {
 export function useCategories(): StorefrontCategory[] {
   const categoriesQuery = trpc.content.categories.useQuery();
   const mediaQuery = trpc.content.siteMedia.useQuery();
+  // The six catalogue categories are shop vocabulary rather than product
+  // data, so they are in the dictionary and follow the chosen language; the
+  // slug (and therefore every /shop?category= link) is untouched.
+  const locale = useLocale();
 
   return useMemo(() => {
     const mediaBySlot = new Map((mediaQuery.data ?? []).map(media => [media.slotKey, media.imageUrl]));
@@ -55,7 +61,7 @@ export function useCategories(): StorefrontCategory[] {
       const { Icon, tone } = categoryPresentation(category.slug);
       return {
         id: category.id,
-        name: category.name,
+        name: translate(category.name, locale),
         slug: category.slug,
         detail: category.description ?? "",
         imageUrl: mediaBySlot.get(slotKey) || category.imageUrl || slotDefault || getCategoryPlaceholderImage(category.slug),
@@ -64,5 +70,5 @@ export function useCategories(): StorefrontCategory[] {
         tone,
       };
     });
-  }, [categoriesQuery.data, mediaQuery.data]);
+  }, [categoriesQuery.data, mediaQuery.data, locale]);
 }

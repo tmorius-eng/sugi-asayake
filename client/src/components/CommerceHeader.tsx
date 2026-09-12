@@ -3,9 +3,11 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import HeaderSearch from "@/components/HeaderSearch";
+import LocaleSwitch from "@/components/LocaleSwitch";
 import { useCategories } from "@/hooks/useCategories";
 import { useSiteText } from "@/hooks/useSiteText";
 import { toggleStorefrontTheme, useStorefrontTheme } from "@/hooks/useStorefrontTheme";
+import { useT } from "@/hooks/useLocale";
 import { trpc } from "@/lib/trpc";
 
 type CommerceHeaderProps = {
@@ -53,6 +55,7 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
   const textFor = useSiteText();
   const categories = useCategories();
   const theme = useStorefrontTheme();
+  const t = useT();
   // Resolved once so the desktop nav and the mobile drawer can never show
   // two different labels for the same link.
   const navItems = marketingNavItems.map(item => ({ ...item, label: textFor(item.slot, item.fallback) }));
@@ -117,12 +120,13 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
             {/* Light/dark for the storefront (Tom). It carries its own
                 attribute on <html>, not the `.dark` class every Tailwind
                 `dark:` utility keys off, so /admin keeps its own theme. */}
+            <LocaleSwitch />
             <button
               type="button"
               className="header-theme-toggle"
               onClick={toggleStorefrontTheme}
-              aria-label={theme === "dark" ? "Цайвар загвар руу шилжих" : "Харанхуй загвар руу шилжих"}
-              title={theme === "dark" ? "Цайвар загвар" : "Харанхуй загвар"}
+              aria-label={theme === "dark" ? t("Цайвар загвар") : t("Харанхуй загвар")}
+              title={theme === "dark" ? t("Цайвар загвар") : t("Харанхуй загвар")}
               aria-pressed={theme === "dark"}
             >
               {theme === "dark" ? <Sun size={19} aria-hidden="true" /> : <Moon size={19} aria-hidden="true" />}
@@ -138,7 +142,7 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
                 {/* The label stays in the DOM for a screen reader and for
                     the mobile drawer; the header itself shows icons only,
                     as the reference does. */}
-                <span className="header-action-label">Хүслийн жагсаалт</span>
+                <span className="header-action-label">{t("Хүслийн жагсаалт")}</span>
                 {wishlistCount > 0 && <span className="header-action-count">{wishlistCount}</span>}
               </Link>
             )}
@@ -152,11 +156,11 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
               ) : (
                 <User size={19} aria-hidden="true" />
               )}
-              <span className="header-action-label">Профайл</span>
+              <span className="header-action-label">{t("Профайл")}</span>
             </Link>
             <button type="button" onClick={onCartOpen} aria-label={cartCount > 0 ? `Сагс нээх, ${cartCount} бараатай` : "Сагс нээх"}>
               <ShoppingBag size={19} aria-hidden="true" />
-              <span className="header-action-label">Сагс</span>
+              <span className="header-action-label">{t("Сагс")}</span>
               {cartCount > 0 && <span className="header-action-count">{cartCount}</span>}
             </button>
             <button type="button" className="commerce-menu-toggle" aria-expanded={menuOpen} aria-label={menuOpen ? "Цэс хаах" : "Цэс нээх"} onClick={() => setMenuOpen(open => !open)}>
@@ -183,14 +187,14 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
               real category list (categories-data.ts, the same single
               source of truth Home.tsx/Shop.tsx already use) and real
               legal/support pages, never bsb.mn's own categories. */}
-          <p className="commerce-mobile-menu-heading">Ангилал</p>
+          <p className="commerce-mobile-menu-heading">{t("Ангилал")}</p>
           {categories.map(category => (
             <Link href={`/shop?category=${encodeURIComponent(category.name)}`} key={category.slug} onClick={closeMenu}>
               <span className="flex items-center gap-2"><category.Icon size={15} aria-hidden="true" />{category.name}</span>
               <ChevronRight size={16} aria-hidden="true" />
             </Link>
           ))}
-          <Link href="/shop" onClick={closeMenu}><span>Бүх бүтээгдэхүүн</span><ArrowUpRight size={16} /></Link>
+          <Link href="/shop" onClick={closeMenu}><span>{t("Бүх бүтээгдэхүүн")}</span><ArrowUpRight size={16} /></Link>
           {marketingNav && navItems.filter(item => item.href !== "/shop").map(item => item.anchor
             ? <a href={item.href} key={item.slot} onClick={closeMenu}><span>{item.label}</span><ArrowUpRight size={16} /></a>
             : <Link href={item.href} key={item.slot} onClick={closeMenu}><span>{item.label}</span><ArrowUpRight size={16} /></Link>)}
@@ -199,11 +203,11 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
               <span>Хүслийн жагсаалт{wishlistCount > 0 ? ` (${wishlistCount})` : ""}</span><ArrowUpRight size={16} />
             </Link>
           )}
-          <Link href="/profile" onClick={closeMenu}><span>Профайл</span><ArrowUpRight size={16} /></Link>
-          <p className="commerce-mobile-menu-heading">Тухай</p>
-          <Link href="/privacy" onClick={closeMenu}><span>Нууцлалын бодлого</span><ArrowUpRight size={16} /></Link>
-          <Link href="/terms" onClick={closeMenu}><span>Үйлчилгээний нөхцөл</span><ArrowUpRight size={16} /></Link>
-          <Link href="/returns" onClick={closeMenu}><span>Буцаалт, солилцоо</span><ArrowUpRight size={16} /></Link>
+          <Link href="/profile" onClick={closeMenu}><span>{t("Профайл")}</span><ArrowUpRight size={16} /></Link>
+          <p className="commerce-mobile-menu-heading">{t("Тухай")}</p>
+          <Link href="/privacy" onClick={closeMenu}><span>{t("Нууцлалын бодлого")}</span><ArrowUpRight size={16} /></Link>
+          <Link href="/terms" onClick={closeMenu}><span>{t("Үйлчилгээний нөхцөл")}</span><ArrowUpRight size={16} /></Link>
+          <Link href="/returns" onClick={closeMenu}><span>{t("Буцаалт, солилцоо")}</span><ArrowUpRight size={16} /></Link>
         </div>
       </header>
     </>

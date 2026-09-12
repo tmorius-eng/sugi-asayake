@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { BadgeCheck, ChevronRight } from "lucide-react";
 import { getSiteMediaSlot, type SiteMediaSlotKey } from "@shared/site-media";
 import { useSiteText } from "@/hooks/useSiteText";
+import { useT } from "@/hooks/useLocale";
 import HeroImageSlideshow, { type HeroSlide } from "./HeroImageSlideshow";
 
 /**
@@ -29,6 +30,7 @@ export default function HeroSection({ imageFor, mediaReady = true }: {
   mediaReady?: boolean;
 }) {
   const textFor = useSiteText();
+  const t = useT();
   // Admins type the heading as up to three lines; here they read as one
   // centred sentence, wrapping wherever the viewport needs it.
   const heading = textFor("home-text-hero-heading", "ГЭР БҮЛИЙН\nГИШҮҮН БҮРТ\nЯПОН ЧАНАР").split("\n").filter(Boolean).join(" ");
@@ -58,11 +60,11 @@ export default function HeroSection({ imageFor, mediaReady = true }: {
    * blank frame -- so the row is three tiles today and up to six the moment
    * /admin -> Зураг has more.
    */
-  const shopLabel = "Бүтээгдэхүүн үзэх";
+  const shopLabel = t("Бүтээгдэхүүн үзэх");
   const slides = [
     slideFor("home-hero", "/shop", shopLabel),
     slideFor("home-hero-2", "/shop", shopLabel),
-    slideFor("home-hero-3", "#stores", "Салбар олох"),
+    slideFor("home-hero-3", "#stores", t("Салбар олох")),
     slideFor("home-hero-4", "/shop", shopLabel),
     slideFor("home-hero-5", "/shop", shopLabel),
     slideFor("home-hero-6", "/shop", shopLabel),
@@ -96,8 +98,8 @@ export default function HeroSection({ imageFor, mediaReady = true }: {
         <h1 id="hero-title">{heading}</h1>
         <p className="hero-description">{textFor("home-text-hero-description", "Японоос баталгаат бүтээгдэхүүнүүдийг албан ёсны эрхтэйгээр танд хүргэж байна.")}</p>
         <div className="hero-actions">
-          <Link className="button button-primary" href="/shop">Бүтээгдэхүүн үзэх <ChevronRight size={16} /></Link>
-          <a className="quiet-link" href="#stores">Салбар олох</a>
+          <Link className="button button-primary" href="/shop">{t("Бүтээгдэхүүн үзэх")} <ChevronRight size={16} /></Link>
+          <a className="quiet-link" href="#stores">{t("Салбар олох")}</a>
         </div>
         <div className="hero-trust">
           <BadgeCheck size={18} />

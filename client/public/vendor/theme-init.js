@@ -19,6 +19,10 @@
       : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     document.documentElement.setAttribute("data-storefront-theme", theme);
     document.documentElement.style.colorScheme = theme;
+    // The language follows the same path: applied before the first paint so
+    // the header does not flash Mongolian at an English-speaking visitor.
+    var locale = localStorage.getItem("sugi-locale");
+    if (locale === "mn" || locale === "en" || locale === "ja") document.documentElement.setAttribute("lang", locale);
   } catch (error) {
     document.documentElement.setAttribute("data-storefront-theme", "light");
   }
