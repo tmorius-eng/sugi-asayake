@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { getActiveIntegrationConfig, getOrderById, getPaymentAttemptByInvoiceId, markQPayPaymentAttemptFailed, markQPayPaymentAttemptPaid, storeQPayPaymentAttemptResponse } from "./db";
+import { normaliseMongolianMobile } from "../shared/mobile";
 import { limitQPayCallbackTraffic } from "./_core/security";
 
 /**
@@ -116,12 +117,9 @@ async function storepayFetch(config: StorepayConfig, path: string, init: Request
   }
 }
 
-/** Mongolian mobile number as StorePay expects it: 8 digits, no country code. */
-export function normaliseMobileNumber(input: string): string | null {
-  const digits = input.replace(/\D/g, "");
-  const local = digits.startsWith("976") && digits.length === 11 ? digits.slice(3) : digits;
-  return /^[5-9]\d{7}$/.test(local) ? local : null;
-}
+/** Mongolian mobile number as StorePay expects it: 8 digits, no country code.
+ *  The rule lives in shared/ because the checkout page applies it too. */
+export const normaliseMobileNumber = normaliseMongolianMobile;
 
 /** How much this customer may borrow right now (0 when they may not). */
 export async function storepayPossibleAmount(mobileNumber: string): Promise<number> {
