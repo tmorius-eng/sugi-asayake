@@ -41,7 +41,12 @@ const PROBE_PATTERNS: RegExp[] = [
   // Server-side languages this app is not written in.
   /\.(php|asp|aspx|jsp|jspx|cgi|pl|cfm)$/i,
   // Framework and CMS admin surfaces we do not have.
-  /(^|\/)(wp-admin|wp-login|wp-content|wp-includes|xmlrpc\.php|phpmyadmin|pma|adminer|cgi-bin|vendor|actuator|_profiler|telescope|laravel|storage\/logs|debug\/default|console|jenkins|solr|manager\/html)(\/|$)/i,
+  // `vendor` is deliberately NOT in this list: this app serves its own
+  // /vendor/silktide-consent-manager.{js,css} (the cookie banner), and the
+  // first version of this rule blocked them -- the banner died on every
+  // page. The classic composer probe (/vendor/phpunit/.../eval-stdin.php)
+  // is still caught by the *.php rule above.
+  /(^|\/)(wp-admin|wp-login|wp-content|wp-includes|xmlrpc\.php|phpmyadmin|pma|adminer|cgi-bin|actuator|_profiler|telescope|laravel|storage\/logs|debug\/default|console|jenkins|solr|manager\/html)(\/|$)/i,
   // The app's own source files, which are never served at these names.
   /^\/(server|app|main|index|config|secrets?|settings|credentials)\.(js|ts|json|cjs|mjs)$/i,
 ];

@@ -1,4 +1,5 @@
 import { Check, CircleAlert, CreditCard, LoaderCircle, MapPin, ShoppingBag, Smartphone, Truck } from "lucide-react";
+import { newRequestId } from "@/lib/requestId";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
@@ -71,7 +72,7 @@ export default function Checkout() {
   // same order instead of placing the basket twice. Rotated only after a
   // success: a failed attempt must keep its id, or the retry would count as
   // a new attempt.
-  const checkoutRequestIdRef = useRef(crypto.randomUUID());
+  const checkoutRequestIdRef = useRef(newRequestId());
   const createInvoice = trpc.payments.qpayCreateInvoice.useMutation();
   // Prefill from the profile page once its data arrives, without ever
   // clobbering something the shopper already typed — each effect fires at
@@ -195,7 +196,7 @@ export default function Checkout() {
       await utils.cart.myStoreCreditBalance.invalidate();
       removeCoupon();
       setUseStoreCredit(false);
-      checkoutRequestIdRef.current = crypto.randomUUID();
+      checkoutRequestIdRef.current = newRequestId();
       setPlacedOrder(order);
       // Cash/pickup orders are confirmed the instant they're placed — see
       // isOrderConfirmed above, which renders OrderConfirmation once this

@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from "react";
+import { newRequestId } from "@/lib/requestId";
 import { LoaderCircle, Minus, Plus, ScanBarcode, Search, ShoppingBag, Store, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -31,7 +32,7 @@ export default function AdminPosPanel() {
   const recordSale = trpc.admin.recordInStoreSale.useMutation();
   // One key per basket: a resend after a timeout, or a double tap on
   // "Бүртгэх", comes back with the same sale instead of a second one.
-  const saleRequestIdRef = useRef(crypto.randomUUID());
+  const saleRequestIdRef = useRef(newRequestId());
   const utils = trpc.useUtils();
 
   const branches = branchesQuery.data ?? [];
@@ -89,7 +90,7 @@ export default function AdminPosPanel() {
         customerPhone: customerPhone.trim() || null,
         clientRequestId: saleRequestIdRef.current,
       });
-      saleRequestIdRef.current = crypto.randomUUID();
+      saleRequestIdRef.current = newRequestId();
       setLastReceipt({ orderNumber: order.orderNumber, totalMnt: order.totalMnt });
       toast.success(`Худалдаа бүртгэгдлээ — ${order.orderNumber}`);
       setLineItems([]);

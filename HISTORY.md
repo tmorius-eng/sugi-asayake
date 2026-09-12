@@ -30,6 +30,9 @@ Tom 27 үе шаттай "FULL-STACK FORENSIC AUDIT + SCAFFOLD-TO-PRODUCTION REF
 - **Tooling**: `tsconfig.json` target ES2022; `tsconfig.tests.json` тест/скриптийг type-check хийнэ (`pnpm check` = 2 tsc) → **90 хуучирсан fake session user** 31 файлд олдов → `server/_test-helpers.ts` `testSessionUser()`; `faceAuth.integration.test` hash биш plaintext нууц үг дамжуулж байсан (бодит bug). ESLint flat config (`pnpm lint`, CI-д Lint алхам) — hooks dep дутуу (AdminFaceGate), тогтворгүй useMemo input, dialog Enter-ийн IME composition bug.
 - Цэвэрлэгээ: QA admin (`qa-admin-tmp@example.invalid`, id 6490) Aiven-ээс устгасан; gate-off 3101 dev server зогсоосон; `scripts/tmp-*.ts` gitignore.
 
+### Мөн орой — LAN/http checkout crash + scanner-blocker-ийн регресс
+Tom утаснаас checkout нээхэд "An unexpected error occurred". Playwright-аар `http://192.168.88.6:3000/checkout` (insecure context) дээр давтаж: `crypto.randomUUID is not a function` — миний 3d3b05a-д нэмсэн idempotency түлхүүр render дээр дуудагддаг байв. `newRequestId()` fallback. Мөн console-д `/vendor/silktide-consent-manager.js` 404 — f4555cb-ийн probe-blocker `vendor`-ыг блоклож cookie banner үхсэн байсныг олж засав (public 71 файлыг matcher-оор audit хийсэн скрипт). Дэлгэрэнгүй CLAUDE.md.
+
 ### Мөн орой — утсан дээрх scroll-ийн 2 алдаа (Tom-ийн LAN тест)
 "Дараах" footer руу; шинэ хуудас доошоо. Хэмжилт + шалтгаан + засвар CLAUDE.md-ийн ижил нэртэй хэсэгт. Сургамж: **scroll хийхээсээ өмнө документын өндөр өөрчлөгдөх эсэхийг бод** — smooth scroll явж байхад layout өөрчлөгдвөл browser (ялангуяа Safari) clamp хийдэг; яг тодорхой газар буух scroll бол instant + render-ийн дараа. Мөн бүрэн suite 52e9e65 дээр 783/783 (84 файл); өмнөх run-ын loyalty timeout нь зэрэгцээ тест ажиллуулснаас үүссэн түр зуурын зүйл байв.
 

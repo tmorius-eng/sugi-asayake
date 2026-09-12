@@ -51,7 +51,10 @@ export default function AdminNotificationsPanel() {
 
   const copy = async (text: string) => {
     try {
-      await navigator.clipboard.writeText(text);
+      // navigator.clipboard is undefined outside a secure context (plain-http
+      // LAN testing, 2026-09-12); fall back to a selectable prompt.
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+      else window.prompt("Хуулах текст:", text);
       toast.success("Хууллаа.");
     } catch {
       toast.error("Хуулж чадсангүй — гараар сонгож хуулна уу.");

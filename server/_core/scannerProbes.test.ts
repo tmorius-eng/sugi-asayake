@@ -11,7 +11,7 @@ const PROBES = [
   "/.env", "/.env.save", "/.env.bak", "/.env.prod", "/.env.local", "/laravel/.env", "/api/.env", "/crm/.env", "/images/.env",
   "/.git/config", "/.aws/credentials", "/.ssh/id_rsa", "/.config.yaml", "/.DS_Store",
   "/info.php", "/phpinfo.php", "/test.php", "/app_dev.php/_profiler/phpinfo", "/index.asp",
-  "/wp-admin/", "/wp-login.php", "/xmlrpc.php", "/phpmyadmin/", "/cgi-bin/test", "/vendor/phpunit", "/actuator/health", "/_profiler/open",
+  "/wp-admin/", "/wp-login.php", "/xmlrpc.php", "/phpmyadmin/", "/cgi-bin/test", "/vendor/phpunit/src/Util/PHP/eval-stdin.php", "/actuator/health", "/_profiler/open",
   "/secrets.env", "/config.js", "/server.js", "/settings.json", "/backup.sql", "/db.sqlite", "/site.zip", "/dump.tar.gz", "/debug/default/view?panel=config".split("?")[0],
   "/%2e%2e/etc/passwd".replace("%2e%2e", ".."), "/%ZZ", // undecodable
 ];
@@ -21,6 +21,9 @@ const REAL = [
   "/api/trpc/catalog.list", "/api/trpc/auth.me?batch=1", "/api/payments/qpay/callback", "/api/payments/storepay/callback", "/api/verify-mn/callback/abc123", "/health",
   "/cdn/products/abc.webp", "/assets/index-B5ktK4kX.js", "/assets/index-DpKeP7kF.css", "/face-models/tiny_face_detector_model-weights_manifest.json", "/face-models/model-shard1",
   "/favicon.ico", "/robots.txt", "/sitemap.xml", "/manifest.webmanifest", "/.well-known/acme-challenge/token", "/.well-known/apple-app-site-association",
+  // The cookie banner's own files (client/public/vendor). Blocking these
+  // silently killed consent on every page once -- keep them here.
+  "/vendor/silktide-consent-manager.js", "/vendor/silktide-consent-manager.css",
   "/@vite/client", "/src/main.tsx", "/node_modules/.vite/deps/react.js",
 ];
 
