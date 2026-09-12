@@ -220,7 +220,8 @@ export const UI_STRINGS: Record<string, { en: string; ja: string }> = {
   "24–48 цагийн дотор · Салбараас үнэгүй авах": { en: "Within 24–48 hours · free store pickup", ja: "24〜48時間以内 ・ 店舗受取は無料" },
   "Албан ёсны баталгаа": { en: "Official guarantee", ja: "正規保証" },
   "ХАМТ ХАРСАН НЬ ТОХИРНО": { en: "OFTEN VIEWED TOGETHER", ja: "一緒に見られている商品" },
-  "Мөн танд таалагдаж": { en: "You may also like", ja: "こちらもおすすめ" },
+  "Мөн танд": { en: "You may also", ja: "こちらも" },
+  "таалагдаж магадгүй": { en: "like these", ja: "おすすめです" },
   "Хэрэглэгчийн сэтгэгдэл": { en: "Customer reviews", ja: "カスタマーレビュー" },
   "Одоогоор сэтгэгдэл байхгүй байна. Эхний сэтгэгдлийг та үлдээгээрэй!": { en: "No reviews yet. Be the first to leave one.", ja: "まだレビューはありません。最初のレビューをお寄せください。" },
   "Нэвтэрч сэтгэгдэл үлдээгээрэй.": { en: "Sign in to leave a review.", ja: "レビューを書くにはログインしてください。" },
@@ -455,6 +456,76 @@ export const UI_STRINGS: Record<string, { en: string; ja: string }> = {
   "Хүргэлт": { en: "Delivery", ja: "配送" },
   "Нийт": { en: "Total", ja: "合計" },
   "Бэлэн мөнгө": { en: "Cash", ja: "現金" },
+
+  // -- assembled labels and the strings the live audit still showed --------
+  "{page} — SUGI ASAYAKE": { en: "{page} — SUGI ASAYAKE", ja: "{page} — SUGI ASAYAKE" },
+  "SUGI ASAYAKE Mongolia — Япон чанарыг гэр бүл бүрт": { en: "SUGI ASAYAKE Mongolia — Japanese quality for every family", ja: "SUGI ASAYAKE Mongolia — 日本の品質を、すべての家族に" },
+  "Захиалга баталгаажуулах": { en: "Checkout", ja: "ご注文の確定" },
+  "Захиалга хянах": { en: "Track an order", ja: "注文状況の確認" },
+  "Зөвлөгөө ба мэдээ": { en: "Journal and news", ja: "ジャーナル・ニュース" },
+  "Хуудас олдсонгүй": { en: "Page not found", ja: "ページが見つかりません" },
+  "Нууц үг сэргээх": { en: "Reset your password", ja: "パスワードの再設定" },
+  "Сагсанд нэмэх — {price}": { en: "Add to cart — {price}", ja: "カートに追加 — {price}" },
+  "УБ хүргэлт — {fee}": { en: "Delivery in UB — {fee}", ja: "UB市内配送 — {fee}" },
+  "24–48 цагийн дотор": { en: "Within 24–48 hours", ja: "24〜48時間以内" },
+  "Салбараас үнэгүй авах": { en: "Free pickup at a store", ja: "店舗受取は無料" },
+  "Нэвтэрч": { en: "Sign in", ja: "ログイン" },
+  "сэтгэгдэл үлдээгээрэй.": { en: "to leave a review.", ja: "してレビューを投稿してください。" },
+  "Дүүрэг, хороо, байр, орц, тоот, нэмэлт тайлбар": { en: "District, khoroo, building, entrance, flat, any extra note", ja: "区・ホロー・建物・入口・部屋番号・補足" },
+  "Хямдралын код": { en: "Discount code", ja: "割引コード" },
+  "Сагс нээх, {n} бараатай": { en: "Open cart, {n} item(s)", ja: "カートを開く（{n}点）" },
+  "{brand} брэндийн бараанууд": { en: "Products by {brand}", ja: "{brand}の商品" },
+  "{name}-г хүслийн жагсаалтад нэмэх": { en: "Add {name} to your wishlist", ja: "{name}をお気に入りに追加" },
+  "{name}-г хүслийн жагсаалтаас хасах": { en: "Remove {name} from your wishlist", ja: "{name}をお気に入りから削除" },
+  "{name}-г сагсанд нэмэх": { en: "Add {name} to your cart", ja: "{name}をカートに追加" },
+  "{name} — сагснаас хасах": { en: "{name} — remove from cart", ja: "{name} — カートから削除" },
+  "{name} — тоо нэмэх": { en: "{name} — increase quantity", ja: "{name} — 数量を増やす" },
+  "{name} — тоо хасах": { en: "{name} — decrease quantity", ja: "{name} — 数量を減らす" },
+  "{name} шуурхай харах": { en: "Quick view of {name}", ja: "{name}をクイックビュー" },
+  "{branch} — Google Maps дээр нээх": { en: "{branch} — open in Google Maps", ja: "{branch} — Googleマップで開く" },
+  "{branch} Google Maps дээр нээх": { en: "{branch} — open in Google Maps", ja: "{branch} — Googleマップで開く" },
+  "{n} дэх зургийг харах": { en: "View image {n}", ja: "{n}枚目の画像を見る" },
+  "Өдөр бүр {hours}": { en: "Every day {hours}", ja: "毎日 {hours}" },
+  "{n} ширхэг үлдсэн": { en: "{n} left in stock", ja: "残り{n}点" },
+  "Миний профайл": { en: "My account", ja: "マイアカウント" },
+  "Зургийг томруулж харах": { en: "View the image larger", ja: "画像を拡大して見る" },
+  "Доод үнэ (₮)": { en: "Lowest price (₮)", ja: "最低価格（₮）" },
+  "Дээд үнэ (₮)": { en: "Highest price (₮)", ja: "最高価格（₮）" },
+  "Том grid харагдац": { en: "Large grid view", ja: "大きいグリッド表示" },
+  "Жижиг grid харагдац": { en: "Small grid view", ja: "小さいグリッド表示" },
+  "Хуудаслалт": { en: "Pagination", ja: "ページ送り" },
+  "Facebook хуудас нээх": { en: "Open our Facebook page", ja: "Facebookページを開く" },
+  "Instagram хуудас нээх": { en: "Open our Instagram page", ja: "Instagramページを開く" },
+  "SUGI ASAYAKE брэндийн мессеж": { en: "A message from SUGI ASAYAKE", ja: "SUGI ASAYAKEからのメッセージ" },
+  "SUGI ASAYAKE-ийн гэр бүлийн арчилгааны бүтээгдэхүүнүүд": { en: "SUGI ASAYAKE family care products", ja: "SUGI ASAYAKEのファミリーケア商品" },
+  "SUGI ASAYAKE-ийн 4 салбарын байршлыг харуулсан зурган дүрслэл": { en: "An illustration of SUGI ASAYAKE's four store locations", ja: "SUGI ASAYAKEの4店舗の場所を示すイラスト" },
+  "Шуурхай": { en: "Quick view", ja: "クイック" },
+  "УБ ХҮРГЭЛТ": { en: "UB DELIVERY", ja: "UB配送" },
+  "САЛБАРААС ҮНЭГҮЙ АВАХ": { en: "FREE STORE PICKUP", ja: "店舗受取は無料" },
+  "брэнд": { en: "brands", ja: "ブランド" },
+  "бараа": { en: "products", ja: "商品" },
+  "Дэлгэрэнгүй унших": { en: "Read more", ja: "続きを読む" },
+  "SUGI ASAYAKE-ийн арчилгаа, гоо сайхан, өдөр тутмын зөвлөгөөнүүд.": { en: "Care, beauty and everyday advice from SUGI ASAYAKE.", ja: "SUGI ASAYAKEのケア・美容・暮らしのアドバイス。" },
+  "Захиалгын дугаар": { en: "Order number", ja: "注文番号" },
+  "Захиалгын дугаар болон захиалахад ашигласан утасны дугаараа оруулна уу.": { en: "Enter your order number and the phone number you ordered with.", ja: "注文番号と、ご注文時の電話番号を入力してください。" },
+  "Бүртгэлтэй утасны дугаараа оруулбал SMS-ээр баталгаажуулна.": { en: "Enter your registered phone number and we will confirm it by SMS.", ja: "登録済みの電話番号を入力すると、SMSで確認します。" },
+  "Баталгаажуулах SMS илгээхэд таны дугаараас": { en: "Sending the confirmation SMS costs you", ja: "確認SMSの送信にはお客様の番号から" },
+  "хасагдана (оператор компаниас хураана, бид биш).": { en: "charged by your mobile operator, not by us.", ja: "が差し引かれます（通信事業者による請求で、当社ではありません）。" },
+  "Код илгээх": { en: "Send the code", ja: "コードを送る" },
+  "Нэвтрэх хуудас руу буцах": { en: "Back to sign in", ja: "ログイン画面に戻る" },
+  "Захиалгаа": { en: "Confirm your", ja: "ご注文を" },
+  "баталгаажуулах": { en: "order", ja: "確定する" },
+  "Захиалгын мэдээллээ баталгаажуулаад, хүргэлт эсвэл салбарынхаа сонголтыг хий. QPay зөвхөн merchant тохиргоо дууссаны дараа идэвхжинэ.": { en: "Check your order details and choose delivery or a store to collect from. QPay switches on once the merchant setup is finished.", ja: "ご注文内容をご確認のうえ、配送か店舗受取をお選びください。QPayは加盟店設定の完了後に有効になります。" },
+  "24–48 цаг": { en: "24–48 hours", ja: "24〜48時間" },
+  "-с эхэлнэ": { en: "and up", ja: "から" },
+  "Merchant credentials орох хүртэл зөвхөн бэлэн мөнгөний захиалга ажиллана. Bank transfer болон картын төлбөр нь тохиргоогүй тул зориуд харагдахгүй байна.": { en: "Until the merchant credentials are in place, only cash orders go through. Bank transfer and card payment are deliberately hidden while they are unconfigured.", ja: "加盟店情報が登録されるまでは、現金でのご注文のみ承ります。銀行振込とカード決済は未設定のため、あえて表示していません。" },
+  "Хэрэглэх": { en: "Apply", ja: "適用する" },
+  "Дэлгэрэнгүйг": { en: "Full details on the", ja: "詳しくは" },
+  "Нээгдсэн, ашигласан бүтээгдэхүүнийг зөвхөн бодит гэмтэлтэй эсвэл зарласан чанар/шинж чанараа хангаагүй үед л буцаана — таалагдаагүй, санаа өөрчлөгдсөн шалтгаанаар буцаах боломжгүй. Ариун цэврийн лац, савлагаа нээгдсэн эрүүл ахуйн бүтээгдэхүүнийг халдваргүйжлийн шалтгаанаар буцаах, солих боломж хязгаарлагдана.": { en: "An opened or used product can be returned only if it is genuinely faulty or fails the quality it was sold on — not because you changed your mind. Hygiene products whose seal or packaging has been opened are limited in what can be returned or exchanged, for reasons of infection control.", ja: "開封・使用済みの商品は、実際に不良がある場合、または表示された品質を満たさない場合にのみご返品いただけます（気に入らない、気が変わったという理由でのご返品はできません）。衛生シールや包装が開封された衛生用品は、衛生上の理由から返品・交換が制限されます。" },
+  "Орос элчингийн салбар": { en: "Russian Embassy branch", ja: "ロシア大使館前店" },
+  "Их наяд плаза": { en: "Ikh Nayad Plaza", ja: "イフ・ナヤド・プラザ店" },
+  "Яармаг FOOD CITY": { en: "Yarmag FOOD CITY", ja: "ヤルマグ FOOD CITY店" },
+  "Japan Town C6, Four Seasons Garden Center 3 давхар": { en: "Japan Town C6, Four Seasons Garden Center, 3rd floor", ja: "Japan Town C6、フォーシーズンズ・ガーデンセンター3階" },
 };
 
 /**
@@ -463,22 +534,129 @@ export const UI_STRINGS: Record<string, { en: string; ja: string }> = {
  * which made an exact lookup miss a phrase the dictionary already had. The
  * decoration is peeled off for the lookup and put back on the translation.
  */
-const TRAILING_DECORATION = /(?:[\s!.…]|\p{Extended_Pictographic}|️|‍)+$/u;
+const TRAILING_DECORATION = /(?:[\s!.…/·,\u2013\u2014]|\p{Extended_Pictographic}|️|‍)+$/u;
 
-/** Translate a Mongolian source string, falling back to it unchanged. */
+/** The same, at the front: JSX splits headings around an emphasis. */
+const LEADING_DECORATION = /^(?:[\s/·,\u2013\u2014]|\p{Extended_Pictographic}|️|‍)+/u;
+
+/**
+ * Every phrase, indexed by all three of its wordings.
+ *
+ * The page translator (client/src/components/TranslateSurface.tsx) reads
+ * the words it translates out of the DOM the app has already rendered, so
+ * the moment a visitor switches once, the page is no longer in Mongolian.
+ * Looking English up under a Mongolian key found nothing, and the page was
+ * left half-switched until a reload (2026-09-12, Tom: "language solihoor
+ * hagas dutuu soligdood baiuna zaawal refresh hiij baij buren soligdoj
+ * baina"). Indexing an entry under its English and Japanese wordings too
+ * makes every direction work -- including back to Mongolian -- with no
+ * memory of what a node used to say.
+ */
+type Phrase = { mn: string; en: string; ja: string };
+
+const phraseFor = (mn: string, entry: { en: string; ja: string }): Phrase => ({ mn, en: entry.en, ja: entry.ja });
+
+/**
+ * Entries whose key carries a {placeholder} are patterns, not fixed
+ * phrases. A great many labels are assembled at runtime from data -- a
+ * product name, a branch name, a count -- so the finished string is never
+ * literally in the dictionary: "MASSEMOLLY-г сагсанд нэмэх" is built from
+ * a product row. Matching those as patterns translates them without
+ * threading a t() call through every component that builds one.
+ *
+ * A placeholder name means nothing but "the same piece, moved": {name} may
+ * land before or after the verb, as each language needs.
+ */
+const PLACEHOLDER = /\{(\w+)\}/g;
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** The wording as a regular expression, with the placeholder names it uses. */
+const compile = (form: string) => {
+  const names: string[] = [];
+  let pattern = "";
+  let last = 0;
+  for (const match of form.matchAll(PLACEHOLDER)) {
+    pattern += escapeRegExp(form.slice(last, match.index));
+    pattern += "(.+?)";
+    names.push(match[1]);
+    last = match.index + match[0].length;
+  }
+  pattern += escapeRegExp(form.slice(last));
+  return { test: new RegExp(`^${pattern}$`, "s"), names };
+};
+
+const EXACT = new Map<string, Phrase>();
+const PATTERNS: { test: RegExp; names: string[]; phrase: Phrase }[] = [];
+
+for (const [mn, entry] of Object.entries(UI_STRINGS)) {
+  const phrase = phraseFor(mn, entry);
+  const forms = [phrase.en, phrase.ja, phrase.mn];
+  if (mn.includes("{")) {
+    // Mongolian last, so a phrase that is its own translation still reads back.
+    for (const form of forms) PATTERNS.push({ ...compile(form), phrase });
+  } else {
+    for (const form of forms) EXACT.set(form, phrase);
+  }
+}
+
+// Longest first, so a specific pattern wins over a looser one.
+PATTERNS.sort((a, b) => b.test.source.length - a.test.source.length);
+
+const fillPattern = (text: string, locale: Locale) => {
+  for (const { test, names, phrase } of PATTERNS) {
+    const found = text.match(test);
+    if (!found) continue;
+    return phrase[locale].replace(PLACEHOLDER, (whole, name: string) => {
+      const index = names.indexOf(name);
+      // A piece can be translatable itself: a branch name dropped into
+      // "{branch} — Google Maps дээр нээх" has an entry of its own.
+      return index === -1 ? whole : translate(found[index + 1], locale);
+    });
+  }
+  return null;
+};
+
+/**
+ * Every lookup is remembered. The page translator walks the whole DOM on
+ * every animation frame that changes it, so the same few hundred strings
+ * are looked up over and over; without this the patterns would be re-tested
+ * thousands of times a second.
+ */
+const memo = new Map<string, string>();
+
+/** Translate a phrase into `locale`, from whichever language it is in now. */
 export const translate = (text: string, locale: Locale): string => {
-  if (locale === "mn" || !text) return text;
+  if (!text) return text;
+  const cacheKey = `${locale}|${text}`;
+  const remembered = memo.get(cacheKey);
+  if (remembered !== undefined) return remembered;
+
+  const result = lookUp(text, locale);
+  // A visitor can browse a long catalogue; forget everything rather than
+  // grow without bound, since re-filling is cheap.
+  if (memo.size > 4000) memo.clear();
+  memo.set(cacheKey, result);
+  return result;
+};
+
+const lookUp = (text: string, locale: Locale): string => {
   const trimmed = text.trim();
-  const direct = UI_STRINGS[trimmed];
+  const direct = EXACT.get(trimmed);
   if (direct) return direct[locale];
   const decorated = trimmed.match(TRAILING_DECORATION);
   if (decorated) {
-    const base = trimmed.slice(0, trimmed.length - decorated[0].length);
-    const entry = UI_STRINGS[base];
+    const entry = EXACT.get(trimmed.slice(0, trimmed.length - decorated[0].length));
     if (entry) return entry[locale] + decorated[0];
   }
+  const led = trimmed.match(LEADING_DECORATION);
+  if (led) {
+    const entry = EXACT.get(trimmed.slice(led[0].length));
+    if (entry) return led[0] + entry[locale];
+  }
   // A phrase that differs only by a final full stop is the same phrase.
-  const withDot = UI_STRINGS[trimmed + "."];
+  const withDot = EXACT.get(trimmed + ".");
   if (withDot) return withDot[locale];
+  const filled = fillPattern(trimmed, locale);
+  if (filled !== null) return filled;
   return text;
 };

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { UI_STRINGS, translate } from "@shared/i18n";
+import { translate } from "@shared/i18n";
 import { useLocale } from "@/hooks/useLocale";
 
 /**
@@ -9,51 +9,66 @@ import { useLocale } from "@/hooks/useLocale";
  * components. Threading a `t()` call through every one of them would be a
  * week of edits and would still miss the next string someone writes, so the
  * translation happens once, here, over the DOM the app has already
- * rendered: any text node whose exact trimmed content is in the dictionary
- * is replaced, and so are the `placeholder`, `title`, `aria-label` and
- * `alt` attributes.
+ * rendered: any text node the dictionary recognises is replaced, and so are
+ * the `placeholder`, `title`, `aria-label` and `alt` attributes.
  *
  * What that buys, and what it costs:
  *   - Every component is covered without touching it, including ones added
  *     later; anything not in the dictionary is left exactly as written.
- *   - It only matches WHOLE strings. A sentence built by concatenation at
- *     runtime ("155,000₮ · 2 ширхэг") is not translated unless its pieces
- *     are their own dictionary entries.
+ *   - It only matches WHOLE strings, or a dictionary pattern like
+ *     "{name}-г сагсанд нэмэх". A sentence built by concatenation at
+ *     runtime is not translated unless its pieces are their own entries.
  *   - React owns these nodes, so every re-render restores the Mongolian and
  *     the observer below translates it again. That is why this watches the
  *     tree instead of running once.
  *
- * It does nothing at all in Mongolian, which is the default, so the normal
- * case costs one early return.
+ * It reads whatever language a node is in now and renders the wanted one,
+ * because shared/i18n.ts indexes every phrase under all three of its
+ * wordings (2026-09-12, Tom: "language solihoor hagas dutuu soligdood
+ * baiuna zaawal refresh hiij baij buren soligdoj baina"). So English ->
+ * Japanese, and the way back to Mongolian, work without a reload and
+ * without this keeping any record of what a node used to say.
  */
+
+/** True once anything has been translated, so Mongolian-only visits do no work. */
+let everTranslated = false;
+
 export default function TranslateSurface() {
   const locale = useLocale();
 
   useEffect(() => {
-    if (locale === "mn") return;
+    if (locale === "mn" && !everTranslated) return;
 
     const ATTRS = ["placeholder", "title", "aria-label", "alt"] as const;
+
+    const translateText = (text: Text) => {
+      const current = text.nodeValue ?? "";
+      const trimmed = current.trim();
+      if (!trimmed) return;
+      const next = translate(trimmed, locale);
+      if (next === trimmed) return;
+      text.nodeValue = current.replace(trimmed, next);
+      everTranslated = true;
+    };
+
     const translateElement = (element: Element) => {
       for (const attr of ATTRS) {
-        const value = element.getAttribute(attr);
-        if (!value) continue;
-        const next = translate(value, locale);
-        if (next !== value) element.setAttribute(attr, next);
+        const current = element.getAttribute(attr);
+        if (!current) continue;
+        const next = translate(current, locale);
+        if (next === current) continue;
+        element.setAttribute(attr, next);
+        everTranslated = true;
       }
     };
 
     const translateTree = (root: Node) => {
       if (root.nodeType === Node.TEXT_NODE) {
-        const raw = root.nodeValue ?? "";
-        const trimmed = raw.trim();
-        if (trimmed && UI_STRINGS[trimmed]) {
-          const next = translate(trimmed, locale);
-          if (next !== trimmed) root.nodeValue = raw.replace(trimmed, next);
-        }
+        translateText(root as Text);
         return;
       }
       if (!(root instanceof Element)) return;
-      // /admin has its own language and its own switch; never touch it.
+      // The cookie banner has its own language and its own copy; never touch it.
       if (root.closest?.("#stcm-wrapper")) return;
       translateElement(root);
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -63,34 +78,37 @@ export default function TranslateSurface() {
         pending.push(node as Text);
         node = walker.nextNode();
       }
-      for (const text of pending) {
-        const raw = text.nodeValue ?? "";
-        const trimmed = raw.trim();
-        if (!trimmed || !UI_STRINGS[trimmed]) continue;
-        const next = translate(trimmed, locale);
-        if (next !== trimmed) text.nodeValue = raw.replace(trimmed, next);
-      }
+      for (const text of pending) translateText(text);
       root.querySelectorAll("[placeholder], [title], [aria-label], [alt]").forEach(translateElement);
     };
 
     const run = () => {
+      // The tab title lives outside <body>, so the walker never sees it.
+      const title = translate(document.title, locale);
+      if (title !== document.title) document.title = title;
       const main = document.body;
       if (!main) return;
       for (const child of Array.from(main.children)) {
         if (child.id === "stcm-wrapper" || child.tagName === "SCRIPT" || child.tagName === "STYLE") continue;
+        // /admin has its own language and its own switch; never touch it.
         if (child.querySelector?.(".admin-shell") || child.classList.contains("admin-shell")) continue;
         translateTree(child);
       }
     };
 
     run();
-    let frame = 0;
+    // A timer, not requestAnimationFrame: rAF is throttled to nothing in a
+    // background tab, which left everything that arrived after the first
+    // pass -- a shelf fetched over the network, a dialog -- in Mongolian.
+    let pending: ReturnType<typeof setTimeout> | 0 = 0;
     const observer = new MutationObserver(() => {
-      if (frame) return;
-      frame = requestAnimationFrame(() => { frame = 0; run(); });
+      if (pending) return;
+      pending = setTimeout(() => { pending = 0; run(); }, 16);
     });
-    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-    return () => { observer.disconnect(); if (frame) cancelAnimationFrame(frame); };
+    // `attributes` too: a placeholder React re-renders in Mongolian has to be
+    // caught, and nothing else notices an attribute changing on its own.
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributeFilter: [...ATTRS] });
+    return () => { observer.disconnect(); if (pending) clearTimeout(pending); };
   }, [locale]);
 
   return null;

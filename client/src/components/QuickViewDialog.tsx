@@ -6,6 +6,8 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import VariantPicker from "@/components/VariantPicker";
 import { notifyAddedToCart } from "@/lib/addedToCartToast";
 import { trpc } from "@/lib/trpc";
+import { useLocale } from "@/hooks/useLocale";
+import { translateProductText } from "@shared/product-i18n";
 import { getCategoryPlaceholderImage, getSalePercent } from "@shared/catalog-filter";
 import { formatMnt } from "@shared/format";
 
@@ -33,6 +35,7 @@ type QuickViewDialogProps = {
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Сагсанд нэмж чадсангүй.";
 
 export default function QuickViewDialog({ open, product, onOpenChange, onAdded }: QuickViewDialogProps) {
+  const locale = useLocale();
   const [quantity, setQuantity] = useState(1);
   const utils = trpc.useUtils();
   const detail = trpc.catalog.bySlug.useQuery({ slug: product?.slug ?? "catalog-preview" }, { enabled: open && Boolean(product) });
@@ -75,7 +78,7 @@ export default function QuickViewDialog({ open, product, onOpenChange, onAdded }
   const activeCompareAtPriceMnt = hasVariantChoice && selectedVariant ? selectedVariant.compareAtPriceMnt ?? null : display.compareAtPriceMnt;
   const activeStockQuantity = hasVariantChoice && selectedVariant ? selectedVariant.stockQuantity : display.stockQuantity;
   const available = Math.max(0, activeStockQuantity);
-  const description = detail.data?.description ?? display.shortDescription ?? "Японоос албан ёсоор нийлүүлсэн өдөр тутмын арчилгааны сонголт.";
+  const description = translateProductText(detail.data?.description ?? display.shortDescription ?? "Японоос албан ёсоор нийлүүлсэн өдөр тутмын арчилгааны сонголт.", locale, display);
   const salePercent = getSalePercent(activePriceMnt, activeCompareAtPriceMnt);
 
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="quick-view-dialog max-h-[calc(100vh-1.5rem)] overflow-y-auto border-0 bg-[#fffdf9] p-0 shadow-[0_28px_100px_rgba(23,24,27,.32)] sm:max-w-3xl" showCloseButton={false}>
