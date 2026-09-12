@@ -3575,7 +3575,9 @@ body:has(.auth-shell) { background: #fff; }
    replaces -- only the ground changes. The generic ".sugi-site .eyebrow
    span { display: none }" above hides the little dot some eyebrows carry,
    so these two marks opt back in explicitly. */
-.sugi-site .hero-eyebrow { display: inline-flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+/* No gap: the two marks sit tight against the slash between them (Tom), so
+   the whole line reads as one lockup rather than three floating pieces. */
+.sugi-site .hero-eyebrow { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0; }
 .sugi-site .hero-eyebrow .hero-eyebrow-brand,
 .sugi-site .hero-eyebrow .hero-eyebrow-place {
   display: inline-flex;
@@ -3592,5 +3594,9 @@ body:has(.auth-shell) { background: #fff; }
   letter-spacing: inherit;
   white-space: nowrap;
 }
+/* The slash itself, between the two marks: no ground of its own, and it
+   needs the same width/height reset as the marks (.eyebrow span fixes a
+   7x7 dot size). */
+.sugi-site .hero-eyebrow .hero-eyebrow-sep { display: inline-flex; width: auto; height: auto; padding: 0 7px; align-items: center; background: none; color: var(--ck-ink); font-family: inherit; font-size: 1.9em; font-weight: 700; letter-spacing: 0; line-height: 1; }
 .sugi-site .hero-eyebrow .hero-eyebrow-brand { background: var(--primary); }
 .sugi-site .hero-eyebrow .hero-eyebrow-place { background: var(--sky); }

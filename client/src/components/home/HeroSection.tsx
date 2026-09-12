@@ -86,6 +86,9 @@ export default function HeroSection({ imageFor, mediaReady = true }: {
             const placePart = rest.join("/").trim();
             return <>
               <span className="hero-eyebrow-brand">{brandPart.trim()}</span>
+              {/* Tom: the slash he types stays visible between the two
+                  marks, not just as the thing that separates them. */}
+              {placePart ? <span className="hero-eyebrow-sep" aria-hidden="true">/</span> : null}
               {placePart ? <span className="hero-eyebrow-place">{placePart}</span> : null}
             </>;
           })()}
