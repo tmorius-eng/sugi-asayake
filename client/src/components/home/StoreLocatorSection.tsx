@@ -46,7 +46,7 @@ export default function StoreLocatorSection() {
     phone: branch.phone ?? "",
     mapUrl: branch.mapUrl ?? "#",
   }));
-  const [headingLine1, headingLine2] = textFor("home-text-locator-heading", "Танд ойрхон\nсалбар дээр.").split("\n");
+  const [headingLine1, headingLine2] = textFor("home-text-locator-heading", "Танд ойрхон\nсалбар дээр").split("\n");
   if (!locations.length) return null;
   return (
     <section className="locator-section page-section" id="stores" data-reveal>

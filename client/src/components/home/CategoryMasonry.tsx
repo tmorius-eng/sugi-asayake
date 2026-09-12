@@ -64,8 +64,8 @@ export default function CategoryMasonry({
   symbolImage: string;
 }) {
   const textFor = useSiteText();
-  const [headingLine1, headingLine2] = textFor("home-text-cat-heading", "Японы бүтээгдэхүүний\nүндсэн ангилал.").split("\n");
-  const [anchorLine1, anchorLine2] = textFor("home-text-cat-anchor-heading", "Нэг өдөрт\nхэрэгтэй бүх зүйл.").split("\n");
+  const [headingLine1, headingLine2] = textFor("home-text-cat-heading", "Японы бүтээгдэхүүний\nүндсэн ангилал").split("\n");
+  const [anchorLine1, anchorLine2] = textFor("home-text-cat-anchor-heading", "Нэг өдөрт\nхэрэгтэй бүх зүйл").split("\n");
   return (
     <section className="cat-mosaic-section page-section" id="collection" data-reveal>
       {/* 2026-09-11 audit: the repeated eyebrow was removed here. Eight of nine

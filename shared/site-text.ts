@@ -290,7 +290,7 @@ export const siteTextSlots = [
     group: "Бүтээгдэхүүний ангилал",
     label: "Гарчиг (2 мөр)",
     description: "",
-    fallbackValue: "Японы бүтээгдэхүүний\nүндсэн ангилал.",
+    fallbackValue: "Японы бүтээгдэхүүний\nүндсэн ангилал",
   },
   {
     key: "home-text-cat-description",
@@ -318,7 +318,7 @@ export const siteTextSlots = [
     group: "Бүтээгдэхүүний ангилал",
     label: "Том зургийн гарчиг (2 мөр)",
     description: "",
-    fallbackValue: "Нэг өдөрт\nхэрэгтэй бүх зүйл.",
+    fallbackValue: "Нэг өдөрт\nхэрэгтэй бүх зүйл",
   },
   {
     key: "home-text-cat-anchor-cta",
@@ -390,7 +390,7 @@ export const siteTextSlots = [
     group: "Их зарагддаг бараанууд",
     label: "Гарчиг (2 мөр)",
     description: "",
-    fallbackValue: "Их зарагддаг\nбараанууд.",
+    fallbackValue: "Их зарагддаг\nбараанууд",
   },
   {
     key: "home-text-bestseller-description",
@@ -432,7 +432,7 @@ export const siteTextSlots = [
     group: "Танд санал болгож байна",
     label: "Гарчиг (2 мөр)",
     description: "",
-    fallbackValue: "Танд санал\nболгож байна.",
+    fallbackValue: "Танд санал\nболгож байна",
   },
   {
     key: "home-text-recommended-description",
@@ -492,7 +492,7 @@ export const siteTextSlots = [
     group: "Гэр бүлийн арчилгаа",
     label: "Гарчиг (2 мөр)",
     description: "Анхны хувилбарт эхний мөрний зөвхөн \"итгэл.\" гэдэг үг ялгаатай өнгөтэй байсан бол одоо энэ хэсэгт бүх эхний мөр адилхан онцлогтойгоор харагдана (жижиг хялбарчлал).",
-    fallbackValue: "Багахан итгэл.\nИх халамж.",
+    fallbackValue: "Багахан итгэл.\nИх халамж",
   },
   {
     key: "home-text-care-description",
@@ -577,7 +577,7 @@ export const siteTextSlots = [
     group: "Салбарууд",
     label: "Гарчиг (2 мөр)",
     description: "",
-    fallbackValue: "Танд ойрхон\nсалбар дээр.",
+    fallbackValue: "Танд ойрхон\nсалбар дээр",
   },
   {
     key: "home-text-locator-description",
@@ -614,7 +614,7 @@ export const siteTextSlots = [
     group: "Гишүүнчлэлийн хураангуй",
     label: "Монгол тайлбар мөр",
     description: "",
-    fallbackValue: "Илүү их худалдан авалт, илүү их хэмнэлт.",
+    fallbackValue: "Илүү их худалдан авалт, илүү их хэмнэлт",
   },
   {
     key: "home-text-qs-description",
@@ -660,7 +660,7 @@ export const siteTextSlots = [
     group: "Эцсийн CTA",
     label: "Гарчиг (2 мөр)",
     description: "",
-    fallbackValue: "Сайн сонголт\nойрхон байна.",
+    fallbackValue: "Сайн сонголт\nойрхон байна",
   },
 
   // ======================================================================

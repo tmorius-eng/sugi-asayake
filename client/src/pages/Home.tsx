@@ -134,8 +134,8 @@ export default function Home() {
     textFor("seo-text-home-title", "SUGI ASAYAKE Mongolia — Япон чанарыг гэр бүл бүрт"),
     textFor("seo-text-home-description", "SUGI ASAYAKE Mongolia — Японоос баталгаат бүтээгдэхүүнүүдийг албан ёсны эрхтэйгээр хүргэж байна. Улаанбаатар хотод {N} салбартай.").replace("{N}", String(branchCount)),
   );
-  const [careHeadingLine1, careHeadingLine2] = textFor("home-text-care-heading", "Багахан итгэл.\nИх халамж.").split("\n");
-  const [finalCtaHeadingLine1, finalCtaHeadingLine2] = textFor("home-text-finalcta-heading", "Сайн сонголт\nойрхон байна.").split("\n");
+  const [careHeadingLine1, careHeadingLine2] = textFor("home-text-care-heading", "Багахан итгэл.\nИх халамж").split("\n");
+  const [finalCtaHeadingLine1, finalCtaHeadingLine2] = textFor("home-text-finalcta-heading", "Сайн сонголт\nойрхон байна").split("\n");
   return (
     <div className="sugi-site" id="top">
       <CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="SUGI ASAYAKE" marketingNav />
@@ -164,7 +164,7 @@ export default function Home() {
             rule: hidden entirely once loaded with zero results. */}
         {(bestsellersQuery.isLoading || bestsellers.length > 0) && (
           <CarouselShelf
-            title={textFor("home-text-bestseller-heading", "Их зарагддаг\nбараанууд.").split("\n").join(" ")}
+            title={textFor("home-text-bestseller-heading", "Их зарагддаг\nбараанууд").split("\n").join(" ")}
             viewAllHref="/shop"
             viewAllLabel={textFor("home-text-bestseller-all-link", "Бүх бүтээгдэхүүн үзэх")}
             loading={bestsellersQuery.isLoading}
@@ -181,7 +181,7 @@ export default function Home() {
             a recommendation is not a ranking. */}
         {user && (recommendedQuery.isLoading || recommended.length > 0) && (
           <CarouselShelf
-            title={textFor("home-text-recommended-heading", "Танд санал\nболгож байна.").split("\n").join(" ")}
+            title={textFor("home-text-recommended-heading", "Танд санал\nболгож байна").split("\n").join(" ")}
             loading={recommendedQuery.isLoading}
             emptyState={null}
           >

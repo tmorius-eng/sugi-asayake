@@ -105,6 +105,13 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
             <HeaderSearch variant="inline" />
           </div>
           <div className="commerce-header-actions">
+            {/* Below ~460px the field itself would be narrower than its own
+                placeholder, so it collapses to the magnifier and opens the
+                same panel (Tom: "suulde bur sizen ulam jijig bolwol search
+                bar bish search icon hurtel bolgdog responsive bolgo"). CSS
+                decides which of the two is on screen; they are the same
+                component and the same catalog.search call. */}
+            <div className="header-search-compact"><HeaderSearch /></div>
             {/* 2026-09-12 (Tom): the plain-text "Дэлгүүр" link is gone from
                 the header entirely. On Home the marketing nav already leads
                 with it; on every other page the bottom bar (phone) and the

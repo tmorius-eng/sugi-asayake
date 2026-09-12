@@ -2795,16 +2795,23 @@ body:has(.sugi-site) { background: #fff; }
 .commerce-header::before { display: none; }
 /* Tom, 2026-09-12: logo, search field and icons share ONE line; the
    marketing nav moved to its own centred row underneath. */
+/* Flex, not grid (2026-09-12, measured): as a 3-column grid this row lost
+   its third column between 761 and 1100px and dropped the icons onto a line
+   of their own -- exactly what Tom saw at 800px. Three flex children can
+   never do that: the logo and the icons take what they need, the search
+   field takes the rest up to 380px, and only below 760px does the field
+   deliberately wrap to its own full-width line. */
 .commerce-header-inner {
-  display: grid;
+  display: flex;
   width: 100%;
   min-height: 65px;
-  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: clamp(16px, 3vw, 48px);
+  gap: clamp(12px, 2.4vw, 40px);
 }
-.commerce-header-search-slot { display: flex; justify-content: center; min-width: 0; }
+.commerce-brand { flex: 0 0 auto; min-width: auto; }
+.commerce-header-search-slot { display: flex; flex: 1 1 auto; justify-content: center; min-width: 0; }
 .commerce-header-search-slot .header-search--inline { width: min(380px, 100%); }
+.commerce-header-actions { flex: 0 0 auto; }
 .commerce-header-navrow { justify-content: center; padding-bottom: 12px; }
 .commerce-brand img { width: 160px; }
 .commerce-brand > span:last-child { border-left-color: var(--ck-line); color: var(--ck-muted); font-weight: 700; letter-spacing: .1em; }
@@ -3206,12 +3213,19 @@ body:has(.sugi-site) { background: #fff; }
 }
 @media (max-width: 760px) {
   .commerce-header { padding: 0 16px; }
-  /* On a phone the three-across row would crush the field, so it drops to
-     its own line under the logo (the logo and the icons keep the top row). */
-  .commerce-header-inner { min-height: 56px; grid-template-columns: minmax(0, 1fr) auto; row-gap: 0; }
-  .commerce-brand img { width: 128px; }
-  .commerce-header-actions { gap: 14px; }
-  .commerce-header-search-slot { grid-column: 1 / -1; padding-bottom: 10px; }
+  /* One line on a phone too (Tom, twice): the logo and the icons shrink,
+     the field takes whatever is left. Wrapping the field onto its own row
+     is what he called "not responsive" -- the logo ended up on one line and
+     the search on another. */
+  .commerce-header-inner { min-height: 56px; flex-wrap: nowrap; gap: 10px; }
+  /* The logo keeps its size at every width (Tom: "logo talbar bishee search
+     bariig size burtn taaruulj bagsag") -- only the field gives ground. It
+     must also never shrink below its own image: it did, and since the image
+     is a fixed width it spilled out of its box and the search field was
+     drawn over the wordmark. */
+  .commerce-brand { flex: 0 0 auto; min-width: auto; }
+  .commerce-brand img { width: 128px; max-width: 100%; }
+  .commerce-header-actions { gap: 12px; margin-left: 0; }
   .header-search--inline { width: 100%; }
   .commerce-mobile-menu { background: #fff; }
   .hero-rail { gap: 12px; padding: 0 16px; }
@@ -3296,7 +3310,6 @@ body:has(.sugi-site) { background: #fff; }
    items, and the drawer toggle appears with it. */
 @media (max-width: 1100px) {
   .commerce-marketing-nav { display: none; }
-  .commerce-header-inner { grid-template-columns: minmax(0, 1fr) auto; }
   .commerce-header-actions .commerce-menu-toggle { display: inline-flex; }
 }
 /* Tom, 2026-09-12 (signed in, phone): a wide hole between the heart and the
@@ -3544,3 +3557,16 @@ body:has(.auth-shell) { background: #fff; }
    now follows its DOM order at every width: label, categories, skin type,
    controls, applied chips. */
 .sugi-site .shop-filter-facets { order: 0; }
+/* The header's search has two shapes: the field, and -- once the row gets
+   too narrow for it to hold its own placeholder -- the magnifier that opens
+   the same panel. Only one is ever on screen. */
+.header-search-compact { display: none; }
+/* On a phone it is always the magnifier (Tom: "search bar iin alga bolgood
+   search icon bolgdog bol utsan deer"). A field that has to share a 390px
+   row with the wordmark and three icons either crowds the logo or shows
+   four characters of its own placeholder -- neither is worth the row. */
+@media (max-width: 760px) {
+  .commerce-header-search-slot { display: none; }
+  .header-search-compact { display: block; }
+  .commerce-header-actions { margin-left: auto; }
+}
