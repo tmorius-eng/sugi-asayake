@@ -1880,7 +1880,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    before, restyled for the light surface.
    Numbers that come straight from the reference: 245/355/245 columns with
    90px gaps (a 1040px row), 44px tiles (90px for the featured middle one),
-   48px from tile to title, 46px stagger. Not from the reference, by Tom's
+   22px from tile to title (was 48 -- too airy), 32px stagger (was 46). Not from the reference, by Tom's
    call: no 01/02/03 numbers, and the site's own eyebrow/heading/card type. Vertical padding is the one
    value deliberately below the reference (which has ~200/250px): Tom asked
    for this exact section to be shorter on 2026-09-11. */
@@ -1889,9 +1889,11 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
   --wcu-tile-2: #2b1d9e;
   --wcu-tile-3: #12b76a;
   /* Tom, 2026-09-12: the panel blends with the site background instead of
-     being a white card on grey like the reference; everything else follows
-     the reference, including its ~200/240px vertical whitespace. */
-  padding: clamp(88px, 13.9vw, 200px) max(34px, 7vw) clamp(96px, 16.6vw, 240px);
+     being a white card on grey like the reference. The reference's
+     ~200/240px vertical whitespace was tried and rejected the same evening
+     ("ямар том div вэ, дэндүү их сул зай") -- this is the same rhythm as
+     the neighbouring bands. */
+  padding: clamp(48px, 5.6vw, 84px) max(34px, 7vw);
   background: var(--background);
   color: var(--foreground);
 }
@@ -1899,7 +1901,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 /* Tom, 2026-09-12: the site's own .eyebrow and .editorial-heading, not the
    reference's tracked label and condensed bold -- only centred here. */
 .wcu-section .wcu-eyebrow { justify-content: center; margin: 0 0 20px; }
-.wcu-grid { display: grid; grid-template-columns: minmax(0, 245fr) minmax(0, 355fr) minmax(0, 245fr); gap: clamp(32px, 6.25vw, 90px); width: min(1040px, 100%); margin: clamp(64px, 7.6vw, 110px) auto 0; padding: 0; list-style: none; }
+.wcu-grid { display: grid; grid-template-columns: minmax(0, 245fr) minmax(0, 355fr) minmax(0, 245fr); gap: clamp(32px, 6.25vw, 90px); width: min(1040px, 100%); margin: clamp(36px, 3.6vw, 52px) auto 0; padding: 0; list-style: none; }
 .wcu-item { min-width: 0; }
 .wcu-tile { display: grid; flex: 0 0 auto; width: 44px; height: 44px; place-items: center; border-radius: 8px; color: #fff; }
 /* Each item sets --wcu-tile inline from its admin-editable colour slot
@@ -1908,7 +1910,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .wcu-item:nth-child(1) .wcu-tile { background: var(--wcu-tile, var(--wcu-tile-1)); }
 .wcu-item:nth-child(2) .wcu-tile { background: var(--wcu-tile, var(--wcu-tile-2)); }
 .wcu-item:nth-child(3) .wcu-tile { background: var(--wcu-tile, var(--wcu-tile-3)); }
-.wcu-item-title { margin: 48px 0 0; font-family: var(--font-display); font-size: 19px; font-weight: 600; line-height: 1.3; color: var(--foreground); }
+.wcu-item-title { margin: 22px 0 0; font-family: var(--font-display); font-size: 19px; font-weight: 600; line-height: 1.3; color: var(--foreground); }
 .wcu-item-desc { margin: 12px 0 0; color: var(--muted-foreground); font-size: 16px; font-weight: 600; line-height: 1.65; overflow-wrap: break-word; }
 .wcu-item--featured .wcu-tile { width: 90px; height: 90px; border-radius: 12px; }
 /* Real reviews, folded in from the old standalone customer-voices-section
@@ -1926,9 +1928,9 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .wcu-review-footer strong { display: block; font-size: 11px; font-weight: 700; color: var(--foreground); }
 .wcu-review-footer span { display: block; margin-top: 1px; color: var(--muted-foreground); font-size: 10px; }
 
-/* Desktop only: the middle column sits 46px lower than its neighbours. */
+/* Desktop only: the middle column sits lower than its neighbours. */
 @media (min-width: 1024px) {
-  .wcu-item--featured { margin-top: 46px; }
+  .wcu-item--featured { margin-top: 32px; }
 }
 /* Phone: one column, no offset, uniform 56px tiles. */
 @media (max-width: 759px) {
