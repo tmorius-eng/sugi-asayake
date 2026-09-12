@@ -92,7 +92,8 @@ pnpm exec vitest run --no-file-parallelism
 **Навигацийн засвар (2026-08-28):** Shop-ийн хайлт/ангилал/хуудаслалт URL-д хадгалагдаж refresh болон product-оос буцахад state сэргээнэ; product breadcrumb болон Admin-ийн нүүр хуудасны холбоосууд ажиллана.
 
 **Шалгагдаагүй/хараахан идэвхгүй:**
-- QPay төлбөр (жинхэнэ merchant credential шаардана, localhost дээр бүрэн туршигдахгүй)
+- QPay төлбөр (жинхэнэ merchant credential шаардана; ⚠️ 2026-09-12: QPay-д **sandbox** орчин байдаг — `QPAY_ENVIRONMENT=sandbox` + sandbox merchant эрхээр бүх урсгалыг гэрээний өмнө туршиж болно)
+- **StorePay** (2026-09-12, код бэлэн, туршигдаагүй): 4 салбар бүгд StorePay хүлээн авдаг тул сайтад нэмэв. Tom StorePay-ээс **7 утга** авах хэрэгтэй: auth хаяг, api хаяг, апп-ын нэр/нууц үг, үндсэн нэр/нууц үг, дэлгүүрийн код (storeId) → /admin → Интеграцууд → StorePay. Бүгд орж, "Идэвхтэй" болтол checkout дээр харагдахгүй. ⚠️ Онлайн төлбөр (QPay ба StorePay) зөвхөн **нэвтэрсэн** хэрэглэгчид харагдана.
 - SMS (Brevo) — SMS кредит/route-ийг Tom баталгаажуулаагүй хэвээр (имэйл тал ажиллаж байгаа нь баталгаажсан, доор "Brevo API" хэсгийг үзнэ үү)
 - eBarimt, StorePay, шууд карт төлбөр, эльч (eBuuhia) хүргэлт — бүгд Tom-ийн биечлэн хийх бизнесийн алхам шаардана, код бэлэн биш (eBarimt зөвхөн inert schema бэлэн — [EBARIMT.md](EBARIMT.md))
 - **Product Variants — PHASE 1 болон PHASE 2 хоёулаа дууссан (2026-08-26)** — худалдан авагч ProductDetail/QuickView дээр 2+ variant-тай бараанаас сонголт хийж, тухайн variant-ийн үнэ/нөөц/sku-гоор бодитоор захиалж болно. Ганц variant-тай (одоогийн 936/937) бараанд ямар ч харагдах өөрчлөлт алга. **Бодит Playwright screenshot баталгаажуулалт хараахан хийгдээгүй** (зөвхөн 149 автомат тест + `pnpm build` + throwaway DB probe script-ээр баталгаажсан) — дэлгэрэнгүй [HISTORY.md](HISTORY.md)-ийн "Product Variants PHASE 2" хэсэгт.

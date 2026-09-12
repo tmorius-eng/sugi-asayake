@@ -4,6 +4,23 @@
 
 ---
 
+## StorePay төлбөр + QPay callback-ийн засвар + и-баримтын 3 дахь зам (2026-09-12, гэрийн лаптоп)
+
+Tom: `https://github.com/techpartners-asia/storepay-go` "manai 4 salbar 4 uulee storepay demjdeg shww!!", дараа нь `https://pypi.org/project/ebarimt-pos-sdk/`, `https://pypi.org/project/qpay-client/`, `https://github.com/hurelhuyag/ebarimt`.
+
+**StorePay (migration `0067`, Aiven дээр ажилласан)** — `payment_attempts.provider` болон `orders.paymentMethod` enum-д `storepay` нэмэгдэв. `server/storepay.ts` нь вендорын өөрсдийн Go SDK-г дагаж бичигдсэн:
+- Auth: `POST {authUrl}/oauth/token?grant_type=password&username={appUsername}&password={appPassword}` + **HTTP Basic** нь ӨӨР хос (username/password). Хоёр хос гэдгийг тохиргооны талбар бүрт нэрлэж бичсэн.
+- `POST {baseUrl}/merchant/loan` `{storeId, mobileNumber, description, amount, callbackUrl}` → `value` = зээлийн дугаар; `GET /merchant/loan/check/{id}` → зөвшөөрсөн эсэх; `POST /user/possibleAmount` → тухайн хэрэглэгчийн боломжит дүн.
+- ⚠️ **HTTP 200 = амжилт БИШ**: хариу бүр `status` талбартай, `"Success"` биш бол `msgList`-д шалтгаан байна. Бүх дуудлага envelope-ыг шалгана (`readStorepayEnvelope`).
+- Урсгал: захиалга үүснэ → харилцагчийн StorePay апп руу хүсэлт очно → апп дээрээ зөвшөөрнө → callback ирэхэд бид **өөрсдөө** `check`-ээр шалгаад л захиалгыг төлөгдсөн болгоно (QPay-тэй ижил зарчим; cancelled/хаагдсан захиалгыг сэргээхгүй `markQPayPaymentAttemptPaid`-ийн хамгаалалт хэвээр).
+- Тохиргоо нь `/admin → Интеграцууд` дээр шифрлэгдэж хадгалагдана (7 талбар: authUrl, baseUrl, appUsername, appPassword, username, password, storeId). Бүгд бөглөгдөж, "Идэвхтэй" болтол checkout дээр сонголт харагдахгүй. Тест: `server/storepay.test.ts` 9 (утасны дугаарын хэлбэрүүд, envelope, Basic+query auth, зээлийн биетүүд, token дахин ашиглалт, boolean шалгалт, дугааргүй зээлийг татгалзах, тохиргоогүй үед унтраалттай).
+
+**QPay-ийн 2 бодит засвар** (qpay-client-ийн баримтаас олдсон): callback нь **`"SUCCESS"` гэсэн энгийн биетээр** хариулах ёстой байсныг JSON буцаадаг байсныг заслаа (QPay callback-ыг дахин дахин илгээх шалтгаан болдог; манай боловсруулалт idempotent тул хохирол байгаагүй), мөн callback route одоо **GET-ийг ч хүлээн авна**. Мөн QPay-д **sandbox** орчин байдгийг тэмдэглэв — манай `QPAY_ENVIRONMENT=sandbox` аль хэдийн дэмждэг тул мерчант гэрээний өмнө бүх урсгалыг туршиж болно.
+
+**Онлайн төлбөр зөвхөн нэвтэрсэн хэрэглэгчид** — `qpayCreateInvoice`/`storepayCreateLoan` нь `protectedProcedure` тул зочин QPay сонгоход захиалга үүсээд ДАРАА нь эрхийн алдаа гардаг байсан (хуучин цоорхой). Одоо товч нь зочинд "Нэвтэрсэн үед идэвхжинэ" гэж унтраалттай харагдана.
+
+**И-баримт — 3 зам болов** ([EBARIMT.md](EBARIMT.md)): **A** Smart POS `/api/sale/sale` (бүх төлбөрт, хариунд ДДТД/QR/сугалаа), **B** локал PosService (`127.0.0.1:7080` — hurelhuyag/ebarimt, ebarimt-pos-sdk хоёул үүнийг баталсан), **C** QPay-ийн өөрийн `ebarimt_create` (зөвхөн QPay-ээр төлсөн захиалгад). Tom-ийн явуулсан 2 PyPI сан нь **албан ёсны биш** (Amraa1, MIT) боловч API-ийн хэлбэрийг зөв тусгасан лавлагаа.
+
 ## Smart Software adapter — Phase 6 ДУУСАВ + API баримтын нээлт (2026-09-11 шөнө → 2026-09-12, гэрийн лаптоп)
 
 Tom: "smart api rest api shde!! bas json", https://developer.smartsoftware.mn/, https://developer.smartsoftware.mn/api-13543729, https://smartsoftware.mn/ptdeveloper, дараа нь "smart api-г худалдаж авна гэсэн, авсны дараа интеграцийн хэсэгт API key хийгээд л болоо биз". Шөнө орой болсон тул Tom зогсоов ("lets do it tomorrow").
