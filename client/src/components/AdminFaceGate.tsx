@@ -6,6 +6,9 @@ import {
   FACE_ENROLL_POSES,
   FACE_ENROLL_POSE_YAW,
   FACE_ENROLL_SAMPLES_PER_POSE,
+  FACE_HEARTBEAT_INTERVAL_MS,
+  FACE_IDLE_TIMEOUT_MS,
+  FACE_IDLE_WARNING_MS,
   FACE_VERIFY_SAMPLES,
   FACE_VERIFY_MIN_DURATION_MS,
   FLASH_COLORS,
@@ -76,7 +79,15 @@ export default function AdminFaceGate({ children }: { children: React.ReactNode 
   if (statusQuery.isError) return <>{children}</>;
 
   const status = statusQuery.data;
-  if (!status || !status.gateEnabled || status.verified) return <>{children}</>;
+  if (!status || !status.gateEnabled) return <>{children}</>;
+  if (status.verified) {
+    return (
+      <>
+        <IdleLockWatcher idleTimeoutMs={status.idleTimeoutMs} onLocked={() => statusQuery.refetch()} />
+        {children}
+      </>
+    );
+  }
 
   return (
     <FaceGateFlow
@@ -84,6 +95,100 @@ export default function AdminFaceGate({ children }: { children: React.ReactNode 
       modelStale={status.modelStale}
       onPassed={() => statusQuery.refetch()}
     />
+  );
+}
+
+/**
+ * Locks /admin after FACE_IDLE_TIMEOUT_MS without real interaction, and warns
+ * shortly before (2026-09-12, Tom: 25 минут ямар ч үйлдэлгүй бол дахин
+ * нүүрээ таниулах).
+ *
+ * Three things make this an actual timeout rather than a decoration:
+ *
+ *  - Only REAL input counts. The panel polls on timers (the bell, the
+ *    notification log), so if any request counted as activity, a dashboard
+ *    left open on a counter would renew itself forever.
+ *  - The server is the one that enforces it. This component's timer decides
+ *    WHEN to lock and gives the warning; the lock itself clears the proof
+ *    cookie server-side, so a browser with its JavaScript paused (or a
+ *    machine asleep past the deadline) is refused on its next request
+ *    anyway -- the proof carries its own expiry.
+ *  - Every open tab locks together, through a BroadcastChannel. Locking one
+ *    tab while a second sat unlocked on the same screen would be worse than
+ *    no lock at all.
+ */
+function IdleLockWatcher({ idleTimeoutMs, onLocked }: { idleTimeoutMs: number; onLocked: () => void }) {
+  const lock = trpc.faceAuth.lock.useMutation();
+  const heartbeat = trpc.faceAuth.heartbeat.useMutation();
+  const lastActivityRef = useRef(Date.now());
+  const lastBeatRef = useRef(Date.now());
+  const lockingRef = useRef(false);
+  const [remainingMs, setRemainingMs] = useState<number | null>(null);
+
+  const timeout = idleTimeoutMs > 0 ? idleTimeoutMs : FACE_IDLE_TIMEOUT_MS;
+
+  const doLock = useCallback(async (broadcast: boolean) => {
+    if (lockingRef.current) return;
+    lockingRef.current = true;
+    try {
+      if (broadcast) channelRef.current?.postMessage("lock");
+      await lock.mutateAsync({ reason: "idle" });
+    } catch {
+      // Even if the call fails, fall through to onLocked: the proof has
+      // expired on its own by now, so the refetched status will say so.
+    }
+    onLocked();
+  }, [lock, onLocked]);
+
+  const channelRef = useRef<BroadcastChannel | null>(null);
+  useEffect(() => {
+    channelRef.current = typeof BroadcastChannel === "function" ? new BroadcastChannel("sugi-admin-idle") : null;
+    const channel = channelRef.current;
+    if (channel) channel.onmessage = event => { if (event.data === "lock") void doLock(false); };
+    return () => { channel?.close(); channelRef.current = null; };
+  }, [doLock]);
+
+  useEffect(() => {
+    // Pointer/key/touch/scroll -- what a person does. Deliberately NOT
+    // "any fetch" and not mousemove alone (a nudged desk should not count as
+    // working, and a trackpad drifting under a sleeve certainly should not).
+    const markActive = () => {
+      lastActivityRef.current = Date.now();
+      setRemainingMs(null);
+      if (Date.now() - lastBeatRef.current >= FACE_HEARTBEAT_INTERVAL_MS) {
+        lastBeatRef.current = Date.now();
+        heartbeat.mutate();
+      }
+    };
+    const events: (keyof WindowEventMap)[] = ["pointerdown", "keydown", "wheel", "touchstart", "scroll"];
+    for (const event of events) window.addEventListener(event, markActive, { passive: true });
+
+    const tick = window.setInterval(() => {
+      const idleFor = Date.now() - lastActivityRef.current;
+      if (idleFor >= timeout) { void doLock(true); return; }
+      // Count down only inside the warning window, so nothing is shown for
+      // the first 23 quiet minutes.
+      setRemainingMs(idleFor >= timeout - FACE_IDLE_WARNING_MS ? timeout - idleFor : null);
+    }, 1000);
+
+    return () => {
+      for (const event of events) window.removeEventListener(event, markActive);
+      window.clearInterval(tick);
+    };
+  }, [doLock, heartbeat, timeout]);
+
+  if (remainingMs === null) return null;
+  const seconds = Math.max(0, Math.ceil(remainingMs / 1000));
+  return (
+    <div role="status" aria-live="polite" className="fixed inset-x-3 bottom-3 z-[120] mx-auto max-w-md rounded-2xl border border-[#f0b52d] bg-[#17181b] px-4 py-3 text-white shadow-lg sm:inset-x-auto sm:right-4">
+      <p className="text-sm font-bold text-[#f0b52d]">Түгжигдэх гэж байна</p>
+      <p className="mt-1 text-xs leading-5 text-white/80">
+        Удаан хугацаанд үйлдэл хийгээгүй тул {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")} минутын дараа /admin түгжигдэж, нүүрээ дахин таниулах шаардлагатай болно.
+      </p>
+      <button type="button" onClick={() => { lastActivityRef.current = Date.now(); lastBeatRef.current = Date.now(); heartbeat.mutate(); setRemainingMs(null); }} className="mt-2 rounded-full bg-[#f0b52d] px-3 py-1.5 text-[11px] font-extrabold text-[#17181b]">
+        Үргэлжлүүлэх
+      </button>
+    </div>
   );
 }
 

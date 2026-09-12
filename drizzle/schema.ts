@@ -1737,7 +1737,10 @@ export type FaceChallenge = typeof faceChallenges.$inferSelect;
 export const faceAttempts = mysqlTable("face_attempts", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").references(() => users.id, { onDelete: "cascade" }),
-  outcome: mysqlEnum("outcome", ["enrolled", "verified", "no_match", "liveness_failed", "error"]).notNull(),
+  // 2026-09-12 (migration 0068): 'idle_locked' -- /admin locked itself after
+  // 25 idle minutes. An audit trail that holds only failures cannot answer
+  // "was this screen left unattended?", so the lock is recorded too.
+  outcome: mysqlEnum("outcome", ["enrolled", "verified", "no_match", "liveness_failed", "error", "idle_locked"]).notNull(),
   distance: int("distance"),
   detail: varchar("detail", { length: 160 }),
   ip: varchar("ip", { length: 64 }),

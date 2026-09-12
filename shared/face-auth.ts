@@ -68,16 +68,49 @@ export const FACE_DESCRIPTOR_LENGTH = 128;
 export const FACE_MATCH_THRESHOLD = 0.45;
 
 /**
- * How long one successful face check stays valid on a device.
+ * ABSOLUTE cap on one face check: however busy the day is, /admin asks again
+ * after this long — one shift, so somebody who signs in at opening isn't
+ * re-prompted all day, but a machine left signed in overnight is.
  *
  * The proof cookie is also cleared on logout and invalidated by any
  * sessionVersion bump (password reset / sign-out-everywhere), so in practice a
- * fresh check is required at every new sign-in regardless of this number. This
- * only bounds how long one continuous working session can run before being
- * asked again — one shift, so somebody who signs in at opening isn't
- * re-prompted all day, but a machine left signed in overnight is.
+ * fresh check is required at every new sign-in regardless of this number.
+ *
+ * Two timeouts, which is what every session-management standard asks for: an
+ * absolute one and an idle one (below). OWASP ASVS V7 and the Session
+ * Management Cheat Sheet put a high-value application's absolute window at
+ * 4–8h; NIST SP 800-63B allows 12h at AAL2. 8h is the shift length here.
  */
 export const FACE_VERIFICATION_TTL_MS = 1000 * 60 * 60 * 8;
+
+/**
+ * IDLE timeout (2026-09-12, Tom asked for 25 minutes): that long with no real
+ * interaction in /admin and the face check expires — the panel locks and asks
+ * for the face again.
+ *
+ * The counter is driven by ACTUAL INPUT (pointer, key, touch, scroll), never
+ * by the panel's own background polling. That distinction is the whole
+ * feature: the dashboard refetches the bell and the outbox on timers, so a
+ * screen left open would otherwise keep renewing itself and the timeout would
+ * be fiction.
+ *
+ * Where 25 sits among the standards this has to answer to: NIST SP 800-63B
+ * requires reauthentication after 30 minutes of inactivity at AAL2; PCI DSS
+ * v4.0 req. 8.2.8 requires 15 minutes for administrative access; OWASP's
+ * Session Management Cheat Sheet suggests 15–30 minutes for high-value
+ * applications. 25 is inside all three.
+ */
+export const FACE_IDLE_TIMEOUT_MS = 1000 * 60 * 25;
+
+/** How long before the lock a warning appears, so nobody loses a half-typed
+ *  product description without notice. A usability requirement, not a
+ *  security one — the lock happens either way. */
+export const FACE_IDLE_WARNING_MS = 1000 * 60 * 2;
+
+/** How often a browser WITH real activity tells the server it is still there.
+ *  Far below the idle timeout, so one dropped request cannot lock somebody
+ *  out mid-sentence; far above "every request", so it is not chatty. */
+export const FACE_HEARTBEAT_INTERVAL_MS = 1000 * 60 * 2;
 
 /** How long an issued liveness challenge stays usable. Short on purpose: an
  *  unused challenge should die quickly rather than sit around replayable. */

@@ -5261,7 +5261,7 @@ export async function consumeFaceChallenge(input: { id: number; userId: number }
 
 export async function recordFaceAttempt(input: {
   userId: number | null;
-  outcome: "enrolled" | "verified" | "no_match" | "liveness_failed" | "error";
+  outcome: "enrolled" | "verified" | "no_match" | "liveness_failed" | "error" | "idle_locked";
   distance?: number | null;
   detail?: string | null;
   ip?: string | null;

@@ -204,8 +204,8 @@ import {
   upsertFaceEnrollment,
 } from "./db";
 // Admin face gate (2026-09-08) -- see server/faceAuth.ts.
-import { clearFaceProofCookie, completeFaceVerification, hasValidFaceProof, isFaceGateEnabled, startFaceVerification } from "./faceAuth";
-import { FACE_DESCRIPTOR_LENGTH, FACE_DIAGNOSTIC_MAX, FACE_MODEL_VERSION, isAdminPanelRole, isValidFaceDescriptor } from "../shared/face-auth";
+import { clearFaceProofCookie, completeFaceVerification, hasValidFaceProof, isFaceGateEnabled, lockFaceSession, refreshFaceProof, startFaceVerification } from "./faceAuth";
+import { FACE_DESCRIPTOR_LENGTH, FACE_DIAGNOSTIC_MAX, FACE_IDLE_TIMEOUT_MS, FACE_MODEL_VERSION, isAdminPanelRole, isValidFaceDescriptor } from "../shared/face-auth";
 import { adminProcedure, anyStaffProcedure, catalogReadProcedure, contentReadProcedure, financeProcedure, lenientRateLimitedProcedure, marketingProcedure, moderateRateLimitedProcedure, ordersReadProcedure, phoneVerifyRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure, usersReadProcedure, warehouseProcedure } from "./_core/trpc";
 import { storagePing, storagePut, storagePutImageVariants } from "./storage";
 import { IMAGE_MAX_DIMENSION, processUploadedImage, processUploadedImageVariants } from "./_core/imageProcessing";
@@ -1652,7 +1652,7 @@ export const appRouter = router({
       // the panel with no camera anywhere -- exactly today's pre-gate
       // behaviour, which is the entire point of the escape hatch.
       if (!gateEnabled || !isAdminPanelRole(ctx.user.role)) {
-        return { gateEnabled, enrolled: true, verified: true, modelStale: false };
+        return { gateEnabled, enrolled: true, verified: true, modelStale: false, idleTimeoutMs: FACE_IDLE_TIMEOUT_MS };
       }
       const enrollment = await getFaceEnrollment(ctx.user.id);
       const hasProof = await hasValidFaceProof(ctx.req, ctx.user.id, ctx.user.sessionVersion);
@@ -1673,7 +1673,32 @@ export const appRouter = router({
         // one; surfaced separately so the UI says "enroll again" rather than
         // "your face didn't match".
         modelStale: !!enrollment && enrollment.modelVersion !== FACE_MODEL_VERSION,
+        // The browser needs the window to run its own countdown and warning;
+        // the server enforces it regardless, through the proof's own `exp`.
+        idleTimeoutMs: FACE_IDLE_TIMEOUT_MS,
       };
+    }),
+
+    /**
+     * "Somebody is actually working here" -- slides the idle deadline
+     * forward. Sent by the browser ONLY after real input (pointer, key,
+     * touch, scroll), never by the panel's own polling, or an open dashboard
+     * would renew itself forever and the 25-minute lock would be fiction.
+     *
+     * Cheap on purpose: verify the existing proof, re-sign it, set the
+     * cookie. No database work, so every open panel can call it every couple
+     * of minutes without being noticed.
+     */
+    heartbeat: protectedProcedure.mutation(async ({ ctx }) => {
+      if (!isFaceGateEnabled() || !isAdminPanelRole(ctx.user.role)) return { ok: true as const, idleExpiresAt: null, absoluteExpiresAt: null };
+      return refreshFaceProof({ req: ctx.req, res: ctx.res, userId: ctx.user.id, sessionVersion: ctx.user.sessionVersion });
+    }),
+
+    /** Ends the face session now -- the browser's idle timer firing, or
+     *  someone deliberately locking the screen before walking away. */
+    lock: protectedProcedure.input(z.object({ reason: z.enum(["idle", "manual"]) })).mutation(async ({ ctx, input }) => {
+      await lockFaceSession({ req: ctx.req, res: ctx.res, userId: ctx.user.id, reason: input.reason });
+      return { ok: true as const };
     }),
 
     /**
