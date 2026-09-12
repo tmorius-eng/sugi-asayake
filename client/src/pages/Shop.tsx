@@ -1,4 +1,4 @@
-import { ArrowDownUp, ArrowUpRight, ChevronLeft, ChevronRight, Eye, Grid3x3, Heart, LayoutGrid, MapPin, PackageCheck, Phone, RotateCcw, LoaderCircle, Search, ShoppingCart, SlidersHorizontal, Sparkles, Star, Truck, Wallet } from "lucide-react";
+import { X, ArrowDownUp, ArrowUpRight, ChevronLeft, ChevronRight, Eye, Grid3x3, Heart, LayoutGrid, MapPin, PackageCheck, Phone, RotateCcw, LoaderCircle, Search, ShoppingCart, SlidersHorizontal, Sparkles, Star, Truck, Wallet } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { scrollElementToTopNow } from "@/lib/scroll";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
@@ -278,6 +278,22 @@ export default function Shop() {
   }, []);
 
   const resetControls = () => { setSearch(""); setCategory("all"); setBrand("all"); setMinPrice(""); setMaxPrice(""); setSkinTypeFilter("all"); setInStockOnly(false); setSort("featured"); };
+  /**
+   * Every filter the shopper has actually applied, one removable chip each,
+   * shown right where the results begin (2026-09-12). Research on faceted
+   * navigation is consistent on this point: applied values belong beside
+   * the product list and must be individually removable, not just a
+   * highlighted state inside the controls -- otherwise someone who forgot
+   * they set a price cap reads a thin catalogue as "you have nothing".
+   */
+  const appliedFilters = [
+    search.trim() ? { key: "q", label: `Хайлт: ${search.trim()}`, clear: () => setSearch("") } : null,
+    category !== "all" ? { key: "category", label: category, clear: () => setCategory("all") } : null,
+    brand !== "all" ? { key: "brand", label: brand, clear: () => setBrand("all") } : null,
+    skinTypeFilter !== "all" ? { key: "skin", label: `Арьсны төрөл: ${skinTypeFilter}`, clear: () => setSkinTypeFilter("all") } : null,
+    minPrice || maxPrice ? { key: "price", label: `Үнэ: ${minPrice || "0"}–${maxPrice || "∞"}`, clear: () => { setMinPrice(""); setMaxPrice(""); } } : null,
+    inStockOnly ? { key: "stock", label: "Бэлэн нөөцтэй", clear: () => setInStockOnly(false) } : null,
+  ].filter((chip): chip is { key: string; label: string; clear: () => void } => chip !== null);
   const rememberProduct = (productId: number) => setRecentlyViewedIds(current => {
     const next = rememberRecentlyViewed(current, productId);
     window.localStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify(next));
@@ -321,6 +337,17 @@ export default function Shop() {
               silently becomes "0" -- see minPrice/maxPrice's own comment. */}
           <div className="price-range-filter"><Wallet size={14} /><input type="number" inputMode="numeric" min={0} step={1000} placeholder="Доод" value={minPrice} onChange={event => setMinPrice(event.target.value)} aria-label="Доод үнэ (₮)" /><span aria-hidden="true">–</span><input type="number" inputMode="numeric" min={0} step={1000} placeholder="Дээд" value={maxPrice} onChange={event => setMaxPrice(event.target.value)} aria-label="Дээд үнэ (₮)" /></div>
           <label className="stock-toggle"><input type="checkbox" checked={inStockOnly} onChange={event => setInStockOnly(event.target.checked)} /><span><PackageCheck size={14} /> Бэлэн нөөцтэй</span></label><label className="sort-control"><ArrowDownUp size={14} /><span>Эрэмбэ</span><select value={sort} onChange={event => setSort(event.target.value as CatalogSortOption)}><option value="featured">Онцлох</option><option value="price-low">Үнэ: багаас</option><option value="price-high">Үнэ: ихээс</option><option value="name-asc">Нэр: A–Я</option></select></label></div>
+        {appliedFilters.length > 0 && (
+          <div className="shop-applied" role="status" aria-live="polite">
+            <span className="shop-applied-label">Сонгосон:</span>
+            {appliedFilters.map(chip => (
+              <button type="button" key={chip.key} className="shop-applied-chip" onClick={chip.clear} aria-label={`${chip.label} шүүлтүүрийг хасах`}>
+                {chip.label} <X size={14} aria-hidden="true" />
+              </button>
+            ))}
+            <button type="button" className="shop-applied-clear" onClick={resetControls}>Бүгдийг цэвэрлэх</button>
+          </div>
+        )}
       </section>
       {catalogLoading ? <section className="shop-product-grid" aria-busy="true" aria-label={isSearching ? "Хайж байна" : "Каталогийг бэлдэж байна"}>{Array.from({ length: 8 }, (_, index) => <ProductCardSkeleton key={index} />)}</section> : catalogErrored ? <section className="shop-status-card error"><h2>Каталогийг ачаалж чадсангүй.</h2><p>Интернэт холболтоо шалгаад дахин оролдоно уу.</p></section> : !isSearching && sourceCount === 0 && !forceZeroResults ? <section className="shop-discovery" data-reveal>
         <div className="shop-discovery-heading"><p className="shop-kicker"><span /> {textFor("shop-text-discovery-kicker", "SUGI ASAYAKE / DISCOVER")}</p><h2>{discoveryLine1}<br /><em>{discoveryLine2}</em></h2><p>{textFor("shop-text-discovery-description", "Онлайн каталогийг бид салбарын бодит нөөцтэй нь уялдуулан шинэчилж байна. Харин та өөрт ойр салбараас дараах ангиллаар шууд асууж болно.")}</p></div>

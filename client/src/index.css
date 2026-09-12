@@ -3450,3 +3450,97 @@ body:has(.auth-shell) { background: #fff; }
    1.77:1, so it takes the panel's own ink (and the link the brand red). */
 .sugi-site [class*="bg-[#17181b]"]:not(button) [class*="text-[#f0b52d]"] { color: var(--ck-muted); }
 .sugi-site [class*="bg-[#17181b]"]:not(button) a[class*="text-[#f0b52d]"] { color: var(--primary-text); }
+
+/* --- /shop filter bar, rebuilt 2026-09-12 -------------------------------- */
+/* Tom: "denduu zambaraagui baina ... neg goy shiidel oldoo, brainstorm hiij
+   websearch hiiged". What the research says (Baymard on filtering
+   interfaces, plus the 2026 round-ups): a horizontal toolbar beats a
+   sidebar only where a shop has FEW facets -- this one has five -- and the
+   most common failure is leaving applied filters invisible, which Baymard
+   measures on 20% of sites. So the pills wrap instead of hiding inside a
+   horizontal scroller (that scrollbar through the middle of the page is
+   what made this read as chaos), the label sits above them rather than off
+   to one side, the controls form one calm row, and every applied filter is
+   repeated underneath as a chip that removes itself.
+     https://baymard.com/blog/horizontal-filtering-sorting-design
+     https://baymard.com/learn/ecommerce-filter-ui */
+.sugi-site .shop-filter {
+  display: grid;
+  gap: 14px;
+  align-items: start;
+  padding: 24px 0 20px;
+  border-bottom: 1px solid var(--ck-line);
+}
+.sugi-site .shop-filter > div:first-child { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.sugi-site .shop-filter p { color: var(--ck-ink); font-size: 14px; font-weight: 700; letter-spacing: .14em; }
+.sugi-site .shop-filter p svg { color: var(--ck-muted); }
+.sugi-site .shop-filter > div:first-child span { color: var(--ck-muted); font-size: 14px; font-weight: 500; }
+.sugi-site .shop-filter-facets { width: 100%; max-width: none; align-items: flex-start; gap: 10px; }
+.sugi-site .shop-filter-pills { flex-wrap: wrap; overflow: visible; }
+.sugi-site .shop-filter-pills button {
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--ck-line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ck-ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+.sugi-site .shop-filter-pills button:hover { border-color: var(--ck-ink); background: var(--ck-chip); }
+.sugi-site .shop-filter-pills button.active { border-color: var(--ck-ink); background: var(--ck-ink); color: #fff; }
+/* The skin-type row filters WITHIN the category above it, so it reads one
+   step quieter until something in it is chosen. */
+.sugi-site .shop-skin-filter button { min-height: 34px; padding: 0 13px; border-color: #ededed; background: var(--ck-cream); color: var(--ck-muted); font-size: 13px; }
+.sugi-site .shop-skin-filter button.active { border-color: var(--ck-ink); background: var(--ck-ink); color: #fff; }
+.sugi-site .shop-control-row { justify-content: flex-start; margin-left: 0; gap: 10px; }
+.sugi-site .price-range-filter,
+.sugi-site .stock-toggle span,
+.sugi-site .sort-control {
+  min-height: 40px;
+  border: 1px solid var(--ck-line);
+  border-radius: 999px;
+  color: var(--ck-ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+.sugi-site .price-range-filter svg,
+.sugi-site .stock-toggle span svg,
+.sugi-site .sort-control svg { color: var(--ck-muted); }
+.sugi-site .price-range-filter input,
+.sugi-site .sort-control select { font-size: 14px; font-weight: 700; }
+.sugi-site .price-range-filter input { width: 74px; }
+.sugi-site .stock-toggle input:checked + span { border-color: var(--ck-ink); background: var(--ck-ink); }
+.sugi-site .stock-toggle input:checked + span svg { color: #fff; }
+/* Applied filters, right where the results start. */
+.sugi-site .shop-applied { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.sugi-site .shop-applied-label { color: var(--ck-muted); font-size: 13px; font-weight: 700; letter-spacing: .1em; }
+.sugi-site .shop-applied-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--ck-ink);
+  border-radius: 999px;
+  background: var(--ck-chip);
+  color: var(--ck-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+.sugi-site .shop-applied-chip:hover { background: var(--ck-ink); color: #fff; }
+.sugi-site .shop-applied-clear { color: var(--primary-text); font-size: 13px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+/* The density toggles join the controls' visual family instead of floating
+   above the grid on their own. */
+.sugi-site .shop-grid-toolbar { margin: 0 0 16px; }
+.sugi-site .shop-grid-toolbar button { width: 40px; height: 40px; border: 1px solid var(--ck-line); border-radius: 999px; color: var(--ck-muted); }
+.sugi-site .shop-grid-toolbar button.active { border-color: var(--ck-ink); background: var(--ck-ink); color: #fff; }
+@media (max-width: 620px) {
+  .sugi-site .shop-control-row { justify-content: flex-start; }
+  .sugi-site .shop-filter-pills button { min-height: 36px; padding: 0 13px; font-size: 13px; }
+}
+/* Under 900px an older rule reordered the facets after the controls, so a
+   phone met the price/sort row before it ever saw the categories. The bar
+   now follows its DOM order at every width: label, categories, skin type,
+   controls, applied chips. */
+.sugi-site .shop-filter-facets { order: 0; }
