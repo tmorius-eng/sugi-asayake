@@ -2807,12 +2807,12 @@ body:has(.sugi-site) { background: #fff; }
 .commerce-header-search-slot .header-search--inline { width: min(380px, 100%); }
 .commerce-header-navrow { justify-content: center; padding-bottom: 12px; }
 .commerce-brand img { width: 160px; }
-.commerce-brand > span:last-child { border-left-color: var(--ck-line); color: var(--ck-muted); font-weight: 500; letter-spacing: .1em; }
+.commerce-brand > span:last-child { border-left-color: var(--ck-line); color: var(--ck-muted); font-weight: 700; letter-spacing: .1em; }
 .commerce-marketing-nav { justify-content: center; gap: clamp(14px, 2.2vw, 34px); }
 .commerce-marketing-nav a {
   color: var(--ck-ink);
   font-size: 17px;
-  font-weight: 400;
+  font-weight: 700;
   letter-spacing: .05em;
   white-space: nowrap;
 }
@@ -2842,7 +2842,7 @@ body:has(.sugi-site) { background: #fff; }
   place-items: center;
   color: var(--ck-ink);
   font-size: 16px;
-  font-weight: 400;
+  font-weight: 700;
 }
 .commerce-header-actions > a::after { display: none; }
 .commerce-header-actions > a:hover,
@@ -2874,7 +2874,7 @@ body:has(.sugi-site) { background: #fff; }
   background: var(--primary);
   color: #fff;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 700;
   line-height: 1;
 }
 .header-search .header-search-trigger { width: 24px; height: 24px; color: var(--ck-ink); }
@@ -2888,15 +2888,14 @@ body:has(.sugi-site) { background: #fff; }
   border-radius: 4px;
   background: none;
   color: var(--ck-ink);
-  font-size: 16px;
-}
+  font-size: 16px; font-weight: 500; }
 .header-search--inline .header-search-input::placeholder { color: #9a9a9a; }
 .header-search-submit { display: grid; width: 40px; height: 38px; flex: 0 0 auto; place-items: center; border: 0; background: none; color: var(--ck-muted); cursor: pointer; }
 .header-search-submit:hover { color: var(--ck-ink); }
 .header-search--inline .header-search-panel { top: calc(100% + 6px); right: 0; left: 0; width: auto; border: 1px solid var(--ck-line); border-radius: 4px; background: #fff; box-shadow: 0 10px 30px rgba(0, 0, 0, .07); }
 .header-search-panel { border-radius: 4px; background: #fff; box-shadow: 0 10px 30px rgba(0, 0, 0, .07); }
 .header-search-result:hover { background: var(--ck-chip); }
-.header-search-viewall { border-radius: 4px; background: var(--ck-chip); color: var(--ck-ink); font-weight: 500; }
+.header-search-viewall { border-radius: 4px; background: var(--ck-chip); color: var(--ck-ink); font-weight: 700; }
 .header-search-viewall:hover { background: var(--ck-line); color: var(--ck-ink); }
 
 /* --- Shared section rhythm ---------------------------------------------- */
@@ -2911,7 +2910,7 @@ body:has(.sugi-site) { background: #fff; }
 .sugi-site .footer-cta-banner h2 {
   font-family: var(--font-display);
   font-size: clamp(24px, 2.4vw, 32px);
-  font-weight: 400;
+  font-weight: 700;
   letter-spacing: .1em;
   line-height: 1.5;
   color: var(--ck-ink);
@@ -2920,16 +2919,16 @@ body:has(.sugi-site) { background: #fff; }
 .sugi-site .editorial-heading em,
 .sugi-site .carousel-shelf-heading h2 em { color: var(--primary-text); font-style: normal; text-decoration: none; }
 .sugi-site .page-section { width: min(var(--ck-container), calc(100% - 40px)); }
-.sugi-site .eyebrow { color: var(--ck-muted); font-size: 13px; font-weight: 500; letter-spacing: .18em; }
+.sugi-site .eyebrow { color: var(--ck-muted); font-size: 13px; font-weight: 700; letter-spacing: .18em; }
 .sugi-site .eyebrow span { display: none; }
 .sugi-site p { color: var(--ck-ink); }
 
 /* Buttons: the reference's pill outline, and one filled brand button. */
-.sugi-site .button { min-height: 44px; padding: 0 26px; border-radius: 999px; font-size: 16px; font-weight: 400; letter-spacing: .06em; }
+.sugi-site .button { min-height: 44px; padding: 0 26px; border-radius: 999px; font-size: 16px; font-weight: 700; letter-spacing: .06em; }
 .sugi-site .button:hover { transform: none; }
 .sugi-site .button-primary { background: var(--primary); box-shadow: none; }
 .sugi-site .quiet-link,
-.sugi-site .inline-link { color: var(--ck-ink); font-size: 16px; font-weight: 400; letter-spacing: .04em; }
+.sugi-site .inline-link { color: var(--ck-ink); font-size: 16px; font-weight: 700; letter-spacing: .04em; }
 .sugi-site .quiet-link:hover,
 .sugi-site .inline-link:hover { color: var(--ck-muted); }
 
@@ -2975,16 +2974,16 @@ body:has(.sugi-site) { background: #fff; }
   max-width: 22ch;
   margin: 14px auto 0;
   font-size: clamp(30px, 3.4vw, 44px);
-  font-weight: 400;
+  font-weight: 700;
   letter-spacing: .04em;
   line-height: 1.45;
   text-shadow: none;
 }
 .sugi-site .hero-copy h1 strong::after { display: none; }
-.sugi-site .hero-description { max-width: 60ch; margin: 18px auto 0; color: var(--ck-muted); font-size: 17px; font-weight: 400; line-height: 1.9; }
+.sugi-site .hero-description { max-width: 60ch; margin: 18px auto 0; color: var(--ck-muted); font-size: 17px; font-weight: 500; line-height: 1.9; }
 .sugi-site .hero-actions { justify-content: center; margin-top: 28px; gap: 22px; }
 .sugi-site .hero-trust { justify-content: center; margin-top: 30px; color: var(--ck-muted); }
-.sugi-site .hero-trust strong { color: var(--ck-ink); font-size: 16px; font-weight: 500; }
+.sugi-site .hero-trust strong { color: var(--ck-ink); font-size: 16px; font-weight: 700; }
 .sugi-site .hero-trust span { font-size: 15px; }
 .sugi-site .hero-trust div { text-align: left; }
 
@@ -3002,7 +3001,7 @@ body:has(.sugi-site) { background: #fff; }
   background: #fff;
   color: var(--ck-ink);
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 700;
   transition: background .16s var(--ease-out), border-color .16s var(--ease-out);
 }
 .kw-chip:hover { border-color: var(--ck-ink); background: var(--ck-chip); }
@@ -3011,7 +3010,7 @@ body:has(.sugi-site) { background: #fff; }
 .sugi-site .carousel-shelf-section { width: min(var(--ck-container), calc(100% - 40px)); margin: 0 auto; padding: var(--ck-gap) 0 0; }
 .sugi-site .carousel-shelf-heading { display: block; margin-bottom: 35px; text-align: center; }
 .sugi-site .carousel-shelf-heading h2 { margin: 0; }
-.sugi-site .carousel-shelf-description { max-width: 60ch; margin: 12px auto 0; color: var(--ck-muted); font-size: 16px; font-weight: 400; text-align: center; }
+.sugi-site .carousel-shelf-description { max-width: 60ch; margin: 12px auto 0; color: var(--ck-muted); font-size: 16px; font-weight: 500; text-align: center; }
 /* The "see all" link moves below the rail as a bordered pill, where the
    reference puts it. */
 .sugi-site .carousel-shelf-heading .carousel-shelf-all-link {
@@ -3023,7 +3022,7 @@ body:has(.sugi-site) { background: #fff; }
   border-radius: 999px;
   color: var(--ck-ink);
   font-size: 16px;
-  font-weight: 400;
+  font-weight: 700;
   letter-spacing: .06em;
 }
 .sugi-site .carousel-shelf-heading .carousel-shelf-all-link:hover { gap: 6px; border-color: var(--ck-ink); color: var(--ck-ink); background: var(--ck-chip); }
@@ -3044,25 +3043,25 @@ body:has(.sugi-site) { background: #fff; }
   box-shadow: none;
 }
 .shelf-card:hover { box-shadow: none; transform: none; }
-.shelf-card-rank { position: static; display: block; width: auto; height: auto; margin-bottom: 6px; background: none; color: var(--ck-gold); font-size: 17px; font-weight: 300; letter-spacing: .04em; }
+.shelf-card-rank { position: static; display: block; width: auto; height: auto; margin-bottom: 6px; background: none; color: var(--ck-gold); font-size: 17px; font-weight: 700; letter-spacing: .04em; }
 .shelf-card-frame { display: block; border: 1px solid var(--ck-line); border-radius: 4px; background: #fff; transition: border-color .18s var(--ease-out); }
 .shelf-card:hover .shelf-card-frame { border-color: #cfcfcf; }
 .shelf-card-image { position: relative; display: block; }
 .shelf-card-image img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #fff; }
 .shelf-card-body { display: block; padding: 10px 12px 14px; }
-.shelf-card-body p { margin: 0 -12px 8px; padding: 4px 12px; background: var(--ck-chip); color: var(--ck-muted); font-size: 13px; font-weight: 400; letter-spacing: .04em; text-transform: none; }
+.shelf-card-body p { margin: 0 -12px 8px; padding: 4px 12px; background: var(--ck-chip); color: var(--ck-muted); font-size: 13px; font-weight: 500; letter-spacing: .04em; text-transform: none; }
 .shelf-card-body h3 {
   margin: 0;
   color: var(--ck-ink);
   font-size: 15px;
-  font-weight: 400;
+  font-weight: 700;
   letter-spacing: 0;
   line-height: 1.55;
 }
 .shelf-card-price { display: block; margin-top: 10px; }
-.shelf-card-price strong { color: var(--ck-ink); font-size: 21px; font-weight: 300; letter-spacing: .02em; }
+.shelf-card-price strong { color: var(--ck-ink); font-size: 21px; font-weight: 700; letter-spacing: .02em; }
 .shelf-card-price s { margin-left: 8px; color: #9a9a9a; font-size: 15px; }
-.shelf-card-rating { display: flex; align-items: center; gap: 5px; margin: 8px 0 0; color: var(--ck-muted); font-size: 13px; font-weight: 400; }
+.shelf-card-rating { display: flex; align-items: center; gap: 5px; margin: 8px 0 0; color: var(--ck-muted); font-size: 13px; font-weight: 500; }
 .shelf-card-stars { display: inline-flex; gap: 1px; color: #e0b93c; }
 .shelf-card-rating em { color: var(--ck-muted); font-style: normal; }
 .sugi-site .shop-sale-badge { top: 6px; right: 6px; border-radius: 3px; font-size: 12px; }
@@ -3084,7 +3083,7 @@ body:has(.sugi-site) { background: #fff; }
   background: #fff;
   color: var(--ck-ink);
   font-size: 16px;
-  font-weight: 400;
+  font-weight: 700;
   letter-spacing: .06em;
 }
 .sugi-site .fbrand-all:hover { border-color: var(--ck-ink); background: var(--ck-chip); color: var(--ck-ink); transform: none; }
@@ -3098,7 +3097,7 @@ body:has(.sugi-site) { background: #fff; }
 .sugi-site .cat-mosaic-section { width: min(var(--ck-container), calc(100% - 40px)); margin: 0 auto; padding: var(--ck-gap) 0 0; }
 .sugi-site .cat-mosaic-top { display: block; margin: 0; text-align: center; }
 .sugi-site .cat-mosaic-heading-block { display: block; padding: 0; background: none; }
-.sugi-site .cat-mosaic-heading-block > p { max-width: 60ch; margin: 12px auto 0; color: var(--ck-muted); font-size: 16px; font-weight: 400; }
+.sugi-site .cat-mosaic-heading-block > p { max-width: 60ch; margin: 12px auto 0; color: var(--ck-muted); font-size: 16px; font-weight: 500; }
 .sugi-site .cat-mosaic-heading-block .quiet-link { display: none; }
 .sugi-site .cat-mosaic-anchor { display: none; }
 .sugi-site .cat-mosaic-note { display: none; }
@@ -3127,7 +3126,7 @@ body:has(.sugi-site) { background: #fff; }
 }
 .sugi-site .cat-mosaic-item:hover .cat-mosaic-item-photo { border-color: #cfcfcf; }
 .sugi-site .cat-mosaic-item-body { padding: 12px 4px 0; text-align: center; }
-.sugi-site .cat-mosaic-item-title { font-size: 15px; font-weight: 400; letter-spacing: .02em; }
+.sugi-site .cat-mosaic-item-title { font-size: 15px; font-weight: 700; letter-spacing: .02em; }
 .sugi-site .cat-mosaic-item-detail { display: none; }
 .sugi-site .cat-mosaic-item-arrow { display: none; }
 .sugi-site .cat-rail-arrows { justify-content: center; gap: 40px; margin-top: 24px; }
@@ -3135,44 +3134,44 @@ body:has(.sugi-site) { background: #fff; }
 /* --- Why choose us / membership / locator / editorial ------------------- */
 .sugi-site .wcu-section { padding: var(--ck-gap) max(20px, 7vw) 0; background: #fff; }
 .sugi-site .wcu-grid { margin-top: 35px; }
-.sugi-site .wcu-item-title { font-size: 17px; font-weight: 500; letter-spacing: .04em; }
-.sugi-site .wcu-item-desc { color: var(--ck-muted); font-size: 16px; font-weight: 400; line-height: 1.8; }
+.sugi-site .wcu-item-title { font-size: 17px; font-weight: 700; letter-spacing: .04em; }
+.sugi-site .wcu-item-desc { color: var(--ck-muted); font-size: 16px; font-weight: 500; line-height: 1.8; }
 .sugi-site .wcu-reviews { margin-top: var(--ck-gap); padding-top: 32px; border-top: 1px solid var(--ck-line); }
-.sugi-site .wcu-reviews-kicker { color: var(--ck-muted); font-size: 13px; font-weight: 500; letter-spacing: .14em; text-align: center; }
+.sugi-site .wcu-reviews-kicker { color: var(--ck-muted); font-size: 13px; font-weight: 700; letter-spacing: .14em; text-align: center; }
 .sugi-site .wcu-review-card { border: 1px solid var(--ck-line); border-radius: 4px; background: var(--ck-cream); }
 .sugi-site .wcu-review-card p { color: var(--ck-ink); font-size: 15px; line-height: 1.85; }
-.sugi-site .wcu-review-footer strong { font-weight: 500; }
+.sugi-site .wcu-review-footer strong { font-weight: 700; }
 
 .sugi-site .qs-section { padding: var(--ck-gap) max(20px, 7vw) 0; background: #fff; }
-.sugi-site .qs-desc, .sugi-site .qs-subtitle { color: var(--ck-muted); font-size: 16px; font-weight: 400; }
+.sugi-site .qs-desc, .sugi-site .qs-subtitle { color: var(--ck-muted); font-size: 16px; font-weight: 500; }
 .sugi-site .qs-guest-tier { border: 1px solid var(--ck-line); border-radius: 4px; background: var(--ck-cream); }
-.sugi-site .qs-guest-tier strong { color: var(--ck-ink); font-size: 21px; font-weight: 300; }
-.sugi-site .qs-guest-tier span { color: var(--ck-muted); font-size: 15px; font-weight: 400; }
+.sugi-site .qs-guest-tier strong { color: var(--ck-ink); font-size: 21px; font-weight: 700; }
+.sugi-site .qs-guest-tier span { color: var(--ck-muted); font-size: 15px; font-weight: 500; }
 .sugi-site .qs-meta { border-top-color: var(--ck-line); }
-.sugi-site .qs-meta-row { font-size: 16px; font-weight: 400; }
-.sugi-site .qs-cta { color: var(--ck-ink); font-size: 16px; font-weight: 400; }
-.sugi-site .qs-savings strong { font-weight: 300; }
+.sugi-site .qs-meta-row { font-size: 16px; font-weight: 700; }
+.sugi-site .qs-cta { color: var(--ck-ink); font-size: 16px; font-weight: 700; }
+.sugi-site .qs-savings strong { font-weight: 700; }
 .sugi-site .qs-skeleton-block { border-radius: 4px; background: var(--ck-cream); }
 
 .sugi-site .editorial-banner { min-height: 0; margin-top: var(--ck-gap); background: var(--ck-cream); }
 .sugi-site .editorial-banner-image { min-height: 360px; background-color: var(--ck-chip); }
-.sugi-site .editorial-banner-tag { border-radius: 3px; background: rgba(33, 33, 33, .72); font-size: 12px; font-weight: 400; letter-spacing: .14em; }
+.sugi-site .editorial-banner-tag { border-radius: 3px; background: rgba(33, 33, 33, .72); font-size: 12px; font-weight: 700; letter-spacing: .14em; }
 .sugi-site .editorial-banner-copy { padding: clamp(36px, 5vw, 64px) clamp(24px, 5vw, 72px); background: var(--ck-cream); }
-.sugi-site .editorial-banner-copy h2 { font-size: clamp(24px, 2.4vw, 32px); font-weight: 400; letter-spacing: .1em; line-height: 1.5; color: var(--ck-ink); }
-.sugi-site .editorial-banner-copy > p:not(.eyebrow) { color: var(--ck-muted); font-size: 16px; font-weight: 400; line-height: 1.9; }
-.sugi-site .editorial-banner-points { color: var(--ck-ink); font-size: 16px; font-weight: 400; }
+.sugi-site .editorial-banner-copy h2 { font-size: clamp(24px, 2.4vw, 32px); font-weight: 700; letter-spacing: .1em; line-height: 1.5; color: var(--ck-ink); }
+.sugi-site .editorial-banner-copy > p:not(.eyebrow) { color: var(--ck-muted); font-size: 16px; font-weight: 500; line-height: 1.9; }
+.sugi-site .editorial-banner-points { color: var(--ck-ink); font-size: 16px; font-weight: 700; }
 .sugi-site .editorial-banner-points li::before { background: var(--ck-gold); }
 
 .sugi-site .locator-section { width: min(var(--ck-container), calc(100% - 40px)); margin: 0 auto; padding: var(--ck-gap) 0 0; background: #fff; }
 .sugi-site .locator-section::before { display: none; }
-.sugi-site .locator-lede { color: var(--ck-muted); font-size: 16px; font-weight: 400; }
+.sugi-site .locator-lede { color: var(--ck-muted); font-size: 16px; font-weight: 500; }
 .sugi-site .locator-map { border-radius: 4px; background: var(--ck-cream); }
 .sugi-site .location-list, .sugi-site .location-row { border-color: var(--ck-line); }
 .sugi-site .location-row:hover { transform: none; color: var(--ck-ink); }
-.sugi-site .location-row > span { color: var(--ck-gold); font-weight: 400; }
-.sugi-site .location-row strong { font-size: 17px; font-weight: 500; }
-.sugi-site .location-row small, .sugi-site .location-row .location-meta { color: var(--ck-muted); font-size: 15px; font-weight: 400; }
-.sugi-site .location-note { color: var(--ck-muted); font-size: 15px; font-weight: 400; }
+.sugi-site .location-row > span { color: var(--ck-gold); font-weight: 700; }
+.sugi-site .location-row strong { font-size: 17px; font-weight: 700; }
+.sugi-site .location-row small, .sugi-site .location-row .location-meta { color: var(--ck-muted); font-size: 15px; font-weight: 500; }
+.sugi-site .location-note { color: var(--ck-muted); font-size: 15px; font-weight: 500; }
 
 /* --- Footer -------------------------------------------------------------- */
 /* Reference: a cream footer, ink text, hairline rules -- not a dark slab. */
@@ -3180,18 +3179,18 @@ body:has(.sugi-site) { background: #fff; }
 .footer-cta-banner { justify-content: center; gap: 20px 40px; padding: 36px 20px; border-bottom: 1px solid var(--ck-line); background: var(--ck-cream); color: var(--ck-ink); text-align: center; }
 .footer-cta-banner .eyebrow { color: var(--ck-muted); font-size: 13px; font-weight: 500; letter-spacing: .18em; }
 .footer-cta-banner .eyebrow span { display: none; }
-.footer-cta-banner h2 { font-size: clamp(22px, 2.1vw, 28px); font-weight: 400; letter-spacing: .1em; line-height: 1.5; color: var(--ck-ink); }
+.footer-cta-banner h2 { font-size: clamp(22px, 2.1vw, 28px); font-weight: 700; letter-spacing: .1em; line-height: 1.5; color: var(--ck-ink); }
 .footer-cta-banner h2 em { color: var(--primary-text); font-style: normal; }
-.footer-cta-banner .button-light { border: 1px solid var(--ck-line); background: #fff; color: var(--ck-ink); font-size: 16px; font-weight: 400; }
+.footer-cta-banner .button-light { border: 1px solid var(--ck-line); background: #fff; color: var(--ck-ink); font-size: 16px; font-weight: 700; }
 .footer-cta-banner .button-light:hover { border-color: var(--ck-ink); background: var(--ck-chip); }
 .footer-grid { width: min(var(--ck-container), calc(100% - 40px)); margin: 0 auto; padding: 48px 0 40px; gap: 32px; }
 .footer-logo { width: 150px; filter: none; }
 .footer-grid > div:first-child p { color: var(--ck-muted); font-size: 15px; }
-.footer-social-link { border-color: var(--ck-line); background: #fff; color: var(--ck-ink); font-size: 15px; font-weight: 400; }
+.footer-social-link { border-color: var(--ck-line); background: #fff; color: var(--ck-ink); font-size: 15px; font-weight: 700; }
 .footer-social-link:hover { border-color: var(--ck-ink); background: var(--ck-chip); color: var(--ck-ink); transform: none; }
 .footer-social-link:hover svg { transform: none; }
-.footer-column > span { color: var(--ck-muted); font-size: 13px; font-weight: 500; letter-spacing: .14em; }
-.footer-column a, .footer-column-button { color: var(--ck-ink); font-size: 15px; font-weight: 400; }
+.footer-column > span { color: var(--ck-muted); font-size: 13px; font-weight: 700; letter-spacing: .14em; }
+.footer-column a, .footer-column-button { color: var(--ck-ink); font-size: 15px; font-weight: 700; }
 .footer-column a:hover, .footer-column-button:hover { color: var(--ck-muted); }
 .footer-column small { color: var(--ck-muted); }
 .footer-bottom { width: min(var(--ck-container), calc(100% - 40px)); margin: 0 auto; padding: 18px 0 26px; border-top-color: var(--ck-line); color: var(--ck-muted); font-size: 13px; }
@@ -3256,7 +3255,7 @@ body:has(.sugi-site) { background: #fff; }
   border-radius: 999px;
   color: var(--ck-ink);
   font-size: 16px;
-  font-weight: 400;
+  font-weight: 700;
   letter-spacing: .06em;
 }
 .sugi-site .carousel-shelf-footer .carousel-shelf-all-link:hover { border-color: var(--ck-ink); background: var(--ck-chip); color: var(--ck-ink); gap: 6px; }
@@ -3331,18 +3330,123 @@ body:has(.auth-shell) { background: #fff; }
 .auth-shell::before { display: none; }
 .auth-main { width: min(420px, calc(100% - 40px)); padding: clamp(36px, 4.4vw, 56px) 0 clamp(44px, 5vw, 64px); }
 .auth-head { margin-bottom: 24px; padding-left: 0; border-left: 0; text-align: center; }
-.auth-head p.auth-kicker { color: var(--ck-muted); font-size: 13px; font-weight: 500; letter-spacing: .18em; }
-.auth-head h1 { margin: 12px 0 0; font-size: clamp(24px, 2.4vw, 32px); font-weight: 400; letter-spacing: .08em; line-height: 1.45; color: var(--ck-ink); }
+.auth-head p.auth-kicker { color: var(--ck-muted); font-size: 13px; font-weight: 700; letter-spacing: .18em; }
+.auth-head h1 { margin: 12px 0 0; font-size: clamp(24px, 2.4vw, 32px); font-weight: 700; letter-spacing: .08em; line-height: 1.45; color: var(--ck-ink); }
 .auth-head h1 em { color: var(--primary-text); font-style: normal; }
-.auth-head p.auth-lede { max-width: none; margin: 12px auto 0; color: var(--ck-muted); font-size: 16px; line-height: 1.8; }
+.auth-head p.auth-lede { max-width: none; margin: 12px auto 0; color: var(--ck-muted); font-size: 16px; line-height: 1.8; font-weight: 500; }
 .auth-card { padding: clamp(20px, 2.6vw, 28px); border: 1px solid var(--ck-line); border-radius: 4px; background: #fff; box-shadow: none; }
 .auth-card::before { display: none; }
-.auth-field { font-size: 15px; font-weight: 500; color: var(--ck-muted); }
+.auth-field { font-size: 15px; font-weight: 700; color: var(--ck-muted); }
 .auth-field-shell { border: 1px solid var(--ck-line); border-radius: 4px; background: #fff; }
 .auth-field-shell:focus-within { border-color: var(--ck-ink); }
-.auth-field-shell input, .auth-field-shell textarea { color: var(--ck-ink); font-weight: 400; }
-.auth-submit { border-radius: 999px; font-size: 16px; font-weight: 400; letter-spacing: .06em; }
+.auth-field-shell input, .auth-field-shell textarea { color: var(--ck-ink); font-weight: 500; }
+.auth-submit { border-radius: 999px; font-size: 16px; font-weight: 700; letter-spacing: .06em; }
 .auth-submit:hover:not(:disabled) { transform: none; }
-.auth-quiet, .auth-switch { color: var(--ck-muted); font-size: 15px; font-weight: 400; }
+.auth-quiet, .auth-switch { color: var(--ck-muted); font-size: 15px; font-weight: 500; }
 .auth-note { border-radius: 4px; font-size: 15px; }
-.auth-back { color: var(--ck-ink); font-size: 15px; font-weight: 400; }
+.auth-back { color: var(--ck-ink); font-size: 15px; font-weight: 500; }
+
+/* ============================================================================
+   COSME KITCHEN CONCEPT -- EVERY PAGE EXCEPT /admin (2026-09-12)
+   ----------------------------------------------------------------------------
+   Tom: "./admin page ees busad buh page iig odoogiin ene cosme kitchen shig
+   design conceptoi bolgo". App.tsx now wraps every non-admin route in
+   .sugi-site, so the palette, the type scale and the surfaces below reach
+   the whole storefront while /admin keeps its own tokens untouched.
+
+   The concept in four rules: a white page with cream bands; hairline
+   borders and a 4px radius instead of shadows and big rounds; bold ink
+   headings with the brand red kept for the accent phrase; one type scale
+   (15-17px body, 21px prices, up to 32px headings).
+   ========================================================================= */
+
+/* --- Surfaces: no shadows, no oversized rounds -------------------------- */
+.sugi-site [class*="-card"],
+.sugi-site [class*="-panel"],
+.sugi-site [class*="-dialog"],
+.sugi-site [class*="-section"],
+.sugi-site [class*="shadow-"] { box-shadow: none; }
+/* Tailwind's rounded-xl/2xl/3xl on the checkout and profile surfaces; the
+   pill utilities (rounded-full) and avatars keep their shape. */
+.sugi-site [class*="rounded-"]:not([class*="rounded-full"]) { border-radius: 4px; }
+
+/* --- /shop --------------------------------------------------------------- */
+.sugi-site .shop-main { width: min(var(--ck-container), calc(100% - 40px)); padding: clamp(28px, 3vw, 44px) 0 clamp(56px, 6vw, 88px); }
+.sugi-site .shop-hero { gap: clamp(24px, 4vw, 56px); padding: clamp(28px, 3.4vw, 48px) clamp(20px, 3vw, 40px); border: 1px solid var(--ck-line); border-radius: 4px; background: var(--ck-cream); }
+.sugi-site .shop-hero::after { display: none; }
+.sugi-site .shop-hero h1,
+.sugi-site .shop-discovery h2 { font-size: clamp(24px, 2.4vw, 32px); font-weight: 700; letter-spacing: .06em; line-height: 1.45; color: var(--ck-ink); }
+.sugi-site .shop-hero h1 em,
+.sugi-site .shop-discovery h2 em { color: var(--primary-text); font-style: normal; }
+.sugi-site .shop-kicker { color: var(--ck-muted); font-size: 13px; font-weight: 700; letter-spacing: .18em; }
+.sugi-site .shop-kicker span { display: none; }
+.sugi-site .shop-hero-copy > p:not(.shop-kicker) { color: var(--ck-muted); font-size: 16px; font-weight: 500; }
+.sugi-site .shop-hero-signature,
+.sugi-site .shop-hero-delivery { border: 1px solid var(--ck-line); border-radius: 999px; background: #fff; font-size: 13px; font-weight: 700; }
+.sugi-site .shop-search-panel { padding: clamp(20px, 2.4vw, 30px); border: 1px solid var(--ck-line); border-radius: 4px; background: #fff; }
+/* The black-and-gold marquee under the shop hero belongs to the old look. */
+.sugi-site .shop-ribbon { display: none; }
+.sugi-site .shop-filter { border-color: var(--ck-line); }
+.sugi-site .shop-discovery { padding: clamp(28px, 3.4vw, 48px) clamp(20px, 3vw, 40px); border: 1px solid var(--ck-line); border-radius: 4px; background: var(--ck-cream); }
+.sugi-site .shop-product-card { border: 1px solid var(--ck-line); border-radius: 4px; background: #fff; }
+.sugi-site .shop-product-card:hover { border-color: #cfcfcf; box-shadow: none; transform: none; }
+.sugi-site .shop-product-copy h2 { font-size: 15px; font-weight: 700; line-height: 1.55; color: var(--ck-ink); }
+.sugi-site .shop-product-prices strong { font-size: 21px; font-weight: 700; color: var(--ck-ink); }
+.sugi-site .shop-product-prices s { color: #9a9a9a; font-size: 13px; }
+.sugi-site .shop-brand-chip { border-radius: 3px; background: var(--ck-chip); color: var(--ck-muted); font-size: 12px; font-weight: 700; }
+.sugi-site .shop-product-rating { color: var(--ck-muted); font-size: 13px; }
+.sugi-site .shop-filter-pills button,
+.sugi-site .shop-filter-pills a { border-radius: 999px; font-size: 14px; font-weight: 700; }
+
+/* --- /privacy, /terms, /returns ------------------------------------------ */
+.sugi-site .doc-shell { min-height: 0; background: #fff; color: var(--ck-ink); }
+.sugi-site .doc-main { width: min(760px, calc(100% - 40px)); padding: clamp(28px, 3vw, 44px) 0 clamp(56px, 6vw, 88px); }
+.sugi-site .doc-back { color: var(--ck-ink); font-size: 14px; font-weight: 700; }
+.sugi-site .doc-head { margin-top: 28px; padding-bottom: 24px; border-bottom-color: var(--ck-line); }
+.sugi-site .doc-kicker { color: var(--ck-muted); font-size: 13px; font-weight: 700; letter-spacing: .18em; }
+.sugi-site .doc-head h1 { font-size: clamp(26px, 2.8vw, 36px); font-weight: 700; letter-spacing: .04em; line-height: 1.4; }
+.sugi-site .doc-head p,
+.sugi-site .doc-section p,
+.sugi-site .doc-body > p,
+.sugi-site .doc-body > ul,
+.sugi-site .doc-body > ol { color: #45494a; font-size: 16px; font-weight: 500; line-height: 1.9; }
+.sugi-site .doc-updated { color: var(--ck-muted); font-size: 13px; font-weight: 500; }
+.sugi-site .doc-section,
+.sugi-site .doc-body > p:not(:last-child) { border-bottom-color: var(--ck-line); }
+.sugi-site .doc-section h2,
+.sugi-site .doc-body > h2 { font-size: 19px; font-weight: 700; letter-spacing: .02em; color: var(--ck-ink); }
+.sugi-site .doc-body > h3 { font-size: 17px; font-weight: 700; }
+.sugi-site .doc-section-index { color: var(--ck-gold); font-size: 15px; font-weight: 700; }
+
+/* --- /profile, /checkout, /track-order, /404 ----------------------------- */
+.sugi-site .profile-main { width: min(920px, calc(100% - 40px)); padding: clamp(28px, 3vw, 44px) 0 clamp(56px, 6vw, 88px); }
+.sugi-site .profile-head { border-bottom-color: var(--ck-line); }
+.sugi-site .notfound-card,
+.sugi-site .notfound-section { border: 1px solid var(--ck-line); border-radius: 4px; background: #fff; }
+/* Checkout is Tailwind-utility markup, so its surfaces are reached through
+   the two sweeps at the top of this block plus the shared button rules. */
+.sugi-site .order-summary-scroll { border-color: var(--ck-line); }
+
+/* --- Shared furniture across all of them --------------------------------- */
+.sugi-site h1 { color: var(--ck-ink); }
+.sugi-site .button-primary { box-shadow: none; }
+.sugi-site input,
+.sugi-site select,
+.sugi-site textarea { font-size: 16px; }
+/* --- /checkout ----------------------------------------------------------- */
+/* Checkout is written in Tailwind utilities with arbitrary colours, so the
+   concept reaches it through attribute selectors on those exact classes
+   rather than by rewriting the page. Dark slab -> cream panel, gold CTA ->
+   the brand red every other primary action on the site uses, heavy red
+   scaffolding -> hairlines. */
+.sugi-site [class*="bg-[#f8f5ef]"] { background: #fff; }
+.sugi-site [class*="bg-[#17181b]"]:not(button) { border: 1px solid var(--ck-line); background: var(--ck-cream); color: var(--ck-ink); }
+.sugi-site [class*="bg-[#17181b]"]:not(button) [class*="text-white"],
+.sugi-site [class*="bg-[#17181b]"]:not(button) [class*="text-[#fffdf9]"] { color: var(--ck-ink); }
+.sugi-site [class*="bg-[#f0b52d]"] { background: var(--primary); color: #fff; }
+.sugi-site [class*="bg-[#f0b52d]"]:hover { background: #ba1731; }
+.sugi-site [class*="border-[#f0b52d]"] { border-color: var(--ck-line); }
+/* Gold text was legible on the old dark slab; on the cream panel it measures
+   1.77:1, so it takes the panel's own ink (and the link the brand red). */
+.sugi-site [class*="bg-[#17181b]"]:not(button) [class*="text-[#f0b52d]"] { color: var(--ck-muted); }
+.sugi-site [class*="bg-[#17181b]"]:not(button) a[class*="text-[#f0b52d]"] { color: var(--primary-text); }

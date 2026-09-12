@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { useScrollToTopOnNavigate } from "./hooks/useScrollToTopOnNavigate";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { lazy, Suspense } from "react";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
 import AddedToCartToast from "./components/AddedToCartToast";
 import BackToTop from "./components/BackToTop";
 import BarcodeScanNavigator from "./components/BarcodeScanNavigator";
@@ -53,7 +53,14 @@ function Router() {
   // 2026-09-12: a forward navigation starts at the top of the new page;
   // without this the old scroll offset carried over (see the hook).
   useScrollToTopOnNavigate();
-  return <Suspense fallback={<RouteLoadingFallback />}><Switch>
+  const [location] = useLocation();
+  // 2026-09-12 (Tom: "./admin page ees busad buh page iig ene cosme kitchen
+  // shig design conceptoi bolgo"): the restyle is scoped to `.sugi-site`, so
+  // wrapping every route except /admin in it carries the white page, the
+  // type scale and the hairline surfaces across the whole storefront. The
+  // admin panel keeps its own palette and its own tokens, untouched.
+  const storefront = !location.startsWith("/admin");
+  return <div className={storefront ? "sugi-site" : undefined}><Suspense fallback={<RouteLoadingFallback />}><Switch>
     <Route path={"/"} component={Home} />
     <Route path={"/product/:slug"} component={ProductDetail} />
     <Route path={"/routine/:slug"} component={RoutineDetail} />
@@ -76,7 +83,7 @@ function Router() {
     <Route path={"/brands"} component={Brands} />
     <Route path={"/:slug"} component={PostDetail} />
     <Route component={NotFound} />
-  </Switch></Suspense>;
+  </Switch></Suspense></div>;
 }
 
 function App() {
