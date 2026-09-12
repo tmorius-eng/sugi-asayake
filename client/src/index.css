@@ -3305,3 +3305,13 @@ body:has(.sugi-site) { font-family: "Inter", "Golos Text", sans-serif; }
   .commerce-header-inner { grid-template-columns: minmax(0, 1fr) auto; }
   .commerce-header-actions .commerce-menu-toggle { display: inline-flex; }
 }
+/* Tom, 2026-09-12 (signed in, phone): a wide hole between the heart and the
+   cart. On a phone the bottom bar already carries wishlist AND profile, so
+   the header was holding two icons that lead where the bar leads, spaced
+   apart by the row's own gap. The header keeps the cart and the menu; the
+   duplicates go, which closes the gap for good rather than tuning it. */
+@media (max-width: 760px) {
+  .commerce-header-actions .wishlist-link,
+  .commerce-header-actions > a.profile-link { display: none; }
+  .commerce-header-actions { gap: 16px; }
+}

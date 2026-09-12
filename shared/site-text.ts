@@ -527,6 +527,28 @@ export const siteTextSlots = [
     fallbackValue: "Бүх бүтээгдэхүүн үзэх",
   },
 
+  {
+    key: "home-text-hero-4-image-caption",
+    group: "Hero — 4-р слайд",
+    label: "Зургийн доод тайлбар",
+    description: "Энэ слайдын зургийн доорх мөр. Слайд нь Зураг таб дээр 4-р слайдын зураг оруулсан үед л харагдана.",
+    fallbackValue: "SUGI ASAYAKE",
+  },
+  {
+    key: "home-text-hero-5-image-caption",
+    group: "Hero — 5-р слайд",
+    label: "Зургийн доод тайлбар",
+    description: "Энэ слайдын зургийн доорх мөр. Слайд нь Зураг таб дээр 5-р слайдын зураг оруулсан үед л харагдана.",
+    fallbackValue: "SUGI ASAYAKE",
+  },
+  {
+    key: "home-text-hero-6-image-caption",
+    group: "Hero — 6-р слайд",
+    label: "Зургийн доод тайлбар",
+    description: "Энэ слайдын зургийн доорх мөр. Слайд нь Зураг таб дээр 6-р слайдын зураг оруулсан үед л харагдана.",
+    fallbackValue: "SUGI ASAYAKE",
+  },
+
   // ---- "Түгээмэл хайлт" keyword chips under the opening photographs
   //      (2026-09-12 Cosme Kitchen restyle; the chips themselves are the
   //      real categories and featured brands, not editable text) ----------

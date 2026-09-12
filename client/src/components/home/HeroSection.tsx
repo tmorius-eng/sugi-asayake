@@ -52,10 +52,20 @@ export default function HeroSection({ imageFor, productCountLabel, branchCount }
     return { key: slotKey, imageUrl, caption: withCounts(textFor(`${prefix}image-caption`, defaultCaption)), href };
   };
 
+  /**
+   * Six slots (Tom, 2026-09-12: "admin deer limit n 6 zurag"). The first
+   * three ship with a real photograph behind them; 4-6 are empty until an
+   * admin uploads one, and an empty slot is dropped rather than shown as a
+   * blank frame -- so the row is three tiles today and up to six the moment
+   * /admin -> Зураг has more.
+   */
   const slides = [
     slideFor("home-hero", "home-text-hero-", "Өдөр бүрийн арчилгаа, илүү ойрхон", "/shop"),
     slideFor("home-hero-2", "home-text-hero-2-", "Захиалгаа хоёр өдрийн дотор гартаа", "/shop"),
     slideFor("home-hero-3", "home-text-hero-3-", "Улаанбаатарын салбаруудаас өөрөө аваарай", "#stores"),
+    slideFor("home-hero-4", "home-text-hero-4-", "SUGI ASAYAKE", "/shop"),
+    slideFor("home-hero-5", "home-text-hero-5-", "SUGI ASAYAKE", "/shop"),
+    slideFor("home-hero-6", "home-text-hero-6-", "SUGI ASAYAKE", "/shop"),
   ].filter((slide): slide is HeroSlide => slide !== null);
 
   return (
