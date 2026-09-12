@@ -130,6 +130,11 @@ export const ENV = {
   // To unblock ONE person rather than everyone (new glasses, a beard, a
   // camera that died), prefer the per-user reset in the admin Users drawer,
   // which clears just that account's enrollment so they re-enroll next visit.
+  // Terminal diagnostics (2026-09-12): a line per HTTP request, and every SQL
+  // statement with its bound params, printed to stdout. Getters so they can
+  // be flipped for one `pnpm dev` session without touching .env.
+  get logRequests() { return process.env.LOG_REQUESTS === "1"; },
+  get logSql() { return process.env.LOG_SQL === "1"; },
   // A getter, not a value: read at call time so a test file can switch the
   // gate on for itself (server/_test-setup.ts turns it off for the suite).
   get adminFaceGateEnabled() { return process.env.ADMIN_FACE_GATE_ENABLED === "1"; },

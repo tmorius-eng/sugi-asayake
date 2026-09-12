@@ -24,6 +24,8 @@ import { registerAbandonedCartReminderJob, registerDataRetentionJob, registerLow
 import { startNotificationDispatcher } from "../notifications";
 import { notifyError, registerHoneybadgerErrorMiddleware, registerHoneybadgerMiddleware } from "./honeybadger";
 import { limitApiTraffic, protectStateChangingApiRequests, setSecurityHeaders } from "./security";
+import { blockScannerProbes } from "./scannerProbes";
+import { logRequests } from "./requestLog";
 import { serveStatic, setupVite } from "./vite";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -55,6 +57,12 @@ async function startServer() {
   app.set("trust proxy", 1);
   app.disable("x-powered-by");
   app.use(setSecurityHeaders);
+  // 2026-09-12: refuse .env / .git / *.php / WordPress-style scanner probes
+  // with a bare 404 and ban repeat offenders for an hour, before compression,
+  // rate limiting or the SPA fallback spend anything on them. Then, if
+  // LOG_REQUESTS=1, an access-log line per request.
+  app.use(blockScannerProbes);
+  app.use(logRequests);
   // Frontend performance audit (2026-09-02): gzip/brotli-compresses JSON
   // (tRPC responses) and any HTML/CSS/JS this process serves directly --
   // real weight on Mongolia's median 17 Mbps mobile connection, and free
