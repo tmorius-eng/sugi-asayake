@@ -59,6 +59,13 @@ export function serveStatic(app: Express) {
     setHeaders: (res, filePath) => {
       if (filePath.includes(`${path.sep}assets${path.sep}`)) {
         res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      } else if (filePath.includes(`${path.sep}face-models${path.sep}`) || filePath.includes(`${path.sep}fonts${path.sep}`)) {
+        // The admin face gate's model weights and wasm runtime (~23MB in
+        // total, 2026-09-13). Not content-hashed, but they change only when
+        // the gate is deliberately re-versioned (FACE_MODEL_VERSION), so a
+        // week of caching saves a staff phone re-downloading them on every
+        // sign-in while still picking up a new model within days.
+        res.setHeader("Cache-Control", "public, max-age=604800");
       } else {
         res.setHeader("Cache-Control", "no-cache");
       }

@@ -62,6 +62,15 @@ export const siteMediaSlots = [
     fallbackUrl: "/cdn/site-media/1/sugi-professional-family-1787207997215_9cd7f13d_9c5e5e05.webp",
   },
   {
+    // 2026-09-13: default is an Unsplash photo of mochi trays (Karolina
+    // Grabowska, Unsplash licence -- free for commercial use, no attribution
+    // required), re-encoded to 3840px WebP under client/public/images.
+    key: "home-category-khuns",
+    label: "Ангиллын зураг: Хүнс",
+    description: "Нүүр хуудасны Categories хэсгийн \"Хүнс\" картын зураг.",
+    fallbackUrl: "/images/categories/khuns.webp",
+  },
+  {
     key: "home-category-arhis-archilgaa",
     label: "Ангиллын зураг: Арьс арчилгаа",
     description: "Нүүр хуудасны Categories хэсгийн \"Арьс арчилгаа\" картын зураг.",

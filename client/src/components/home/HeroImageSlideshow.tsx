@@ -78,6 +78,15 @@ export default function HeroImageSlideshow({ slides, imageAlt }: { slides: HeroS
   const loop = count > 1;
 
   /** One set = the distance between a tile and its twin in the next copy. */
+  /** Width of one tile plus the column gap -- how far the rail must travel
+   *  per slide. Measured HERE, with the set width, never per frame: the
+   *  timer below writes scrollLeft sixty times a second, and reading
+   *  getBoundingClientRect / getComputedStyle after each write forced a
+   *  synchronous layout on every frame (2026-09-13 trace on a throttled
+   *  phone: ~1.1s of forced reflow during load, the biggest single cause of
+   *  the homepage feeling sluggish). Re-measured on resize via the
+   *  ResizeObserver that already exists. */
+  const pitch = useRef(0);
   const measure = useCallback(() => {
     const rail = railRef.current;
     if (!rail) return 0;
@@ -86,6 +95,12 @@ export default function HeroImageSlideshow({ slides, imageAlt }: { slides: HeroS
     setWidth.current = perCopy > 0 && tiles.length > perCopy
       ? tiles[perCopy].offsetLeft - tiles[0].offsetLeft
       : rail.scrollWidth / COPIES;
+    const first = tiles[0];
+    if (first) {
+      const styles = getComputedStyle(rail);
+      const gap = Number.parseFloat(styles.columnGap || styles.gap || "0") || 0;
+      pitch.current = first.getBoundingClientRect().width + gap;
+    }
     return setWidth.current;
   }, []);
 
@@ -134,17 +149,14 @@ export default function HeroImageSlideshow({ slides, imageAlt }: { slides: HeroS
         const now = self.currentTime;
         const elapsed = last ? Math.min(now - last, 100) : 0;
         last = now;
-        if (!setWidth.current) measure();
+        if (!setWidth.current || !pitch.current) measure();
+        if (!pitch.current) return;
         // Speed is derived from the tile pitch rather than fixed in pixels,
         // so one photograph passes every MS_PER_SLIDE at any width
         // -- on a phone the tiles are smaller and the drift slows to match.
-        const first = rail.querySelector<HTMLElement>("[data-hero-tile]");
-        if (!first) return;
-        const styles = getComputedStyle(rail);
-        const gap = Number.parseFloat(styles.columnGap || styles.gap || "0") || 0;
-        const pitch = first.getBoundingClientRect().width + gap;
+        // The pitch comes from measure(); this frame is write-only.
         // Right-drifting content means a decreasing scroll position.
-        position.current = (position.current ?? rail.scrollLeft) - (pitch * elapsed) / MS_PER_SLIDE;
+        position.current = (position.current ?? rail.scrollLeft) - (pitch.current * elapsed) / MS_PER_SLIDE;
         rail.scrollLeft = position.current;
         wrap();
       },

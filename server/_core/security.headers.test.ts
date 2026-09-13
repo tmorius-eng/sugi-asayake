@@ -71,3 +71,29 @@ describe("Permissions-Policy", () => {
     expect(headers.get("Referrer-Policy")).toBe("strict-origin-when-cross-origin");
   });
 });
+
+describe("Content-Security-Policy nonce (2026-09-13)", () => {
+  // Cloudflare Bot Fight Mode injects an inline bootstrap into every HTML
+  // response at the edge. A static script-src blocked it (one CSP error per
+  // page view, and the bot check never ran). Cloudflare copies a nonce it
+  // finds in the CSP header onto its injected script, so the header must
+  // carry a fresh one on every response -- and must NOT fall back to
+  // unsafe-inline to achieve that.
+  it("carries a fresh nonce per response, without unsafe-inline", () => {
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    try {
+      const first = runMiddleware().get("Content-Security-Policy") ?? "";
+      const second = runMiddleware().get("Content-Security-Policy") ?? "";
+      const nonceOf = (csp: string) => csp.match(/script-src[^;]*'nonce-([A-Za-z0-9+/=]{16,})'/)?.[1];
+      expect(nonceOf(first)).toBeTruthy();
+      expect(nonceOf(second)).toBeTruthy();
+      expect(nonceOf(first)).not.toBe(nonceOf(second));
+      expect(first).toContain("script-src 'self'");
+      expect(first).toContain("'wasm-unsafe-eval'");
+      expect(first.match(/script-src[^;]*/)?.[0]).not.toContain("unsafe-inline");
+    } finally {
+      process.env.NODE_ENV = previous;
+    }
+  });
+});

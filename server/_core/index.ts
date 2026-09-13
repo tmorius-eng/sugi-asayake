@@ -18,6 +18,8 @@ import { assertProductionSecrets, createContext } from "./context";
 import { registerQPayCallbackRoute } from "../qpay";
 import { registerStorepayCallbackRoute } from "../storepay";
 import { registerVerifyMnCallbackRoute } from "../verifyMn";
+import { warmUpModerationModel } from "./moderationModel";
+import { warmUpImageSafety } from "./imageSafety";
 import { dbPing } from "../db";
 import { startScheduler } from "./scheduler";
 import { registerAbandonedCartReminderJob, registerDataRetentionJob, registerLowStockDigestJob, registerInventorySyncJob, registerNotificationOutboxPurgeJob, registerStaleTransferJob, registerStockLedgerDriftJob } from "../automation";
@@ -141,6 +143,11 @@ async function startServer() {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
 
+  // Customer-content safety models (2026-09-13): load in the background so
+  // the first review / avatar upload does not pay the start-up cost. Both
+  // are no-ops when disabled and fail soft (logged) when unavailable.
+  warmUpModerationModel();
+  warmUpImageSafety();
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });

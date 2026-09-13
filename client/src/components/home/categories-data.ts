@@ -1,4 +1,4 @@
-import { BadgeCheck, CircleCheck, Flower2, Gift, LayoutGrid, ShieldCheck, Sparkles, type LucideIcon } from "lucide-react";
+import { BadgeCheck, CircleCheck, Cookie, Flower2, Gift, LayoutGrid, ShieldCheck, Sparkles, type LucideIcon } from "lucide-react";
 
 // 2026-09-12: this file used to BE the category list -- name, description,
 // photo and order for all six, hardcoded. That made it the second source of
@@ -28,6 +28,7 @@ const PRESENTATION_BY_SLUG: Record<string, CategoryPresentation> = {
   "eruul-akhui": { Icon: BadgeCheck, tone: "mint" },
   "us-ba-bie": { Icon: CircleCheck, tone: "peach" },
   "eej-ba-khuukhed": { Icon: Gift, tone: "sand" },
+  "khuns": { Icon: Cookie, tone: "marigold" },
 };
 
 /** Never throws for an unknown slug -- a brand-new category gets a neutral look. */

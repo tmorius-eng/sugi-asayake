@@ -103,6 +103,9 @@ export const UI_STRINGS: Record<string, { en: string; ja: string }> = {
   "Эрүүл ахуй": { en: "Hygiene", ja: "衛生用品" },
   "Үс ба бие": { en: "Hair & body", ja: "ヘア・ボディ" },
   "Ээж ба хүүхэд": { en: "Mother & baby", ja: "ママ＆ベビー" },
+  // 2026-09-13: the POS gained a Food category (mochi, jelly, tea, chocolate,
+  // cookies); scripts/import-pos-products.ts creates it as slug "khuns".
+  "Хүнс": { en: "Food & sweets", ja: "食品・お菓子" },
 
   // -- footer, legal -------------------------------------------------------
   "Япон чанарыг гэр бүл бүрт.": { en: "Japanese quality for every family.", ja: "日本のクオリティを、すべての家族に。" },

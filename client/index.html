@@ -22,9 +22,14 @@
     <meta name="twitter:title" content="%SEO_SITE_NAME%" />
     <meta name="twitter:description" content="%SEO_TWITTER_DESCRIPTION%" />
     <script type="application/ld+json">%SEO_STRUCTURED_DATA%</script>
+    <!-- Hero photo preload, filled by server/_core/indexHtml.ts (LCP). -->
+    %SEO_HERO_PRELOAD%
     <link rel="icon" type="image/png" href="/cdn/sugi-symbol_0a534a76.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Golos Text is self-hosted (see @font-face in src/index.css); the
+         Cyrillic and Latin files are preloaded because the hero heading is
+         the first text painted. -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/golos-text-cyrillic.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/golos-text-latin.woff2" />
     <!-- 2026-09-06: replaced DM Sans + Space Grotesk + "Noto Sans Mongolian" --
          verified via Google's actual served css2 responses that NONE of those
          three contain any Cyrillic glyphs ("Noto Sans Mongolian" is Google's
@@ -35,7 +40,6 @@
          cyrillic + cyrillic-ext coverage (confirmed unicode-range includes
          U+0460-052F, covering Өө/Үү) -- see index.css:96-97 for the matching
          --font-body/--font-display values. -->
-    <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..900&display=swap" rel="stylesheet" />
     <!-- Applies the shopper's saved light/dark choice before the first
          paint; see client/public/vendor/theme-init.js. A file, not an
          inline block: CSP here is script-src 'self'. -->

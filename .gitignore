@@ -124,3 +124,6 @@ aiven-ca.pem
 
 # throwaway helper scripts a session writes and deletes
 scripts/tmp-*.ts
+
+# 2026-09-13: local backups written by scripts/sync-variant-prices.ts
+variant-price-backup-*.json

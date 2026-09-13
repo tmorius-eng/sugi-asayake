@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 
 type Bucket = { count: number; resetAt: number };
@@ -18,13 +19,28 @@ function clientKey(request: Request) {
 // NOTE: if a real analytics provider is ever wired up via
 // VITE_ANALYTICS_ENDPOINT (see client/index.html), that host needs to be
 // added to script-src/connect-src here too, or its request will be blocked.
-const CONTENT_SECURITY_POLICY = [
+// Per-response, because script-src carries a NONCE (2026-09-13). The app
+// itself ships no inline script, so the nonce exists for one reader:
+// Cloudflare. Bot Fight Mode injects an inline bootstrap
+// (window.__CF$cv$params + /cdn-cgi/challenge-platform/...) into every HTML
+// response at the edge, and the previous static policy blocked it -- one CSP
+// error per page view and, worse, the bot check it belongs to never ran.
+// Cloudflare copies the nonce it finds in an existing CSP header onto the
+// scripts it injects, so a fresh random nonce here is what lets that script
+// run without opening script-src to 'unsafe-inline' or a third-party host.
+// 'self' keeps working for our own external scripts alongside the nonce.
+function contentSecurityPolicy(nonce: string): string {
+  return [
   "default-src 'self'",
-  "script-src 'self'",
+  // 'wasm-unsafe-eval' (2026-09-13): the admin face gate runs MediaPipe Face
+  // Landmarker as WebAssembly (self-hosted under /face-models/mediapipe). It
+  // permits compiling wasm only -- eval() and inline script stay blocked.
+  `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval'`,
   // 'unsafe-inline' here covers React/Radix/Tailwind's runtime `style={...}`
   // attributes, which CSP has no practical nonce-based alternative for.
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com",
+  // Fonts are self-hosted since 2026-09-13; no third-party style/font hosts.
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self'",
   // Product/site-media images are served from an admin-configured S3/CDN
   // host (S3_PUBLIC_BASE_URL) that varies per deployment, so it can't be
   // pinned to a single origin here.
@@ -34,7 +50,8 @@ const CONTENT_SECURITY_POLICY = [
   "base-uri 'self'",
   "form-action 'self'",
   "object-src 'none'",
-].join("; ");
+  ].join("; ");
+}
 
 export function setSecurityHeaders(_request: Request, response: Response, next: NextFunction) {
   response.setHeader("X-Content-Type-Options", "nosniff");
@@ -56,7 +73,7 @@ export function setSecurityHeaders(_request: Request, response: Response, next: 
   response.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
   if (process.env.NODE_ENV === "production") {
     response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-    response.setHeader("Content-Security-Policy", CONTENT_SECURITY_POLICY);
+    response.setHeader("Content-Security-Policy", contentSecurityPolicy(randomBytes(16).toString("base64")));
   }
   next();
 }

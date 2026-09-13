@@ -8,6 +8,46 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Golos Text, self-hosted (2026-09-13). The Google Fonts stylesheet was a
+   render-blocking third-party request on every visit -- the trace on a
+   throttled phone put the render-blocking group at ~2.1s of FCP, with the
+   fonts.googleapis.com CSS the only one we could not control. These are the
+   same variable woff2 files Google serves (OFL licence), split by unicode
+   range exactly as its css2 endpoint does, so Cyrillic pages fetch only the
+   Cyrillic file. font-display: swap keeps text visible while they load. */
+@font-face {
+  font-family: "Golos Text";
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url("/fonts/golos-text-cyrillic-ext.woff2") format("woff2");
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: "Golos Text";
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url("/fonts/golos-text-cyrillic.woff2") format("woff2");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: "Golos Text";
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url("/fonts/golos-text-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Golos Text";
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url("/fonts/golos-text-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -1464,7 +1504,8 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    .carousel-shelf-track above. */
 .admin-sidebar-nav { scrollbar-width: none; }
 .admin-sidebar-nav::-webkit-scrollbar { display: none; }
-.shelf-card-slot { flex: 0 0 auto; scroll-snap-align: start; }
+.shelf-card-slot { flex: 0 0 auto; display: flex; scroll-snap-align: start; }
+.shelf-card-slot > * { width: 100%; }
 .carousel-shelf-btn { position: absolute; top: 40%; z-index: 2; display: grid; width: 40px; height: 40px; place-items: center; border-radius: 50%; border: 1px solid rgba(23,24,27,.14); background: #fff; color: #17181b; box-shadow: var(--shadow-sm); transition: opacity .18s var(--ease-out), transform .18s var(--ease-out); }
 .carousel-shelf-btn:hover:not(:disabled) { transform: translateY(-50%) scale(1.06); }
 .carousel-shelf-btn:disabled { opacity: 0; pointer-events: none; }
@@ -1473,17 +1514,17 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .carousel-shelf-empty { padding: 40px; text-align: center; color: #545958; font-size: 13px; background: #dae0da; border-radius: 20px; }
 @media (max-width: 640px) { .carousel-shelf-btn { display: none; } }
 
-.shelf-card { display: flex; flex-direction: column; overflow: hidden; background: #f2f5f2; border-radius: 18px; box-shadow: var(--shadow-sm); transition: transform .22s var(--ease-out), box-shadow .22s var(--ease-out); }
+.shelf-card { display: flex; flex-direction: column; height: 100%; overflow: hidden; background: #f2f5f2; border-radius: 18px; box-shadow: var(--shadow-sm); transition: transform .22s var(--ease-out), box-shadow .22s var(--ease-out); }
 .shelf-card:hover { box-shadow: var(--shadow-md); transform: translateY(-4px); }
 .shelf-card-image { position: relative; }
 .shelf-card-image img { width: 100%; aspect-ratio: 1; object-fit: cover; }
 .shelf-card-rank { position: absolute; top: 9px; left: 9px; z-index: 1; display: grid; width: 24px; height: 24px; place-items: center; border-radius: 50%; background: #17181b; color: #f0b52d; font-family: var(--font-display); font-size: 11px; font-weight: 700; }
-.shelf-card-body { padding: 13px 14px 15px; }
+.shelf-card-body { display: flex; flex: 1 1 auto; flex-direction: column; padding: 13px 14px 15px; }
 .shelf-card-body p { margin: 0; color: var(--primary-text); font-size: 8px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
-.shelf-card-body h3 { display: -webkit-box; overflow: hidden; margin: 6px 0; font-family: var(--font-display); font-size: 14px; font-weight: 650; letter-spacing: -.03em; line-height: 1.15; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.shelf-card-body h3 { display: -webkit-box; overflow: hidden; min-height: calc(1.15em * 2); margin: 6px 0; font-family: var(--font-display); font-size: 14px; font-weight: 650; letter-spacing: -.03em; line-height: 1.15; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .shelf-card-rating { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; font-size: 10px; font-weight: 800; }
 .shelf-card-rating em { color: #545958; font-style: normal; }
-.shelf-card-price { display: flex; align-items: baseline; gap: 8px; }
+.shelf-card-price { display: flex; align-items: baseline; gap: 8px; margin-top: auto; }
 .shelf-card-price strong { font-size: 13px; }
 .shelf-card-price s { color: #8b918c; font-size: 11px; }
 
@@ -2186,7 +2227,22 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 /* Mirrored so turning left on screen matches turning left in reality -- the
    instructions say "left" and must mean the user's left. The mesh canvas
    mirrors itself in its own draw call, not here. */
-.face-gate-video { position: absolute; inset: 7%; width: 86%; height: 86%; object-fit: cover; border-radius: 50%; transform: scaleX(-1); background: #0b1220; }
+.face-gate-video { position: absolute; inset: 7%; width: 86%; height: 86%; object-fit: cover; border-radius: 50%; transform: scaleX(-1); background: #0b1220;
+  /* iOS Safari paints its own play/pause button over an inline <video> and
+     shows it on any tap (Tom, 2026-09-13: "ugly"). The preview is not a
+     player -- nothing about it is tappable -- so the native controls are
+     hidden and taps fall through to the page. */
+  pointer-events: none; -webkit-touch-callout: none;
+  /* Invisible but still decoding (see the previewRef note in the gate):
+     iOS paints its play/pause overlay INSIDE the video element, so the
+     element itself has to be invisible; the preview canvas shows the feed. */
+  opacity: 0; }
+.face-gate-preview { position: absolute; inset: 7%; width: 86%; height: 86%; object-fit: cover; border-radius: 50%; transform: scaleX(-1); background: #0b1220; pointer-events: none; }
+.face-gate-video::-webkit-media-controls,
+.face-gate-video::-webkit-media-controls-overlay-play-button,
+.face-gate-video::-webkit-media-controls-start-playback-button,
+.face-gate-video::-webkit-media-controls-panel,
+.face-gate-video::-webkit-media-controls-play-button { display: none !important; -webkit-appearance: none; opacity: 0; pointer-events: none; }
 .face-gate-mesh { position: absolute; inset: 7%; width: 86%; height: 86%; border-radius: 50%; pointer-events: none; }
 
 /* Progress ring around the rim. */
@@ -3067,7 +3123,13 @@ body:has(.sugi-site) { background: var(--ck-page); }
 /* The card itself -- shared with ProductDetail's related-products rail, so
    one treatment site-wide, as the reference has. */
 .shelf-card {
-  display: block;
+  /* Column flex + full slot height (Tom, 2026-09-13: "No.1 is smaller than
+     the others"): a one-line name made its card shorter than two-line
+     neighbours. The frame and body stretch, the name reserves two lines,
+     and the price pins to the bottom, so a rail is one even row. */
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   overflow: visible;
   border-radius: 0;
   background: none;
@@ -3075,14 +3137,15 @@ body:has(.sugi-site) { background: var(--ck-page); }
 }
 .shelf-card:hover { box-shadow: none; transform: none; }
 .shelf-card-rank { position: static; display: block; width: auto; height: auto; margin-bottom: 6px; background: none; color: var(--ck-gold); font-size: 17px; font-weight: 700; letter-spacing: .04em; }
-.shelf-card-frame { display: block; border: 1px solid var(--ck-line); border-radius: 4px; background: var(--ck-surface); transition: border-color .18s var(--ease-out); }
+.shelf-card-frame { display: flex; flex: 1 1 auto; flex-direction: column; border: 1px solid var(--ck-line); border-radius: 4px; background: var(--ck-surface); transition: border-color .18s var(--ease-out); }
 .shelf-card:hover .shelf-card-frame { border-color: #cfcfcf; }
 .shelf-card-image { position: relative; display: block; }
 .shelf-card-image img { width: 100%; aspect-ratio: 1; object-fit: contain; background: var(--ck-surface); }
-.shelf-card-body { display: block; padding: 10px 12px 14px; }
+.shelf-card-body { display: flex; flex: 1 1 auto; flex-direction: column; padding: 10px 12px 14px; }
 .shelf-card-body p { margin: 0 -12px 8px; padding: 4px 12px; background: var(--ck-chip); color: var(--ck-muted); font-size: 13px; font-weight: 500; letter-spacing: .04em; text-transform: none; }
 .shelf-card-body h3 {
   margin: 0;
+  min-height: calc(1.55em * 2);
   color: var(--ck-ink);
   font-size: 15px;
   font-weight: 700;
@@ -3723,6 +3786,20 @@ html[data-storefront-theme="dark"] .sugi-site .cat-mosaic-item-photo { border-co
    (--card, --background, --foreground, --muted-foreground, --border), which
    stayed light. Re-pointing those tokens inside the storefront fixes them
    all at once instead of chasing each rule. */
+/* Portal-rendered surfaces (2026-09-13, Tom: "dark theme deer cart tsagaan
+   heveeree"): the cart Sheet, dialogs, popovers, dropdowns and tooltips are
+   mounted by Radix straight under <body>, OUTSIDE .sugi-site, so the token
+   override below never reached them and they stayed Linen-light. Listed by
+   their ui/* data-slot names. :not(:has(.admin-shell)) keeps /admin -- which
+   carries its own theme attribute and its own portal styling -- unaffected
+   when the storefront toggle happens to be dark. */
+html[data-storefront-theme="dark"]:not(:has(.admin-shell)) [data-slot="sheet-content"],
+html[data-storefront-theme="dark"]:not(:has(.admin-shell)) [data-slot="dialog-content"],
+html[data-storefront-theme="dark"]:not(:has(.admin-shell)) [data-slot="popover-content"],
+html[data-storefront-theme="dark"]:not(:has(.admin-shell)) [data-slot="dropdown-menu-content"],
+html[data-storefront-theme="dark"]:not(:has(.admin-shell)) [data-slot="dropdown-menu-sub-content"],
+html[data-storefront-theme="dark"]:not(:has(.admin-shell)) [data-slot="tooltip-content"],
+html[data-storefront-theme="dark"]:not(:has(.admin-shell)) [data-sonner-toaster],
 html[data-storefront-theme="dark"] .sugi-site,
 html[data-storefront-theme="dark"] .auth-shell,
 html[data-storefront-theme="dark"] .commerce-header,
@@ -3741,6 +3818,15 @@ html[data-storefront-theme="dark"] .mobile-sticky-bar {
   --input: var(--ck-line);
 }
 
+/* Portal surfaces inherit body text colour from <body>, which the storefront
+   dark theme never restyles, so bold prices and quantities inside the cart
+   Sheet rendered near-black on near-black (measured: rgb(23,24,27) on
+   rgb(27,27,27)). Give the surfaces the token foreground explicitly. */
+html[data-storefront-theme="dark"]:not(:has(.admin-shell)) [data-slot="sheet-content"],
+html[data-storefront-theme="dark"]:not(:has(.admin-shell)) [data-slot="dialog-content"],
+html[data-storefront-theme="dark"]:not(:has(.admin-shell)) [data-slot="popover-content"],
+html[data-storefront-theme="dark"]:not(:has(.admin-shell)) [data-slot="dropdown-menu-content"],
+html[data-storefront-theme="dark"]:not(:has(.admin-shell)) [data-slot="dropdown-menu-sub-content"] { color: var(--foreground); }
 /* The category tile is a circle; its photograph is a square with a white
    ground, so without clipping the corners show through on a dark page
    (Tom: "durvuljin 4 bulan untsug haragdaj baina"). */
@@ -3884,3 +3970,90 @@ html[data-storefront-theme="dark"] .sugi-site .qs-stage small { color: var(--ck-
 }
 .locale-switch-menu button:hover { background: var(--ck-chip); }
 .locale-switch-menu button.is-current { background: var(--ck-ink); color: var(--ck-page); }
+
+/* ---------------------------------------------------------------------------
+   Admin face gate — Face ID-style coverage ring (2026-09-13).
+
+   Eight arc segments around the scanner, one per head direction, plus the
+   centre dot. A segment is dim until the head has been held in that
+   direction, lights gold while it is the direction currently being held,
+   and settles to blue once covered. The progress ring underneath is kept for
+   the login flow, which has no directions to cover.
+--------------------------------------------------------------------------- */
+.face-gate-sectors { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.face-gate-sector { fill: none; stroke: rgba(255,255,255,.14); stroke-width: 4; stroke-linecap: round; transition: stroke .35s ease, filter .35s ease, stroke-width .25s ease; }
+.face-gate-sector--current { stroke: #ffd65c; stroke-width: 5; filter: drop-shadow(0 0 6px rgba(255,214,92,.65)); }
+.face-gate-sector--covered { stroke: #6fd0ff; filter: drop-shadow(0 0 5px rgba(111,208,255,.55)); }
+.face-gate-sector--target { stroke: rgba(255,214,92,.45); animation: face-gate-sector-pulse 1.1s ease-in-out infinite; }
+@keyframes face-gate-sector-pulse { 0%, 100% { stroke-opacity: .45; } 50% { stroke-opacity: 1; } }
+
+/* Centre marker: hollow until the frontal reference is captured. */
+.face-gate-center { position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); pointer-events: none; transition: background .3s ease, border-color .3s ease, transform .3s ease; }
+.face-gate-center--done { background: #6fd0ff; border-color: #6fd0ff; box-shadow: 0 0 10px rgba(111,208,255,.7); transform: scale(.7); }
+
+/* Direction arrow that points at the next uncovered sector -- the same cue
+   Face ID gives with its text, made visual so it reads on a phone held at
+   arm's length. */
+.face-gate-arrow { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; transition: transform .25s ease; }
+.face-gate-arrow::after { content: ""; position: absolute; left: -7px; top: calc(-50% - 7px); width: 14px; height: 14px; border-right: 3px solid #ffd65c; border-bottom: 3px solid #ffd65c; transform: rotate(-45deg); filter: drop-shadow(0 0 4px rgba(255,214,92,.7)); animation: face-gate-arrow-nudge .9s ease-in-out infinite; }
+@keyframes face-gate-arrow-nudge { 0%, 100% { translate: 0 0; } 50% { translate: 4px 0; } }
+
+/* Small live counter under the ring during enrolment ("5/9"). */
+.face-gate-count { margin: 10px 0 0; text-align: center; font-size: 12px; font-weight: 700; letter-spacing: .08em; color: rgba(255,255,255,.7); }
+
+/* Processing snapshots after the ring completes: the video dims and a
+   determinate bar shows descriptors being computed one by one. */
+.face-gate-processing { position: absolute; inset: 7%; border-radius: 50%; display: grid; place-items: center; background: rgba(13,27,51,.78); color: #fff; z-index: 2; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-align: center; padding: 20px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .face-gate-sector--target { animation: none; stroke-opacity: .8; }
+  .face-gate-arrow::after { animation: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   Review thread (2026-09-13) -- avatar, bubble, Like / Reply / time, replies
+   indented under the review with a connector that drops from the parent
+   avatar and curves into each reply. Logical properties throughout (the
+   reference design's point): inset-inline-start, border-inline-start,
+   border-end-start-radius, padding-inline-start. Colours are the storefront
+   tokens, so Linen light and the dark theme both work with one ruleset.
+--------------------------------------------------------------------------- */
+.review-thread { list-style: none; margin: 24px 0 0; padding: 0; display: grid; gap: 22px; max-width: 760px; }
+.review-item { position: relative; }
+.review-row { display: flex; align-items: flex-start; gap: 12px; }
+.review-avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: var(--muted); border: 1px solid var(--border); }
+.review-avatar--initials { display: grid; place-items: center; font-size: 12px; font-weight: 800; letter-spacing: .04em; color: var(--muted-foreground); }
+.review-main { min-width: 0; flex: 1 1 auto; }
+.review-bubble { padding: 12px 16px 14px; border-radius: 16px; border-start-start-radius: 4px; background: var(--card); border: 1px solid var(--border); }
+.review-bubble-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.review-author { font-size: 14px; font-weight: 750; letter-spacing: -.01em; color: var(--foreground); }
+.review-staff-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; background: var(--primary-text, #b01729); color: #fff; font-size: 9px; font-weight: 900; letter-spacing: .12em; }
+.review-stars { display: inline-flex; align-items: center; gap: 1px; color: var(--muted-foreground); }
+.review-text { margin: 8px 0 0; font-size: 14px; line-height: 1.65; color: var(--foreground); white-space: pre-wrap; overflow-wrap: anywhere; }
+.review-text--muted { color: var(--muted-foreground); font-style: italic; }
+.review-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 6px; padding-inline-start: 6px; }
+.review-action { display: inline-flex; align-items: center; gap: 5px; padding: 4px 2px; border: 0; background: none; color: var(--muted-foreground); font-size: 12px; font-weight: 700; cursor: pointer; transition: color .15s ease; }
+.review-action:hover { color: var(--foreground); }
+.review-action.is-active { color: var(--primary-text, #b01729); }
+.review-action--primary { padding: 6px 14px; border-radius: 999px; background: var(--primary, #df1f3d); color: #fff; }
+.review-action--primary:hover { color: #fff; background: #bc1732; }
+.review-action:disabled { opacity: .5; cursor: not-allowed; }
+.review-time { font-size: 12px; color: var(--muted-foreground); }
+
+/* Replies: indented by the parent avatar's width; the connector is drawn
+   by the list's own inline-start border, and each reply gets a short
+   curved elbow into its avatar. */
+.review-replies { list-style: none; margin: 14px 0 0; padding: 0; padding-inline-start: 52px; position: relative; display: grid; gap: 14px; }
+.review-item--has-replies > .review-row > .review-avatar { position: relative; }
+.review-replies::before { content: ""; position: absolute; inset-block: -8px 24px; inset-inline-start: 19px; border-inline-start: 2px solid var(--border); }
+.review-reply { position: relative; }
+.review-reply::before { content: ""; position: absolute; inset-inline-start: -33px; top: -10px; width: 26px; height: 26px; border-inline-start: 2px solid var(--border); border-block-end: 2px solid var(--border); border-end-start-radius: 12px; }
+.review-reply .review-bubble { border-start-start-radius: 4px; }
+.review-reply-input { width: 100%; padding: 10px 14px; border-radius: 14px; border: 1px solid var(--border); background: var(--card); color: var(--foreground); font-size: 14px; line-height: 1.5; resize: vertical; }
+.review-reply-input:focus { outline: 2px solid var(--primary, #df1f3d); outline-offset: 1px; }
+
+@media (max-width: 520px) {
+  .review-replies { padding-inline-start: 40px; }
+  .review-replies::before { inset-inline-start: 15px; }
+  .review-reply::before { inset-inline-start: -25px; width: 18px; }
+}

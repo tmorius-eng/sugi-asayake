@@ -1,9 +1,10 @@
 import { randomBytes } from "node:crypto";
+import { isAdminPanelRole } from "../shared/face-auth";
 import { sqlInt } from "./_core/sqlSafe";
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lt, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { describeTransport, planMysqlConnection } from "./_core/dbConnection";
-import { adminAuditLogs, branches, branchStock, cartItems, carts, discountCodes, faceAttempts, faceChallenges, faceEnrollments, featuredBrands, InsertProduct, InsertProductCategory, integrationConfigs, loginAttempts, notificationOutbox, stockMovements,loyaltyTiers, marketingSpend, mediaLibrary, orderItems, orders, paymentAttempts, phoneVerificationSessions, postCategories, postCategoryLinks, posts, postTagLinks, postTags, productCategories, productReviews, productVariants, products, routines, routineSteps, scheduledJobRuns, siteDocuments, siteMedia, siteText, sitePromotions, storeCreditLedger, storeSettings, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
+import { adminAuditLogs, branches, branchStock, cartItems, carts, discountCodes, faceAttempts, faceChallenges, faceEnrollments, featuredBrands, InsertProduct, InsertProductCategory, integrationConfigs, loginAttempts, notificationOutbox, stockMovements,loyaltyTiers, marketingSpend, mediaLibrary, orderItems, orders, paymentAttempts, phoneVerificationSessions, postCategories, postCategoryLinks, posts, postTagLinks, postTags, productCategories, productReviews, productReviewReplies, productReviewLikes, productVariants, products, routines, routineSteps, scheduledJobRuns, siteDocuments, siteMedia, siteText, sitePromotions, storeCreditLedger, storeSettings, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
 import { slugify } from "../shared/slugify";
 import { looksLikeBarcode, normaliseBarcode } from "../shared/barcode";
 import { expandQueryGroups, normaliseSearchText } from "../shared/search-synonyms";
@@ -2400,21 +2401,145 @@ export async function createProductReview(input: { userId: number; productId: nu
 }
 
 /** Public, approved-only reviews for a product page — newest first. */
-export async function getProductReviews(productId: number) {
+/**
+ * Reviews for a product page as a THREAD (2026-09-13): each review with its
+ * author's avatar and role, its like count, whether the viewer liked it, and
+ * its approved replies in posting order. Three queries, not N+1: reviews,
+ * then likes and replies for exactly those review ids.
+ */
+export async function getProductReviews(productId: number, viewerUserId: number | null = null) {
   const db = await getDb();
   if (!db) return [];
-  return db
+  const reviews = await db
     .select({
       id: productReviews.id,
       rating: productReviews.rating,
       comment: productReviews.comment,
       createdAt: productReviews.createdAt,
       reviewerName: users.name,
+      reviewerAvatarUrl: users.avatarUrl,
+      reviewerRole: users.role,
+      reviewerUserId: users.id,
     })
     .from(productReviews)
     .innerJoin(users, eq(users.id, productReviews.userId))
     .where(and(eq(productReviews.productId, productId), eq(productReviews.isApproved, true)))
     .orderBy(desc(productReviews.createdAt));
+  if (reviews.length === 0) return [];
+  const ids = reviews.map(r => r.id);
+
+  const likeRows = await db
+    .select({ reviewId: productReviewLikes.reviewId, count: sql<number>`count(*)`, mine: sql<number>`sum(case when ${productReviewLikes.userId} = ${viewerUserId ?? -1} then 1 else 0 end)` })
+    .from(productReviewLikes)
+    .where(inArray(productReviewLikes.reviewId, ids))
+    .groupBy(productReviewLikes.reviewId);
+  const likes = new Map(likeRows.map(row => [row.reviewId, { count: Number(row.count), mine: Number(row.mine) > 0 }]));
+
+  const replyRows = await db
+    .select({
+      id: productReviewReplies.id,
+      reviewId: productReviewReplies.reviewId,
+      body: productReviewReplies.body,
+      createdAt: productReviewReplies.createdAt,
+      authorName: users.name,
+      authorAvatarUrl: users.avatarUrl,
+      authorRole: users.role,
+      authorUserId: users.id,
+    })
+    .from(productReviewReplies)
+    .innerJoin(users, eq(users.id, productReviewReplies.userId))
+    .where(and(inArray(productReviewReplies.reviewId, ids), eq(productReviewReplies.isApproved, true)))
+    .orderBy(asc(productReviewReplies.createdAt));
+  const replies = new Map<number, typeof replyRows>();
+  for (const reply of replyRows) replies.set(reply.reviewId, [...(replies.get(reply.reviewId) ?? []), reply]);
+
+  return reviews.map(review => ({
+    ...review,
+    // Staff answering for the shop get a badge; customers do not expose roles.
+    reviewerIsStaff: isAdminPanelRole(review.reviewerRole),
+    reviewerRole: undefined,
+    likeCount: likes.get(review.id)?.count ?? 0,
+    likedByMe: likes.get(review.id)?.mine ?? false,
+    replies: (replies.get(review.id) ?? []).map(reply => ({ ...reply, authorIsStaff: isAdminPanelRole(reply.authorRole), authorRole: undefined })),
+  }));
+}
+
+/**
+ * Who may reply under a review: the review's author, panel staff answering
+ * for the shop, or another verified buyer of the same product. Anyone else
+ * (a signed-in browser who never bought it) cannot -- the same purchase
+ * gate that keeps the reviews themselves honest.
+ */
+export async function canReplyToReview(userId: number, role: string | null, reviewId: number): Promise<{ ok: true; productId: number } | { ok: false; reason: string }> {
+  const db = await getDb();
+  if (!db) return { ok: false, reason: "Database is not available" };
+  const [review] = await db.select({ id: productReviews.id, productId: productReviews.productId, userId: productReviews.userId, isApproved: productReviews.isApproved }).from(productReviews).where(eq(productReviews.id, reviewId)).limit(1);
+  if (!review || !review.isApproved) return { ok: false, reason: "Сэтгэгдэл олдсонгүй." };
+  if (review.userId === userId || isAdminPanelRole(role)) return { ok: true, productId: review.productId };
+  if (await findVerifyingOrderId(userId, review.productId)) return { ok: true, productId: review.productId };
+  return { ok: false, reason: "Зөвхөн энэ бүтээгдэхүүнийг захиалсан хэрэглэгч хариулах боломжтой." };
+}
+
+export async function createReviewReply(input: { reviewId: number; userId: number; body: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const inserted = await db.insert(productReviewReplies).values({ reviewId: input.reviewId, userId: input.userId, body: input.body });
+  const [created] = await db.select().from(productReviewReplies).where(eq(productReviewReplies.id, Number(inserted[0].insertId))).limit(1);
+  return created;
+}
+
+/** Toggle. Returns the new state and count so the UI needs no refetch. */
+export async function toggleReviewLike(reviewId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const [review] = await db.select({ id: productReviews.id }).from(productReviews).where(and(eq(productReviews.id, reviewId), eq(productReviews.isApproved, true))).limit(1);
+  if (!review) throw new Error("Сэтгэгдэл олдсонгүй.");
+  const [existing] = await db.select({ reviewId: productReviewLikes.reviewId }).from(productReviewLikes).where(and(eq(productReviewLikes.reviewId, reviewId), eq(productReviewLikes.userId, userId))).limit(1);
+  if (existing) await db.delete(productReviewLikes).where(and(eq(productReviewLikes.reviewId, reviewId), eq(productReviewLikes.userId, userId)));
+  else await db.insert(productReviewLikes).values({ reviewId, userId });
+  const [count] = await db.select({ n: sql<number>`count(*)` }).from(productReviewLikes).where(eq(productReviewLikes.reviewId, reviewId));
+  return { liked: !existing, likeCount: Number(count?.n ?? 0) };
+}
+
+/** Admin edit of a review's own text/rating (Tom, 2026-09-13: manage
+ *  comments from /admin -- edit and delete). */
+export async function updateAdminReview(input: { id: number; rating?: number; comment?: string | null }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const patch: Partial<typeof productReviews.$inferInsert> = { updatedAt: new Date() };
+  if (input.rating !== undefined) patch.rating = input.rating;
+  if (input.comment !== undefined) patch.comment = input.comment;
+  await db.update(productReviews).set(patch).where(eq(productReviews.id, input.id));
+  const [row] = await db.select().from(productReviews).where(eq(productReviews.id, input.id)).limit(1);
+  return row ?? null;
+}
+
+export async function getAdminReviewReplies(reviewId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({ id: productReviewReplies.id, body: productReviewReplies.body, isApproved: productReviewReplies.isApproved, createdAt: productReviewReplies.createdAt, authorName: users.name, authorUserId: users.id })
+    .from(productReviewReplies)
+    .innerJoin(users, eq(users.id, productReviewReplies.userId))
+    .where(eq(productReviewReplies.reviewId, reviewId))
+    .orderBy(asc(productReviewReplies.createdAt));
+}
+
+export async function updateAdminReviewReply(input: { id: number; body?: string; isApproved?: boolean }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const patch: Partial<typeof productReviewReplies.$inferInsert> = { updatedAt: new Date() };
+  if (input.body !== undefined) patch.body = input.body;
+  if (input.isApproved !== undefined) patch.isApproved = input.isApproved;
+  await db.update(productReviewReplies).set(patch).where(eq(productReviewReplies.id, input.id));
+  return { id: input.id };
+}
+
+export async function deleteAdminReviewReply(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.delete(productReviewReplies).where(eq(productReviewReplies.id, id));
+  return { id };
 }
 
 /**
@@ -2486,6 +2611,8 @@ export async function getAdminReviews() {
       productSlug: products.slug,
       reviewerName: users.name,
       reviewerEmail: users.email,
+      replyCount: sql<number>`(select count(*) from ${productReviewReplies} where ${productReviewReplies.reviewId} = ${productReviews.id})`,
+      likeCount: sql<number>`(select count(*) from ${productReviewLikes} where ${productReviewLikes.reviewId} = ${productReviews.id})`,
     })
     .from(productReviews)
     .innerJoin(products, eq(products.id, productReviews.productId))

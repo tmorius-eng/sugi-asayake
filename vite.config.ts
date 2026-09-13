@@ -3,6 +3,19 @@ import react from "@vitejs/plugin-react";
 import path from "node:path";
 import { defineConfig } from "vite";
 
+// 2026-09-13: Vite answers any request whose Host header it does not recognise
+// with "Blocked request. This host is not allowed." (its DNS-rebinding guard).
+// A Cloudflare Tunnel sends exactly such a Host, so `pnpm dev` behind one is
+// unusable until the tunnel hostname is listed here -- verified by sending
+// `Host: <name>.trycloudflare.com` to the dev server and getting 403, while
+// the same header against `pnpm start` (production build, which has no Vite
+// in the request path) returned 200. Comma-separated; a leading dot covers a
+// domain and its subdomains (".trycloudflare.com"). Unset, nothing changes.
+const devAllowedHosts = (process.env.DEV_ALLOWED_HOSTS ?? "")
+  .split(",")
+  .map((host) => host.trim())
+  .filter(Boolean);
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
@@ -36,6 +49,7 @@ export default defineConfig({
   },
   server: {
     host: true,
+    allowedHosts: devAllowedHosts.length > 0 ? devAllowedHosts : undefined,
     fs: {
       strict: true,
       deny: ["**/.*"],

@@ -149,6 +149,58 @@ export function loadFaceModels(): Promise<void> {
   return modelsPromise;
 }
 
+/**
+ * Runs each network once on a tiny blank canvas (2026-09-13).
+ *
+ * The first inference on the WebGL backend is where TFJS compiles its
+ * shaders -- one to two seconds on an integrated GPU, and it used to land
+ * exactly at "Боловсруулж байна…", after the person had already done their
+ * part. Tom saw the spinner sit there on a laptop and called the whole thing
+ * laggy. Paying that cost while the camera is still opening (this is called
+ * right after loadFaceModels, never awaited by the UI) makes the descriptor
+ * step later feel instant. A 160px blank frame finds no face, which is
+ * fine: the detector's shaders are what compile; the landmark and
+ * recognition nets are exercised on a synthetic 150px crop below.
+ */
+let warmedUp: Promise<void> | null = null;
+export function warmUpFaceModels(): Promise<void> {
+  if (!warmedUp) {
+    warmedUp = (async () => {
+      const lib = requireFaceApi();
+      const canvas = document.createElement("canvas");
+      canvas.width = 160;
+      canvas.height = 160;
+      const ctx = canvas.getContext("2d");
+      if (ctx) { ctx.fillStyle = "#888"; ctx.fillRect(0, 0, 160, 160); }
+      try {
+        await lib.detectAllFaces(canvas, new lib.TinyFaceDetectorOptions({ inputSize: DETECTOR_INPUT_SIZE, scoreThreshold: FACE_MIN_DETECTION_SCORE }));
+        // Landmark + recognition nets take an aligned face; a blank 150px
+        // canvas is enough to trigger their shader compilation.
+        const face = document.createElement("canvas");
+        face.width = 150;
+        face.height = 150;
+        await lib.nets.faceLandmark68Net.detectLandmarks(face);
+        await lib.nets.faceRecognitionNet.computeFaceDescriptor(face);
+      } catch {
+        // Warm-up is best effort; a failure here surfaces properly on the
+        // real call with the real error handling.
+      }
+    })();
+  }
+  return warmedUp;
+}
+
+/** Which TFJS backend the recogniser ended up on -- "webgl" is the fast
+ *  path, "cpu" is the slow fallback. Reported in the verification
+ *  diagnostic so a slow machine is diagnosable from the Security Center. */
+export function faceBackendName(): string {
+  try {
+    return ((faceapi?.tf as unknown as TfBackendControls | undefined)?.getBackend?.() ?? "?");
+  } catch {
+    return "?";
+  }
+}
+
 export type CameraError =
   | "INSECURE_CONTEXT"
   | "UNSUPPORTED"
@@ -256,13 +308,30 @@ export type CaptureResult =
  * away, half out of shot). Rejecting those here — with a specific reason the
  * UI turns into "move closer" — is what keeps false rejections low.
  */
-export async function captureFace(video: HTMLVideoElement): Promise<CaptureResult> {
+/** Either the live <video> or a frame copied out of it (faceTracker's
+ *  snapshotFrame). Since 2026-09-13 the descriptor is computed from
+ *  snapshots chosen by the MediaPipe tracker, after the fact, so the tracking
+ *  loop is never blocked by this -- the expensive -- step. */
+export type FaceInput = HTMLVideoElement | HTMLCanvasElement;
+
+function inputSize(input: FaceInput): { width: number; height: number } {
+  return input instanceof HTMLVideoElement
+    ? { width: input.videoWidth, height: input.videoHeight }
+    : { width: input.width, height: input.height };
+}
+
+export async function captureFace(
+  video: FaceInput,
+  /** Loosened for enrolment snapshots of a deliberately turned head, whose
+   *  projected width is narrower than a frontal one. */
+  minBoxRatio: number = FACE_MIN_BOX_RATIO,
+): Promise<CaptureResult> {
   // A <video> with a live stream still reports 0x0 until the first frame is
   // decoded, and the detector finds no faces in a zero-pixel image. Treated
   // as "no face yet" so the caller simply tries the next frame.
-  if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) {
-    return { ok: false, issue: "NO_FACE" };
-  }
+  if (video instanceof HTMLVideoElement && video.readyState < 2) return { ok: false, issue: "NO_FACE" };
+  const { width: frameWidth, height: frameHeight } = inputSize(video);
+  if (frameWidth === 0 || frameHeight === 0) return { ok: false, issue: "NO_FACE" };
 
   const lib = requireFaceApi();
   const options = new lib.TinyFaceDetectorOptions({
@@ -291,12 +360,12 @@ export async function captureFace(video: HTMLVideoElement): Promise<CaptureResul
 
   if (score < FACE_MIN_DETECTION_SCORE) return { ok: false, issue: "LOW_CONFIDENCE" };
 
-  if (box.width / video.videoWidth < FACE_MIN_BOX_RATIO) {
+  if (box.width / frameWidth < minBoxRatio) {
     return { ok: false, issue: "TOO_FAR" };
   }
 
-  const offsetX = Math.abs((box.x + box.width / 2) - video.videoWidth / 2) / video.videoWidth;
-  const offsetY = Math.abs((box.y + box.height / 2) - video.videoHeight / 2) / video.videoHeight;
+  const offsetX = Math.abs((box.x + box.width / 2) - frameWidth / 2) / frameWidth;
+  const offsetY = Math.abs((box.y + box.height / 2) - frameHeight / 2) / frameHeight;
   if (offsetX > FACE_MAX_CENTER_OFFSET_RATIO || offsetY > FACE_MAX_CENTER_OFFSET_RATIO) {
     return { ok: false, issue: "OFF_CENTER" };
   }
@@ -475,6 +544,10 @@ export class SmoothMeshRenderer {
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly video: HTMLVideoElement,
+    /** How to paint one interpolated frame. Defaults to the 68-point mesh;
+     *  the MediaPipe tracker passes its own 478-point painter, which ignores
+     *  the box and takes normalised points. */
+    private readonly draw: (canvas: HTMLCanvasElement, video: HTMLVideoElement, points: LandmarkSet, box: FaceApi.Box) => void = drawFaceMesh,
   ) {}
 
   /** Feed a new detection. Cheap: it only stores state, never draws. */
@@ -524,7 +597,7 @@ export class SmoothMeshRenderer {
         height: from.box.height + (this.latest.box.height - from.box.height) * t,
       } as FaceApi.Box;
 
-      drawFaceMesh(this.canvas, this.video, points, box);
+      this.draw(this.canvas, this.video, points, box);
     };
     this.frame = requestAnimationFrame(tick);
   }

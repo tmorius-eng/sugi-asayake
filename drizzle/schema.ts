@@ -1,4 +1,4 @@
-import { boolean, index, int, mysqlEnum, mysqlTable, text, timestamp, tinyint, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { boolean, index, int, mysqlEnum, mysqlTable, text, timestamp, tinyint, uniqueIndex, varchar , primaryKey } from "drizzle-orm/mysql-core";
 import { ubDistricts } from "../shared/districts";
 import { INTEGRATION_PROVIDERS } from "../shared/integrations";
 
@@ -901,6 +901,36 @@ export const productReviews = mysqlTable("product_reviews", {
 
 export type ProductReview = typeof productReviews.$inferSelect;
 export type InsertProductReview = typeof productReviews.$inferInsert;
+
+// Threaded review conversations (2026-09-13, migration 0070). Replies are a
+// separate table on purpose: product_reviews carries the one-review-per-
+// buyer unique key and a NOT NULL rating, neither of which a reply has.
+// Who may reply is decided in server/db.ts createReviewReply (the review
+// author, another verified buyer of the product, or panel staff answering
+// for the shop -- the reader sees a "SUGI ASAYAKE" badge on staff replies).
+export const productReviewReplies = mysqlTable("product_review_replies", {
+  id: int("id").autoincrement().primaryKey(),
+  reviewId: int("reviewId").notNull().references(() => productReviews.id, { onDelete: "cascade" }),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  isApproved: boolean("isApproved").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  index("product_review_replies_review_idx").on(table.reviewId),
+]);
+
+export type ProductReviewReply = typeof productReviewReplies.$inferSelect;
+
+/** One row per (review, user) -- a like is a toggle, never a count a user
+ *  can inflate. */
+export const productReviewLikes = mysqlTable("product_review_likes", {
+  reviewId: int("reviewId").notNull().references(() => productReviews.id, { onDelete: "cascade" }),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  primaryKey({ columns: [table.reviewId, table.userId] }),
+]);
 
 // PREMIUM-FEATURES.md TIER 4: an admin-curated, ordered product bundle
 // ("Алхам 1: Цэвэрлэгч -> Алхам 2: Тонер -> ...") with an optional bundle

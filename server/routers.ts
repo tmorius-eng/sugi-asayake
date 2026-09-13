@@ -203,6 +203,11 @@ import {
   recordFaceAttempt,
   upsertFaceEnrollment,
 } from "./db";
+// Customer-content safety (2026-09-13): NSFW screen on avatar uploads and
+// a multilingual abuse screen on review text -- both server-side.
+import { classifyImageSafety, formatScores, IMAGE_SAFETY_REJECT_MESSAGE } from "./_core/imageSafety";
+import { MODERATION_REJECT_MESSAGE, screenText } from "./_core/moderation";
+import { canReplyToReview, createReviewReply, deleteAdminReviewReply, getAdminReviewReplies, toggleReviewLike, updateAdminReview, updateAdminReviewReply } from "./db";
 // Admin face gate (2026-09-08) -- see server/faceAuth.ts.
 import { clearFaceProofCookie, completeFaceVerification, hasValidFaceProof, isFaceGateEnabled, lockFaceSession, refreshFaceProof, startFaceVerification } from "./faceAuth";
 import { FACE_DESCRIPTOR_LENGTH, FACE_DIAGNOSTIC_MAX, FACE_IDLE_TIMEOUT_MS, FACE_MODEL_VERSION, isAdminPanelRole, isValidFaceDescriptor } from "../shared/face-auth";
@@ -1111,7 +1116,29 @@ export const appRouter = router({
   }),
   // PREMIUM-FEATURES.md TIER 2: verified-purchase reviews & ratings.
   reviews: router({
-    list: publicProcedure.input(z.object({ productId: z.number().int().positive() })).query(({ input }) => getProductReviews(input.productId)),
+    list: publicProcedure.input(z.object({ productId: z.number().int().positive() })).query(({ ctx, input }) => getProductReviews(input.productId, ctx.user?.id ?? null)),
+    // Threaded conversation (2026-09-13): replies and likes.
+    reply: strictRateLimitedProtectedProcedure
+      .input(z.object({ reviewId: z.number().int().positive(), body: z.string().trim().min(1).max(2_000) }))
+      .mutation(async ({ ctx, input }) => {
+        const permission = await canReplyToReview(ctx.user.id, ctx.user.role, input.reviewId);
+        if (!permission.ok) throw new TRPCError({ code: "FORBIDDEN", message: permission.reason });
+        const verdict = await screenText(input.body);
+        if (!verdict.allowed) {
+          console.warn(`[moderation] reply rejected user=${ctx.user.id} review=${input.reviewId} category=${verdict.category} source=${verdict.source}`);
+          throw new TRPCError({ code: "BAD_REQUEST", message: MODERATION_REJECT_MESSAGE });
+        }
+        return createReviewReply({ reviewId: input.reviewId, userId: ctx.user.id, body: input.body });
+      }),
+    like: protectedProcedure
+      .input(z.object({ reviewId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await toggleReviewLike(input.reviewId, ctx.user.id);
+        } catch (error) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Алдаа гарлаа." });
+        }
+      }),
     // NEWVISION.md §6 "Юу ярьж байна" -- real, high-rated, commented reviews
     // for the homepage's CustomerVoices section. See getFeaturedReviews.
     featured: publicProcedure.query(() => getFeaturedReviews(8)),
@@ -1122,6 +1149,15 @@ export const appRouter = router({
     create: protectedProcedure
       .input(z.object({ productId: z.number().int().positive(), rating: z.number().int().min(1).max(5), comment: nullableText(2_000) }))
       .mutation(async ({ ctx, input }) => {
+        // Abuse screen (Tom, 2026-09-13): buyers may review, but not insult.
+        // Lexical layer always; Claude layer when ANTHROPIC_API_KEY is set.
+        if (input.comment?.trim()) {
+          const verdict = await screenText(input.comment);
+          if (!verdict.allowed) {
+            console.warn(`[moderation] review rejected user=${ctx.user.id} product=${input.productId} category=${verdict.category} source=${verdict.source}`);
+            throw new TRPCError({ code: "BAD_REQUEST", message: MODERATION_REJECT_MESSAGE });
+          }
+        }
         try {
           return await createProductReview({ userId: ctx.user.id, productId: input.productId, rating: input.rating, comment: input.comment ?? null });
         } catch (error) {
@@ -1443,6 +1479,20 @@ export const appRouter = router({
         assertImageSignature(buffer, input.contentType);
         const extension = input.contentType === "image/jpeg" ? "jpg" : input.contentType === "image/png" ? "png" : "webp";
         const processed = await processUploadedImageOrThrow(buffer, input.contentType, IMAGE_MAX_DIMENSION.avatar);
+        // Nudity / adult-content screen (Tom, 2026-09-13). Runs on the
+        // resized bytes that would be stored; a model failure refuses the
+        // upload rather than skipping the check -- see imageSafety.ts.
+        let safety;
+        try {
+          safety = await classifyImageSafety(processed);
+        } catch (error) {
+          console.error("[image-safety] avatar screen unavailable", error instanceof Error ? error.message : error);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Зургийн шалгалт түр боломжгүй байна. Дараа дахин оролдоно уу." });
+        }
+        if (!safety.allowed) {
+          console.warn(`[image-safety] avatar rejected user=${ctx.user.id} reason=${safety.reason} ${formatScores(safety.scores)}`);
+          throw new TRPCError({ code: "BAD_REQUEST", message: IMAGE_SAFETY_REJECT_MESSAGE });
+        }
         const stored = await storagePut(`avatars/${ctx.user.id}/avatar-${Date.now()}.${extension}`, processed, input.contentType);
         const updated = await updateUserAvatar(ctx.user.id, stored.url);
         if (!updated) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Зураг хадгалж чадсангүй." });
@@ -1751,7 +1801,9 @@ export const appRouter = router({
         poses: z.array(z.object({
           pose: z.string().max(20),
           descriptor: z.array(z.number()).length(FACE_DESCRIPTOR_LENGTH),
-        })).max(8).optional(),
+        // 12 (2026-09-13): the Face ID-style enrolment stores the centre plus
+        // eight compass directions = 9 views; headroom for two more.
+        })).max(12).optional(),
         consented: z.literal(true),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -2627,6 +2679,28 @@ export const appRouter = router({
     deleteReview: marketingProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const result = await deleteAdminReview(input.id);
       await logAdminAction({ actorUserId: ctx.user.id, action: "review.deleted", entityType: "review", entityId: input.id });
+      return result;
+    }),
+    // 2026-09-13: edit a review's text/rating, and manage its replies.
+    updateReview: marketingProcedure
+      .input(z.object({ id: z.number().int().positive(), rating: z.number().int().min(1).max(5).optional(), comment: z.string().trim().max(2_000).nullable().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const result = await updateAdminReview({ id: input.id, rating: input.rating, comment: input.comment === undefined ? undefined : (input.comment || null) });
+        if (!result) throw new TRPCError({ code: "NOT_FOUND", message: "Сэтгэгдэл олдсонгүй." });
+        await logAdminAction({ actorUserId: ctx.user.id, action: "review.edited", entityType: "review", entityId: input.id });
+        return result;
+      }),
+    reviewReplies: marketingProcedure.input(z.object({ reviewId: z.number().int().positive() })).query(({ input }) => getAdminReviewReplies(input.reviewId)),
+    updateReviewReply: marketingProcedure
+      .input(z.object({ id: z.number().int().positive(), body: z.string().trim().min(1).max(2_000).optional(), isApproved: z.boolean().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const result = await updateAdminReviewReply(input);
+        await logAdminAction({ actorUserId: ctx.user.id, action: "review.reply.edited", entityType: "review_reply", entityId: input.id });
+        return result;
+      }),
+    deleteReviewReply: marketingProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const result = await deleteAdminReviewReply(input.id);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "review.reply.deleted", entityType: "review_reply", entityId: input.id });
       return result;
     }),
     // PREMIUM-FEATURES.md TIER 4.

@@ -1,7 +1,8 @@
 import { Toaster } from "@/components/ui/sonner";
 import { useScrollToTopOnNavigate } from "./hooks/useScrollToTopOnNavigate";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { lazy, Suspense } from "react";
+import { Suspense, useEffect } from "react";
+import { lazyRetry, markChunksHealthy } from "./lib/lazyRetry";
 import { Route, Switch, useLocation } from "wouter";
 import AddedToCartToast from "./components/AddedToCartToast";
 import BackToTop from "./components/BackToTop";
@@ -16,21 +17,21 @@ import { PageviewTracker } from "./lib/pageviewTracking";
 import { useConsentIconAutoHide } from "./lib/consentIconAutoHide";
 import { useScrollReveal } from "./hooks/useScrollReveal";
 
-const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
-const Checkout = lazy(() => import("./pages/Checkout"));
-const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
-const Journal = lazy(() => import("./pages/Journal"));
-const Brands = lazy(() => import("./pages/Brands"));
-const Legal = lazy(() => import("./pages/Legal"));
-const Login = lazy(() => import("./pages/Login"));
-const MyOrders = lazy(() => import("./pages/MyOrders"));
-const NotFound = lazy(() => import("@/pages/NotFound"));
-const PostDetail = lazy(() => import("./pages/PostDetail"));
-const ProductDetail = lazy(() => import("./pages/ProductDetail"));
-const Profile = lazy(() => import("./pages/Profile"));
-const RoutineDetail = lazy(() => import("./pages/RoutineDetail"));
-const Shop = lazy(() => import("./pages/Shop"));
-const TrackOrder = lazy(() => import("./pages/TrackOrder"));
+const AdminDashboard = lazyRetry(() => import("./pages/AdminDashboard"));
+const Checkout = lazyRetry(() => import("./pages/Checkout"));
+const ForgotPassword = lazyRetry(() => import("./pages/ForgotPassword"));
+const Journal = lazyRetry(() => import("./pages/Journal"));
+const Brands = lazyRetry(() => import("./pages/Brands"));
+const Legal = lazyRetry(() => import("./pages/Legal"));
+const Login = lazyRetry(() => import("./pages/Login"));
+const MyOrders = lazyRetry(() => import("./pages/MyOrders"));
+const NotFound = lazyRetry(() => import("@/pages/NotFound"));
+const PostDetail = lazyRetry(() => import("./pages/PostDetail"));
+const ProductDetail = lazyRetry(() => import("./pages/ProductDetail"));
+const Profile = lazyRetry(() => import("./pages/Profile"));
+const RoutineDetail = lazyRetry(() => import("./pages/RoutineDetail"));
+const Shop = lazyRetry(() => import("./pages/Shop"));
+const TrackOrder = lazyRetry(() => import("./pages/TrackOrder"));
 
 function RouteLoadingFallback() {
   return <main className="min-h-screen bg-[#f6f3ee] grid place-items-center px-6 text-center">
@@ -88,6 +89,24 @@ function Router() {
 }
 
 function App() {
+  // A page that rendered is proof this tab holds a working build, so the
+  // next deploy (however many hours away) is allowed its own one-time reload.
+  useEffect(() => { markChunksHealthy(); }, []);
+  useEffect(() => {
+    const warm = () => {
+      void import("./pages/Shop");
+      void import("./pages/ProductDetail");
+      void import("./pages/Checkout");
+    };
+    // Safari has no requestIdleCallback; a short timer is the fallback.
+    const w = window as Window & { requestIdleCallback?: typeof requestIdleCallback; cancelIdleCallback?: typeof cancelIdleCallback };
+    if (w.requestIdleCallback) {
+      const id = w.requestIdleCallback(warm, { timeout: 4000 });
+      return () => w.cancelIdleCallback?.(id);
+    }
+    const id = setTimeout(warm, 2500);
+    return () => clearTimeout(id);
+  }, []);
   return <ErrorBoundary>
     <ThemeProvider defaultTheme="light">
       <TooltipProvider>

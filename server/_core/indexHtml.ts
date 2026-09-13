@@ -1,5 +1,6 @@
-import { getSiteText, getStoreSettingValue, getStorefrontBranches } from "../db";
+import { getSiteMedia, getSiteText, getStoreSettingValue, getStorefrontBranches } from "../db";
 import { getSiteTextSlot, type SiteTextSlotKey } from "../../shared/site-text";
+import { getSiteMediaSlot } from "../../shared/site-media";
 import { ENV } from "./env";
 
 /**
@@ -51,13 +52,23 @@ async function resolveValues(): Promise<Map<string, string>> {
   const now = Date.now();
   if (cache && now - cache.renderedAt < CACHE_TTL_MS) return cache.values;
 
-  const [rows, branches, phoneDigits, facebookUrl, instagramUrl] = await Promise.all([
+  const [rows, branches, phoneDigits, facebookUrl, instagramUrl, media] = await Promise.all([
     getSiteText(),
     getStorefrontBranches(),
     getStoreSettingValue("contact-phone-tel"),
     getStoreSettingValue("contact-facebook-url"),
     getStoreSettingValue("contact-instagram-url"),
+    getSiteMedia(),
   ]);
+
+  // LCP (2026-09-13, measured on a throttled phone: 3.4s, of which 2.8s was
+  // "load delay"): the hero photograph is the largest thing on the first
+  // screen, but the browser only learned its URL after index.js had loaded,
+  // React had rendered, and the siteMedia tRPC call had returned. Naming it
+  // in the HTML head lets the fetch start with the document itself. Must be
+  // byte-identical to the src HeroSection renders (admin slot, else the
+  // slot's default), or the preload is wasted.
+  const heroUrl = media.find(row => row.slotKey === "home-hero")?.imageUrl || getSiteMediaSlot("home-hero").fallbackUrl;
 
   const saved = new Map(rows.map(row => [row.slotKey, row.textValue]));
   const branchCount = String(branches.length);
@@ -94,6 +105,7 @@ async function resolveValues(): Promise<Map<string, string>> {
     // would end the tag early. Escaping the slash keeps it inert and is still
     // valid JSON.
     ["SEO_STRUCTURED_DATA", JSON.stringify(structuredData).replace(/</g, "\\u003c")],
+    ["SEO_HERO_PRELOAD", heroUrl ? `<link rel="preload" as="image" href="${escapeAttribute(heroUrl)}" fetchpriority="high" />` : ""],
 
     // The consent banner's copy, which lands inside a JS string literal
     // rather than an HTML attribute -- hence escapeJsString, not escapeAttribute.
@@ -160,6 +172,10 @@ function fallbackFor(key: string): string | undefined {
     case "SEO_TWITTER_DESCRIPTION": return escapeAttribute(getSiteTextSlot("seo-text-twitter-description").fallbackValue);
     case "SEO_CANONICAL": return escapeAttribute(ENV.publicBaseUrl || "https://sugiasayake.mn");
     case "SEO_STRUCTURED_DATA": return "{}";
+    case "SEO_HERO_PRELOAD": {
+      const fallback = getSiteMediaSlot("home-hero").fallbackUrl;
+      return fallback ? `<link rel="preload" as="image" href="${escapeAttribute(fallback)}" fetchpriority="high" />` : "";
+    }
     default: return undefined;
   }
 }

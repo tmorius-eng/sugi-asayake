@@ -1,0 +1,231 @@
+/**
+ * Admin face gate (2026-09-13) — real-time face TRACKING via MediaPipe Face
+ * Landmarker, running as self-hosted WebAssembly in the staff member's own
+ * browser.
+ *
+ * Division of labour, because it is the whole reason the gate got fast:
+ *
+ *   MediaPipe (this file)     every frame   478 3-D landmarks, 52 blendshapes
+ *                                            → framing, head pose, blink,
+ *                                              stillness, the on-screen mesh
+ *   dlib / face-api (faceEngine.ts) a few    128-number recognition descriptor
+ *                             snapshots      → the identity decision
+ *
+ * The old flow ran the dlib descriptor network on EVERY frame, including the
+ * frames spent waiting for someone to turn their head. On a phone that network
+ * is the expensive step by a wide margin, so "reading your face" took ages.
+ * Now it runs three times at login and nine times at enrolment, on frames
+ * chosen because the tracker says they are good.
+ *
+ * Nothing leaves the device from here either: landmarks and blendshapes are
+ * consumed locally and discarded.
+ *
+ * Assets are served from this origin (client/public/face-models/mediapipe):
+ * the .task model and the wasm runtime. No CDN, for the same reasons the
+ * dlib weights are self-hosted -- no third party learns that someone is
+ * signing in, and the gate keeps working when a CDN is blocked. The CSP
+ * grants 'wasm-unsafe-eval' for exactly this.
+ */
+
+import type { FaceLandmarker as FaceLandmarkerType, FaceLandmarkerResult } from "@mediapipe/tasks-vision";
+import { blendshapeMap, type Blendshapes, type MpLandmarks } from "@shared/face-pose";
+
+const MP_BASE = "/face-models/mediapipe";
+
+let landmarker: FaceLandmarkerType | null = null;
+/** "GPU" or "CPU" -- whichever delegate the landmarker was created with. */
+let delegateUsed: "GPU" | "CPU" | "?" = "?";
+export function trackerDelegate(): string {
+  return delegateUsed;
+}
+let loadPromise: Promise<void> | null = null;
+/** MediaPipe demands strictly increasing timestamps per landmarker instance;
+ *  two frames in the same millisecond throw. Tracked here so callers can't
+ *  get it wrong. */
+let lastTimestamp = 0;
+
+export type TrackerError = "TRACKER_LOAD";
+
+/**
+ * Loads the wasm runtime and the model, once per page load. Idempotent like
+ * loadFaceModels() so it can be kicked off in parallel with the camera and
+ * the dlib weights.
+ *
+ * GPU delegate first (WebGL2; what phones want), CPU as the fallback -- the
+ * same shape as faceEngine's WebGL→CPU fallback, for the same hardened-
+ * browser reasons.
+ */
+export function loadFaceTracker(): Promise<void> {
+  if (!loadPromise) {
+    loadPromise = (async () => {
+      try {
+        const vision = await import("@mediapipe/tasks-vision");
+        const fileset = await vision.FilesetResolver.forVisionTasks(`${MP_BASE}/wasm`);
+        const base = {
+          baseOptions: { modelAssetPath: `${MP_BASE}/face_landmarker.task`, delegate: "GPU" as const },
+          runningMode: "VIDEO" as const,
+          numFaces: 2,
+          outputFaceBlendshapes: true,
+          outputFacialTransformationMatrixes: false,
+          minFaceDetectionConfidence: 0.5,
+          minFacePresenceConfidence: 0.5,
+          minTrackingConfidence: 0.5,
+        };
+        try {
+          landmarker = await vision.FaceLandmarker.createFromOptions(fileset, base);
+          delegateUsed = "GPU";
+        } catch {
+          landmarker = await vision.FaceLandmarker.createFromOptions(fileset, { ...base, baseOptions: { ...base.baseOptions, delegate: "CPU" } });
+          delegateUsed = "CPU";
+        }
+      } catch {
+        loadPromise = null;
+        throw new Error("TRACKER_LOAD");
+      }
+    })();
+  }
+  return loadPromise;
+}
+
+export type TrackedFrame = {
+  /** How many faces the model saw (numFaces caps it at 2 -- enough to know
+   *  "more than one"). */
+  faces: number;
+  /** Landmarks of the first face, normalised to the frame, or null. */
+  landmarks: MpLandmarks | null;
+  blendshapes: Blendshapes;
+};
+
+/**
+ * Runs the landmarker on the current video frame. Synchronous once loaded --
+ * MediaPipe's video mode is designed to be called from a requestAnimationFrame
+ * loop -- and cheap enough to do so on a phone.
+ */
+export function trackFrame(video: HTMLVideoElement): TrackedFrame {
+  if (!landmarker) throw new Error("TRACKER_LOAD");
+  if (video.readyState < 2 || video.videoWidth === 0) return { faces: 0, landmarks: null, blendshapes: new Map() };
+
+  let timestamp = performance.now();
+  if (timestamp <= lastTimestamp) timestamp = lastTimestamp + 1;
+  lastTimestamp = timestamp;
+
+  let result: FaceLandmarkerResult;
+  try {
+    result = landmarker.detectForVideo(video, timestamp);
+  } catch {
+    return { faces: 0, landmarks: null, blendshapes: new Map() };
+  }
+  const landmarks = result.faceLandmarks?.[0] ?? null;
+  return {
+    faces: result.faceLandmarks?.length ?? 0,
+    landmarks,
+    blendshapes: blendshapeMap(result.faceBlendshapes?.[0]?.categories),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Mesh overlay from the 478-point model.
+//
+// Drawn from the model's own contour connection lists (face oval, eyes,
+// brows, lips) plus a sparse scatter of the remaining points, so it is an
+// honest picture of what the tracker sees -- same principle as the old
+// 68-point mesh, with a denser, more obviously "3-D" look.
+// ---------------------------------------------------------------------------
+
+type Connection = { start: number; end: number };
+let contours: Connection[] | null = null;
+
+/** Every ~4th landmark, drawn as a dot. Enough to read as a mesh, few
+ *  enough that the canvas stays cheap on a phone. */
+const DOT_STRIDE = 4;
+
+async function loadContours(): Promise<Connection[]> {
+  if (contours) return contours;
+  const { FaceLandmarker } = await import("@mediapipe/tasks-vision");
+  contours = [
+    ...FaceLandmarker.FACE_LANDMARKS_FACE_OVAL,
+    ...FaceLandmarker.FACE_LANDMARKS_LEFT_EYE,
+    ...FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE,
+    ...FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW,
+    ...FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW,
+    ...FaceLandmarker.FACE_LANDMARKS_LIPS,
+  ];
+  return contours;
+}
+
+/** Kick the contour tables loading alongside the model so the first frame
+ *  can draw. Safe to call any time. */
+export function warmMeshContours(): void {
+  void loadContours().catch(() => undefined);
+}
+
+/**
+ * Draws the tracked mesh onto an overlay canvas. Points are normalised
+ * (0..1); the canvas is mirrored to sit on the mirrored preview, exactly as
+ * faceEngine.drawFaceMesh does for the 68-point layout.
+ */
+/** Overlay canvases are shown at ~300 CSS px, so a 1280x720 backing store
+ *  was 4x the pixels the screen can use, repainted 60 times a second. The
+ *  landmarks are normalised, so any size draws correctly. */
+export const OVERLAY_MAX_WIDTH = 640;
+export function overlaySize(video: HTMLVideoElement): { width: number; height: number } {
+  const w = video.videoWidth || 640;
+  const h = video.videoHeight || 480;
+  const scale = Math.min(1, OVERLAY_MAX_WIDTH / w);
+  return { width: Math.round(w * scale), height: Math.round(h * scale) };
+}
+
+export function drawTrackedMesh(canvas: HTMLCanvasElement, video: HTMLVideoElement, landmarks: MpLandmarks | null): void {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const size = overlaySize(video);
+  if (canvas.width !== size.width || canvas.height !== size.height) {
+    canvas.width = size.width;
+    canvas.height = size.height;
+  }
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!landmarks || !contours) return;
+
+  const w = canvas.width;
+  const h = canvas.height;
+  const scale = Math.max(w, h) / 640;
+
+  ctx.save();
+  ctx.translate(w, 0);
+  ctx.scale(-1, 1);
+
+  ctx.strokeStyle = "rgba(150, 210, 255, .8)";
+  ctx.lineWidth = 1.2 * scale;
+  ctx.beginPath();
+  for (const { start, end } of contours) {
+    const a = landmarks[start];
+    const b = landmarks[end];
+    if (!a || !b) continue;
+    ctx.moveTo(a.x * w, a.y * h);
+    ctx.lineTo(b.x * w, b.y * h);
+  }
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(255, 255, 255, .55)";
+  for (let i = 0; i < landmarks.length; i += DOT_STRIDE) {
+    const p = landmarks[i];
+    ctx.beginPath();
+    ctx.arc(p.x * w, p.y * h, 1.3 * scale, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+/**
+ * Copies the current video frame into a canvas, for the descriptor network to
+ * read later. Cheap (one drawImage) so the tracking loop is never held up by
+ * the expensive step; the canvases are processed after the ring completes.
+ */
+export function snapshotFrame(video: HTMLVideoElement): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext("2d")?.drawImage(video, 0, 0);
+  return canvas;
+}
