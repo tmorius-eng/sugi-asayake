@@ -46,7 +46,7 @@ sleep 8
 curl -s --max-time 20 http://localhost:3000/health; echo
 pm2 status sugi | grep sugi | cut -c1-100
 '@
-$remote = $remote.Replace("__BUNDLE__", $bundle)
+$remote = $remote.Replace("__BUNDLE__", $bundle).Replace("`r`n", "`n")  # CRLF checkout -> LF for the remote bash
 # Sent over stdin, not as an argument: passed as an argument the script is
 # re-split by the remote shell and its quotes are lost ("[: missing ]").
 $remote | ssh -o ClearAllForwardings=yes sugi-oci "bash -s"
