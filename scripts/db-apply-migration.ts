@@ -29,6 +29,7 @@ import { getDb } from "../server/db";
  * manual path).
  */
 async function main() {
+  if (process.env.DATABASE_ADMIN_URL) process.env.DATABASE_URL = process.env.DATABASE_ADMIN_URL;
   const files = process.argv.slice(2);
   if (!files.length) {
     console.error("Usage: pnpm exec tsx scripts/db-apply-migration.ts <drizzle/NNNN_name.sql> [...more]");

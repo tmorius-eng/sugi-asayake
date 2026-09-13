@@ -47,6 +47,12 @@ export type ConnectionPlan = {
 
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 
+/** IPv4 dotted quad or bracketed/plain IPv6, as URL.hostname reports it. */
+export function isIpLiteral(hostname: string): boolean {
+  const bare = hostname.replace(/^\[|\]$/g, "");
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(bare) || (bare.includes(":") && /^[0-9a-f:.]+$/i.test(bare));
+}
+
 export function loadCaCertificate(env: NodeJS.ProcessEnv = process.env): string | undefined {
   const inline = env.DATABASE_CA_CERT?.trim();
   if (inline) return inline.replace(/\\n/g, "\n");
@@ -76,8 +82,26 @@ export function planMysqlConnection(databaseUrl: string, env: NodeJS.ProcessEnv 
     return { options, transport: "plaintext-explicit" };
   }
   const ca = loadCaCertificate(env);
-  options.ssl = ca ? { rejectUnauthorized: true, ca, minVersion: "TLSv1.2" } : { rejectUnauthorized: false, minVersion: "TLSv1.2" };
-  return { options, transport: ca ? "tls-verified" : "tls-unverified" };
+  if (!ca) {
+    options.ssl = { rejectUnauthorized: false, minVersion: "TLSv1.2" };
+    return { options, transport: "tls-unverified" };
+  }
+  // A MySQL reached by bare IP -- an Oracle Cloud HeatWave endpoint through
+  // an SSH tunnel (127.0.0.1) or a VM by its address (2026-09-13) -- presents
+  // a certificate whose CN/SAN name the address, not what we typed, so Node
+  // would reject it on hostname mismatch even though the chain is pinned to
+  // the exact CA we shipped. For an IP-literal host the CA pin IS the
+  // identity check (only a server holding a key signed by that private CA
+  // can pass), so hostname matching is skipped there and nowhere else: a DNS
+  // name such as the Aiven hostname still gets the full identity check.
+  const ipLiteral = isIpLiteral(url.hostname);
+  options.ssl = {
+    rejectUnauthorized: true,
+    ca,
+    minVersion: "TLSv1.2",
+    ...(ipLiteral ? { checkServerIdentity: () => undefined } : {}),
+  };
+  return { options, transport: "tls-verified" };
 }
 
 export function describeTransport(plan: ConnectionPlan): string {

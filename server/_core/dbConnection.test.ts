@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeTransport, planMysqlConnection } from "./dbConnection";
+import { describeTransport, planMysqlConnection, isIpLiteral } from "./dbConnection";
 
 const AIVEN = "mysql://avnadmin:p%40ss%3Aword@sugi-asayake-db-project-4b75.h.aivencloud.com:25861/defaultdb?ssl-mode=REQUIRED";
 
@@ -46,5 +46,27 @@ describe("planMysqlConnection", () => {
 
   it("rejects a non-mysql URL instead of guessing", () => {
     expect(() => planMysqlConnection("postgres://u:p@h/db", {})).toThrow(/mysql:/);
+  });
+});
+
+describe("IP-literal hosts with a pinned CA (HeatWave through an SSH tunnel, or a VM by address)", () => {
+  const ca = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----";
+  it("keeps chain verification but skips hostname matching for a bare IP", () => {
+    const { options, transport } = planMysqlConnection("mysql://sugi_app:pw@127.0.0.1:3307/defaultdb?ssl-mode=REQUIRED", { DATABASE_CA_CERT: ca });
+    expect(transport).toBe("tls-verified");
+    const ssl = options.ssl as { rejectUnauthorized: boolean; ca: string; checkServerIdentity?: unknown };
+    expect(ssl.rejectUnauthorized).toBe(true);
+    expect(ssl.ca).toBe(ca);
+    expect(typeof ssl.checkServerIdentity).toBe("function");
+  });
+  it("still checks the hostname for a DNS name (Aiven)", () => {
+    const { options } = planMysqlConnection("mysql://u:p@sugi-asayake-db-project-4b75.h.aivencloud.com:25861/defaultdb?ssl-mode=REQUIRED", { DATABASE_CA_CERT: ca });
+    const ssl = options.ssl as { checkServerIdentity?: unknown };
+    expect(ssl.checkServerIdentity).toBeUndefined();
+  });
+  it("recognises IPv4 and IPv6 literals only", () => {
+    expect(isIpLiteral("140.83.1.2")).toBe(true);
+    expect(isIpLiteral("[2001:db8::1]")).toBe(true);
+    expect(isIpLiteral("db.example.com")).toBe(false);
   });
 });

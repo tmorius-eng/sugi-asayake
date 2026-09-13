@@ -106,6 +106,7 @@ async function resolveValues(): Promise<Map<string, string>> {
     // valid JSON.
     ["SEO_STRUCTURED_DATA", JSON.stringify(structuredData).replace(/</g, "\\u003c")],
     ["SEO_HERO_PRELOAD", heroUrl ? `<link rel="preload" as="image" href="${escapeAttribute(heroUrl)}" fetchpriority="high" />` : ""],
+    ["SEO_OG_IMAGE", escapeAttribute(absoluteUrl(heroUrl))],
 
     // The consent banner's copy, which lands inside a JS string literal
     // rather than an HTML attribute -- hence escapeJsString, not escapeAttribute.
@@ -161,6 +162,15 @@ const COOKIE_FALLBACK_SLOTS: Record<string, SiteTextSlotKey> = {
   COOKIE_ANALYTICS_DESCRIPTION: "cookie-text-analytics-description",
 };
 
+/** Open Graph needs absolute URLs; storage URLs may already be absolute
+ *  (R2 public host) or site-relative (/cdn/...). */
+function absoluteUrl(url: string | null | undefined): string {
+  if (!url) return "";
+  if (/^https?:\/\//i.test(url)) return url;
+  const base = (ENV.publicBaseUrl || "https://sugiasayake.mn").replace(/\/$/, "");
+  return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
+}
+
 function fallbackFor(key: string): string | undefined {
   const cookieSlot = COOKIE_FALLBACK_SLOTS[key];
   if (cookieSlot) return escapeJsString(getSiteTextSlot(cookieSlot).fallbackValue);
@@ -172,6 +182,7 @@ function fallbackFor(key: string): string | undefined {
     case "SEO_TWITTER_DESCRIPTION": return escapeAttribute(getSiteTextSlot("seo-text-twitter-description").fallbackValue);
     case "SEO_CANONICAL": return escapeAttribute(ENV.publicBaseUrl || "https://sugiasayake.mn");
     case "SEO_STRUCTURED_DATA": return "{}";
+    case "SEO_OG_IMAGE": return escapeAttribute(absoluteUrl(getSiteMediaSlot("home-hero").fallbackUrl));
     case "SEO_HERO_PRELOAD": {
       const fallback = getSiteMediaSlot("home-hero").fallbackUrl;
       return fallback ? `<link rel="preload" as="image" href="${escapeAttribute(fallback)}" fetchpriority="high" />` : "";

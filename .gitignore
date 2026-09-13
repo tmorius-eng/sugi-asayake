@@ -127,3 +127,7 @@ scripts/tmp-*.ts
 
 # 2026-09-13: local backups written by scripts/sync-variant-prices.ts
 variant-price-backup-*.json
+
+# never commit env backups (2026-09-13: one slipped into a commit and was force-removed)
+.env.bak*
+.env.*.bak
