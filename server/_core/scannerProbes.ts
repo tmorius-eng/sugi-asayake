@@ -60,7 +60,7 @@ const ALLOW_PATTERNS: RegExp[] = [
   /^\/assets\//,
   /^\/face-models\//,
   /^\/health$/,
-  /^\/(favicon\.ico|robots\.txt|sitemap\.xml|manifest\.webmanifest|manifest\.json|site\.webmanifest)$/,
+  /^\/(favicon\.ico|robots\.txt|sitemap\.xml|manifest\.webmanifest|manifest\.json|site\.webmanifest|sw\.js|offline\.html)$/,
   /^\/\.well-known\//,
   // Vite dev-server internals, only present under `pnpm dev`.
   /^\/(@vite|@react-refresh|@fs|@id|node_modules|src)\//,

@@ -29,23 +29,24 @@ tar czf $bundle dist package.json pnpm-lock.yaml pnpm-workspace.yaml
 # ClearAllForwardings: the Host block carries the 3307 tunnel forward, which
 # the always-on tunnel task already holds -- without this, ssh aborts with
 # "Address already in use" before running anything (ExitOnForwardFailure).
-scp -q -o ClearAllForwardings=yes $bundle "sugi-oci:~/$bundle"
+scp -q -o ClearAllForwardings=yes $bundle "sugi-oci:~/__BUNDLE__"
 Remove-Item $bundle
 
 Write-Host "==> install + restart on the VM" -ForegroundColor Cyan
-$remote = @"
+$remote = @'
 set -e
 cd ~/sugi-asayake
-old=\$(md5sum pnpm-lock.yaml | cut -c1-32)
-rm -rf dist.new && mkdir dist.new && tar xzf ~/$bundle -C dist.new && rm ~/$bundle
+old=$(md5sum pnpm-lock.yaml | cut -c1-32)
+rm -rf dist.new && mkdir dist.new && tar xzf ~/__BUNDLE__ -C dist.new && rm ~/__BUNDLE__
 rm -rf dist && mv dist.new/dist dist && mv -f dist.new/package.json dist.new/pnpm-lock.yaml dist.new/pnpm-workspace.yaml . && rm -rf dist.new
-new=\$(md5sum pnpm-lock.yaml | cut -c1-32)
-if [ "\$old" != "\$new" ]; then echo "lockfile changed -> pnpm install --prod"; pnpm install --prod --frozen-lockfile 2>&1 | tail -2; fi
+new=$(md5sum pnpm-lock.yaml | cut -c1-32)
+if [ "$old" != "$new" ]; then echo "lockfile changed -> pnpm install --prod"; pnpm install --prod --frozen-lockfile 2>&1 | tail -2; fi
 pm2 restart sugi --update-env >/dev/null
 sleep 8
 curl -s --max-time 20 http://localhost:3000/health; echo
 pm2 status sugi | grep sugi | cut -c1-100
-"@
+'@
+$remote = $remote.Replace("__BUNDLE__", $bundle)
 # Sent over stdin, not as an argument: passed as an argument the script is
 # re-split by the remote shell and its quotes are lost ("[: missing ]").
 $remote | ssh -o ClearAllForwardings=yes sugi-oci "bash -s"

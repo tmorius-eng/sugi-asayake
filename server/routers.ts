@@ -208,6 +208,10 @@ import {
 import { classifyImageSafety, formatScores, IMAGE_SAFETY_REJECT_MESSAGE } from "./_core/imageSafety";
 import { MODERATION_REJECT_MESSAGE, screenText } from "./_core/moderation";
 import { canReplyToReview, createReviewReply, deleteAdminReviewReply, getAdminReviewReplies, toggleReviewLike, updateAdminReview, updateAdminReviewReply } from "./db";
+import { canAnswerQuestion, createProductQuestion, createQuestionAnswer, deleteQuestion, deleteQuestionAnswer, getAdminQuestions, getProductQuestions, setQuestionApproved } from "./db";
+import { renderOrderInvoice } from "./invoice";
+import { deletePushSubscription, hasPushSubscription, issueGiftCards, listGiftCards, redeemGiftCard, upsertPushSubscription, voidGiftCard } from "./db";
+import { sendOrderStatusPush, sendPushToUser, webPushEnabled } from "./_core/webPush";
 // Admin face gate (2026-09-08) -- see server/faceAuth.ts.
 import { clearFaceProofCookie, completeFaceVerification, hasValidFaceProof, isFaceGateEnabled, lockFaceSession, refreshFaceProof, startFaceVerification } from "./faceAuth";
 import { FACE_DESCRIPTOR_LENGTH, FACE_DIAGNOSTIC_MAX, FACE_IDLE_TIMEOUT_MS, FACE_MODEL_VERSION, isAdminPanelRole, isValidFaceDescriptor } from "../shared/face-auth";
@@ -528,7 +532,7 @@ const DUMMY_PASSWORD_HASH = `${"0".repeat(32)}:${"0".repeat(128)}`;
 // Called right after auth.login/auth.register issue a session: if the
 // browser was shopping as a guest, fold that cart into the now-known
 // account's cart and stop treating the browser as a guest.
-async function mergeGuestCartAndClearCookie(ctx: TrpcContext, userId: number) {
+export async function mergeGuestCartAndClearCookie(ctx: TrpcContext, userId: number) {
   const guestToken = currentGuestCartToken(ctx);
   if (!guestToken) return;
   try {
@@ -806,6 +810,9 @@ export const appRouter = router({
     // Login is phone+password (unchanged) -- findUserByPhone's flexible digits-only-right-8
     // match means however the shopper happens to type their number (spaces,
     // dashes, +976 or not) still resolves to their one account.
+    // Which social sign-ins are configured (2026-09-13) -- the login page
+    // shows a provider button only when its keys are present.
+    socialProviders: publicProcedure.query(() => ({ facebook: Boolean(ENV.facebookAppId && ENV.facebookAppSecret) })),
     login: strictRateLimitedProcedure
       .input(z.object({
         phone: phoneSchema,
@@ -1115,6 +1122,70 @@ export const appRouter = router({
     active: publicProcedure.query(() => getActiveSitePromotion()),
   }),
   // PREMIUM-FEATURES.md TIER 2: verified-purchase reviews & ratings.
+  // Gift cards (2026-09-13): the customer side is one call -- redeem into store credit.
+  giftCards: router({
+    redeem: strictRateLimitedProtectedProcedure
+      .input(z.object({ code: z.string().trim().min(8).max(40) }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await redeemGiftCard(input.code, ctx.user.id);
+        } catch (error) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Алдаа гарлаа." });
+        }
+      }),
+  }),
+  // Customer Web Push (2026-09-13). The browser subscribes through the
+  // service worker and posts the endpoint here; order status changes are
+  // pushed from sendOrderStatusPush.
+  push: router({
+    publicKey: publicProcedure.query(() => ({ key: webPushEnabled() ? ENV.vapidPublicKey : null })),
+    status: protectedProcedure.input(z.object({ endpoint: z.string().url().max(1000) })).query(({ ctx, input }) => hasPushSubscription(ctx.user.id, input.endpoint)),
+    subscribe: protectedProcedure
+      .input(z.object({ endpoint: z.string().url().max(1000), keys: z.object({ p256dh: z.string().min(10).max(200), auth: z.string().min(5).max(100) }) }))
+      .mutation(async ({ ctx, input }) => {
+        if (!webPushEnabled()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Push мэдэгдэл тохируулагдаагүй байна." });
+        await upsertPushSubscription({ userId: ctx.user.id, endpoint: input.endpoint, p256dh: input.keys.p256dh, auth: input.keys.auth, userAgent: (ctx.req.headers["user-agent"] ?? "").slice(0, 300) || null });
+        return { ok: true };
+      }),
+    unsubscribe: protectedProcedure.input(z.object({ endpoint: z.string().url().max(1000) })).mutation(async ({ ctx, input }) => {
+      await deletePushSubscription(input.endpoint, ctx.user.id);
+      return { ok: true };
+    }),
+    // Lets the customer confirm the channel works right after enabling it.
+    test: strictRateLimitedProtectedProcedure.mutation(async ({ ctx }) => ({ delivered: await sendPushToUser(ctx.user.id, { title: "SUGI ASAYAKE", body: "Мэдэгдэл ажиллаж байна. Захиалгын явцыг эндээс мэдэх болно.", url: "/profile?tab=notifications", tag: "test" }) })),
+  }),
+  // Product Q&A (2026-09-13, growth tier). Same moderation + rate-limit
+  // shape as reviews.reply; answering follows the review-reply permission
+  // rule (staff or a verified buyer of that product).
+  questions: router({
+    list: publicProcedure.input(z.object({ productId: z.number().int().positive() })).query(({ input }) => getProductQuestions(input.productId)),
+    ask: strictRateLimitedProtectedProcedure
+      .input(z.object({ productId: z.number().int().positive(), body: z.string().trim().min(5).max(1_000) }))
+      .mutation(async ({ ctx, input }) => {
+        const verdict = await screenText(input.body);
+        if (!verdict.allowed) {
+          console.warn(`[moderation] question rejected user=${ctx.user.id} product=${input.productId} category=${verdict.category} source=${verdict.source}`);
+          throw new TRPCError({ code: "BAD_REQUEST", message: MODERATION_REJECT_MESSAGE });
+        }
+        try {
+          return await createProductQuestion({ productId: input.productId, userId: ctx.user.id, body: input.body });
+        } catch (error) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Алдаа гарлаа." });
+        }
+      }),
+    answer: strictRateLimitedProtectedProcedure
+      .input(z.object({ questionId: z.number().int().positive(), body: z.string().trim().min(1).max(2_000) }))
+      .mutation(async ({ ctx, input }) => {
+        const permission = await canAnswerQuestion(ctx.user.id, ctx.user.role, input.questionId);
+        if (!permission.ok) throw new TRPCError({ code: "FORBIDDEN", message: permission.reason });
+        const verdict = await screenText(input.body);
+        if (!verdict.allowed) {
+          console.warn(`[moderation] answer rejected user=${ctx.user.id} question=${input.questionId} category=${verdict.category} source=${verdict.source}`);
+          throw new TRPCError({ code: "BAD_REQUEST", message: MODERATION_REJECT_MESSAGE });
+        }
+        return createQuestionAnswer({ questionId: input.questionId, userId: ctx.user.id, body: input.body });
+      }),
+  }),
   reviews: router({
     list: publicProcedure.input(z.object({ productId: z.number().int().positive() })).query(({ ctx, input }) => getProductReviews(input.productId, ctx.user?.id ?? null)),
     // Threaded conversation (2026-09-13): replies and likes.
@@ -1402,6 +1473,14 @@ export const appRouter = router({
       cursor: z.number().int().positive().nullish(),
       limit: z.number().int().min(1).max(50).optional(),
     }).optional()).query(({ ctx, input }) => getOrdersForUser(ctx.user.id, { cursor: input?.cursor ?? null, limit: input?.limit })),
+    // PDF receipt (2026-09-13, growth tier): rendered server-side (pdfkit +
+    // Golos Text for Cyrillic) and returned as base64 so it rides the same
+    // session check as every other order read. See server/invoice.ts.
+    invoicePdf: protectedProcedure.input(z.object({ orderId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const result = await renderOrderInvoice(input.orderId, ctx.user.id);
+      if (!result) throw new TRPCError({ code: "NOT_FOUND", message: "Захиалга олдсонгүй." });
+      return result;
+    }),
     // Admin overhaul (2026-09-08, Phase F): a guest checkout customer's only
     // way to check status until now. A mutation (not a query) so the phone
     // number stays out of a GET query string, matching auth.login/
@@ -1429,6 +1508,7 @@ export const appRouter = router({
       }
       try {
         await sendOrderStatusUpdateEmail(order);
+        await sendOrderStatusPush(order);
       } catch (error) {
         console.error("[orders.cancel] Failed to send status update email", error);
       }
@@ -2409,6 +2489,7 @@ export const appRouter = router({
       if (input.status !== undefined) {
         try {
           await sendOrderStatusUpdateEmail(order);
+        await sendOrderStatusPush(order);
         } catch (error) {
           console.error("[admin.updateOrder] Failed to send status update email", error);
         }
@@ -2432,6 +2513,7 @@ export const appRouter = router({
           succeeded.push(id);
           try {
             await sendOrderStatusUpdateEmail(order);
+        await sendOrderStatusPush(order);
           } catch (notifyError) {
             console.error("[admin.bulkUpdateOrderStatus] Failed to send status update email", notifyError);
           }
@@ -2691,6 +2773,39 @@ export const appRouter = router({
         return result;
       }),
     reviewReplies: marketingProcedure.input(z.object({ reviewId: z.number().int().positive() })).query(({ input }) => getAdminReviewReplies(input.reviewId)),
+    // Gift cards (2026-09-13): finance issues/voids; the ledger row on redeem is the audit trail.
+    giftCards: financeProcedure.query(() => listGiftCards()),
+    issueGiftCards: financeProcedure
+      .input(z.object({ amountMnt: z.number().int().min(1_000).max(10_000_000), count: z.number().int().min(1).max(100), recipientName: z.string().trim().max(120).nullable().optional(), note: z.string().trim().max(300).nullable().optional(), expiresInMonths: z.number().int().min(1).max(60).nullable().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const expiresAt = input.expiresInMonths ? new Date(Date.now() + input.expiresInMonths * 30 * 24 * 3600 * 1000) : null;
+        const cards = await issueGiftCards({ amountMnt: input.amountMnt, count: input.count, issuedByUserId: ctx.user.id, recipientName: input.recipientName ?? null, note: input.note ?? null, expiresAt });
+        await logAdminAction({ actorUserId: ctx.user.id, action: "gift_card.issued", entityType: "gift_card", entityId: cards[0]?.id ?? 0, metadata: { amountMnt: input.amountMnt, count: input.count } });
+        return cards;
+      }),
+    voidGiftCard: financeProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const ok = await voidGiftCard(input.id);
+      if (!ok) throw new TRPCError({ code: "BAD_REQUEST", message: "Зөвхөн идэвхтэй картыг хүчингүй болгоно." });
+      await logAdminAction({ actorUserId: ctx.user.id, action: "gift_card.voided", entityType: "gift_card", entityId: input.id });
+      return { ok: true };
+    }),
+    // Product Q&A moderation (2026-09-13).
+    questions: marketingProcedure.query(() => getAdminQuestions()),
+    setQuestionApproved: marketingProcedure.input(z.object({ id: z.number().int().positive(), isApproved: z.boolean() })).mutation(async ({ ctx, input }) => {
+      await setQuestionApproved(input.id, input.isApproved);
+      await logAdminAction({ actorUserId: ctx.user.id, action: input.isApproved ? "question.show" : "question.hide", entityType: "product_question", entityId: input.id });
+      return { ok: true };
+    }),
+    deleteQuestion: marketingProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      await deleteQuestion(input.id);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "question.delete", entityType: "product_question", entityId: input.id });
+      return { ok: true };
+    }),
+    deleteQuestionAnswer: marketingProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      await deleteQuestionAnswer(input.id);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "question.answer.delete", entityType: "product_question_answer", entityId: input.id });
+      return { ok: true };
+    }),
     updateReviewReply: marketingProcedure
       .input(z.object({ id: z.number().int().positive(), body: z.string().trim().min(1).max(2_000).optional(), isApproved: z.boolean().optional() }))
       .mutation(async ({ ctx, input }) => {

@@ -100,6 +100,17 @@ export const ENV = {
   // throw loudly the moment they're actually called with it missing,
   // instead of silently falling back to a console.log -- a deliberate,
   // explicit exception to this file's usual convention, not an oversight.
+  // "Continue with Facebook" (2026-09-13). Both from developers.facebook.com
+  // -> the app -> App settings -> Basic. Empty = the button is hidden and
+  // /api/auth/facebook answers 404.
+  facebookAppId: process.env.FACEBOOK_APP_ID ?? "",
+  facebookAppSecret: process.env.FACEBOOK_APP_SECRET ?? "",
+  // Customer Web Push (2026-09-13). Generate once with
+  // node -e "console.log(require('web-push').generateVAPIDKeys())".
+  // Empty = the profile toggle is hidden and nothing is sent.
+  vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? "",
+  vapidPrivateKey: process.env.VAPID_PRIVATE_KEY ?? "",
+  vapidSubject: process.env.VAPID_SUBJECT || "mailto:t.morius@gmail.com",
   verifyMnApiKey: process.env.VERIFY_MN_API_KEY ?? "",
 
   // Audit 2026-09-09 (R7): the site's own public origin, e.g.

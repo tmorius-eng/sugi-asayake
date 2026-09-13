@@ -97,6 +97,8 @@ export const users = mysqlTable("users", {
    * imposes no constraint on phone-only accounts that never set it.
    */
   email: varchar("email", { length: 320 }).unique(),
+  /** Meta app-scoped user id for "Continue with Facebook" (2026-09-13, migration 0072). */
+  facebookId: varchar("facebookId", { length: 64 }).unique(),
   /** scrypt("<saltHex>:<hashHex>") — see server/_core/password.ts. Never sent to the client. */
   passwordHash: varchar("passwordHash", { length: 200 }).notNull(),
   // 2026-09-08 (Admin overhaul, Phase A): widened from 3 values ("user",
@@ -921,6 +923,35 @@ export const productReviewReplies = mysqlTable("product_review_replies", {
 ]);
 
 export type ProductReviewReply = typeof productReviewReplies.$inferSelect;
+
+/**
+ * Product Q&A (2026-09-13, migration 0071). Any signed-in customer may ask;
+ * answers come from panel staff or from customers who bought the product
+ * (same rule as review replies). Both bodies pass moderation before insert.
+ * isApproved=false hides the row from the storefront (admin moderation).
+ */
+export const productQuestions = mysqlTable("product_questions", {
+  id: int("id").autoincrement().primaryKey(),
+  productId: int("productId").notNull().references(() => products.id, { onDelete: "cascade" }),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  isApproved: boolean("isApproved").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [index("product_questions_product_idx").on(table.productId, table.createdAt)]);
+
+export const productQuestionAnswers = mysqlTable("product_question_answers", {
+  id: int("id").autoincrement().primaryKey(),
+  questionId: int("questionId").notNull().references(() => productQuestions.id, { onDelete: "cascade" }),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  isApproved: boolean("isApproved").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [index("product_question_answers_question_idx").on(table.questionId)]);
+
+export type ProductQuestion = typeof productQuestions.$inferSelect;
+export type ProductQuestionAnswer = typeof productQuestionAnswers.$inferSelect;
 
 /** One row per (review, user) -- a like is a toggle, never a count a user
  *  can inflate. */
@@ -1789,3 +1820,36 @@ export const faceAttempts = mysqlTable("face_attempts", {
   index("face_attempts_created_idx").on(table.createdAt),
 ]);
 export type FaceAttempt = typeof faceAttempts.$inferSelect;
+
+/**
+ * Gift cards (2026-09-13, migration 0073). Issued by finance/admin (later:
+ * by a paid order via purchaseOrderId); redeemed once into store credit.
+ */
+export const giftCards = mysqlTable("gift_cards", {
+  id: int("id").autoincrement().primaryKey(),
+  code: varchar("code", { length: 24 }).notNull().unique(),
+  amountMnt: int("amountMnt").notNull(),
+  status: mysqlEnum("status", ["active", "redeemed", "void"]).default("active").notNull(),
+  issuedByUserId: int("issuedByUserId").references(() => users.id, { onDelete: "set null" }),
+  purchaseOrderId: int("purchaseOrderId").references(() => orders.id, { onDelete: "set null" }),
+  redeemedByUserId: int("redeemedByUserId").references(() => users.id, { onDelete: "set null" }),
+  redeemedAt: timestamp("redeemedAt"),
+  recipientName: varchar("recipientName", { length: 120 }),
+  note: varchar("note", { length: 300 }),
+  expiresAt: timestamp("expiresAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type GiftCard = typeof giftCards.$inferSelect;
+
+/** Customer Web Push subscriptions (2026-09-13, migration 0074). One row per browser. */
+export const pushSubscriptions = mysqlTable("push_subscriptions", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  endpoint: varchar("endpoint", { length: 1000 }).notNull(),
+  p256dh: varchar("p256dh", { length: 200 }).notNull(),
+  auth: varchar("auth", { length: 100 }).notNull(),
+  userAgent: varchar("userAgent", { length: 300 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  lastUsedAt: timestamp("lastUsedAt"),
+}, table => [index("push_subscriptions_user_idx").on(table.userId)]);
+export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;

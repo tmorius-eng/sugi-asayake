@@ -24,6 +24,7 @@ import AdminOperationsPanel from "./AdminOperationsPanel";
 import AdminProductImportModal from "./admin/AdminProductImportModal";
 import AdminPostsPanel from "./AdminPostsPanel";
 import AdminReviewsPanel from "./AdminReviewsPanel";
+import AdminQuestionsPanel from "./AdminQuestionsPanel";
 import AdminBrandsPanel from "./AdminBrandsPanel";
 import AdminBranchesPanel from "./AdminBranchesPanel";
 import AdminPosPanel from "./AdminPosPanel";
@@ -38,6 +39,7 @@ import AdminReceivingPanel from "./AdminReceivingPanel";
 import AdminNotificationBell from "./admin/AdminNotificationBell";
 import AdminProductVariantsPanel from "./AdminProductVariantsPanel";
 import AdminPromotionsPanel from "./AdminPromotionsPanel";
+import AdminGiftCardsPanel from "./AdminGiftCardsPanel";
 import AdminRoutinesPanel from "./AdminRoutinesPanel";
 import AdminSecurityCenter from "./AdminSecurityCenter";
 import AdminUserDetailDrawer from "./AdminUserDetailDrawer";
@@ -711,11 +713,11 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
             />}
             {section === "security" && !preview && <AdminSecurityCenter />}
             {section === "security" && preview && <div className="rounded-3xl bg-[var(--a-soft)] p-8 text-center text-sm text-[var(--a-muted)]">Preview горимд аудит лог харагдахгүй.</div>}
-            {section === "reviews" && !preview && <AdminReviewsPanel />}
+            {section === "reviews" && !preview && <><AdminReviewsPanel /><AdminQuestionsPanel /></>}
             {section === "reviews" && preview && <div className="rounded-3xl bg-[var(--a-soft)] p-8 text-center text-sm text-[var(--a-muted)]">Preview горимд сэтгэгдэл харагдахгүй.</div>}
             {section === "routines" && !preview && <AdminRoutinesPanel />}
             {section === "routines" && preview && <div className="rounded-3xl bg-[var(--a-soft)] p-8 text-center text-sm text-[var(--a-muted)]">Preview горимд Routine удирдлага харагдахгүй.</div>}
-            {section === "promotions" && !preview && <AdminPromotionsPanel />}
+            {section === "promotions" && !preview && <><AdminPromotionsPanel /><AdminGiftCardsPanel /></>}
             {section === "promotions" && preview && <div className="rounded-3xl bg-[var(--a-soft)] p-8 text-center text-sm text-[var(--a-muted)]">Preview горимд урамшуулал удирдлага харагдахгүй.</div>}
             {section === "calendar" && !preview && <AdminContentCalendarPanel onNavigate={target => { setSection(target); setQuery(""); setComposer(null); }} />}
             {section === "calendar" && preview && <div className="rounded-3xl bg-[var(--a-soft)] p-8 text-center text-sm text-[var(--a-muted)]">Preview горимд хуанли харагдахгүй.</div>}

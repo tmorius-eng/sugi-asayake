@@ -3,7 +3,7 @@ import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { Link, useLocation, useSearch } from "wouter";
 import {
   Bell, Camera, ChevronDown, ClipboardList, CreditCard, Heart, HelpCircle, Home, LayoutDashboard,
-  Loader2, LoaderCircle, LogIn, LogOut, Mail, MapPin, Pencil, Phone, Plus, RotateCcw,
+  Gift, Loader2, LoaderCircle, LogIn, LogOut, Mail, MapPin, Pencil, Phone, Plus, FileDown, RotateCcw,
   ShieldCheck, ShieldOff, ShoppingBag, Sparkles, Star, Trash2, User as UserIcon, X,
 } from "lucide-react";
 import { useShopContact } from "@/hooks/useShopContact";
@@ -25,6 +25,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import { notifyAddedToCart } from "@/lib/addedToCartToast";
 import { trpc } from "@/lib/trpc";
+import { currentPushSubscription, pushSupport, subscribeToPush, unsubscribeFromPush } from "@/lib/push";
 import type { RouterOutputs } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
 
@@ -293,6 +294,18 @@ function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
     onError: error => toast.error(error instanceof Error ? error.message : "Захиалгыг цуцлах боломжгүй боллоо."),
   });
 
+  const invoice = trpc.orders.invoicePdf.useMutation({
+    onSuccess: ({ fileName, base64 }) => {
+      const bytes = Uint8Array.from(atob(base64), char => char.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+      const link = document.createElement("a");
+      link.href = url; link.download = fileName; link.rel = "noopener";
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    },
+    onError: error => toast.error(error instanceof Error ? error.message : "Баримт үүсгэх боломжгүй боллоо."),
+  });
+
   const buyAgain = async (order: (typeof orderList)[number]) => {
     const available = order.items.filter((item): item is typeof item & { productId: number } => item.productId != null);
     if (!available.length) { toast.error("Энэ захиалгын бүтээгдэхүүн(үүд) одоо каталогт байхгүй байна."); return; }
@@ -357,6 +370,9 @@ function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                 <button type="button" className="order-buy-again" disabled={buyingAgainId === order.id} onClick={() => buyAgain(order)}>
                   {buyingAgainId === order.id ? <Loader2 className="animate-spin" size={14} /> : <RotateCcw size={14} />} Дахин захиалах
+                </button>
+                <button type="button" className="order-buy-again" disabled={invoice.isPending && invoice.variables?.orderId === order.id} onClick={() => invoice.mutate({ orderId: order.id })}>
+                  {invoice.isPending && invoice.variables?.orderId === order.id ? <Loader2 className="animate-spin" size={14} /> : <FileDown size={14} />} Баримт (PDF)
                 </button>
                 {(order.status === "pending" || order.status === "confirmed") && (
                   <button type="button" className="order-buy-again" disabled={cancelOrder.isPending} onClick={() => { if (window.confirm("Энэ захиалгыг цуцлах уу? Энэ үйлдлийг буцаах боломжгүй.")) cancelOrder.mutate({ id: order.id }); }}>
@@ -741,7 +757,53 @@ function NotificationsTab() {
         <div><strong>SMS мэдэгдэл</strong><span>Захиалга, хүргэлттэй холбоотой богино мессеж</span></div>
         <label className="switch"><input type="checkbox" checked={user?.smsOptIn ?? true} onChange={event => update.mutate({ smsOptIn: event.target.checked })} /><span className="switch-track" /></label>
       </div>
+      <PushToggleRow />
     </section>
+  );
+}
+
+// Customer Web Push (2026-09-13): one browser at a time. The row explains
+// itself when the browser cannot do push (http:// LAN, iOS without "Add to
+// Home Screen", permission denied) instead of failing silently.
+function PushToggleRow() {
+  const keyQuery = trpc.push.publicKey.useQuery(undefined, { staleTime: 10 * 60_000 });
+  const [endpoint, setEndpoint] = useState<string | null>(null);
+  const [checked, setChecked] = useState(false);
+  const support = pushSupport();
+  const status = trpc.push.status.useQuery({ endpoint: endpoint ?? "https://none.invalid/" }, { enabled: Boolean(endpoint) });
+  useEffect(() => { void currentPushSubscription().then(sub => { setEndpoint(sub?.endpoint ?? null); setChecked(false); }); }, []);
+  const subscribe = trpc.push.subscribe.useMutation({ onError: error => toast.error(messageFrom(error)) });
+  const unsubscribe = trpc.push.unsubscribe.useMutation({ onError: error => toast.error(messageFrom(error)) });
+  const test = trpc.push.test.useMutation({
+    onSuccess: ({ delivered }) => delivered ? toast.success("Туршилтын мэдэгдэл илгээлээ.") : toast.error("Илгээгдсэнгүй — энэ хөтөч бүртгэлгүй байна."),
+    onError: error => toast.error(messageFrom(error)),
+  });
+  if (!keyQuery.data?.key) return null;
+  const enabled = checked || (Boolean(endpoint) && status.data === true);
+  const busy = subscribe.isPending || unsubscribe.isPending || status.isLoading;
+  const toggle = async (on: boolean) => {
+    if (on) {
+      const sub = await subscribeToPush(keyQuery.data!.key!);
+      if (!sub) { toast.error("Хөтөч мэдэгдэл илгээхийг зөвшөөрсөнгүй."); return; }
+      await subscribe.mutateAsync(sub);
+      setEndpoint(sub.endpoint); setChecked(true);
+      toast.success("Push мэдэгдэл асаалаа.");
+    } else {
+      const old = await unsubscribeFromPush();
+      if (old) await unsubscribe.mutateAsync({ endpoint: old });
+      setEndpoint(null); setChecked(false);
+      toast.success("Push мэдэгдэл унтраалаа.");
+    }
+  };
+  return (
+    <div className="pref-toggle-row">
+      <div>
+        <strong>Push мэдэгдэл (энэ хөтөч)</strong>
+        <span>{support === "unsupported" ? "Энэ хөтөч/холболт push дэмждэггүй (HTTPS ба iPhone дээр \"Нүүр дэлгэцэд нэмэх\" шаардлагатай)." : support === "denied" ? "Хөтчийн тохиргоонд мэдэгдэл хаагдсан байна." : "Захиалгын явц (баталгаажсан, хүргэлтэд гарсан, хүргэгдсэн)"}</span>
+        {enabled && <button type="button" className="auth-quiet" style={{ display: "inline", marginTop: 6 }} disabled={test.isPending} onClick={() => test.mutate()}>Туршилтын мэдэгдэл илгээх</button>}
+      </div>
+      <label className="switch"><input type="checkbox" disabled={support !== "ready" || busy} checked={enabled} onChange={event => { void toggle(event.target.checked); }} /><span className="switch-track" /></label>
+    </div>
   );
 }
 
@@ -868,6 +930,24 @@ function SupportTab() {
 // point, not just a bigger discount number.
 const TIER_CARD_CLASS: Record<string, string> = { "Хүрэл": "tier-bronze", "Мөнгөн": "tier-silver", "Алтан": "tier-gold" };
 
+function GiftCardRedeem() {
+  const utils = trpc.useUtils();
+  const [code, setCode] = useState("");
+  const redeem = trpc.giftCards.redeem.useMutation({
+    onSuccess: ({ amountMnt, storeCreditMnt }) => { toast.success(`${formatMnt(amountMnt)} дэлгүүрийн зээл нэмэгдлээ. Үлдэгдэл: ${formatMnt(storeCreditMnt)}`); setCode(""); utils.auth.me.invalidate(); utils.loyalty.myStatus.invalidate(); },
+    onError: error => toast.error(messageFrom(error)),
+  });
+  return (
+    <form onSubmit={event => { event.preventDefault(); if (code.trim().length >= 8) redeem.mutate({ code: code.trim() }); }} className="gift-redeem">
+      <div><strong>Бэлгийн карт ашиглах</strong><span>Кодоо оруулахад дүн нь дэлгүүрийн зээл болж, дараагийн захиалгад ашиглагдана.</span></div>
+      <div className="gift-redeem-row">
+        <input value={code} onChange={event => setCode(event.target.value)} placeholder="SUGI-XXXX-XXXX-XXXX" maxLength={24} autoComplete="off" spellCheck={false} aria-label="Бэлгийн картын код" />
+        <button type="submit" className="order-buy-again" disabled={redeem.isPending || code.trim().length < 8}>{redeem.isPending ? <Loader2 className="animate-spin" size={14} /> : <Gift size={14} />} Ашиглах</button>
+      </div>
+    </form>
+  );
+}
+
 function LoyaltyTab() {
   const status = trpc.loyalty.myStatus.useQuery();
   const data = status.data;
@@ -875,6 +955,7 @@ function LoyaltyTab() {
   return (
     <section className="profile-section" data-reveal>
       <div className="profile-section-head"><div><h2>Гишүүнчлэлийн карт</h2><p>Нийт худалдан авалтын дүнгээр автоматаар шатлан нэмэгддэг хөнгөлөлт</p></div></div>
+      <GiftCardRedeem />
 
       {status.isLoading ? (
         <div aria-busy="true">

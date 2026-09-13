@@ -12,6 +12,15 @@ import "./index.css";
 
 captureTrafficSource();
 
+// PWA service worker (2026-09-13). Registered after the page has loaded so it
+// never competes with the first paint; scope "/" so /shop, /product/* and the
+// offline page are all covered. Dev is excluded on purpose.
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => undefined);
+  });
+}
+
 // Stale build after a deploy (2026-09-13): Vite fires this when a code-split
 // chunk or its CSS cannot be fetched -- the file was renamed by a deploy that
 // happened while this tab was open. Reload once so the tab picks up the new

@@ -62,7 +62,9 @@ function Router() {
   // type scale and the hairline surfaces across the whole storefront. The
   // admin panel keeps its own palette and its own tokens, untouched.
   const storefront = !location.startsWith("/admin");
-  return <div className={storefront ? "sugi-site" : undefined}><Suspense fallback={<RouteLoadingFallback />}><Switch>
+  return <div className={storefront ? "sugi-site" : undefined}>
+    {storefront && <a href="#main-content" className="skip-link">Агуулга руу очих</a>}
+    <div id="main-content" tabIndex={-1}><Suspense fallback={<RouteLoadingFallback />}><Switch>
     <Route path={"/"} component={Home} />
     <Route path={"/product/:slug"} component={ProductDetail} />
     <Route path={"/routine/:slug"} component={RoutineDetail} />
@@ -85,7 +87,7 @@ function Router() {
     <Route path={"/brands"} component={Brands} />
     <Route path={"/:slug"} component={PostDetail} />
     <Route component={NotFound} />
-  </Switch></Suspense></div>;
+  </Switch></Suspense></div></div>;
 }
 
 function App() {

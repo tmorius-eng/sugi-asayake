@@ -1,0 +1,22 @@
+{
+  "name": "SUGI ASAYAKE Mongolia",
+  "short_name": "SUGI ASAYAKE",
+  "description": "Японы skincare, гоо сайхан, гэр ахуйн бараа — Улаанбаатар.",
+  "lang": "mn",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#dae0da",
+  "theme_color": "#b01729",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Дэлгүүр", "url": "/shop", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Захиалга хянах", "url": "/track-order", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

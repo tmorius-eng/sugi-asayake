@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BadgeCheck, ChevronRight, ListChecks, LoaderCircle, Minus, Plus, Search, ShieldCheck, ShoppingBag, Sparkles, Star, Truck } from "lucide-react";
+import { ChevronRight, ListChecks, LoaderCircle, Minus, Plus, Search, ShieldCheck, ShoppingBag, Sparkles, Star, Truck } from "lucide-react";
 import { Link, useRoute } from "wouter";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { toast } from "sonner";
@@ -16,6 +16,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { notifyAddedToCart } from "@/lib/addedToCartToast";
 import { trpc } from "@/lib/trpc";
 import ReviewThread from "@/components/ReviewThread";
+import ProductQuestions from "@/components/ProductQuestions";
 import { useLocale } from "@/hooks/useLocale";
 import { translateProductText } from "@shared/product-i18n";
 import { useSiteText } from "@/hooks/useSiteText";
@@ -98,6 +99,16 @@ function RelatedProducts({ productId }: { productId: number }) {
       {related.map(product => <ShelfProductCard product={product} key={product.id} />)}
     </CarouselShelf>
   </div>;
+}
+
+// Product Q&A (2026-09-13). Staff and verified buyers may answer; anyone
+// signed in may ask (the component handles the login prompt itself).
+function QuestionsSection({ productId }: { productId: number }) {
+  const { isAuthenticated, user } = useAuth();
+  const eligibilityQuery = trpc.reviews.eligibility.useQuery({ productId }, { enabled: isAuthenticated });
+  const eligibility = eligibilityQuery.data;
+  const canAnswer = Boolean(isAuthenticated && (eligibility?.canReview || eligibility?.alreadyReviewed || (user?.role && user.role !== "user")));
+  return <ProductQuestions productId={productId} canAnswer={canAnswer} />;
 }
 
 function ReviewsSection({ productId }: { productId: number }) {
@@ -224,7 +235,7 @@ export default function ProductDetail() {
     sticky bar below (live-confirmed on bsb.mn: they never show both an
     inline add-to-cart row AND a sticky one on the same screen) -- desktop/
     tablet keeps this exact row unchanged. */}
-<div className="hidden items-center gap-4 min-[761px]:flex"><div className="inline-flex items-center rounded-full border border-border bg-white"><button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="grid size-11 place-items-center" aria-label="Тоо хасах"><Minus size={16} /></button><span className="grid min-w-10 place-items-center font-bold">{quantity}</span><button type="button" disabled={quantity >= activeStockQuantity} onClick={() => setQuantity(quantity + 1)} className="grid size-11 place-items-center disabled:opacity-40" aria-label="Тоо нэмэх"><Plus size={16} /></button></div><button type="button" disabled={addItem.isPending || activeStockQuantity === 0} onClick={addToCart} className="min-h-12 flex-1 rounded-full bg-[#df1f3d] px-6 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-55">{addItem.isPending ? <LoaderCircle className="mx-auto animate-spin" size={17} /> : activeStockQuantity === 0 ? "Нөөц дууссан" : `Сагсанд нэмэх — ${formatMnt(activePriceMnt * quantity)}`}</button></div><div className="mt-8 grid gap-3 sm:grid-cols-2"><div className="flex gap-3 rounded-2xl bg-white p-4"><Truck className="shrink-0 text-[#df1f3d]" size={19} /><p className="text-xs leading-5"><strong className="block text-foreground">УБ хүргэлт — {formatMnt(deliveryFeeUbMnt)}</strong><span className="text-muted-foreground">24–48 цагийн дотор · Салбараас үнэгүй авах</span></p></div><div className="flex gap-3 rounded-2xl bg-white p-4"><ShieldCheck className="shrink-0 text-[#df1f3d]" size={19} /><p className="text-xs leading-5"><strong className="block text-foreground">Албан ёсны баталгаа</strong><span className="text-muted-foreground">SUGI Drug Store Japan</span></p></div></div></section></div><RoutineCrossSell productId={product.id} onAdded={() => setCartOpen(true)} /><RelatedProducts productId={product.id} /><ReviewsSection productId={product.id} /></main>
+<div className="hidden items-center gap-4 min-[761px]:flex"><div className="inline-flex items-center rounded-full border border-border bg-white"><button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="grid size-11 place-items-center" aria-label="Тоо хасах"><Minus size={16} /></button><span className="grid min-w-10 place-items-center font-bold">{quantity}</span><button type="button" disabled={quantity >= activeStockQuantity} onClick={() => setQuantity(quantity + 1)} className="grid size-11 place-items-center disabled:opacity-40" aria-label="Тоо нэмэх"><Plus size={16} /></button></div><button type="button" disabled={addItem.isPending || activeStockQuantity === 0} onClick={addToCart} className="min-h-12 flex-1 rounded-full bg-[#df1f3d] px-6 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-55">{addItem.isPending ? <LoaderCircle className="mx-auto animate-spin" size={17} /> : activeStockQuantity === 0 ? "Нөөц дууссан" : `Сагсанд нэмэх — ${formatMnt(activePriceMnt * quantity)}`}</button></div><div className="mt-8 grid gap-3 sm:grid-cols-2"><div className="flex gap-3 rounded-2xl bg-white p-4"><Truck className="shrink-0 text-[#df1f3d]" size={19} /><p className="text-xs leading-5"><strong className="block text-foreground">УБ хүргэлт — {formatMnt(deliveryFeeUbMnt)}</strong><span className="text-muted-foreground">24–48 цагийн дотор · Салбараас үнэгүй авах</span></p></div><div className="flex gap-3 rounded-2xl bg-white p-4"><ShieldCheck className="shrink-0 text-[#df1f3d]" size={19} /><p className="text-xs leading-5"><strong className="block text-foreground">Албан ёсны баталгаа</strong><span className="text-muted-foreground">SUGI Drug Store Japan</span></p></div></div></section></div><RoutineCrossSell productId={product.id} onAdded={() => setCartOpen(true)} /><RelatedProducts productId={product.id} /><ReviewsSection productId={product.id} /><QuestionsSection productId={product.id} /></main>
 {/* 2026-09-07 (bsb.mn mobile-UX pass): mobile-only sticky "quantity + Add to
     cart" bar, replacing BottomNavBar.tsx here (see that component's own
     `hidden` check for /product/*) -- live-confirmed on bsb.mn's real product

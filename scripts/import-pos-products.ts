@@ -62,7 +62,7 @@ function cleanName(row: Row): { name: string; lostCyrillic: boolean } {
 const db = await getDb();
 if (!db) throw new Error("no database");
 
-const existingSlugs = new Set((await db.select({ slug: productCategories.slug }).from(productCategories)).map((r) => r.slug));
+const _existingSlugs = new Set((await db.select({ slug: productCategories.slug }).from(productCategories)).map((r) => r.slug));
 const bySlug = async (slug: string) => (await db.select({ id: productCategories.id }).from(productCategories).where(eq(productCategories.slug, slug)).limit(1))[0]?.id;
 
 const fresh: Row[] = [];

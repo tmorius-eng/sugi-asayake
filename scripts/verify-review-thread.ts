@@ -53,6 +53,7 @@ function callerFor(user: { id: number; role: string } | null) {
 const [product] = await db.select({ id: products.id, name: products.name, slug: products.slug }).from(products).where(eq(products.isPublished, true)).limit(1);
 console.log("product:", product.id, product.name, `/product/${product.slug}`);
 
+// eslint-disable-next-line no-useless-assignment -- zero means "not created yet" for the cleanup block
 let buyerId = 0, staffId = 0, orderId = 0, reviewId = 0;
 try {
   const passwordHash = await hashPassword("verify-thread-pass-123");

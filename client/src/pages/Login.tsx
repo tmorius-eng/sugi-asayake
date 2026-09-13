@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { Link, useLocation, useSearch } from "wouter";
 import { LoaderCircle, Lock, LogIn, Phone, User as UserIcon, UserPlus } from "lucide-react";
@@ -41,6 +41,15 @@ export default function Login() {
   const [verifiedSessionId, setVerifiedSessionId] = useState<string | null>(null);
   const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
+  const providers = trpc.auth.socialProviders.useQuery(undefined, { staleTime: 5 * 60_000 });
+  // Callback failures land back here as /login?error=facebook&reason=...
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    if (params.get("error") !== "facebook") return;
+    const reason = params.get("reason");
+    toast.error(reason === "denied" ? "Facebook нэвтрэлтийг цуцаллаа." : reason === "suspended" ? "Таны эрх түр хаагдсан байна." : reason === "linked-elsewhere" ? "Энэ Facebook данс өөр бүртгэлтэй холбогдсон байна." : "Facebook-ээр нэвтрэх боломжгүй боллоо. Утасны дугаараар нэвтэрнэ үү.");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const redirectTarget = (() => {
     const params = new URLSearchParams(search);
@@ -160,6 +169,12 @@ export default function Login() {
           </form>
         )}
 
+        {providers.data?.facebook && (
+          <a href={`/api/auth/facebook?redirect=${encodeURIComponent(redirectTarget)}`} className="auth-social auth-social--facebook">
+            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.8-4.7 4.54-4.7 1.31 0 2.69.24 2.69.24v2.97h-1.52c-1.5 0-1.96.93-1.96 1.89v2.26h3.33l-.53 3.49h-2.8V24C19.61 23.1 24 18.1 24 12.07"/></svg>
+            Facebook-ээр үргэлжлүүлэх
+          </a>
+        )}
         <button type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setVerifiedSessionId(null); }} className="auth-switch">
           {mode === "login" ? "Шинэ хэрэглэгч үү? Бүртгүүлэх" : "Бүртгэлтэй юу? Нэвтрэх"}
         </button>

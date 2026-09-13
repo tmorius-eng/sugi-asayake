@@ -1,0 +1,126 @@
+/**
+ * Order invoice / receipt as a PDF (2026-09-13 gap audit: "no downloadable
+ * receipt -- business customers need one").
+ *
+ * Rendered with pdfkit into memory and returned to the client as base64
+ * through tRPC (orders.invoicePdf), so the download goes through the same
+ * session check every other order read uses -- no separate URL that could be
+ * guessed. The client turns the bytes into a Blob and triggers the save.
+ *
+ * FONT: pdfkit's built-in Helvetica has no Cyrillic, so every string would
+ * render as boxes. Golos Text (the site's own face, OFL) ships in
+ * server/assets/fonts and is copied into dist/assets by the build. Keep the
+ * layout on one page for the typical order; long orders flow to a second
+ * page automatically.
+ *
+ * This is a RECEIPT ("Захиалгын баримт"), not an eBarimt tax receipt --
+ * eBarimt is a separate legal document (see EBARIMT.md) and is named as such
+ * in the footer so nobody mistakes one for the other.
+ */
+
+import PDFDocument from "pdfkit";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { eq } from "drizzle-orm";
+import { orderItems } from "../drizzle/schema";
+import { getDb, getOrderForUser, getStoreSettingValue } from "./db";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+/** dist/index.js sits next to dist/assets; in dev the source tree has server/assets. */
+const FONT_CANDIDATES = [path.join(here, "assets", "fonts", "GolosText.ttf"), path.join(here, "..", "server", "assets", "fonts", "GolosText.ttf")];
+
+/** Golos Text has no U+20AE (₮) glyph, so amounts are written "11,250 төг". */
+const money = (amountMnt: number) => `${new Intl.NumberFormat("mn-MN").format(amountMnt)} төг`;
+
+const PAYMENT_LABEL: Record<string, string> = {
+  qpay: "QPay", storepay: "StorePay", bank_transfer: "Банкны шилжүүлэг", card: "Карт", cash_on_delivery: "Хүргэлтээр бэлнээр", in_store: "Дэлгүүрт",
+};
+const STATUS_LABEL: Record<string, string> = {
+  pending: "Хүлээгдэж буй", confirmed: "Баталгаажсан", processing: "Бэлтгэж буй", shipped: "Хүргэлтэд гарсан", delivered: "Хүргэгдсэн", completed: "Дууссан", cancelled: "Цуцлагдсан", returned: "Буцаагдсан", refunded: "Буцаан олгосон",
+};
+
+export type InvoiceResult = { fileName: string; base64: string };
+
+export async function renderOrderInvoice(orderId: number, userId: number): Promise<InvoiceResult | null> {
+  const order = await getOrderForUser(orderId, userId);
+  if (!order) return null;
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const items = await db.select({ productName: orderItems.productName, sku: orderItems.sku, unitPriceMnt: orderItems.unitPriceMnt, quantity: orderItems.quantity }).from(orderItems).where(eq(orderItems.orderId, orderId)).orderBy(orderItems.id);
+  const [phone, email] = await Promise.all([getStoreSettingValue("contact-phone"), getStoreSettingValue("contact-email")]);
+
+  const doc = new PDFDocument({ size: "A4", margin: 48, info: { Title: `Захиалга ${order.orderNumber}`, Author: "SUGI ASAYAKE Mongolia" } });
+  const font = FONT_CANDIDATES.find(existsSync);
+  if (font) { doc.registerFont("body", font); doc.font("body"); }
+
+  const chunks: Buffer[] = [];
+  doc.on("data", chunk => chunks.push(chunk as Buffer));
+  const done = new Promise<Buffer>(resolve => doc.on("end", () => resolve(Buffer.concat(chunks))));
+
+  const ink = "#17181b", muted = "#545958", red = "#b01729", line = "#c9d0ca";
+  const left = doc.page.margins.left, right = doc.page.width - doc.page.margins.right;
+
+  // Header
+  doc.fillColor(red).fontSize(20).text("SUGI ASAYAKE", left, 48);
+  doc.fillColor(muted).fontSize(9).text("Японы гоо сайхан, эрүүл мэнд, гэр ахуйн бараа · Улаанбаатар", left, 72);
+  doc.fillColor(ink).fontSize(16).text("Захиалгын баримт", left, 100);
+  doc.fontSize(10).fillColor(muted)
+    .text(`Дугаар: ${order.orderNumber}`, left, 122)
+    .text(`Огноо: ${new Date(order.createdAt).toLocaleString("mn-MN", { timeZone: "Asia/Ulaanbaatar" })}`, left, 136)
+    .text(`Төлөв: ${STATUS_LABEL[order.status] ?? order.status} · Төлбөр: ${PAYMENT_LABEL[order.paymentMethod] ?? order.paymentMethod} (${order.paymentStatus === "paid" ? "төлөгдсөн" : "төлөгдөөгүй"})`, left, 150);
+
+  // Customer / delivery
+  doc.fillColor(ink).fontSize(10).text("Худалдан авагч", left, 180);
+  doc.fillColor(muted).text(order.customerName ?? "—", left, 194).text(order.customerPhone ?? "", left, 208);
+  doc.fillColor(ink).text(order.deliveryMethod === "store_pickup" ? "Салбараас авах" : "Хүргэлт", 320, 180);
+  doc.fillColor(muted).text(order.deliveryMethod === "store_pickup" ? (order.pickupBranch ?? "—") : [order.deliveryDistrict, order.deliveryAddress].filter(Boolean).join(", ") || "—", 320, 194, { width: right - 320 });
+
+  // Items table
+  let y = 248;
+  // Columns (A4 = 595pt, margins 48): name 48..318, qty 330..370, unit 378..458, sum 466..547 -- no overlap even for 9-digit sums.
+  const col = { name: left, qty: 330, unit: 378, sum: right - 81 };
+  doc.moveTo(left, y).lineTo(right, y).strokeColor(ink).lineWidth(1).stroke();
+  y += 8;
+  doc.fillColor(muted).fontSize(8).text("БАРАА", col.name, y).text("ТОО", col.qty, y, { width: 40, align: "right" }).text("НЭГЖ ҮНЭ", col.unit, y, { width: 80, align: "right" }).text("ДҮН", col.sum, y, { width: 81, align: "right" });
+  y += 16;
+  doc.fillColor(ink).fontSize(10);
+  for (const item of items) {
+    if (y > doc.page.height - 160) { doc.addPage(); y = doc.page.margins.top; }
+    const nameHeight = doc.heightOfString(item.productName, { width: col.qty - col.name - 12 });
+    doc.text(item.productName, col.name, y, { width: col.qty - col.name - 12 });
+    doc.text(String(item.quantity), col.qty, y, { width: 40, align: "right" });
+    doc.text(money(item.unitPriceMnt), col.unit, y, { width: 80, align: "right" });
+    doc.text(money(item.unitPriceMnt * item.quantity), col.sum, y, { width: 81, align: "right" });
+    if (item.sku) doc.fillColor(muted).fontSize(8).text(item.sku, col.name, y + nameHeight + 1).fillColor(ink).fontSize(10);
+    y += Math.max(nameHeight, 12) + (item.sku ? 12 : 4) + 6;
+    doc.moveTo(left, y - 3).lineTo(right, y - 3).strokeColor(line).lineWidth(0.5).stroke();
+  }
+
+  // Totals
+  y += 6;
+  const totals: [string, number][] = [["Барааны дүн", order.subtotalMnt]];
+  if (order.discountMnt) totals.push(["Хямдрал", -order.discountMnt]);
+  if (order.loyaltyDiscountMnt) totals.push([`Гишүүнчлэлийн хямдрал${order.appliedLoyaltyTierName ? ` (${order.appliedLoyaltyTierName})` : ""}`, -order.loyaltyDiscountMnt]);
+  if (order.couponDiscountMnt) totals.push([`Купон${order.couponCode ? ` ${order.couponCode}` : ""}`, -order.couponDiscountMnt]);
+  if (order.storeCreditAppliedMnt) totals.push(["Дэлгүүрийн зээл", -order.storeCreditAppliedMnt]);
+  totals.push(["Хүргэлт", order.deliveryFeeMnt]);
+  for (const [label, amount] of totals) {
+    doc.fillColor(muted).fontSize(10).text(label, 320, y, { width: 150 }).text(money(amount), right - 120, y, { width: 120, align: "right" });
+    y += 15;
+  }
+  doc.moveTo(320, y).lineTo(right, y).strokeColor(ink).lineWidth(1).stroke();
+  y += 6;
+  doc.fillColor(ink).fontSize(13).text("Нийт", 320, y, { width: 150 }).text(money(order.totalMnt), right - 140, y, { width: 140, align: "right" });
+
+  // Footer
+  const footY = doc.page.height - 80;
+  doc.moveTo(left, footY).lineTo(right, footY).strokeColor(line).lineWidth(0.5).stroke();
+  doc.fillColor(muted).fontSize(8)
+    .text(`SUGI ASAYAKE Mongolia · ${phone || ""} · ${email || ""} · sugiasayake.mn`, left, footY + 8)
+    .text("Энэ бол захиалгын баримт бөгөөд НӨАТ-ын и-баримт (eBarimt) биш. И-баримтыг төлбөрийн дараа тусад нь олгоно.", left, footY + 20, { width: right - left });
+
+  doc.end();
+  const pdf = await done;
+  return { fileName: `sugi-asayake-${order.orderNumber}.pdf`, base64: pdf.toString("base64") };
+}

@@ -4,7 +4,7 @@ import { sqlInt } from "./_core/sqlSafe";
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lt, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { describeTransport, planMysqlConnection } from "./_core/dbConnection";
-import { adminAuditLogs, branches, branchStock, cartItems, carts, discountCodes, faceAttempts, faceChallenges, faceEnrollments, featuredBrands, InsertProduct, InsertProductCategory, integrationConfigs, loginAttempts, notificationOutbox, stockMovements,loyaltyTiers, marketingSpend, mediaLibrary, orderItems, orders, paymentAttempts, phoneVerificationSessions, postCategories, postCategoryLinks, posts, postTagLinks, postTags, productCategories, productReviews, productReviewReplies, productReviewLikes, productVariants, products, routines, routineSteps, scheduledJobRuns, siteDocuments, siteMedia, siteText, sitePromotions, storeCreditLedger, storeSettings, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
+import { adminAuditLogs, branches, branchStock, cartItems, carts, discountCodes, faceAttempts, faceChallenges, faceEnrollments, featuredBrands, InsertProduct, InsertProductCategory, integrationConfigs, loginAttempts, notificationOutbox, stockMovements,loyaltyTiers, marketingSpend, mediaLibrary, orderItems, orders, paymentAttempts, phoneVerificationSessions, postCategories, postCategoryLinks, posts, postTagLinks, postTags, productCategories, productReviews, productReviewReplies, productReviewLikes, productQuestions, productQuestionAnswers, productVariants, giftCards, pushSubscriptions, products, routines, routineSteps, scheduledJobRuns, siteDocuments, siteMedia, siteText, sitePromotions, storeCreditLedger, storeSettings, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
 import { slugify } from "../shared/slugify";
 import { looksLikeBarcode, normaliseBarcode } from "../shared/barcode";
 import { expandQueryGroups, normaliseSearchText } from "../shared/search-synonyms";
@@ -5670,4 +5670,298 @@ export async function deleteAdminProductVariant(id: number) {
     if (nextDefault) await db.update(productVariants).set({ isDefault: true }).where(eq(productVariants.id, nextDefault.id));
   }
   return { id };
+}
+
+// ---------------------------------------------------------------------------
+// Product Q&A (2026-09-13, migration 0071). Mirrors the review thread: one
+// query for questions, one for answers, author avatar + staff flag inline so
+// the storefront never needs a per-row lookup.
+// ---------------------------------------------------------------------------
+
+export async function getProductQuestions(productId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const questions = await db
+    .select({
+      id: productQuestions.id,
+      body: productQuestions.body,
+      createdAt: productQuestions.createdAt,
+      authorName: users.name,
+      authorAvatarUrl: users.avatarUrl,
+      authorRole: users.role,
+      authorUserId: users.id,
+    })
+    .from(productQuestions)
+    .innerJoin(users, eq(users.id, productQuestions.userId))
+    .where(and(eq(productQuestions.productId, productId), eq(productQuestions.isApproved, true)))
+    .orderBy(desc(productQuestions.createdAt))
+    .limit(50);
+  if (questions.length === 0) return [];
+  const ids = questions.map(q => q.id);
+  const answerRows = await db
+    .select({
+      id: productQuestionAnswers.id,
+      questionId: productQuestionAnswers.questionId,
+      body: productQuestionAnswers.body,
+      createdAt: productQuestionAnswers.createdAt,
+      authorName: users.name,
+      authorAvatarUrl: users.avatarUrl,
+      authorRole: users.role,
+      authorUserId: users.id,
+    })
+    .from(productQuestionAnswers)
+    .innerJoin(users, eq(users.id, productQuestionAnswers.userId))
+    .where(and(inArray(productQuestionAnswers.questionId, ids), eq(productQuestionAnswers.isApproved, true)))
+    .orderBy(productQuestionAnswers.createdAt);
+  const byQuestion = new Map<number, typeof answerRows>();
+  for (const row of answerRows) {
+    const list = byQuestion.get(row.questionId) ?? [];
+    list.push(row);
+    byQuestion.set(row.questionId, list);
+  }
+  const shape = (row: { authorName: string | null; authorAvatarUrl: string | null; authorRole: string | null; authorUserId: number }) => ({
+    authorName: row.authorName ?? "Хэрэглэгч",
+    authorAvatarUrl: row.authorAvatarUrl,
+    authorIsStaff: isAdminPanelRole(row.authorRole),
+    authorUserId: row.authorUserId,
+  });
+  return questions.map(q => ({
+    id: q.id,
+    body: q.body,
+    createdAt: q.createdAt,
+    ...shape(q),
+    answers: (byQuestion.get(q.id) ?? []).map(a => ({ id: a.id, body: a.body, createdAt: a.createdAt, ...shape(a) })),
+  }));
+}
+
+export async function createProductQuestion(input: { productId: number; userId: number; body: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const [product] = await db.select({ id: products.id }).from(products).where(and(eq(products.id, input.productId), eq(products.isPublished, true))).limit(1);
+  if (!product) throw new Error("Бараа олдсонгүй.");
+  const inserted = await db.insert(productQuestions).values({ productId: input.productId, userId: input.userId, body: input.body });
+  const [created] = await db.select().from(productQuestions).where(eq(productQuestions.id, Number(inserted[0].insertId))).limit(1);
+  return created;
+}
+
+/** Same rule as review replies: staff, or a customer who bought this product. The asker may not answer their own question. */
+export async function canAnswerQuestion(userId: number, role: string | null, questionId: number): Promise<{ ok: true; productId: number } | { ok: false; reason: string }> {
+  const db = await getDb();
+  if (!db) return { ok: false, reason: "Database is not available" };
+  const [question] = await db.select({ id: productQuestions.id, productId: productQuestions.productId, userId: productQuestions.userId, isApproved: productQuestions.isApproved }).from(productQuestions).where(eq(productQuestions.id, questionId)).limit(1);
+  if (!question || !question.isApproved) return { ok: false, reason: "Асуулт олдсонгүй." };
+  if (isAdminPanelRole(role)) return { ok: true, productId: question.productId };
+  if (await findVerifyingOrderId(userId, question.productId)) return { ok: true, productId: question.productId };
+  return { ok: false, reason: "Зөвхөн ажилтан эсвэл энэ барааг захиалсан хэрэглэгч хариулах боломжтой." };
+}
+
+export async function createQuestionAnswer(input: { questionId: number; userId: number; body: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const inserted = await db.insert(productQuestionAnswers).values({ questionId: input.questionId, userId: input.userId, body: input.body });
+  const [created] = await db.select().from(productQuestionAnswers).where(eq(productQuestionAnswers.id, Number(inserted[0].insertId))).limit(1);
+  return created;
+}
+
+/** Admin moderation: newest first, with product name and answer count, hidden rows included. */
+export async function getAdminQuestions(limit = 200) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: productQuestions.id,
+      productId: productQuestions.productId,
+      productName: products.name,
+      body: productQuestions.body,
+      isApproved: productQuestions.isApproved,
+      createdAt: productQuestions.createdAt,
+      authorName: users.name,
+      answerCount: sql<number>`(select count(*) from ${productQuestionAnswers} where ${productQuestionAnswers.questionId} = ${productQuestions.id})`,
+    })
+    .from(productQuestions)
+    .innerJoin(products, eq(products.id, productQuestions.productId))
+    .innerJoin(users, eq(users.id, productQuestions.userId))
+    .orderBy(desc(productQuestions.createdAt))
+    .limit(limit);
+}
+
+export async function setQuestionApproved(questionId: number, isApproved: boolean) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.update(productQuestions).set({ isApproved }).where(eq(productQuestions.id, questionId));
+}
+
+export async function deleteQuestion(questionId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.delete(productQuestions).where(eq(productQuestions.id, questionId));
+}
+
+export async function deleteQuestionAnswer(answerId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.delete(productQuestionAnswers).where(eq(productQuestionAnswers.id, answerId));
+}
+
+// ---------------------------------------------------------------------------
+// "Continue with Facebook" (2026-09-13, migration 0072). Phone remains the
+// primary identifier; a Facebook sign-in either finds the account already
+// linked to that app-scoped id or creates a phone-less account (the profile
+// page can attach a verified phone later). passwordHash is NOT NULL, so a
+// Facebook-created account gets a hash of a random 32-byte secret nobody
+// knows -- password login for it is impossible until a reset sets one.
+// ---------------------------------------------------------------------------
+
+export async function findUserByFacebookId(facebookId: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [user] = await db.select().from(users).where(eq(users.facebookId, facebookId)).limit(1);
+  return user;
+}
+
+export async function createUserFromFacebook(input: { facebookId: string; name: string | null; email: string | null; avatarUrl: string | null; passwordHash: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  // Email is unique; if another account already carries this address, leave
+  // it off rather than fail the whole sign-in (email is not a login key here).
+  let email = input.email;
+  if (email) {
+    const [taken] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
+    if (taken) email = null;
+  }
+  const inserted = await db.insert(users).values({
+    facebookId: input.facebookId,
+    name: input.name,
+    email,
+    avatarUrl: input.avatarUrl,
+    passwordHash: input.passwordHash,
+    role: "user",
+    lastSignedIn: new Date(),
+  });
+  return getUserById(Number(inserted[0].insertId));
+}
+
+/** Link a Facebook id to an already signed-in account (profile page). Fails if that id belongs to someone else. */
+export async function linkFacebookIdToUser(userId: number, facebookId: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const other = await findUserByFacebookId(facebookId);
+  if (other && other.id !== userId) throw new Error("Энэ Facebook данс өөр бүртгэлтэй холбогдсон байна.");
+  await db.update(users).set({ facebookId }).where(eq(users.id, userId));
+  forgetSessionUser(userId);
+}
+
+// ---------------------------------------------------------------------------
+// Gift cards (2026-09-13, migration 0073).
+// ---------------------------------------------------------------------------
+
+/** Crockford-style alphabet without 0/O/1/I so a printed code is unambiguous. */
+const GIFT_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function generateGiftCode(): string {
+  const bytes = randomBytes(12);
+  let out = "";
+  for (let i = 0; i < 12; i++) out += GIFT_CODE_ALPHABET[bytes[i]! % GIFT_CODE_ALPHABET.length];
+  return `SUGI-${out.slice(0, 4)}-${out.slice(4, 8)}-${out.slice(8, 12)}`;
+}
+/** "sugi abcd-efgh 2345" -> "SUGI-ABCD-EFGH-2345" (whatever the customer typed). */
+export function normalizeGiftCode(raw: string): string {
+  const body = raw.toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/^SUGI/, "");
+  return `SUGI-${body.slice(0, 4)}-${body.slice(4, 8)}-${body.slice(8, 12)}`;
+}
+
+export async function issueGiftCards(input: { amountMnt: number; count: number; issuedByUserId: number; recipientName?: string | null; note?: string | null; expiresAt?: Date | null }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const created: { id: number; code: string }[] = [];
+  for (let i = 0; i < input.count; i++) {
+    // Retry on the (astronomically unlikely) unique collision.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const code = generateGiftCode();
+      try {
+        const inserted = await db.insert(giftCards).values({ code, amountMnt: input.amountMnt, issuedByUserId: input.issuedByUserId, recipientName: input.recipientName ?? null, note: input.note ?? null, expiresAt: input.expiresAt ?? null });
+        created.push({ id: Number(inserted[0].insertId), code });
+        break;
+      } catch (error) {
+        if (attempt === 2 || !(error instanceof Error && /Duplicate/i.test(error.message))) throw error;
+      }
+    }
+  }
+  return created;
+}
+
+export async function listGiftCards(limit = 300) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(giftCards).orderBy(desc(giftCards.id)).limit(limit);
+}
+
+export async function voidGiftCard(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const result = await db.update(giftCards).set({ status: "void" }).where(and(eq(giftCards.id, id), eq(giftCards.status, "active")));
+  return Number(result[0].affectedRows ?? 0) === 1;
+}
+
+/**
+ * Redeem into store credit. One transaction: the guarded UPDATE on the card
+ * (status must still be active) is the lock -- a second tab or a second
+ * customer typing the same code sees affectedRows 0 and gets the "already
+ * used" message; the balance and the ledger row follow in the same
+ * transaction so a card can never be marked used without the credit landing.
+ */
+export async function redeemGiftCard(rawCode: string, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const code = normalizeGiftCode(rawCode);
+  return db.transaction(async tx => {
+    const [card] = await tx.select().from(giftCards).where(eq(giftCards.code, code)).limit(1);
+    if (!card) throw new Error("Ийм бэлгийн карт олдсонгүй. Кодоо шалгана уу.");
+    if (card.status === "redeemed") throw new Error("Энэ бэлгийн карт аль хэдийн ашиглагдсан байна.");
+    if (card.status === "void") throw new Error("Энэ бэлгийн карт хүчингүй болсон байна.");
+    if (card.expiresAt && card.expiresAt.getTime() < Date.now()) throw new Error("Энэ бэлгийн картын хугацаа дууссан байна.");
+    const claimed = await tx.update(giftCards)
+      .set({ status: "redeemed", redeemedByUserId: userId, redeemedAt: new Date() })
+      .where(and(eq(giftCards.id, card.id), eq(giftCards.status, "active")));
+    if (Number(claimed[0].affectedRows ?? 0) !== 1) throw new Error("Энэ бэлгийн карт аль хэдийн ашиглагдсан байна.");
+    await tx.update(users).set({ storeCreditMnt: sql`${users.storeCreditMnt} + ${card.amountMnt}`, updatedAt: new Date() }).where(eq(users.id, userId));
+    await tx.insert(storeCreditLedger).values({ userId, deltaMnt: card.amountMnt, reason: `Бэлгийн карт ${code}`, actorUserId: null, orderId: null });
+    const [updated] = await tx.select({ storeCreditMnt: users.storeCreditMnt }).from(users).where(eq(users.id, userId)).limit(1);
+    forgetSessionUser(userId);
+    return { amountMnt: card.amountMnt, storeCreditMnt: updated?.storeCreditMnt ?? 0 };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Customer Web Push subscriptions (2026-09-13, migration 0074).
+// ---------------------------------------------------------------------------
+
+export async function upsertPushSubscription(input: { userId: number; endpoint: string; p256dh: string; auth: string; userAgent: string | null }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.insert(pushSubscriptions).values(input).onDuplicateKeyUpdate({ set: { userId: input.userId, p256dh: input.p256dh, auth: input.auth, userAgent: input.userAgent } });
+}
+
+export async function deletePushSubscription(endpoint: string, userId?: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(pushSubscriptions).where(userId ? and(eq(pushSubscriptions.endpoint, endpoint), eq(pushSubscriptions.userId, userId)) : eq(pushSubscriptions.endpoint, endpoint));
+}
+
+export async function getPushSubscriptionsForUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
+}
+
+export async function hasPushSubscription(userId: number, endpoint: string) {
+  const db = await getDb();
+  if (!db) return false;
+  const [row] = await db.select({ id: pushSubscriptions.id }).from(pushSubscriptions).where(and(eq(pushSubscriptions.userId, userId), eq(pushSubscriptions.endpoint, endpoint))).limit(1);
+  return Boolean(row);
+}
+
+export async function touchPushSubscriptions(ids: number[]) {
+  const db = await getDb();
+  if (!db || ids.length === 0) return;
+  await db.update(pushSubscriptions).set({ lastUsedAt: new Date() }).where(inArray(pushSubscriptions.id, ids));
 }

@@ -22,6 +22,7 @@ import { warmUpModerationModel } from "./moderationModel";
 import { warmUpImageSafety } from "./imageSafety";
 import { dbPing } from "../db";
 import { serveRobots, serveSitemap } from "./sitemap";
+import { finishFacebookLogin, startFacebookLogin } from "./facebookAuth";
 import { startScheduler } from "./scheduler";
 import { registerAbandonedCartReminderJob, registerDataRetentionJob, registerLowStockDigestJob, registerInventorySyncJob, registerNotificationOutboxPurgeJob, registerStaleTransferJob, registerStockLedgerDriftJob } from "../automation";
 import { startNotificationDispatcher } from "../notifications";
@@ -125,11 +126,15 @@ async function startServer() {
   // legacy path (and every tool that does) got a 200 with HTML for an icon.
   // The real icon is the <link rel="icon"> in client/index.html; send them
   // there.
-  app.get("/favicon.ico", (_req, res) => res.redirect(302, "/cdn/sugi-symbol_0a534a76.png"));
+  app.get("/favicon.ico", (_req, res) => res.redirect(302, "/icons/favicon-64.png"));
   // Crawler surface (2026-09-13): sitemap from the catalogue, robots pointing
   // at it -- both dynamic so the origin follows PUBLIC_BASE_URL. Registered
   // ahead of the static/SPA fallback, which used to answer /sitemap.xml with
   // index.html and served a robots.txt naming the retired Manus host.
+  // "Continue with Facebook" (2026-09-13): plain OAuth redirect + callback,
+  // 404 until FACEBOOK_APP_ID/SECRET are set. See server/_core/facebookAuth.ts.
+  app.get("/api/auth/facebook", startFacebookLogin);
+  app.get("/api/auth/facebook/callback", (req, res) => { void finishFacebookLogin(req, res); });
   app.get("/sitemap.xml", serveSitemap);
   app.get("/robots.txt", serveRobots);
   // development mode uses Vite, production mode uses static files
