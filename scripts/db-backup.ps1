@@ -49,8 +49,10 @@ $match = [regex]::Match($DatabaseUrl, '^mysql://(?<user>[^:@]+):(?<pass>[^@]*)@(
 if (-not $match.Success) {
   throw "Could not parse DATABASE_URL. Expected format: mysql://user:password@host:port/dbname"
 }
-$dbUser = $match.Groups["user"].Value
-$dbPass = $match.Groups["pass"].Value
+# Credentials in the URL are percent-encoded (the HeatWave passwords contain '#'
+# and '@', which dotenv/URL parsing would otherwise misread) - decode them.
+$dbUser = [uri]::UnescapeDataString($match.Groups["user"].Value)
+$dbPass = [uri]::UnescapeDataString($match.Groups["pass"].Value)
 $dbHost = $match.Groups["host"].Value
 $dbPort = if ($match.Groups["port"].Success) { $match.Groups["port"].Value } else { "3306" }
 $dbName = $match.Groups["db"].Value
@@ -77,6 +79,10 @@ $env:MYSQL_PWD = $dbPass
 try {
   $dumpArgs = @("--host=$dbHost", "--port=$dbPort", "--user=$dbUser")
   if ($DatabaseUrl -match '(?i)([?&])ssl-mode=required(&|$)') { $dumpArgs += "--ssl-mode=REQUIRED" }
+  # Same flags as migrate-to-oracle-mysql.ps1: HeatWave is GTID-enabled and its
+  # admin user has neither SUPER (needed to apply GTID_PURGED on restore) nor
+  # PROCESS (needed to read tablespace metadata). Harmless on other servers.
+  $dumpArgs += @("--set-gtid-purged=OFF", "--no-tablespaces")
   $dumpArgs += @("--single-transaction", "--routines", "--triggers", "--result-file=$sqlFile")
   & $MySqlDumpPath @dumpArgs $dbName
   if ($LASTEXITCODE -ne 0) { throw "mysqldump exited with code $LASTEXITCODE" }

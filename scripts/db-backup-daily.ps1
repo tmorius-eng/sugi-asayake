@@ -12,10 +12,16 @@ $ErrorActionPreference = "Stop"
 $envFile = Join-Path $RepositoryRoot ".env"
 if (-not (Test-Path $envFile)) { throw "Missing .env file: $envFile" }
 
-$databaseLine = Get-Content $envFile | Where-Object { $_ -match '^DATABASE_URL=' } | Select-Object -First 1
-if (-not $databaseLine) { throw "DATABASE_URL is missing from $envFile" }
-$databaseUrl = $databaseLine.Substring("DATABASE_URL=".Length).Trim().Trim('"').Trim("'")
-if (-not $databaseUrl) { throw "DATABASE_URL is empty in $envFile" }
+# Prefer DATABASE_ADMIN_URL (HeatWave, 2026-09-13): the app's sugi_app user has
+# only SELECT/INSERT/UPDATE/DELETE, which is not enough for a full mysqldump
+# (--routines/--triggers). Fall back to DATABASE_URL where no admin URL exists.
+$databaseUrl = $null
+foreach ($key in "DATABASE_ADMIN_URL", "DATABASE_URL") {
+  $line = Get-Content $envFile | Where-Object { $_ -match "^$key=" } | Select-Object -First 1
+  if ($line) { $databaseUrl = $line.Substring("$key=".Length).Trim().Trim('"').Trim("'") }
+  if ($databaseUrl) { break }
+}
+if (-not $databaseUrl) { throw "DATABASE_ADMIN_URL / DATABASE_URL is missing from $envFile" }
 
 & (Join-Path $PSScriptRoot "db-backup.ps1") `
   -DatabaseUrl $databaseUrl `

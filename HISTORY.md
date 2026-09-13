@@ -4,6 +4,17 @@
 
 ---
 
+## Гэрийн лаптоп (hero_) → Oracle HeatWave + өдөр тутмын backup task (2026-09-13, гэрийн лаптоп)
+
+Tom энэ лаптоп дээр `.env`-ийн бүрэн агуулгыг (Oracle/R2/Facebook/VAPID/Cloudflare token бүгд) chat-д paste хийв → **бүх нууц rotate хийх** хэрэгтэй гэж хэлсэн (Cloudflare API token хамгийн түрүүнд). Дараа нь:
+
+- `git fetch` эхэндээ `C:\Users\hero_`-оос ажиллуулснаас "dubious ownership in 'C:/'" гарсан — repo-ийн алдаа биш, буруу хавтас; `safe.directory C:/` нэмэхгүй. Repo дотроос 10 commit `--ff-only` татав (`541d4b0`).
+- `scripts/oci/setup-laptop.ps1` step 1: `~/.ssh/sugi-oci` (ed25519, comment `sugi-asayake-oci-MYDICK`), `Host sugi-oci` config, "SUGI OCI Tunnel" logon task. **Step 2 (VM-ийн `authorized_keys`-д public key нэмэх) ажлын лаптопоос л хийгдэнэ** — энэ session-ий төгсгөлд хараахан хийгдээгүй, `ssh sugi-oci` → "Permission denied (publickey)", 3307 хаалттай.
+- `oci-ca.pem`-ийг Tom-ийн paste хийсэн `MySQL_Endpoint_CA` сертификатаас шууд бичив (scp хэрэггүй болсон); `.env` → Oracle 3 мөр + `DATABASE_ADMIN_URL`, `PUBLIC_BASE_URL`, `DEV_ALLOWED_HOSTS`, `FACEBOOK_*`, `VAPID_*`; хуучин нь `.env.bak-aiven-2026-09-13`. Хоёулаа gitignored.
+- **Backup task энэ лаптопт байгаагүй** (CLAUDE.md "гэрийн лаптопт байдаг" гэж бичсэн нь ажлын лаптопыг хэлж байсан — 09-13-ны нэрийн залруулгыг үзнэ). Одоо `SUGI ASAYAKE Daily DB Backup` бүртгэгдсэн (19:00, `powershell.exe -File scripts/db-backup-daily.ps1`, StartWhenAvailable, 30 мин лимит). mysqldump 8.0.46 (`C:\Program Files\MySQL\MySQL Server 8.0\bin`).
+- `scripts/db-backup.ps1`: URL-ийн user/password-ыг `[uri]::UnescapeDataString` (HeatWave-ийн нууц үгэнд `%23`/`%40`); `--set-gtid-purged=OFF --no-tablespaces` (migrate-to-oracle-mysql.ps1-тэй ижил — HeatWave GTID-тэй, admin-д SUPER/PROCESS байхгүй; эс бөгөөс dump-ийг буцааж restore хийх боломжгүй). `scripts/db-backup-daily.ps1`: `DATABASE_ADMIN_URL`-ийг эхэлж авна (`sugi_app` нь SELECT/INSERT/UPDATE/DELETE л тул `--routines/--triggers` дутуу).
+- **Баталгаажуулалт**: tunnel хаалттай тул Aiven (7 хоног амьд) дээр тест-dump: 57 хүснэгт, 1.95 MB, `GTID_PURGED` 0 мөр, zip 253.6 KB. HeatWave дээрх бодит run — түлхүүр VM-д орсны дараа.
+
 ## Каталогийн тайлбар + хэл солих алдаанууд (2026-09-12, гэрийн лаптоп, commit `527e000`)
 
 Tom: "937 baraanii mongol tailbaruud!! angli bas yponoor orchuulagdhgui baina!!", дараа нь
