@@ -161,7 +161,7 @@ export default function QuickStatsSection() {
                   <span>Нийт хэмнэсэн дүн</span>
                 </div>
                 <p className="qs-sr-summary">
-                  Таны гишүүнчлэл: {status.currentTier.name} зэрэглэл, одоогийн хөнгөлөлт {status.currentTier.discountPercent}%, нийт худалдан авалт {formatMnt(status.totalSpendMnt)}, нийт хэмнэсэн дүн {formatMnt(status.totalLoyaltySavingsMnt)}, {nextTierSummary}.
+                  {`Таны гишүүнчлэл: ${status.currentTier.name} зэрэглэл, одоогийн хөнгөлөлт ${status.currentTier.discountPercent}%, нийт худалдан авалт ${formatMnt(status.totalSpendMnt)}, нийт хэмнэсэн дүн ${formatMnt(status.totalLoyaltySavingsMnt)}, ${nextTierSummary}.`}
                 </p>
               </>
             );

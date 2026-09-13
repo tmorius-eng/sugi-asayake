@@ -153,7 +153,7 @@ export default function ProfileQuizWizard({ open, onOpenChange }: { open: boolea
             <Sparkles size={16} style={{ display: "inline", marginRight: 8, verticalAlign: "-2px" }} />{STEP_TITLES[step]}
           </DialogTitle>
           <DialogDescription style={{ fontSize: "12px", color: "#77787d", marginTop: 4 }}>
-            Алхам {step + 1} / {STEP_TITLES.length} — бүх асуулт заавал биш, хүссэн үедээ хаагаад дараа үргэлжлүүлж болно.
+            {`Алхам ${step + 1} / ${STEP_TITLES.length} — бүх асуулт заавал биш, хүссэн үедээ хаагаад дараа үргэлжлүүлж болно.`}
           </DialogDescription>
           <div style={{ height: 4, borderRadius: 999, background: "rgba(23,24,27,.08)", marginTop: 14, overflow: "hidden" }}>
             <div style={{ height: "100%", width: `${progressPercent}%`, background: "#17181b", transition: "width .25s ease" }} />

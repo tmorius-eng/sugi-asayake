@@ -4,6 +4,17 @@
 
 ---
 
+## Profile, сэтгэгдэл, Асуулт/хариулт, Checkout-ийн орчуулга (2026-09-13, гэрийн лаптоп)
+
+Tom 日本語 руу солиод /profile-ийг нээхэд ихэнх нь монголоор үлдсэн ("profile barag bur teg chigeerei mongol hel deeree baina!! sain orchuulalt hiigeegui baina!"). Шалтгаан: 09-12-ны орчуулга нүүр/shop/PDP-ийн ил хэсгүүдийг л хамарсан; нэвтэрсэн хэрэглэгчийн хуудсууд (Profile-ийн 9 таб, ReviewThread, ProductQuestions, ProfileQuizWizard), Checkout-ийн StorePay/QPay мөрүүд, RoutineDetail, ForgotPassword, ErrorBoundary болон `shared/catalog-filter.ts`-ийн профайлын сонголтын шошгууд (арьс/үс/үнэр/интерьер) толь бичигт ороогүй байв.
+
+- **Арга**: dev сервер tunnel-гүй тул хуудсыг нээж чадахгүй → **статик sweep** (`scratchpad/missing-i18n2.mjs`: тайлбар мөрүүдийг хасаад, `"'`<>{}` хооронд кирилл агуулсан сегмент бүрийг `UI_STRINGS`-ийн 3 хэлний утгатай тулгана). Storefront-ийн 414 дутуу мөр → ~300 entry нэмэгдэв (admin файлууд санаатайгаар хасагдсан; `shared/site-text.ts`-ийн зөвхөн storefront дээр зурагддаг анхдагч утгууд орсон). ⚠️ Скрипт `\n`-тэй түлхүүрүүдийг буруу decode хийдэг тул тэдгээр нь худал "дутуу" гарна — TS1117 duplicate алдаагаар 14 давхардал илэрч устгагдсан.
+- **`{n}` placeholder одоо зөвхөн тоо таарна** (`NUMERIC_PLACEHOLDERS`: n, N, count, pct, discount, step, steps). Шалтгаан: сэтгэгдлийн харьцангуй цаг "2ц"/"4ө"/"5мин" pattern-ууд `(.+?)`-тэй байсан бол "Багц", "Хувцас" мэт ц-ээр төгссөн бүх text node-ыг эвдэх байсан (probe-оор шалгасан: "Багц" хэвээр, "2ц"→"2h"→"2時間前").
+- **8 JSX мөр template literal болов** (Profile 977/979 loyalty өгүүлбэр, QuickStats-ийн sr-only гишүүнчлэлийн өгүүлбэр, Shop-ийн "Таны өмнө үзсэн N…", HeaderSearch-ийн 2 мөр, ProfileQuizWizard-ийн "Алхам N / M", RoutineDetail-ийн "Багцаар авбал") — React `{expr}` бүрд text node хувааж, pattern таарахгүй байсан. Үзэгдэх өөрчлөлт 0.
+- Хуваагдсан хэвээр үлдээсэн (fragment entry-ээр): CartDrawer-ийн хүргэлтийн тайлбар (`<strong>үнэгүй</strong>` дунд нь), PDP-ийн "Энэ бүтээгдэхүүн <Link/> арчилгааны дараалалд багтдаг.", Checkout-ийн "Хямдралын код (" / "QPay нэхэмжлэл #" гэх мэт — англи/японоор уншигдахуйц болгож бичсэн.
+- Баталгаажуулалт: `pnpm check` (i18n цэвэр; `web-push` модуль энэ лаптопт `pnpm install` хийгээгүйгээс алдаа өгч байсныг суулгав), `pnpm lint` цэвэр, 17 мөрийн probe (mn→en, mn→ja, ja→mn round-trip) ✅. Bодит хуудсан дээр Playwright-аар ХАРААХАН үзээгүй — tunnel орсны дараа /profile-ийг ja-аар нээж кирилл үлдсэн эсэхийг шалгах.
+- Дараагийн: `shared/districts.ts` (дүүргийн нэр, 11) орчуулаагүй — хаягийн өгөгдөл тул санаатай; /privacy·/terms·/returns өмнөх шигээ хүлээгдэж байна.
+
 ## Гэрийн лаптоп (hero_) → Oracle HeatWave + өдөр тутмын backup task (2026-09-13, гэрийн лаптоп)
 
 Tom энэ лаптоп дээр `.env`-ийн бүрэн агуулгыг (Oracle/R2/Facebook/VAPID/Cloudflare token бүгд) chat-д paste хийв → **бүх нууц rotate хийх** хэрэгтэй гэж хэлсэн (Cloudflare API token хамгийн түрүүнд). Дараа нь:

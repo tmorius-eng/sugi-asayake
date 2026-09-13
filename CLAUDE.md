@@ -327,6 +327,7 @@ Tom: "translate hiideg button hiilgmeer baina hajuudn!! dotorn english bas japan
 - Tab-ын `<title>` одоо орчуулагдана (`{page} — SUGI ASAYAKE` pattern).
 - **Баталгаажуулалт**: 12 маршрут × en/ja — кирилл үлдсэн шошго 0 (DB контентээс бусад); /shop дээр **6 удаа дараалж солиход** refreshгүйгээр бүгд дагаж, монгол руу яг буцаж ирнэ.
 - ⏳ **Дараагийн ажил**: /privacy, /terms, /returns (76 хэсэг, ~14,000 тэмдэгт) орчуулах.
+- ✅ **2026-09-13 (гэрийн лаптоп)**: /profile-ийн 9 таб, сэтгэгдэл/хариулт, Асуулт/хариулт, профайлын сонголтын шошгууд (`catalog-filter.ts`), Checkout-ийн StorePay/QPay, RoutineDetail, ForgotPassword, ErrorBoundary — ~300 entry нэмэгдэв (Tom: "profile barag bur … mongol hel deeree baina"). **`{n}`/`{pct}`/`{count}` placeholder зөвхөн тоо таарна** (`NUMERIC_PLACEHOLDERS`) — "2ц" pattern "Багц"-ыг эвдэхгүй. Дутуу мөр олох арга: статик sweep (HISTORY.md "Profile, сэтгэгдэл … орчуулга"); шинэ storefront текст бичихдээ **React `{expr}`-тэй өгүүлбэрийг template literal-аар нэг text node болго**, эс бөгөөс pattern таарахгүй. ⚠️ Бодит хуудсан дээр (ja) хараахан үзээгүй — tunnel орсны дараа шалгах.
 
 ## ✅ (2026-09-12) Storefront-ийн Dark theme (header дээрх товч)
 

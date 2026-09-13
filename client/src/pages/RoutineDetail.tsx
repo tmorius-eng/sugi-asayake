@@ -73,7 +73,7 @@ export default function RoutineDetail() {
 
         <div className="my-7 border-y border-black/10 py-6">
           <div className="flex items-end gap-3"><strong className="font-[var(--font-display)] text-4xl tracking-[-.08em]">{formatMnt(routine.discountPercent > 0 ? bundlePriceMnt : originalTotalMnt)}</strong>{routine.discountPercent > 0 && <span className="pb-1 text-sm text-[#a9a49a] line-through">{formatMnt(originalTotalMnt)}</span>}</div>
-          {routine.discountPercent > 0 && <p className="mt-2 flex items-center gap-2 text-xs font-bold text-[#2c7650]"><Sparkles size={13} /> Багцаар авбал -{routine.discountPercent}% ({formatMnt(savingsMnt)} хэмнэнэ)</p>}
+          {routine.discountPercent > 0 && <p className="mt-2 flex items-center gap-2 text-xs font-bold text-[#2c7650]"><Sparkles size={13} /> {`Багцаар авбал -${routine.discountPercent}% (${formatMnt(savingsMnt)} хэмнэнэ)`}</p>}
           {routine.discountPercent > 0 && <p className="mt-2 text-[11px] leading-5 text-[#9a9ba0]">Хямдрал нь захиалга баталгаажуулах үед, сагсанд routine-ийн бүх бараа байгаа тохиолдолд автоматаар тооцогдоно.</p>}
         </div>
 

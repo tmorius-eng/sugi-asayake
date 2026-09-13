@@ -974,9 +974,9 @@ function LoyaltyTab() {
           <div className="loyalty-progress-row"><span>Нийт худалдан авалт</span><strong>{formatMnt(data.totalSpendMnt)}</strong></div>
           {data.nextTier ? <>
             <div className="loyalty-progress-bar"><div className="loyalty-progress-fill" style={{ width: `${Math.min(100, Math.round((data.totalSpendMnt / data.nextTier.minSpendMnt) * 100))}%` }} /></div>
-            <p className="loyalty-progress-note">"{data.nextTier.name}" шатанд (-{data.nextTier.discountPercent}%) хүрэхэд {formatMnt(data.amountToNextTierMnt ?? 0)} дутуу байна.</p>
+            <p className="loyalty-progress-note">{`"${data.nextTier.name}" шатанд (-${data.nextTier.discountPercent}%) хүрэхэд ${formatMnt(data.amountToNextTierMnt ?? 0)} дутуу байна.`}</p>
           </> : <p className="loyalty-progress-note">Та хамгийн дээд шатанд хүрсэн байна — баярлалаа!</p>}
-          {data.manualAdjustmentMnt > 0 && <p className="loyalty-progress-note">Үүнд манай салбарт биечлэн хийсэн {formatMnt(data.manualAdjustmentMnt)} худалдан авалтын түүх багтсан.</p>}
+          {data.manualAdjustmentMnt > 0 && <p className="loyalty-progress-note">{`Үүнд манай салбарт биечлэн хийсэн ${formatMnt(data.manualAdjustmentMnt)} худалдан авалтын түүх багтсан.`}</p>}
         </div>
 
         <div className="loyalty-tiers">

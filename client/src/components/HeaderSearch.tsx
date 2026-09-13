@@ -63,12 +63,12 @@ export default function HeaderSearch({ variant = "icon" }: { variant?: "icon" | 
   const results = (
     <>
       {trimmed ? <div className="header-search-results">
-        {trimmed.length < MIN_QUERY_LENGTH ? <p className="header-search-empty">Дор хаяж {MIN_QUERY_LENGTH} тэмдэгт оруулна уу.</p> : search.isLoading || debouncedTerm !== trimmed ? <p className="header-search-empty">Хайж байна…</p> : matches.length ? <>
+        {trimmed.length < MIN_QUERY_LENGTH ? <p className="header-search-empty">{`Дор хаяж ${MIN_QUERY_LENGTH} тэмдэгт оруулна уу.`}</p> : search.isLoading || debouncedTerm !== trimmed ? <p className="header-search-empty">Хайж байна…</p> : matches.length ? <>
           {matches.map(product => <Link key={product.id} href={`/product/${product.slug}`} onClick={() => setOpen(false)} className="header-search-result">
             <img src={product.imageUrl ?? fallbackImage} alt="" />
             <span><strong>{product.name}</strong><small>{formatMnt(product.priceMnt)}</small></span>
           </Link>)}
-          <button type="button" onClick={goToShop} className="header-search-viewall">&ldquo;{trimmed}&rdquo; -г бүх дэлгүүрээс харах →</button>
+          <button type="button" onClick={goToShop} className="header-search-viewall">{`“${trimmed}” -г бүх дэлгүүрээс харах →`}</button>
         </> : <p className="header-search-empty">Тохирох бүтээгдэхүүн олдсонгүй.</p>}
       </div> : null}
     </>
