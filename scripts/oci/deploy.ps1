@@ -49,7 +49,9 @@ pm2 status sugi | grep sugi | cut -c1-100
 $remote = $remote.Replace("__BUNDLE__", $bundle).Replace("`r`n", "`n")  # CRLF checkout -> LF for the remote bash
 # Sent over stdin, not as an argument: passed as an argument the script is
 # re-split by the remote shell and its quotes are lost ("[: missing ]").
-$remote | ssh -o ClearAllForwardings=yes sugi-oci "bash -s"
+# tr strips the CR that PowerShell appends to every line when it pipes a
+# string into a native process (that was the "cut: invalid ... '\r'" noise).
+$remote | ssh -o ClearAllForwardings=yes sugi-oci "tr -d '\r' | bash -s"
 
 Write-Host "==> public check" -ForegroundColor Cyan
 $code = (Invoke-WebRequest -Uri "https://sugi.karkaron.com/health" -UseBasicParsing -TimeoutSec 40).StatusCode
