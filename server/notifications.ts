@@ -177,6 +177,12 @@ export function startNotificationDispatcher() {
   setOutboxListener(kickNotificationDispatch);
   loop = setInterval(() => void runOnce(), LOOP_INTERVAL_MS);
   loop.unref?.();
-  void runOnce();
+  // First pass a few seconds after boot in production (2026-09-13): firing
+  // it at once, together with the scheduler and the warm-ups, opened ~10 TLS
+  // connections in the same instant and the 1-ECPU HeatWave instance timed
+  // the last ones out. Tests keep the immediate run.
+  const bootDelay = process.env.NODE_ENV === "production" ? 8_000 : 0;
+  const first = setTimeout(() => void runOnce(), bootDelay);
+  first.unref?.();
 }
 

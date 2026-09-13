@@ -64,6 +64,10 @@ const TICK_INTERVAL_MS = 15 * 60 * 1000;
 export function startScheduler() {
   if (tickHandle) return; // idempotent, in case something calls this twice
   tickHandle = setInterval(() => { void runDueJobsOnce(); }, TICK_INTERVAL_MS);
+  // Staggered after the notification dispatcher (see startNotificationDispatcher):
+  // the boot burst of connections is what timed out on the small HeatWave.
+  const bootDelay = process.env.NODE_ENV === "production" ? 15_000 : 0;
+  if (bootDelay) { const first = setTimeout(() => { void runDueJobsOnce(); }, bootDelay); first.unref?.(); return; }
   // Also run once shortly after startup, so a job that became overdue while
   // the server was down doesn't sit unnoticed for up to a full tick period.
   void runDueJobsOnce();

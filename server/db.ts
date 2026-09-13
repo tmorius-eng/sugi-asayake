@@ -110,7 +110,14 @@ export async function getDb() {
       // server/_core/dbConnection.ts for the CA-verification rules.
       const plan = planMysqlConnection(process.env.DATABASE_URL);
       if (plan.transport !== "plaintext-loopback") console.warn(`[db] ${describeTransport(plan)}`);
-      _db = drizzle({ connection: { ...plan.options, connectTimeout: 10_000, enableKeepAlive: true }, logger: sqlQueryLogger });
+      // connectTimeout 10s -> 30s (2026-09-13): on the 1-ECPU HeatWave
+      // instance the boot burst (scheduler jobs, notification dispatcher,
+      // warm-ups) opens ~10 TLS handshakes at once and the last ones took
+      // longer than 10s to be accepted -- "connect ETIMEDOUT" in the
+      // notification dispatcher on every start, Aborted_connects climbing
+      // on the server. A slow handshake is not a dead server; 30s bounds
+      // a genuinely unreachable host well enough.
+      _db = drizzle({ connection: { ...plan.options, connectTimeout: 30_000, enableKeepAlive: true }, logger: sqlQueryLogger });
       // drizzle-orm's mysql `timestamp` column hard-assumes the DB session
       // is UTC: it reads a raw wire value and appends "+0000" (see
       // node_modules/drizzle-orm/mysql-core/columns/timestamp.js), and
