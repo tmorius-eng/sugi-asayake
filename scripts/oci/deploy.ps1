@@ -29,7 +29,7 @@ tar czf $bundle dist package.json pnpm-lock.yaml pnpm-workspace.yaml
 # ClearAllForwardings: the Host block carries the 3307 tunnel forward, which
 # the always-on tunnel task already holds -- without this, ssh aborts with
 # "Address already in use" before running anything (ExitOnForwardFailure).
-scp -q -o ClearAllForwardings=yes $bundle "sugi-oci:~/__BUNDLE__"
+scp -q -o ClearAllForwardings=yes $bundle "sugi-oci:~/$bundle"
 Remove-Item $bundle
 
 Write-Host "==> install + restart on the VM" -ForegroundColor Cyan
