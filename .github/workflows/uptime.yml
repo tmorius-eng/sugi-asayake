@@ -1,0 +1,58 @@
+# External uptime check (2026-09-14).
+#
+# The shop runs on one Oracle VM; nothing outside that VM was watching it.
+# GitHub's scheduler runs this from GitHub's own network every 10 minutes
+# (GitHub may delay cron by a few minutes under load): it fetches /health
+# with two retries and, when the site is down or the database reports
+# "down", posts to the shop's ntfy topic -- the same phone push channel the
+# admin bell already uses.
+#
+# Secrets to add once (repo -> Settings -> Secrets and variables -> Actions):
+#   NTFY_URL    e.g. https://ntfy.sh/<the admin topic>
+#   NTFY_TOKEN  the ntfy access token (Bearer)
+# Without them the job still runs and fails visibly in the Actions tab.
+name: uptime
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe /health (3 attempts, 20 s apart)
+        id: probe
+        run: |
+          set +e
+          for attempt in 1 2 3; do
+            body=$(curl -sS --max-time 20 -w '\n%{http_code}' https://sugi.karkaron.com/health)
+            code=$(echo "$body" | tail -1)
+            json=$(echo "$body" | head -n -1)
+            echo "attempt $attempt: HTTP $code $json"
+            if [ "$code" = "200" ] && echo "$json" | grep -q '"database":"up"'; then
+              echo "ok=true" >> "$GITHUB_OUTPUT"; exit 0
+            fi
+            sleep 20
+          done
+          echo "ok=false" >> "$GITHUB_OUTPUT"
+          echo "detail=HTTP ${code:-none} ${json:-no body}" >> "$GITHUB_OUTPUT"
+      - name: Push alert to the phone
+        if: steps.probe.outputs.ok == 'false' && env.NTFY_URL != ''
+        env:
+          NTFY_URL: ${{ secrets.NTFY_URL }}
+          NTFY_TOKEN: ${{ secrets.NTFY_TOKEN }}
+        run: |
+          curl -sS --max-time 20 \
+            -H "Authorization: Bearer $NTFY_TOKEN" \
+            -H "Title: sugi.karkaron.com is DOWN" \
+            -H "Priority: 5" -H "Tags: rotating_light" \
+            -d "Health check failed 3 times in a row: ${{ steps.probe.outputs.detail }}. Check: ssh sugi-oci 'pm2 logs sugi --lines 40'" \
+            "$NTFY_URL"
+      - name: Fail the run when down
+        if: steps.probe.outputs.ok == 'false'
+        run: exit 1

@@ -875,6 +875,11 @@ export const UI_STRINGS: Record<string, { en: string; ja: string }> = {
   "Одоогоор бүх бараа нөөцгүй байна.": { en: "All of these products are currently out of stock.", ja: "現在すべての商品が在庫切れです。" },
   "Бүх {n} бараа сагсанд орлоо.": { en: "All {n} products are in your cart.", ja: "{n}点すべてをカートに追加しました。" },
   "{n} бараа сагсанд орлоо ({skipped} нөөцгүй тул алгассан).": { en: "{n} products added to your cart ({skipped} skipped — out of stock).", ja: "{n}点をカートに追加しました（在庫切れの{skipped}点はスキップ）。" },
+  // -- product page jump links (2026-09-14) --------------------------------
+  "Хуудасны хэсгүүд": { en: "Sections on this page", ja: "このページのセクション" },
+  "{n} сэтгэгдэл": { en: "{n} review(s)", ja: "レビュー{n}件" },
+  "Эхний сэтгэгдлийг бичих": { en: "Write the first review", ja: "最初のレビューを書く" },
+  "{n} асуулт, хариулт": { en: "{n} question(s) & answers", ja: "質問と回答 {n}件" },
   // -- product share row (2026-09-14) --------------------------------------
   "Хуваалцах": { en: "Share", ja: "シェア" },
   "хуваалцах": { en: "share", ja: "シェア" },

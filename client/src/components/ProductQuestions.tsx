@@ -52,7 +52,7 @@ export default function ProductQuestions({ productId, canAnswer }: { productId: 
   const requireLogin = () => toast.error("Асуулт асуухын тулд нэвтэрнэ үү.");
 
   return (
-    <section className="product-questions" aria-labelledby="product-questions-heading">
+    <section id="product-questions" className="product-questions pdp-anchor-section" aria-labelledby="product-questions-heading">
       <div className="product-questions-head">
         <div>
           <h2 id="product-questions-heading" className="product-questions-title"><MessageCircleQuestion size={20} aria-hidden="true" /> Асуулт, хариулт{questions.length ? ` · ${questions.length}` : ""}</h2>

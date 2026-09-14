@@ -62,7 +62,7 @@ export default function ShareBar({ title, url }: { title: string; url?: string }
 
   return (
     <div className="share-bar" role="group" aria-label={t("Хуваалцах")}>
-      <span className="share-bar-label">{t("Хуваалцах")}</span>
+      {!canNativeShare && <span className="share-bar-label">{t("Хуваалцах")}</span>}
       {canNativeShare && (
         <button type="button" className="share-btn share-btn-primary" onClick={nativeShare} aria-label={t("Хуваалцах")}>
           <Share2 size={15} aria-hidden="true" /><span>{t("Хуваалцах")}</span>

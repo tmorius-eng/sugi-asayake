@@ -4,6 +4,13 @@
 
 ---
 
+## VM→R2 өдөр тутмын backup + GitHub uptime + PDP jump links + захиалгын push баталгаа (2026-09-14, гэрийн лаптоп)
+
+- **Backup лаптопоос салав**: `scripts/oci/vm-backup.sh` (mysqldump admin/TLS, HeatWave-safe flags → gzip → `openssl enc -aes-256-cbc -pbkdf2 -iter 200000`, `BACKUP_PASSPHRASE` VM `.env`-д; гэрийн лаптопын `.env`-д хуулбар) + `scripts/oci/vm-backup-upload.mjs` (VM-ийн өөрийн `node_modules/@aws-sdk/client-s3`-ээр **тусдаа private bucket `sugi-asayake-backups`** (`db/` prefix; storefront-ийн bucket нь pub-*.r2.dev-ээр нийтэд ил тул тэнд хийхгүй), 30 хоногоос хуучныг устгана). `curl … | sudo bash` (rclone) classifier-т хаагдсан тул binary нэмээгүй. Эхний run: 250 KB, bucket үүссэн; **restore тест**: R2-оос татаж decrypt+gunzip → 61 `CREATE TABLE` ✓. Cron `0 19 * * *` UTC (03:00 УБ), лог `~/backup.log`. Хоёр скрипт deploy.ps1-д ордоггүй — өөрчилбөл гараар `scp`.
+- **Uptime**: `.github/workflows/uptime.yml` — GitHub cron 10 мин тутам `/health` 3 удаа; унавал ntfy-д priority-5 push. ⚠️ Repo secrets **`NTFY_URL`** (admin сэдвийн бүтэн URL), **`NTFY_TOKEN`** Tom нэмнэ (github MCP/gh CLI энэ лаптопт байхгүй); байхгүй үед workflow улаан болоод л зогсоно.
+- **Захиалгын push баталгаажлаа**: 09-08-аас хойш бодит захиалга байгаагүй тул VM dispatcher хэзээ ч ажиллаагүй байв (Tom-ийн утсанд зөвхөн 09-11-ний туршилт). Амьд сайт дээр Playwright-аар бэлэн мөнгө/салбараас авах туршилтын захиалга **`SAMU0NHNJY458K8X`** ("ТУРШИЛТ — Claude (цуцлана уу)", 88001122) → `order.placed` admin+warehouse хоёулаа **2 секундэд `sent`** (#2304/#2305). ⚠️ Tom /admin-аас цуцлах. VM логийн 2 "dispatch failed … connect ETIMEDOUT" нь 09-13 boot-ын blip.
+- **PDP**: давхар "ХУВААЛЦАХ" шошго хасагдав (native share байхгүй хөтөчид л үг үлдэнэ); **`ProductSectionJumps`** — гарчгийн доор "★ N сэтгэгдэл / Эхний сэтгэгдлийг бичих" ба "N асуулт, хариулт / Асуулт асуух" pill линк → `#product-reviews`/`#product-questions` (scroll-margin-top 96/84px, smooth scroll, `questions.list` query dedupe). Tom: "хүмүүс тэр болгон анзаарахгүй байна".
+
 ## Барааны share + серверийн OG/JSON-LD + Google Merchant feed + Search Console (2026-09-14, гэрийн лаптоп)
 
 Tom: "baraa buriin page bur deer share to social … share hiihed ter platform deer n ter baraanii zuragn haragdag baih ystoi". Шалтгаан: SPA тул бүх URL нэг `index.html` — og:image нь нүүрний hero байсан, барааны линк Facebook-т hero зурагтай гарч байв. Crawler JS ажиллуулдаггүй тул **сервер** л барааны meta өгч чадна.
