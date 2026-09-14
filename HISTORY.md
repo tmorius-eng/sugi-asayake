@@ -4,6 +4,12 @@
 
 ---
 
+## /admin → Баримт бичиг: editor хоосон харагдаж байсан (миний 09-14-ний регресс) + dev-only admin preview route (2026-09-14, гэрийн лаптоп)
+
+Tom (screenshot, /terms · English): гарчиг/lead бөглөгдсөн ч TinyMCE агуулга хоосон, storefront дээр текст зөв. Шалтгаан: `AdminDocumentsPanel`-ийн seed `useEffect` `[activeKey, activeLocale, saved, fallback]`-аас хамаардаг; шинэ `getLegalDocumentFallbackFor()` дуудлага бүрд **шинэ объект** буцаадаг (хуучин `getLegalDocumentFallback` массивын тогтвортой элемент буцаадаг байсан) → render бүрт effect → `setForm` + `editorKey++` → TinyMCE тасралтгүй remount, init хэзээ ч дуусдаггүй. Засвар: `useMemo(() => getLegalDocumentFallbackFor(activeKey, activeLocale), [activeKey, activeLocale])`. **Дүрэм**: effect dependency-д тавих утга render бүрт шинэ объект байж болохгүй.
+
+Баталгаажуулалт: admin нэвтрэлт+царай шаарддаг тул **dev-only route `/__admin-preview?adminSection=<section>`** (`App.tsx`, `import.meta.env.DEV` — production bundle-д ордоггүй) `AdminWorkspace preview` горимоор (auth/query-гүй, fallback өгөгдөл) зурна; Playwright-аар mn 12 h2/6,154 тэмдэгт, English 12/6,030, 日本語 12/2,610, гарчиг солигддог. Цаашид admin панелийн render-ийг ингэж шалгана.
+
 ## Share карт жижиг дөрвөлжин гарч байсан → 1200×630 OG карт бараа бүрд (2026-09-14, гэрийн лаптоп)
 
 Tom (FB post composer screenshot): зураг жижиг, текст том. Шалтгаан: Facebook 600×315-аас жижиг og:image-ийг жижиг дөрвөлжин thumbnail-аар зурдаг; Cocochi-ийн зураг **270×390** (Diane 1280×1280 тул том гарах байсан) — бараа бүрийн зураг өөр өөр хэмжээтэй. Шийдэл `server/_core/ogImage.ts`: `/og/product/<slug>.jpg` — sharp-аар packshot-ийг 1200×630 цагаан канвас дээр төвлөрүүлж (40px padding, upscale зөвшөөрнө) JPEG q86; tmpdir cache (slug+зургийн URL hash), 7 хоног Cache-Control; зураггүй → 404 (routeMeta тэр үед нүүрний зураг). `routeMeta`: og:image = карт, + `og:image:width/height/type/alt` (`%SEO_OG_IMAGE_META%`); JSON-LD/preload бодит зураг хэвээр. ⚠️ Facebook хуудас бүрийн scrape-ийг ~30 хоног cache-лдэг — өмнө нь хуваалцсан URL-д Sharing Debugger → "Scrape again" хэрэгтэй; шинэ бараанд шууд.

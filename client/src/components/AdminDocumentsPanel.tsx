@@ -85,7 +85,12 @@ export default function AdminDocumentsPanel({ preview = false }: { preview?: boo
     [documentsQuery.data],
   );
   const saved = savedByKey.get(`${activeKey}:${activeLocale}`) as DocumentRow | undefined;
-  const fallback = getLegalDocumentFallbackFor(activeKey, activeLocale);
+  // useMemo, not a plain call: getLegalDocumentFallbackFor builds a fresh
+  // object per call, and the seeding effect below lists `fallback` as a
+  // dependency -- without memoisation every render re-seeded the form and
+  // re-mounted TinyMCE, which never got to show any content (2026-09-14,
+  // Tom: "barimt bichegiin aguulguud bugd hooson").
+  const fallback = useMemo(() => getLegalDocumentFallbackFor(activeKey, activeLocale), [activeKey, activeLocale]);
   const isCustom = Boolean(saved);
 
   // Seed the form from whatever is live for the selected document, and

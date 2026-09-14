@@ -18,6 +18,10 @@ import { useConsentIconAutoHide } from "./lib/consentIconAutoHide";
 import { useScrollReveal } from "./hooks/useScrollReveal";
 
 const AdminDashboard = lazyRetry(() => import("./pages/AdminDashboard"));
+// Dev-only: the admin workspace in `preview` mode (no login, no face gate,
+// fallback data) so a panel's rendering can be checked with Playwright
+// without a real admin session. Tree-shaken out of production builds.
+const AdminPreview = import.meta.env.DEV ? lazyRetry(() => import("./components/AdminWorkspace").then(m => ({ default: () => <m.default preview /> }))) : null;
 const Checkout = lazyRetry(() => import("./pages/Checkout"));
 const ForgotPassword = lazyRetry(() => import("./pages/ForgotPassword"));
 const Journal = lazyRetry(() => import("./pages/Journal"));
@@ -74,6 +78,7 @@ function Router() {
     <Route path={"/profile"} component={Profile} />
     <Route path={"/checkout"} component={Checkout} />
     <Route path={"/admin"} component={AdminDashboard} />
+    {AdminPreview && <Route path={"/__admin-preview"} component={AdminPreview} />}
     <Route path={"/login"} component={Login} />
     <Route path={"/forgot-password"} component={ForgotPassword} />
     <Route path={"/track-order"} component={TrackOrder} />
