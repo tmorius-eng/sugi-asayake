@@ -34,6 +34,7 @@ export const STATIC_ROUTES: readonly { path: string; changefreq: string; priorit
   { path: "/brands", changefreq: "weekly", priority: "0.6" },
   { path: "/journal", changefreq: "weekly", priority: "0.6" },
   { path: "/track-order", changefreq: "monthly", priority: "0.3" },
+  { path: "/help", changefreq: "monthly", priority: "0.5" },
   { path: "/privacy", changefreq: "yearly", priority: "0.2" },
   { path: "/terms", changefreq: "yearly", priority: "0.2" },
   { path: "/returns", changefreq: "yearly", priority: "0.2" },

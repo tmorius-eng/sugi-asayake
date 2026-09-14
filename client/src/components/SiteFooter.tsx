@@ -87,6 +87,7 @@ export default function SiteFooter({ ctaBanner }: { ctaBanner?: FooterCtaBanner 
           <Link href="/terms">{t("Үйлчилгээний нөхцөл")}</Link>
           <Link href="/returns">{t("Буцаалт, солилцоо")}</Link>
           <Link href="/track-order">{t("Захиалгаа хянах")}</Link>
+          <Link href="/help">{t("Тусламж, холбоо барих")}</Link>
           {/* 2026-09-06: resetConsent() is Silktide Consent Manager's own
               documented public method (client/public/vendor/silktide-consent-
               manager.js) -- re-shows the initial Accept/Reject/Preferences

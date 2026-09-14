@@ -23,6 +23,7 @@ const ForgotPassword = lazyRetry(() => import("./pages/ForgotPassword"));
 const Journal = lazyRetry(() => import("./pages/Journal"));
 const Brands = lazyRetry(() => import("./pages/Brands"));
 const Legal = lazyRetry(() => import("./pages/Legal"));
+const Help = lazyRetry(() => import("./pages/Help"));
 const Login = lazyRetry(() => import("./pages/Login"));
 const MyOrders = lazyRetry(() => import("./pages/MyOrders"));
 const NotFound = lazyRetry(() => import("@/pages/NotFound"));
@@ -79,6 +80,7 @@ function Router() {
     <Route path={"/privacy"} component={Legal} />
     <Route path={"/terms"} component={Legal} />
     <Route path={"/returns"} component={Legal} />
+    <Route path={"/help"} component={Help} />
     <Route path={"/404"} component={NotFound} />
     {/* Must come before the /:slug catch-all below, or "/journal" would be
         read as a post-slug lookup (and 404, since no post has that slug)

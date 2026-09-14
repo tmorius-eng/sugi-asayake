@@ -1,3 +1,4 @@
+import { HELP_FAQ } from "@shared/help-faq";
 import { useEffect, useState } from "react";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { Link, useLocation, useSearch } from "wouter";
@@ -75,12 +76,7 @@ const SKIN_TYPES = skinTypeOptions;
 const SKIN_CONCERNS = skinConcernOptions;
 const INTERIOR_STYLES = interiorStyleOptions;
 
-const FAQ_ITEMS: Array<{ q: string; a: string }> = [
-  { q: "Хүргэлт хэдэн хоног болох вэ?", a: "Улаанбаатар доторх хүргэлт ихэвчлэн 24–48 цагийн дотор хийгдэнэ. Салбараас өөрөө авах бол захиалга баталгаажмагц бэлэн болно." },
-  { q: "Захиалгаа хэрхэн буцаах вэ?", a: "Хүлээн авсан бараанд гэмтэл, зөрүү илэрвэл савлагаа, баримтын хамт 9450-9911 дугаарт мэдэгдэнэ үү. Дэлгэрэнгүй нөхцөл Нүүр хуудасны \"Буцаалт\" хэсэгт бий." },
-  { q: "Төлбөрийн ямар сонголт байдаг вэ?", a: "Бэлэн мөнгө (хүргэлт/салбарт хүлээн авахдаа), мөн QPay (merchant тохиргоо дуусмагц идэвхжинэ)." },
-  { q: "Миний мэдээллийг хэрхэн хамгаалдаг вэ?", a: "Төлбөрийн картын мэдээллийг сайт хадгалдаггүй. Дэлгэрэнгүй Нүүр хуудасны \"Хувийн нууцлал\" хэсэгт бий." },
-];
+const FAQ_ITEMS = HELP_FAQ;
 
 export default function Profile() {
   const textFor = useSiteText();

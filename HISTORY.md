@@ -4,6 +4,10 @@
 
 ---
 
+## /help — Тусламж, холбоо барих хуудас (2026-09-14, гэрийн лаптоп)
+
+Утас footer-т, FAQ зөвхөн нэвтэрсэн профайлын "Тусламж" таб-д, салбарууд нүүрний locator-т — худалдан авахаас өмнө асуулттай хүнд очих нэг газар байгаагүй, footer-т "тусламж" линк ч байгаагүй. `client/src/pages/Help.tsx` (route `/help`, `/:slug`-аас өмнө): холбоо барих 4 карт (утас `tel:`, **Messenger** — `contact-facebook-url`-аас `m.me/<page>` гаргана, имэйл, ажлын цаг — бүгд store settings-ээс), салбарууд (`content.branches`: нэр/хаяг/утас/газрын зураг), FAQ accordion (`<details>`), холбоотой хуудсууд. FAQ **`shared/help-faq.ts`** — Profile-ийн `FAQ_ITEMS` хуулбарыг халж, 3 шинэ асуулт (захиалга хянах, бүртгэлгүй захиалах, жинхэнэ Японых) нэмэв; бүгд i18n-д. Footer "Нөхцөл ба бодлого" баганад линк, sitemap-д `/help` (0.5). CSS `.help-*` (токен, dark OK).
+
 ## VM→R2 өдөр тутмын backup + GitHub uptime + PDP jump links + захиалгын push баталгаа (2026-09-14, гэрийн лаптоп)
 
 - **Backup лаптопоос салав**: `scripts/oci/vm-backup.sh` (mysqldump admin/TLS, HeatWave-safe flags → gzip → `openssl enc -aes-256-cbc -pbkdf2 -iter 200000`, `BACKUP_PASSPHRASE` VM `.env`-д; гэрийн лаптопын `.env`-д хуулбар) + `scripts/oci/vm-backup-upload.mjs` (VM-ийн өөрийн `node_modules/@aws-sdk/client-s3`-ээр **тусдаа private bucket `sugi-asayake-backups`** (`db/` prefix; storefront-ийн bucket нь pub-*.r2.dev-ээр нийтэд ил тул тэнд хийхгүй), 30 хоногоос хуучныг устгана). `curl … | sudo bash` (rclone) classifier-т хаагдсан тул binary нэмээгүй. Эхний run: 250 KB, bucket үүссэн; **restore тест**: R2-оос татаж decrypt+gunzip → 61 `CREATE TABLE` ✓. Cron `0 19 * * *` UTC (03:00 УБ), лог `~/backup.log`. Хоёр скрипт deploy.ps1-д ордоггүй — өөрчилбөл гараар `scp`.

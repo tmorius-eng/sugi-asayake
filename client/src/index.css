@@ -4111,3 +4111,32 @@ html[data-storefront-theme="dark"] .sugi-site .qs-stage small { color: var(--ck-
 /* The sticky header (and the mobile cart bar) must not cover the heading we scroll to. */
 .pdp-anchor-section { scroll-margin-top: 96px; }
 @media (max-width: 760px) { .pdp-anchor-section { scroll-margin-top: 84px; } }
+
+/* ---- /help: contact cards, stores, FAQ (2026-09-14) ---------------------- */
+.help-contact { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 28px; }
+.help-card { display: grid; gap: 6px; padding: 16px; border: 1px solid var(--border); border-radius: 4px; background: var(--card); color: var(--foreground); text-decoration: none; transition: border-color .15s; }
+.help-card:hover { border-color: var(--foreground); }
+.help-card svg { color: #df1f3d; }
+.help-card-label { font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--muted-foreground); }
+.help-card strong { font-size: 15px; font-weight: 700; overflow-wrap: anywhere; }
+.help-card-static { cursor: default; }
+.help-section { margin-top: 40px; }
+.help-section h2 { font-size: clamp(20px, 2.2vw, 26px); font-weight: 600; letter-spacing: -.03em; margin: 0 0 14px; }
+.help-muted { color: var(--muted-foreground); font-size: 14px; }
+.help-stores { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.help-store { display: flex; gap: 12px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 4px; background: var(--card); }
+.help-store svg { flex: 0 0 auto; margin-top: 3px; color: #df1f3d; }
+.help-store > div { display: grid; gap: 3px; font-size: 14px; }
+.help-store span { color: var(--muted-foreground); }
+.help-store-links { display: flex; flex-wrap: wrap; gap: 14px; }
+.help-store-links a { color: var(--foreground); font-weight: 700; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }
+.help-faq { display: grid; gap: 8px; }
+.help-faq-item { border: 1px solid var(--border); border-radius: 4px; background: var(--card); padding: 0 16px; }
+.help-faq-item summary { cursor: pointer; padding: 14px 0; font-weight: 700; font-size: 15px; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.help-faq-item summary::-webkit-details-marker { display: none; }
+.help-faq-item summary::after { content: "+"; font-size: 20px; line-height: 1; color: var(--muted-foreground); }
+.help-faq-item[open] summary::after { content: "−"; }
+.help-faq-item p { margin: 0 0 14px; font-size: 14px; line-height: 1.7; color: var(--muted-foreground); }
+.help-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.help-links a { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--foreground); font-size: 13px; font-weight: 700; text-decoration: none; }
+.help-links a:hover { border-color: var(--foreground); }
