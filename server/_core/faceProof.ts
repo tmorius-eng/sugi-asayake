@@ -51,13 +51,34 @@ function secretKey(): Uint8Array {
  * a password reset or "sign out everywhere" invalidates it automatically,
  * without this module needing to know those flows exist.
  */
-async function signFaceProof(userId: number, sessionVersion: number, absoluteDeadlineMs: number): Promise<string> {
+/**
+ * Which browser tab is asking (2026-09-14, Tom: closing the /admin tab and
+ * opening it again went straight in -- "ayultai").
+ *
+ * The proof cookie survives a closed tab; a value in sessionStorage does
+ * not. The browser keeps a random id per tab there and sends it as
+ * `x-admin-tab` on every API call (client/src/lib/adminTab.ts); the proof
+ * records the tabs it was verified in, and a request from any other tab --
+ * a freshly opened one, or a stolen cookie replayed elsewhere -- is no
+ * proof at all. A request with no header (tests, curl) binds to "-", a value
+ * a real tab never has.
+ */
+const ADMIN_TAB_HEADER = "x-admin-tab";
+const NO_TAB = "-";
+const MAX_BOUND_TABS = 6;
+export function tabIdFrom(req: Request): string {
+  const raw = req.headers?.[ADMIN_TAB_HEADER];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return typeof value === "string" && /^[A-Za-z0-9-]{8,64}$/.test(value) ? value : NO_TAB;
+}
+
+async function signFaceProof(userId: number, sessionVersion: number, absoluteDeadlineMs: number, tabs: readonly string[]): Promise<string> {
   // Two deadlines in one token. `exp` is the IDLE one and slides forward on
   // real activity (see refreshFaceProof); `abs` is the absolute one and is
   // copied unchanged through every refresh, so renewing can extend a working
   // session but can never outlast the shift-length cap.
   const idleDeadline = Math.min(Date.now() + FACE_IDLE_TIMEOUT_MS, absoluteDeadlineMs);
-  return new SignJWT({ sub: String(userId), sv: sessionVersion, abs: absoluteDeadlineMs })
+  return new SignJWT({ sub: String(userId), sv: sessionVersion, abs: absoluteDeadlineMs, tabs: tabs.slice(-MAX_BOUND_TABS) })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(new Date(idleDeadline))
@@ -66,7 +87,7 @@ async function signFaceProof(userId: number, sessionVersion: number, absoluteDea
 
 /** The proof this request carries, or null when there is not a valid one.
  *  Shared by the status check and the heartbeat so they can never disagree. */
-async function readFaceProof(req: Request, userId: number, sessionVersion: number): Promise<{ absoluteDeadlineMs: number; idleDeadlineMs: number } | null> {
+async function readFaceProof(req: Request, userId: number, sessionVersion: number, options: { anyTab?: boolean } = {}): Promise<{ absoluteDeadlineMs: number; idleDeadlineMs: number; tabs: string[] } | null> {
   const raw = parseCookieHeader(req.headers.cookie ?? "")[ADMIN_FACE_COOKIE_NAME];
   if (!raw) return null;
   try {
@@ -88,7 +109,12 @@ async function readFaceProof(req: Request, userId: number, sessionVersion: numbe
     // whatever it was signed with.
     if (idleDeadlineMs > absoluteDeadlineMs || idleDeadlineMs - Date.now() > FACE_IDLE_TIMEOUT_MS + 5_000) return null;
     if (absoluteDeadlineMs <= Date.now()) return null;
-    return { absoluteDeadlineMs, idleDeadlineMs };
+    // Tab binding. A proof without `tabs` predates this rule and is invalid
+    // (one more camera pass, same policy as the missing-`abs` case above).
+    const tabs = Array.isArray(payload.tabs) ? payload.tabs.filter((t): t is string => typeof t === "string") : null;
+    if (!tabs || tabs.length === 0) return null;
+    if (!options.anyTab && !tabs.includes(tabIdFrom(req))) return null;
+    return { absoluteDeadlineMs, idleDeadlineMs, tabs };
   } catch {
     return null;
   }
@@ -131,14 +157,21 @@ export async function hasValidFaceProof(req: Request, userId: number, sessionVer
  * exercise the real cookie rather than a re-implementation of it.
  */
 export async function issueFaceProof(input: { req: Request; res: Response; userId: number; sessionVersion: number }): Promise<void> {
-  const proof = await signFaceProof(input.userId, input.sessionVersion, Date.now() + FACE_VERIFICATION_TTL_MS);
+  // A second tab that passes the camera JOINS the existing proof (its
+  // absolute window and its other tabs kept) rather than replacing it, so
+  // two open admin tabs do not keep locking each other out.
+  const existing = await readFaceProof(input.req, input.userId, input.sessionVersion, { anyTab: true });
+  const tab = tabIdFrom(input.req);
+  const tabs = existing ? [...existing.tabs.filter(t => t !== tab), tab] : [tab];
+  const absolute = existing ? existing.absoluteDeadlineMs : Date.now() + FACE_VERIFICATION_TTL_MS;
+  const proof = await signFaceProof(input.userId, input.sessionVersion, absolute, tabs);
   input.res.cookie(ADMIN_FACE_COOKIE_NAME, proof, faceProofCookieOptions(input.req));
 }
 
 export async function refreshFaceProof(input: { req: Request; res: Response; userId: number; sessionVersion: number }): Promise<{ ok: boolean; idleExpiresAt: number | null; absoluteExpiresAt: number | null }> {
   const proof = await readFaceProof(input.req, input.userId, input.sessionVersion);
   if (!proof) return { ok: false, idleExpiresAt: null, absoluteExpiresAt: null };
-  const renewed = await signFaceProof(input.userId, input.sessionVersion, proof.absoluteDeadlineMs);
+  const renewed = await signFaceProof(input.userId, input.sessionVersion, proof.absoluteDeadlineMs, proof.tabs);
   input.res.cookie(ADMIN_FACE_COOKIE_NAME, renewed, faceProofCookieOptions(input.req));
   return {
     ok: true,

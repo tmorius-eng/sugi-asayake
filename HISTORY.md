@@ -4,6 +4,10 @@
 
 ---
 
+## /admin царайны баталгаа tab-тай холбогдов — tab хаагаад буцахад заавал царай (2026-09-14, гэрийн лаптоп)
+
+Tom: "/admin tab-аа хаагаад буцаад орход царай уншуулахгүй шууд орж байна — аюултай". Өмнө нь proof cookie (idle 25 мин / абсолют 8 ц) tab хаасан ч амьд байсан. Шийдэл: **tab-д холбосон proof**. Client `client/src/lib/adminTab.ts` — `sessionStorage`-д tab бүрд нэг санамсаргүй id (tab хаагдахад алга болно), `main.tsx`-ийн tRPC fetch бүх дуудлагад `x-admin-tab` header илгээнэ. Server `faceProof.ts`: JWT-д `tabs` claim; `readFaceProof` header-ийн tab-ыг `tabs`-д байхыг шаардана (байхгүй → proof биш → `panelProcedure` FACE_REQUIRED → камер); `issueFaceProof` — хоёр дахь tab царайгаа таниулбал одоо байгаа proof-д **нэмэгдэнэ** (абсолют хугацаа, бусад tab хэвээр; max 6) — хоёр tab хоорондоо lock хийлцэхгүй; `refreshFaceProof` tabs-ийг дамжуулна. Header-гүй хүсэлт (тест, curl) `"-"` гэсэн pseudo-tab-д холбогдоно — бодит tab хэзээ ч тэр утгатай байхгүй тул хулгайлсан cookie header-гүй replay хийгдэхгүй. `tabs`-гүй хуучин proof хүчингүй (deploy-ийн дараа нэг удаа камер). Тест `face-idle.test.ts` +1; face suite 32/32.
+
 ## /admin → Баримт бичиг: editor хоосон харагдаж байсан (миний 09-14-ний регресс) + dev-only admin preview route (2026-09-14, гэрийн лаптоп)
 
 Tom (screenshot, /terms · English): гарчиг/lead бөглөгдсөн ч TinyMCE агуулга хоосон, storefront дээр текст зөв. Шалтгаан: `AdminDocumentsPanel`-ийн seed `useEffect` `[activeKey, activeLocale, saved, fallback]`-аас хамаардаг; шинэ `getLegalDocumentFallbackFor()` дуудлага бүрд **шинэ объект** буцаадаг (хуучин `getLegalDocumentFallback` массивын тогтвортой элемент буцаадаг байсан) → render бүрт effect → `setForm` + `editorKey++` → TinyMCE тасралтгүй remount, init хэзээ ч дуусдаггүй. Засвар: `useMemo(() => getLegalDocumentFallbackFor(activeKey, activeLocale), [activeKey, activeLocale])`. **Дүрэм**: effect dependency-д тавих утга render бүрт шинэ объект байж болохгүй.

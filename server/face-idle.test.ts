@@ -51,9 +51,9 @@ function fakeResponse() {
   return { res, jar };
 }
 
-function requestWith(jar: Map<string, string>) {
+function requestWith(jar: Map<string, string>, tab?: string) {
   const cookie = Array.from(jar, ([name, value]) => `${name}=${value}`).join("; ");
-  return { headers: { cookie }, protocol: "https", ip: "203.0.113.7" } as unknown as Request;
+  return { headers: { cookie, ...(tab ? { "x-admin-tab": tab } : {}) }, protocol: "https", ip: "203.0.113.7" } as unknown as Request;
 }
 
 async function issueProof(jar: Map<string, string>, res: Response) {
@@ -175,3 +175,20 @@ describe("admin face gate idle timeout", () => {
     });
   });
 });
+
+describe("face proof is bound to the browser tab that earned it (2026-09-14)", () => {
+  it("rejects the same cookie from another tab or with no tab header, accepts it from the verified tab, and lets a second tab join", async () => {
+    const { res, jar } = fakeResponse();
+    await issueFaceProof({ req: requestWith(jar, "tab-aaaaaaaa"), res, userId: USER, sessionVersion: SESSION_VERSION });
+    expect(await hasValidFaceProof(requestWith(jar, "tab-aaaaaaaa"), USER, SESSION_VERSION)).toBe(true);
+    // A freshly opened tab has a new id -- exactly the "closed the tab and came back" case.
+    expect(await hasValidFaceProof(requestWith(jar, "tab-bbbbbbbb"), USER, SESSION_VERSION)).toBe(false);
+    // A replayed cookie with no tab header at all is not a proof either.
+    expect(await hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION)).toBe(false);
+    // The second tab passes the camera: it joins, and the first keeps working.
+    await issueFaceProof({ req: requestWith(jar, "tab-bbbbbbbb"), res, userId: USER, sessionVersion: SESSION_VERSION });
+    expect(await hasValidFaceProof(requestWith(jar, "tab-bbbbbbbb"), USER, SESSION_VERSION)).toBe(true);
+    expect(await hasValidFaceProof(requestWith(jar, "tab-aaaaaaaa"), USER, SESSION_VERSION)).toBe(true);
+  });
+});
+

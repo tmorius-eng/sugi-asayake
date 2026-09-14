@@ -1,3 +1,4 @@
+import { adminTabId } from "@/lib/adminTab";
 import { trpc } from "@/lib/trpc";
 import { FACE_REQUIRED_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -96,8 +97,13 @@ const trpcClient = trpc.createClient({
       url: "/api/trpc",
       transformer: superjson,
       fetch(input, init) {
+        // The admin face proof is bound to this tab (client/src/lib/adminTab.ts);
+        // harmless on every other call, so it is simply always sent.
+        const headers = new Headers(init?.headers ?? {});
+        headers.set("x-admin-tab", adminTabId());
         return globalThis.fetch(input, {
           ...(init ?? {}),
+          headers,
           credentials: "include",
         });
       },
