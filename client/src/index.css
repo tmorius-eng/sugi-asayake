@@ -4162,12 +4162,28 @@ html[data-storefront-theme="dark"] .sugi-site .qs-stage small { color: var(--ck-
 .checkout-phone-verify { border: 1px solid var(--border); border-radius: 12px; padding: 14px; background: var(--muted); }
 .checkout-phone-verify .auth-card, .checkout-phone-verify .phone-verify-compact { margin: 10px 0 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
 
-/* Product facts (2026-09-14): ingredients / net content / origin / shelf life on the PDP. */
-.product-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 0; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--muted); }
-.product-facts > div { min-width: 0; }
-.product-facts-wide { grid-column: 1 / -1; }
-.product-facts dt { font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--muted-foreground); }
-.product-facts dd { margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: var(--foreground); overflow-wrap: anywhere; }
+/* Product facts (2026-09-14): glass pills in the bottom-left corner of the
+   product photograph, ingredients as a panel over the picture. Always on a
+   white packshot, so the colours are fixed rather than themed. */
+.product-facts-overlay { position: absolute; left: 14px; right: 68px; bottom: 14px; z-index: 2; display: grid; gap: 10px; pointer-events: none; }
+.product-facts-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.product-fact-pill { pointer-events: auto; display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 5px 12px 5px 10px; border: 1px solid rgba(255,255,255,.14); border-radius: 999px; background: rgba(23,24,27,.78); color: #fff; font: inherit; text-align: left; backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2); box-shadow: 0 6px 18px rgba(0,0,0,.18); }
+.product-fact-pill svg { flex: 0 0 auto; color: #f0b52d; }
+.product-fact-pill b { font-size: 13px; font-weight: 800; letter-spacing: .01em; line-height: 1.1; white-space: nowrap; }
+.product-fact-pill small { font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,.62); line-height: 1.1; white-space: nowrap; }
+.product-fact-pill.is-button { cursor: pointer; transition: background .18s var(--ease-out), transform .18s var(--ease-out); }
+.product-fact-pill.is-button:hover, .product-fact-pill.is-open { background: var(--primary); }
+.product-fact-pill.is-button:hover svg, .product-fact-pill.is-open svg { color: #fff; }
+.product-fact-pill.is-button:active { transform: scale(.97); }
+.product-facts-panel { pointer-events: auto; max-height: 52vh; overflow: auto; padding: 14px 16px 16px; border-radius: 18px; background: rgba(255,255,255,.94); color: #17181b; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 14px 40px rgba(0,0,0,.22); animation: product-facts-in .22s var(--ease-out); }
+.product-facts-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.product-facts-panel-head span { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--primary-text); }
+.product-facts-panel-head button { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 50%; background: rgba(23,24,27,.06); color: #17181b; cursor: pointer; }
+.product-facts-panel-head button:hover { background: rgba(23,24,27,.12); }
+.product-facts-panel p { margin: 0; font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; }
+@keyframes product-facts-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (max-width: 760px) { .product-facts-overlay { left: 10px; right: 10px; bottom: 10px; } .product-fact-pill { min-height: 32px; padding: 4px 10px 4px 9px; } .product-fact-pill small { display: none; } .product-facts-panel { max-height: 60vh; } }
+
 
 /* Messenger chat button (2026-09-14): bottom-right, above the back-to-top
    button, lifted over the mobile sticky bar the same way. */
