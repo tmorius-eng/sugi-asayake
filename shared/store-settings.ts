@@ -224,6 +224,22 @@ export const storeSettingSlots = [
     fallbackValue: "{нэр}, таны сагсанд сонгосон бараа хүлээж байна. Нэг товшилтоор захиалгаа дуусгаарай.",
   },
   {
+    key: "seo-google-site-verification",
+    group: "SEO ба баталгаажуулалт",
+    type: "text" as const,
+    label: "Google Search Console баталгаажуулах код",
+    description: "Search Console → Property → HTML tag: content=\"...\" доторх утгыг л буулгана. Хоосон бол tag гарахгүй.",
+    fallbackValue: "",
+  },
+  {
+    key: "seo-facebook-domain-verification",
+    group: "SEO ба баталгаажуулалт",
+    type: "text" as const,
+    label: "Meta (Facebook) домэйн баталгаажуулах код",
+    description: "Meta Business Suite → Brand safety → Domains → Meta-tag verification: content=\"...\" доторх утга. Business verification-д хэрэгтэй.",
+    fallbackValue: "",
+  },
+  {
     key: "email-subject-abandoned-cart",
     group: "Имэйлийн гарчиг",
     type: "text" as const,

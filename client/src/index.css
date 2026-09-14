@@ -4090,3 +4090,14 @@ html[data-storefront-theme="dark"] .sugi-site .qs-stage small { color: var(--ck-
 .gift-redeem-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .gift-redeem-row input { flex: 1 1 220px; min-width: 0; height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--background); color: var(--foreground); font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .06em; text-transform: uppercase; }
 .gift-redeem-row input:focus-visible { outline: 2px solid #f0b52d; outline-offset: 1px; }
+
+/* ---- Product share row (2026-09-14) ------------------------------------ */
+.share-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 18px; }
+.share-bar-label { font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--muted-foreground); margin-right: 4px; }
+.share-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 36px; height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--card); color: var(--foreground); font-size: 12px; font-weight: 700; text-decoration: none; cursor: pointer; transition: border-color .15s, background .15s; }
+.share-btn:hover { border-color: var(--foreground); }
+.share-btn:focus-visible { outline: 2px solid #f0b52d; outline-offset: 2px; }
+.share-btn-primary { background: var(--foreground); color: var(--card); border-color: var(--foreground); }
+.share-btn-primary:hover { opacity: .88; }
+.share-x { font-size: 15px; line-height: 1; font-weight: 700; }
+.share-bar-status { font-size: 12px; color: var(--muted-foreground); }

@@ -4,6 +4,16 @@
 
 ---
 
+## Барааны share + серверийн OG/JSON-LD + Google Merchant feed + Search Console (2026-09-14, гэрийн лаптоп)
+
+Tom: "baraa buriin page bur deer share to social … share hiihed ter platform deer n ter baraanii zuragn haragdag baih ystoi". Шалтгаан: SPA тул бүх URL нэг `index.html` — og:image нь нүүрний hero байсан, барааны линк Facebook-т hero зурагтай гарч байв. Crawler JS ажиллуулдаггүй тул **сервер** л барааны meta өгч чадна.
+
+- **`server/_core/routeMeta.ts`** (шинэ): `/product/:slug` → `getProductBySlug` (title/description/og:image=барааны зураг/og:type=product/canonical/**Product JSON-LD** (Offer MNT, availability, brand, gtin=13 оронтой sku, AggregateRating)/зургийн preload); `/:slug` → нийтлэгдсэн post бол Article meta; бусад slug анхдагч. `renderIndexHtml(template, pathname)`; 60 с cache. ⚠️ **`app.use("*")` дотор `req.path` үргэлж "/"** — `req.originalUrl` хэрэглэнэ (эхний оролдлого яг үүнээс болж ажиллаагүй).
+- `index.html`: `og:type`/`og:url`/`twitter:title` placeholder, `%SEO_VERIFICATION%` → шинэ store settings **`seo-google-site-verification`**, **`seo-facebook-domain-verification`** ("SEO ба баталгаажуулалт" бүлэг) — утга байвал `<meta name=google-site-verification|facebook-domain-verification>`.
+- **`/feeds/google-merchant.xml`** (`server/_core/merchantFeed.ts`): RSS 2.0 + g: namespace, зурагтай нийтлэгдсэн бараа (519/980), price "N MNT", хуучин үнэ байвал price=хуучин + sale_price, gtin эсвэл identifier_exists=no, product_type=ангилал; 10 мин cache. Merchant Center → Products → Add feed → Scheduled fetch → энэ URL.
+- **`ShareBar.tsx`**: native `navigator.share` (утсанд OS share sheet — Messenger/Instagram/Telegram) + Facebook/X/Telegram линк + холбоос хуулах (clipboard guard, fallback execCommand/prompt). PDP-д тайлбарын доор; `.share-bar*` CSS токенууд (dark-д ажиллана); i18n 5 entry.
+- Баталгаажуулалт (dev): барааны head — title/description/og:image=барааны зураг/og:type=product/JSON-LD Product/preload; post — og:type=article + cover; `/no-such-thing` анхдагч; feed 519 item; share bar 1280px screenshot ✓. Facebook Sharing Debugger-ээр амьд URL-ийг Tom нэг удаа "Scrape again" хийвэл хуучин cache арилна.
+
 ## Утасны өргөний sweep — 390px × dark × ja (2026-09-14, гэрийн лаптоп)
 
 Нүүр, /shop, PDP, /checkout, /login-ийг Playwright-аар 390px, харанхуй, ja-аар: хэвтээ overflow 0, эвдэрсэн зураг 0, console алдаа 0. Олдсон/зассан: (1) **өөрийн регресс** — `NUMERIC_PLACEHOLDERS` (`{N}`) зөвхөн цифр таардаг болсноос "Арчилгаа, гоо сайхан, эрүүл ахуйн **900+** төрөл" орчуулагдахаа больсон байв → тоон class-д `+` нэмэв (`[\d][\d.,+\s]*?`), EN "900+ lines across skincare…" дахин гарна; (2) 2 хаах товч 14×14/16×16 tap target (WCAG 2.5.8 ≥24) — `AddedToCartToast` (padding 6 / margin −6) ба `SitePromo` зарлалын мөрийн × (`p-1.5 -m-1.5`); (3) header-ийн 24×24 дүрсэн товчнууд, breadcrumb/inline текст линкүүд 15–18px — зөвшөөрөгдөх (inline текст), хөндөөгүй.

@@ -22,7 +22,8 @@ export async function setupVite(app: Express, server: Server) {
       template = await vite.transformIndexHtml(url, template);
       // Same substitution as production (see serveStatic) so an SEO edit can
       // actually be checked locally instead of only after a deploy.
-      template = await renderIndexHtml(template);
+      // originalUrl, not req.path: inside app.use("*") req.path is always "/".
+      template = await renderIndexHtml(template, req.originalUrl.split("?")[0]);
       res.status(200).set({ "Content-Type": "text/html" }).end(template);
     } catch (error) {
       vite.ssrFixStacktrace(error as Error);
@@ -76,10 +77,10 @@ export function serveStatic(app: Express) {
 
   // SPA fallback: any route that isn't a static asset or an already-handled
   // /api/* route falls back to index.html so client-side routing works.
-  app.use("*", async (_req, res, next) => {
+  app.use("*", async (req, res, next) => {
     try {
       const template = await fs.promises.readFile(templatePath, "utf-8");
-      res.status(200).set({ "Content-Type": "text/html", "Cache-Control": "no-cache" }).end(await renderIndexHtml(template));
+      res.status(200).set({ "Content-Type": "text/html", "Cache-Control": "no-cache" }).end(await renderIndexHtml(template, req.originalUrl.split("?")[0]));
     } catch (error) {
       next(error);
     }

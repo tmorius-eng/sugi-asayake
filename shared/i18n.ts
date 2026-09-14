@@ -875,6 +875,12 @@ export const UI_STRINGS: Record<string, { en: string; ja: string }> = {
   "Одоогоор бүх бараа нөөцгүй байна.": { en: "All of these products are currently out of stock.", ja: "現在すべての商品が在庫切れです。" },
   "Бүх {n} бараа сагсанд орлоо.": { en: "All {n} products are in your cart.", ja: "{n}点すべてをカートに追加しました。" },
   "{n} бараа сагсанд орлоо ({skipped} нөөцгүй тул алгассан).": { en: "{n} products added to your cart ({skipped} skipped — out of stock).", ja: "{n}点をカートに追加しました（在庫切れの{skipped}点はスキップ）。" },
+  // -- product share row (2026-09-14) --------------------------------------
+  "Хуваалцах": { en: "Share", ja: "シェア" },
+  "хуваалцах": { en: "share", ja: "シェア" },
+  "Холбоос хуулах": { en: "Copy link", ja: "リンクをコピー" },
+  "Холбоос хуулагдлаа": { en: "Link copied", ja: "リンクをコピーしました" },
+  "Холбоосыг хуулна уу:": { en: "Copy this link:", ja: "このリンクをコピーしてください:" },
   // -- cookie banner (Silktide, vendor-rendered from the cookie-text-* site text) ---
   "Күки (cookie) гэдэг нь таны сагс, нэвтэрсэн төлөвийг санах жижиг файл. Та зөвшөөрвөл бид нэмээд сайтад хэдэн хүн орж байгааг нэргүйгээр тоолж, сайтаа сайжруулна. Хувийн мэдээллийг тань хэнд ч өгөхгүй.": { en: "A cookie is a small file that remembers your cart and whether you are signed in. If you agree, we also count anonymously how many people visit, to improve the site. Your personal data is never given to anyone.", ja: "Cookieは、カートの中身やログイン状態を記憶する小さなファイルです。同意いただくと、サイト改善のために訪問者数を匿名で集計します。個人情報を第三者に渡すことはありません。" },
   "За, зөвшөөрч байна": { en: "OK, I agree", ja: "はい、同意します" },

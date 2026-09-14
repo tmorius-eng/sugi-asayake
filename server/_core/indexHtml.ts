@@ -2,6 +2,7 @@ import { getSiteMedia, getSiteText, getStoreSettingValue, getStorefrontBranches 
 import { getSiteTextSlot, type SiteTextSlotKey } from "../../shared/site-text";
 import { getSiteMediaSlot } from "../../shared/site-media";
 import { ENV } from "./env";
+import { resolveRouteMeta } from "./routeMeta";
 
 /**
  * Substitutes the admin-editable site-wide SEO values into
@@ -52,14 +53,23 @@ async function resolveValues(): Promise<Map<string, string>> {
   const now = Date.now();
   if (cache && now - cache.renderedAt < CACHE_TTL_MS) return cache.values;
 
-  const [rows, branches, phoneDigits, facebookUrl, instagramUrl, media] = await Promise.all([
+  const [rows, branches, phoneDigits, facebookUrl, instagramUrl, media, googleVerification, facebookVerification] = await Promise.all([
     getSiteText(),
     getStorefrontBranches(),
     getStoreSettingValue("contact-phone-tel"),
     getStoreSettingValue("contact-facebook-url"),
     getStoreSettingValue("contact-instagram-url"),
     getSiteMedia(),
+    getStoreSettingValue("seo-google-site-verification"),
+    getStoreSettingValue("seo-facebook-domain-verification"),
   ]);
+  // Search Console / Meta Business verification tokens (2026-09-14): pasted
+  // in /admin -> Дэлгүүрийн тохиргоо, rendered as the <meta> each service
+  // asks for. Empty setting = no tag at all.
+  const verificationTags = [
+    googleVerification.trim() ? `<meta name="google-site-verification" content="${escapeAttribute(googleVerification.trim())}" />` : "",
+    facebookVerification.trim() ? `<meta name="facebook-domain-verification" content="${escapeAttribute(facebookVerification.trim())}" />` : "",
+  ].filter(Boolean).join("\n    ");
 
   // LCP (2026-09-13, measured on a throttled phone: 3.4s, of which 2.8s was
   // "load delay"): the hero photograph is the largest thing on the first
@@ -107,6 +117,8 @@ async function resolveValues(): Promise<Map<string, string>> {
     ["SEO_STRUCTURED_DATA", JSON.stringify(structuredData).replace(/</g, "\\u003c")],
     ["SEO_HERO_PRELOAD", heroUrl ? `<link rel="preload" as="image" href="${escapeAttribute(heroUrl)}" fetchpriority="high" />` : ""],
     ["SEO_OG_IMAGE", escapeAttribute(absoluteUrl(heroUrl))],
+    ["SEO_OG_TYPE", "website"],
+    ["SEO_VERIFICATION", verificationTags],
 
     // The consent banner's copy, which lands inside a JS string literal
     // rather than an HTML attribute -- hence escapeJsString, not escapeAttribute.
@@ -132,7 +144,7 @@ async function resolveValues(): Promise<Map<string, string>> {
  * the document untouched-but-valid if the database is unreachable: an
  * outage should degrade the link preview, never take down the page itself.
  */
-export async function renderIndexHtml(template: string): Promise<string> {
+export async function renderIndexHtml(template: string, pathname = "/"): Promise<string> {
   let values: Map<string, string>;
   try {
     values = await resolveValues();
@@ -140,7 +152,12 @@ export async function renderIndexHtml(template: string): Promise<string> {
     console.error("[seo] Could not read site SEO values; serving the fallback document.", error);
     values = new Map();
   }
-  return template.replace(/%((?:SEO|COOKIE)_[A-Z_]+)%/g, (match, key: string) => values.get(key) ?? fallbackFor(key) ?? match);
+  // A product or journal post carries its own title, description, image
+  // and structured data (server/_core/routeMeta.ts); everything else keeps
+  // the site-wide values.
+  const siteName = values.get("SEO_SITE_NAME") ?? getSiteTextSlot("seo-text-site-name").fallbackValue;
+  const routeMeta = await resolveRouteMeta(pathname, siteName.replace(/&quot;/g, '"').replace(/&amp;/g, "&"));
+  return template.replace(/%((?:SEO|COOKIE)_[A-Z_]+)%/g, (match, key: string) => routeMeta?.get(key) ?? values.get(key) ?? fallbackFor(key) ?? match);
 }
 
 /**
@@ -182,6 +199,8 @@ function fallbackFor(key: string): string | undefined {
     case "SEO_TWITTER_DESCRIPTION": return escapeAttribute(getSiteTextSlot("seo-text-twitter-description").fallbackValue);
     case "SEO_CANONICAL": return escapeAttribute(ENV.publicBaseUrl || "https://sugiasayake.mn");
     case "SEO_STRUCTURED_DATA": return "{}";
+    case "SEO_OG_TYPE": return "website";
+    case "SEO_VERIFICATION": return "";
     case "SEO_OG_IMAGE": return escapeAttribute(absoluteUrl(getSiteMediaSlot("home-hero").fallbackUrl));
     case "SEO_HERO_PRELOAD": {
       const fallback = getSiteMediaSlot("home-hero").fallbackUrl;

@@ -534,6 +534,7 @@ Tom-ийн "growth tier" жагсаалтаас нэг дор хэрэгжүүл
 - `abandoned-cart-reminder` job одоо **web push**-аар ч сануулна (утасны бүртгэлтэй, имэйлгүй хэрэглэгч) — `push-body-abandoned-cart` store setting; ядаж нэг суваг хүрсэн үед л `reminderSentAt`.
 - `{N}`/`{n}` placeholder `+`-тэй тоо ("900+") таарна; 2 хаах товчны tap target ≥24px.
 - Tom-д: барааны нэр "Бараа (4901655440509)" (POS placeholder) нэрлэх; `product_categories` "Shampoo" (id 1, хоосон) устгаж болно; privacy §4 "Aiven"→"Oracle Cloud (Токио)" 3 хэлээр код fallback-д зассан (admin мөр байвал тэр давамгайлна).
+- **Барааны share + серверийн meta** (`server/_core/routeMeta.ts`): `/product/:slug` ба нийтлэл `/:slug` өөрийн og:title/description/**og:image**/JSON-LD-тэй — `renderIndexHtml(template, originalUrl)`. **Google Merchant feed** `/feeds/google-merchant.xml`; **Search Console / Meta домэйн баталгаажуулалт** — /admin → Дэлгүүрийн тохиргоо → "SEO ба баталгаажуулалт" (2 код). PDP-д `ShareBar` (native share + FB/X/Telegram/copy). Tom: Search Console-д property нэмж кодоо буулгах; Merchant Center-д feed URL өгөх; FB Sharing Debugger-ээр барааны линкийг "Scrape again".
 - Дараагийн боломж (хийгээгүй): бэлгийн картыг checkout-оор зарах (`gift_cards.purchaseOrderId` бэлэн; 3 "paid" шилжилт дээр код гаргах хэрэгтэй); referral.
 
 ## Дараагийн ажлын санал (2026-09-12-ний байдлаар НЭЭЛТТЭЙ зүйлс л — хаагдсан бүх зүйл HISTORY.md-д)
