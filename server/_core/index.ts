@@ -23,6 +23,7 @@ import { warmUpImageSafety } from "./imageSafety";
 import { dbPing } from "../db";
 import { serveRobots, serveSitemap } from "./sitemap";
 import { serveMerchantFeed } from "./merchantFeed";
+import { serveProductOgImage } from "./ogImage";
 import { finishFacebookLogin, startFacebookLogin } from "./facebookAuth";
 import { startScheduler } from "./scheduler";
 import { registerAbandonedCartReminderJob, registerDataRetentionJob, registerLowStockDigestJob, registerInventorySyncJob, registerNotificationOutboxPurgeJob, registerStaleTransferJob, registerStockLedgerDriftJob } from "../automation";
@@ -140,6 +141,8 @@ async function startServer() {
   app.get("/robots.txt", serveRobots);
   // Google Merchant Center scheduled-fetch URL (2026-09-14).
   app.get("/feeds/google-merchant.xml", serveMerchantFeed);
+  // The 1200x630 share card for a product (2026-09-14, see ogImage.ts).
+  app.get("/og/product/:slug", serveProductOgImage);
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);

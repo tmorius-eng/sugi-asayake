@@ -24,6 +24,7 @@ import { getProductBySlug, getPublishedPostBySlug } from "../db";
 import { getOrSetCached } from "./ttlCache";
 import { ENV } from "./env";
 import { escapeAttribute } from "./indexHtml";
+import { OG_HEIGHT, OG_WIDTH } from "./ogImage";
 
 const CACHE_TTL_MS = 60_000;
 
@@ -46,7 +47,11 @@ async function productMeta(slug: string, siteName: string): Promise<RouteMeta | 
   const product = await getProductBySlug(slug);
   if (!product) return null;
   const description = clip(stripHtml(product.shortDescription || product.description || `${product.name} — ${siteName}`));
+  // The share card is composed by /og/product/<slug>.jpg (see ogImage.ts):
+  // always 1200x630, so Facebook draws the large-image layout whatever size
+  // the catalogue photo is. Structured data keeps the real photo.
   const image = absoluteUrl(product.imageUrl);
+  const card = product.imageUrl ? absoluteUrl(`/og/product/${product.slug}.jpg`) : "";
   const url = absoluteUrl(`/product/${product.slug}`);
   const title = `${product.name} — ${siteName}`;
   const structuredData = {
@@ -77,7 +82,13 @@ async function productMeta(slug: string, siteName: string): Promise<RouteMeta | 
     ["SEO_TWITTER_DESCRIPTION", escapeAttribute(description)],
     ["SEO_OG_TYPE", "product"],
     ["SEO_CANONICAL", escapeAttribute(url)],
-    ...(image ? [["SEO_OG_IMAGE", escapeAttribute(image)] as [string, string]] : []),
+    ...(card ? [
+      ["SEO_OG_IMAGE", escapeAttribute(card)] as [string, string],
+      ["SEO_OG_IMAGE_META", `<meta property="og:image:width" content="${OG_WIDTH}" />
+    <meta property="og:image:height" content="${OG_HEIGHT}" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:alt" content="${escapeAttribute(product.name)}" />`] as [string, string],
+    ] : []),
     ["SEO_STRUCTURED_DATA", jsonLd(structuredData)],
     // The product photo is the PDP's largest paint; start fetching it with the document.
     ["SEO_HERO_PRELOAD", product.imageUrl ? `<link rel="preload" as="image" href="${escapeAttribute(product.imageUrl)}" fetchpriority="high" />` : ""],

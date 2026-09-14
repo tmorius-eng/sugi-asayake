@@ -4,6 +4,10 @@
 
 ---
 
+## Share карт жижиг дөрвөлжин гарч байсан → 1200×630 OG карт бараа бүрд (2026-09-14, гэрийн лаптоп)
+
+Tom (FB post composer screenshot): зураг жижиг, текст том. Шалтгаан: Facebook 600×315-аас жижиг og:image-ийг жижиг дөрвөлжин thumbnail-аар зурдаг; Cocochi-ийн зураг **270×390** (Diane 1280×1280 тул том гарах байсан) — бараа бүрийн зураг өөр өөр хэмжээтэй. Шийдэл `server/_core/ogImage.ts`: `/og/product/<slug>.jpg` — sharp-аар packshot-ийг 1200×630 цагаан канвас дээр төвлөрүүлж (40px padding, upscale зөвшөөрнө) JPEG q86; tmpdir cache (slug+зургийн URL hash), 7 хоног Cache-Control; зураггүй → 404 (routeMeta тэр үед нүүрний зураг). `routeMeta`: og:image = карт, + `og:image:width/height/type/alt` (`%SEO_OG_IMAGE_META%`); JSON-LD/preload бодит зураг хэвээр. ⚠️ Facebook хуудас бүрийн scrape-ийг ~30 хоног cache-лдэг — өмнө нь хуваалцсан URL-д Sharing Debugger → "Scrape again" хэрэгтэй; шинэ бараанд шууд.
+
 ## Share — утсан дээр Facebook товч зүгээр л апп нээдэг байсан; гарын авлага + борлуулалтын танилцуулга (2026-09-14, гэрийн лаптоп)
 
 Tom (iPhone): "Facebook share songood orhoor zgr facebook ongoij baina". Шалтгаан: iOS дээр Facebook апп `facebook.com/sharer/sharer.php` universal link-ийг барьж аваад нүүр хуудсаа нээдэг (Meta-ийн мэдэгдэж буй зан; `fb://` share scheme хуучирсан). Засвар `ShareBar.tsx`: `(pointer: coarse)` төхөөрөмж дээр Facebook товчны оронд **Messenger deep link** (`fb-messenger://share/?link=`), Facebook руу хуваалцах нь эхний хар "Хуваалцах" (OS share sheet) товчоор; компьютер дээр Facebook вэб sharer хэвээр (тэнд ажилладаг). X/Telegram intent хоёр утсан дээр хэвийн. Мөн `docs/ADMIN-MANUAL.md` (ажилтны өдөр тутмын заавар, эрхийн түвшин, захиалгын урсгал, юу хийж болохгүй) ба `docs/SALES-BRIEF.md` (худалдан авагч компанид: тоо, боломж, дэд бүтэц, хүлээгдэж буй бизнесийн алхам).

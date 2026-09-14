@@ -118,6 +118,7 @@ async function resolveValues(): Promise<Map<string, string>> {
     ["SEO_HERO_PRELOAD", heroUrl ? `<link rel="preload" as="image" href="${escapeAttribute(heroUrl)}" fetchpriority="high" />` : ""],
     ["SEO_OG_IMAGE", escapeAttribute(absoluteUrl(heroUrl))],
     ["SEO_OG_TYPE", "website"],
+    ["SEO_OG_IMAGE_META", ""],
     ["SEO_VERIFICATION", verificationTags],
 
     // The consent banner's copy, which lands inside a JS string literal
@@ -200,6 +201,7 @@ function fallbackFor(key: string): string | undefined {
     case "SEO_CANONICAL": return escapeAttribute(ENV.publicBaseUrl || "https://sugiasayake.mn");
     case "SEO_STRUCTURED_DATA": return "{}";
     case "SEO_OG_TYPE": return "website";
+    case "SEO_OG_IMAGE_META": return "";
     case "SEO_VERIFICATION": return "";
     case "SEO_OG_IMAGE": return escapeAttribute(absoluteUrl(getSiteMediaSlot("home-hero").fallbackUrl));
     case "SEO_HERO_PRELOAD": {
