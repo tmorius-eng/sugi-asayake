@@ -30,9 +30,18 @@ $dbIp = "10.0.1.227"
 if (-not $Finish) {
   New-Item -ItemType Directory -Force $sshDir | Out-Null
   if (-not (Test-Path $key)) {
-    & ssh-keygen -t ed25519 -C "sugi-asayake-oci-$env:COMPUTERNAME" -f $key -N '""' -q
+    # Through cmd.exe so the empty passphrase survives: PowerShell (5.1 and 7)
+    # either drops an empty "" argument or, with '""', hands ssh-keygen the two
+    # quote characters as the passphrase -- which is exactly what happened on
+    # the home laptop on 2026-09-13 (the VM accepted the key, ssh could not
+    # unlock it: "incorrect passphrase", "Permission denied (publickey)").
+    & cmd.exe /c "ssh-keygen -t ed25519 -C ""sugi-asayake-oci-$env:COMPUTERNAME"" -f ""$key"" -N """" -q"
     Write-Host "SSH key created: $key"
   }
+  # Prove the key opens without a passphrase; a key that prompts here would fail
+  # silently later inside the scheduled tunnel task.
+  $pub = $null | & ssh-keygen -y -f $key 2>$null
+  if (-not $pub) { throw "The key at $key needs a passphrase -- it must not. Run: ssh-keygen -p -f $key (old passphrase, then empty twice)." }
   if (-not (Test-Path $cfg) -or -not (Select-String -Path $cfg -Pattern "Host sugi-oci" -Quiet)) {
     @"
 
