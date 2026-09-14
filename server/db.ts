@@ -4213,13 +4213,27 @@ export async function markScheduledJobRun(jobName: string): Promise<void> {
  * on `users` already excludes every guest cart without a separate
  * condition; `reminderSentAt IS NULL` is what keeps a still-abandoned cart
  * from being reminded twice.
+ *
+ * 2026-09-14: registration is phone-only, so most customers have no email
+ * at all -- the reminder reached almost nobody. A shopper who turned on
+ * web push (Profile -> Notifications) is now eligible too; the job sends
+ * whichever channels the row says exist (`emailOptIn`+`email`, and/or
+ * `pushSubscriptions` > 0).
  */
 export async function getAbandonedCartsNeedingReminder() {
   const db = await getDb();
   if (!db) return [];
   const staleCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  return db
-    .selectDistinct({ cartId: carts.id, userId: users.id, email: users.email, name: users.name })
+  const pushSubscriptionCount = sql<number>`(SELECT COUNT(*) FROM ${pushSubscriptions} WHERE ${pushSubscriptions.userId} = ${users.id})`;
+  const rows = await db
+    .selectDistinct({
+      cartId: carts.id,
+      userId: users.id,
+      email: users.email,
+      emailOptIn: users.emailOptIn,
+      name: users.name,
+      pushSubscriptions: pushSubscriptionCount,
+    })
     .from(carts)
     .innerJoin(cartItems, eq(cartItems.cartId, carts.id))
     .innerJoin(users, eq(users.id, carts.userId))
@@ -4227,9 +4241,12 @@ export async function getAbandonedCartsNeedingReminder() {
       eq(carts.status, "active"),
       lt(carts.updatedAt, staleCutoff),
       isNull(carts.reminderSentAt),
-      eq(users.emailOptIn, true),
-      isNotNull(users.email),
+      or(
+        and(eq(users.emailOptIn, true), isNotNull(users.email)),
+        sql`${pushSubscriptionCount} > 0`,
+      ),
     ));
+  return rows.map(row => ({ ...row, pushSubscriptions: Number(row.pushSubscriptions) }));
 }
 
 export async function markCartReminderSent(cartId: number): Promise<void> {

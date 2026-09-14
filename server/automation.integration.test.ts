@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, inArray } from "drizzle-orm";
-import { cartItems, carts, productCategories, products, productVariants, users } from "../drizzle/schema";
-import { getDb } from "./db";
+import { cartItems, carts, productCategories, products, productVariants, pushSubscriptions, users } from "../drizzle/schema";
+import { getAbandonedCartsNeedingReminder, getDb } from "./db";
 import { hashPassword } from "./_core/password";
 import { runAbandonedCartReminderJob, runLowStockDigestJob } from "./automation";
 
@@ -93,6 +93,28 @@ describeWithDatabase("automation jobs integration", () => {
     await runAbandonedCartReminderJob();
     const secondRun = logSpy.mock.calls.map(call => call.join(" ")).join("\n");
     expect(secondRun).not.toContain(`${marker}-optedin@example.invalid`);
+  });
+
+  it("treats a push-subscribed customer without an opted-in email as eligible (phone-only registration)", async () => {
+    const db = await getDb();
+    if (!db) throw new Error("no db");
+    // The opted-out user has no usable email; a push subscription alone must qualify them.
+    const cartId = await insertStaleCart({ userId: optedOutUserId });
+    const endpoint = `https://push.example.invalid/${marker}`;
+    await db.insert(pushSubscriptions).values({ userId: optedOutUserId, endpoint, p256dh: "test-p256dh", auth: "test-auth" });
+    try {
+      const eligible = await getAbandonedCartsNeedingReminder();
+      const row = eligible.find(cart => cart.cartId === cartId);
+      expect(row).toBeDefined();
+      expect(row?.pushSubscriptions).toBe(1);
+      expect(row?.emailOptIn).toBe(false);
+      // Without the subscription the same cart is not eligible.
+      await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
+      const afterwards = await getAbandonedCartsNeedingReminder();
+      expect(afterwards.find(cart => cart.cartId === cartId)).toBeUndefined();
+    } finally {
+      await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
+    }
   });
 
   it("sends a low-stock digest only when the product list is non-empty, naming the actual SKU", async () => {

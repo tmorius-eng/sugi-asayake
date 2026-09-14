@@ -4,6 +4,10 @@
 
 ---
 
+## Орхигдсон сагсны сануулга — web push суваг (2026-09-14, гэрийн лаптоп)
+
+`abandoned-cart-reminder` job (цаг тутам, Phase E) зөвхөн `emailOptIn`+имэйлтэй хэрэглэгчид илгээдэг байсан — бүртгэл утасны дугаараар л тул бараг хэнд ч хүрдэггүй байв. `getAbandonedCartsNeedingReminder` одоо (имэйл opt-in) **ЭСВЭЛ** (`push_subscriptions` ≥ 1) хэрэглэгчийн сагсыг буцаана (`emailOptIn`, `pushSubscriptions` тоотой); job суваг бүрээр илгээж (`sendPushToUser`, `url: /checkout`, `tag: abandoned-cart`), **ядаж нэг суваг бодитоор хүрсэн үед л** `reminderSentAt` тэмдэглэнэ (үхсэн subscription → дараагийн tick дахин оролдоно). Push текст admin-аар: шинэ store setting `push-body-abandoned-cart` ("Мессежийн загвар" бүлэг, `{нэр}`), гарчиг = имэйлийн гарчиг. Тест: `automation.integration.test.ts` +1 (push subscription-тай, имэйлгүй хэрэглэгч eligible; subscription устгахад eligible биш).
+
 ## Нүүрний rail-уудын cache + жижиг засварууд (2026-09-14, гэрийн лаптоп)
 
 Tom: "chi hiij chadah ymnuudaa hii yanzl bas saijruul! … uur hamaaralgui aldaa oldwol ter buriig ynzala". Амьд хэмжилт: нүүрний tRPC дуудлага бүр ~0.2 с, ихэнх нь UB→Токио сүлжээ; зөвхөн `catalog.bestsellers` cold 0.48 с бодит серверийн ажил. Тиймээс `getBestsellingProducts`/`getFeaturedBrands`/`getBrandDirectory`/`getPublishedProductCount`/`getRelatedProducts` одоо `STOREFRONT_CACHE_TTL_MS` (30 с) cache-тэй (`server/db.ts`), бичигчид (featured brand create/update/delete, product create/update/delete, POS sale, QPay paid, admin order update) түлхүүрээ шууд хаяна — шинэ `invalidateCachedByPrefix` (`server/_core/ttlCache.ts`) параметртэй түлхүүрт. Gated тест bestsellers/catalog 33/33, unit 656 ✓.

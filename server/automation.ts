@@ -4,6 +4,7 @@ import { runInventorySync } from "./integrations/inventorySync";
 import { fillTemplate } from "../shared/store-settings";
 import { ubDateKey } from "../shared/notification-events";
 import { sendAccountEmail, notifyOwner } from "./_core/notification";
+import { sendPushToUser } from "./_core/webPush";
 import { registerJob } from "./_core/scheduler";
 
 /**
@@ -21,14 +22,26 @@ import { registerJob } from "./_core/scheduler";
 // (server/db.ts) for the exact staleness/eligibility rules.
 export async function runAbandonedCartReminderJob(): Promise<void> {
   const abandonedCarts = await getAbandonedCartsNeedingReminder();
+  if (abandonedCarts.length === 0) return;
+  const subject = await getStoreSettingValue("email-subject-abandoned-cart");
+  const emailBody = await getStoreSettingValue("email-body-abandoned-cart");
+  const pushBody = await getStoreSettingValue("push-body-abandoned-cart");
   for (const cart of abandonedCarts) {
-    if (!cart.email) continue; // belt-and-suspenders; the query itself already filters this
-    await sendAccountEmail({
-      to: cart.email,
-      subject: await getStoreSettingValue("email-subject-abandoned-cart"),
-      content: fillTemplate(await getStoreSettingValue("email-body-abandoned-cart"), { "{нэр}": cart.name ?? "хүндэт харилцагч" }),
-    });
-    await markCartReminderSent(cart.cartId);
+    const name = cart.name ?? "хүндэт харилцагч";
+    let delivered = false;
+    if (cart.email && cart.emailOptIn) {
+      await sendAccountEmail({ to: cart.email, subject, content: fillTemplate(emailBody, { "{нэр}": name }) });
+      delivered = true;
+    }
+    // 2026-09-14: the phone-only customer's channel. Counted as delivered
+    // only when a subscription actually accepted it, so a cart whose only
+    // subscription has died (404/410, dropped by sendPushToUser) is retried
+    // by a later tick instead of being silently marked.
+    if (cart.pushSubscriptions > 0) {
+      const sent = await sendPushToUser(cart.userId, { title: subject, body: fillTemplate(pushBody, { "{нэр}": name }), url: "/checkout", tag: "abandoned-cart" });
+      if (sent > 0) delivered = true;
+    }
+    if (delivered) await markCartReminderSent(cart.cartId);
   }
 }
 
