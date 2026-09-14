@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Facebook, Link2, Send, Share2 } from "lucide-react";
+import { Check, Facebook, Link2, MessageCircle, Send, Share2 } from "lucide-react";
 import { useT } from "@/hooks/useLocale";
 
 /**
@@ -54,8 +54,16 @@ export default function ShareBar({ title, url }: { title: string; url?: string }
     }
   };
 
+  // On a phone the Facebook app intercepts facebook.com/sharer links and
+  // just opens its feed (2026-09-14, Tom's iPhone) -- the reliable way to
+  // reach Facebook there is the OS share sheet above. So on touch devices
+  // the explicit Facebook button becomes a Messenger deep link (which does
+  // work), and the web sharer is offered only where it behaves: desktop.
+  const isTouch = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
   const targets = [
-    { key: "facebook", label: "Facebook", href: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`, icon: <Facebook size={15} aria-hidden="true" /> },
+    ...(isTouch
+      ? [{ key: "messenger", label: "Messenger", href: `fb-messenger://share/?link=${encodedUrl}`, icon: <MessageCircle size={15} aria-hidden="true" /> }]
+      : [{ key: "facebook", label: "Facebook", href: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`, icon: <Facebook size={15} aria-hidden="true" /> }]),
     { key: "x", label: "X", href: `https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedTitle}`, icon: <span aria-hidden="true" className="share-x">𝕏</span> },
     { key: "telegram", label: "Telegram", href: `https://t.me/share/url?url=${encodedUrl}&text=${encodedTitle}`, icon: <Send size={15} aria-hidden="true" /> },
   ];

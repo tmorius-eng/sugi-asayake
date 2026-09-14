@@ -538,6 +538,7 @@ Tom-ийн "growth tier" жагсаалтаас нэг дор хэрэгжүүл
 - **DB backup одоо VM дээрээс** (`~/sugi-asayake/vm-backup.sh`, cron 19:00 UTC → private R2 `sugi-asayake-backups/db/*.sql.gz.enc`, 30 хоног; restore: `openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:BACKUP_PASSPHRASE | gunzip | mysql`; passphrase VM `.env` + гэрийн `.env`). Лаптопын Windows task нэмэлт хуулбар л. **Uptime**: `.github/workflows/uptime.yml` — ⚠️ Tom repo secrets `NTFY_URL`/`NTFY_TOKEN` нэмэх хүртэл push илгээхгүй.
 - **Захиалгын push ажиллаж байгаа нь амьдаар батлагдсан** (туршилтын захиалга `SAMU0NHNJY458K8X` — Tom /admin-аас цуцлах). PDP: сэтгэгдэл/асуулт руу үсрэх pill (`ProductSectionJumps`).
 - **/help** — холбоо барих (утас/Messenger/имэйл/цаг — store settings), салбарууд, FAQ (`shared/help-faq.ts`, Profile-тэй нэг жагсаалт), footer-т линк, sitemap-д.
+- Share: утсан дээр Facebook товч → **Messenger deep link** (Facebook апп sharer линкийг барьж феедээ нээдэг — 09-14 бодит), Facebook нь share sheet-ээр. Баримт: **`docs/ADMIN-MANUAL.md`** (ажилтанд), **`docs/SALES-BRIEF.md`** (худалдан авагч компанид).
 - Дараагийн боломж (хийгээгүй): бэлгийн картыг checkout-оор зарах (`gift_cards.purchaseOrderId` бэлэн; 3 "paid" шилжилт дээр код гаргах хэрэгтэй); referral.
 
 ## Дараагийн ажлын санал (2026-09-12-ний байдлаар НЭЭЛТТЭЙ зүйлс л — хаагдсан бүх зүйл HISTORY.md-д)

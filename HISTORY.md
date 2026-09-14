@@ -4,6 +4,10 @@
 
 ---
 
+## Share — утсан дээр Facebook товч зүгээр л апп нээдэг байсан; гарын авлага + борлуулалтын танилцуулга (2026-09-14, гэрийн лаптоп)
+
+Tom (iPhone): "Facebook share songood orhoor zgr facebook ongoij baina". Шалтгаан: iOS дээр Facebook апп `facebook.com/sharer/sharer.php` universal link-ийг барьж аваад нүүр хуудсаа нээдэг (Meta-ийн мэдэгдэж буй зан; `fb://` share scheme хуучирсан). Засвар `ShareBar.tsx`: `(pointer: coarse)` төхөөрөмж дээр Facebook товчны оронд **Messenger deep link** (`fb-messenger://share/?link=`), Facebook руу хуваалцах нь эхний хар "Хуваалцах" (OS share sheet) товчоор; компьютер дээр Facebook вэб sharer хэвээр (тэнд ажилладаг). X/Telegram intent хоёр утсан дээр хэвийн. Мөн `docs/ADMIN-MANUAL.md` (ажилтны өдөр тутмын заавар, эрхийн түвшин, захиалгын урсгал, юу хийж болохгүй) ба `docs/SALES-BRIEF.md` (худалдан авагч компанид: тоо, боломж, дэд бүтэц, хүлээгдэж буй бизнесийн алхам).
+
 ## /help — Тусламж, холбоо барих хуудас (2026-09-14, гэрийн лаптоп)
 
 Утас footer-т, FAQ зөвхөн нэвтэрсэн профайлын "Тусламж" таб-д, салбарууд нүүрний locator-т — худалдан авахаас өмнө асуулттай хүнд очих нэг газар байгаагүй, footer-т "тусламж" линк ч байгаагүй. `client/src/pages/Help.tsx` (route `/help`, `/:slug`-аас өмнө): холбоо барих 4 карт (утас `tel:`, **Messenger** — `contact-facebook-url`-аас `m.me/<page>` гаргана, имэйл, ажлын цаг — бүгд store settings-ээс), салбарууд (`content.branches`: нэр/хаяг/утас/газрын зураг), FAQ accordion (`<details>`), холбоотой хуудсууд. FAQ **`shared/help-faq.ts`** — Profile-ийн `FAQ_ITEMS` хуулбарыг халж, 3 шинэ асуулт (захиалга хянах, бүртгэлгүй захиалах, жинхэнэ Японых) нэмэв; бүгд i18n-д. Footer "Нөхцөл ба бодлого" баганад линк, sitemap-д `/help` (0.5). CSS `.help-*` (токен, dark OK).
