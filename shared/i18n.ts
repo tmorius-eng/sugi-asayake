@@ -106,6 +106,20 @@ export const UI_STRINGS: Record<string, { en: string; ja: string }> = {
   // 2026-09-13: the POS gained a Food category (mochi, jelly, tea, chocolate,
   // cookies); scripts/import-pos-products.ts creates it as slug "khuns".
   "Хүнс": { en: "Food & sweets", ja: "食品・お菓子" },
+  // 2026-09-14: gift cards sold at checkout (scripts/seed-gift-cards.ts, slug "gift-card").
+  "Бэлгийн карт": { en: "Gift cards", ja: "ギフトカード" },
+  "Ашиглаагүй": { en: "Unused", ja: "未使用" },
+  "Ашигласан": { en: "Used", ja: "使用済み" },
+  "Хүчингүй": { en: "Void", ja: "無効" },
+  "Хуулах": { en: "Copy", ja: "コピー" },
+  "{code} хуулах": { en: "Copy {code}", ja: "{code} をコピー" },
+  "{code} хуулагдлаа.": { en: "{code} copied.", ja: "{code} をコピーしました。" },
+  "Кодыг гараар хуулна уу.": { en: "Please copy the code by hand.", ja: "コードを手動でコピーしてください。" },
+  "Төлбөр баталгаажмагц {n} картын код энд, имэйл болон push мэдэгдлээр ирнэ.": { en: "Once payment is confirmed, the code for {n} card(s) will appear here and arrive by email and push notification.", ja: "お支払い確認後、{n} 枚分のコードがここに表示され、メールとプッシュ通知でも届きます。" },
+  "Кодыг Профайл → Гишүүнчлэл → \"Бэлгийн карт ашиглах\" хэсэгт оруулахад дүн дэлгүүрийн зээл болно. Хүчинтэй хугацаа {n} сар.": { en: "Enter the code under Profile → Membership → \"Redeem a gift card\" and the amount becomes store credit. Valid for {n} months.", ja: "プロフィール → メンバーシップ → 「ギフトカードを使う」でコードを入力すると、金額がストアクレジットになります。有効期間は {n} か月です。" },
+  "Цахим (бэлгийн карт)": { en: "Digital (gift card)", ja: "デジタル（ギフトカード）" },
+  "Цахим бэлгийн карт — төлбөр баталгаажмагц код шууд ирнэ": { en: "Digital gift card — the code arrives as soon as payment is confirmed", ja: "デジタルギフトカード — お支払い確認後すぐにコードが届きます" },
+  "Сагсанд зөвхөн бэлгийн карт байна — хүргэлт, салбар хэрэггүй. Төлбөр баталгаажмагц картын код профайлын захиалгын түүх, имэйл (өгсөн бол) болон push мэдэгдлээр ирнэ.": { en: "Your basket holds only gift cards — no delivery or branch needed. Once payment is confirmed, the codes arrive in your order history, by email (if given) and by push notification.", ja: "カートにはギフトカードのみが入っています — 配送や店舗の選択は不要です。お支払い確認後、コードは注文履歴、メール（入力した場合）、プッシュ通知で届きます。" },
 
   // -- footer, legal -------------------------------------------------------
   "Япон чанарыг гэр бүл бүрт.": { en: "Japanese quality for every family.", ja: "日本のクオリティを、すべての家族に。" },

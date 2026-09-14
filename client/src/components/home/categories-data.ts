@@ -29,6 +29,7 @@ const PRESENTATION_BY_SLUG: Record<string, CategoryPresentation> = {
   "us-ba-bie": { Icon: CircleCheck, tone: "peach" },
   "eej-ba-khuukhed": { Icon: Gift, tone: "sand" },
   "khuns": { Icon: Cookie, tone: "marigold" },
+  "gift-card": { Icon: Gift, tone: "rose" },
 };
 
 /** Never throws for an unknown slug -- a brand-new category gets a neutral look. */

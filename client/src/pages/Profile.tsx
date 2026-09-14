@@ -18,6 +18,7 @@ import {
 } from "@shared/catalog-filter";
 import { toast } from "sonner";
 import CartDrawer from "@/components/CartDrawer";
+import GiftCardCodes from "@/components/GiftCardCodes";
 import CommerceHeader from "@/components/CommerceHeader";
 import ProfileQuizWizard from "@/components/ProfileQuizWizard";
 import SiteFooter from "@/components/SiteFooter";
@@ -359,10 +360,11 @@ function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
                 ))}
               </div>
               <div className="order-foot">
-                <span>{order.deliveryMethod === "store_pickup" ? `Авах салбар: ${order.pickupBranch ?? "Сонгогдоогүй"}` : "Улаанбаатар хүргэлт"}</span>
+                <span>{order.deliveryMethod === "store_pickup" ? `Авах салбар: ${order.pickupBranch ?? (order.items.some(item => item.kind === "gift_card") ? "Цахим (бэлгийн карт)" : "Сонгогдоогүй")}` : "Улаанбаатар хүргэлт"}</span>
                 <strong>Нийт {formatMnt(order.totalMnt)}</strong>
               </div>
               {order.deliveryTrackingRef && <p className="order-tracking">Хүргэлтийн дугаар: {order.deliveryTrackingRef}</p>}
+              <GiftCardCodes cards={order.giftCards} pendingCount={order.status === "cancelled" ? 0 : order.items.reduce((sum, item) => sum + (item.kind === "gift_card" ? item.quantity : 0), 0)} />
               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                 <button type="button" className="order-buy-again" disabled={buyingAgainId === order.id} onClick={() => buyAgain(order)}>
                   {buyingAgainId === order.id ? <Loader2 className="animate-spin" size={14} /> : <RotateCcw size={14} />} Дахин захиалах

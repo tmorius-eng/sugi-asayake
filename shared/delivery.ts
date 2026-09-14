@@ -18,7 +18,10 @@ export function computeDeliveryFeeMnt(input: {
   subtotalMnt: number;
   deliveryFeeUbMnt: number;
   freeShippingThresholdMnt: number;
+  /** A basket of only gift cards (shared/gift-cards.ts): nothing to deliver, so never a fee. */
+  digitalOnly?: boolean;
 }): number {
+  if (input.digitalOnly) return 0;
   if (input.deliveryMethod !== "ub_delivery") return 0;
   const qualifiesForFreeShipping = input.freeShippingThresholdMnt > 0 && input.subtotalMnt >= input.freeShippingThresholdMnt;
   return qualifiesForFreeShipping ? 0 : Math.max(0, input.deliveryFeeUbMnt);

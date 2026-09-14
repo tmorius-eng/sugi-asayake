@@ -71,6 +71,14 @@ export const siteMediaSlots = [
     fallbackUrl: "/images/categories/khuns.webp",
   },
   {
+    // 2026-09-14: gift cards sold at checkout (scripts/seed-gift-cards.ts).
+    // The default is the card art the seed script renders (client/public).
+    key: "home-category-gift-card",
+    label: "Ангиллын зураг: Бэлгийн карт",
+    description: "Нүүр хуудасны Categories хэсгийн \"Бэлгийн карт\" картын зураг.",
+    fallbackUrl: "/images/categories/gift-card.webp",
+  },
+  {
     key: "home-category-arhis-archilgaa",
     label: "Ангиллын зураг: Арьс арчилгаа",
     description: "Нүүр хуудасны Categories хэсгийн \"Арьс арчилгаа\" картын зураг.",

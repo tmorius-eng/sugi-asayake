@@ -360,6 +360,15 @@ export const products = mysqlTable("products", {
   stockQuantity: int("stockQuantity").notNull().default(0),
   isPublished: boolean("isPublished").notNull().default(false),
   /**
+   * Gift cards sold at checkout (2026-09-14, migration 0076). A gift_card
+   * product is digital: checkout never touches its shelf stock, a basket
+   * of only gift cards has no delivery, percentage discounts skip it, and
+   * the moment its order is paid the codes are minted into `gift_cards`
+   * (issueGiftCardsForPaidOrder in server/db.ts). Its priceMnt IS the
+   * card's value. Everything else in the catalogue is "physical".
+   */
+  kind: mysqlEnum("kind", ["physical", "gift_card"]).notNull().default("physical"),
+  /**
    * PREMIUM-FEATURES.md TIER 1: matches the same three fields on `users`
    * (see the Beauty & Home preference profile there) so "recommended for
    * you" can just intersect a shopper's saved preferences against these —

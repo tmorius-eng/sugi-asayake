@@ -17,7 +17,7 @@
  * 5000 characters, the feed limit.
  */
 import type { Request, Response } from "express";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { getDb } from "../db";
 import { productCategories, products } from "../../drizzle/schema";
 import { getSiteTextSlot } from "../../shared/site-text";
@@ -55,7 +55,9 @@ export async function buildMerchantFeed(origin: string): Promise<string> {
     })
     .from(products)
     .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
-    .where(eq(products.isPublished, true))
+    // Gift cards (2026-09-14) are out: Merchant Center has its own rules
+    // for them and they carry no GTIN, brand or photo of a real item.
+    .where(and(eq(products.isPublished, true), eq(products.kind, "physical")))
     .orderBy(asc(products.id));
   const siteName = getSiteTextSlot("seo-text-site-name").fallbackValue;
   const items = rows

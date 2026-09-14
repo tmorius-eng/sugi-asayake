@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import { LoaderCircle, Package, Phone, Search } from "lucide-react";
 import { toast } from "sonner";
 import CommerceHeader from "@/components/CommerceHeader";
+import GiftCardCodes from "@/components/GiftCardCodes";
 import SiteFooter from "@/components/SiteFooter";
 import { trpc } from "@/lib/trpc";
 import { useSiteText } from "@/hooks/useSiteText";
@@ -84,7 +85,7 @@ export default function TrackOrder() {
               <span style={{ fontWeight: 700, color: "#57585e" }}>{PAYMENT_LABEL[order.paymentStatus] ?? order.paymentStatus}</span>
             </div>
             <p style={{ marginTop: "10px", fontSize: "13px", color: "#626368" }}>
-              {order.deliveryMethod === "store_pickup" ? `Салбараас авах: ${order.pickupBranch ?? "—"}` : order.deliveryAddress ?? "УБ хүргэлт"}
+              {order.deliveryMethod === "store_pickup" ? `Салбараас авах: ${order.pickupBranch ?? (order.items.some(item => item.kind === "gift_card") ? "Цахим (бэлгийн карт)" : "—")}` : order.deliveryAddress ?? "УБ хүргэлт"}
             </p>
             {order.deliveryTrackingRef && <p style={{ marginTop: "4px", fontSize: "13px", color: "#626368" }}>Хүргэлтийн дугаар: {order.deliveryTrackingRef}</p>}
             <div style={{ marginTop: "14px", display: "grid", gap: "6px" }}>
@@ -95,6 +96,7 @@ export default function TrackOrder() {
                 </div>
               ))}
             </div>
+            <GiftCardCodes cards={order.giftCards} pendingCount={order.status === "cancelled" ? 0 : order.items.reduce((sum, item) => sum + (item.kind === "gift_card" ? item.quantity : 0), 0)} />
             <div style={{ marginTop: "14px", display: "flex", justifyContent: "space-between", borderTop: "1px solid rgba(0,0,0,.08)", paddingTop: "10px", fontWeight: 700 }}>
               <span>Нийт дүн</span>
               <span>{formatMnt(order.totalMnt)}</span>

@@ -1,3 +1,4 @@
+import { discountableSubtotalMnt } from "../shared/gift-cards";
 import { COOKIE_NAME, GUEST_CART_COOKIE_NAME, NOT_ADMIN_ERR_MSG, VISITOR_SESSION_COOKIE_NAME } from "@shared/const";
 import { formatVariantAttributes } from "@shared/catalog-filter";
 import { ubDistricts } from "@shared/districts";
@@ -314,6 +315,8 @@ const productWriteSchema = z.object({
   galleryJson: nullableText(20_000),
   stockQuantity: z.number().int().min(0).max(1_000_000),
   isPublished: z.boolean(),
+  // Gift cards sold at checkout (2026-09-14) -- see products.kind.
+  kind: z.enum(["physical", "gift_card"]).optional(),
   skinType: skinTypeSchema,
   skinConcerns: skinConcernsSchema,
   interiorStyle: interiorStyleSchema,
@@ -1313,7 +1316,8 @@ export const appRouter = router({
       if (!owner) throw new TRPCError({ code: "BAD_REQUEST", message: "Сагс хоосон байна." });
       const cart = await getActiveCartForOwner(owner);
       if (!cart?.items.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Сагс хоосон байна." });
-      const subtotalMnt = cart.items.reduce((sum, item) => sum + item.priceMnt * item.quantity, 0);
+      // Gift-card lines are never a discount base (shared/gift-cards.ts).
+      const subtotalMnt = discountableSubtotalMnt(cart.items);
       const routineDiscount = await getApplicableRoutineDiscount(cart.items);
       try {
         // A signed-in shopper gets the per-customer cap (R1) checked here
@@ -1338,7 +1342,7 @@ export const appRouter = router({
       if (!owner) return null;
       const cart = await getActiveCartForOwner(owner);
       if (!cart?.items.length) return null;
-      const subtotalMnt = cart.items.reduce((sum, item) => sum + item.priceMnt * item.quantity, 0);
+      const subtotalMnt = discountableSubtotalMnt(cart.items);
       const routineDiscount = await getApplicableRoutineDiscount(cart.items);
       const afterRoutineMnt = subtotalMnt - (routineDiscount?.discountMnt ?? 0);
       let afterCouponMnt = afterRoutineMnt;
@@ -1421,9 +1425,9 @@ export const appRouter = router({
       if (value.deliveryMethod === "ub_delivery" && !value.deliveryAddress) {
         context.addIssue({ code: z.ZodIssueCode.custom, message: "A delivery address is required for Ulaanbaatar delivery.", path: ["deliveryAddress"] });
       }
-      if (value.deliveryMethod === "store_pickup" && !value.pickupBranch) {
-        context.addIssue({ code: z.ZodIssueCode.custom, message: "Select a SUGI branch for store pickup.", path: ["pickupBranch"] });
-      }
+      // A missing pickup branch is judged in createOrderFromActiveCart, which
+      // knows whether the basket is gift cards only (no branch to pick from,
+      // 2026-09-14) and validates the name against the live branches table.
     })).mutation(async ({ ctx, input }) => {
       let order;
       try {

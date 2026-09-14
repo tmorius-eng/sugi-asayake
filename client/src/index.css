@@ -4140,3 +4140,18 @@ html[data-storefront-theme="dark"] .sugi-site .qs-stage small { color: var(--ck-
 .help-links { display: flex; flex-wrap: wrap; gap: 8px; }
 .help-links a { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--foreground); font-size: 13px; font-weight: 700; text-decoration: none; }
 .help-links a:hover { border-color: var(--foreground); }
+
+/* Gift cards sold at checkout (2026-09-14): the codes block on an order
+   (profile order history + guest tracking). Token colours only, so the
+   storefront dark theme needs no extra rules. */
+.gift-codes { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--muted); }
+.gift-codes-title { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--primary-text); }
+.gift-codes-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.gift-code { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 10px; border-radius: 10px; background: var(--card); border: 1px solid var(--border); }
+.gift-code code { font-size: 15px; font-weight: 800; letter-spacing: .08em; color: var(--foreground); }
+.gift-code-amount { font-weight: 700; color: var(--foreground); }
+.gift-code-status { font-size: 12px; color: var(--muted-foreground); }
+.gift-code-redeemed code, .gift-code-void code { text-decoration: line-through; color: var(--muted-foreground); }
+.gift-code-copy { display: inline-flex; align-items: center; gap: 5px; margin-inline-start: auto; min-height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); font-size: 12px; font-weight: 700; color: var(--foreground); cursor: pointer; }
+.gift-code-copy:hover { border-color: var(--primary-text); color: var(--primary-text); }
+.gift-codes-pending, .gift-codes-hint { margin: 8px 0 0; font-size: 12px; line-height: 1.6; color: var(--muted-foreground); }

@@ -10,6 +10,7 @@ import { looksLikeBarcode, normaliseBarcode } from "../shared/barcode";
 import { expandQueryGroups, normaliseSearchText } from "../shared/search-synonyms";
 import { guessDistrictFromAddress, type UbDistrict } from "../shared/districts";
 import { computeDeliveryFeeMnt } from "../shared/delivery";
+import { GIFT_CARD_VALIDITY_MONTHS, discountableSubtotalMnt, isDigitalOnlyBasket, isGiftCardLine } from "../shared/gift-cards";
 import { getStoreSettingSlot, type StoreSettingKey } from "../shared/store-settings";
 import { decryptJson, encryptJson } from "./_core/crypto";
 import { getOrSetCached, invalidateCached, invalidateCachedByPrefix } from "./_core/ttlCache";
@@ -1459,6 +1460,7 @@ export async function getProductBySlug(slug: string) {
       imageUrl: products.imageUrl,
       galleryJson: products.galleryJson,
       stockQuantity: products.stockQuantity,
+      kind: products.kind,
       categoryName: productCategories.name,
       categorySlug: productCategories.slug,
       skinType: products.skinType,
@@ -1563,6 +1565,10 @@ export async function getActiveCartForOwner(owner: CartOwner) {
       imageUrl: sql<string | null>`coalesce(${productVariants.imageUrl}, ${products.imageUrl})`,
       stockQuantity: productVariants.stockQuantity,
       attributesJson: productVariants.attributesJson,
+      // Gift cards sold at checkout (2026-09-14): a digital line is skipped
+      // by the stock decrement, so checkout checks "still on sale" itself.
+      kind: products.kind,
+      isPublished: products.isPublished,
     })
     .from(cartItems)
     .innerJoin(productVariants, eq(cartItems.variantId, productVariants.id))
@@ -1727,7 +1733,12 @@ export async function createOrderFromActiveCart(input: {
   }
   const cart = await getActiveCartForOwner(input.owner);
   if (!cart?.items.length) throw new Error("Your cart is empty.");
-  const availabilityFailure = getInventoryReservationFailure(cart.items);
+  // Gift cards sold at checkout (2026-09-14, shared/gift-cards.ts): digital
+  // lines have no shelf, a basket of only gift cards has no delivery and
+  // no pickup branch, and no percentage discount ever applies to them.
+  const digitalOnly = isDigitalOnlyBasket(cart.items);
+  const discountBaseMnt = discountableSubtotalMnt(cart.items);
+  const availabilityFailure = getInventoryReservationFailure(cart.items.filter(item => !isGiftCardLine(item)));
   if (availabilityFailure) throw new Error(availabilityFailure);
   // "Controls everything" admin overhaul (2026-09-08, Phase J/L): validated
   // against the real, live branches table here (the actual authority),
@@ -1746,7 +1757,7 @@ export async function createOrderFromActiveCart(input: {
   const activeBranchesForOrder = await getActiveBranches();
   const fulfillmentBranch = activeBranchesForOrder.find(branch => branch.isFulfillmentDefault);
   let fulfillingBranchId: number | null = null;
-  if (input.deliveryMethod === "store_pickup") {
+  if (input.deliveryMethod === "store_pickup" && !digitalOnly) {
     // Pickup is only ever at a STORE (2026-09-11) -- a warehouse is not a
     // place a shopper can walk into, even if someone posts its name.
     const matchedBranch = input.pickupBranch ? activeBranchesForOrder.find(branch => branch.name === input.pickupBranch && branch.kind === "store") : undefined;
@@ -1781,7 +1792,7 @@ export async function createOrderFromActiveCart(input: {
   ]);
   // Audit 2026-09-09: the ONE delivery-fee rule, shared with Checkout.tsx's
   // preview (shared/delivery.ts) -- no second hand-copied formula.
-  const deliveryFeeMnt = computeDeliveryFeeMnt({ deliveryMethod: input.deliveryMethod, subtotalMnt, deliveryFeeUbMnt, freeShippingThresholdMnt });
+  const deliveryFeeMnt = computeDeliveryFeeMnt({ deliveryMethod: input.deliveryMethod, subtotalMnt, deliveryFeeUbMnt, freeShippingThresholdMnt, digitalOnly });
   // PREMIUM-FEATURES.md TIER 4: computed from the cart's real contents right
   // now, not a client-supplied amount — see getApplicableRoutineDiscount.
   const routineDiscount = await getApplicableRoutineDiscount(cart.items);
@@ -1791,12 +1802,12 @@ export async function createOrderFromActiveCart(input: {
   // if the code has gone stale between the checkout-preview call and now
   // (expired, used up, deactivated), the whole order fails with a clear
   // error rather than silently dropping the discount the shopper was shown.
-  const couponResult = input.couponCode ? await validateDiscountCode(input.couponCode, subtotalMnt - discountMnt, { userId: input.owner.userId ?? null, phone: input.customerPhone }) : null;
+  const couponResult = input.couponCode ? await validateDiscountCode(input.couponCode, discountBaseMnt - discountMnt, { userId: input.owner.userId ?? null, phone: input.customerPhone }) : null;
   const couponDiscountMnt = couponResult?.discountMnt ?? 0;
   // PREMIUM-FEATURES.md TIER 5: loyalty applies to the subtotal after both
   // the routine discount and the coupon — sequential stacking throughout,
   // never multiple percentages computed off the same base.
-  const loyaltyDiscount = await getApplicableLoyaltyDiscount(input.owner.userId, subtotalMnt - discountMnt - couponDiscountMnt);
+  const loyaltyDiscount = await getApplicableLoyaltyDiscount(input.owner.userId, discountBaseMnt - discountMnt - couponDiscountMnt);
   const loyaltyDiscountMnt = loyaltyDiscount?.discountMnt ?? 0;
   // Prefer whatever the checkout form actually sent (a shopper picking
   // their saved address's district, or the dropdown next to a fresh
@@ -1825,6 +1836,13 @@ export async function createOrderFromActiveCart(input: {
   const placeOrderTransaction = (orderNumber: string) => db.transaction(async tx => {
     const trackedItems: { variantId: number; quantity: number }[] = [];
     for (const item of cart.items) {
+      if (isGiftCardLine(item)) {
+        // Digital: nothing leaves a shelf. It still has to be on sale --
+        // the requirePublished check below is what enforces that for
+        // physical lines, so mirror it here.
+        if (!item.isPublished) throw new Error(`${item.name} одоогоор зарагдахгүй байна.`);
+        continue;
+      }
       // "Controls everything" admin overhaul (2026-09-08, Phase L): decrements
       // the SPECIFIC fulfilling branch's shelf now, not one shared global
       // pool -- see decrementBranchStock's own doc-comment for the full
@@ -2014,6 +2032,7 @@ export async function recordInStoreSale(input: InStoreSaleInput) {
   // number and never retried on a duplicate, so a collision surfaced as a
   // raw ER_DUP_ENTRY to the cashier. Same generator + retry as checkout.
   let orderId = 0;
+  let issuedGiftCards: IssuedGiftCard[] = [];
   const recordSale = (orderNumber: string) => db.transaction(async tx => {
     const trackedItems: { variantId: number; quantity: number }[] = [];
     for (const item of input.items) {
@@ -2053,6 +2072,9 @@ export async function recordInStoreSale(input: InStoreSaleInput) {
     for (const item of trackedItems) {
       await recordStockMovement(tx, input.branchId, item.variantId, -item.quantity, { type: "sale_pos", refType: "order", refId: orderId, actorUserId: input.actorUserId ?? null });
     }
+    // A register sale is paid on the spot: gift cards on the receipt are
+    // issued right here and handed back to the cashier (2026-09-14).
+    issuedGiftCards = await issueGiftCardsForPaidOrder(tx, orderId);
   });
   for (let attempt = 1; ; attempt++) {
     try {
@@ -2071,7 +2093,7 @@ export async function recordInStoreSale(input: InStoreSaleInput) {
   }
 
   const order = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
-  return { ...order[0], replayed: false as const };
+  return { ...order[0], replayed: false as const, giftCards: issuedGiftCards };
 }
 
 /**
@@ -2348,8 +2370,24 @@ export async function getOrdersForUser(userId: number, input: { cursor?: number 
   // the "Дахин захиалах" (Buy Again) button on the profile Orders tab
   // re-add these exact products to the cart. Scoped to this user's own
   // order ids rather than scanning the whole order_items table.
-  const lineItems = await db.select({ orderId: orderItems.orderId, productId: orderItems.productId, productName: orderItems.productName, sku: orderItems.sku, quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt }).from(orderItems).where(inArray(orderItems.orderId, pageRows.map(order => order.id)));
-  return { orders: pageRows.map(order => ({ ...order, items: lineItems.filter(item => item.orderId === order.id) })), nextCursor, total };
+  const orderIds = pageRows.map(order => order.id);
+  const [lineItems, cardRows] = await Promise.all([
+    // `kind` (LEFT JOIN: the product may be gone) tells the profile a line
+    // is a gift card whose code is still to come (2026-09-14).
+    db.select({ orderId: orderItems.orderId, productId: orderItems.productId, productName: orderItems.productName, sku: orderItems.sku, quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt, kind: products.kind })
+      .from(orderItems).leftJoin(products, eq(orderItems.productId, products.id)).where(inArray(orderItems.orderId, orderIds)),
+    db.select({ orderId: giftCards.purchaseOrderId, code: giftCards.code, amountMnt: giftCards.amountMnt, status: giftCards.status, expiresAt: giftCards.expiresAt })
+      .from(giftCards).where(inArray(giftCards.purchaseOrderId, orderIds)).orderBy(asc(giftCards.id)),
+  ]);
+  return {
+    orders: pageRows.map(order => ({
+      ...order,
+      items: lineItems.filter(item => item.orderId === order.id),
+      giftCards: cardRows.filter(card => card.orderId === order.id).map(({ orderId: _orderId, ...card }) => card),
+    })),
+    nextCursor,
+    total,
+  };
 }
 
 // Admin overhaul (2026-09-08, Phase G): customer self-service cancellation.
@@ -2727,6 +2765,11 @@ export async function markQPayPaymentAttemptPaid(input: { id: number; orderId: n
     .set({ paymentStatus: "paid", status: sql`IF(${orders.status} = 'pending', 'confirmed', ${orders.status})`, updatedAt: new Date() })
     .where(and(eq(orders.id, input.orderId), eq(orders.paymentStatus, "unpaid"), sql`${orders.status} NOT IN ('cancelled', 'returned')`));
   const orderUpdated = Number(updated[0].affectedRows ?? 0) === 1;
+  if (orderUpdated) {
+    // Exactly once per order: the guarded UPDATE above is what serialises
+    // QPay's at-least-once callbacks, and purchaseOrderId is the marker.
+    announceIssuedGiftCards(input.orderId, await issueGiftCardsForPaidOrder(db, input.orderId));
+  }
   if (!orderUpdated) {
     console.warn(`[QPay] Payment ${input.providerPaymentId ?? "(no id)"} confirmed for order ${input.orderId}, but the order is already paid or closed -- left unchanged; check payment_attempts for a refund.`);
   }
@@ -2777,6 +2820,7 @@ export async function getAdminProducts() {
       imageUrl: products.imageUrl,
       stockQuantity: products.stockQuantity,
       isPublished: products.isPublished,
+      kind: products.kind,
       updatedAt: products.updatedAt,
       categoryName: productCategories.name,
       skinType: products.skinType,
@@ -3142,6 +3186,7 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
       throw new Error("Order fulfilment cannot move backward.");
     }
   }
+  let issuedGiftCards: IssuedGiftCard[] = [];
   await db.transaction(async tx => {
     // Audit 2026-09-09: the ladder checks above are a plain read, not a
     // lock -- two concurrent cancels (a double-clicked button, or a customer
@@ -3162,6 +3207,10 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
     }
     if (input.status === "cancelled") {
       await reverseStoreCreditForOrder(tx, input.id, "цуцлагдсан");
+      // Cards this order paid for that nobody has redeemed yet die with it
+      // (a redeemed one already became store credit; refundOrder's
+      // reverseStoreCreditForOrder does not touch that, by design).
+      await voidGiftCardsForOrder(tx, input.id);
     }
     await tx.update(orders).set({
       // status/returnedAt were already written by the guarded flip above.
@@ -3179,7 +3228,12 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
       ...(input.adminNote !== undefined ? { adminNote: input.adminNote } : {}),
       updatedAt: new Date(),
     }).where(eq(orders.id, input.id));
+    // "Completed" is the moment a cash/bank order counts as paid (above), so
+    // it is also the moment its gift cards exist. Idempotent: an order the
+    // QPay webhook already paid (and issued for) gets nothing twice.
+    if (input.status === "completed") issuedGiftCards = await issueGiftCardsForPaidOrder(tx, input.id);
   });
+  announceIssuedGiftCards(input.id, issuedGiftCards);
   const updated = await db.select().from(orders).where(eq(orders.id, input.id)).limit(1);
   return updated[0];
 }
@@ -3226,6 +3280,7 @@ export async function refundOrder(input: { id: number; refundAmountMnt: number; 
       await restoreStockForOrder(tx, input.id, { type: "refund_restock", actorUserId: input.actorUserId ?? null });
     }
     await reverseStoreCreditForOrder(tx, input.id, "буцаагдсан");
+    await voidGiftCardsForOrder(tx, input.id);
     await enqueueNotification(tx, "refund.recorded", { orderNumber: current[0].orderNumber, refundMnt: input.refundAmountMnt, restocked: input.restockItems }, { dedupeKey: `order:${input.id}` });
   });
   const updated = await db.select().from(orders).where(eq(orders.id, input.id)).limit(1);
@@ -3253,9 +3308,17 @@ export async function getOrderForTracking(orderNumber: string, phone: string) {
   const rows = await db.select().from(orders).where(and(eq(orders.orderNumber, orderNumber.trim()), sql`RIGHT(REGEXP_REPLACE(${orders.customerPhone}, '[^0-9]', ''), 8) = ${localPhone}`)).limit(1);
   const order = rows[0];
   if (!order) return null;
-  const items = await db.select({ productName: orderItems.productName, sku: orderItems.sku, quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt }).from(orderItems).where(eq(orderItems.orderId, order.id));
+  const [items, cards] = await Promise.all([
+    db.select({ productName: orderItems.productName, sku: orderItems.sku, quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt, kind: products.kind })
+      .from(orderItems).leftJoin(products, eq(orderItems.productId, products.id)).where(eq(orderItems.orderId, order.id)),
+    // The guest who bought a gift card has no profile to read the code from:
+    // order number + phone is their proof, same as for every other field here.
+    db.select({ code: giftCards.code, amountMnt: giftCards.amountMnt, status: giftCards.status, expiresAt: giftCards.expiresAt })
+      .from(giftCards).where(eq(giftCards.purchaseOrderId, order.id)).orderBy(asc(giftCards.id)),
+  ]);
   return {
     orderNumber: order.orderNumber,
+    giftCards: cards,
     status: order.status,
     paymentStatus: order.paymentStatus,
     deliveryMethod: order.deliveryMethod,
@@ -4570,6 +4633,8 @@ export type ProductWriteInput = {
   galleryJson?: string | null;
   stockQuantity: number;
   isPublished: boolean;
+  /** Gift cards sold at checkout (2026-09-14) -- see the schema comment on products.kind. */
+  kind?: "physical" | "gift_card";
   skinType?: "dry" | "oily" | "combination" | "sensitive" | "normal" | null;
   skinConcerns?: string | null;
   interiorStyle?: string | null;
@@ -4616,6 +4681,7 @@ export async function createAdminProduct(input: ProductWriteInput) {
       galleryJson: input.galleryJson ?? null,
       stockQuantity: input.stockQuantity,
       isPublished: input.isPublished,
+      kind: input.kind ?? "physical",
       skinType: input.skinType ?? null,
       skinConcerns: input.skinConcerns ?? null,
       interiorStyle: input.interiorStyle ?? null,
@@ -4730,6 +4796,7 @@ export async function updateAdminProduct(input: { id: number } & Partial<Product
   if (input.galleryJson !== undefined) changes.galleryJson = input.galleryJson;
   if (input.stockQuantity !== undefined) changes.stockQuantity = input.stockQuantity;
   if (input.isPublished !== undefined) changes.isPublished = input.isPublished;
+  if (input.kind !== undefined) changes.kind = input.kind;
   if (input.skinType !== undefined) changes.skinType = input.skinType;
   if (input.skinConcerns !== undefined) changes.skinConcerns = input.skinConcerns;
   if (input.interiorStyle !== undefined) changes.interiorStyle = input.interiorStyle;
@@ -5932,6 +5999,68 @@ export async function issueGiftCards(input: { amountMnt: number; count: number; 
     }
   }
   return created;
+}
+
+/**
+ * Gift cards sold at checkout (2026-09-14). Mints the cards an order paid
+ * for -- one per unit of every gift_card line, each worth that line's unit
+ * price -- and returns them so the caller can hand them to the buyer.
+ *
+ * Runs inside the caller's transaction (or on the plain connection for the
+ * QPay webhook, whose guarded UPDATE already serialised the "became paid"
+ * moment). Idempotent by `purchaseOrderId`: a second call for the same order
+ * -- the admin marking a webhook-paid order completed, a repeated callback
+ * -- finds the existing rows and mints nothing. Physical-only orders return
+ * an empty list without writing anything.
+ */
+export async function issueGiftCardsForPaidOrder(tx: GiftCardWriter, orderId: number): Promise<IssuedGiftCard[]> {
+  const lines = await tx.select({ quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt, orderNumber: orders.orderNumber, customerName: orders.customerName })
+    .from(orderItems)
+    .innerJoin(products, eq(orderItems.productId, products.id))
+    .innerJoin(orders, eq(orders.id, orderItems.orderId))
+    .where(and(eq(orderItems.orderId, orderId), eq(products.kind, "gift_card")));
+  if (!lines.length) return [];
+  const already = await tx.select({ id: giftCards.id }).from(giftCards).where(eq(giftCards.purchaseOrderId, orderId)).limit(1);
+  if (already.length) return [];
+  const expiresAt = new Date();
+  expiresAt.setMonth(expiresAt.getMonth() + GIFT_CARD_VALIDITY_MONTHS);
+  const issued: IssuedGiftCard[] = [];
+  for (const line of lines) {
+    for (let unit = 0; unit < line.quantity; unit++) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const code = generateGiftCode();
+        try {
+          const inserted = await tx.insert(giftCards).values({ code, amountMnt: line.unitPriceMnt, purchaseOrderId: orderId, issuedByUserId: null, recipientName: line.customerName, note: `Захиалга ${line.orderNumber}`, expiresAt });
+          issued.push({ id: Number(inserted[0].insertId), code, amountMnt: line.unitPriceMnt, expiresAt });
+          break;
+        } catch (error) {
+          if (attempt === 2 || !(error instanceof Error && /Duplicate/i.test(error.message))) throw error;
+        }
+      }
+    }
+  }
+  return issued;
+}
+export type IssuedGiftCard = { id: number; code: string; amountMnt: number; expiresAt: Date };
+type GiftCardWriter = Pick<OrderTx, "select" | "insert" | "update">;
+
+/** The cards an order bought that nobody has redeemed yet become void with the order (cancel / refund). */
+export async function voidGiftCardsForOrder(tx: GiftCardWriter, orderId: number): Promise<number> {
+  const result = await tx.update(giftCards).set({ status: "void" }).where(and(eq(giftCards.purchaseOrderId, orderId), eq(giftCards.status, "active")));
+  return Number(result[0].affectedRows ?? 0);
+}
+
+/**
+ * Hands freshly minted cards to the buyer (push + email) after the paying
+ * transaction has committed. Loaded lazily: giftCardFulfilment imports this
+ * module, and a static import back would be a cycle. Never throws -- the
+ * codes are in the database and on the profile regardless.
+ */
+function announceIssuedGiftCards(orderId: number, cards: IssuedGiftCard[]): void {
+  if (!cards.length) return;
+  import("./giftCardFulfilment")
+    .then(module => module.deliverIssuedGiftCards(orderId, cards))
+    .catch(error => console.error(`[gift-cards] could not deliver the codes for order ${orderId}`, error));
 }
 
 export async function listGiftCards(limit = 300) {

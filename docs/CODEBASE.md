@@ -150,6 +150,8 @@ browser → /api/trpc/<router>.<procedure>
 
 Хоёулаа: **callback-ийн биед хэзээ ч итгэхгүй** — тэр зөвхөн "аль гүйлгээг шалгах вэ" гэдгийг л хэлнэ.
 
+**Бэлгийн карт (2026-09-14)**: `products.kind='gift_card'` бараа = цахим мөр. `shared/gift-cards.ts` (`isGiftCardLine`, `isDigitalOnlyBasket`, `discountableSubtotalMnt`) — checkout preview (client) ба `createOrderFromActiveCart` хоёулаа: нөөц хасахгүй, зөвхөн карттай сагс хүргэлтгүй/салбаргүй, хямдрал physical мөрөнд л. Захиалга **paid болох гурван цэг** (`markQPayPaymentAttemptPaid`, `updateAdminOrder` completed, `recordInStoreSale`) бүгд `issueGiftCardsForPaidOrder` дуудна (idempotent: `gift_cards.purchaseOrderId`); cancel/refund → `voidGiftCardsForOrder`. Код хүргэлт `server/giftCardFulfilment.ts` (push+имэйл, db.ts-ээс dynamic import). **Шинээр "paid" бичдэг зам нэмбэл заавал issue дуудна.**
+
 ### 3.6 Интеграцууд (`server/integrations/`)
 
 - **`inventorySync.ts`** — вендороос хамааралгүй "гэрээ" + бүртгэл. Урсгалууд: `push` (манай хөдөлгөөн → вендор, 2 минутын хоцролт, `refType='external'` эргэж явахгүй), `sales` (вендорын борлуулалт → манай ledger, `external_refs`-ээр нэг удаа), **`snapshot`** (вендорын үлдэгдэл → **батлах хүлээсэн тооллого**, нөөц хэзээ ч шууд бичигдэхгүй). Бүх функц `SyncOptions {namespace, lagSeconds}` авдаг тул тест бодит cursor-ыг хөндөхгүй.
