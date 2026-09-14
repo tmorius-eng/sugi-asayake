@@ -962,7 +962,8 @@ const compile = (form: string) => {
   let last = 0;
   for (const match of form.matchAll(PLACEHOLDER)) {
     pattern += escapeRegExp(form.slice(last, match.index));
-    pattern += NUMERIC_PLACEHOLDERS.has(match[1]) ? "([\\d][\\d.,\\s]*?)" : "(.+?)";
+    // Digits, thousands separators, and a trailing "+" ("900+ төрөл").
+    pattern += NUMERIC_PLACEHOLDERS.has(match[1]) ? "([\\d][\\d.,+\\s]*?)" : "(.+?)";
     names.push(match[1]);
     last = match.index + match[0].length;
   }

@@ -4,6 +4,10 @@
 
 ---
 
+## Утасны өргөний sweep — 390px × dark × ja (2026-09-14, гэрийн лаптоп)
+
+Нүүр, /shop, PDP, /checkout, /login-ийг Playwright-аар 390px, харанхуй, ja-аар: хэвтээ overflow 0, эвдэрсэн зураг 0, console алдаа 0. Олдсон/зассан: (1) **өөрийн регресс** — `NUMERIC_PLACEHOLDERS` (`{N}`) зөвхөн цифр таардаг болсноос "Арчилгаа, гоо сайхан, эрүүл ахуйн **900+** төрөл" орчуулагдахаа больсон байв → тоон class-д `+` нэмэв (`[\d][\d.,+\s]*?`), EN "900+ lines across skincare…" дахин гарна; (2) 2 хаах товч 14×14/16×16 tap target (WCAG 2.5.8 ≥24) — `AddedToCartToast` (padding 6 / margin −6) ба `SitePromo` зарлалын мөрийн × (`p-1.5 -m-1.5`); (3) header-ийн 24×24 дүрсэн товчнууд, breadcrumb/inline текст линкүүд 15–18px — зөвшөөрөгдөх (inline текст), хөндөөгүй.
+
 ## Орхигдсон сагсны сануулга — web push суваг (2026-09-14, гэрийн лаптоп)
 
 `abandoned-cart-reminder` job (цаг тутам, Phase E) зөвхөн `emailOptIn`+имэйлтэй хэрэглэгчид илгээдэг байсан — бүртгэл утасны дугаараар л тул бараг хэнд ч хүрдэггүй байв. `getAbandonedCartsNeedingReminder` одоо (имэйл opt-in) **ЭСВЭЛ** (`push_subscriptions` ≥ 1) хэрэглэгчийн сагсыг буцаана (`emailOptIn`, `pushSubscriptions` тоотой); job суваг бүрээр илгээж (`sendPushToUser`, `url: /checkout`, `tag: abandoned-cart`), **ядаж нэг суваг бодитоор хүрсэн үед л** `reminderSentAt` тэмдэглэнэ (үхсэн subscription → дараагийн tick дахин оролдоно). Push текст admin-аар: шинэ store setting `push-body-abandoned-cart` ("Мессежийн загвар" бүлэг, `{нэр}`), гарчиг = имэйлийн гарчиг. Тест: `automation.integration.test.ts` +1 (push subscription-тай, имэйлгүй хэрэглэгч eligible; subscription устгахад eligible биш).

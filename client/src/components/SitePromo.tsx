@@ -119,7 +119,7 @@ export default function SitePromo() {
       </div>
       <div className="flex shrink-0 items-center gap-3">
         {promo.ctaLabel && promo.ctaUrl ? <a href={promo.ctaUrl} className="shrink-0 rounded-full bg-[#df1f3d] px-3 py-1 text-[11px] font-bold text-white transition hover:bg-[#bc1732]">{promo.ctaLabel}</a> : null}
-        <button type="button" onClick={dismiss} aria-label="Зарыг хаах" className="shrink-0 text-white/60 transition hover:text-white"><X size={16} /></button>
+        <button type="button" onClick={dismiss} aria-label="Зарыг хаах" className="-m-1.5 shrink-0 p-1.5 text-white/60 transition hover:text-white"><X size={16} /></button>
       </div>
     </div>;
   }
