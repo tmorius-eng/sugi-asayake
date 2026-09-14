@@ -68,8 +68,6 @@ export default function TranslateSurface() {
         return;
       }
       if (!(root instanceof Element)) return;
-      // The cookie banner has its own language and its own copy; never touch it.
-      if (root.closest?.("#stcm-wrapper")) return;
       translateElement(root);
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
       const pending: Text[] = [];
@@ -89,7 +87,10 @@ export default function TranslateSurface() {
       const main = document.body;
       if (!main) return;
       for (const child of Array.from(main.children)) {
-        if (child.id === "stcm-wrapper" || child.tagName === "SCRIPT" || child.tagName === "STYLE") continue;
+        // The cookie banner (#stcm-wrapper, vendor-rendered from the admin's
+        // site text) used to be skipped; since 2026-09-14 it is translated
+        // like any other node (Tom: "Cookie needs to be translated also").
+        if (child.tagName === "SCRIPT" || child.tagName === "STYLE") continue;
         // /admin has its own language and its own switch; never touch it.
         if (child.querySelector?.(".admin-shell") || child.classList.contains("admin-shell")) continue;
         translateTree(child);

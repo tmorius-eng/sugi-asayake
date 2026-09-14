@@ -3,8 +3,9 @@ import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { Link, useLocation } from "wouter";
 import SiteFooter from "@/components/SiteFooter";
 import { trpc } from "@/lib/trpc";
+import { useLocale } from "@/hooks/useLocale";
 import {
-  getLegalDocumentFallback,
+  getLegalDocumentFallbackFor,
   legalSectionsToHtml,
   type LegalDocumentKey,
 } from "@shared/legal-documents";
@@ -19,6 +20,13 @@ import {
  * in the `site_documents` table, edited in /admin -> Баримт бичиг with the
  * same TinyMCE editor as the news posts, and the researched text moved
  * verbatim to shared/legal-documents.ts as the fallback.
+ *
+ * 2026-09-14: one document per language. The visitor's language switch
+ * (useLocale) picks the row saved for that language, else the code fallback
+ * in that language (shared/legal-documents.i18n.ts for en/ja). A legal text
+ * is authored per language, not run through the word-by-word page
+ * translator -- which is also why an English page never shows a
+ * half-translated paragraph when the admin has revised only the Mongolian.
  *
  * Precedence is the same contract as every other admin-editable surface
  * here: a saved row wins, no row means the code fallback, and clearing the
@@ -41,11 +49,12 @@ const ROUTE_TO_KEY: Record<string, LegalDocumentKey> = {
 
 export default function Legal() {
   const [location] = useLocation();
+  const locale = useLocale();
   const key: LegalDocumentKey = ROUTE_TO_KEY[location] ?? "privacy";
-  const fallback = getLegalDocumentFallback(key);
+  const fallback = getLegalDocumentFallbackFor(key, locale);
 
   const documentsQuery = trpc.content.siteDocuments.useQuery();
-  const saved = documentsQuery.data?.find(row => row.documentKey === key);
+  const saved = documentsQuery.data?.find(row => row.documentKey === key && row.locale === locale);
 
   const title = saved?.title || fallback.title;
   const lead = saved?.lead ?? fallback.lead;
@@ -67,7 +76,7 @@ export default function Legal() {
         {/* .doc-body carries the numbered-section styling the old per-section
             markup had; see index.css. One container instead of a mapped list
             because the body is now a single authored HTML document. */}
-        <div className="doc-sections doc-body" dangerouslySetInnerHTML={{ __html: contentHtml }} />
+        <div className="doc-sections doc-body" lang={locale} dangerouslySetInnerHTML={{ __html: contentHtml }} />
       </main>
       <SiteFooter />
     </div>

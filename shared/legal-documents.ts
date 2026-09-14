@@ -119,3 +119,20 @@ const escapeHtml = (value: string) =>
  */
 export const legalSectionsToHtml = (sections: readonly (readonly [string, string])[]) =>
   sections.map(([heading, text]) => `<h2>${escapeHtml(heading)}</h2>\n<p>${escapeHtml(text)}</p>`).join("\n");
+
+// ---------------------------------------------------------------------------
+// Per-language fallbacks (2026-09-14). English and Japanese live in
+// shared/legal-documents.i18n.ts; Mongolian is the array above.
+import { legalDocumentTranslations } from "./legal-documents.i18n";
+
+export type LegalDocumentLocale = "mn" | "en" | "ja";
+
+/** The fallback text of one document in one language, same shape for all three. */
+export const getLegalDocumentFallbackFor = (key: LegalDocumentKey, locale: LegalDocumentLocale) => {
+  const base = getLegalDocumentFallback(key);
+  if (locale === "mn") return { path: base.path, title: base.title, lead: base.lead, updated: base.updated, sections: base.sections };
+  const translated = legalDocumentTranslations[key][locale];
+  // The revision date is the Mongolian original's: the translations were
+  // made from that revision and carry no separate editorial date.
+  return { path: base.path, title: translated.title, lead: translated.lead, updated: base.updated, sections: translated.sections };
+};

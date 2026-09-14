@@ -3925,6 +3925,7 @@ export async function getSiteDocuments() {
     return db
       .select({
         documentKey: siteDocuments.documentKey,
+        locale: siteDocuments.locale,
         title: siteDocuments.title,
         lead: siteDocuments.lead,
         contentHtml: siteDocuments.contentHtml,
@@ -3932,12 +3933,13 @@ export async function getSiteDocuments() {
         updatedAt: siteDocuments.updatedAt,
       })
       .from(siteDocuments)
-      .orderBy(asc(siteDocuments.documentKey));
+      .orderBy(asc(siteDocuments.documentKey), asc(siteDocuments.locale));
   });
 }
 
 export async function upsertSiteDocument(input: {
   documentKey: string;
+  locale: string;
   title: string;
   lead: string | null;
   contentHtml: string;
@@ -3953,6 +3955,7 @@ export async function upsertSiteDocument(input: {
   const contentHtml = sanitizePostContent(input.contentHtml);
   await db.insert(siteDocuments).values({
     documentKey: input.documentKey,
+    locale: input.locale,
     title: input.title,
     lead: input.lead,
     contentHtml,
@@ -3968,16 +3971,17 @@ export async function upsertSiteDocument(input: {
       updatedAt: new Date(),
     },
   });
-  const updated = await db.select().from(siteDocuments).where(eq(siteDocuments.documentKey, input.documentKey)).limit(1);
+  const updated = await db.select().from(siteDocuments)
+    .where(and(eq(siteDocuments.documentKey, input.documentKey), eq(siteDocuments.locale, input.locale))).limit(1);
   return updated[0];
 }
 
-export async function deleteSiteDocument(documentKey: string) {
+export async function deleteSiteDocument(documentKey: string, locale: string) {
   invalidateStorefront("siteDocuments");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  await db.delete(siteDocuments).where(eq(siteDocuments.documentKey, documentKey));
-  return { documentKey };
+  await db.delete(siteDocuments).where(and(eq(siteDocuments.documentKey, documentKey), eq(siteDocuments.locale, locale)));
+  return { documentKey, locale };
 }
 
 /**

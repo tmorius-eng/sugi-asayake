@@ -3,11 +3,13 @@ import { LoaderCircle, RotateCcw, Save, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import {
-  getLegalDocumentFallback,
+  getLegalDocumentFallbackFor,
   legalDocuments,
   legalSectionsToHtml,
   type LegalDocumentKey,
+  type LegalDocumentLocale,
 } from "@shared/legal-documents";
+import { LOCALE_LABELS } from "@shared/i18n";
 
 import MediaLibraryModal from "./admin/MediaLibraryModal";
 
@@ -15,6 +17,7 @@ const TinyMceEditor = lazy(() => import("./admin/TinyMceEditor"));
 
 type DocumentRow = {
   documentKey: string;
+  locale: string;
   title: string;
   lead: string | null;
   contentHtml: string;
@@ -39,7 +42,14 @@ const messageFrom = (error: unknown) => error instanceof Error ? error.message :
  * switching tabs without a remount would leave the previous document's body
  * in the box -- the same remount discipline AdminPostsPanel already uses
  * when toggling Visual/Text.
+ *
+ * 2026-09-14: one document per language. A second pill row (Монгол /
+ * English / 日本語) picks the language; each language is its own row in
+ * site_documents with its own fallback (shared/legal-documents.i18n.ts), so
+ * revising the Mongolian never silently changes what an English-speaking
+ * shopper reads.
  */
+const DOCUMENT_LOCALES: readonly LegalDocumentLocale[] = ["mn", "en", "ja"];
 export default function AdminDocumentsPanel({ preview = false }: { preview?: boolean }) {
   const utils = trpc.useUtils();
   const documentsQuery = trpc.admin.siteDocuments.useQuery(undefined, { enabled: !preview });
@@ -47,6 +57,7 @@ export default function AdminDocumentsPanel({ preview = false }: { preview?: boo
   const clearDocument = trpc.admin.clearSiteDocument.useMutation();
 
   const [activeKey, setActiveKey] = useState<LegalDocumentKey>("privacy");
+  const [activeLocale, setActiveLocale] = useState<LegalDocumentLocale>("mn");
   const [form, setForm] = useState<{ title: string; lead: string; updatedLabel: string; contentHtml: string } | null>(null);
   const [editorKey, setEditorKey] = useState(0);
   // Same promise-bridge the posts editor uses: TinyMCE's image button awaits
@@ -70,11 +81,11 @@ export default function AdminDocumentsPanel({ preview = false }: { preview?: boo
   };
 
   const savedByKey = useMemo(
-    () => new Map((documentsQuery.data ?? []).map((row: DocumentRow) => [row.documentKey, row])),
+    () => new Map((documentsQuery.data ?? []).map((row: DocumentRow) => [`${row.documentKey}:${row.locale}`, row])),
     [documentsQuery.data],
   );
-  const saved = savedByKey.get(activeKey) as DocumentRow | undefined;
-  const fallback = getLegalDocumentFallback(activeKey);
+  const saved = savedByKey.get(`${activeKey}:${activeLocale}`) as DocumentRow | undefined;
+  const fallback = getLegalDocumentFallbackFor(activeKey, activeLocale);
   const isCustom = Boolean(saved);
 
   // Seed the form from whatever is live for the selected document, and
@@ -87,7 +98,7 @@ export default function AdminDocumentsPanel({ preview = false }: { preview?: boo
       contentHtml: saved?.contentHtml ?? legalSectionsToHtml(fallback.sections),
     });
     setEditorKey(current => current + 1);
-  }, [activeKey, saved, fallback]);
+  }, [activeKey, activeLocale, saved, fallback]);
 
   const busy = updateDocument.isPending || clearDocument.isPending;
   const refresh = async () => {
@@ -102,6 +113,7 @@ export default function AdminDocumentsPanel({ preview = false }: { preview?: boo
     try {
       await updateDocument.mutateAsync({
         documentKey: activeKey,
+        locale: activeLocale,
         title: form.title.trim(),
         lead: form.lead.trim() || null,
         contentHtml: form.contentHtml,
@@ -118,7 +130,7 @@ export default function AdminDocumentsPanel({ preview = false }: { preview?: boo
     if (preview) return toast.message("Preview горим", { description: "Бодит сэргээлт зөвхөн хамгаалагдсан admin хэсэгт ажиллана." });
     if (!window.confirm("Энэ баримтыг SUGI-ийн анхны хувилбар руу буцаах уу? Таны бичсэн засвар устана.")) return;
     try {
-      await clearDocument.mutateAsync({ documentKey: activeKey });
+      await clearDocument.mutateAsync({ documentKey: activeKey, locale: activeLocale });
       await refresh();
       toast.success("Анхны хувилбарыг сэргээлээ.");
     } catch (error) {
@@ -147,10 +159,32 @@ export default function AdminDocumentsPanel({ preview = false }: { preview?: boo
             onClick={() => setActiveKey(document.key)}
             className={`rounded-full px-4 py-2 text-xs font-bold transition ${isActive ? "bg-[var(--a-btn-dark)] text-white" : "text-[var(--a-text-soft)] hover:text-[var(--a-text)]"}`}
           >
-            {savedByKey.get(document.key)?.title ?? document.title}
+            {savedByKey.get(`${document.key}:mn`)?.title ?? document.title}
           </button>
         );
       })}
+    </div>
+
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      <span className="text-[11px] font-bold text-[var(--a-muted)]">Хэл:</span>
+      <div className="inline-flex flex-wrap gap-1 rounded-full border border-[var(--a-border)] bg-[var(--a-card)] p-1">
+        {DOCUMENT_LOCALES.map(locale => {
+          const isActive = locale === activeLocale;
+          const hasRow = savedByKey.has(`${activeKey}:${locale}`);
+          return (
+            <button
+              key={locale}
+              type="button"
+              onClick={() => setActiveLocale(locale)}
+              className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${isActive ? "bg-[var(--a-btn-dark)] text-white" : "text-[var(--a-text-soft)] hover:text-[var(--a-text)]"}`}
+              title={hasRow ? "Засварласан хувилбартай" : "Анхны хувилбар"}
+            >
+              {LOCALE_LABELS[locale]}{hasRow ? " •" : ""}
+            </button>
+          );
+        })}
+      </div>
+      <span className="text-[11px] leading-4 text-[var(--a-muted)]">Хэл бүр тусдаа баримт — монголоор зассан өөрчлөлт англи, япон хувилбарт өөрөө орохгүй.</span>
     </div>
 
     {!preview && documentsQuery.isLoading && (
@@ -164,14 +198,14 @@ export default function AdminDocumentsPanel({ preview = false }: { preview?: boo
       <div className="mt-5 rounded-3xl border border-[var(--a-border)] bg-[var(--a-card)] p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <p className="text-[10px] font-extrabold tracking-[.15em] text-[#df1f3d]">{fallback.path}</p>
+            <p className="text-[10px] font-extrabold tracking-[.15em] text-[#df1f3d]">{fallback.path} · {LOCALE_LABELS[activeLocale]}</p>
             <h3 className="mt-1 font-[var(--font-display)] text-lg font-semibold tracking-[-.04em]">{form.title || fallback.title}</h3>
           </div>
           <div className="flex items-center gap-2">
             <span className={`rounded-full px-2.5 py-1 text-[9px] font-extrabold tracking-[.12em] ${isCustom ? "bg-[var(--a-pos-soft)] text-[var(--a-pos)]" : "bg-[var(--a-info-soft)] text-[var(--a-muted)]"}`}>
               {isCustom ? "ЗАСВАРЛАСАН" : "АНХНЫ ХУВИЛБАР"}
             </span>
-            <a href={fallback.path} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-[var(--a-muted)] underline underline-offset-2">Амьд хуудсыг харах</a>
+            <a href={`${fallback.path}?lang=${activeLocale}`} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-[var(--a-muted)] underline underline-offset-2">Амьд хуудсыг харах</a>
           </div>
         </div>
 
@@ -211,7 +245,7 @@ export default function AdminDocumentsPanel({ preview = false }: { preview?: boo
         <div className="rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] p-0.5">
           <Suspense fallback={<div className="grid min-h-[420px] place-items-center text-xs text-[var(--a-faint)]"><LoaderCircle className="animate-spin" size={20} /></div>}>
             <TinyMceEditor
-              key={`${activeKey}-${editorKey}`}
+              key={`${activeKey}-${activeLocale}-${editorKey}`}
               initialValue={form.contentHtml}
               onChange={html => setForm(current => current && { ...current, contentHtml: html })}
               onRequestMedia={requestMedia}

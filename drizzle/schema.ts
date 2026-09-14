@@ -1155,7 +1155,11 @@ export const siteText = mysqlTable("site_text", {
  */
 export const siteDocuments = mysqlTable("site_documents", {
   id: int("id").autoincrement().primaryKey(),
-  documentKey: varchar("documentKey", { length: 40 }).notNull().unique(),
+  documentKey: varchar("documentKey", { length: 40 }).notNull(),
+  // 2026-09-14: one row per language ("mn" | "en" | "ja"); the code fallback
+  // in shared/legal-documents.ts carries all three, so a language with no
+  // row still renders a full document.
+  locale: varchar("locale", { length: 2 }).notNull().default("mn"),
   title: varchar("title", { length: 200 }).notNull(),
   lead: text("lead"),
   contentHtml: text("contentHtml").notNull(),
@@ -1164,6 +1168,7 @@ export const siteDocuments = mysqlTable("site_documents", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => [
+  uniqueIndex("site_documents_key_locale_unique").on(table.documentKey, table.locale),
   index("site_documents_updated_by_idx").on(table.updatedByUserId),
 ]);
 

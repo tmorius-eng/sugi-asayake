@@ -875,6 +875,18 @@ export const UI_STRINGS: Record<string, { en: string; ja: string }> = {
   "Одоогоор бүх бараа нөөцгүй байна.": { en: "All of these products are currently out of stock.", ja: "現在すべての商品が在庫切れです。" },
   "Бүх {n} бараа сагсанд орлоо.": { en: "All {n} products are in your cart.", ja: "{n}点すべてをカートに追加しました。" },
   "{n} бараа сагсанд орлоо ({skipped} нөөцгүй тул алгассан).": { en: "{n} products added to your cart ({skipped} skipped — out of stock).", ja: "{n}点をカートに追加しました（在庫切れの{skipped}点はスキップ）。" },
+  // -- cookie banner (Silktide, vendor-rendered from the cookie-text-* site text) ---
+  "Күки (cookie) гэдэг нь таны сагс, нэвтэрсэн төлөвийг санах жижиг файл. Та зөвшөөрвөл бид нэмээд сайтад хэдэн хүн орж байгааг нэргүйгээр тоолж, сайтаа сайжруулна. Хувийн мэдээллийг тань хэнд ч өгөхгүй.": { en: "A cookie is a small file that remembers your cart and whether you are signed in. If you agree, we also count anonymously how many people visit, to improve the site. Your personal data is never given to anyone.", ja: "Cookieは、カートの中身やログイン状態を記憶する小さなファイルです。同意いただくと、サイト改善のために訪問者数を匿名で集計します。個人情報を第三者に渡すことはありません。" },
+  "За, зөвшөөрч байна": { en: "OK, I agree", ja: "はい、同意します" },
+  "Зөвхөн сагс, нэвтрэлтэд хэрэгтэйг нь": { en: "Only what the cart and sign-in need", ja: "カートとログインに必要なもののみ" },
+  "Күки гэж юу вэ?": { en: "What are cookies?", ja: "Cookieとは？" },
+  "SUGI ASAYAKE сайт хоёр төрлийн күки хэрэглэдэг. Доороос аль нэгийг нь асааж, унтрааж болно.": { en: "SUGI ASAYAKE uses two kinds of cookies. You can switch either on or off below.", ja: "SUGI ASAYAKEは2種類のCookieを使用しています。以下でそれぞれオン・オフを切り替えられます。" },
+  "Хадгалах": { en: "Save", ja: "保存" },
+  "Заавал хэрэгтэй (сагс, нэвтрэлт)": { en: "Essential (cart, sign-in)", ja: "必須（カート・ログイン）" },
+  "Таны сагсанд хийсэн бараа, нэвтэрсэн төлөвийг санахад хэрэгтэй. Үүнгүйгээр сайт ажиллахгүй тул унтраах боломжгүй.": { en: "Needed to remember what is in your cart and that you are signed in. The site cannot work without it, so it cannot be switched off.", ja: "カートの中身とログイン状態を記憶するために必要です。これがないとサイトが動作しないため、オフにはできません。" },
+  "Тоолуур (нэргүй статистик)": { en: "Counter (anonymous statistics)", ja: "カウンター（匿名の統計）" },
+  "Сайтад өдөрт хэдэн хүн орж, аль хуудсыг үзэж байгааг нэргүйгээр тоолно — та хэн болохыг мэдэхгүй. Google, Facebook зэрэг гадны компанид юу ч илгээхгүй.": { en: "Counts anonymously how many people visit each day and which pages they see — it does not know who you are. Nothing is sent to Google, Facebook or any other third party.", ja: "1日の訪問者数と閲覧されたページを匿名で集計します。あなたが誰かは分かりません。GoogleやFacebookなどの第三者には何も送信しません。" },
+  "Күүкийн тохиргоог хаах": { en: "Close cookie settings", ja: "Cookie設定を閉じる" },
   // The shop hero kicker renders its three lines as separate nodes; the last one is Cyrillic.
   "УЛААНБААТАР / MONGOLIA": { en: "ULAANBAATAR / MONGOLIA", ja: "ウランバートル / MONGOLIA" },
   "Агуулга руу очих": { en: "Skip to content", ja: "本文へ移動" },

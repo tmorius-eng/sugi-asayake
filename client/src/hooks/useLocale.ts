@@ -31,6 +31,14 @@ export const setLocale = (locale: Locale) => {
   listeners.forEach(listener => listener());
 };
 
+// A `?lang=en` link selects the language once, exactly as the header switch
+// would -- the admin editor's "view live page" link uses it, and it makes a
+// shared link land in the right language (2026-09-14).
+if (typeof window !== "undefined") {
+  const wanted = new URLSearchParams(window.location.search).get("lang");
+  if (isLocale(wanted) && wanted !== read()) setLocale(wanted);
+}
+
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
   return () => { listeners.delete(listener); };

@@ -6,6 +6,7 @@ import { slugify } from "@shared/slugify";
 import { looksLikeBarcode, MAX_BARCODE_LENGTH, normaliseBarcode } from "@shared/barcode";
 import { invalidateIndexHtmlCache } from "./_core/indexHtml";
 import { legalDocumentKeys } from "@shared/legal-documents";
+import { LOCALES } from "@shared/i18n";
 import { TRPCError } from "@trpc/server";
 import { parse as parseCookieHeader } from "cookie";
 import { createHash, randomBytes } from "node:crypto";
@@ -520,6 +521,8 @@ const siteMediaSlotSchema = z.enum(siteMediaSlotKeys);
 const siteTextSlotSchema = z.enum(siteTextSlotKeys);
 const storeSettingKeySchema = z.enum(storeSettingKeys);
 const legalDocumentKeySchema = z.enum(legalDocumentKeys);
+// One legal document per storefront language (2026-09-14).
+const legalDocumentLocaleSchema = z.enum(LOCALES).default("mn");
 // A syntactically valid but unusable scrypt hash (correct salt/hash lengths,
 // see server/_core/password.ts), used to run `verifyPassword` through its
 // full computation even when no account matches the submitted phone number.
@@ -3009,6 +3012,7 @@ export const appRouter = router({
     // the same TinyMCE "Text" tab can paste raw markup.
     updateSiteDocument: marketingProcedure.input(z.object({
       documentKey: legalDocumentKeySchema,
+      locale: legalDocumentLocaleSchema,
       title: z.string().trim().min(2).max(200),
       lead: nullableText(2_000),
       contentHtml: z.string().trim().min(10).max(200_000),
@@ -3016,19 +3020,20 @@ export const appRouter = router({
     })).mutation(async ({ ctx, input }) => {
       const document = await upsertSiteDocument({
         documentKey: input.documentKey,
+        locale: input.locale,
         title: input.title,
         lead: input.lead ?? null,
         contentHtml: input.contentHtml,
         updatedLabel: input.updatedLabel ?? null,
         updatedByUserId: ctx.user.id,
       });
-      await logAdminAction({ actorUserId: ctx.user.id, action: "site_document.updated", entityType: "site_document", entityId: document.id, metadata: { documentKey: input.documentKey } });
+      await logAdminAction({ actorUserId: ctx.user.id, action: "site_document.updated", entityType: "site_document", entityId: document.id, metadata: { documentKey: input.documentKey, locale: input.locale } });
       return document;
     }),
-    clearSiteDocument: marketingProcedure.input(z.object({ documentKey: legalDocumentKeySchema })).mutation(async ({ ctx, input }) => {
-      await deleteSiteDocument(input.documentKey);
-      await logAdminAction({ actorUserId: ctx.user.id, action: "site_document.cleared", entityType: "site_document", entityId: null, metadata: { documentKey: input.documentKey } });
-      return { documentKey: input.documentKey };
+    clearSiteDocument: marketingProcedure.input(z.object({ documentKey: legalDocumentKeySchema, locale: legalDocumentLocaleSchema })).mutation(async ({ ctx, input }) => {
+      await deleteSiteDocument(input.documentKey, input.locale);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "site_document.cleared", entityType: "site_document", entityId: null, metadata: { documentKey: input.documentKey, locale: input.locale } });
+      return { documentKey: input.documentKey, locale: input.locale };
     }),
 
     // ---- Loyalty ladder (2026-09-12) ----------------------------------

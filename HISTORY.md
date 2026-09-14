@@ -4,6 +4,15 @@
 
 ---
 
+## Хуулийн 3 хуудас гурван хэлээр + cookie banner-ийн орчуулга (2026-09-14, гэрийн лаптоп)
+
+Tom (утасны screenshot, ja горимд cookie banner монголоор): "Cookie needs to be translated also!! And privacy and terms return policy needs to be translate … On /admin panel".
+
+- **Cookie banner**: Silktide нь текстээ `index.html`-ийн JSON блокоос (server `%COOKIE_*%` placeholder ← `cookie-text-*` site-text) уншиж DOM зурдаг; `TranslateSurface` `#stcm-wrapper`-ийг санаатайгаар алгасдаг байсан. Алгасалтыг хасаж, 11 анхдагч текст + init.js-ийн hardcode "Күүкийн тохиргоог хаах" aria-label-ийг толь бичигт нэмэв. ⚠️ Нэг түлхүүр site-text-ээс зөрж байсан ("гадны компанид" vs "гуравдагч талд") — grep-ээр бүх 4 урт текстийг verbatim тулгаж баталгаажуулсан. Playwright: banner ja-д "はい、同意します / カートとログインに必要なもののみ / 詳細", aria "Cookie設定を閉じる", кирилл 0.
+- **Хуулийн баримт**: толь бичгээр биш — хэл бүрд **тусдаа баримт** (admin монголоо засахад en/ja өөрөө өөрчлөгдөхгүй, статутын мэдэгдэлд энэ л шударга). `site_documents.locale` (0075: ADD COLUMN DEFAULT 'mn', DROP `site_documents_documentKey_unique`, ADD UNIQUE(documentKey, locale)); `upsertSiteDocument`/`deleteSiteDocument` locale авна; router `legalDocumentLocaleSchema` (`z.enum(LOCALES).default("mn")`); `content.siteDocuments` бүх мөрөө буцаана, client key+locale-оор шүүнэ. `shared/legal-documents.i18n.ts`: privacy 12 + terms 13 + returns 9 хэсэг × en/ja, монгол эхийн орчуулга (хуулийн зүйл, дугаар, утас, имэйл бүгд хэвээр; "Сүүлд шинэчилсэн" огноо монгол эхийнх). `Legal.tsx` `useLocale` + `getLegalDocumentFallbackFor`, body-д `lang` атрибут. `AdminDocumentsPanel`: "Хэл:" pill мөр, мөр байвал "•", editor key-д locale, "Амьд хуудсыг харах" → `?lang=`; `useLocale.ts` module load дээр `?lang=` байвал `setLocale`.
+- Баталгаажуулалт: `pnpm check`/`pnpm lint` цэвэр; migration HeatWave дээр 3/3 ok; Playwright dev: `/privacy?lang=en` h1 "Privacy policy", 12 h2, body-д кирилл 0, "Last updated: 2026.09.06", "Back to the homepage"; `/returns?lang=ja` "返品と交換", 9 h2, кирилл 0; cookie banner ja (дээр). Screenshot `.playwright-mcp/legal-ja-cookie-banner.png`.
+- ⚠️ Tom-д: монгол privacy §4 "Aiven" гэж байгаа — DB одоо Oracle Cloud (Токио); 3 хэлээр /admin-аас засах (en/ja анхдагч ч "Aiven" гэж орчуулагдсан, эх бичвэрт үнэнч байх үүднээс).
+
 ## Profile, сэтгэгдэл, Асуулт/хариулт, Checkout-ийн орчуулга (2026-09-13, гэрийн лаптоп)
 
 Tom 日本語 руу солиод /profile-ийг нээхэд ихэнх нь монголоор үлдсэн ("profile barag bur teg chigeerei mongol hel deeree baina!! sain orchuulalt hiigeegui baina!"). Шалтгаан: 09-12-ны орчуулга нүүр/shop/PDP-ийн ил хэсгүүдийг л хамарсан; нэвтэрсэн хэрэглэгчийн хуудсууд (Profile-ийн 9 таб, ReviewThread, ProductQuestions, ProfileQuizWizard), Checkout-ийн StorePay/QPay мөрүүд, RoutineDetail, ForgotPassword, ErrorBoundary болон `shared/catalog-filter.ts`-ийн профайлын сонголтын шошгууд (арьс/үс/үнэр/интерьер) толь бичигт ороогүй байв.
