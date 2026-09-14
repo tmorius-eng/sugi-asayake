@@ -20,11 +20,15 @@
  * admin editor нь шинээр бичихэд биш, шинэчлэн байлгахад зориулагдсан.
  */
 
-export const legalDocumentKeys = ["privacy", "terms", "returns"] as const;
-export type LegalDocumentKey = (typeof legalDocumentKeys)[number];
+// 2026-09-14: "about" ба "careers" нэмэгдэв. Хуучин asayake.mn (Zochil) дээр
+// байсан "Бидний тухай", "Ажлын байр" хоёр хуудас шинэ сайтад байхгүй байсныг
+// нөхөв — хуулийн гурван хуудастай ижил механизмаар (site_documents мөр,
+// /admin -> Баримт бичиг, гурван хэл, мөргүй үед доорх fallback).
+export const siteDocumentKeys = ["privacy", "terms", "returns", "about", "careers"] as const;
+export type SiteDocumentKey = (typeof siteDocumentKeys)[number];
 
-export type LegalDocumentFallback = {
-  key: LegalDocumentKey;
+export type SiteDocumentFallback = {
+  key: SiteDocumentKey;
   /** The storefront route the document is served on. */
   path: `/${string}`;
   title: string;
@@ -35,7 +39,7 @@ export type LegalDocumentFallback = {
   sections: readonly (readonly [string, string])[];
 };
 
-export const legalDocuments: readonly LegalDocumentFallback[] = [
+export const siteDocumentFallbacks: readonly SiteDocumentFallback[] = [
   {
     key: "privacy",
     path: "/privacy",
@@ -97,13 +101,42 @@ export const legalDocuments: readonly LegalDocumentFallback[] = [
       ["Гомдол шийдвэрлэгдээгүй тохиолдолд", "Бидэнтэй харилцан ойлголцолд хүрч чадаагүй тохиолдолд та Зохистой өрсөлдөөн, хэрэглэгчийн төлөө газар, эсвэл Монгол Улсын эрх бүхий шүүхэд хандах эрхтэй."],
     ],
   },
+  {
+    key: "about",
+    path: "/about",
+    title: "Бидний тухай",
+    lead: "Асаяке ХХК — Японы гоо сайхан, эрүүл мэнд, ахуйн бүтээгдэхүүнийг албан ёсны эрхээр Монголд нийлүүлж буй компани.",
+    updated: "2026.09.14",
+    sections: [
+      ["Компанийн танилцуулга", "Асаяке ХХК нь 2013 онд байгуулагдсанаас хойш Японы олон компанийн бараа бүтээгдэхүүнийг албан ёсны эрхтэйгээр Монголд худалдаалж байна. Бид зөвхөн өөрийн нэрийн дэлгүүрээс гадна сүлжээ дэлгүүрүүдэд бараа нийлүүлдэг бөгөөд одоогоор 200 гаруй салбар сүлжээ дэлгүүрт Японы чанартай бүтээгдэхүүн хүрч байна. Энэ нь хэрэглэгчдэдээ илүү ойртсон үйлчилгээ үзүүлэх боломжийг бидэнд олгодог."],
+      ["Өөрийн нэрийн бүтээгдэхүүн", "Японы алдартай брэндүүдээс гадна бид Японы гоо сайхны компанитай хамтран өөрийн нэрийн хоёр төрлийн гоо сайхны иж бүрэн цуврал бүтээгдэхүүн үйлдвэрлүүлж Монголд худалдаалсан. Эдгээр бүтээгдэхүүн хэрэглэгчдээс өндөр үнэлгээ авч, байнгын хэрэглэгчидтэй болсон."],
+      ["SUGI ASAYAKE дэлгүүрүүд", "Улаанбаатар хотод SUGI ASAYAKE нэрийн 4 салбар ажиллаж, арьс арчилгаа, гоо сайхан, эрүүл мэнд, ариун цэвэр, гэр ахуй, хүнсний бүтээгдэхүүнийг Японоос албан ёсны сувгаар оруулж ирдэг. Салбар бүрийн хаяг, ажиллах цагийг сайтын Салбарууд хэсгээс харна уу."],
+      ["Онлайн дэлгүүр", "Энэ онлайн дэлгүүрээр дэлгүүрийн бүтээгдэхүүнийг гэрээсээ захиалах боломжтой. Захиалгаа хүргүүлэх, эсвэл өөрт ойр салбараас очиж авах боломжтой бөгөөд бараа бүрийн найрлага, хэмжээ, гарал үүсэл, хадгалах хугацааг барааны хуудсан дээрээс нь шалгана."],
+      ["Чанар, баталгаа", "Манай бүх бараа Японоос албан ёсны сувгаар орж ирдэг. Бүтээгдэхүүн бүр Японы үйлдвэрийн баркод (JAN код)-той бөгөөд та уг кодоор нь эх бүтээгдэхүүн эсэхийг шалгах боломжтой. Барааны хуудас бүр дээр баркод, найрлага, цэвэр хэмжээ, гарал үүслийг ил бичдэг."],
+      ["Холбоо барих", "Утас: 9450-9911. И-мэйл: asayake0307@gmail.com. Түгээмэл асуулт, хүргэлт, буцаалтын талаарх дэлгэрэнгүй мэдээллийг Тусламж хуудаснаас үзнэ үү. Биднийг сонгон үйлчлүүлдэг эрхэм хэрэглэгч нартаа баярлалаа."],
+    ],
+  },
+  {
+    key: "careers",
+    path: "/careers",
+    title: "Ажлын байр",
+    lead: "SUGI ASAYAKE-д ажиллах сонирхолтой бол бидэнтэй холбогдоорой.",
+    updated: "2026.09.14",
+    sections: [
+      ["Нээлттэй ажлын байр", "Одоогоор нээлттэй зарлагдсан ажлын байр байхгүй байна. Шинэ ажлын байр гармагц энэ хуудсанд байршуулах тул үе үе шалгаж байхыг зөвлөж байна."],
+      ["Бид ямар хүмүүстэй ажилладаг вэ", "Дэлгүүрийн зөвлөх, кассчин, агуулахын ажилтан, онлайн захиалгын оператор, хүргэлтийн жолооч зэрэг албан тушаалд хүн авдаг. Гоо сайхан, арьс арчилгааны бүтээгдэхүүнийг сонирхдог, хэрэглэгчтэй эелдэг харилцдаг, багаар ажиллах чадвартай хүнийг эрэлхийлдэг."],
+      ["Бид юу санал болгодог вэ", "Албан ёсны хөдөлмөрийн гэрээ, нийгмийн даатгал, ажилтны хөнгөлөлт, Японы бүтээгдэхүүний талаарх сургалт, тогтмол ажлын цагийн хуваарь."],
+      ["Хэрхэн өргөдөл гаргах вэ", "Анкет, товч намтраа asayake0307@gmail.com хаягаар илгээх, эсвэл 9450-9911 дугаарт холбогдож дэлгэрэнгүй мэдээлэл авна уу. Захидлын гарчигт сонирхож буй албан тушаалаа бичнэ үү."],
+      ["Таны мэдээллийг хэрхэн хадгалах вэ", "Ирүүлсэн анкет, товч намтрыг зөвхөн ажилд авах зорилгоор ашиглаж, сонгон шалгаруулалт дууссаны дараа устгана. Дэлгэрэнгүйг Хувийн нууцлал хуудаснаас үзнэ үү."],
+    ],
+  },
 ] as const;
 
-export const getLegalDocumentFallback = (key: LegalDocumentKey) =>
-  legalDocuments.find(document => document.key === key)!;
+export const getSiteDocumentFallback = (key: SiteDocumentKey) =>
+  siteDocumentFallbacks.find(document => document.key === key)!;
 
-export const isLegalDocumentKey = (value: string): value is LegalDocumentKey =>
-  (legalDocumentKeys as readonly string[]).includes(value);
+export const isSiteDocumentKey = (value: string): value is SiteDocumentKey =>
+  (siteDocumentKeys as readonly string[]).includes(value);
 
 const escapeHtml = (value: string) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -115,21 +148,21 @@ const escapeHtml = (value: string) =>
  * round-trips through the same sanitizer as an admin-saved version and the
  * two can never render differently for structural reasons.
  */
-export const legalSectionsToHtml = (sections: readonly (readonly [string, string])[]) =>
+export const documentSectionsToHtml = (sections: readonly (readonly [string, string])[]) =>
   sections.map(([heading, text]) => `<h2>${escapeHtml(heading)}</h2>\n<p>${escapeHtml(text)}</p>`).join("\n");
 
 // ---------------------------------------------------------------------------
 // Per-language fallbacks (2026-09-14). English and Japanese live in
-// shared/legal-documents.i18n.ts; Mongolian is the array above.
-import { legalDocumentTranslations } from "./legal-documents.i18n";
+// shared/site-documents.i18n.ts; Mongolian is the array above.
+import { siteDocumentTranslations } from "./site-documents.i18n";
 
-export type LegalDocumentLocale = "mn" | "en" | "ja";
+export type SiteDocumentLocale = "mn" | "en" | "ja";
 
 /** The fallback text of one document in one language, same shape for all three. */
-export const getLegalDocumentFallbackFor = (key: LegalDocumentKey, locale: LegalDocumentLocale) => {
-  const base = getLegalDocumentFallback(key);
+export const getSiteDocumentFallbackFor = (key: SiteDocumentKey, locale: SiteDocumentLocale) => {
+  const base = getSiteDocumentFallback(key);
   if (locale === "mn") return { path: base.path, title: base.title, lead: base.lead, updated: base.updated, sections: base.sections };
-  const translated = legalDocumentTranslations[key][locale];
+  const translated = siteDocumentTranslations[key][locale];
   // The revision date is the Mongolian original's: the translations were
   // made from that revision and carry no separate editorial date.
   return { path: base.path, title: translated.title, lead: translated.lead, updated: base.updated, sections: translated.sections };

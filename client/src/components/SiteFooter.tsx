@@ -1,4 +1,4 @@
-import { Facebook, Instagram, Phone } from "lucide-react";
+import { Facebook, Instagram, Phone, Youtube } from "lucide-react";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useCategories } from "@/hooks/useCategories";
@@ -47,6 +47,7 @@ export default function SiteFooter({ ctaBanner }: { ctaBanner?: FooterCtaBanner 
   const socials = [
     contact.facebookUrl ? { label: "Facebook", href: contact.facebookUrl, Icon: Facebook } : null,
     contact.instagramUrl ? { label: "Instagram", href: contact.instagramUrl, Icon: Instagram } : null,
+    contact.youtubeUrl ? { label: "YouTube", href: contact.youtubeUrl, Icon: Youtube } : null,
   ].filter((social): social is { label: string; href: string; Icon: typeof Facebook } => social !== null);
   // "Controls everything" admin overhaul (2026-09-08, Phase J): replaces
   // locations-data.ts's hardcoded array -- react-query dedupes this against
@@ -83,6 +84,8 @@ export default function SiteFooter({ ctaBanner }: { ctaBanner?: FooterCtaBanner 
         </div>
         <div className="footer-column">
           <span>{textFor("footer-text-column-legal", "Нөхцөл ба бодлого")}</span>
+          <Link href="/about">{t("Бидний тухай")}</Link>
+          <Link href="/careers">{t("Ажлын байр")}</Link>
           <Link href="/privacy">{t("Хувийн нууцлал")}</Link>
           <Link href="/terms">{t("Үйлчилгээний нөхцөл")}</Link>
           <Link href="/returns">{t("Буцаалт, солилцоо")}</Link>

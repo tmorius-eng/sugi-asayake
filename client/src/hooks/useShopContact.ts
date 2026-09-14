@@ -10,6 +10,8 @@ export type ShopContact = {
   hours: string;
   facebookUrl: string | null;
   instagramUrl: string | null;
+  /** 2026-09-14: хуучин сайтын footer дээр байсан гурав дахь суваг. */
+  youtubeUrl: string | null;
 };
 
 /**
@@ -40,5 +42,6 @@ export function useShopContact(): ShopContact {
     hours: valueForSetting("contact-branch-hours", fallback("contact-branch-hours")),
     facebookUrl: asLink(valueForSetting("contact-facebook-url", fallback("contact-facebook-url"))),
     instagramUrl: asLink(valueForSetting("contact-instagram-url", fallback("contact-instagram-url"))),
+    youtubeUrl: asLink(valueForSetting("contact-youtube-url", fallback("contact-youtube-url"))),
   };
 }

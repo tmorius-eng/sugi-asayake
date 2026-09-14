@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
-import { Download, ExternalLink, ImageUp, LoaderCircle, PackagePlus, Pencil, Search, ShieldCheck, Tags, Trash2, Upload } from "lucide-react";
+import { Download, ExternalLink, ImageUp, LoaderCircle, PackagePlus, Pencil, QrCode, Search, ShieldCheck, Tags, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { downloadCsv } from "@/lib/csv";
@@ -22,6 +22,7 @@ import { GenericListView, type GenericListColumn } from "./admin/GenericListView
 import AdminHistoryPanel from "./admin/AdminHistoryPanel";
 import AdminOperationsPanel from "./AdminOperationsPanel";
 import AdminProductImportModal from "./admin/AdminProductImportModal";
+import ProductQrModal, { type QrProduct } from "./admin/ProductQrModal";
 import AdminPostsPanel from "./AdminPostsPanel";
 import AdminReviewsPanel from "./AdminReviewsPanel";
 import AdminQuestionsPanel from "./AdminQuestionsPanel";
@@ -199,6 +200,9 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
   // history at all. Same URL-state pattern Shop.tsx already uses for its
   // own filters (replaceState, not pushState -- deliberately doesn't spam
   // history per click, same tradeoff Shop.tsx made).
+  // 2026-09-14: тавиурын шошгонд зориулсан барааны QR (Zochil-ийн жагсаалтын
+  // "QR код үүсгэх" баганын орлуулга). null = цонх хаалттай.
+  const [qrProduct, setQrProduct] = useState<QrProduct | null>(null);
   const [section, setSection] = useState<AdminSection>(() => {
     const requested = new URLSearchParams(window.location.search).get("adminSection");
     return adminSectionKeys.includes(requested as AdminSection) ? (requested as AdminSection) : "dashboard";
@@ -715,6 +719,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
                   <button type="button" onClick={() => openCategoryComposer()} className="inline-flex items-center justify-center gap-2 rounded-full border border-[#df1f3d]/25 bg-[var(--a-card)] px-4 py-3 text-xs font-bold text-[var(--a-neg)] transition hover:-translate-y-0.5 hover:border-[#df1f3d] active:scale-[.97]"><Tags size={15} />Ангилал</button>
                   <button type="button" onClick={() => openProductComposer()} className="inline-flex items-center justify-center gap-2 rounded-full bg-[#df1f3d] px-5 py-3 text-xs font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97]"><PackagePlus size={16} />Бүтээгдэхүүн нэмэх</button>
                   <AdminProductImportModal open={showProductImport} onOpenChange={setShowProductImport} />
+                  <ProductQrModal product={qrProduct} onClose={() => setQrProduct(null)} />
                 </>}
                 {section !== "dashboard" && section !== "posts" && section !== "reviews" && section !== "routines" && section !== "promotions" && section !== "calendar" && section !== "discountCodes" && section !== "brands" && section !== "branches" && section !== "pos" && section !== "media" && section !== "campaigns" && section !== "storeSettings" && section !== "security" && section !== "integrations" && section !== "notifications" && section !== "receiving" && section !== "documents" && section !== "loyalty" && <label className="flex h-10 items-center gap-2 rounded-full border border-[var(--a-border)] bg-[var(--a-card)] px-4"><Search size={15} className="text-[var(--a-faint)]" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={section === "users" ? "Нэр эсвэл имэйл хайх" : section === "orders" ? "Дугаар, хэрэглэгч, утас хайх" : "Нэр, SKU хайх"} className="w-full bg-transparent text-xs outline-none" /></label>}
               </div>
@@ -787,6 +792,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
                 rowActions={product => (
                   <div className="flex justify-end gap-1">
                     {product.isPublished && <a href={`/product/${product.slug}`} target="_blank" rel="noopener noreferrer" className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)] hover:text-[var(--a-info)]" aria-label={`${product.name} — амьд хуудсыг харах`} title="Амьд хуудсыг харах"><ExternalLink size={15} /></a>}
+                    <button type="button" onClick={() => setQrProduct({ name: product.name, slug: product.slug, sku: product.sku })} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)] hover:text-[var(--a-info)]" aria-label={`${product.name} — QR код`} title="QR код"><QrCode size={15} /></button>
                     <button type="button" disabled={isCatalogBusy} onClick={() => openProductComposer(product)} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)] hover:text-[#df1f3d]" aria-label={`${product.name} засах`} title="Засах"><Pencil size={15} /></button>
                     <button type="button" disabled={isCatalogBusy} onClick={() => removeProduct(product)} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${product.name} устгах`} title="Устгах"><Trash2 size={15} /></button>
                   </div>

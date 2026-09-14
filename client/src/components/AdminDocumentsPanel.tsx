@@ -3,12 +3,12 @@ import { LoaderCircle, RotateCcw, Save, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import {
-  getLegalDocumentFallbackFor,
-  legalDocuments,
-  legalSectionsToHtml,
-  type LegalDocumentKey,
-  type LegalDocumentLocale,
-} from "@shared/legal-documents";
+  getSiteDocumentFallbackFor,
+  siteDocumentFallbacks,
+  documentSectionsToHtml,
+  type SiteDocumentKey,
+  type SiteDocumentLocale,
+} from "@shared/site-documents";
 import { LOCALE_LABELS } from "@shared/i18n";
 
 import MediaLibraryModal from "./admin/MediaLibraryModal";
@@ -33,7 +33,7 @@ const messageFrom = (error: unknown) => error instanceof Error ? error.message :
  * The three legal pages, edited with the same TinyMCE editor as the news
  * posts. Same override contract as Content & Media / Дэлгүүрийн тохиргоо:
  * the form starts from the live published text (a saved row if there is
- * one, otherwise the researched fallback in shared/legal-documents.ts), and
+ * one, otherwise the researched fallback in shared/site-documents.ts), and
  * "Анхны хувилбар руу буцаах" deletes the row so the fallback is served
  * again verbatim.
  *
@@ -45,19 +45,19 @@ const messageFrom = (error: unknown) => error instanceof Error ? error.message :
  *
  * 2026-09-14: one document per language. A second pill row (Монгол /
  * English / 日本語) picks the language; each language is its own row in
- * site_documents with its own fallback (shared/legal-documents.i18n.ts), so
+ * site_documents with its own fallback (shared/site-documents.i18n.ts), so
  * revising the Mongolian never silently changes what an English-speaking
  * shopper reads.
  */
-const DOCUMENT_LOCALES: readonly LegalDocumentLocale[] = ["mn", "en", "ja"];
+const DOCUMENT_LOCALES: readonly SiteDocumentLocale[] = ["mn", "en", "ja"];
 export default function AdminDocumentsPanel({ preview = false }: { preview?: boolean }) {
   const utils = trpc.useUtils();
   const documentsQuery = trpc.admin.siteDocuments.useQuery(undefined, { enabled: !preview });
   const updateDocument = trpc.admin.updateSiteDocument.useMutation();
   const clearDocument = trpc.admin.clearSiteDocument.useMutation();
 
-  const [activeKey, setActiveKey] = useState<LegalDocumentKey>("privacy");
-  const [activeLocale, setActiveLocale] = useState<LegalDocumentLocale>("mn");
+  const [activeKey, setActiveKey] = useState<SiteDocumentKey>("privacy");
+  const [activeLocale, setActiveLocale] = useState<SiteDocumentLocale>("mn");
   const [form, setForm] = useState<{ title: string; lead: string; updatedLabel: string; contentHtml: string } | null>(null);
   const [editorKey, setEditorKey] = useState(0);
   // Same promise-bridge the posts editor uses: TinyMCE's image button awaits
@@ -85,12 +85,12 @@ export default function AdminDocumentsPanel({ preview = false }: { preview?: boo
     [documentsQuery.data],
   );
   const saved = savedByKey.get(`${activeKey}:${activeLocale}`) as DocumentRow | undefined;
-  // useMemo, not a plain call: getLegalDocumentFallbackFor builds a fresh
+  // useMemo, not a plain call: getSiteDocumentFallbackFor builds a fresh
   // object per call, and the seeding effect below lists `fallback` as a
   // dependency -- without memoisation every render re-seeded the form and
   // re-mounted TinyMCE, which never got to show any content (2026-09-14,
   // Tom: "barimt bichegiin aguulguud bugd hooson").
-  const fallback = useMemo(() => getLegalDocumentFallbackFor(activeKey, activeLocale), [activeKey, activeLocale]);
+  const fallback = useMemo(() => getSiteDocumentFallbackFor(activeKey, activeLocale), [activeKey, activeLocale]);
   const isCustom = Boolean(saved);
 
   // Seed the form from whatever is live for the selected document, and
@@ -100,7 +100,7 @@ export default function AdminDocumentsPanel({ preview = false }: { preview?: boo
       title: saved?.title ?? fallback.title,
       lead: saved?.lead ?? fallback.lead,
       updatedLabel: saved?.updatedLabel ?? fallback.updated,
-      contentHtml: saved?.contentHtml ?? legalSectionsToHtml(fallback.sections),
+      contentHtml: saved?.contentHtml ?? documentSectionsToHtml(fallback.sections),
     });
     setEditorKey(current => current + 1);
   }, [activeKey, activeLocale, saved, fallback]);
@@ -155,7 +155,7 @@ export default function AdminDocumentsPanel({ preview = false }: { preview?: boo
     </div>
 
     <div className="mt-5 inline-flex flex-wrap gap-1 rounded-full border border-[var(--a-border)] bg-[var(--a-card)] p-1">
-      {legalDocuments.map(document => {
+      {siteDocumentFallbacks.map(document => {
         const isActive = document.key === activeKey;
         return (
           <button

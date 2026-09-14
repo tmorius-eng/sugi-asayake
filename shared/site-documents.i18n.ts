@@ -1,7 +1,7 @@
 /**
  * Хуулийн гурван хуудасны англи, япон хувилбар (2026-09-14).
  *
- * Монголын shared/legal-documents.ts-тэй ижил үүрэг: admin-ийн хадгалсан мөр дарж
+ * Монголын shared/site-documents.ts-тэй ижил үүрэг: admin-ийн хадгалсан мөр дарж
  * бичдэг FALLBACK. /admin -> Баримт бичиг одоо хэл солих товчтой (Монгол / English /
  * 日本語), хэл бүрд нэг site_documents мөр хадгална; мөргүй хэл доорх текстийг зурна.
  *
@@ -11,16 +11,16 @@
  * толь бичгээс угсрагддаггүй. Tom /admin-д монгол үгээ засахад англи, япон хуудас
  * түүнийг ч засах хүртэл хэлснээ хэлсээр — хуулийн мэдэгдэлд үнэнч зан төлөв.
  */
-import type { LegalDocumentKey } from "./legal-documents";
+import type { SiteDocumentKey } from "./site-documents";
 
-export type LegalDocumentTranslation = {
+export type SiteDocumentTranslation = {
   title: string;
   lead: string;
   /** [heading, paragraph] pairs, one per section of the Mongolian original. */
   sections: readonly (readonly [string, string])[];
 };
 
-export const legalDocumentTranslations: Record<LegalDocumentKey, { en: LegalDocumentTranslation; ja: LegalDocumentTranslation }> = {
+export const siteDocumentTranslations: Record<SiteDocumentKey, { en: SiteDocumentTranslation; ja: SiteDocumentTranslation }> = {
   privacy: {
     en: {
       title: "Privacy policy",
@@ -128,6 +128,56 @@ export const legalDocumentTranslations: Record<LegalDocumentKey, { en: LegalDocu
         ["返金", "承認された返金は、お支払いいただいた方法（銀行振込、またはQPayが有効化されている場合はQPay）で、できる限り速やかに行います。ご注文・支払いの記録は、会計法に基づき最低10年間保存します（詳しくはプライバシーポリシーのページをご覧ください）。"],
         ["配送中の破損", "配送された商品に外観上の破損がある場合は、お受け取り時にご確認のうえ、遅くとも翌営業日までに 9450-9911 へご連絡ください。これは§3の「使用済み商品」の制限には該当しません。破損はお客様の過失ではなく配送中に生じたものだからです。"],
         ["苦情が解決しない場合", "当社との相互理解に至らなかった場合、お客様は公正競争・消費者保護庁またはモンゴル国の管轄裁判所に申し立てる権利があります。"],
+      ],
+    },
+  },
+  about: {
+    en: {
+      title: "About us",
+      lead: "Asayake LLC supplies Japanese beauty, health and household products to Mongolia under official distribution rights.",
+      sections: [
+        ["Who we are", "Since it was founded in 2013, Asayake LLC has sold the products of many Japanese companies in Mongolia under official distribution rights. Besides our own stores we supply chain retailers, and Japanese quality products now reach more than 200 chain store branches. That lets us serve customers closer to where they live."],
+        ["Our own brands", "Alongside well-known Japanese brands, we worked with a Japanese cosmetics manufacturer to produce two complete own-brand beauty ranges for the Mongolian market. Both have been rated highly by customers and have built a loyal following."],
+        ["SUGI ASAYAKE stores", "Four SUGI ASAYAKE stores operate in Ulaanbaatar, importing skincare, cosmetics, health, hygiene, household and food products from Japan through official channels. Addresses and opening hours for each branch are on the Stores section of this site."],
+        ["The online store", "This online store lets you order our products from home. You can have them delivered or collect them from the branch nearest you, and you can check the ingredients, net content, country of origin and shelf life of every item on its product page."],
+        ["Quality and authenticity", "All of our goods arrive from Japan through official channels. Every product carries the Japanese manufacturer's barcode (JAN code), which you can use to verify that it is genuine. Each product page shows the barcode, ingredients, net content and country of origin openly."],
+        ["Contact us", "Phone: 9450-9911. Email: asayake0307@gmail.com. For frequently asked questions and details on delivery and returns, see the Help page. Thank you to every customer who chooses us."],
+      ],
+    },
+    ja: {
+      title: "会社案内",
+      lead: "アサヤケ有限会社は、日本の化粧品・健康・日用品を正規の販売権のもとでモンゴルに供給しています。",
+      sections: [
+        ["会社について", "アサヤケ有限会社は2013年の設立以来、多くの日本企業の商品を正規の権利のもとでモンゴルで販売してきました。自社店舗に加えてチェーン店にも商品を供給しており、現在200を超えるチェーン店舗で日本品質の商品をお求めいただけます。これによりお客様により近い場所でのサービスが可能になりました。"],
+        ["自社ブランド商品", "日本の有名ブランドに加え、当社は日本の化粧品メーカーと協力して自社ブランドの化粧品シリーズを2種類製造し、モンゴルで販売してきました。いずれもお客様から高い評価をいただき、多くのリピーターを得ています。"],
+        ["SUGI ASAYAKE 店舗", "ウランバートル市内で SUGI ASAYAKE の4店舗を運営し、スキンケア・化粧品・健康・衛生・日用品・食品を日本から正規ルートで輸入しています。各店舗の住所と営業時間は本サイトの「店舗」からご覧ください。"],
+        ["オンラインストア", "このオンラインストアでは、ご自宅から商品をご注文いただけます。配送またはお近くの店舗での受け取りをお選びいただけ、各商品ページで成分・内容量・原産国・使用期限をご確認いただけます。"],
+        ["品質と正規品保証", "当社の商品はすべて日本から正規ルートで入荷しています。各商品には日本のメーカーのバーコード（JANコード）が付いており、そのコードで正規品であることをご確認いただけます。商品ページにはバーコード・成分・内容量・原産国を明記しています。"],
+        ["お問い合わせ", "電話: 9450-9911　メール: asayake0307@gmail.com　よくあるご質問、配送・返品の詳細はヘルプページをご覧ください。ご利用いただいているお客様に心より感謝申し上げます。"],
+      ],
+    },
+  },
+  careers: {
+    en: {
+      title: "Careers",
+      lead: "If you would like to work at SUGI ASAYAKE, please get in touch.",
+      sections: [
+        ["Open positions", "There are no open positions advertised at the moment. New openings are posted on this page, so it is worth checking back from time to time."],
+        ["Who we hire", "We recruit for roles such as store consultant, cashier, warehouse staff, online order operator and delivery driver. We look for people who are interested in beauty and skincare products, who deal with customers courteously, and who work well in a team."],
+        ["What we offer", "A formal employment contract, social insurance, a staff discount, training on the Japanese products we carry, and a regular working schedule."],
+        ["How to apply", "Send your application and CV to asayake0307@gmail.com, or call 9450-9911 for more information. Please put the position you are interested in in the subject line."],
+        ["How we handle your data", "Applications and CVs we receive are used only for recruitment and are deleted once the selection process is complete. See the Privacy policy page for details."],
+      ],
+    },
+    ja: {
+      title: "採用情報",
+      lead: "SUGI ASAYAKE で働くことにご関心のある方は、ぜひご連絡ください。",
+      sections: [
+        ["募集中の職種", "現在、募集中の職種はございません。新しい募集はこのページに掲載しますので、ときどきご確認ください。"],
+        ["どのような方を求めているか", "店舗コンサルタント、レジ担当、倉庫スタッフ、オンライン注文オペレーター、配送ドライバーなどの職種で採用を行っています。化粧品やスキンケア商品に関心があり、お客様に丁寧に対応でき、チームで働ける方を求めています。"],
+        ["待遇", "正式な雇用契約、社会保険、従業員割引、取り扱う日本商品に関する研修、規則的な勤務シフト。"],
+        ["応募方法", "応募書類と履歴書を asayake0307@gmail.com までお送りいただくか、9450-9911 までお電話ください。件名にご希望の職種をご記入ください。"],
+        ["個人情報の取り扱い", "お預かりした応募書類・履歴書は採用目的にのみ使用し、選考終了後に削除します。詳しくはプライバシーポリシーのページをご覧ください。"],
       ],
     },
   },

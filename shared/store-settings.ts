@@ -87,6 +87,14 @@ export const storeSettingSlots = [
     description: "Footer-ийн Instagram icon. Icon-ыг нуухын тулд холбоосын оронд \"-\" бичнэ.",
     fallbackValue: "https://www.instagram.com/asayake_japan_cosmetics/",
   },
+  {
+    key: "contact-youtube-url",
+    group: "Холбоо барих",
+    type: "text" as const,
+    label: "YouTube хаяг",
+    description: "Бүтэн URL. Сувгийн бичлэг байхгүй бол \"-\" гэж бичвэл дүрс харагдахгүй.",
+    fallbackValue: "-",
+  },
 
   // ---- Хүргэлт (Delivery) — Phase B --------------------------------------
   {

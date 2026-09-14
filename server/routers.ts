@@ -6,7 +6,7 @@ import { parseDeviceType, isLikelyBot } from "@shared/deviceType";
 import { slugify } from "@shared/slugify";
 import { looksLikeBarcode, MAX_BARCODE_LENGTH, normaliseBarcode } from "@shared/barcode";
 import { invalidateIndexHtmlCache } from "./_core/indexHtml";
-import { legalDocumentKeys } from "@shared/legal-documents";
+import { siteDocumentKeys } from "@shared/site-documents";
 import { LOCALES } from "@shared/i18n";
 import { TRPCError } from "@trpc/server";
 import { parse as parseCookieHeader } from "cookie";
@@ -529,9 +529,9 @@ const staffRoleSchema = z.enum(["user", "staff", "finance", "marketing", "wareho
 const siteMediaSlotSchema = z.enum(siteMediaSlotKeys);
 const siteTextSlotSchema = z.enum(siteTextSlotKeys);
 const storeSettingKeySchema = z.enum(storeSettingKeys);
-const legalDocumentKeySchema = z.enum(legalDocumentKeys);
+const siteDocumentKeySchema = z.enum(siteDocumentKeys);
 // One legal document per storefront language (2026-09-14).
-const legalDocumentLocaleSchema = z.enum(LOCALES).default("mn");
+const siteDocumentLocaleSchema = z.enum(LOCALES).default("mn");
 // A syntactically valid but unusable scrypt hash (correct salt/hash lengths,
 // see server/_core/password.ts), used to run `verifyPassword` through its
 // full computation even when no account matches the submitted phone number.
@@ -1377,7 +1377,7 @@ export const appRouter = router({
     // changed /shop's filter pills).
     categories: publicProcedure.query(() => getPublishedCategories()),
     // Only the rows an admin has actually saved; the client merges them
-    // over shared/legal-documents.ts so an unedited page still renders.
+    // over shared/site-documents.ts so an unedited page still renders.
     siteDocuments: publicProcedure.query(() => getSiteDocuments()),
     // The live discount ladder. publicProcedure because the homepage's
     // membership section shows it to signed-out visitors as the reason to
@@ -3210,8 +3210,8 @@ export const appRouter = router({
     // (server/db.ts) on every write, exactly like posts.content, because
     // the same TinyMCE "Text" tab can paste raw markup.
     updateSiteDocument: marketingProcedure.input(z.object({
-      documentKey: legalDocumentKeySchema,
-      locale: legalDocumentLocaleSchema,
+      documentKey: siteDocumentKeySchema,
+      locale: siteDocumentLocaleSchema,
       title: z.string().trim().min(2).max(200),
       lead: nullableText(2_000),
       contentHtml: z.string().trim().min(10).max(200_000),
@@ -3229,7 +3229,7 @@ export const appRouter = router({
       await logAdminAction({ actorUserId: ctx.user.id, action: "site_document.updated", entityType: "site_document", entityId: document.id, metadata: { documentKey: input.documentKey, locale: input.locale } });
       return document;
     }),
-    clearSiteDocument: marketingProcedure.input(z.object({ documentKey: legalDocumentKeySchema, locale: legalDocumentLocaleSchema })).mutation(async ({ ctx, input }) => {
+    clearSiteDocument: marketingProcedure.input(z.object({ documentKey: siteDocumentKeySchema, locale: siteDocumentLocaleSchema })).mutation(async ({ ctx, input }) => {
       await deleteSiteDocument(input.documentKey, input.locale);
       await logAdminAction({ actorUserId: ctx.user.id, action: "site_document.cleared", entityType: "site_document", entityId: null, metadata: { documentKey: input.documentKey, locale: input.locale } });
       return { documentKey: input.documentKey, locale: input.locale };

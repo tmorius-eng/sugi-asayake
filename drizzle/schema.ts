@@ -1173,7 +1173,7 @@ export const siteText = mysqlTable("site_text", {
  *
  * Same override-a-code-fallback contract as siteText/siteMedia/
  * storeSettings above: a row here replaces the corresponding entry in
- * shared/legal-documents.ts, deleting it restores that entry verbatim.
+ * shared/site-documents.ts, deleting it restores that entry verbatim.
  * `contentHtml` passes through server/_core/sanitizeHtml.ts on every write,
  * exactly like posts.content, because the same TinyMCE "Text" tab that can
  * paste arbitrary HTML edits it.
@@ -1187,7 +1187,7 @@ export const siteDocuments = mysqlTable("site_documents", {
   id: int("id").autoincrement().primaryKey(),
   documentKey: varchar("documentKey", { length: 40 }).notNull(),
   // 2026-09-14: one row per language ("mn" | "en" | "ja"); the code fallback
-  // in shared/legal-documents.ts carries all three, so a language with no
+  // in shared/site-documents.ts carries all three, so a language with no
   // row still renders a full document.
   locale: varchar("locale", { length: 2 }).notNull().default("mn"),
   title: varchar("title", { length: 200 }).notNull(),

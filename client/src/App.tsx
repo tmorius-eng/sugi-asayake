@@ -86,6 +86,8 @@ function Router() {
     <Route path={"/privacy"} component={Legal} />
     <Route path={"/terms"} component={Legal} />
     <Route path={"/returns"} component={Legal} />
+    <Route path={"/about"} component={Legal} />
+    <Route path={"/careers"} component={Legal} />
     <Route path={"/help"} component={Help} />
     <Route path={"/404"} component={NotFound} />
     {/* Must come before the /:slug catch-all below, or "/journal" would be

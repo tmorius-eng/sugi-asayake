@@ -902,6 +902,8 @@ export const UI_STRINGS: Record<string, { en: string; ja: string }> = {
   "{n} бараа сагсанд орлоо ({skipped} нөөцгүй тул алгассан).": { en: "{n} products added to your cart ({skipped} skipped — out of stock).", ja: "{n}点をカートに追加しました（在庫切れの{skipped}点はスキップ）。" },
   // -- /help page (2026-09-14) -----------------------------------------------
   "Тусламж, холбоо барих": { en: "Help & contact", ja: "ヘルプ・お問い合わせ" },
+  "Бидний тухай": { en: "About us", ja: "会社案内" },
+  "Ажлын байр": { en: "Careers", ja: "採用情報" },
   "Захиалга, хүргэлт, буцаалтын талаар асуух зүйл байвал шууд холбогдоорой — ажлын цагаар хариулна.": { en: "Questions about an order, delivery or a return? Get in touch — we answer during opening hours.", ja: "ご注文・配送・返品についてのご質問は、お気軽にご連絡ください。営業時間内に対応いたします。" },
   "Утсаар залгах": { en: "Call us", ja: "電話する" },
   "Messenger-ээр бичих": { en: "Message us on Messenger", ja: "Messengerで問い合わせ" },

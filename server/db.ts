@@ -4317,7 +4317,7 @@ export async function deleteSiteText(slotKey: string) {
 /**
  * The three legal pages (2026-09-12) -- same override-a-fallback contract
  * as siteText above. Returns only the rows an admin has actually saved;
- * the caller merges them over shared/legal-documents.ts, so a key that has
+ * the caller merges them over shared/site-documents.ts, so a key that has
  * never been edited simply isn't here.
  */
 export async function getSiteDocuments() {
