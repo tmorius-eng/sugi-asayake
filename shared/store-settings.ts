@@ -265,6 +265,49 @@ export const storeSettingSlots = [
     tokens: ["{тоо}"] as const,
     fallbackValue: "SUGI ASAYAKE — {тоо} бараа нөөц дуусч байна",
   },
+  // Guest checkout phone verification (2026-09-14). "1" = a shopper with no
+  // verified phone on their account must confirm the number on the order by
+  // verify.mn SMS before the order is accepted; "0" = off (e.g. while the
+  // verify.mn balance is empty). Signed-in shoppers registered by phone are
+  // never asked twice.
+  {
+    key: "checkout-guest-phone-verification",
+    group: "Захиалга",
+    type: "text" as const,
+    label: "Зочны захиалгад утас баталгаажуулах (1 = тийм, 0 = үгүй)",
+    description: "1 бол бүртгэлгүй (эсвэл утасгүй) худалдан авагч захиалгаа батлахын өмнө утасны дугаараа verify.mn SMS-ээр баталгаажуулна — хуурамч бэлэн мөнгөний захиалгаас хамгаална. verify.mn-ийн үлдэгдэл дууссан үед 0 болгож түр унтраана.",
+    fallbackValue: "1",
+  },
+  // Order SMS (2026-09-14). Off by default: Brevo transactional SMS credits
+  // are needed (Интеграцууд → Brevo). When on, the shopper gets a text at
+  // order time and on every status change, whether or not they gave an
+  // email -- the one channel every Mongolian shopper has.
+  {
+    key: "sms-order-notifications",
+    group: "Захиалга",
+    type: "text" as const,
+    label: "Захиалгын SMS мэдэгдэл (1 = тийм, 0 = үгүй)",
+    description: "1 бол захиалга орох болон төлөв бүр солигдоход харилцагчийн утсанд SMS очно (Brevo SMS кредит шаардана). Имэйл/push-аас үл хамааран ажиллана.",
+    fallbackValue: "0",
+  },
+  {
+    key: "sms-body-order-placed",
+    group: "Мессежийн загвар",
+    type: "text" as const,
+    label: "SMS — захиалга хүлээн авлаа",
+    description: "Захиалга орох үед илгээх SMS. 160 тэмдэгтээс хэтэрвэл 2 мессеж болно.",
+    tokens: ["{захиалга}", "{дүн}"] as const,
+    fallbackValue: "SUGI ASAYAKE: {захиалга} захиалгыг хүлээн авлаа ({дүн}). Баталгаажмагц мэдэгдэнэ. Хянах: sugi.karkaron.com/track-order",
+  },
+  {
+    key: "sms-body-order-status",
+    group: "Мессежийн загвар",
+    type: "text" as const,
+    label: "SMS — захиалгын төлөв солигдлоо",
+    description: "Төлөв бүр солигдоход илгээх SMS.",
+    tokens: ["{захиалга}", "{төлөв}"] as const,
+    fallbackValue: "SUGI ASAYAKE: {захиалга} захиалга — {төлөв}. Асуулт байвал 9450-9911.",
+  },
 ] as const;
 
 /**

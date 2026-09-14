@@ -37,6 +37,12 @@
  */
 import "dotenv/config";
 
+// Guest checkout phone verification (2026-09-14) is a real SMS round trip
+// with verify.mn; no test can answer one. Off here, and the one suite that
+// exercises the guard (checkout-otp.integration.test.ts) switches it on for
+// its own calls only.
+process.env.GUEST_CHECKOUT_OTP = "0";
+
 if (!process.env.INTEGRATIONS_ENCRYPTION_KEY) {
   process.env.INTEGRATIONS_ENCRYPTION_KEY = "0".repeat(64);
 }

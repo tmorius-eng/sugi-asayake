@@ -232,6 +232,7 @@ import { assertImageSignature, imageContentTypes, processUploadedImageOrThrow } 
 import { INTEGRATION_PROVIDERS } from "../shared/integrations";
 import { buildNotificationMessage, NOTIFICATION_GROUP_LABELS, NOTIFICATION_GROUPS, NTFY_TOPIC_FIELD } from "../shared/notification-events";
 import { createNoOpVerificationSession, createVerificationSession, getSessionStatus, isNoOpSessionExpired, normalizePhoneForVerifyMn } from "./verifyMn";
+import { consumeCheckoutPhoneVerificationSession } from "./db";
 import { getCategoryWriteViolation, getProductWriteViolation } from "./catalog-validation";
 import { getAnalyticsReport, exportAnalyticsExcel, exportAnalyticsPdf, getAllCustomersForCampaign, getDashboardHighlights, getPreferenceSegmentBreakdown, getRecommendationCoverage, getUsersByLoyaltyTier, getUsersBySegment, type PreferenceSegmentField } from "./analytics";
 import { siteMediaSlotKeys } from "../shared/site-media";
@@ -620,6 +621,71 @@ async function sendOrderConfirmationEmail(order: { orderNumber: string; customer
   });
 }
 
+// Order SMS (2026-09-14): the one channel every shopper here actually has.
+// Off unless the admin switches sms-order-notifications on (needs Brevo SMS
+// credit); never throws -- a failed text must not undo an order.
+async function orderSmsEnabled(): Promise<boolean> {
+  return (await getStoreSettingValue("sms-order-notifications")).trim() === "1";
+}
+async function sendOrderPlacedSms(order: { orderNumber: string; customerPhone: string; totalMnt: number }): Promise<void> {
+  if (!(await orderSmsEnabled())) return;
+  const body = fillTemplate(await getStoreSettingValue("sms-body-order-placed"), { "{захиалга}": order.orderNumber, "{дүн}": formatMnt(order.totalMnt) });
+  await sendAccountSms({ to: order.customerPhone, content: body }).catch(error => console.warn("[sms] order placed", error instanceof Error ? error.message : error));
+}
+const ORDER_STATUS_SMS_LABEL: Record<string, string> = {
+  confirmed: "баталгаажлаа", packed: "бэлтгэгдлээ", out_for_delivery: "хүргэлтэд гарлаа", completed: "амжилттай дууслаа", cancelled: "цуцлагдлаа", returned: "буцаагдлаа",
+};
+async function sendOrderStatusSms(order: { orderNumber: string; customerPhone: string; status: string }): Promise<void> {
+  if (!(await orderSmsEnabled())) return;
+  const label = ORDER_STATUS_SMS_LABEL[order.status];
+  if (!label) return;
+  const body = fillTemplate(await getStoreSettingValue("sms-body-order-status"), { "{захиалга}": order.orderNumber, "{төлөв}": label });
+  await sendAccountSms({ to: order.customerPhone, content: body }).catch(error => console.warn("[sms] order status", error instanceof Error ? error.message : error));
+}
+
+/**
+ * Guest checkout phone verification (2026-09-14, Tom: fake cash-on-delivery
+ * orders are a real problem here). A visitor with no verified phone on their
+ * account -- a guest, or a Facebook-created account -- must present a
+ * verify.mn session (purpose "checkout") for the very number on the order.
+ * Switchable from /admin (checkout-guest-phone-verification) and off in the
+ * test environment (GUEST_CHECKOUT_OTP=0), where no SMS can be answered.
+ *
+ * verify.mn's LIVE status is re-checked when a key is configured, exactly as
+ * completeRegistration does; without a key (dev/test) the cached column is
+ * what the callback route wrote. Returns the session so the caller can spend
+ * it once the order exists.
+ */
+async function guestPhoneVerificationRequired(ctx: TrpcContext): Promise<boolean> {
+  if (process.env.GUEST_CHECKOUT_OTP === "0") return false;
+  if (ctx.user?.phone) return false;
+  return (await getStoreSettingValue("checkout-guest-phone-verification")).trim() !== "0";
+}
+async function requireCheckoutPhoneVerification(ctx: TrpcContext, customerPhone: string, sessionId: string | null) {
+  if (!(await guestPhoneVerificationRequired(ctx))) return null;
+  const message = "Захиалга батлахын өмнө утасны дугаараа баталгаажуулна уу.";
+  if (!sessionId || sessionId.startsWith("noop:")) throw new TRPCError({ code: "BAD_REQUEST", message });
+  const session = await getPhoneVerificationSessionByVerifyMnId(sessionId);
+  if (!session || session.purpose !== "checkout" || session.consumedAt) throw new TRPCError({ code: "BAD_REQUEST", message });
+  if (session.phone !== normalizePhoneForVerifyMn(customerPhone)) throw new TRPCError({ code: "BAD_REQUEST", message: "Баталгаажуулсан дугаар захиалгын дугаартай таарахгүй байна." });
+  if (session.expiresAt.getTime() <= Date.now() && session.status !== "verified") throw new TRPCError({ code: "BAD_REQUEST", message: "Баталгаажуулалтын хугацаа дууссан байна. Дахин баталгаажуулна уу." });
+  let verified = session.status === "verified";
+  // VERIFY_MN_SKIP_LIVE_CHECK=1 is set only by checkout-otp.integration.test.ts
+  // (its sessions never existed at verify.mn); production always re-checks.
+  if (ENV.verifyMnApiKey && process.env.VERIFY_MN_SKIP_LIVE_CHECK !== "1") {
+    try {
+      const live = await getSessionStatus(session.verifyMnSessionId);
+      verified = live.sessionStatus === "VERIFIED";
+      await updatePhoneVerificationSessionStatus(session.id, verified ? "verified" : live.sessionStatus === "EXPIRED" ? "expired" : "pending");
+    } catch (error) {
+      console.error("[VerifyMn] checkout status check failed", error);
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Баталгаажуулалтыг шалгаж чадсангүй. Дахин оролдоно уу." });
+    }
+  }
+  if (!verified) throw new TRPCError({ code: "BAD_REQUEST", message });
+  return session;
+}
+
 async function sendOrderStatusUpdateEmail(order: { orderNumber: string; customerEmail: string | null; customerName: string; status: string; paymentStatus: string; deliveryTrackingRef: string | null }) {
   if (!order.customerEmail) return;
   const messageKey = orderStatusMessageKeys[order.status];
@@ -886,10 +952,16 @@ export const appRouter = router({
     // phone afterward) -- see auth.completeRegistration below for how a
     // no-ctx.user session actually finishes.
     startPhoneVerification: phoneVerifyRateLimitedProcedure
-      .input(z.object({ phone: phoneSchema, purpose: z.enum(["register", "password_reset"]) }))
+      .input(z.object({ phone: phoneSchema, purpose: z.enum(["register", "password_reset", "checkout"]) }))
       .mutation(async ({ ctx, input }) => {
         let userId: number | null;
-        if (input.purpose === "register") {
+        if (input.purpose === "checkout") {
+          // Guest checkout (2026-09-14): any number may be verified -- it is
+          // the number on the order, not an account identity. Tied to the
+          // signed-in user when there is one (a Facebook-created account
+          // with no phone), otherwise to nobody.
+          userId = ctx.user?.id ?? null;
+        } else if (input.purpose === "register") {
           // A phone already tied to an account can't start a fresh register
           // session -- unlike password_reset below, this is NOT an
           // anti-enumeration case: telling a registrant "this number is
@@ -1421,6 +1493,11 @@ export const appRouter = router({
       // (createOrderFromActiveCart), never trusted as the actual amount
       // applied -- same discipline as couponCode above.
       applyStoreCreditMnt: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
+      // Guest checkout phone verification (2026-09-14): the verify.mn session
+      // (auth.startPhoneVerification purpose "checkout") that proved the
+      // customerPhone above. Required when guestPhoneVerificationRequired
+      // says so; ignored otherwise.
+      phoneVerificationSessionId: z.string().trim().min(1).max(80).nullable().optional(),
     }).superRefine((value, context) => {
       if (value.deliveryMethod === "ub_delivery" && !value.deliveryAddress) {
         context.addIssue({ code: z.ZodIssueCode.custom, message: "A delivery address is required for Ulaanbaatar delivery.", path: ["deliveryAddress"] });
@@ -1429,6 +1506,8 @@ export const appRouter = router({
       // knows whether the basket is gift cards only (no branch to pick from,
       // 2026-09-14) and validates the name against the live branches table.
     })).mutation(async ({ ctx, input }) => {
+      const { phoneVerificationSessionId, ...orderInput } = input;
+      const verifiedSession = await requireCheckoutPhoneVerification(ctx, input.customerPhone, phoneVerificationSessionId ?? null);
       let order;
       try {
         const deviceType = parseDeviceType(ctx.req.headers["user-agent"]);
@@ -1438,22 +1517,29 @@ export const appRouter = router({
         // discipline as everything else here.
         const visitorToken = parseCookieHeader(ctx.req.headers.cookie ?? "")[VISITOR_SESSION_COOKIE_NAME];
         const visitorSessionId = visitorToken ? await getVisitorSessionIdByToken(visitorToken) : null;
-        order = await createOrderFromActiveCart({ owner: resolveCartOwnerForWrite(ctx), ...input, deviceType, visitorSessionId });
+        order = await createOrderFromActiveCart({ owner: resolveCartOwnerForWrite(ctx), ...orderInput, deviceType, visitorSessionId });
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to place this order." });
       }
+      // The session vouched for this order and no other. A replay (same
+      // clientRequestId) returns the order it already placed and spends
+      // nothing new.
+      if (verifiedSession && !order.replayed) await consumeCheckoutPhoneVerificationSession(verifiedSession.id).catch(() => undefined);
       // Best-effort: a failed confirmation email should never undo an
       // already-placed (and stock-decremented) order. A replayed attempt
       // already sent its email the first time.
       if (!order.replayed) {
         try {
           await sendOrderConfirmationEmail(order);
+          await sendOrderPlacedSms(order);
         } catch (error) {
           console.error("[checkout.createOrder] Failed to send order confirmation email", error);
         }
       }
       return order;
     }),
+    /** Whether THIS visitor has to verify the phone on their order (see requireCheckoutPhoneVerification). */
+    guestPhoneVerificationRequired: publicProcedure.query(({ ctx }) => guestPhoneVerificationRequired(ctx)),
   }),
   // Tier E analytics: best-effort, first-party pageview telemetry so
   // Conversion Rate can be a real number (orders ÷ sessions) instead of a
@@ -1516,6 +1602,7 @@ export const appRouter = router({
       try {
         await sendOrderStatusUpdateEmail(order);
         await sendOrderStatusPush(order);
+        await sendOrderStatusSms(order);
       } catch (error) {
         console.error("[orders.cancel] Failed to send status update email", error);
       }
@@ -2497,6 +2584,7 @@ export const appRouter = router({
         try {
           await sendOrderStatusUpdateEmail(order);
         await sendOrderStatusPush(order);
+        await sendOrderStatusSms(order);
         } catch (error) {
           console.error("[admin.updateOrder] Failed to send status update email", error);
         }
@@ -2521,6 +2609,7 @@ export const appRouter = router({
           try {
             await sendOrderStatusUpdateEmail(order);
         await sendOrderStatusPush(order);
+        await sendOrderStatusSms(order);
           } catch (notifyError) {
             console.error("[admin.bulkUpdateOrderStatus] Failed to send status update email", notifyError);
           }

@@ -1476,7 +1476,9 @@ export const phoneVerificationSessions = mysqlTable("phone_verification_sessions
   // NULL during register (no account exists yet at session-creation time);
   // set for password_reset, resolved by looking up users.phone.
   userId: int("userId").references(() => users.id, { onDelete: "cascade" }),
-  purpose: mysqlEnum("purpose", ["register", "password_reset"]).notNull(),
+  // "checkout" (2026-09-14, migration 0077): a guest proving the phone on
+  // their order -- see checkout.createOrder in server/routers.ts.
+  purpose: mysqlEnum("purpose", ["register", "password_reset", "checkout"]).notNull(),
   // Normalized digits only (see server/verifyMn.ts's normalizePhoneForVerifyMn).
   phone: varchar("phone", { length: 20 }).notNull(),
   verifyMnSessionId: varchar("verifyMnSessionId", { length: 64 }).notNull(),

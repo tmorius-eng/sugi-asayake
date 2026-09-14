@@ -4155,3 +4155,9 @@ html[data-storefront-theme="dark"] .sugi-site .qs-stage small { color: var(--ck-
 .gift-code-copy { display: inline-flex; align-items: center; gap: 5px; margin-inline-start: auto; min-height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); font-size: 12px; font-weight: 700; color: var(--foreground); cursor: pointer; }
 .gift-code-copy:hover { border-color: var(--primary-text); color: var(--primary-text); }
 .gift-codes-pending, .gift-codes-hint { margin: 8px 0 0; font-size: 12px; line-height: 1.6; color: var(--muted-foreground); }
+
+/* Guest checkout phone verification (2026-09-14): the verify.mn step inside
+   checkout section 01. The shared component's own classes (.auth-field,
+   .phone-verify-*) style the internals; this only frames it. */
+.checkout-phone-verify { border: 1px solid var(--border); border-radius: 12px; padding: 14px; background: var(--muted); }
+.checkout-phone-verify .auth-card, .checkout-phone-verify .phone-verify-compact { margin: 10px 0 0; padding: 0; border: 0; background: transparent; box-shadow: none; }

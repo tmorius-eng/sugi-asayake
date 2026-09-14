@@ -31,8 +31,11 @@ function formatCountdown(msRemaining: number): string {
  * truth here (no public callback URL exists yet for verify.mn to reach, see
  * server/verifyMn.ts), not just a UI nicety.
  */
-export default function PhoneVerificationStep({ purpose, onVerified }: { purpose: "register" | "password_reset"; onVerified: (sessionId: string) => void }) {
-  const [phone, setPhone] = useState("");
+export default function PhoneVerificationStep({ purpose, onVerified, initialPhone, compact }: { purpose: "register" | "password_reset" | "checkout"; onVerified: (sessionId: string, phone: string) => void; initialPhone?: string; compact?: boolean }) {
+  const [phone, setPhone] = useState(initialPhone ?? "");
+  // Checkout (2026-09-14) passes the number typed on the order form so the
+  // shopper does not type it twice; keep following it until a session starts.
+  useEffect(() => { if (initialPhone !== undefined) setPhone(initialPhone); }, [initialPhone]);
   const [session, setSession] = useState<{ sessionId: string; smsUri: string; displayInstruction: string; expiresAt: string } | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
@@ -56,7 +59,7 @@ export default function PhoneVerificationStep({ purpose, onVerified }: { purpose
   // rendering" React warning/error) means this runs exactly once per
   // session transitioning to verified, not on every re-render.
   useEffect(() => {
-    if (status === "verified" && session) onVerified(session.sessionId);
+    if (status === "verified" && session) onVerified(session.sessionId, phone);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, session?.sessionId]);
 
@@ -77,7 +80,7 @@ export default function PhoneVerificationStep({ purpose, onVerified }: { purpose
 
   if (!session) {
     return (
-      <form onSubmit={submitPhone} className="auth-card">
+      <form onSubmit={submitPhone} className={compact ? "phone-verify-compact" : "auth-card"}>
         <label className="auth-field">
           Утасны дугаар
           <div className="auth-field-shell">
@@ -90,7 +93,7 @@ export default function PhoneVerificationStep({ purpose, onVerified }: { purpose
         </p>
         <button type="submit" disabled={startVerification.isPending} className="auth-submit" style={{ marginTop: "14px" }}>
           {startVerification.isPending && <LoaderCircle className="animate-spin" size={17} aria-hidden="true" />}
-          Код илгээх
+          {compact ? "Утсаа баталгаажуулах" : "Код илгээх"}
         </button>
       </form>
     );

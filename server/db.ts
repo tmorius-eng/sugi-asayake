@@ -513,7 +513,7 @@ export async function findUserByPhone(localEightDigitPhone: string) {
 // id, so we can't have the real id yet). verifyMnSessionId is NOT NULL
 // UNIQUE, so a random local placeholder fills that column until
 // attachVerifyMnSessionId overwrites it.
-export async function createPendingPhoneVerificationSession(input: { userId: number | null; purpose: "register" | "password_reset"; phone: string; code: string; expiresAt: Date }) {
+export async function createPendingPhoneVerificationSession(input: { userId: number | null; purpose: "register" | "password_reset" | "checkout"; phone: string; code: string; expiresAt: Date }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const placeholder = `pending:${randomBytes(16).toString("hex")}`;
@@ -548,6 +548,20 @@ export async function getPhoneVerificationSessionByVerifyMnId(verifyMnSessionId:
   if (!db) return undefined;
   const result = await db.select().from(phoneVerificationSessions).where(eq(phoneVerificationSessions.verifyMnSessionId, verifyMnSessionId)).limit(1);
   return result[0];
+}
+
+/**
+ * Spends a verified checkout session on exactly one order (2026-09-14). The
+ * guarded UPDATE is the lock: a second order that presents the same session
+ * sees affectedRows 0 and is refused, so one 150₮ SMS cannot vouch for a
+ * stream of orders.
+ */
+export async function consumeCheckoutPhoneVerificationSession(id: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const result = await db.update(phoneVerificationSessions).set({ consumedAt: new Date(), status: "verified" })
+    .where(and(eq(phoneVerificationSessions.id, id), eq(phoneVerificationSessions.purpose, "checkout"), isNull(phoneVerificationSessions.consumedAt)));
+  return Number(result[0].affectedRows ?? 0) === 1;
 }
 
 export async function updatePhoneVerificationSessionStatus(id: number, status: "pending" | "verified" | "expired") {

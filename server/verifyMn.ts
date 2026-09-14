@@ -16,7 +16,7 @@ const SHORTCODE = "144773";
 // if their response is ever missing expiresAt, never as the primary source.
 const DEFAULT_TTL_MS = 300_000;
 
-export type VerifyMnPurpose = "register" | "password_reset";
+export type VerifyMnPurpose = "register" | "password_reset" | "checkout";
 export type VerifyMnSessionStatus = "PENDING" | "VERIFIED" | "EXPIRED";
 
 export type CreateSessionResult = {
