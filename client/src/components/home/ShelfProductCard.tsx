@@ -30,7 +30,8 @@ export default function ShelfProductCard({ product, rank }: { product: ShelfProd
   const salePercent = getSalePercent(product.priceMnt, product.compareAtPriceMnt);
   return (
     <Link href={`/product/${product.slug}`} className="shelf-card">
-      {rank !== undefined && <span className="shelf-card-rank">No.{rank}</span>}
+      {/* Нэг text node ("No.1") — тусдаа "No." node нь орчуулгын толь бичгийн "No"-тэй таарч япон хэлэнд "いいえ.1" болж байсан. */}
+      {rank !== undefined && <span className="shelf-card-rank">{`No.${rank}`}</span>}
       <span className="shelf-card-frame">
         <span className="shelf-card-image">
           {salePercent ? <span className="shop-sale-badge">-{salePercent}%</span> : null}
