@@ -3510,7 +3510,9 @@ export async function editAdminOrder(input: OrderEditInput) {
     if (wantsItemChange) {
       // Removed or reduced lines give stock back; added or increased lines take it.
       for (const line of existingLines) {
-        if (line.variantId === null) { if (!desired.has(-1)) await tx.delete(orderItems).where(eq(orderItems.id, line.id)); continue; }
+        // A pre-variants line (variantId null) has no stock to move and no
+        // way to be re-specified: it is left exactly as it is.
+        if (line.variantId === null) continue;
         const next = desired.get(line.variantId) ?? 0;
         const delta = line.quantity - next; // positive = goods return
         const kind = sources.get(line.variantId)?.kind ?? "physical";
@@ -5129,7 +5131,10 @@ export async function updateAdminProduct(input: { id: number } & Partial<Product
   if (input.countryOfOrigin !== undefined) changes.countryOfOrigin = input.countryOfOrigin;
   if (input.shelfLifeMonths !== undefined) changes.shelfLifeMonths = input.shelfLifeMonths;
   if (input.factsSource !== undefined) changes.factsSource = input.factsSource;
-  else if (input.ingredients !== undefined || input.netContent !== undefined || input.countryOfOrigin !== undefined || input.shelfLifeMonths !== undefined) changes.factsSource = "admin";
+  // "admin" only when a person actually entered a fact -- the editor sends
+  // all four fields on every save, and a save with all of them empty must
+  // not stop the enrich script from filling them later.
+  else if (input.ingredients || input.netContent || input.countryOfOrigin || input.shelfLifeMonths) changes.factsSource = "admin";
   if (input.skinType !== undefined) changes.skinType = input.skinType;
   if (input.skinConcerns !== undefined) changes.skinConcerns = input.skinConcerns;
   if (input.interiorStyle !== undefined) changes.interiorStyle = input.interiorStyle;

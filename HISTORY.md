@@ -4,6 +4,12 @@
 
 ---
 
+## Барааны факт — editor-ийн bug + бүх өдрийн admin procedure-ийн round-trip тест (2026-09-14, орой)
+
+Tom: "hadgalah hugtsaa 36 gej oruulsan, page deer 19; admin-aar dahin orohod facts alga, save boloogui". Шалтгаан: `openProductComposer` detail мөрөөс зөвхөн `description`-ийг авч, шинэ 4 талбарыг **жагсаалтын мөрөөс** (`admin.products` — тэнд байхгүй) уншдаг байсан → форм хоосон, дахин хадгалахад null-аар дарж бичдэг. "36" нь placeholder байсан (одоо "жишээ: 36"). Засвар: detail мөрөөс уншина. Мөн `editAdminOrder` variantId=null (хуучин) мөрийг item засварт устгадаг байсныг засав; `factsSource="admin"` зөвхөн бодит утга оруулсан үед. **Дүрэм**: admin editor-т шинэ талбар нэмбэл `admin.productDetail`-аас уншиж байгаа эсэхийг шалга — жагсаалт (`getAdminProducts`) хүнд баганыг санаатай авдаггүй.
+
+Факт нь одоо зургийн дотор (`ProductFacts.tsx`: зүүн доод буланд glass pill — хэмжээ/хугацаа/гарал; "Найрлага" pill дарахад зургийн дээгүүр panel; zoom товч баруун доод хэвээр; `.product-facts-*` CSS). Шинэ `server/admin-today-roundtrip.integration.test.ts` (3): updateProduct→productDetail→catalog.bySlug факт хадгалагдах + partial update хөндөхгүй + kind; createManualOrder (replay) → admin.orders items.variantId → editOrder → orderDetail → packingSlipPdf/orderInvoicePdf; orders.requestReturn (нэг удаа) + admin list-д харагдах; `review-reward-mnt=2000` → reviews.create → зээл +2000. 6/6 ✓.
+
 ## "Za bugdiin hii" — 8 зүйлийн дутагдлыг нэг дор (2026-09-14, гэрийн лаптоп, 5 commit)
 
 Tom: "odoo ymar saijruulalt uldsen be?" → судалсан жагсаалт → "Za bugdiin hii! Heregtei ym baiwal nadaas asuugaarai". Дарааллаар:
