@@ -6,6 +6,7 @@ import { lazyRetry, markChunksHealthy } from "./lib/lazyRetry";
 import { Route, Switch, useLocation } from "wouter";
 import AddedToCartToast from "./components/AddedToCartToast";
 import BackToTop from "./components/BackToTop";
+import MessengerButton from "./components/MessengerButton";
 import BarcodeScanNavigator from "./components/BarcodeScanNavigator";
 import BottomNavBar from "./components/BottomNavBar";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -127,6 +128,7 @@ function App() {
         <SitePromo />
         <BottomNavBar />
         <BackToTop />
+        <MessengerButton />
         <AddedToCartToast />
         <Router />
       </TooltipProvider>

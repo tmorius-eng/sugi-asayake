@@ -240,6 +240,8 @@ browser → /api/trpc/<router>.<procedure>
 8. **Тестийн өгөгдөл `%test%`-ээр хайж болохгүй** — каталогт жинхэнэ `Honey amproom tester` бий (`scripts/test-residue-report.ts`).
 9. **Захиалга бичдэг шинэ зам бүр `clientRequestId` авна** (checkout, POS шиг) — эс бөгөөс timeout/resend/2 дахь tab давхар захиалга, давхар нөөц хасалт үүсгэнэ.
 10. **`users` мөрийн эрх/sessionVersion/suspend-ийг өөрчилдөг шинэ функц бүр `forgetSessionUser(id)` дуудна** — эс бөгөөс "бүх төхөөрөмжөөс гарах" 5 с хоцорно (2026-09-12-нд бодитоор гарсан P0).
+13. **Захиалгын мөр өөрчилдөг код (`editAdminOrder`, POS, checkout) нөөцийг `adjustOrderLineStock`/`decrementBranchStock`/`restoreStockForOrder`-оор л хөдөлгөнө** — шууд `branch_stock` бичихгүй (§3.3-ийн ledger дүрэм).
+14. **Зочны захиалга = утас баталгаажсан session** (`requireCheckoutPhoneVerification`) — шинэ захиалгын зам (ж. өөр checkout) энэ шалгалтыг алгасахгүй.
 12. **Шинэ admin procedure = role builder** (`adminProcedure`, `staffProcedure`…), `protectedProcedure` БИШ — эс бөгөөс царайны proof шалгагдахгүй (2026-09-12-ны incident: gate зөвхөн дэлгэц байсан).
 11. **Cloud вендорын URL https + public host** (`validateIntegrationSettings`, `isPrivateHost`) — ntfy л LAN-д зөвшөөрөгдөнө.
 
@@ -262,7 +264,7 @@ pnpm lint    # ESLint flat config: typescript-eslint recommended + react-hooks (
 
 ## 10. Скриптүүд (`scripts/`)
 
-`db-apply-migration.ts` (migration), `db-backup.ps1` / `db-restore.ps1`, `stock-ledger-rebaseline.ts` (drift засах), `test-residue-report.ts` / `test-residue-purge.ts` (амьд DB-ийн тестийн үлдэгдэл), `schema-drift-check.ts` (`drizzle/schema.ts` vs бодит `information_schema` + FK индекс — нөгөө лаптопын migration-ыг илрүүлнэ), `tmp-*.ts` (gitignore, нэг удаагийн), зураг/брэндийн seed скриптүүд.
+`db-apply-migration.ts` (migration, нэг файл, prod), `db-apply-all-migrations.ts` (хоосон DB-д бүх migration — CI/шинэ орчин), `ci-seed.ts` (4 салбар), `enrich-products-from-open-facts.ts` (Open Facts TSV → барааны факт), `seed-gift-cards.ts`, `db-backup.ps1` / `db-restore.ps1`, `stock-ledger-rebaseline.ts` (drift засах), `test-residue-report.ts` / `test-residue-purge.ts` (амьд DB-ийн тестийн үлдэгдэл), `schema-drift-check.ts` (`drizzle/schema.ts` vs бодит `information_schema` + FK индекс — нөгөө лаптопын migration-ыг илрүүлнэ), `tmp-*.ts` (gitignore, нэг удаагийн), зураг/брэндийн seed скриптүүд.
 
 ---
 

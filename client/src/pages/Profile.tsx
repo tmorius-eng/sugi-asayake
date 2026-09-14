@@ -286,6 +286,10 @@ function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
   // destructive action (see the address-delete/logout-all-devices confirms
   // just below in this same file), not the heavier password-reentry flow
   // full account deletion uses.
+  const requestReturn = trpc.orders.requestReturn.useMutation({
+    onSuccess: () => { toast.success("Буцаалтын хүсэлт илгээгдлээ. Ажилтан тантай холбогдоно."); utils.orders.mine.invalidate(); },
+    onError: error => toast.error(error instanceof Error ? error.message : "Буцаалтын хүсэлт илгээж чадсангүй."),
+  });
   const cancelOrder = trpc.orders.cancel.useMutation({
     onSuccess: () => { utils.orders.mine.invalidate(); toast.success("Захиалгыг цуцаллаа."); },
     onError: error => toast.error(error instanceof Error ? error.message : "Захиалгыг цуцлах боломжгүй боллоо."),
@@ -364,6 +368,7 @@ function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
                 <strong>Нийт {formatMnt(order.totalMnt)}</strong>
               </div>
               {order.deliveryTrackingRef && <p className="order-tracking">Хүргэлтийн дугаар: {order.deliveryTrackingRef}</p>}
+              {order.returnRequestedAt && <p className="order-tracking">{`Буцаалтын хүсэлт илгээсэн: ${new Date(order.returnRequestedAt).toLocaleDateString("mn-MN")}${order.status === "returned" ? " · буцаагдсан" : " · ажилтан шийдэх хүлээгдэж байна"}`}</p>}
               <GiftCardCodes cards={order.giftCards} pendingCount={order.status === "cancelled" ? 0 : order.items.reduce((sum, item) => sum + (item.kind === "gift_card" ? item.quantity : 0), 0)} />
               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                 <button type="button" className="order-buy-again" disabled={buyingAgainId === order.id} onClick={() => buyAgain(order)}>
@@ -372,6 +377,11 @@ function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
                 <button type="button" className="order-buy-again" disabled={invoice.isPending && invoice.variables?.orderId === order.id} onClick={() => invoice.mutate({ orderId: order.id })}>
                   {invoice.isPending && invoice.variables?.orderId === order.id ? <Loader2 className="animate-spin" size={14} /> : <FileDown size={14} />} Баримт (PDF)
                 </button>
+                {order.status === "completed" && !order.returnRequestedAt && (
+                  <button type="button" className="order-buy-again" disabled={requestReturn.isPending} onClick={() => { const reason = window.prompt("Буцаах шалтгаанаа бичнэ үү (гэмтэлтэй, буруу бараа гэх мэт):"); if (reason && reason.trim().length >= 5) requestReturn.mutate({ id: order.id, reason: reason.trim() }); else if (reason !== null) toast.error("Шалтгаанаа дор хаяж 5 тэмдэгтээр бичнэ үү."); }}>
+                    {requestReturn.isPending ? <Loader2 className="animate-spin" size={14} /> : <RotateCcw size={14} />} Буцаах хүсэлт
+                  </button>
+                )}
                 {(order.status === "pending" || order.status === "confirmed") && (
                   <button type="button" className="order-buy-again" disabled={cancelOrder.isPending} onClick={() => { if (window.confirm("Энэ захиалгыг цуцлах уу? Энэ үйлдлийг буцаах боломжгүй.")) cancelOrder.mutate({ id: order.id }); }}>
                     {cancelOrder.isPending ? <Loader2 className="animate-spin" size={14} /> : <X size={14} />} Захиалга цуцлах

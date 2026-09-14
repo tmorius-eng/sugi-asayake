@@ -3257,6 +3257,57 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
 }
 
 // ---------------------------------------------------------------------------
+// Post-delivery review request + customer return request (2026-09-14).
+// ---------------------------------------------------------------------------
+
+/**
+ * Completed orders of signed-in buyers that were completed at least `days`
+ * ago (updatedAt is the last status flip for a completed order) and have
+ * not been asked yet. Capped at 60 days old so switching the job on never
+ * mails the whole history. Carries what the job needs to deliver: the
+ * buyer's name, the order's email, and whether a push subscription exists.
+ */
+export async function getOrdersNeedingReviewRequest(days: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const cutoff = new Date(Date.now() - days * 86_400_000);
+  const floor = new Date(Date.now() - 60 * 86_400_000);
+  return db.select({
+    orderId: orders.id, orderNumber: orders.orderNumber, userId: orders.userId, customerEmail: orders.customerEmail, customerName: orders.customerName,
+    pushSubscriptions: sql<number>`(SELECT COUNT(*) FROM ${pushSubscriptions} WHERE ${pushSubscriptions.userId} = ${orders.userId})`,
+  }).from(orders)
+    .where(and(eq(orders.status, "completed"), isNotNull(orders.userId), isNull(orders.reviewRequestedAt), lte(orders.updatedAt, cutoff), gte(orders.createdAt, floor)))
+    .orderBy(asc(orders.id)).limit(200);
+}
+
+export async function markReviewRequested(orderId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(orders).set({ reviewRequestedAt: new Date() }).where(eq(orders.id, orderId));
+}
+
+/**
+ * The customer's own return request. Only their own COMPLETED order, once,
+ * within the admin-set window after completion. It changes nothing else:
+ * staff see the request in Захиалга (and get a push) and decide with the
+ * existing "returned" status + refund.
+ */
+export async function requestOrderReturn(input: { orderId: number; userId: number; reason: string; windowDays: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const [order] = await db.select().from(orders).where(and(eq(orders.id, input.orderId), eq(orders.userId, input.userId))).limit(1);
+  if (!order) throw new Error("Захиалга олдсонгүй.");
+  if (order.status !== "completed") throw new Error("Зөвхөн дууссан (хүлээн авсан) захиалгад буцаалтын хүсэлт илгээнэ.");
+  if (order.returnRequestedAt) throw new Error("Энэ захиалгад буцаалтын хүсэлт аль хэдийн илгээгдсэн байна.");
+  if (order.updatedAt.getTime() < Date.now() - input.windowDays * 86_400_000) throw new Error(`Буцаалтын хүсэлтийг захиалга дууссанаас хойш ${input.windowDays} хоногийн дотор илгээнэ.`);
+  const flipped = await db.update(orders).set({ returnRequestedAt: new Date(), returnRequestReason: input.reason.trim().slice(0, 500), updatedAt: new Date() })
+    .where(and(eq(orders.id, input.orderId), isNull(orders.returnRequestedAt)));
+  if (Number(flipped[0].affectedRows ?? 0) !== 1) throw new Error("Энэ захиалгад буцаалтын хүсэлт аль хэдийн илгээгдсэн байна.");
+  const [updated] = await db.select().from(orders).where(eq(orders.id, input.orderId)).limit(1);
+  return updated;
+}
+
+// ---------------------------------------------------------------------------
 // Staff-side order writes (2026-09-14, Tom: "admin захиалгыг засаж чадахгүй",
 // "утсаар/Messenger-ээр ирсэн захиалгыг бүртгэх газаргүй").
 // ---------------------------------------------------------------------------

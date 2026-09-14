@@ -232,7 +232,7 @@ import { assertImageSignature, imageContentTypes, processUploadedImageOrThrow } 
 import { INTEGRATION_PROVIDERS } from "../shared/integrations";
 import { buildNotificationMessage, NOTIFICATION_GROUP_LABELS, NOTIFICATION_GROUPS, NTFY_TOPIC_FIELD } from "../shared/notification-events";
 import { createNoOpVerificationSession, createVerificationSession, getSessionStatus, isNoOpSessionExpired, normalizePhoneForVerifyMn } from "./verifyMn";
-import { consumeCheckoutPhoneVerificationSession, createManualOrder, editAdminOrder, getAdminOrderWithItems } from "./db";
+import { consumeCheckoutPhoneVerificationSession, createManualOrder, editAdminOrder, getAdminOrderWithItems, getStoreSettingNumber, recordNotification, requestOrderReturn } from "./db";
 import { getCategoryWriteViolation, getProductWriteViolation } from "./catalog-validation";
 import { getAnalyticsReport, exportAnalyticsExcel, exportAnalyticsPdf, getAllCustomersForCampaign, getDashboardHighlights, getPreferenceSegmentBreakdown, getRecommendationCoverage, getUsersByLoyaltyTier, getUsersBySegment, type PreferenceSegmentField } from "./analytics";
 import { siteMediaSlotKeys } from "../shared/site-media";
@@ -1316,11 +1316,26 @@ export const appRouter = router({
             throw new TRPCError({ code: "BAD_REQUEST", message: MODERATION_REJECT_MESSAGE });
           }
         }
+        let review;
         try {
-          return await createProductReview({ userId: ctx.user.id, productId: input.productId, rating: input.rating, comment: input.comment ?? null });
+          review = await createProductReview({ userId: ctx.user.id, productId: input.productId, rating: input.rating, comment: input.comment ?? null });
         } catch (error) {
           throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Сэтгэгдэл бичиж чадсангүй." });
         }
+        // Review reward (2026-09-14): store credit for a verified-purchase
+        // review, once per product per buyer (the review itself is unique).
+        // Off unless the admin sets review-reward-mnt > 0.
+        let rewardMnt = 0;
+        const reward = await getStoreSettingNumber("review-reward-mnt");
+        if (reward > 0) {
+          try {
+            await adjustStoreCredit({ userId: ctx.user.id, deltaMnt: reward, reason: `Сэтгэгдлийн урамшуулал (бараа #${input.productId})`, actorUserId: null });
+            rewardMnt = reward;
+          } catch (error) {
+            console.warn("[reviews] reward failed", error instanceof Error ? error.message : error);
+          }
+        }
+        return { ...review, rewardMnt };
       }),
   }),
   content: router({
@@ -1601,6 +1616,20 @@ export const appRouter = router({
     // (same forward-only ladder, same stock-restore logic). Not an admin
     // action, so no logAdminAction -- this is the customer acting on their
     // own record, the same trust tier as profile.update.
+    // Customer return request (2026-09-14): a notice to staff, not a status
+    // change -- see requestOrderReturn. Reason text is screened like a review.
+    requestReturn: strictRateLimitedProtectedProcedure.input(z.object({ id: z.number().int().positive(), reason: z.string().trim().min(5).max(500) })).mutation(async ({ ctx, input }) => {
+      const verdict = await screenText(input.reason);
+      if (!verdict.allowed) throw new TRPCError({ code: "BAD_REQUEST", message: MODERATION_REJECT_MESSAGE });
+      let order;
+      try {
+        order = await requestOrderReturn({ orderId: input.id, userId: ctx.user.id, reason: input.reason, windowDays: await getStoreSettingNumber("return-window-days") });
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Буцаалтын хүсэлт илгээж чадсангүй." });
+      }
+      await recordNotification("order.return_requested", { orderNumber: order.orderNumber, totalMnt: order.totalMnt }, `order:${order.id}`);
+      return order;
+    }),
     cancel: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       let order;
       try {

@@ -4168,3 +4168,10 @@ html[data-storefront-theme="dark"] .sugi-site .qs-stage small { color: var(--ck-
 .product-facts-wide { grid-column: 1 / -1; }
 .product-facts dt { font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--muted-foreground); }
 .product-facts dd { margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: var(--foreground); overflow-wrap: anywhere; }
+
+/* Messenger chat button (2026-09-14): bottom-right, above the back-to-top
+   button, lifted over the mobile sticky bar the same way. */
+.messenger-fab { position: fixed; right: 16px; bottom: calc(var(--mobile-sticky-bar-h, 0px) + var(--safe-bottom, 0px) + 72px); z-index: 40; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px 0 14px; border-radius: 999px; background: #0084ff; color: #fff; font-size: 13px; font-weight: 800; letter-spacing: .02em; text-decoration: none; box-shadow: 0 6px 20px rgba(0, 0, 0, .18); }
+.messenger-fab:hover { background: #006fd6; color: #fff; }
+.messenger-fab-label { line-height: 1; }
+@media (max-width: 760px) { .messenger-fab { padding: 0 12px; } .messenger-fab-label { display: none; } }

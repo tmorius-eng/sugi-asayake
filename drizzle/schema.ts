@@ -814,6 +814,11 @@ export const orders = mysqlTable("orders", {
   refundAmountMnt: int("refundAmountMnt"),
   refundedAt: timestamp("refundedAt"),
   refundNote: varchar("refundNote", { length: 300 }),
+  /** Review request (2026-09-14, migration 0080): set once the review-request job has asked this buyer -- never twice. */
+  reviewRequestedAt: timestamp("reviewRequestedAt"),
+  /** Return request from the profile (2026-09-14): the customer's ask; staff decide (status "returned" + refund). */
+  returnRequestedAt: timestamp("returnRequestedAt"),
+  returnRequestReason: varchar("returnRequestReason", { length: 500 }),
   /**
    * Marketing-analytics snapshot, captured automatically at checkout (see
    * checkout.createOrder in server/routers.ts) — never asked of the

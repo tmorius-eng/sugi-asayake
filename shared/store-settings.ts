@@ -265,6 +265,62 @@ export const storeSettingSlots = [
     tokens: ["{тоо}"] as const,
     fallbackValue: "SUGI ASAYAKE — {тоо} бараа нөөц дуусч байна",
   },
+  // Post-delivery review request + reward (2026-09-14). The job asks each
+  // buyer once, N days after their order is completed; a reward (store
+  // credit) is granted the moment a verified-purchase review is posted.
+  {
+    key: "review-request-days",
+    group: "Захиалга",
+    type: "number" as const,
+    label: "Сэтгэгдэл хүсэх хугацаа (захиалга дууссанаас хойш хэд хоног)",
+    description: "Захиалга \"Дууссан\" болсноос хойш энэ хэдэн хоногийн дараа худалдан авагчид push/имэйлээр сэтгэгдэл бичихийг нэг удаа хүснэ. 0 = хүсэхгүй.",
+    fallbackValue: "3",
+  },
+  {
+    key: "review-reward-mnt",
+    group: "Захиалга",
+    type: "number" as const,
+    label: "Сэтгэгдлийн урамшуулал (₮ дэлгүүрийн зээл)",
+    description: "Худалдан авсан бараандаа сэтгэгдэл бичсэн хэрэглэгчид энэ дүнгээр дэлгүүрийн зээл автоматаар нэмэгдэнэ (нэг бараанд нэг л удаа — сэтгэгдэл бараа/хэрэглэгч бүрд нэг байдаг). 0 = урамшуулалгүй.",
+    fallbackValue: "0",
+  },
+  {
+    key: "email-subject-review-request",
+    group: "Имэйлийн гарчиг",
+    type: "text" as const,
+    label: "Сэтгэгдэл хүсэх имэйлийн гарчиг",
+    description: "",
+    tokens: ["{захиалга}"] as const,
+    fallbackValue: "SUGI ASAYAKE — {захиалга} захиалгын бараа таалагдсан уу?",
+  },
+  {
+    key: "email-body-review-request",
+    group: "Мессежийн загвар",
+    type: "text" as const,
+    label: "Сэтгэгдэл хүсэх имэйлийн текст",
+    description: "{урамшуулал} нь \"Сэтгэгдлийн урамшуулал\" 0-ээс их үед л мөр болж орно.",
+    tokens: ["{нэр}", "{захиалга}", "{урамшуулал}"] as const,
+    fallbackValue: "Сайн байна уу, {нэр}!\n\nТаны {захиалга} захиалга хүрсэн байх гэж найдаж байна. Бараа таалагдсан эсэхээ 1 минутад бичиж бусад худалдан авагчид туслаарай: Профайл → Захиалга → тухайн бараа → Сэтгэгдэл үлдээх.{урамшуулал}\n\nБаярлалаа,\nSUGI ASAYAKE",
+  },
+  {
+    key: "push-body-review-request",
+    group: "Мессежийн загвар",
+    type: "text" as const,
+    label: "Сэтгэгдэл хүсэх push мэдэгдлийн текст",
+    description: "",
+    tokens: ["{нэр}", "{урамшуулал}"] as const,
+    fallbackValue: "{нэр}, захиалсан бараа тань таалагдсан уу? Сэтгэгдлээ 1 минутад бичээрэй.{урамшуулал}",
+  },
+  // Customer return request window (2026-09-14): how many days after the
+  // order is completed the profile still offers "Буцаах хүсэлт".
+  {
+    key: "return-window-days",
+    group: "Захиалга",
+    type: "number" as const,
+    label: "Буцаалтын хүсэлт илгээх хугацаа (хоног)",
+    description: "Захиалга дууссанаас хойш энэ хэдэн хоногийн дотор худалдан авагч профайлаасаа буцаалтын хүсэлт илгээж болно (/returns бодлоготой нийцүүлнэ). Хүсэлт нь зөвхөн мэдэгдэл — буцаалтыг ажилтан \"Буцаагдсан\" төлөв + буцаан олголтоор шийднэ.",
+    fallbackValue: "14",
+  },
   // Measurement (2026-09-14): GA4 and the Meta Pixel load ONLY after the
   // visitor accepts the matching cookie category (analytics / marketing),
   // from /vendor/analytics-init.js. Empty = tag never loads.

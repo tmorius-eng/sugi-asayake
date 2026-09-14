@@ -118,6 +118,10 @@ export const UI_STRINGS: Record<string, { en: string; ja: string }> = {
   "Төлбөр баталгаажмагц {n} картын код энд, имэйл болон push мэдэгдлээр ирнэ.": { en: "Once payment is confirmed, the code for {n} card(s) will appear here and arrive by email and push notification.", ja: "お支払い確認後、{n} 枚分のコードがここに表示され、メールとプッシュ通知でも届きます。" },
   "Кодыг Профайл → Гишүүнчлэл → \"Бэлгийн карт ашиглах\" хэсэгт оруулахад дүн дэлгүүрийн зээл болно. Хүчинтэй хугацаа {n} сар.": { en: "Enter the code under Profile → Membership → \"Redeem a gift card\" and the amount becomes store credit. Valid for {n} months.", ja: "プロフィール → メンバーシップ → 「ギフトカードを使う」でコードを入力すると、金額がストアクレジットになります。有効期間は {n} か月です。" },
   "Цахим (бэлгийн карт)": { en: "Digital (gift card)", ja: "デジタル（ギフトカード）" },
+  // Reviews reward + return request (2026-09-14)
+  "Сэтгэгдэл бичвэл {n} дэлгүүрийн зээл бэлэглэнэ.": { en: "Write a review and receive {n} store credit.", ja: "レビューを書くと {n} 分のストアクレジットをプレゼント。" },
+  "Буцаах хүсэлт": { en: "Request a return", ja: "返品をリクエスト" },
+  "Буцаалтын хүсэлт илгээгдлээ. Ажилтан тантай холбогдоно.": { en: "Return request sent. A staff member will contact you.", ja: "返品リクエストを送信しました。担当者からご連絡します。" },
   // Product facts (2026-09-14)
   "Хэмжээ": { en: "Net content", ja: "内容量" },
   "Гарал үүсэл": { en: "Country of origin", ja: "原産国" },

@@ -1,4 +1,4 @@
-import { getAbandonedCartsNeedingReminder, getLowStockProducts, getStockLedgerHealth, markCartReminderSent, getStoreSettingValue, purgeNotificationOutbox, purgeStaleTelemetry, recordNotification } from "./db";
+import { getAbandonedCartsNeedingReminder, getLowStockProducts, getOrdersNeedingReviewRequest, getStockLedgerHealth, getStoreSettingNumber, markCartReminderSent, markReviewRequested, getStoreSettingValue, purgeNotificationOutbox, purgeStaleTelemetry, recordNotification } from "./db";
 import { getStaleTransfers } from "./transfers";
 import { runInventorySync } from "./integrations/inventorySync";
 import { fillTemplate } from "../shared/store-settings";
@@ -50,6 +50,37 @@ export async function runAbandonedCartReminderJob(): Promise<void> {
 // traffic.
 export function registerAbandonedCartReminderJob() {
   registerJob({ name: "abandoned-cart-reminder", intervalMs: 60 * 60 * 1000, run: runAbandonedCartReminderJob });
+}
+
+// Post-delivery review request (2026-09-14, Tom: reviews are 0 because
+// nobody is ever asked). Once per completed order, N days after completion
+// (review-request-days; 0 switches the job off), by push and/or the order's
+// email. Marked as asked even when neither channel exists -- there is
+// nothing to retry with.
+export async function runReviewRequestJob(): Promise<void> {
+  const days = await getStoreSettingNumber("review-request-days");
+  if (!(days > 0)) return;
+  const candidates = await getOrdersNeedingReviewRequest(days);
+  if (candidates.length === 0) return;
+  const [subject, emailBody, pushBody, rewardMnt] = await Promise.all([
+    getStoreSettingValue("email-subject-review-request"), getStoreSettingValue("email-body-review-request"), getStoreSettingValue("push-body-review-request"), getStoreSettingNumber("review-reward-mnt"),
+  ]);
+  const rewardLine = rewardMnt > 0 ? ` Сэтгэгдэл бүрд ${new Intl.NumberFormat("mn-MN").format(rewardMnt)}₮ дэлгүүрийн зээл бэлэглэнэ.` : "";
+  for (const order of candidates) {
+    const name = order.customerName?.trim() || "хүндэт харилцагч";
+    const values = { "{нэр}": name, "{захиалга}": order.orderNumber, "{урамшуулал}": rewardLine };
+    if (order.customerEmail) {
+      await sendAccountEmail({ to: order.customerEmail, subject: fillTemplate(subject, values), content: fillTemplate(emailBody, values) }).catch(() => undefined);
+    }
+    if (order.userId && order.pushSubscriptions > 0) {
+      await sendPushToUser(order.userId, { title: fillTemplate(subject, values), body: fillTemplate(pushBody, values), url: "/profile?tab=orders", tag: `review-${order.orderId}` }).catch(() => undefined);
+    }
+    await markReviewRequested(order.orderId);
+  }
+}
+
+export function registerReviewRequestJob() {
+  registerJob({ name: "review-request", intervalMs: 6 * 60 * 60 * 1000, run: runReviewRequestJob });
 }
 
 // Phase F: a daily digest to the store owner instead of a dashboard widget
