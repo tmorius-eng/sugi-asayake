@@ -1,9 +1,8 @@
 /**
- * Beeps for the barcode scan screens (2026-09-11). Someone unpacking a box
- * is looking at the box, not the screen, so every scan answers with a sound:
- * one short high tone = counted, a low double tone = the code is not in the
- * catalogue. Web Audio, no files; silently does nothing where audio is
- * unavailable or blocked until the first user gesture.
+ * Баркод скан дэлгэцийн дуунууд (2026-09-11). Хайрцаг задалж буй хүн дэлгэц биш
+ * хайрцаг руу харж байдаг тул скан бүр дуугаар хариулна: нэг богино өндөр дуу =
+ * тоологдлоо, нам давхар дуу = код каталогт байхгүй. Web Audio, файлгүй; аудио
+ * боломжгүй эсвэл эхний user gesture хүртэл хаалттай бол чимээгүй юу ч хийхгүй.
  */
 
 let context: AudioContext | null = null;

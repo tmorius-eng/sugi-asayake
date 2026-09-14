@@ -1,21 +1,18 @@
 /**
- * Order invoice / receipt as a PDF (2026-09-13 gap audit: "no downloadable
- * receipt -- business customers need one").
+ * Захиалгын нэхэмжлэх / баримт PDF-ээр (2026-09-13 нээлтийн аудит: "татаж авах
+ * баримт байхгүй — бизнес харилцагчид хэрэгтэй").
  *
- * Rendered with pdfkit into memory and returned to the client as base64
- * through tRPC (orders.invoicePdf), so the download goes through the same
- * session check every other order read uses -- no separate URL that could be
- * guessed. The client turns the bytes into a Blob and triggers the save.
+ * pdfkit-ээр санах ойд render хийгдэж tRPC-ээр (orders.invoicePdf) base64 буцаана,
+ * тиймээс татаалт захиалгын бусад уншилттай ижил session шалгалтаар явна — таагдах
+ * тусдаа URL байхгүй. Client байтуудыг Blob болгож хадгалалт өдөөнө.
  *
- * FONT: pdfkit's built-in Helvetica has no Cyrillic, so every string would
- * render as boxes. Golos Text (the site's own face, OFL) ships in
- * server/assets/fonts and is copied into dist/assets by the build. Keep the
- * layout on one page for the typical order; long orders flow to a second
- * page automatically.
+ * ШРИФТ: pdfkit-ийн built-in Helvetica кириллгүй тул мөр бүр хайрцаг болно. Golos
+ * Text (сайтын өөрийн шрифт, OFL) server/assets/fonts-д байдаг, build dist/assets-
+ * д хуулна. Ердийн захиалгад нэг хуудсанд багтаана; урт захиалга автоматаар хоёр
+ * дахь хуудас руу урсана.
  *
- * This is a RECEIPT ("Захиалгын баримт"), not an eBarimt tax receipt --
- * eBarimt is a separate legal document (see EBARIMT.md) and is named as such
- * in the footer so nobody mistakes one for the other.
+ * Энэ бол БАРИМТ ("Захиалгын баримт"), eBarimt татварын баримт биш — eBarimt тусдаа
+ * хуулийн баримт (EBARIMT.md) бөгөөд хэн ч андуурахгүйн тулд footer-т тэгж нэрлэсэн.
  */
 
 import PDFDocument from "pdfkit";

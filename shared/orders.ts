@@ -1,19 +1,16 @@
 /**
- * Order money-state helpers shared by the storefront (Profile), the admin
- * panel (orders list, dashboard) and the server (emails, dashboard counts).
+ * Storefront (Profile), admin панель (захиалгын жагсаалт, самбар), сервер (имэйл,
+ * самбарын тоо) хуваалцдаг захиалгын мөнгөний төлөвийн туслахууд.
  *
- * Audit 2026-09-09 (R2 + architecture debt #2): `paymentStatus` records
- * whether money was COLLECTED ("paid") or given BACK ("refunded"); it says
- * nothing about whether the sale still stands. The one combination that
- * needs its own name is "we have the customer's money and the order is
- * dead": a QPay order becomes "paid" at webhook time while still
- * pending/confirmed -- exactly the window in which it can be cancelled
- * (orders.cancel by the customer, admin.updateOrder by the warehouse).
- * Cancellation deliberately never touches paymentStatus (the money really
- * was collected), so such an order is `cancelled` + `paid` until finance
- * records the refund (admin.refundOrder). That is a REFUND OWED, and this
- * is the single definition of it -- derived, not stored, so it can never
- * drift from the two columns it is made of.
+ * Аудит 2026-09-09 (R2 + архитектурын өр #2): `paymentStatus` мөнгө АВСАН ("paid")
+ * эсвэл БУЦААСАН ("refunded") эсэхийг бүртгэнэ; борлуулалт хүчинтэй эсэх талаар юу ч
+ * хэлэхгүй. Өөрийн нэр хэрэгтэй цорын ганц хослол "харилцагчийн мөнгө бидэнд, захиалга
+ * үхсэн": QPay захиалга webhook үед pending/confirmed хэвээр "paid" болно — яг
+ * цуцлагдаж болох цонх (харилцагч orders.cancel, агуулах admin.updateOrder).
+ * Цуцлалт paymentStatus-ийг санаатай хөнддөггүй (мөнгө үнэхээр авагдсан) тул ийм
+ * захиалга finance буцаан олголт бүртгэтэл (admin.refundOrder) `cancelled` + `paid`.
+ * Энэ бол ХҮЛЭЭГДЭЖ БУЙ БУЦААН ОЛГОЛТ, түүний цорын ганц тодорхойлолт — гаргаж авсан,
+ * хадгалаагүй тул бүрдүүлдэг хоёр баганаасаа хэзээ ч зөрөхгүй.
  */
 export type OrderMoneyState = { status: string; paymentStatus: string };
 

@@ -1,9 +1,9 @@
 /**
- * Browser side of customer Web Push (2026-09-13). Talks to the service
- * worker registered in main.tsx (production only) and to push.subscribe /
- * push.unsubscribe. Everything is guarded: no SW, no PushManager, denied
- * permission, or an http:// LAN origin all resolve to "unsupported" without
- * throwing (the profile toggle explains why instead of crashing).
+ * Харилцагчийн Web Push-ийн хөтчийн тал (2026-09-13). main.tsx-д бүртгэсэн
+ * service worker (зөвхөн production) болон push.subscribe / push.unsubscribe-
+ * тэй ярина. Бүгд хамгаалагдсан: SW-гүй, PushManager-гүй, зөвшөөрөл татгалзсан,
+ * эсвэл http:// LAN origin бүгд throw хийхгүй "unsupported" болно (профайлын
+ * toggle унахын оронд шалтгааныг тайлбарлана).
  */
 
 export type PushSupport = "unsupported" | "denied" | "ready";

@@ -1,36 +1,32 @@
 /**
- * In-process multilingual toxicity model (2026-09-13).
+ * Процесс доторх олон хэлний toxicity загвар (2026-09-13).
  *
- * Tom: no Docker, no extra service eating the VPS -- but the abuse screen
- * must understand insults written without swear words, in several
- * languages. This runs a BERT toxicity classifier INSIDE the Node process
- * through transformers.js + ONNX Runtime (CPU):
+ * Tom: Docker хэрэггүй, VPS-ийг иддэг нэмэлт үйлчилгээ хэрэггүй — гэхдээ шүүлт
+ * хараалгүй бичсэн доромжлолыг хэд хэдэн хэлээр ойлгох ёстой. Энэ нь BERT toxicity
+ * ангилагчийг Node процесс ДОТОР transformers.js + ONNX Runtime (CPU)-ээр ажиллуулна:
  *
  *   onnx-community/bert-multilingual-toxicity-classifier-ONNX
- *   (ONNX export of textdetox/bert-multilingual-toxicity-classifier,
- *   trained on 15 languages incl. Russian, Chinese, Japanese, German,
- *   Spanish, Arabic, Hindi -- Mongolian is not in the training set, so the
- *   lexical layer in moderation.ts stays responsible for Mongolian; the
- *   multilingual tokenizer still reads Cyrillic and Russian transfer helps.)
+ *   (textdetox/bert-multilingual-toxicity-classifier-ийн ONNX export, орос, хятад,
+ *   япон, герман, испани, араб, хинди зэрэг 15 хэлээр сургагдсан — монгол сургалтын
+ *   багцад байхгүй тул монголыг moderation.ts-ийн lexical давхарга хариуцсаар;
+ *   олон хэлний tokenizer кириллийг уншсаар, оросын шилжүүлэлт тусална.)
  *
- * Cost: one-time download of the 8-bit quantised weights (~179MB) into
- * MODERATION_MODEL_DIR (default ./.cache/moderation-model, git-ignored),
- * then fully offline. ~300-500MB RAM while loaded, ~100-300ms per review on
- * a laptop CPU. Nothing leaves the server. Compared with LocalMod (Docker,
- * 3.5GB, English-only toxicity) this is smaller, needs no container and
- * covers more of the languages the shop actually sees.
+ * Зардал: 8-бит quantised жин (~179MB) MODERATION_MODEL_DIR-т (анхдагч ./.cache/
+ * moderation-model, git-ignored) нэг удаа татагдаад бүрэн офлайн. Ачаалагдсан үед
+ * ~300-500MB RAM, лаптоп CPU дээр сэтгэгдэл бүрт ~100-300мс. Серверээс юу ч
+ * гарахгүй. LocalMod (Docker, 3.5GB, зөвхөн англи toxicity)-той харьцуулахад жижиг,
+ * container хэрэггүй, дэлгүүрийн бодитоор хардаг хэлүүдийг илүү хамарна.
  *
- * Fail-open by design, like the other non-lexical layers: if the model is
- * missing or the runtime cannot start, the lexical verdict stands and the
- * problem is logged once. Set MODERATION_MODEL=0 to disable entirely.
+ * Бусад lexical бус давхарга шиг санаатай fail-open: загвар байхгүй эсвэл runtime
+ * эхлэхгүй бол lexical шийдвэр хүчинтэй, асуудал нэг удаа log-логдоно.
+ * MODERATION_MODEL=0 бүрмөсөн унтраана.
  *
- * MEMORY POLICY (Tom, 2026-09-13: "ali boloh websited achaalal uguhgui"):
- * reviews arrive a few times a day, so the model is NOT kept resident. It
- * loads on demand for a review, is disposed after MODEL_IDLE_MS without
- * another one, and the process goes back to its baseline RAM. At boot the
- * weights are only PREFETCHED to disk (load once, dispose immediately) so
- * the first real review never waits on a 179MB download -- a few seconds of
- * CPU once, then nothing until someone actually writes a review.
+ * САНАХ ОЙН БОДЛОГО (Tom, 2026-09-13: "ali boloh websited achaalal uguhgui"):
+ * сэтгэгдэл өдөрт цөөн ирдэг тул загвар байнга санах ойд БАЙХГҮЙ. Сэтгэгдэлд
+ * хэрэгтэй үед ачаалж, MODEL_IDLE_MS-ийн дараа өөр ирэхгүй бол dispose хийгдэж
+ * процесс суурь RAM руугаа буцна. Boot дээр жинг зөвхөн диск рүү ПРЕФЕТЧ хийнэ (нэг
+ * удаа ачаалж шууд dispose) — эхний бодит сэтгэгдэл 179MB татаалт хүлээхгүй, нэг
+ * удаа хэдэн секундын CPU, дараа нь хэн нэгэн сэтгэгдэл бичтэл юу ч үгүй.
  */
 
 import path from "node:path";

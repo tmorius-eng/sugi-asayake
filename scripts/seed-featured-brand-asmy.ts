@@ -1,17 +1,16 @@
-// 2026-09-11 (Tom: "bestseller deer prieclat cocochi asmy giin buh set iin
-// nem"): PRIECLAT and Cocochi were already rows in `featured_brands` (the
-// admin-managed table behind /admin -> Брэнд, the Топ брэнд rail, and — as of
-// this date — the filler slots of the homepage "Их зарагддаг бараа" rail).
-// Asmy was not, despite having 5 published, in-stock products. This adds it
-// as a normal featured-brand row so all three brands surface together.
+// 2026-09-11 (Tom: "bestseller deer prieclat cocochi asmy giin buh set iin nem"):
+// PRIECLAT, Cocochi `featured_brands`-д (/admin -> Брэнд, Топ брэнд rail, энэ
+// өдрөөс нүүрний "Их зарагддаг бараа" rail-ийн filler-ийн ард байгаа admin
+// хүснэгт) аль хэдийн мөртэй байв. Asmy 5 нийтлэгдсэн, нөөцтэй бараатай атлаа
+// байсангүй. Гурван брэнд хамт гарахын тулд ердийн featured-brand мөрөөр нэмнэ.
 //
-// Deliberately a content row, never an order: the bestseller rail ranks by
-// real settled sales first (getBestsellingProducts), and nothing here
-// fabricates a sale, so genuine bestsellers displace this filler the moment
-// orders exist. Everything below is editable/removable from the admin panel.
+// Санаатайгаар контентын мөр, захиалга хэзээ ч биш: bestseller rail эхлээд бодит
+// төлөгдсөн борлуулалтаар эрэмбэлдэг (getBestsellingProducts), энд юу ч борлуулалт
+// зохиодоггүй тул захиалга гармагц жинхэнэ bestseller энэ filler-ийг шахна. Доорх
+// бүгд admin панелаас засварлагдах/устгагдах боломжтой.
 //
-// Idempotent: skips when a row with this brandName already exists, so
-// re-running is always safe. Same convention as scripts/seed-branches.ts.
+// Idempotent: энэ brandName-тай мөр байвал алгасна, дахин ажиллуулах аюулгүй.
+// scripts/seed-branches.ts-тэй ижил конвенц.
 import "dotenv/config";
 import { eq, sql } from "drizzle-orm";
 import { getDb } from "../server/db";

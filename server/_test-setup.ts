@@ -1,39 +1,36 @@
 /**
- * Vitest setup — runs in every worker before any test file is imported.
+ * Vitest setup — тест файл import хийгдэхээс өмнө worker бүрт ажиллана.
  *
- * 1. Loads .env the same way the app and scripts/ do. Without this, vitest
- *    never saw DATABASE_URL / S3_* at all: the integration gates
- *    (RUN_AUTH_INTEGRATION_TESTS, COMMERCE_INTEGRATION_TESTS,
- *    RUN_MEDIA_INTEGRATION_TESTS) would switch the tests ON, and they would
- *    then fail with "Database unavailable" / "Storage config missing" unless
- *    the shell happened to export those values by hand. That made a full
- *    local run look broken (22 failed files) for a reason that had nothing
- *    to do with the code under test.
+ * 1. .env-ийг апп болон scripts/-тэй ижил аргаар ачаална. Үүнгүйгээр vitest
+ *    DATABASE_URL / S3_*-ийг огт хардаггүй байв: integration gate-үүд
+ *    (RUN_AUTH_INTEGRATION_TESTS, COMMERCE_INTEGRATION_TESTS, RUN_MEDIA_INTEGRATION_
+ *    TESTS) тестийг АСААХ ч shell тэдгээр утгыг гараар export хийгээгүй бол "Database
+ *    unavailable" / "Storage config missing" гэж унана. Энэ нь тестлэж буй кодтой
+ *    ямар ч хамаагүй шалтгаанаар бүрэн локал run-ийг эвдэрсэн мэт (22 файл унасан)
+ *    харуулж байв.
  *
- *    On CI there is no .env file and dotenv is a silent no-op, so the gates
- *    stay off and the affected tests skip exactly as before.
+ *    CI дээр .env файл байхгүй, dotenv чимээгүй no-op тул gate-үүд унтраалттай
+ *    хэвээр, холбогдох тестүүд өмнөх шигээ алгасагдана.
  *
- * 2. Supplies a throwaway INTEGRATIONS_ENCRYPTION_KEY when the environment
- *    has none. server/integrations.integration.test.ts's "integration config
- *    encryption (unit)" tests run UNGATED (they touch no database), and
- *    server/_core/crypto.ts's getKey() throws unless the key is a 64-char
- *    hex string — so on a fresh checkout, and on GitHub Actions, those two
- *    tests failed for want of configuration rather than for any defect.
+ * 2. Орчинд байхгүй үед түр INTEGRATIONS_ENCRYPTION_KEY өгнө. server/integrations.
+ *    integration.test.ts-ийн "integration config encryption (unit)" тестүүд GATE-ГҮЙ
+ *    ажилладаг (DB-д хүрдэггүй), server/_core/crypto.ts-ийн getKey() 64 тэмдэгт hex
+ *    түлхүүргүй бол throw хийдэг — тиймээс шинэ clone, GitHub Actions дээр тэр хоёр
+ *    тест ямар нэг алдаанаас биш тохиргоо дутуугаас унаж байв.
  *
- *    Those tests assert that encryptJson/decryptJson round-trip and that a
- *    tampered blob is rejected. Both properties hold for ANY valid key, so
- *    the value below is arbitrary and protects nothing: it encrypts only
- *    data the test itself just made up, inside the test process.
+ *    Тэдгээр тест encryptJson/decryptJson round-trip хийдэг, өөрчилсөн blob
+ *    татгалзагддагийг батална. Хоёр шинж ЯМАР Ч хүчинтэй түлхүүрт хадгалагддаг тул
+ *    доорх утга дур зоргын, юу ч хамгаалдаггүй: тест процесс дотор тестийн өөрийн
+ *    зохиосон өгөгдлийг л шифрлэнэ.
  *
- *    This deliberately does NOT relax the application: server/_core/env.ts
- *    and crypto.ts are untouched, so a real server still refuses to encrypt
- *    anything unless a real key is configured. The weak-default risk that
- *    docs/PROJECT-GUIDE.md warns about would come from putting a fallback THERE, not
- *    here. Setting it here also means CI needs no repository secret, and a
- *    fresh clone can run `pnpm test` green with no setup.
+ *    Энэ аппликейшнийг санаатайгаар сулруулахгүй: server/_core/env.ts, crypto.ts
+ *    хөндөгдөөгүй тул бодит сервер бодит түлхүүр тохируулаагүй бол юу ч шифрлэхээс
+ *    татгалзсаар. docs/PROJECT-GUIDE.md-ийн анхааруулдаг сул анхдагчийн эрсдэл ТЭНД
+ *    fallback тавихаас гарна, энд биш. Энд тавьснаар CI-д repo secret хэрэггүй, шинэ
+ *    clone тохиргоогүй `pnpm test` ногоон ажиллуулна.
  *
- *    A real key in .env or the environment still wins — this only fills a
- *    gap, it never overrides.
+ *    .env эсвэл орчны бодит түлхүүр үргэлж ялна — энэ зөвхөн цоорхой нөхнө, хэзээ ч
+ *    дарж бичихгүй.
  */
 import "dotenv/config";
 

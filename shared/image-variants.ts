@@ -1,26 +1,23 @@
 /**
- * Frontend performance audit (2026-09-02): every stored image was served at
- * one fixed size, in whatever format was uploaded -- a 1600px product photo
- * shipped to a ~300px-wide grid card, as JPEG/PNG. On Mongolia's median
- * mobile connection (17 Mbps, 92ms latency -- well under the 33.9 Mbps
- * global median) a 24-card /shop page is by far the heaviest thing the site
- * sends, so this is where responsive images pay off most.
+ * Frontend гүйцэтгэлийн аудит (2026-09-02): хадгалагдсан зураг бүр нэг тогтмол
+ * хэмжээгээр, upload хийсэн форматаараа serve хийгдэж байв — 1600px барааны зураг
+ * ~300px grid картад JPEG/PNG-ээр. Монголын дундаж мобайл холболтод (17 Mbps, 92мс
+ * latency — дэлхийн дундаж 33.9 Mbps-ээс хол доогуур) 24 карттай /shop хуудас сайтын
+ * илгээдэг хамгийн хүнд зүйл тул responsive зураг энд хамгийн их үр дүнтэй.
  *
- * Naming convention (single source of truth for BOTH the upload pipeline in
- * server/_core/imageProcessing.ts + server/storage.ts AND the components
- * that render srcset):
+ * Нэрлэлтийн конвенц (upload pipeline server/_core/imageProcessing.ts + server/
+ * storage.ts БА srcset зурдаг компонентуудын нэг эх сурвалж):
  *
  *   full : catalog/products/12/name_a1b2c3d4.webp
  *   grid : catalog/products/12/name_a1b2c3d4-600w.webp
  *
- * The `.webp` extension IS the signal that a grid derivative exists. Images
- * uploaded before this shipped are `.jpg`/`.png` and have no sibling, so
- * gridVariantUrl() returns null for them and callers fall back to a plain
- * single-source <img> -- exactly today's behavior, with no risk of a 404'd
- * srcset candidate (a browser that picks a missing candidate shows a broken
- * image; there is no graceful degradation once a candidate is listed). That
- * makes the migration safely incremental: a product moves to responsive
- * images the moment its photo is re-uploaded or backfilled, never before.
+ * `.webp` өргөтгөл grid derivative байгаагийн ДОХИО. Үүнээс өмнө upload хийгдсэн
+ * зураг `.jpg`/`.png` бөгөөд хамт зураггүй тул gridVariantUrl() null буцааж дуудагч
+ * энгийн нэг эх сурвалжтай <img> рүү буцна — яг өнөөдрийн зан төлөв, 404 өгөх srcset
+ * candidate-ийн эрсдэлгүй (дутуу candidate сонгосон хөтөч эвдэрсэн зураг харуулна;
+ * candidate жагсаагдсаны дараа зөөлөн буулт байхгүй). Энэ нь migration-ийг аюулгүй
+ * алхам алхмаар болгоно: бараа зургаа дахин upload эсвэл backfill хийгдмэгц л
+ * responsive зурагт шилжинэ, өмнө нь хэзээ ч биш.
  */
 
 /** Longest edge (px) of the small derivative -- see IMAGE_MAX_DIMENSION for the full size. */

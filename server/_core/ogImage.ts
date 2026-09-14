@@ -1,20 +1,17 @@
 /**
- * /og/product/<slug>.jpg -- the picture a shared product link shows on
- * Facebook, Messenger, Telegram, X (2026-09-14).
+ * /og/product/<slug>.jpg — хуваалцсан барааны линк Facebook, Messenger, Telegram,
+ * X дээр харуулах зураг (2026-09-14).
  *
- * Tom shared a product from his phone and Facebook drew the small square
- * thumbnail with the title beside it: the Cocochi packshot is 270x390 px,
- * and Facebook only renders the big-image card for pictures of at least
- * 600x315 (1200x630 recommended, 1.91:1). Catalogue photos come in every
- * size, so instead of hoping, the server composes a card per product: the
- * packshot scaled to fit inside a 1200x630 white canvas, centred, as JPEG.
- * routeMeta.ts points og:image at this URL and declares the dimensions, so
- * the crawler never has to guess.
+ * Tom утаснаасаа бараа хуваалцахад Facebook жижиг дөрвөлжин thumbnail-ийг гарчгийн
+ * хажууд зурсан: Cocochi packshot 270x390 px бөгөөд Facebook дор хаяж 600x315
+ * (1200x630 зөвлөмж, 1.91:1) зурагт л том зурагтай карт зурдаг. Каталогийн зураг
+ * бүх хэмжээтэй тул найдахын оронд сервер бараа бүрт карт угсарна: packshot-ыг
+ * 1200x630 цагаан canvas дотор багтааж, төвлөрүүлж, JPEG. routeMeta.ts og:image-ийг
+ * энэ URL руу зааж хэмжээг зарладаг тул crawler таамаглах шаардлагагүй.
  *
- * Cached on disk (tmpdir) keyed by slug + the source URL, so a re-uploaded
- * photo gets a fresh card and an unchanged one is composed once. Served
- * with a week of cache. Missing product -> 404; a photo that cannot be
- * fetched -> 503, never a broken card.
+ * Диск дээр (tmpdir) slug + эх URL-аар кэшлэгдэнэ — дахин upload хийсэн зураг шинэ
+ * карт авна, өөрчлөгдөөгүй нь нэг л удаа угсрагдана. Долоо хоногийн cache-тэй.
+ * Бараа байхгүй -> 404; зураг татагдахгүй -> 503, эвдэрсэн карт хэзээ ч биш.
  */
 import type { Request, Response } from "express";
 import { createHash } from "node:crypto";

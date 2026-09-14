@@ -1,8 +1,7 @@
-// Ulaanbaatar's 9 official дүүрэг (districts) + a catch-all for anything
-// outside UB or unparseable. Values are romanized/English (matching this
-// codebase's convention for enum internals — see skinType in
-// drizzle/schema.ts) with the Mongolian display label kept separately here,
-// same split as skinTypeLabels in shared/catalog-filter.ts.
+// Улаанбаатарын 9 албан ёсны дүүрэг + УБ-аас гадуур эсвэл parse хийгдэхгүй бүхэнд
+// нэг catch-all. Утгууд романчлагдсан/англи (энэ кодын enum-ийн дотоод утгын конвенц
+// — drizzle/schema.ts-ийн skinType), монгол дэлгэцийн шошго энд тусдаа, shared/
+// catalog-filter.ts-ийн skinTypeLabels-тэй ижил хуваалт.
 export const ubDistricts = ["baganuur", "bagakhangai", "bayangol", "bayanzurkh", "nalaikh", "songinokhairkhan", "sukhbaatar", "khan_uul", "chingeltei", "other"] as const;
 
 export type UbDistrict = (typeof ubDistricts)[number];

@@ -1,18 +1,15 @@
 /**
- * A random id for an idempotent request (checkout attempt, register sale).
+ * Idempotent хүсэлтийн санамсаргүй id (checkout оролдлого, POS борлуулалт).
  *
- * `crypto.randomUUID()` exists only in a secure context -- https, or
- * localhost. On 2026-09-12 Tom opened the site from his phone over the LAN
- * (http://192.168.88.6) and /checkout crashed at render with "crypto.randomUUID
- * is not a function": the page had worked in every local test because
- * localhost counts as secure. Production is https, so this would never have
- * shown there, but a checkout page must not depend on which address it was
- * opened from.
+ * `crypto.randomUUID()` зөвхөн secure context-д (https эсвэл localhost) байдаг.
+ * 2026-09-12-нд Tom утаснаасаа LAN-аар (http://192.168.88.6) сайт нээхэд /checkout
+ * render дээр "crypto.randomUUID is not a function" гэж унасан: localhost secure-д
+ * тооцогддог тул локал бүх туршилтад ажиллаж байв. Production https тул тэнд
+ * хэзээ ч гарахгүй байсан ч checkout хуудас аль хаягаар нээгдсэнээс хамаарах ёсгүй.
  *
- * `getRandomValues` is available in insecure contexts too, so a v4 UUID is
- * built from it; the Math.random fallback is for environments with no
- * WebCrypto at all. The result always matches the server's
- * /^[A-Za-z0-9_-]{8,64}$/ rule for clientRequestId.
+ * `getRandomValues` insecure context-д ч байдаг тул v4 UUID түүгээр үүсгэнэ;
+ * Math.random fallback нь WebCrypto огт байхгүй орчинд. Үр дүн үргэлж серверийн
+ * clientRequestId-ийн /^[A-Za-z0-9_-]{8,64}$/ дүрэмд таарна.
  */
 export function newRequestId(): string {
   const c = globalThis.crypto;

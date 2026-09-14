@@ -1,14 +1,12 @@
 /**
- * One rule for a Mongolian mobile number (2026-09-12), shared because the
- * checkout page and the server must agree on it: the page asks StorePay what
- * a number may borrow and then compares the answer against the number the
- * shopper typed, so a different normalisation on either side would silently
- * compare two different phones.
+ * Монголын гар утасны дугаарын нэг дүрэм (2026-09-12), checkout хуудас ба сервер
+ * санал нийлэх ёстой тул хуваалцсан: хуудас StorePay-ээс дугаар хэд зээлж болохыг
+ * асуугаад хариуг худалдан авагчийн бичсэн дугаартай харьцуулдаг, аль нэг талд өөр
+ * нормчлол хоёр өөр утсыг чимээгүй харьцуулна.
  *
- * Accepts what people actually type -- "9911 2233", "+976-9911-2233",
- * "97699112233" -- and returns the bare local 8 digits, or null when it is
- * not a mobile number. Mongolian mobile prefixes start at 5 (no operator
- * issues 1xxxxxxx or 2xxxxxxx mobiles).
+ * Хүмүүсийн бодитоор бичдэгийг хүлээн авна — "9911 2233", "+976-9911-2233",
+ * "97699112233" — нүцгэн 8 орон буцаана, гар утас биш бол null. Монголын гар утасны
+ * prefix 5-аас эхэлнэ (ямар ч оператор 1xxxxxxx, 2xxxxxxx гар утас олгодоггүй).
  */
 export function normaliseMongolianMobile(input: string): string | null {
   const digits = input.replace(/\D/g, "");

@@ -1,11 +1,11 @@
 /**
- * The shop's frequently asked questions (2026-09-14).
+ * Дэлгүүрийн түгээмэл асуултууд (2026-09-14).
  *
- * One list, read by two places: the public /help page and the "Тусламж" tab
- * of a signed-in customer's profile (which used to keep its own copy in
- * Profile.tsx). Answers name the phone number and pages the way the legal
- * fallbacks do; the storefront's language switch translates them through
- * shared/i18n.ts, where every question and answer below has an entry.
+ * Нэг жагсаалт, хоёр газар уншина: нийтийн /help хуудас ба нэвтэрсэн харилцагчийн
+ * профайлын "Тусламж" таб (өмнө нь Profile.tsx-д өөрийн хуулбартай байсан).
+ * Хариултууд утасны дугаар, хуудсуудыг хуулийн fallback-тай ижил аргаар нэрлэнэ;
+ * storefront-ийн хэл солих товч shared/i18n.ts-ээр орчуулна, доорх асуулт, хариулт
+ * бүр тэнд бичлэгтэй.
  */
 export const HELP_FAQ: ReadonlyArray<{ q: string; a: string }> = [
   { q: "Хүргэлт хэдэн хоног болох вэ?", a: "Улаанбаатар доторх хүргэлт ихэвчлэн 24–48 цагийн дотор хийгдэнэ. Салбараас өөрөө авах бол захиалга баталгаажмагц бэлэн болно." },

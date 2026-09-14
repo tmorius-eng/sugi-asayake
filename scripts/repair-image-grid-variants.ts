@@ -1,20 +1,19 @@
-// Frontend performance audit (2026-09-02) follow-up: fills in any missing
-// `-600w.webp` grid derivative for an already-`.webp` stored image.
+// Frontend гүйцэтгэлийн аудит (2026-09-02)-ийн үргэлжлэл: аль хэдийн `.webp`
+// хадгалагдсан зургийн дутуу `-600w.webp` grid derivative-ийг нөхнө.
 //
-// Why this was needed: the first revision of processUploadedImageVariants
-// returned `grid: null` when the source was already <= 600px, on the theory
-// that a same-size second copy bought nothing. That silently broke the
-// invariant the design depends on -- shared/image-variants.ts derives the
-// grid URL from the `.webp` extension ALONE, so an image without its
-// sibling produces a srcset candidate that 404s, which a browser renders as
-// a broken image (a listed candidate has no fallback). 224 of 529 stored
-// images were in that state. processUploadedImageVariants now always emits
-// a grid; this repairs the ones written before that fix.
+// Яагаад хэрэгтэй болсон: processUploadedImageVariants-ийн эхний хувилбар эх нь
+// <= 600px бол "ижил хэмжээний хоёр дахь хуулбар юу ч өгөхгүй" гэж `grid: null`
+// буцаадаг байв. Энэ нь дизайны түшдэг инвариантыг чимээгүй эвдсэн — shared/image-
+// variants.ts grid URL-ийг ЗӨВХӨН `.webp` өргөтгөлөөс гаргадаг тул хамт зураггүй
+// зураг 404 өгөх srcset candidate үүсгэж, хөтөч эвдэрсэн зураг зурна (жагсаасан
+// candidate-д fallback байхгүй). 529 хадгалагдсан зургийн 224 нь тэр байдалтай
+// байв. processUploadedImageVariants одоо үргэлж grid гаргадаг; энэ script тэр
+// засвараас өмнө бичигдсэнийг засна.
 //
-// Idempotent: HEADs each derived grid URL first and only writes the ones
-// actually missing. Never touches the full-size object or any DB row.
+// Idempotent: derived grid URL бүрийг эхлээд HEAD шалгаж, бодитоор дутууг л бичнэ.
+// Бүтэн хэмжээний объект, DB мөрийг хэзээ ч хөндөхгүй.
 //
-// Usage:
+// Хэрэглээ:
 //   pnpm exec tsx scripts/repair-image-grid-variants.ts          # dry run
 //   pnpm exec tsx scripts/repair-image-grid-variants.ts --apply
 

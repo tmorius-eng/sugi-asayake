@@ -1,20 +1,17 @@
-// 2026-09-07 (WordPress-parity admin editor rebuild): the new post editor's
-// TinyMCE "Text" tab lets a staffer type or paste ARBITRARY raw HTML directly
-// (that's the whole point of a source view) -- this is the real trust
-// boundary that makes that safe. Runs on every create/update, server-side,
-// before a post's `content` ever reaches the database. Client-side rendering
-// (client/src/pages/PostDetail.tsx) trusts what's already stored rather than
-// re-sanitizing on every render, since this is the one place content is
-// written.
+// 2026-09-07 (WordPress-той ижил admin editor): шинэ нийтлэлийн editor-ийн TinyMCE
+// "Text" таб ажилтанд ДУРЫН түүхий HTML бичих/хуулах боломж олгодог (source view-
+// ийн бүх утга нь энэ) — үүнийг аюулгүй болгодог бодит итгэлийн хил энд. Create/
+// update бүрт, сервер талд, нийтлэлийн `content` DB-д хүрэхээс өмнө ажиллана.
+// Client талын render (client/src/pages/PostDetail.tsx) render бүрт дахин sanitize
+// хийхийн оронд хадгалагдсанд итгэнэ, учир нь агуулга бичигдэх цорын ганц газар энэ.
 //
-// `sanitize-html` (not DOMPurify) because it runs in plain Node with no DOM/
-// jsdom dependency, which is what a server-side pass needs.
+// `sanitize-html` (DOMPurify биш) — DOM/jsdom dependency-гүй энгийн Node-д ажилладаг,
+// сервер талын шүүлтэд яг хэрэгтэй нь.
 //
-// Allowlist is exactly what the configured TinyMCE toolbar (see
-// client/src/components/admin/TinyMceEditor.tsx) can actually produce --
-// script/style/iframe/on*-event-handler attributes and everything else are
-// stripped, not merely escaped, so a submitted <script> tag disappears
-// entirely rather than surviving as inert text.
+// Allowlist нь тохируулсан TinyMCE toolbar-ийн (client/src/components/admin/
+// TinyMceEditor.tsx) бодитоор гаргаж чадах зүйл л — script/style/iframe/on*-event
+// attribute ба бусад бүгд escape биш устгагдана, тиймээс илгээсэн <script> tag
+// идэвхгүй текст болж үлдэхгүй, бүрмөсөн алга болно.
 import sanitizeHtml from "sanitize-html";
 
 const ALLOWED_TAGS = [

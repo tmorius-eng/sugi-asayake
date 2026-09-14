@@ -1,22 +1,19 @@
 /**
- * Barcode handling for the catalogue (2026-09-11).
+ * Каталогийн баркодын боловсруулалт (2026-09-11).
  *
- * WHY THIS IS ONE SHARED MODULE: the same code has to be normalised in
- * three places that must never disagree -- the storefront's search box,
- * the POS register's scan field, and the server's lookup. A scanner gun is
- * just a keyboard, so what actually arrives varies by device: some models
- * append a tab instead of a newline, some emit thin spaces between digit
- * groups, and a shopper typing a code off a box will add hyphens or
- * spaces. Normalising in only one of the three would make a scan succeed
- * at the register but fail on the site (or the reverse), which reads as a
- * missing product rather than a formatting difference.
+ * ЯАГААД НЭГ ХУВААЛЦСАН МОДУЛЬ: нэг кодыг хэзээ ч зөрөх ёсгүй гурван газар нормчлох
+ * ёстой — storefront-ийн хайлтын талбар, POS-ийн скан талбар, серверийн lookup.
+ * Сканнер бол зүгээр л keyboard тул бодитоор юу ирэх нь төхөөрөмжөөс хамаарна:
+ * зарим загвар newline-ийн оронд tab залгадаг, зарим нь цифрийн бүлэг хооронд нимгэн
+ * зай гаргадаг, хайрцгаас код бичиж буй худалдан авагч зураас, зай нэмнэ. Гурвын
+ * нэгд л нормчилбол скан POS-д амжилттай, сайтад амжилтгүй (эсвэл эсрэгээр) болж,
+ * форматын ялгаа биш бараа байхгүй мэт харагдана.
  *
- * All 937 products in this catalogue carry a real 13-digit JAN barcode in
- * `products.sku` (verified 2026-09-11: 937/937 match ^[0-9]{13}$ and all
- * start with the Japanese 45/49 prefix), and every product_variants.sku
- * equals its product's. That is why an exact `sku = ?` lookup is the right
- * primitive here -- the column is already NOT NULL + UNIQUE, so it is an
- * indexed single-row fetch, not a scan.
+ * Энэ каталогийн 937 бараа бүр `products.sku`-д бодит 13 оронтой JAN баркодтой
+ * (2026-09-11-нд шалгасан: 937/937 ^[0-9]{13}$ таарч, бүгд Японы 45/49 prefix-ээр
+ * эхэлдэг), product_variants.sku бүр барааныхтайгаа тэнцүү. Тиймээс яг `sku = ?`
+ * lookup энд зөв primitive — багана аль хэдийн NOT NULL + UNIQUE тул индекстэй нэг
+ * мөрийн fetch, scan биш.
  */
 
 /** Longest code we will ever accept -- guards the DB lookups against junk. */

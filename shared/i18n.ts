@@ -1,23 +1,19 @@
 /**
- * Storefront languages (2026-09-12, Tom: "translate hiideg button hiilgmeer
- * baina ... dotorn english bas japanese baih ystoi").
+ * Storefront-ийн хэлүүд (2026-09-12, Tom: "translate hiideg button hiilgmeer baina
+ * ... dotorn english bas japanese baih ystoi").
  *
- * How this works, and what it deliberately does NOT do:
+ * Хэрхэн ажилладаг, санаатайгаар юу ХИЙДЭГГҮЙ:
  *
- *   - The site is written in Mongolian. Rather than key every label with an
- *     invented id, the Mongolian string IS the key: `t("Дэлгүүр")` returns
- *     "Shop" or "ショップ" and falls back to the Mongolian itself when a
- *     phrase has no entry yet. That means a missing translation degrades to
- *     the original wording instead of showing a bare key, and new copy needs
- *     no plumbing to keep working.
- *   - It covers the SHOP'S OWN WORDS: navigation, buttons, section
- *     headings, form labels, the footer. It does not translate catalogue
- *     data -- product names, descriptions and brands live in the database
- *     in one language, and translating those needs a per-language column
- *     and an admin screen to fill it, which is a separate piece of work.
- *   - Admin-entered copy (the site-text slots) is translated when its
- *     current value happens to match an entry here; the fallbacks shipped
- *     with the site all do.
+ *   - Сайт монголоор бичигдсэн. Шошго бүрийг зохиомол id-аар түлхүүрлэхийн оронд
+ *     монгол мөр ӨӨРӨӨ түлхүүр: `t("Дэлгүүр")` "Shop" эсвэл "ショップ" буцааж,
+ *     бичлэггүй хэллэгт монголоороо буцна. Дутуу орчуулга нүцгэн түлхүүр биш анхны
+ *     үг рүү буурна, шинэ текст ажиллахын тулд нэмэлт холболт хэрэггүй гэсэн үг.
+ *   - ДЭЛГҮҮРИЙН ӨӨРИЙН ҮГСИЙГ хамарна: цэс, товч, хэсгийн гарчиг, формын шошго,
+ *     footer. Каталогийн өгөгдлийг орчуулахгүй — барааны нэр, тайлбар, брэнд DB-д
+ *     нэг хэлээр байдаг, тэдгээрийг орчуулахад хэл бүрийн багана, бөглөх admin дэлгэц
+ *     хэрэгтэй, тусдаа ажил.
+ *   - Admin-ийн оруулсан текст (site-text slot) одоогийн утга нь энд бичлэгтэй
+ *     таарвал орчуулагдана; сайттай хамт ирсэн fallback-ууд бүгд таардаг.
  */
 export const LOCALES = ["mn", "en", "ja"] as const;
 export type Locale = (typeof LOCALES)[number];

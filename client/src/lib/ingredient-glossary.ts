@@ -1,9 +1,8 @@
-// PREMIUM-FEATURES.md TIER 3: ingredient-term glossary for the skincare
-// product description tooltip (see components/GlossaryText.tsx). Terms match
-// the exact Mongolian vocabulary already used across both the hand-written
-// pilot-batch descriptions and the rule-based bulk-import generator
-// (server/db.ts import scripts) — see PRODUCT-IMPORT.md — so real product
-// descriptions actually light up rather than needing a rewrite.
+// PREMIUM-FEATURES.md TIER 3: арьс арчилгааны барааны тайлбарын tooltip-д
+// зориулсан найрлагын нэр томьёоны толь (components/GlossaryText.tsx). Нэр томьёо
+// нь гараар бичсэн туршилтын багц болон дүрэмд суурилсан bulk-import генератор
+// (server/db.ts import script) хоёуланд ашигласан яг тэр монгол үгстэй таардаг —
+// PRODUCT-IMPORT.md — тиймээс бодит тайлбарууд дахин бичихгүйгээр асна.
 export type GlossaryEntry = { term: string; definition: string };
 
 export const INGREDIENT_GLOSSARY: GlossaryEntry[] = [

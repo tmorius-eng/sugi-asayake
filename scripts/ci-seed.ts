@@ -1,8 +1,7 @@
-// 2026-09-14: the few reference rows the integration suites assume exist
-// (they were created by hand in production long before migrations tracked
-// them): the four store branches, the first of them the online fulfilment
-// default. Run after scripts/db-apply-all-migrations.ts on an empty CI
-// database. Idempotent: existing slugs are left alone.
+// 2026-09-14: integration тестүүдийн байгаа гэж үздэг цөөн лавлах мөр (production-д
+// migration-ээс өмнө гараар үүсгэгдсэн): 4 дэлгүүрийн салбар, эхнийх нь онлайн
+// fulfilment-ийн үндсэн. Хоосон CI DB дээр scripts/db-apply-all-migrations.ts-ийн
+// дараа ажиллуулна. Idempotent: байгаа slug-ийг хөндөхгүй.
 import "dotenv/config";
 import { eq } from "drizzle-orm";
 import { branches } from "../drizzle/schema";

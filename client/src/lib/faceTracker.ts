@@ -1,30 +1,27 @@
 /**
- * Admin face gate (2026-09-13) — real-time face TRACKING via MediaPipe Face
- * Landmarker, running as self-hosted WebAssembly in the staff member's own
- * browser.
+ * Admin царайны хаалга (2026-09-13) — MediaPipe Face Landmarker-ээр бодит
+ * цагийн царайн TRACKING, ажилтны хөтөч дээр өөрөө hosting хийсэн WebAssembly-
+ * ээр ажиллана.
  *
- * Division of labour, because it is the whole reason the gate got fast:
+ * Хөдөлмөрийн хуваарь — хаалга хурдан болсны бүх шалтгаан:
  *
- *   MediaPipe (this file)     every frame   478 3-D landmarks, 52 blendshapes
- *                                            → framing, head pose, blink,
- *                                              stillness, the on-screen mesh
- *   dlib / face-api (faceEngine.ts) a few    128-number recognition descriptor
- *                             snapshots      → the identity decision
+ *   MediaPipe (энэ файл)      frame бүр     478 3-D цэг, 52 blendshape
+ *                                           → framing, толгойн байрлал, анивчилт,
+ *                                             хөдөлгөөнгүй байдал, дэлгэцийн mesh
+ *   dlib / face-api (faceEngine.ts) цөөн   128 тооны таних descriptor
+ *                             snapshot      → таних шийдвэр
  *
- * The old flow ran the dlib descriptor network on EVERY frame, including the
- * frames spent waiting for someone to turn their head. On a phone that network
- * is the expensive step by a wide margin, so "reading your face" took ages.
- * Now it runs three times at login and nine times at enrolment, on frames
- * chosen because the tracker says they are good.
+ * Хуучин урсгал dlib descriptor сүлжээг frame БҮРТ, толгойгоо эргүүлэхийг хүлээж
+ * байх frame-үүдэд ч ажиллуулж байв. Утсан дээр тэр сүлжээ хамгийн үнэтэй алхам
+ * тул "царай уншиж байна" маш удаан байсан. Одоо нэвтрэхэд 3, бүртгэхэд 9 удаа,
+ * tracker сайн гэсэн frame-үүд дээр л ажиллана.
  *
- * Nothing leaves the device from here either: landmarks and blendshapes are
- * consumed locally and discarded.
+ * Эндээс ч юу ч төхөөрөмжөөс гарахгүй: цэг, blendshape локалд хэрэглэгдээд хаягдана.
  *
- * Assets are served from this origin (client/public/face-models/mediapipe):
- * the .task model and the wasm runtime. No CDN, for the same reasons the
- * dlib weights are self-hosted -- no third party learns that someone is
- * signing in, and the gate keeps working when a CDN is blocked. The CSP
- * grants 'wasm-unsafe-eval' for exactly this.
+ * Asset-ууд энэ origin-оос (client/public/face-models/mediapipe): .task загвар ба
+ * wasm runtime. CDN биш — dlib жингүүдийг өөрөө hosting хийсэнтэй ижил шалтгаан:
+ * хэн нэгэн нэвтэрч байгааг гуравдагч тал мэдэхгүй, CDN хаагдсан ч хаалга ажиллана.
+ * CSP яг үүнд 'wasm-unsafe-eval' зөвшөөрнө.
  */
 
 import type { FaceLandmarker as FaceLandmarkerType, FaceLandmarkerResult } from "@mediapipe/tasks-vision";

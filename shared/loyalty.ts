@@ -1,9 +1,8 @@
-// PREMIUM-FEATURES.md TIER 5: matches the real cumulative-lifetime-spend
-// discount tiers already configured on Tom's Smart POS system across all 3
-// physical branches (confirmed 2026-08-25) — 500k -> 3%, 1M -> 5%, 10M -> 10%.
-// This is the single source of truth for the tier table; both the server
-// (enforcement + admin display) and the client (profile card, checkout
-// preview) import from here so they can never drift apart.
+// PREMIUM-FEATURES.md TIER 5: Tom-ийн Smart POS системд 3 биет салбар даяар аль хэдийн
+// тохируулсан бодит нийт худалдан авалтын хямдралын шатлалтай таарна (2026-08-25-нд
+// баталгаажсан) — 500k -> 3%, 1M -> 5%, 10M -> 10%. Шатлалын хүснэгтийн цорын ганц эх
+// сурвалж; сервер (хэрэгжүүлэлт + admin дэлгэц), client (профайлын карт, checkout
+// preview) хоёулаа эндээс import хийдэг тул хэзээ ч зөрөхгүй.
 export type LoyaltyTier = { name: string; discountPercent: number; minSpendMnt: number };
 
 export const LOYALTY_TIERS: LoyaltyTier[] = [

@@ -1,20 +1,18 @@
 /**
- * Google Merchant Center product feed -- /feeds/google-merchant.xml
+ * Google Merchant Center-ийн барааны feed — /feeds/google-merchant.xml
  * (2026-09-14).
  *
- * RSS 2.0 with the g: namespace, the format Merchant Center's "scheduled
- * fetch" reads directly from a URL, so listing the catalogue on Google
- * Shopping needs no upload step: paste this URL once. Every published
- * product, from the same query the storefront uses, cached for ten
- * minutes like the sitemap.
+ * g: namespace-тэй RSS 2.0 — Merchant Center-ийн "scheduled fetch" URL-ээс шууд
+ * уншдаг формат, тиймээс каталогийг Google Shopping-д гаргахад upload алхам
+ * хэрэггүй: энэ URL-ийг нэг удаа өгнө. Нийтлэгдсэн бараа бүр, storefront-ийн
+ * ашигладаг ижил query-ээс, sitemap шиг 10 минут кэшлэгдэнэ.
  *
- * Field choices: `price` is "<amount> MNT" (Merchant Center wants the ISO
- * code, not ₮); `gtin` is the SKU only when it is a real 8-14 digit barcode
- * (the POS export uses the barcode as SKU, but a few are hand-typed);
- * `availability` follows stockQuantity; `product_type` is the shop's own
- * category name (google_product_category is optional and best set in
- * Merchant Center's own rules). Descriptions are HTML-stripped and cut at
- * 5000 characters, the feed limit.
+ * Талбарын сонголт: `price` нь "<amount> MNT" (Merchant Center ₮ биш ISO код
+ * хүсдэг); `gtin` зөвхөн SKU бодит 8-14 оронтой баркод үед (POS export баркодыг
+ * SKU болгодог ч цөөн хэд гараар бичигдсэн); `availability` stockQuantity-г дагана;
+ * `product_type` дэлгүүрийн өөрийн ангиллын нэр (google_product_category сонголттой,
+ * Merchant Center-ийн дүрмээр тавих нь дээр). Тайлбар HTML-гүй, feed-ийн хязгаар
+ * 5000 тэмдэгтээр таслагдана.
  */
 import type { Request, Response } from "express";
 import { and, asc, eq } from "drizzle-orm";

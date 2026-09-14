@@ -1,20 +1,19 @@
-// One-time migration: copies every object from a local MinIO bucket into
-// this machine's currently-configured S3-compatible destination (whatever
-// .env's S3_* vars point at). Written for the 2026-08-26 MinIO -> Cloudflare
-// R2 move (see docs/PROJECT-GUIDE.md's dated section) so both laptops read/write the
-// same shared bucket instead of each having their own local MinIO copy --
-// no cross-machine sync needed at all once this has run once per machine.
+// Нэг удаагийн migration: локал MinIO bucket-ийн объект бүрийг энэ машины одоо
+// тохируулсан S3-compatible зорилт руу (.env-ийн S3_* хувьсагчийн заасан газар)
+// хуулна. 2026-08-26-ны MinIO -> Cloudflare R2 нүүлгэлтэд бичигдсэн (docs/PROJECT-
+// GUIDE.md-ийн огноотой хэсэг) — хоёр лаптоп тус тусын локал MinIO хуулбар биш нэг
+// хуваалцсан bucket уншиж/бичнэ, машин бүрт нэг удаа ажилласны дараа синк хэрэггүй.
 //
-// IMPORTANT: point .env's S3_* vars at the DESTINATION (R2) before running
-// this -- the source (local MinIO) is hardcoded below to the standard local
-// dev defaults, not read from .env, since .env IS the destination here.
+// ЧУХАЛ: ажиллуулахаасаа өмнө .env-ийн S3_* хувьсагчийг ЗОРИЛТ (R2) руу заа — эх
+// сурвалж (локал MinIO) доор стандарт локал dev анхдагчаар hardcode-логдсон, .env-
+// ээс уншихгүй, учир нь .env энд зорилт мөн.
 //
-// Run with:
+// Ажиллуулах:
 //   pnpm exec tsx scripts/migrate-storage-to-r2.ts
 //
-// Safe to re-run: skips any key that already exists at the destination (a
-// HeadObject check before each copy), so an interrupted run can just be
-// started again without re-uploading everything.
+// Дахин ажиллуулахад аюулгүй: зорилт дээр байгаа түлхүүрийг алгасна (хуулбар бүрийн
+// өмнө HeadObject шалгалт) тул тасалдсан ажиллагааг бүгдийг дахин upload хийхгүйгээр
+// үргэлжлүүлж болно.
 import "dotenv/config";
 import {
   S3Client,

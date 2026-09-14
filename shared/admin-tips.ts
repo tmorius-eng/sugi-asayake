@@ -1,24 +1,22 @@
 /**
- * Mongolian help text for every /admin section (2026-09-12).
+ * /admin хэсэг бүрийн монгол тусламжийн текст (2026-09-12).
  *
- * Tom, having seen Bitrix24's "Useful tips" popovers: "./admin дээр монгол
- * тайлбар, заавар, хэрэглэх tips, товч тайлбар — энэ яг юунд ашиглагддаг вэ
- * гэдгийг бүгдэн дээр нь хийж өгвөл яахуу? Анх удаа нэвтэрч байгаа хүн."
+ * Tom Bitrix24-ийн "Useful tips" popover-ийг хараад: "./admin дээр монгол тайлбар,
+ * заавар, хэрэглэх tips, товч тайлбар — энэ яг юунд ашиглагддаг вэ гэдгийг бүгдэн
+ * дээр нь хийж өгвөл яахуу? Анх удаа нэвтэрч байгаа хүн."
  *
- * The audience is a staff member opening a panel for the first time, not a
- * developer. Each entry answers two questions in the order they are asked:
- * WHAT this screen is for (`summary`), and WHAT I CAN DO here (`actions`) --
- * concrete, verifiable things this panel really supports today, never
- * aspirational. `caution` is only present where getting it wrong has a real
- * consequence a newcomer could not guess (a price the customer actually
- * pays, an irreversible action, a legal page).
+ * Үзэгч нь панелийг анх удаа нээж буй ажилтан, хөгжүүлэгч биш. Бичлэг бүр асуугдах
+ * дарааллаар хоёр асуултад хариулна: энэ дэлгэц ЮУНД (`summary`), энд БИ ЮУ ХИЙЖ
+ * ЧАДАХ (`actions`) — энэ панелийн өнөөдөр бодитоор дэмждэг, шалгаж болох тодорхой
+ * зүйлс, хэзээ ч хүсэл зорилго биш. `caution` зөвхөн буруу хийхэд шинээр ирсэн хүн
+ * таахааргүй бодит үр дагавартай газарт (харилцагчийн бодитоор төлдөг үнэ, буцаагдахгүй
+ * үйлдэл, хуулийн хуудас).
  *
- * WHY THIS IS CODE AND NOT A site_text CMS SLOT, unlike every customer-
- * facing string in this project: these describe how the SOFTWARE works, so
- * they change when a panel changes, not when the business changes. Shipping
- * them beside the panels keeps the two in step; putting them in the content
- * CMS would add ~21 entries an owner would never edit and would let the help
- * drift out of date silently.
+ * ЯАГААД site_text CMS slot БИШ КОД ВЭ — энэ төслийн харилцагчид харагдах бусад мөр
+ * бүрээс ялгаатай: эдгээр ПРОГРАМ хэрхэн ажилладгийг тайлбарладаг тул панель
+ * өөрчлөгдөхөд өөрчлөгдөнө, бизнес өөрчлөгдөхөд биш. Панелийн хажууд байлгах нь
+ * хоёрыг зэрэгцүүлнэ; контентын CMS-д тавивал эзний хэзээ ч засахгүй ~21 бичлэг нэмж,
+ * тусламж чимээгүй хуучирна.
  */
 export type AdminTip = {
   /** One sentence: what this screen is for. */

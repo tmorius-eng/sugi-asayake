@@ -1,39 +1,35 @@
-// Preference Profile v2 (2026-09-01) bulk auto-tag pass. A real read of the
-// live catalog found only 4/937 products carry any personalization tag, so
-// the recommendation engine (server/db.ts's getRecommendedProducts) has
-// almost nothing to score against. Two tiers, run in order per product:
+// Preference Profile v2 (2026-09-01) bulk auto-tag. Амьд каталогийг бодитоор
+// уншихад 937-оос ердөө 4 бараа personalization tag-тай байсан тул санал болгох
+// хөдөлгүүрт (server/db.ts getRecommendedProducts) оноо өгөх зүйл бараг байсангүй.
+// Бараа бүрт дарааллаар ажиллах 2 шат:
 //
-//   Tier 1 -- the same rule-based keyword matcher the admin panel's
-//   per-product suggestion chips use (shared/product-tagging.ts's
-//   suggestTagsForProduct): real signal found in the product's own name/
-//   description, gated by category so it can't cross-contaminate (e.g. a
-//   skin phrase can't tag a hair product).
+//   1-р шат — admin панелийн бараа бүрийн санал chip-ийн ашигладаг ижил дүрэмд
+//   суурилсан keyword matcher (shared/product-tagging.ts suggestTagsForProduct):
+//   барааны өөрийн нэр/тайлбарт олдсон бодит дохио, ангиллаар хаалттай тул
+//   холилдохгүй (арьсны үг үсний барааг tag хийхгүй).
 //
-//   Tier 2 -- a coarse CATEGORY-LEVEL default for whatever tier 1 still
-//   left untagged (e.g. skinType: "normal" for an untagged skincare
-//   product, hairType: "normal" for an untagged hair-care product). Added
-//   2026-09-01 after a live QA run: with only tier 1, categories like
-//   "Үс ба бие" had close to 0% real coverage, so a shopper who picked
-//   "Хуурай үс" got literally zero matching products -- not deprioritized,
-//   ABSENT. Tier 2 exists so every published product carries at least one
-//   matchable signal. It is intentionally NOT part of suggestTagsForProduct
-//   itself and so never shows up as an admin suggestion chip -- a chip
-//   implies "we found real signal in this text", which a category default
-//   is not; tier 2 only ever runs here, in the bulk pass.
+//   2-р шат — 1-р шатны дараа tag-гүй үлдсэн бараанд бүдүүвч АНГИЛЛЫН анхдагч утга
+//   (tag-гүй арьс арчилгааны бараанд skinType: "normal", үсний бараанд hairType:
+//   "normal"). 2026-09-01-ний амьд QA-ийн дараа нэмэгдсэн: зөвхөн 1-р шатаар
+//   "Үс ба бие" мэт ангилалд бодит хамрах хүрээ 0%-тай ойр тул "Хуурай үс" сонгосон
+//   худалдан авагчид таарах бараа огт байсангүй — доогуур эрэмбэлэгдсэн биш, ОГТ
+//   БАЙХГҮЙ. 2-р шат нь нийтлэгдсэн бараа бүр дор хаяж нэг таарах дохиотой байлгахын
+//   тулд. Санаатайгаар suggestTagsForProduct-ийн хэсэг БИШ тул admin-ийн санал chip
+//   болж хэзээ ч гарахгүй — chip нь "текстэд бодит дохио олдсон" гэсэн утгатай,
+//   ангиллын анхдагч утга тийм биш; 2-р шат зөвхөн энд, bulk pass-д л ажиллана.
 //
-// Both tiers NEVER overwrite a field an admin already set (every write is
-// guarded by isNull on that specific column).
+// Хоёр шат хоёулаа admin аль хэдийн тавьсан талбарыг ХЭЗЭЭ Ч дарж бичихгүй
+// (бичилт бүр тухайн баганад isNull-аар хамгаалагдсан).
 //
-// Safe to re-run any time. Defaults to a DRY RUN (prints a per-category
-// coverage report, writes nothing) -- per Tom's explicit decision
-// (2026-09-01), this must be reviewed before it's ever run for real.
+// Хэзээ ч дахин ажиллуулахад аюулгүй. Анхдагчаар DRY RUN (ангилал бүрийн хамрах
+// хүрээний тайлан хэвлэнэ, юу ч бичихгүй) — Tom-ийн шууд шийдвэрээр (2026-09-01)
+// бодитоор ажиллуулахаас өмнө заавал хянана.
 //
-// Usage:
-//   pnpm exec tsx scripts/auto-tag-products.ts             # dry run (default)
-//   pnpm exec tsx scripts/auto-tag-products.ts --apply      # writes for real
+// Хэрэглээ:
+//   pnpm exec tsx scripts/auto-tag-products.ts             # dry run (анхдагч)
+//   pnpm exec tsx scripts/auto-tag-products.ts --apply      # бодитоор бичнэ
 //
-// Before running with --apply against the real Aiven database, take a
-// fresh backup first: powershell scripts/db-backup.ps1
+// Бодит DB дээр --apply хийхээсээ өмнө шинэ backup ав: powershell scripts/db-backup.ps1
 import "dotenv/config";
 import { and, eq, isNull, or } from "drizzle-orm";
 import { getDb } from "../server/db";

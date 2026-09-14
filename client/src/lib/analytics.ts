@@ -1,8 +1,8 @@
 /**
- * Commerce events for GA4 / Meta Pixel (2026-09-14). The tags themselves
- * live in /vendor/analytics-init.js and load only after cookie consent and
- * only when an id is set in /admin; without either this is a no-op, so the
- * app never has to know whether measurement is on.
+ * GA4 / Meta Pixel-д зориулсан худалдааны event-үүд (2026-09-14). Tag-ууд нь
+ * /vendor/analytics-init.js-д байдаг бөгөөд зөвхөн күкийн зөвшөөрлийн дараа,
+ * /admin-д ID тавигдсан үед л ачаалагдана; аль нь ч байхгүй бол энэ no-op тул
+ * апп хэмжилт асаалттай эсэхийг мэдэх шаардлагагүй.
  */
 type Item = { item_id: string; item_name: string; price: number; quantity: number };
 type Params = { value?: number; currency?: string; transaction_id?: string; items?: Item[]; search_term?: string };

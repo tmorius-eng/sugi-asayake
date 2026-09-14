@@ -1,25 +1,23 @@
 /**
- * The three legal pages (/privacy, /terms, /returns) -- 2026-09-12, "100%
- * admin-editable storefront" pass.
+ * Хуулийн гурван хуудас (/privacy, /terms, /returns) — 2026-09-12, "100% admin-
+ * засварлагдах storefront" pass.
  *
- * Until now these lived as a `documents` literal inside
- * client/src/pages/Legal.tsx, so changing a sentence of the returns policy
- * (a real business decision Tom makes, not a code decision) meant a code
- * deploy. They now live in the `site_documents` table and are edited in
- * /admin -> "Баримт бичиг" with the same TinyMCE editor the news posts use.
+ * Одоог хүртэл эдгээр client/src/pages/Legal.tsx доторх `documents` literal-д байсан
+ * тул буцаалтын бодлогын нэг өгүүлбэр солих (Tom-ийн хийдэг бодит бизнесийн шийдвэр,
+ * кодын шийдвэр биш) кодын deploy шаарддаг байв. Одоо `site_documents` хүснэгтэд,
+ * /admin -> "Баримт бичиг" дээр нийтлэлийн ашигладаг ижил TinyMCE editor-оор
+ * засварлагдана.
  *
- * This file is the FALLBACK, exactly like shared/site-text.ts's
- * fallbackValue: the current real copy, moved here verbatim from Legal.tsx
- * (every section, every citation, every number -- nothing rewritten). A row
- * in site_documents overrides it; clearing that row restores exactly this.
- * The server also uses it to answer a request when the DB has no row yet, so
- * a fresh deployment never shows an empty legal page.
+ * Энэ файл shared/site-text.ts-ийн fallbackValue-тэй яг ижил FALLBACK: одоогийн бодит
+ * текст, Legal.tsx-ээс үгчлэн зөөсөн (хэсэг, иш татаалт, тоо бүр — юу ч дахин
+ * бичээгүй). site_documents-ийн мөр дарж бичнэ; тэр мөрийг цэвэрлэвэл яг энэ сэргэнэ.
+ * Сервер мөн DB-д мөргүй үед хүсэлтэд үүгээр хариулдаг тул шинэ deploy хэзээ ч хоосон
+ * хуулийн хуудас харуулахгүй.
  *
- * The content itself was researched against Mongolia's actual statutes on
- * 2026-09-05/06 -- see the long comment that used to sit above the literal
- * in Legal.tsx (kept in git history) for the law-by-law rationale. That
- * rationale is why the fallback is not "lorem ipsum": the admin editor is
- * for keeping it current, not for writing it from scratch.
+ * Агуулга нь 2026-09-05/06-нд Монголын бодит хуультай тулгагдаж судлагдсан — хууль
+ * бүрийн үндэслэлийг Legal.tsx-ийн literal-ийн дээр байсан урт тайлбараас (git түүхэнд
+ * хадгалагдсан) үзнэ. Тэр үндэслэл fallback "lorem ipsum" биш байгаагийн шалтгаан:
+ * admin editor нь шинээр бичихэд биш, шинэчлэн байлгахад зориулагдсан.
  */
 
 export const legalDocumentKeys = ["privacy", "terms", "returns"] as const;

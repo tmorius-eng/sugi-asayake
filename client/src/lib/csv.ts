@@ -1,7 +1,7 @@
-// Client-side CSV export for the admin panel (TIER 5) — no server round trip,
-// since the admin/orders/products lists are already fully loaded in memory.
-// Escapes per RFC 4180: wrap in quotes if the value contains a comma, quote,
-// or newline; double up any embedded quotes.
+// Admin панелийн client талын CSV export (TIER 5) — сервер рүү явахгүй, учир нь
+// admin/захиалга/барааны жагсаалт санах ойд бүрэн ачаалагдсан байдаг.
+// RFC 4180-аар escape хийнэ: таслал, хашилт, шинэ мөр агуулсан утгыг хашилтад
+// хийж, доторх хашилтыг давхарлана.
 function escapeCsvCell(value: string | number | boolean | null | undefined): string {
   if (value === null || value === undefined) return "";
   const text = String(value);

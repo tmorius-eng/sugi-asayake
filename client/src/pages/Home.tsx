@@ -1,30 +1,26 @@
 /**
- * SUGI ASAYAKE professional direction: quiet Japanese retail authority with a
- * warm paper base, disciplined vermilion accents, editorial spacing, and clear
- * trust / shop / visit actions. This page intentionally avoids heavy overlays,
- * novelty effects, and oversized template-like compositions.
+ * SUGI ASAYAKE-ийн мэргэжлийн чиглэл: Японы жижиглэн худалдааны нам гүм эрх мэдэл,
+ * дулаан цаасан суурь, сахилгатай vermilion өргөлт, editorial зай, тодорхой итгэл /
+ * дэлгүүр / зочлох үйлдлүүд. Энэ хуудас хүнд overlay, шинэлэг эффект, template
+ * маягийн хэт том бүтцээс санаатай зайлсхийнэ.
  *
- * 2026-09-06 homepage consolidation (external design review + Tom's explicit
- * "cut to ~6 sections" call -- see docs/PROJECT-GUIDE.md): the page used to stack up to
- * ~9 rail-like carousel blocks with almost no break between them (2
- * identical bestseller/recommended rails back-to-back, then up to 6 more
- * per-category rails with zero break), plus 3 separate sections doing
- * overlapping "why choose us" trust messaging. Retired from THIS page's
- * render tree (not from the codebase -- every component, its backend, and
- * its admin CRUD stay intact and reusable elsewhere, this is a JSX-level
- * change only): the per-category CarouselShelf loop, SeasonalCampaignCarousel,
- * JournalSection (still lives at /journal), and the standalone
- * customer-voices-section (its real reviews now show as a compact strip
- * inside BrandStorySection instead). Top Brands was briefly retired here
- * too, then restored the same day at Tom's explicit "must have" -- back in
- * its original position, between BrandStorySection and CategoryMasonry.
- * Final structure: Hero -> Quick Stats -> BrandStorySection (merges the old
- * story-section + WhyChooseUs + review strip) -> Top Brands rail ->
- * CategoryMasonry -> Bestseller rail -> Recommended rail -> EditorialBanner
- * (the old care-section's real content, restyled via the already-built-
- * but-previously-unused EditorialBanner primitive) -> StoreLocatorSection
- * -> Footer (absorbing the old standalone final-cta as an opt-in banner,
- * see SiteFooter.tsx).
+ * 2026-09-06 нүүрний нэгтгэл (гадны дизайны шүүмж + Tom-ийн "~6 хэсэг болго"
+ * гэсэн шууд шийдвэр — docs/PROJECT-GUIDE.md): хуудас өмнө нь хооронд нь бараг
+ * завсаргүй ~9 rail маягийн карусель блок (2 ижил bestseller/recommended rail
+ * дараалан, дараа нь ангилал бүрийн 6 хүртэл rail) + давхардсан "яагаад биднийг"
+ * итгэлийн 3 тусдаа хэсэг давхарлан харуулдаг байв. ЭНЭ хуудасны render модноос
+ * хасагдсан (кодоос биш — компонент, backend, admin CRUD бүгд хэвээр, өөр газар
+ * дахин ашиглагдана; зөвхөн JSX түвшний өөрчлөлт): ангилал бүрийн CarouselShelf
+ * давталт, SeasonalCampaignCarousel, JournalSection (/journal дээр хэвээр), бие
+ * даасан customer-voices-section (бодит сэтгэгдлүүд одоо BrandStorySection дотор
+ * нягт зурвасаар). Top Brands мөн түр хасагдаад Tom-ийн "заавал байх ёстой" гэсэн
+ * шаардлагаар тэр өдөртөө анхны байрлалдаа, BrandStorySection ба CategoryMasonry-
+ * ийн хооронд сэргээгдсэн. Эцсийн бүтэц: Hero -> Quick Stats -> BrandStorySection
+ * (хуучин story-section + WhyChooseUs + сэтгэгдлийн зурвас нэгтгэсэн) -> Top Brands
+ * rail -> CategoryMasonry -> Bestseller rail -> Recommended rail -> EditorialBanner
+ * (хуучин care-section-ийн бодит агуулга, өмнө нь бүтээгдсэн ч ашиглагдаагүй
+ * EditorialBanner primitive-ээр) -> StoreLocatorSection -> Footer (хуучин final-cta-г
+ * opt-in banner болгон шингээсэн, SiteFooter.tsx).
  */
 import { useMemo, useState } from "react";
 import CartDrawer from "@/components/CartDrawer";

@@ -1,19 +1,18 @@
-// 2026-09-14: gift cards sold at checkout -- the catalogue side.
+// 2026-09-14: checkout-оор зарагдах бэлгийн карт — каталогийн тал.
 //
-// Renders the card art (client/public/images/gift-cards/<amount>.webp, 1600px
-// square like a packshot, plus the category tile) and creates the "Бэлгийн
-// карт" category (slug gift-card) with one product per denomination, kind =
-// gift_card. Goes through createAdminCategory / createAdminProduct so the
-// default variant, branch_stock enrolment and cache invalidation all happen
-// exactly as for a product added in /admin. Idempotent: an existing category
-// or SKU is left alone (re-run after editing DENOMINATIONS to add more).
+// Картын зургийг render хийж (client/public/images/gift-cards/<amount>.webp,
+// packshot шиг 1600px дөрвөлжин, + ангиллын зураг) "Бэлгийн карт" ангилал (slug
+// gift-card) болон дүн бүрд нэг бараа (kind = gift_card) үүсгэнэ. createAdminCategory
+// / createAdminProduct-оор явдаг тул default variant, branch_stock бүртгэл, cache
+// invalidation бүгд /admin-д нэмсэн бараатай яг ижил. Idempotent: байгаа ангилал,
+// SKU-г хөндөхгүй (DENOMINATIONS засаад дахин ажиллуулбал шинийг нэмнэ).
 //
-//   pnpm exec tsx scripts/seed-gift-cards.ts            # render art + dry run
-//   pnpm exec tsx scripts/seed-gift-cards.ts --apply    # also write to the DB
+//   pnpm exec tsx scripts/seed-gift-cards.ts            # зураг render + dry run
+//   pnpm exec tsx scripts/seed-gift-cards.ts --apply    # DB-д ч бичнэ
 //
-// The art is drawn with sharp from an SVG (system sans-serif; sharp renders
-// Cyrillic fine on both laptops -- checked before this was written). Prices
-// are the card values: a 50,000₮ product IS a 50,000₮ card.
+// Зургийг sharp-аар SVG-ээс зурна (системийн sans-serif; sharp хоёр лаптоп дээр
+// кириллийг зөв зурдгийг бичихээс өмнө шалгасан). Үнэ = картын дүн: 50,000₮-ийн
+// бараа нь 50,000₮-ийн карт МӨН.
 import "dotenv/config";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";

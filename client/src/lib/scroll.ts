@@ -1,15 +1,14 @@
 /**
- * Instant scrolling that wins over `html { scroll-behavior: smooth }`
- * (2026-09-12). Two phone bugs came from the same root: a smooth scroll that
- * is still animating when the document changes height gets clamped or
- * cancelled by the browser (measured on /shop: the grid unmounted into a
- * skeleton, the page shrank from 8170 to 4414 px mid-animation). A scroll
- * that has to land somewhere exact -- top of a new route, top of the product
- * grid on "Дараах" -- must therefore be instant and happen after render.
+ * `html { scroll-behavior: smooth }`-ийг давдаг шууд scroll (2026-09-12). Утасны
+ * хоёр bug нэг үндэстэй: документын өндөр өөрчлөгдөж байхад animation хийж буй
+ * smooth scroll-ийг хөтөч clamp/cancel хийдэг (/shop дээр хэмжсэн: grid skeleton
+ * болж unmount хийгдэж, хуудас animation дундуур 8170-оос 4414 px болж багассан).
+ * Яг нэг газар буух ёстой scroll — шинэ route-ийн дээд, "Дараах" дээрх grid-ийн
+ * дээд — тиймээс шууд байж, render-ийн ДАРАА хийгдэх ёстой.
  *
- * Setting `scroll-behavior: auto` inline for one frame is the only reliable
- * way to make `scrollTo` instant while the global smooth rule stays for the
- * anchor links and the back-to-top button that want it.
+ * Нэг frame-ийн турш inline `scroll-behavior: auto` тавих нь anchor линк, back-to-
+ * top товчны хүсдэг global smooth дүрмийг хэвээр үлдээгээд `scrollTo`-г шууд
+ * болгох цорын ганц найдвартай арга.
  */
 export function scrollToNow(top: number) {
   const root = document.documentElement;

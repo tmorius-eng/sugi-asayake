@@ -1,19 +1,16 @@
-// "Controls everything" admin overhaul (2026-09-08, Phase K). One-time
-// backfill, NOT a repeatable migration -- run once against the real Aiven
-// database, kept here as a permanent historical record (same convention as
-// scripts/backfill-order-districts.ts).
+// Admin шинэчлэл (2026-09-08, Phase K). Нэг удаагийн backfill, давтагдах
+// migration БИШ — бодит DB дээр нэг удаа ажилласан, түүхийн бүртгэл болгож энд
+// үлдээв (scripts/backfill-order-districts.ts-тэй ижил конвенц).
 //
-// No real historical per-branch stock split exists (every branch has always
-// shared one global productVariants.stockQuantity number), so this is the
-// only honest starting point: every existing variant's current stock
-// becomes its opening balance at the designated isFulfillmentDefault
-// branch, and every OTHER active branch starts at 0 (never a guessed
-// split). Tom can move stock between branches afterward via the admin
-// per-branch stock editor (Phase L) as physical inventory is actually
-// counted branch-by-branch.
+// Салбар бүрийн бодит түүхэн нөөцийн хуваарилалт байхгүй (бүх салбар үргэлж нэг
+// global productVariants.stockQuantity тоог хуваалцаж байсан) тул үнэнч эхлэл нь:
+// variant бүрийн одоогийн нөөц isFulfillmentDefault салбарын эхний үлдэгдэл болж,
+// бусад идэвхтэй салбар бүр 0-ээс эхэлнэ (таамагласан хуваалт хэзээ ч биш). Дараа
+// нь Tom бодит тооллогоор салбар хооронд admin-ийн салбарын нөөц засварлагчаар
+// (Phase L) зөөнө.
 //
-// Idempotent: skips any (branchId, variantId) pair that already has a row,
-// so re-running this is always safe and never double-seeds.
+// Idempotent: аль хэдийн мөртэй (branchId, variantId) хосыг алгасна тул дахин
+// ажиллуулах үргэлж аюулгүй, давхар seed хийхгүй.
 import "dotenv/config";
 import { eq } from "drizzle-orm";
 import { getDb } from "../server/db";

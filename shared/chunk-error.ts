@@ -1,19 +1,17 @@
 /**
- * Stale-build detection (2026-09-13).
+ * Хуучирсан build илрүүлэлт (2026-09-13).
  *
- * Every deploy renames the code-split chunks (ProductDetail-BJW-G6rc.js →
- * ProductDetail-<new hash>.js) and the old files are gone. A browser tab that
- * was open BEFORE the deploy still holds the old index.js, which points at
- * the old chunk names; the first navigation that needs one -- on the shop's
- * counter laptop that is the barcode gun opening a product page -- fails
- * with a module-load error, React's lazy() throws, and the error boundary
- * shows a stack trace mentioning "ProductDetail-….js". Reloading fixes it
- * because the reload fetches the new index.js. Tom hit exactly this after
- * a day of six deploys ("products tsx gej aldaa zaagaad reload hiisen chine
- * zugeer").
+ * Deploy бүр code-split chunk-уудын нэрийг сольдог (ProductDetail-BJW-G6rc.js →
+ * ProductDetail-<шинэ hash>.js), хуучин файлууд алга болно. Deploy-оос ӨМНӨ нээгдсэн
+ * хөтчийн tab хуучин chunk нэрүүд рүү заасан хуучин index.js-ээ барьсаар; аль нэг
+ * хэрэгтэй болох эхний navigation — дэлгүүрийн лангууны лаптоп дээр баркод сканнер
+ * барааны хуудас нээх — module-load алдаагаар унаж, React-ийн lazy() throw хийж,
+ * error boundary "ProductDetail-….js" дурдсан stack харуулна. Reload засдаг, учир
+ * нь шинэ index.js татагдана. Tom яг үүнийг 6 deploy-той өдрийн дараа хэлсэн
+ * ("products tsx gej aldaa zaagaad reload hiisen chine zugeer").
  *
- * Browsers word the failure differently; this is the union of the messages
- * Chrome, Firefox, Safari and Vite's own preload helper produce.
+ * Хөтчүүд алдааг өөр өөрөөр хэлдэг; энэ нь Chrome, Firefox, Safari, Vite-ийн өөрийн
+ * preload helper-ийн мессежүүдийн нэгдэл.
  */
 const CHUNK_ERROR_PATTERNS = [
   /failed to fetch dynamically imported module/i, // Chrome, Edge

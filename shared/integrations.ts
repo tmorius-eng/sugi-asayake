@@ -1,17 +1,16 @@
 /**
- * The one list of admin-managed third-party integrations (2026-09-11).
+ * Admin-ийн удирддаг гуравдагч талын интеграцуудын нэг жагсаалт (2026-09-11).
  *
- * Before this file the provider list was hand-copied in five places (the
- * drizzle enum, db.ts, the router's zod enum, and twice in the admin panel),
- * and each provider's settings were a free-form key/value editor with no idea
- * which keys it needed. Now the schema enum, the server's validation and the
- * admin form all read the definitions below.
+ * Энэ файлаас өмнө провайдерийн жагсаалт таван газар гараар хуулагдсан (drizzle
+ * enum, db.ts, router-ийн zod enum, admin панелд хоёр удаа) бөгөөд провайдер бүрийн
+ * тохиргоо ямар түлхүүр хэрэгтэйгээ мэдэхгүй чөлөөт key/value editor байв. Одоо
+ * schema enum, серверийн шалгалт, admin форм бүгд доорх тодорхойлолтыг уншина.
  *
- * Three are wired to runtime code today: ntfy (server/_core/ntfy.ts),
- * Smart Software (server/integrations/smartSoftware.ts) and StorePay
- * (server/storepay.ts). The rest only record credentials while a business
- * decision is pending; `wiredUp: false` makes the admin screen say so
- * instead of letting an "Идэвхтэй" toggle look like a live integration.
+ * Өнөөдөр гурав нь runtime кодтой холбогдсон: ntfy (server/_core/ntfy.ts), Smart
+ * Software (server/integrations/smartSoftware.ts), StorePay (server/storepay.ts).
+ * Бусад нь бизнесийн шийдвэр хүлээгдэж байхад зөвхөн credential бүртгэнэ; `wiredUp:
+ * false` нь "Идэвхтэй" toggle амьд интеграц мэт харагдуулахын оронд admin дэлгэцэд
+ * тэгж хэлүүлнэ.
  */
 
 export const INTEGRATION_PROVIDERS = ["ebarimt", "storepay", "card_golomt", "courier_ebuuhia", "ntfy", "smartsoftware"] as const;

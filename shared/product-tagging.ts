@@ -1,20 +1,18 @@
 /**
- * Preference Profile v2 (2026-09-01) — rule-based, zero-ML keyword tagging.
+ * Preference Profile v2 (2026-09-01) — дүрэмд суурилсан, ML-гүй keyword tagging.
  *
- * Deliberately NOT machine learning: a real read of the live catalog found
- * only 4/937 products carry any personalization tag, and 82% of products
- * have generic, non-differentiating shortDescription text (e.g. "S-Select
- * брэндийн Японы жинхэнэ бүтээгдэхүүн"). So this matches primarily against
- * product NAME (English/brand-style tokens like "cream"/"shampoo"/"uv" are
- * common there), then description text, and gates several fields behind
- * categorySlug so a shampoo can never be mistagged with a skin-only concern
- * and vice versa. A field with no keyword hit is left undefined — this
- * module never guesses, matching the codebase's "N of M, never fabricate"
- * discipline used everywhere else (see server/analytics.ts).
+ * Санаатайгаар machine learning БИШ: амьд каталогийг бодитоор уншихад 937-оос ердөө
+ * 4 бараа personalization tag-тай, 82% нь ерөнхий, ялгарахгүй shortDescription-тэй
+ * (ж. "S-Select брэндийн Японы жинхэнэ бүтээгдэхүүн"). Тиймээс энэ голдуу барааны
+ * НЭР-тэй (тэнд "cream"/"shampoo"/"uv" мэт англи/брэнд маягийн token түгээмэл),
+ * дараа нь тайлбарын тексттэй тулгаж, шампунь арьсны асуудлаар (эсрэгээр) буруу tag
+ * хийгдэхгүйн тулд хэд хэдэн талбарыг categorySlug-ийн ард хаана. Keyword таараагүй
+ * талбар undefined үлдэнэ — энэ модуль хэзээ ч таадаггүй, кодын бусад газрын "N of M,
+ * хэзээ ч зохиохгүй" зарчимтай ижил (server/analytics.ts).
  *
- * Used by BOTH scripts/auto-tag-products.ts (Node, bulk pass) and
- * client/src/components/AdminWorkspace.tsx (browser, per-product suggestion
- * chips) — this is why it lives in shared/, not server/.
+ * scripts/auto-tag-products.ts (Node, bulk pass) БА client/src/components/
+ * AdminWorkspace.tsx (хөтөч, бараа бүрийн санал chip) хоёулаа ашигладаг — тиймээс
+ * server/ биш shared/-д.
  */
 
 export type SuggestedTags = {

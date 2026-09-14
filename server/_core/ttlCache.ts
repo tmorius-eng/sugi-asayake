@@ -1,16 +1,15 @@
 /**
- * Admin overhaul (2026-09-08, Phase L): a plain in-memory, per-process TTL
- * cache -- no Redis, matching this project's single-process reality (same
- * tradeoff already accepted for rate-limit buckets and the SQL query log's
- * ring buffer). Applied at each call site rather than inside one query layer,
- * so the cache key can include the exact filter params a given call used --
- * the one real failure mode this needs to avoid is serving a stale result
- * for a *different* filter than what's cached.
+ * Admin шинэчлэл (2026-09-08, Phase L): энгийн in-memory, процесс бүрийн TTL cache
+ * — Redis-гүй, энэ төслийн нэг процессын бодит байдалд нийцсэн (rate-limit bucket,
+ * SQL query log-ийн ring buffer-т аль хэдийн хүлээн зөвшөөрсөн ижил tradeoff). Нэг
+ * query давхаргын дотор биш дуудлагын цэг бүрт хэрэглэгддэг тул cache түлхүүр тухайн
+ * дуудлагын яг ашигласан filter параметрийг агуулж чадна — зайлсхийх ёстой цорын
+ * ганц бодит алдаа нь кэшлэгдсэнээс *өөр* filter-т хуучин үр дүн өгөх.
  *
- * Deliberately dumb about eviction: no LRU. The staleness window (30s for the
- * audit/login/SQL logs and the storefront's content reads, 60s for the
- * third-party Honeybadger call) is the intended behaviour for these
- * read-heavy, rarely-urgent views, not a bug to work around.
+ * Eviction-д санаатайгаар энгийн: LRU-гүй. Хуучрах цонх (audit/login/SQL log ба
+ * storefront-ийн контент уншилтад 30с, гуравдагч талын Honeybadger дуудлагад 60с)
+ * нь эдгээр уншилт ихтэй, яаралтай биш харагдацуудын зориулалтын зан төлөв, засах
+ * ёстой bug биш.
  */
 
 type CacheEntry<T> = { value: T; expiresAt: number };

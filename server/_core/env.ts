@@ -1,7 +1,7 @@
-// Self-hosted environment configuration.
-// This file replaces the Manus-managed "_core/env.ts" that shipped only as a
-// compiled bundle. Every value below is something SUGI ASAYAKE owns and
-// configures itself — nothing here points at Manus infrastructure.
+// Өөрөө hosting хийсэн орчны тохиргоо.
+// Энэ файл зөвхөн compile хийгдсэн bundle-аар ирсэн Manus-ийн "_core/env.ts"-ийг
+// орлоно. Доорх утга бүр SUGI ASAYAKE-ийн өөрийн эзэмшдэг, тохируулдаг зүйл —
+// энд Manus-ийн дэд бүтэц рүү заасан юу ч байхгүй.
 
 function required(_name: string, value: string | undefined): string {
   if (!value) {

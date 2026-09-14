@@ -1,11 +1,10 @@
-// One-time-per-environment backfill: guesses orders.deliveryDistrict from
-// the free-text deliveryAddress on every ub_delivery order that doesn't
-// have a district yet (placed before the district field existed, or before
-// the checkout dropdown was filled in for some other reason). Safe to
-// re-run any time — it only ever touches rows where deliveryDistrict IS
-// NULL, so it never overwrites a real customer-picked value.
+// Орчин бүрт нэг удаагийн backfill: дүүрэггүй ub_delivery захиалга бүрийн чөлөөт
+// текст deliveryAddress-аас orders.deliveryDistrict-ийг таана (дүүргийн талбар
+// үүсэхээс өмнө хийгдсэн, эсвэл checkout-ийн dropdown бөглөгдөөгүй). Хэзээ ч дахин
+// ажиллуулахад аюулгүй — зөвхөн deliveryDistrict IS NULL мөрийг л хөнддөг тул
+// харилцагчийн бодит сонголтыг дарж бичихгүй.
 //
-// Usage: pnpm exec tsx scripts/backfill-order-districts.ts
+// Хэрэглээ: pnpm exec tsx scripts/backfill-order-districts.ts
 import { and, eq, isNull } from "drizzle-orm";
 import { getDb } from "../server/db";
 import { orders } from "../drizzle/schema";

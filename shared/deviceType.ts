@@ -1,9 +1,8 @@
-/** Device-type bucket parsed from the request's User-Agent header. Deliberately
- *  coarse (mobile/tablet/desktop) rather than full UA-parsing (browser,
- *  OS, version) — that's a much bigger dependency for a metric that's used
- *  as one summary breakdown, not device-specific rendering. Anything that
- *  doesn't match a known pattern (missing header, an unusual bot/client)
- *  reports "unknown" rather than guessing. */
+/** Хүсэлтийн User-Agent header-ээс parse хийсэн төхөөрөмжийн төрлийн бүлэг. Санаатайгаар
+ *  бүдүүвч (mobile/tablet/desktop), бүрэн UA parse (хөтөч, OS, хувилбар) биш — нэг
+ *  товч задаргаанд хэрэглэгддэг үзүүлэлтэд тэр нь дэндүү том dependency, төхөөрөмж
+ *  тус бүрийн render биш. Мэдэгдэх pattern-д таарахгүй юу ч (header байхгүй,
+ *  ховор bot/client) таамаглахгүй "unknown" гэж мэдээлнэ. */
 export function parseDeviceType(userAgent: string | string[] | undefined | null): "mobile" | "tablet" | "desktop" | "unknown" {
   const header = Array.isArray(userAgent) ? userAgent[0] : userAgent;
   if (!header) return "unknown";

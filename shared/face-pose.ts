@@ -1,29 +1,26 @@
 /**
- * Admin face gate (2026-09-13) — head-pose, coverage and blink arithmetic for
- * the MediaPipe Face Landmarker pipeline that now drives tracking.
+ * Admin царайны хаалга (2026-09-13) — одоо tracking-ийг жолооддог MediaPipe Face
+ * Landmarker pipeline-ийн толгойн байрлал, хамрах хүрээ, анивчилтын арифметик.
  *
- * Pure numbers in, pure numbers out: no DOM, no model, so every rule that
- * decides "did the head turn far enough" or "was that a blink" is unit-tested
- * (server/face-pose.test.ts) instead of discovered on someone's phone.
+ * Цэвэр тоо орж, цэвэр тоо гарна: DOM-гүй, загваргүй, тиймээс "толгой хангалттай
+ * эргэсэн үү", "тэр анивчилт байсан уу" гэж шийддэг дүрэм бүр хэн нэгний утсан дээр
+ * нээгдэхийн оронд unit-тестлэгдсэн (server/face-pose.test.ts).
  *
- * WHY THIS EXISTS next to shared/face-auth.ts rather than inside it: the
- * older file's motion code is written for dlib's 68-point layout and is kept
- * (and still tested) because the RECOGNITION descriptor still comes from that
- * pipeline. Tracking, pose and liveness moved to MediaPipe's 478 3-D points,
- * whose indices and coordinate system are different, so mixing the two in one
- * file would have been a standing invitation to use the wrong index table.
+ * ЯАГААД shared/face-auth.ts-ийн дотор биш хажууд: хуучин файлын хөдөлгөөний код
+ * dlib-ийн 68 цэгийн layout-д бичигдсэн бөгөөд ТАНИХ descriptor тэр pipeline-аас
+ * ирсээр тул хадгалагдаж (тестлэгдсээр) байна. Tracking, байрлал, liveness MediaPipe-
+ * ийн 478 3-D цэг рүү шилжсэн, индекс ба координатын систем нь өөр тул нэг файлд
+ * холивол буруу индексийн хүснэгт ашиглах байнгын урилга болно.
  *
- * Sources the design follows (see docs/FACE-AUTH-RESEARCH-2026-09-13.md):
- *  - Apple's Face ID enrolment: the user rotates their head in a circle and a
- *    ring of segments fills as each direction is covered. Adopted because it
- *    captures many angles quickly and people already know the gesture.
- *  - ISO/IEC 30107-3 vocabulary (bona-fide vs attack presentations) for how
- *    the liveness signal is reported: measured and recorded, never inferred
- *    from a single frame.
- *  - MediaPipe Face Landmarker: 478 landmarks, 52 ARKit-style blendshapes
- *    (eyeBlinkLeft/Right, jawOpen...) that make blink detection a threshold on
- *    a model output rather than a hand-rolled eye-aspect ratio that had to be
- *    calibrated per person.
+ * Дизайны дагадаг эх сурвалж (docs/FACE-AUTH-RESEARCH-2026-09-13.md):
+ *  - Apple-ийн Face ID бүртгэл: хэрэглэгч толгойгоо тойруулан эргүүлж чиглэл бүр
+ *    хамрагдахад цагирагийн хэсэг дүүрнэ. Олон өнцгийг хурдан авдаг, хүмүүс аль
+ *    хэдийн мэддэг хөдөлгөөн тул авсан.
+ *  - Liveness дохиог хэрхэн мэдээлэх ISO/IEC 30107-3 нэр томьёо (bona-fide vs
+ *    attack presentation): хэмжигдэж, бүртгэгдэнэ, нэг frame-ээс хэзээ ч таагдахгүй.
+ *  - MediaPipe Face Landmarker: 478 цэг, 52 ARKit маягийн blendshape (eyeBlinkLeft/
+ *    Right, jawOpen...) — анивчилт илрүүлэлт хүн бүрд тааруулах ёстой гараар хийсэн
+ *    нүдний харьцаа биш загварын гаралт дээрх босго болно.
  */
 
 /** A normalised landmark from MediaPipe: x and y in [0, 1] of the frame, z

@@ -1,23 +1,22 @@
-// 2026-09-13: import the products the shop's POS list has that the website
-// does not, and create the "Хүнс" (Food) category they mostly belong to.
+// 2026-09-13: дэлгүүрийн POS жагсаалтад байгаа ч сайтад байхгүй барааг импортлож,
+// ихэнх нь хамаарах "Хүнс" ангиллыг үүсгэнэ.
 //
-// Source: Tom's POS export "shine baraanuudad nemegdsen list.csv"
-// (Selection;barcode;name;barcode;;;price — semicolon-separated, latin1,
-// Cyrillic names came through as "?"). 980 rows; 937 barcodes already exist
-// as products.sku, 43 do not. Those 43 are almost all food (mochi, jelly,
-// tea, chocolate, cookies), plus toilet paper and two knee/calf supports.
+// Эх сурвалж: Tom-ийн POS export "shine baraanuudad nemegdsen list.csv"
+// (Selection;barcode;name;barcode;;;price — цэг таслалаар, latin1, кирилл нэр "?"
+// болсон). 980 мөр; 937 баркод products.sku-д аль хэдийн бий, 43 байхгүй. Тэр 43
+// бараг бүгд хүнс (mochi, jelly, цай, шоколад, cookies), + ариун цэврийн цаас, 2
+// өвдөг/шилбэний бэхэлгээ.
 //
-// Goes through createAdminProduct / createAdminCategory so every invariant
-// the admin form relies on holds (default variant, branch stock ledger,
-// storefront cache invalidation) -- never a raw INSERT into products.
+// createAdminProduct / createAdminCategory-оор явна, admin формын түшдэг бүх
+// инвариант хадгалагдана (default variant, салбарын нөөцийн ledger, storefront cache
+// invalidation) — products руу шууд INSERT хэзээ ч биш.
 //
 //   pnpm exec tsx scripts/import-pos-products.ts            # dry run
-//   pnpm exec tsx scripts/import-pos-products.ts --apply    # write
+//   pnpm exec tsx scripts/import-pos-products.ts --apply    # бичнэ
 //
-// Defaults for what the POS list does not carry: stock 20 (what every
-// existing product was seeded with), published, no photo. Names that lost
-// their Cyrillic in the export are imported with the barcode appended so
-// they are findable and renamable in /admin, and listed at the end.
+// POS жагсаалтад байхгүй зүйлийн анхдагч: нөөц 20 (байгаа бараа бүрийн seed утга),
+// нийтлэгдсэн, зураггүй. Export-д кириллээ алдсан нэрийг олдох, /admin-д нэрлэгдэх
+// боломжтой байлгах үүднээс баркодыг залгаж импортлоод төгсгөлд жагсаана.
 import "dotenv/config";
 import { readFileSync } from "node:fs";
 import { createAdminCategory, createAdminProduct, findProductBySku, getDb } from "../server/db";

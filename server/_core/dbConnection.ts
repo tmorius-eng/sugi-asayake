@@ -1,31 +1,26 @@
-// Turns DATABASE_URL into explicit mysql2 connection options.
+// DATABASE_URL-ийг mysql2-ийн тодорхой холболтын option болгоно.
 //
-// 2026-09-09 deep audit finding: the pool was created with
-// `{ uri: process.env.DATABASE_URL }`. mysql2 parses that URI itself and
-// does NOT understand `?ssl-mode=REQUIRED` (that flag belongs to the
-// mysql CLI, which the backup scripts drive correctly) -- it logged
-// "Ignoring invalid configuration option ... ssl-mode" on every boot and
-// opened the connection to Aiven WITHOUT TLS. Verified on the live service:
-// `SHOW SESSION STATUS LIKE 'Ssl_cipher'` came back empty and the server
-// has `require_secure_transport=OFF`, so nothing on either side forced
-// encryption. Every query -- customer data, order rows, the password
-// handshake -- crossed the public Internet to Bangalore in plaintext.
+// 2026-09-09 гүнзгий аудитын олдвор: pool `{ uri: process.env.DATABASE_URL }`-
+// аар үүсдэг байв. mysql2 URI-г өөрөө parse хийдэг бөгөөд `?ssl-mode=REQUIRED`-
+// ийг ойлгодоггүй (тэр flag mysql CLI-ийнх, backup script-үүд зөв дамжуулдаг) —
+// boot бүрт "Ignoring invalid configuration option ... ssl-mode" бичиж, Aiven руу
+// TLS-ГҮЙ холбогдож байв. Амьд сервер дээр баталгаажсан: `SHOW SESSION STATUS
+// LIKE 'Ssl_cipher'` хоосон, сервер `require_secure_transport=OFF` тул аль ч тал
+// шифрлэлт шаардаагүй. Query бүр — харилцагчийн өгөгдөл, захиалга, нууц үгийн
+// handshake — Бангалор хүртэл нээлттэй интернэтээр plaintext явж байв.
 //
-// Rules, in order:
-// 1. Loopback hosts (local MySQL, the offline fallback in docs/PROJECT-GUIDE.md) stay
-//    plaintext -- TLS there is pointless and the local server has no cert.
-// 2. Everything else gets TLS. If DATABASE_CA_CERT (PEM text) or
-//    DATABASE_CA_CERT_PATH (file) is set, the server certificate is
-//    verified against it -- Aiven signs with a per-project CA that no
-//    system root store knows (rejectUnauthorized:true against system roots
-//    fails with HANDSHAKE_SSL_ERROR, confirmed). Without a CA we still
-//    encrypt but cannot authenticate the server; that is logged once, as a
-//    warning, because encrypt-only is a real improvement over plaintext
-//    but is not the finished state. Aiven Console -> service -> Overview
-//    -> "CA certificate" is where the PEM comes from.
-// 3. `ssl-mode=DISABLED` in the URL is honoured (explicit opt-out), any
-//    other query parameter is dropped rather than forwarded, so mysql2
-//    never sees an option it doesn't know.
+// Дүрэм, дарааллаар:
+// 1. Loopback host (локал MySQL, docs/PROJECT-GUIDE.md-ийн офлайн fallback)
+//    plaintext хэвээр — тэнд TLS утгагүй, локал серверт сертификат байхгүй.
+// 2. Бусад бүгд TLS. DATABASE_CA_CERT (PEM текст) эсвэл DATABASE_CA_CERT_PATH
+//    (файл) тавигдсан бол серверийн сертификатыг түүгээр шалгана — Aiven төслийн
+//    CA-аар гарын үсэг зурдаг тул системийн root store мэдэхгүй (системийн root-
+//    оор rejectUnauthorized:true HANDSHAKE_SSL_ERROR өгдгийг баталгаажуулсан). CA-
+//    гүй бол шифрлэсээр ч серверийг баталгаажуулж чадахгүй; үүнийг нэг удаа warning
+//    бичнэ — зөвхөн шифрлэлт нь plaintext-ээс бодит сайжруулалт ч дууссан төлөв
+//    биш. PEM нь Aiven Console -> service -> Overview -> "CA certificate"-ээс.
+// 3. URL дахь `ssl-mode=DISABLED` хүндэтгэгдэнэ (санаатай татгалзал), бусад query
+//    параметр дамжуулагдахгүй хаягдана, тиймээс mysql2 мэдэхгүй option харахгүй.
 import { readFileSync } from "node:fs";
 
 export type MysqlSslOptions = { rejectUnauthorized: boolean; ca?: string; minVersion: "TLSv1.2" };

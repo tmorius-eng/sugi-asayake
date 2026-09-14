@@ -1,19 +1,15 @@
 /**
- * English and Japanese versions of the three legal pages (2026-09-14).
+ * Хуулийн гурван хуудасны англи, япон хувилбар (2026-09-14).
  *
- * Same role as shared/legal-documents.ts for Mongolian: the FALLBACK an
- * admin-saved row overrides. /admin -> Баримт бичиг now has a language
- * switch (Монгол / English / 日本語) and saves one site_documents row per
- * language; a language without a row renders the text below.
+ * Монголын shared/legal-documents.ts-тэй ижил үүрэг: admin-ийн хадгалсан мөр дарж
+ * бичдэг FALLBACK. /admin -> Баримт бичиг одоо хэл солих товчтой (Монгол / English /
+ * 日本語), хэл бүрд нэг site_documents мөр хадгална; мөргүй хэл доорх текстийг зурна.
  *
- * These are translations of the Mongolian fallback as it stood on
- * 2026-09-14 -- the researched text, every citation and number carried
- * over, nothing added. They are NOT run through the word-by-word page
- * translator (shared/i18n.ts): a privacy policy is a document, and a
- * document is authored per language, not assembled from a dictionary.
- * When Tom revises the Mongolian wording in /admin, the English and
- * Japanese pages keep saying what they said until he revises them too --
- * which is the honest behaviour for a statutory disclosure.
+ * Эдгээр нь 2026-09-14-ний байдлаарх монгол fallback-ийн орчуулга — судалсан текст,
+ * иш татсан хууль, тоо бүр хэвээр, юу ч нэмээгүй. Үг бүрийн хуудасны орчуулагчаар
+ * (shared/i18n.ts) явахгүй: нууцлалын бодлого бол баримт, баримт хэл бүрд зохиогддог,
+ * толь бичгээс угсрагддаггүй. Tom /admin-д монгол үгээ засахад англи, япон хуудас
+ * түүнийг ч засах хүртэл хэлснээ хэлсээр — хуулийн мэдэгдэлд үнэнч зан төлөв.
  */
 import type { LegalDocumentKey } from "./legal-documents";
 

@@ -1,14 +1,13 @@
 /**
- * First-touch traffic source, captured once per browser session and reused
- * for every order placed in that session. By the time someone reaches
- * checkout, document.referrer is almost always the site's own previous page
- * (cart/shop), not the original external referrer -- so this has to run on
- * the very first page load and be stashed in sessionStorage, not read fresh
- * at checkout time.
+ * Эхний хүрэлтийн traffic source — хөтчийн session бүрт нэг удаа авч, тэр session-
+ * д хийсэн захиалга бүрд дахин ашиглана. Checkout-д хүрэх үед document.referrer
+ * бараг үргэлж сайтын өөрийн өмнөх хуудас (сагс/дэлгүүр) болсон байдаг, анхны
+ * гадаад referrer биш — тиймээс хамгийн эхний ачаалалт дээр ажиллаж sessionStorage-
+ * д хадгалагдах ёстой, checkout үед шинээр уншихгүй.
  *
- * Preference order: utm_source (deliberate campaign tagging) > a real
- * external referrer's hostname > "Шууд орсон" (direct, no referrer -- typed
- * the URL, used a bookmark, or came from an app that strips referrers).
+ * Дараалал: utm_source (санаатай кампанийн tag) > бодит гадаад referrer-ийн
+ * hostname > "Шууд орсон" (referrer-гүй — URL бичсэн, bookmark, эсвэл referrer
+ * хасдаг апп).
  */
 const STORAGE_KEY = "sugi_traffic_source";
 

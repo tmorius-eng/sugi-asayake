@@ -1,28 +1,26 @@
 /**
- * Image safety screen for customer uploads (2026-09-13).
+ * Харилцагчийн upload хийсэн зургийн аюулгүй байдлын шүүлт (2026-09-13).
  *
- * Tom: registered customers must not be able to put nudity / +21 / obscene
- * images on their profile. Enforced HERE, on the server, on the bytes that
- * would be stored -- a client-side check could be skipped with one request.
+ * Tom: бүртгэлтэй харилцагч профайлдаа нүцгэн / +21 / бүдүүлэг зураг тавьж
+ * чадахгүй байх ёстой. ЭНД, сервер дээр, хадгалагдах байтууд дээр хэрэгжинэ —
+ * client талын шалгалтыг нэг хүсэлтээр алгасаж болно.
  *
- * Model: nsfwjs "MobileNetV2Mid" (MIT; the weights ship inside the npm
- * package, so nothing is fetched at runtime and no image ever leaves this
- * server). It scores five classes -- Drawing, Hentai, Neutral, Porn, Sexy --
- * and runs on the pure-JS TensorFlow backend, which needs no native build on
- * the Windows laptops this runs on. ~0.3-1s per image on CPU, only on
- * uploads, so nothing else waits on it.
+ * Загвар: nsfwjs "MobileNetV2Mid" (MIT; жин npm багц дотор тул runtime-д юу ч
+ * татахгүй, зураг серверээс хэзээ ч гарахгүй). Drawing, Hentai, Neutral, Porn, Sexy
+ * гэсэн 5 ангилалд оноо өгч, Windows лаптоп дээр native build шаарддаггүй цэвэр JS
+ * TensorFlow backend дээр ажиллана. CPU дээр зураг бүрт ~0.3-1с, зөвхөн upload үед
+ * тул өөр юу ч хүлээхгүй.
  *
- * Decoding: sharp (already a dependency) turns the upload into raw RGB at
- * 224px, which is the model's input size, so decode cost is negligible and
- * there is no dependency on tfjs-node's image codecs.
+ * Decode: sharp (аль хэдийн dependency) upload-ыг 224px raw RGB болгоно — загварын
+ * input хэмжээ, тиймээс decode-ийн зардал бага, tfjs-node-ийн зургийн codec-ээс
+ * хамаарахгүй.
  *
- * Decision: block if Porn or Hentai is likely, or Sexy is dominant. The
- * thresholds are deliberately conservative for an AVATAR -- a swimsuit
- * photo is not what a shop's profile picture is for -- and every rejection
- * is logged with the scores (never the image) so they can be tuned from
- * real data. If the model cannot load, uploads are REFUSED, not waved
- * through: the check exists to enforce a rule, and a silent bypass would be
- * the worse failure. server/image-safety.test.ts proves the model loads.
+ * Шийдвэр: Porn эсвэл Hentai магадлалтай, эсвэл Sexy давамгайлж байвал хаана.
+ * Босго нь AVATAR-т зориулж санаатайгаар консерватив — усны хувцастай зураг дэлгүүрийн
+ * профайл зургийн зориулалт биш — татгалзал бүр оноотойгоо (зураг биш) log-логдож
+ * бодит өгөгдлөөр тааруулж болно. Загвар ачаалагдахгүй бол upload ТАТГАЛЗАГДАНА,
+ * алгасагдахгүй: шалгалт дүрэм хэрэгжүүлэхийн тулд бий, чимээгүй алгасалт илүү муу
+ * алдаа. server/image-safety.test.ts загвар ачаалагддагийг батална.
  */
 
 import sharp from "sharp";

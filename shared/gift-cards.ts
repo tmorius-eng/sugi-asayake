@@ -1,12 +1,11 @@
 /**
- * Gift cards sold at checkout (2026-09-14) -- the few rules the checkout
- * preview (client) and the real charge (server/db.ts) must agree on.
+ * Checkout-оор зарагдах бэлгийн карт (2026-09-14) — checkout preview (client) ба
+ * бодит төлбөр (server/db.ts) хоёрын заавал санал нийлэх цөөн дүрэм.
  *
- * A gift-card line is digital: it never leaves a shelf, a basket made only
- * of gift cards needs no delivery, and a percentage discount must never
- * apply to it -- a 50% coupon on a 100,000₮ card would mint 100,000₮ of
- * store credit for 50,000₮. The card's value is its product price; the
- * codes are issued the moment the order is paid (issueGiftCardsForPaidOrder).
+ * Бэлгийн картын мөр цахим: тавиураас хэзээ ч гарахгүй, зөвхөн карттай сагсанд
+ * хүргэлт хэрэггүй, хувийн хямдрал түүнд хэзээ ч хэрэглэгдэх ёсгүй — 100,000₮-ийн
+ * картад 50% купон 50,000₮-өөр 100,000₮ дэлгүүрийн зээл гаргана. Картын дүн нь
+ * барааны үнэ; захиалга төлөгдмөгц код олгогдоно (issueGiftCardsForPaidOrder).
  */
 export type GiftCardAwareLine = { kind?: "physical" | "gift_card" | null; priceMnt: number; quantity: number };
 

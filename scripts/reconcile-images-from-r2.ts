@@ -1,12 +1,11 @@
-// One-off reconciliation: the home laptop's MySQL was restored from a
-// catalog export taken BEFORE the multi-batch image-sourcing work, so
-// products.imageUrl is back to NULL for ~145 products that already have a
-// real, verified photo sitting in the (laptop-shared) R2 bucket. Since R2 is
-// shared between machines, we recover by listing catalog/products/<id>/...
-// objects and re-pointing imageUrl at whichever object is newest per id
-// (in case of a re-upload/correction), without re-running any sourcing.
+// Нэг удаагийн тулгалт: гэрийн лаптопын MySQL олон багцын зураг олох ажлаас ӨМНӨХ
+// каталогийн export-оос сэргээгдсэн тул хуваалцсан R2 bucket-д бодит, шалгасан
+// зурагтай ~145 барааны products.imageUrl NULL болж буцсан. R2 машин хооронд
+// хуваалцагддаг тул catalog/products/<id>/... объектуудыг жагсааж, id бүрд хамгийн
+// шинэ объект руу (дахин upload/засвар байж болох тул) imageUrl-ийг дахин заана,
+// ямар ч хайлт дахин хийхгүй.
 //
-// Usage: pnpm exec tsx scripts/reconcile-images-from-r2.ts [--dry-run]
+// Хэрэглээ: pnpm exec tsx scripts/reconcile-images-from-r2.ts [--dry-run]
 
 import "dotenv/config";
 import { S3Client, ListObjectsV2Command } from "@aws-sdk/client-s3";

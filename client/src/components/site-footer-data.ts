@@ -1,8 +1,8 @@
-// The footer's brand logo. A file in the repo, not a setting: it is the
-// company wordmark, and swapping it is a rebrand (a design change), not
-// something an admin adjusts between deploys the way a phone number is.
+// Footer-ийн брэндийн лого. Тохиргоо биш, репо доторх файл: энэ бол компанийн
+// wordmark бөгөөд солих нь rebrand (дизайны өөрчлөлт), утасны дугаар шиг admin
+// deploy хооронд өөрчилдөг зүйл биш.
 //
-// 2026-09-12: the `footerSocials` array that used to live here moved into
-// store_settings (/admin -> Дэлгүүрийн тохиргоо -> Холбоо барих) and
-// SiteFooter reads it directly, so no page passes footer props any more.
+// 2026-09-12: энд байсан `footerSocials` массив store_settings руу шилжсэн
+// (/admin -> Дэлгүүрийн тохиргоо -> Холбоо барих), SiteFooter шууд уншдаг тул
+// ямар ч хуудас footer-ийн prop дамжуулахгүй болсон.
 export const footerLogoUrl = "/cdn/sugi-logo-transparent-clean_fee66cad.png";

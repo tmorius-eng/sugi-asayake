@@ -1,15 +1,13 @@
-// Error tracking (2026-09): ROADMAP.md's TIER 5 items (Sentry, staging, CDN,
-// uptime monitoring) were all bundled together as "blocked on choosing a
-// production host" -- but error tracking specifically doesn't need one.
-// Honeybadger's free tier (5,000 events/mo, no credit card) reports from
-// this dev machine today and keeps working unchanged once real hosting
-// exists.
+// Алдааны бүртгэл (2026-09): ROADMAP.md-ийн TIER 5 зүйлс (Sentry, staging, CDN,
+// uptime хяналт) бүгд "production host сонгох хүртэл" гэж багцлагдсан байв — гэхдээ
+// алдааны бүртгэлд host хэрэггүй. Honeybadger-ийн үнэгүй tier (сард 5,000 event,
+// карт хэрэггүй) өнөөдөр энэ dev машинаас мэдээлж, бодит hosting гарсан ч
+// өөрчлөлтгүй ажиллана.
 //
-// Configured only when HONEYBADGER_API_KEY is set (see server/_core/env.ts)
-// -- same "N of M, never silently do the insecure/undesired thing without
-// real config" discipline as INTEGRATIONS_ENCRYPTION_KEY. Every export below
-// is a safe no-op without a key, so nothing else in the app needs to check
-// "is error tracking configured?" before using them.
+// Зөвхөн HONEYBADGER_API_KEY тавигдсан үед тохируулагдана (server/_core/env.ts) —
+// INTEGRATIONS_ENCRYPTION_KEY-тэй ижил "бодит тохиргоогүй бол хэзээ ч чимээгүй
+// аюултай зүйл хийхгүй" зарчим. Доорх export бүр түлхүүргүй үед аюулгүй no-op тул
+// аппын өөр газар "алдааны бүртгэл асаалттай юу" гэж шалгах хэрэггүй.
 import Honeybadger from "@honeybadger-io/js";
 import type { ErrorRequestHandler, Express, RequestHandler } from "express";
 import { ENV } from "./env";

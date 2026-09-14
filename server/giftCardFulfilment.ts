@@ -1,12 +1,11 @@
 /**
- * Gift cards sold at checkout (2026-09-14): telling the buyer their codes.
+ * Checkout-оор зарагдсан бэлгийн карт (2026-09-14): худалдан авагчид кодоо мэдэгдэх.
  *
- * issueGiftCardsForPaidOrder (server/db.ts) mints the cards inside the
- * transaction that marks the order paid; this runs after that commit and
- * only carries the news -- a Web Push to the buyer's browsers (if they are
- * signed in and subscribed) and an email (if they gave one). Failing here
- * loses nothing: the codes are on the order in the profile and in the
- * guest's order tracking either way.
+ * issueGiftCardsForPaidOrder (server/db.ts) захиалгыг төлөгдсөн болгодог transaction
+ * дотор картуудыг үүсгэнэ; энэ нь тэр commit-ийн дараа ажиллаж зөвхөн мэдээг хүргэнэ
+ * — худалдан авагчийн хөтчүүд рүү Web Push (нэвтэрсэн, бүртгүүлсэн бол) ба имэйл
+ * (өгсөн бол). Энд алдвал юу ч алдагдахгүй: кодууд профайлын захиалга дээр, зочны
+ * захиалга хянах хуудсанд аль ч тохиолдолд бий.
  */
 import { formatMnt } from "../shared/format";
 import { GIFT_CARD_VALIDITY_MONTHS } from "../shared/gift-cards";

@@ -1,13 +1,12 @@
 /**
- * When a stock change deserves a phone push (2026-09-11, Phase 5).
+ * Нөөцийн өөрчлөлт хэзээ утасны push хүртэх вэ (2026-09-11, Phase 5).
  *
- * Only a DOWNWARD crossing alerts: the moment a shelf goes from above its
- * threshold to at-or-below it ("low"), or from something to nothing
- * ("out"). Staying low, or going lower while already low, says nothing new
- * -- and once stock rises back above the threshold the next drop alerts
- * again, with no state to reset. Only locations with a threshold set alert
- * at all: the stores' counts here are not live until Smart POS is synced,
- * so an alert about them would be noise.
+ * Зөвхөн ДООШ огтлолт мэдэгдэнэ: тавиур босгоосоо дээрээс босгод-эсвэл-доор ("бага")
+ * болох мөч, эсвэл ямар нэгээс юу ч үгүй ("дууссан") болох мөч. Бага хэвээр байх,
+ * аль хэдийн бага байхад улам буурах шинэ юу ч хэлэхгүй — нөөц босгоос дээш буцмагц
+ * дараагийн бууралт дахин мэдэгдэнэ, reset хийх төлөвгүй. Зөвхөн босго тавьсан байршил
+ * мэдэгдэнэ: дэлгүүрүүдийн тоо Smart POS синк хийгдтэл амьд биш тул тэдний тухай
+ * мэдэгдэл шуугиан.
  */
 
 export type StockAlertLevel = "low" | "out";

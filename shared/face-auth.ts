@@ -1,20 +1,19 @@
 /**
- * Admin face gate (2026-09-08) — values shared by the browser that computes a
- * face descriptor and the server that compares it, so the two can never drift
- * apart on the numbers that decide whether someone gets into /admin.
+ * Admin царайны хаалга (2026-09-08) — царайн descriptor тооцдог хөтөч ба түүнийг
+ * харьцуулдаг сервер хоёрын хуваалцдаг утгууд, тиймээс хэн /admin-д орохыг шийддэг
+ * тоон дээр хоёр хэзээ ч зөрөхгүй.
  *
- * SCOPE (Tom, explicit and repeated): this covers ONLY the five roles that can
- * open /admin — staff, finance, marketing, warehouse, admin. It is not a
- * customer-facing feature. Nobody shopping on the site is ever asked for a
- * camera, and none of this code runs on any storefront page.
+ * ХАМРАХ ХҮРЭЭ (Tom, шууд бөгөөд давтан): ЗӨВХӨН /admin нээж чадах 5 эрх — staff,
+ * finance, marketing, warehouse, admin. Харилцагчид хандсан функц биш. Сайтад
+ * худалдан авч буй хэнээс ч камер асуухгүй, энэ кодын юу ч storefront хуудсанд
+ * ажиллахгүй.
  *
- * WHY THIS MODEL: the recognition net is dlib's
- * `face_recognition_resnet_model_v1`, whose author released the weights into
- * the public domain ("anyone can do whatever they want with these model
- * files"). The more accurate ArcFace/InsightFace models were deliberately
- * rejected: their pretrained weights are licensed for non-commercial research
- * only, and this is a real commercial shop. Tom chose the free public-domain
- * route explicitly over paying for a commercial licence.
+ * ЯАГААД ЭНЭ ЗАГВАР: таних сүлжээ dlib-ийн `face_recognition_resnet_model_v1`,
+ * зохиогч нь жинг public domain-д гаргасан ("хэн ч эдгээр загварын файлаар юу ч
+ * хийж болно"). Илүү нарийвчлалтай ArcFace/InsightFace-ийг санаатай татгалзсан:
+ * тэдний pretrained жин зөвхөн арилжааны бус судалгаанд лицензтэй, энэ бол бодит
+ * арилжааны дэлгүүр. Tom арилжааны лиценз төлөхийн оронд үнэгүй public-domain замыг
+ * шууд сонгосон.
  */
 
 /**

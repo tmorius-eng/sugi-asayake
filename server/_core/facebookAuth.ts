@@ -1,24 +1,23 @@
 /**
- * "Continue with Facebook" (2026-09-13, growth tier).
+ * "Facebook-ээр үргэлжлүүлэх" (2026-09-13, growth tier).
  *
- * Plain OAuth 2.0 authorization-code flow against Meta's Login dialog, no SDK:
- *   GET /api/auth/facebook?redirect=/shop   -> 302 to facebook.com/dialog/oauth
- *   GET /api/auth/facebook/callback         <- code + state, exchanged server-side
+ * Meta-ийн Login dialog-той SDK-гүй энгийн OAuth 2.0 authorization-code урсгал:
+ *   GET /api/auth/facebook?redirect=/shop   -> facebook.com/dialog/oauth руу 302
+ *   GET /api/auth/facebook/callback         <- code + state, сервер талд солигдоно
  *
- * Security notes:
- *  - `state` is a random 32-byte value kept in a short-lived httpOnly cookie
- *    and compared on return (CSRF / login-fixation guard, RFC 6749 §10.12).
- *  - The token exchange and the /me call happen server-to-server with the
- *    app secret; the browser never sees an access token. `appsecret_proof`
- *    is sent on the Graph call as Meta recommends for server calls.
- *  - Only the app-scoped user id is stored (users.facebookId). We ask for
- *    public_profile + email; a missing email is fine.
- *  - Redirect targets are same-site paths only (same guard as Login.tsx).
- *  - A signed-in user hitting the flow LINKS the Facebook id to their own
- *    account instead of creating a second one.
- * Phone stays the primary login; a Facebook-created account has no phone
- * until the customer adds one from the profile page, and checkout asks for
- * a delivery phone anyway.
+ * Аюулгүй байдлын тэмдэглэл:
+ *  - `state` нь богино хугацааны httpOnly cookie-д хадгалагдсан санамсаргүй 32 байт,
+ *    буцаж ирэхэд харьцуулагдана (CSRF / login-fixation хамгаалалт, RFC 6749 §10.12).
+ *  - Token солилцоо ба /me дуудлага app secret-тэй сервер-сервер хийгдэнэ; хөтөч
+ *    access token хэзээ ч харахгүй. Graph дуудлагад Meta-ийн зөвлөдөг `appsecret_proof`
+ *    илгээнэ.
+ *  - Зөвхөн app-scoped user id хадгалагдана (users.facebookId). public_profile + email
+ *    асууна; имэйл байхгүй бол зүгээр.
+ *  - Redirect зорилт зөвхөн same-site зам (Login.tsx-тэй ижил хамгаалалт).
+ *  - Нэвтэрсэн хэрэглэгч энэ урсгалд орвол Facebook id-г өөрийн дансандаа ХОЛБОНО,
+ *    хоёр дахь данс үүсгэхгүй.
+ * Утас үндсэн нэвтрэлт хэвээр; Facebook-ээр үүссэн данс харилцагч профайлаас
+ * нэмтэл утасгүй, checkout хүргэлтийн утас асуусаар байна.
  */
 
 import type { Request, Response } from "express";

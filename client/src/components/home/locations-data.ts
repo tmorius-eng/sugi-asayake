@@ -1,12 +1,11 @@
-// This file used to hold the branch list (name/address/phone/mapUrl) as a
-// hardcoded array; those moved into the `branches` table on 2026-09-08 and
-// are edited in /admin -> Салбарууд.
+// Энэ файл өмнө нь салбарын жагсаалтыг (нэр/хаяг/утас/mapUrl) hardcode
+// массиваар хадгалдаг байсан; 2026-09-08-нд `branches` хүснэгт рүү шилжиж,
+// /admin -> Салбарууд дээр засварлагддаг болсон.
 //
-// 2026-09-12: the last constant here, BRANCH_HOURS, moved too -- it is now
-// the `contact-branch-hours` store setting (/admin -> Дэлгүүрийн тохиргоо
-// -> Холбоо барих), read via useShopContact(). Nothing about the shop's
-// real-world operation is hardcoded any more, so this file is intentionally
-// left empty rather than deleted: its name appears in several explanatory
-// comments across the homepage components, and an empty file with this note
-// is a better landing place for that trail than a broken path.
+// 2026-09-12: сүүлчийн тогтмол BRANCH_HOURS ч зөөгдөв — одоо `contact-branch-hours`
+// store setting (/admin -> Дэлгүүрийн тохиргоо -> Холбоо барих), useShopContact()-
+// оор уншигдана. Дэлгүүрийн бодит үйл ажиллагааны юу ч hardcode-гүй болсон тул
+// энэ файлыг устгахын оронд санаатай хоосон үлдээв: нэр нь нүүрний хэд хэдэн
+// компонентын тайлбарт дурдагддаг бөгөөд эвдэрсэн замаас энэ тэмдэглэлтэй хоосон
+// файл дээр.
 export {};

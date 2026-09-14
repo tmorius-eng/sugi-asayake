@@ -1,17 +1,16 @@
 /**
- * The ONE delivery-fee rule, shared by the checkout preview (client) and the
- * real charge (server/db.ts createOrderFromActiveCart).
+ * Checkout preview (client) ба бодит төлбөр (server/db.ts createOrderFromActiveCart)
+ * хоёрын хуваалцдаг ЦОРЫН ГАНЦ хүргэлтийн төлбөрийн дүрэм.
  *
- * Audit 2026-09-09 (architecture debt #1): the same three-line formula was
- * written out twice -- Checkout.tsx and createOrderFromActiveCart -- and
- * happened to agree. Two hand-copied implementations of one money rule is
- * exactly how a preview and a charge start to disagree; both now call this.
+ * Аудит 2026-09-09 (архитектурын өр #1): ижил гурван мөрийн томьёо хоёр газар —
+ * Checkout.tsx ба createOrderFromActiveCart — бичигдэж, санамсаргүй таарч байв. Нэг
+ * мөнгөний дүрмийн гараар хуулсан хоёр хэрэгжүүлэлт нь preview ба төлбөр зөрж эхлэх
+ * яг тэр арга; одоо хоёулаа үүнийг дуудна.
  *
- * Rule: store pickup is always free. Ulaanbaatar delivery costs
- * `deliveryFeeUbMnt` unless a free-shipping threshold is configured (> 0)
- * and the PRE-discount subtotal reaches it -- the conventional "order
- * amount" a shopper compares against a free-shipping banner, not the
- * post-discount payable total.
+ * Дүрэм: салбараас авах үргэлж үнэгүй. Улаанбаатар хүргэлт `deliveryFeeUbMnt`,
+ * үнэгүй хүргэлтийн босго (> 0) тохируулагдсан бөгөөд ХЯМДРАЛААС ӨМНӨХ дүн түүнд
+ * хүрсэн бол үнэгүй — худалдан авагчийн үнэгүй хүргэлтийн banner-тай харьцуулдаг
+ * ердийн "захиалгын дүн", хямдралын дараах төлөх дүн биш.
  */
 export function computeDeliveryFeeMnt(input: {
   deliveryMethod: "ub_delivery" | "store_pickup";

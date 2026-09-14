@@ -1,13 +1,11 @@
-// At-rest encryption for admin-entered third-party provider credentials
-// (integration_configs.encryptedConfig — see server/db.ts). AES-256-GCM via
-// Node's built-in crypto, no external dependency, matching this project's
-// established preference (see password.ts's scrypt) for keeping the
-// dependency footprint small for security-sensitive primitives.
+// Admin-ийн оруулсан гуравдагч талын нууц үгсийн at-rest шифрлэлт
+// (integration_configs.encryptedConfig — server/db.ts). Node-ийн built-in crypto-
+// оор AES-256-GCM, гадны dependency-гүй — аюулгүй байдлын primitive-д dependency
+// багатай байх энэ төслийн тогтсон зарчим (password.ts-ийн scrypt).
 //
-// The key never lives in the database — only ENV.integrationsEncryptionKey
-// (INTEGRATIONS_ENCRYPTION_KEY) does. This means a leaked DB backup alone
-// does not expose stored provider credentials, only a leak of both the DB
-// AND the server's env would.
+// Түлхүүр DB-д хэзээ ч байхгүй — зөвхөн ENV.integrationsEncryptionKey
+// (INTEGRATIONS_ENCRYPTION_KEY). Алдагдсан DB backup дангаараа хадгалсан
+// credential-ийг ил гаргахгүй, DB БА серверийн env хоёулаа алдагдвал л.
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { ENV } from "./env";
 

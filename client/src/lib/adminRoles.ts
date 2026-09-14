@@ -1,11 +1,10 @@
-// Admin overhaul (2026-09-08, Phase C): one shared label/badge-color source
-// for the 6 roles (user/staff/finance/marketing/warehouse/admin), reused by
-// the admin Users list badge, AdminUserDetailDrawer, and the sidebar/topbar
-// footer -- previously a 3-way ternary hand-copied in each of those places,
-// which only ever covered user/staff/admin. Badge colors reuse this
-// codebase's own admin KPI icon palette (Захиалга's green,
-// Хөрвүүлэлт's purple, Дундаж сессийн хугацаа's amber) rather than
-// inventing new ones.
+// Admin шинэчлэл (2026-09-08, Phase C): 6 эрхийн (user/staff/finance/marketing/
+// warehouse/admin) нэг хуваалцсан шошго/badge өнгөний эх сурвалж — admin
+// Хэрэглэгчийн жагсаалтын badge, AdminUserDetailDrawer, sidebar/topbar footer
+// ашиглана; өмнө нь газар бүрт гараар хуулсан 3 салаат ternary байсан бөгөөд
+// зөвхөн user/staff/admin-ийг л хамардаг байв. Badge-ийн өнгө нь шинийг зохиохгүй
+// admin KPI icon палитраас (Захиалгын ногоон, Хөрвүүлэлтийн ягаан, Дундаж сессийн
+// хугацааны шар).
 const ROLE_LABELS: Record<string, string> = { user: "User", staff: "Staff", finance: "Finance", marketing: "Marketing", warehouse: "Warehouse", admin: "Admin" };
 
 export function roleLabel(role: string): string {

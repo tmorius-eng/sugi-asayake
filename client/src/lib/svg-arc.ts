@@ -1,14 +1,12 @@
 /**
- * Shared SVG polar-coordinate/arc-path math. Originally hand-rolled once
- * inside AdminAnalyticsPanel.tsx for its semicircle "speedometer" AOV gauge
- * (rather than routed through recharts' RadialBarChart -- exact pixel
- * control over the needle's pivot/rotation is far more reliable than
- * reverse-engineering recharts' internal cx/cy from inside a
- * ResponsiveContainer that resizes). Extracted here once a second consumer
- * (the home redesign's InfinityGraph, see
- * client/src/components/home/InfinityGraph.tsx) needed the exact same
- * math for a different shape (two overlapping circles instead of one
- * semicircle) -- a single consumer wouldn't have justified extracting this.
+ * Хуваалцсан SVG туйлын координат/нум замын математик. Анх AdminAnalyticsPanel.tsx-
+ * ийн хагас дугуй "спидометр" AOV gauge-д гараар бичигдсэн (recharts-ийн
+ * RadialBarChart биш — зүүний тэнхлэг/эргэлтийг пикселээр яг удирдах нь
+ * ResponsiveContainer доторх recharts-ийн cx/cy-г урвуулан гаргахаас хавьгүй
+ * найдвартай). Хоёр дахь хэрэглэгч (нүүрний редизайны InfinityGraph,
+ * client/src/components/home/InfinityGraph.tsx) өөр дүрст (нэг хагас дугуйн оронд
+ * давхацсан хоёр дугуй) яг ижил математик шаардсан үед энд салгав — нэг хэрэглэгч
+ * салгах шаардлага үүсгэхгүй байсан.
  */
 
 export function polarPoint(cx: number, cy: number, r: number, angleDeg: number) {

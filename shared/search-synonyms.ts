@@ -1,37 +1,31 @@
 /**
- * Bilingual search vocabulary for the catalogue (2026-09-12).
+ * Каталогийн хоёр хэлний хайлтын үгсийн сан (2026-09-12).
  *
- * THE PROBLEM THIS SOLVES, measured against the live catalogue rather than
- * assumed:
+ * ШИЙДЭЖ БУЙ АСУУДАЛ, таамаглаагүй, амьд каталог дээр хэмжсэн:
  *
- *   - All 937 published product names are pure Latin script ("BA-YU Horse
- *     Oil Non-Silicone Shampoo"). Zero contain a Cyrillic character.
- *   - Every product's Mongolian text is one formulaic sentence,
- *     "<brand> брэндийн Японы жинхэнэ <type>." -- so a product is reachable
- *     in Mongolian by exactly ONE word, and for 220 of them (23%) that word
- *     is the useless "бүтээгдэхүүн". "S-SELECT White Clay Foam cleanser"
- *     could not be found by any Mongolian word at all.
- *   - Shoppers type Mongolian. Tom's own example: someone looking for
- *     BA-YU horse oil types "морины тос" or "морины шампунь", and older
- *     customers spell the borrowed words however they sound -- "крэм" for
- *     "крем", "шампуунь" for "шампунь".
+ *   - 937 нийтлэгдсэн барааны нэр бүгд цэвэр латин ("BA-YU Horse Oil Non-Silicone
+ *     Shampoo"). Кирилл тэмдэгт агуулсан нь тэг.
+ *   - Бараа бүрийн монгол текст нэг томьёолсон өгүүлбэр "<brand> брэндийн Японы
+ *     жинхэнэ <type>." — тиймээс бараа монголоор яг НЭГ үгээр л олддог, 220-д нь
+ *     (23%) тэр үг нь утгагүй "бүтээгдэхүүн". "S-SELECT White Clay Foam cleanser"-
+ *     ийг ямар ч монгол үгээр олох боломжгүй байв.
+ *   - Худалдан авагч монголоор бичдэг. Tom-ийн өөрийн жишээ: BA-YU морины тос хайж
+ *     буй хүн "морины тос" эсвэл "морины шампунь" гэж бичнэ, ахмад харилцагчид
+ *     зээлсэн үгийг сонсогдсоноор нь — "крем"-ийг "крэм", "шампунь"-ийг "шампуунь".
  *
- * THE FIX: translate the query, not the catalogue. Each entry below is one
- * CONCEPT holding every word that means it -- Mongolian spellings, Latin
- * transliterations, and the English word that actually appears in product
- * names. Matching any one word pulls in the whole group, so "морины тос"
- * searches "horse" and "oil" too and finds the BA-YU line, and "нүүр
- * угаагч" reaches "cleanser"/"wash"/"facial" and finds those 220
- * otherwise-invisible products.
+ * ЗАСВАР: каталог биш query-г орчуулна. Доорх бичлэг бүр нэг ОЙЛГОЛТ бөгөөд түүнийг
+ * илэрхийлэх бүх үгийг агуулна — монгол бичлэгүүд, латин галиг, барааны нэрэнд бодитоор
+ * байдаг англи үг. Аль нэг үг таарвал бүх бүлэг татагдана: "морины тос" "horse" ба
+ * "oil"-ийг ч хайж BA-YU-г олно, "нүүр угаагч" "cleanser"/"wash"/"facial"-д хүрч
+ * өнөөх үл үзэгдэх 220 барааг олно.
  *
- * WHY NOT BACKFILL THE DATABASE INSTEAD: rewriting 937 Mongolian
- * descriptions would be a one-off guess frozen into rows, and it would
- * still not cover a misspelling. Expanding the query covers both, costs no
- * migration, and a new synonym ships as one line here.
+ * ЯАГААД DB-ИЙГ BACKFILL ХИЙХГҮЙ: 937 монгол тайлбарыг дахин бичих нь мөрөнд хөлдсөн
+ * нэг удаагийн таамаг, алдаатай бичлэгийг ч хамрахгүй. Query өргөтгөх нь хоёуланг
+ * хамарна, migration хэрэггүй, шинэ синоним энд нэг мөрөөр орно.
  *
- * The Mongolian side is grounded in the 199 distinct type-words the live
- * catalogue actually uses; the English side in the words that actually
- * occur in product names (both enumerated directly from the database).
+ * Монгол тал амьд каталогийн бодитоор ашигладаг 199 ялгаатай төрлийн үгэнд, англи
+ * тал барааны нэрэнд бодитоор тааралддаг үгэнд суурилсан (хоёулаа DB-ээс шууд
+ * тоолсон).
  */
 
 /**

@@ -1,13 +1,12 @@
-// One-off manual test for the Brevo email/SMS integration (server/_core/notification.ts).
-// Run with your real BREVO_API_KEY (and BREVO_SENDER_EMAIL for the email test)
-// set in the environment, e.g.:
+// Brevo имэйл/SMS интеграцийн (server/_core/notification.ts) нэг удаагийн гар
+// туршилт. Бодит BREVO_API_KEY (имэйл туршилтад BREVO_SENDER_EMAIL) орчинд
+// тохируулж ажиллуулна, жишээ:
 //
 //   pnpm exec tsx scripts/test-brevo.ts email you@example.com
 //   pnpm exec tsx scripts/test-brevo.ts sms 88112233
 //
-// Not wired into any app flow — this only exists so you can confirm your
-// Brevo credentials actually work before relying on them, without spamming
-// a real user through the app.
+// Аппын урсгалд холбогдоогүй — Brevo эрхээ бодит хэрэглэгчид спам илгээлгүйгээр
+// ажиллаж байгааг батлахад л зориулагдсан.
 import "dotenv/config";
 import { sendAccountEmail, sendAccountSms } from "../server/_core/notification";
 

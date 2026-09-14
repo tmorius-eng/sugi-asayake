@@ -1,24 +1,23 @@
-// 2026-09-13: copy every product's price onto its (sole) variant.
+// 2026-09-13: бараа бүрийн үнийг (ганц) variant дээр нь хуулна.
 //
-// Why: the storefront shows products.priceMnt, but the cart, checkout and
-// every order line read product_variants.priceMnt (cart_items point at a
-// variant). Admin price edits updated the product row only, so a tester saw
-// 25,000₮ in /shop and 22,500₮ in the cart -- and real orders were being
-// charged the stale, lower price. 814 of 937 variants were out of step when
-// this was written (686 at 90%, 75 at 50%, 27 at 80% of the product price).
+// Яагаад: storefront products.priceMnt харуулдаг бол сагс, checkout, захиалгын мөр
+// бүр product_variants.priceMnt уншдаг (cart_items variant руу заадаг). Admin-ийн
+// үнийн засвар зөвхөн барааны мөрийг шинэчилдэг тул тестлэгч /shop-д 25,000₮,
+// сагсанд 22,500₮ харсан — бодит захиалга хуучин, доогуур үнээр төлөгдөж байв.
+// Бичих үед 937 variant-аас 814 нь зөрүүтэй (686 нь барааны үнийн 90%, 75 нь 50%,
+// 27 нь 80%).
 //
-// Every product currently has exactly one variant, so the product row is the
-// price the owner actually maintains and the variant must mirror it.
-// server/db.ts's syncSoleVariantFromProduct (2026-09-11) already copies price
-// changes across on every product edit, so this cannot recur for edits made
-// after that date; the drifted rows come from edits made before it existed.
-// This script repairs them once.
+// Одоо бараа бүр яг нэг variant-тай тул барааны мөр эзний бодитоор хадгалдаг үнэ
+// бөгөөд variant түүнийг тусгах ёстой. server/db.ts syncSoleVariantFromProduct
+// (2026-09-11) барааны засвар бүрт үнийн өөрчлөлтийг хуулдаг болсон тул тэр
+// өдрөөс хойших засварт дахин үүсэхгүй; зөрсөн мөрүүд түүнээс өмнөх засвараас.
+// Энэ script нэг удаа засна.
 //
-//   pnpm exec tsx scripts/sync-variant-prices.ts            # dry run: shows what would change
-//   pnpm exec tsx scripts/sync-variant-prices.ts --apply    # writes, after saving a JSON backup
+//   pnpm exec tsx scripts/sync-variant-prices.ts            # dry run: юу өөрчлөгдөхийг харуулна
+//   pnpm exec tsx scripts/sync-variant-prices.ts --apply    # JSON backup хадгалсны дараа бичнэ
 //
-// Uses the app's own TLS connection plan (DATABASE_URL from .env). Run it
-// deliberately, by hand -- it writes to the live catalogue.
+// Аппын өөрийн TLS холболтын төлөвлөгөө (DATABASE_URL .env-ээс). Санаатайгаар,
+// гараар ажиллуул — амьд каталогт бичнэ.
 import "dotenv/config";
 import { writeFileSync } from "node:fs";
 import mysql from "mysql2/promise";

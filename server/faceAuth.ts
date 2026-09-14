@@ -1,19 +1,17 @@
 /**
- * Admin face gate (2026-09-08) — server side of the browser-camera face check
- * that stands in front of /admin for the five panel roles.
+ * Admin царайны хаалга (2026-09-08) — панелийн 5 эрхийн /admin-ий өмнө зогсдог
+ * хөтчийн камерын царайн шалгалтын серверийн тал.
  *
- * Deliberately mirrors server/verifyMn.ts's shape (issue a single-use
- * challenge, then verify against it) minus the third-party round trip: there
- * is no vendor here, no API key, and no outbound network call. The face model
- * runs in the staff member's browser and only a 128-number descriptor reaches
- * this file.
+ * server/verifyMn.ts-ийн хэлбэрийг санаатай тусгана (нэг удаагийн challenge өгч,
+ * түүнтэй тулгаж баталгаажуулах) гуравдагч талын round trip-гүйгээр: энд вендор,
+ * API түлхүүр, гадагш сүлжээний дуудлага байхгүй. Царайн загвар ажилтны хөтөч дээр
+ * ажиллаж, зөвхөн 128 тооны descriptor энэ файлд хүрнэ.
  *
- * WHAT THIS FILE DOES NOT DO, on purpose: it never receives, stores or
- * forwards a camera image. There is no upload endpoint in this flow. If you
- * are adding one, stop and reconsider — the entire privacy argument for this
- * design (and the reason it needs no cross-border data disclosure under
- * Mongolia's Personal Data Protection Law) rests on frames never leaving the
- * machine they were captured on.
+ * ЭНЭ ФАЙЛ САНААТАЙГААР ЮУ ХИЙДЭГГҮЙ: камерын зургийг хэзээ ч хүлээн авахгүй,
+ * хадгалахгүй, дамжуулахгүй. Энэ урсгалд upload endpoint байхгүй. Нэмэх гэж байвал
+ * зогсоод дахин бод — энэ дизайны бүх нууцлалын үндэслэл (Монголын Хувь хүний
+ * мэдээлэл хамгаалах хуулиар хил дамнасан өгөгдлийн мэдэгдэл шаарддаггүй шалтгаан)
+ * frame авсан машинаасаа хэзээ ч гардаггүйд тулгуурладаг.
  */
 
 import { TRPCError } from "@trpc/server";

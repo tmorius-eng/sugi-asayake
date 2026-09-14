@@ -1,15 +1,14 @@
-// 2026-09-13: end-to-end proof that the review thread is real and stored.
+// 2026-09-13: сэтгэгдлийн thread бодит, хадгалагддаг гэдгийн end-to-end баталгаа.
 //
-// Creates a throwaway buyer + staff member and a completed order for a real
-// product, then drives the SAME code paths the website uses (appRouter
-// procedures -- reviews.create, reviews.reply, reviews.like, reviews.list,
-// admin.updateReview / reviewReplies / updateReviewReply / deleteReview)
-// against the live Aiven database, reads the rows back, and deletes
-// everything it created. Also proves the moderation screen refuses abuse.
+// Түр худалдан авагч + ажилтан, бодит бараанд дууссан захиалга үүсгээд сайтын
+// ашигладаг ЯГ ИЖИЛ кодын замаар (appRouter procedure — reviews.create, reviews.reply,
+// reviews.like, reviews.list, admin.updateReview / reviewReplies / updateReviewReply /
+// deleteReview) амьд DB дээр явуулж, мөрүүдийг буцааж уншаад үүсгэсэн бүхнээ устгана.
+// Мөн moderation шүүлт доромжлолыг татгалздагийг батална.
 //
-//   pnpm exec tsx scripts/verify-review-thread.ts             # run + clean up
-//   pnpm exec tsx scripts/verify-review-thread.ts --keep      # leave the thread for a screenshot
-//   pnpm exec tsx scripts/verify-review-thread.ts --cleanup   # remove anything a --keep run left
+//   pnpm exec tsx scripts/verify-review-thread.ts             # ажиллуулж цэвэрлэнэ
+//   pnpm exec tsx scripts/verify-review-thread.ts --keep      # screenshot-д thread үлдээнэ
+//   pnpm exec tsx scripts/verify-review-thread.ts --cleanup   # --keep-ийн үлдээснийг устгана
 import "dotenv/config";
 import { eq, like } from "drizzle-orm";
 import { appRouter } from "../server/routers";

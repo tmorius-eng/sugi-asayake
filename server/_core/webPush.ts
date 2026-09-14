@@ -1,16 +1,16 @@
 /**
- * Customer Web Push (2026-09-13, growth tier). Standard VAPID push through
- * the `web-push` library: the browser subscribes in the service worker
- * (client/public/sw.js) and hands us the endpoint + keys (push.subscribe);
- * order status changes fan out here to every browser the customer allowed.
+ * Харилцагчийн Web Push (2026-09-13, growth tier). `web-push` сангаар стандарт VAPID
+ * push: хөтөч service worker-т (client/public/sw.js) бүртгүүлж endpoint + түлхүүрээ
+ * бидэнд өгнө (push.subscribe); захиалгын төлөвийн өөрчлөлт эндээс харилцагчийн
+ * зөвшөөрсөн хөтөч бүрт тархана.
  *
- * - Nothing is sent unless VAPID_PUBLIC_KEY/PRIVATE_KEY are set.
- * - A push endpoint that answers 404/410 is gone for good (browser revoked
- *   it) and the row is deleted so we stop paying for the request.
- * - Payloads carry no personal data beyond the order number; the phone /
- *   address never leave the server (same rule as the staff ntfy channel).
- * - Errors never propagate to the caller: a push failure must not fail the
- *   order update that triggered it.
+ * - VAPID_PUBLIC_KEY/PRIVATE_KEY тавигдаагүй бол юу ч илгээгдэхгүй.
+ * - 404/410 хариулсан push endpoint бүрмөсөн алга (хөтөч хүчингүй болгосон) тул
+ *   мөр устгагдаж, хүсэлтийн төлбөр төлөхөө болино.
+ * - Payload захиалгын дугаараас хэтэрсэн хувийн мэдээлэл авч явахгүй; утас / хаяг
+ *   серверээс хэзээ ч гарахгүй (ажилтны ntfy сувагтай ижил дүрэм).
+ * - Алдаа дуудагч руу хэзээ ч тархахгүй: push-ийн алдаа түүнийг өдөөсөн захиалгын
+ *   шинэчлэлийг унагаах ёсгүй.
  */
 
 import webpush from "web-push";

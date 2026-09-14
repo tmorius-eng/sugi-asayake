@@ -1,10 +1,10 @@
-// Admin analytics dashboard — sales, customer, and district reporting for
-// people who actually run the business (Tom + staff), not shopper-facing.
-// Every figure here is computed from real orders/users data that already
-// exists; nothing is fabricated or estimated to "fill a gap" (see the
-// demographics section below for how that discipline is enforced even when
-// data is genuinely incomplete). adminProcedure-gated in routers.ts, same
-// sensitivity tier as Security Center / Integrations.
+// Admin аналитикийн самбар — бизнесийг бодитоор удирддаг хүмүүст (Tom + ажилтнууд)
+// зориулсан борлуулалт, харилцагч, дүүргийн тайлан, худалдан авагчид зориулаагүй.
+// Энд байгаа тоо бүр аль хэдийн байгаа бодит захиалга/хэрэглэгчийн өгөгдлөөс
+// тооцоологдоно; "цоорхой нөхөх" гэж юу ч зохиогдох, тооцоолон таагдахгүй (өгөгдөл
+// үнэхээр дутуу үед ч энэ зарчим хэрхэн хэрэгждэгийг доорх demographics хэсгээс
+// үзнэ). routers.ts-д adminProcedure-ээр хамгаалагдсан, Security Center /
+// Integrations-тай ижил нууцлалын түвшин.
 import path from "node:path";
 import { and, desc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import ExcelJS from "exceljs";

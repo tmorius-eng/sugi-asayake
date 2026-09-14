@@ -1,21 +1,17 @@
 /**
- * Reads the (self-hosted) Silktide Consent Manager's own localStorage choice
- * for the "analytics" consent type -- see client/index.html's
- * silktideConsentManager.init() call for the consentTypes definition. No
- * `namespace` is configured there, so Silktide stores the choice under the
- * literal key `stcm.consent.analytics` -- confirmed by reading the actual
- * shipped `client/public/vendor/silktide-consent-manager.js` source
- * (`_buildConsentKey`), not the docs. The stored value is the literal string
- * `"true"`/`"false"` (Silktide's own `setConsentChoice` does
- * `accepted.toString()`, and its own `getConsentChoice` compares with
- * `value === 'true'`) -- matched exactly here rather than re-deriving a
- * "truthy" check that could silently diverge from the library's own logic.
+ * Silktide Consent Manager-ийн (өөрөө hosting) localStorage-д хадгалсан
+ * "analytics" зөвшөөрлийг уншина — consentTypes тодорхойлолт client/index.html-
+ * ийн silktideConsentManager.init() дуудлагад. `namespace` тохируулаагүй тул
+ * Silktide сонголтыг `stcm.consent.analytics` түлхүүрээр хадгална — баримт биш,
+ * бодит `client/public/vendor/silktide-consent-manager.js` эх кодоос
+ * (`_buildConsentKey`) уншиж баталгаажуулсан. Хадгалагдсан утга `"true"`/
+ * `"false"` мөр (Silktide-ийн `setConsentChoice` `accepted.toString()` хийдэг,
+ * `getConsentChoice` `value === 'true'` гэж харьцуулдаг) — сангийн логикоос
+ * зөрж болох "truthy" шалгалт биш, яг ижил харьцуулалт.
  *
- * This is a plain read gating whether pageviewTracking.ts's beacon fires at
- * all (see shared/const.ts VISITOR_SESSION_COOKIE_NAME, the one real
- * analytics cookie this site sets) -- not a script-injection integration,
- * since no 3rd-party analytics script exists anywhere in this codebase to
- * conditionally load.
+ * Энэ бол pageviewTracking.ts-ийн beacon илгээх эсэхийг шийддэг энгийн уншилт
+ * (shared/const.ts VISITOR_SESSION_COOKIE_NAME — сайтын тавьдаг цорын ганц
+ * analytics күки), script injection интеграц биш.
  */
 export function hasAnalyticsConsent(): boolean {
   if (typeof window === "undefined") return false;

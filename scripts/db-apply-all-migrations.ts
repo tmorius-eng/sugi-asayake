@@ -1,19 +1,19 @@
-// 2026-09-14: bring an EMPTY database up to the current schema by running
-// every drizzle/NNNN_*.sql in order -- the CI database job's first step
-// (.github/workflows/ci.yml), and a fresh local MySQL's.
+// 2026-09-14: ХООСОН DB-г drizzle/NNNN_*.sql бүрийг дарааллаар ажиллуулж одоогийн
+// schema-д хүргэнэ — CI-ийн DB job-ийн эхний алхам (.github/workflows/ci.yml),
+// мөн шинэ локал MySQL-д.
 //
 //   DATABASE_URL=mysql://root:root@127.0.0.1:3306/sugi_test pnpm exec tsx scripts/db-apply-all-migrations.ts
 //
-// Opens its own mysql2 connection with multipleStatements on: the older
-// migration files carry several `;`-terminated statements without a
-// `--> statement-breakpoint` marker, which the app's pool (single-statement
-// by design, see docs/SECURITY-sqli.md) cannot run. The connection is built
-// by the same planner the app uses, so TLS/CA rules hold for a remote host.
+// multipleStatements асаалттай өөрийн mysql2 холболт нээнэ: хуучин migration
+// файлууд `--> statement-breakpoint` тэмдэггүй хэд хэдэн `;`-ээр төгссөн statement
+// агуулдаг бөгөөд аппын pool (зориуд нэг statement-тэй, docs/SECURITY-sqli.md)
+// тэднийг ажиллуулж чадахгүй. Холболтыг аппын ашигладаг planner-аар үүсгэдэг тул
+// алсын host-д TLS/CA дүрэм хэвээр.
 //
-// Re-runnable: "already exists" / "duplicate column" errors are reported and
-// skipped, so a database that already has some migrations gets the rest.
-// Never point this at production -- there, migrations are applied one at a
-// time (scripts/db-apply-migration.ts) and recorded in HISTORY.md.
+// Дахин ажиллуулж болно: "already exists" / "duplicate column" алдааг мэдээлж
+// алгасдаг тул зарим migration-той DB үлдсэнээ авна. Production руу ХЭЗЭЭ Ч
+// чиглүүлэхгүй — тэнд migration нэг нэгээр (scripts/db-apply-migration.ts) хийгдэж
+// HISTORY.md-д бүртгэгдэнэ.
 import "dotenv/config";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";

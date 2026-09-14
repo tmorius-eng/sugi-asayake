@@ -1,23 +1,21 @@
 /**
- * LocalMod adapter (2026-09-13) -- Tom's pick from r/selfhosted: an
- * open-source, MIT, fully offline moderation API
- * (https://github.com/KOKOSde/localmod). Text classifiers: toxicity, spam,
- * nsfw, pii, prompt_injection; image classifier: nsfw_image
- * (Falconsai/nsfw_image_detection). One Docker image, ~3.5GB of models,
- * 1-3GB RAM, ~50-500ms per call on a CPU.
+ * LocalMod adapter (2026-09-13) — Tom-ийн r/selfhosted-оос сонгосон: нээлттэй эх,
+ * MIT, бүрэн офлайн moderation API (https://github.com/KOKOSde/localmod). Текстийн
+ * ангилагч: toxicity, spam, nsfw, pii, prompt_injection; зургийн ангилагч:
+ * nsfw_image (Falconsai/nsfw_image_detection). Нэг Docker image, ~3.5GB загвар,
+ * 1-3GB RAM, CPU дээр дуудлага бүрт ~50-500мс.
  *
- * Honest limits, so nobody is surprised later: LocalMod's toxicity ensemble
- * is ENGLISH-ONLY (toxic-bert, dehatebert-mono-english, roberta_toxicity,
- * roberta-hate-speech-dynabench). It adds real semantic judgement for
- * English reviews ("you people are worthless" has no swear word), but it
- * will not recognise Mongolian, Russian or Chinese abuse. That is what the
- * lexical layer in moderation.ts is for; the two run together.
+ * Үнэнч хязгаар, дараа нь хэн ч гайхахгүйн тулд: LocalMod-ийн toxicity ensemble
+ * ЗӨВХӨН АНГЛИ (toxic-bert, dehatebert-mono-english, roberta_toxicity, roberta-
+ * hate-speech-dynabench). Англи сэтгэгдэлд бодит утгын дүгнэлт нэмнэ ("you people
+ * are worthless"-д хараал байхгүй) харин монгол, орос, хятад доромжлолыг танихгүй.
+ * Тэр нь moderation.ts-ийн lexical давхаргын үүрэг; хоёулаа хамт ажиллана.
  *
- * Wiring: set MODERATION_API_URL (e.g. http://127.0.0.1:8000) and both the
- * review text screen and the avatar image screen consult it. Unset, this
- * file is a no-op. An unreachable service is logged and skipped for TEXT
- * (the lexical verdict stands) but for IMAGES the local nsfwjs verdict is
- * already authoritative, so LocalMod is a second opinion there too.
+ * Холболт: MODERATION_API_URL (ж. http://127.0.0.1:8000) тавибал сэтгэгдлийн текст
+ * ба avatar зургийн шүүлт хоёулаа түүнээс асууна. Тавиагүй бол энэ файл no-op.
+ * Хүрэхгүй үйлчилгээ ТЕКСТэд log-логдож алгасагдана (lexical шийдвэр хүчинтэй),
+ * ЗУРАГТ локал nsfwjs шийдвэр аль хэдийн эрх мэдэлтэй тул LocalMod тэнд ч хоёр
+ * дахь санал л.
  */
 
 const TEXT_CLASSIFIERS = ["toxicity", "spam", "nsfw"] as const;

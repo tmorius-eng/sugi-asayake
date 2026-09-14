@@ -1,7 +1,7 @@
 /**
- * Mongolian labels for stock ledger movement types (2026-09-11, see
- * stockMovements in drizzle/schema.ts). Shared so the admin history lists
- * and any later export say the same thing.
+ * Нөөцийн ledger-ийн хөдөлгөөний төрлийн монгол шошго (2026-09-11, drizzle/schema.ts-
+ * ийн stockMovements). Admin түүхийн жагсаалт, дараагийн ямар ч export ижил зүйл
+ * хэлэхийн тулд хуваалцсан.
  */
 export const STOCK_MOVEMENT_LABELS: Record<string, string> = {
   opening: "Эхний үлдэгдэл",

@@ -1,8 +1,7 @@
 /**
- * Comparing what the warehouse sent with what the store scanned on arrival
- * (2026-09-11, Phase 4). Pure, so the store's preview and the server's
- * confirmation use exactly the same rule -- the server recomputes it and
- * never trusts the client's version.
+ * Агуулахын илгээсэн ба дэлгүүрийн ирэхэд сканнердсаныг харьцуулах (2026-09-11,
+ * Phase 4). Цэвэр функц, тиймээс дэлгүүрийн preview ба серверийн баталгаажуулалт яг
+ * ижил дүрэм ашиглана — сервер дахин тооцоолж client-ийн хувилбарт хэзээ ч итгэхгүй.
  */
 
 export type ReconcileStatus = "matched" | "short" | "over" | "unexpected";

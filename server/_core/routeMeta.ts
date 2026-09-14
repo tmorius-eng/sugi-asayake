@@ -1,24 +1,22 @@
 /**
- * Per-route <head> values for the two page kinds people actually share:
- * a product and a journal post (2026-09-14, Tom: "share hiihed ter platform
- * deer n ter baraanii zuragn haragdag baih ystoi").
+ * Хүмүүсийн бодитоор хуваалцдаг хоёр төрлийн хуудасны route бүрийн <head> утга:
+ * бараа ба нийтлэл (2026-09-14, Tom: "share hiihed ter platform deer n ter baraanii
+ * zuragn haragdag baih ystoi").
  *
- * The SPA renders every route from one index.html, and until now that
- * document carried the SAME og:image (the homepage hero) for every URL --
- * so a product link pasted into Facebook or Messenger showed the hero, not
- * the product. Crawlers never run the app's JavaScript; the only place a
- * product's own title, image and price can live is the HTML the server
- * sends. This module resolves those values for the path being served and
- * indexHtml.ts substitutes them over the site-wide defaults.
+ * SPA route бүрийг нэг index.html-ээс зурдаг бөгөөд одоог хүртэл тэр документ URL
+ * бүрт ИЖИЛ og:image (нүүрний hero) авч явдаг байв — тиймээс Facebook, Messenger-т
+ * хуулсан барааны линк бараа биш hero харуулж байв. Crawler аппын JavaScript
+ * ажиллуулдаггүй; барааны өөрийн гарчиг, зураг, үнэ байж болох цорын ганц газар нь
+ * серверийн илгээдэг HTML. Энэ модуль serve хийж буй path-д тэр утгуудыг олж,
+ * indexHtml.ts сайт даяарх анхдагчийн оронд орлуулна.
  *
- * Also carries the structured data Google Shopping reads (schema.org
- * Product with an Offer in MNT, plus AggregateRating when there are
- * reviews) and, as a side effect, preloads the product image so the PDP's
- * largest paint starts with the document, the same trick the homepage hero
- * already uses.
+ * Мөн Google Shopping-ийн уншдаг structured data (schema.org Product, MNT Offer,
+ * сэтгэгдэлтэй бол AggregateRating) авч явдаг бөгөөд хажуугаар нь барааны зургийг
+ * preload хийдэг тул PDP-ийн хамгийн том paint документтой хамт эхэлнэ — нүүрний
+ * hero-гийн ашигладаг ижил арга.
  *
- * Cached per path for a minute -- a shared link tends to be opened by many
- * crawlers and people in a short burst.
+ * Path бүрт нэг минут кэшлэгдэнэ — хуваалцсан линкийг богино хугацаанд олон crawler,
+ * хүн нээдэг.
  */
 import { getProductBySlug, getPublishedPostBySlug } from "../db";
 import { getOrSetCached } from "./ttlCache";

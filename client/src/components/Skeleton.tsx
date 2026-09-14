@@ -1,7 +1,7 @@
-// A content-shaped loading placeholder instead of a generic spinner —
-// spinners tell a shopper "something is happening" but a skeleton the same
-// size/shape as the real content tells them roughly WHAT's about to load
-// and where it'll sit, so the page doesn't visibly jump once data arrives.
+// Ердийн spinner-ийн оронд агуулгын хэлбэртэй ачааллын placeholder —
+// spinner нь "ямар нэг зүйл болж байна" гэдгийг л хэлдэг бол бодит агуулгатай
+// ижил хэмжээ/хэлбэртэй skeleton нь ЮУ, ХААНА ачаалагдахыг ойролцоогоор
+// харуулдаг тул өгөгдөл ирэхэд хуудас үсрэхгүй.
 export function Skeleton({ className = "", style }: { className?: string; style?: React.CSSProperties }) {
   return <div className={`skeleton ${className}`} style={style} aria-hidden="true" />;
 }

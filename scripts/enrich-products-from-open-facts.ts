@@ -1,20 +1,19 @@
-// 2026-09-14: fill products.ingredients / netContent / countryOfOrigin from
-// the Open Food Facts / Open Beauty Facts / Open Products Facts databases
-// (Open Database License; per-record contents under the Database Contents
-// License -- text facts, no images are copied).
+// 2026-09-14: products.ingredients / netContent / countryOfOrigin-ийг Open Food
+// Facts / Open Beauty Facts / Open Products Facts мэдээллийн сангаас бөглөнө
+// (Open Database License; мөр бүрийн агуулга Database Contents License-ээр —
+// текст факт л, зураг хуулахгүй).
 //
-// The projects ask that the live API is NOT looped over a catalogue ("1 API
-// call = 1 real scan"), so this reads rows from their nightly CSV exports
-// instead. The exports are large (food ~0.9 GB gz); the rows for our own
-// barcodes are cut out on the VM with scripts/../off-extract (a streaming
-// awk over the export, header kept) and the small TSV is passed here:
+// Тэдгээр төслүүд амьд API-г каталог даяар давтахгүй байхыг хүсдэг ("1 API call =
+// 1 real scan") тул энэ нь шөнийн CSV export-ийн мөрүүдийг уншина. Export том
+// (food ~0.9 GB gz); өөрийн баркодуудын мөрийг VM дээр scripts/../off-extract-аар
+// (export дээгүүр стрийм awk, header хадгална) таслаж, жижиг TSV-г энд өгнө:
 //
 //   pnpm exec tsx scripts/enrich-products-from-open-facts.ts off-beauty.tsv --source openbeautyfacts          # dry run
 //   pnpm exec tsx scripts/enrich-products-from-open-facts.ts off-beauty.tsv --source openbeautyfacts --apply
 //
-// Rules: only EMPTY fields are filled; a product whose factsSource is
-// "admin" is never touched (a person edited it in /admin); every write sets
-// factsSource to the source name. Nothing else on the product changes.
+// Дүрэм: зөвхөн ХООСОН талбарыг бөглөнө; factsSource нь "admin" бараа хэзээ ч
+// хөндөгдөхгүй (/admin дээр хүн зассан); бичилт бүр factsSource-д эх сурвалжийн
+// нэрийг тавина. Барааны өөр юу ч өөрчлөгдөхгүй.
 import "dotenv/config";
 import { readFileSync } from "node:fs";
 import { eq } from "drizzle-orm";

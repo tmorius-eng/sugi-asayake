@@ -1,13 +1,12 @@
-// Applies a locally-downloaded, already-verified product photo to one
-// product: resizes it, uploads it to the shared R2 bucket under
-// catalog/products/<id>/, and points that product's imageUrl at it.
+// Локалд татаж, аль хэдийн шалгасан барааны зургийг нэг бараанд хэрэглэнэ:
+// хэмжээг өөрчилж, хуваалцсан R2 bucket-ийн catalog/products/<id>/ доор upload
+// хийж, тухайн барааны imageUrl-ийг түүн рүү заана.
 //
-// This is a data-entry helper for the ongoing real-product-photo sourcing
-// effort (see docs/PROJECT-GUIDE.md / backups/image-sourcing-log.md) — it does NOT do
-// any searching or verification itself. Verify the image is actually the
-// right product BEFORE calling this.
+// Энэ бол барааны бодит зураг олох ажлын өгөгдөл оруулах туслах (docs/PROJECT-
+// GUIDE.md / backups/image-sourcing-log.md) — өөрөө хайлт, шалгалт ХИЙХГҮЙ.
+// Дуудахаасаа ӨМНӨ зураг яг тэр бараа мөн эсэхийг шалга.
 //
-// Usage:
+// Хэрэглээ:
 //   pnpm exec tsx scripts/apply-product-image.ts <productId> <path-to-image>
 import "dotenv/config";
 import { readFileSync } from "node:fs";

@@ -1,16 +1,14 @@
-// Extracted from AdminAnalyticsPanel.tsx (2026-09-06) so the new admin
-// dashboard's "Network Activities" 7/30/90-day toggle computes date
-// windows and zero-filled day-series the exact same way, rather than a
-// second, independently-written (and potentially subtly divergent) day-
-// boundary calculator. Pure move -- AdminAnalyticsPanel's own behavior is
-// unchanged, it just imports these instead of defining them locally.
+// AdminAnalyticsPanel.tsx-ээс салгав (2026-09-06): шинэ admin самбарын "Network
+// Activities" 7/30/90 хоногийн toggle нь огнооны цонх, тэгээр дүүргэсэн өдрийн
+// цувааг яг ижил аргаар тооцоолохын тулд — бие даан бичсэн (нарийн зөрж болох)
+// хоёр дахь тооцоолуур биш. Цэвэр зөөлт — AdminAnalyticsPanel-ийн зан төлөв
+// хэвээр, зөвхөн энд байгааг import хийнэ.
 //
-// 2026-09-08 (reference-driven admin redesign): extended with "10d" and a
-// real "custom" window. Tom, explicit: "7 honog 10 honog 30 honog 90 honog
-// gej manaid baidag bol ene zurgan deer hussen uduruu songoj boldog" -- the
-// presets were the only thing on offer, the reference lets you pick actual
-// dates, so `custom` carries two yyyy-mm-dd strings and every consumer
-// resolves a range through one function instead of a local ternary.
+// 2026-09-08 (лавлагаанд суурилсан admin редизайн): "10d" ба бодит "custom"
+// цонх нэмэгдэв. Tom, шууд: "7 honog 10 honog 30 honog 90 honog gej manaid baidag
+// bol ene zurgan deer hussen uduruu songoj boldog" — өмнө нь зөвхөн preset байсан,
+// лавлагаа нь бодит огноо сонгуулдаг тул `custom` хоёр yyyy-mm-dd мөр авч, хэрэглэгч
+// бүр локал ternary биш нэг функцээр муж шийднэ.
 export type RangeKey = "7d" | "10d" | "30d" | "90d" | "thisMonth" | "all" | "custom";
 
 /** A range as the UI holds it. `customFrom`/`customTo` are only read when

@@ -1,7 +1,6 @@
-// Small shared error hierarchy for app-level (non-tRPC) error handling.
-// Kept intentionally minimal: nothing else in the codebase currently imports
-// from "shared/types", but the file is re-exported from there, so it needs to
-// exist and type-check.
+// Апп түвшний (tRPC бус) алдааны боловсруулалтын жижиг хуваалцсан алдааны шатлал.
+// Санаатайгаар хамгийн бага: кодын өөр юу ч одоогоор "shared/types"-оос import
+// хийдэггүй ч тэндээс re-export хийгддэг тул байж, type-check хийгдэх ёстой.
 
 export class AppError extends Error {
   constructor(

@@ -1,14 +1,13 @@
-// Extracted from AdminSecurityCenter.tsx (2026-09-06) so the new admin
-// dashboard's Recent Activity feed can humanize admin_audit_logs.action
-// through the exact same map, rather than duplicating it. Pure move, no
-// behavior change to AdminSecurityCenter's own audit-log tab.
+// AdminSecurityCenter.tsx-ээс салгав (2026-09-06): шинэ admin самбарын Recent
+// Activity feed admin_audit_logs.action-ийг яг ижил map-аар хүнлэг болгохын
+// тулд, давхардуулахгүйгээр. Цэвэр зөөлт, AdminSecurityCenter-ийн audit-log таб
+// өөрчлөгдөөгүй.
 //
-// Expanded to cover every `logAdminAction({ ..., action: "..." })` call
-// site in server/routers.ts (grepped directly, not guessed) -- several
-// newer actions (phone recovery, featured brands, product variants,
-// routines, promotions, discount codes, marketing spend, site text) were
-// missing from the original map and silently fell back to the raw action
-// string via actionLabel's own `?? action` safety net.
+// server/routers.ts-ийн `logAdminAction({ ..., action: "..." })` дуудлага бүрийг
+// хамарсан (таамаглаагүй, grep-ээр шууд) — хэд хэдэн шинэ action (утас сэргээх,
+// онцлох брэнд, барааны variant, routine, урамшуулал, хямдралын код, маркетингийн
+// зардал, site text) анхны map-д дутуу байж actionLabel-ийн `?? action`
+// хамгаалалтаар түүхий мөрөөрөө гарч байв.
 export const actionLabels: Record<string, string> = {
   "staff_invitation.created": "Ажилтан урьсан",
   "staff_invitation.revoked": "Урилга цуцалсан",

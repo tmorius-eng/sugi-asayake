@@ -1,35 +1,34 @@
 /**
- * Admin face gate (2026-09-08) — the browser half of the face check.
+ * Admin царайны хаалга (2026-09-08) — царай шалгалтын хөтчийн тал.
  *
- * Everything in this file runs on the staff member's own machine. Camera
- * frames are never uploaded: the model turns a frame into 128 numbers here,
- * and only those numbers are sent to the server. That is the whole reason
- * this design needs no cross-border data disclosure and stores no photograph
- * anywhere.
+ * Энэ файлын бүх зүйл ажилтны өөрийн машин дээр ажиллана. Камерын frame хэзээ ч
+ * upload хийгдэхгүй: загвар frame-ийг энд 128 тоо болгож, зөвхөн тэр тоонууд
+ * сервер рүү явна. Энэ дизайн хил дамнасан өгөгдлийн мэдэгдэл шаарддаггүй,
+ * хаана ч гэрэл зураг хадгалдаггүйн бүх шалтгаан энэ.
  *
- * Model: dlib's face_recognition_resnet_model_v1 via @vladmandic/face-api
- * (both MIT / public domain — see shared/face-auth.ts for why the more
- * accurate ArcFace family was deliberately rejected on licensing grounds).
+ * Загвар: dlib-ийн face_recognition_resnet_model_v1, @vladmandic/face-api-аар
+ * (хоёулаа MIT / public domain — илүү нарийвчлалтай ArcFace гэр бүлийг лицензийн
+ * үүднээс санаатай татгалзсан шалтгааныг shared/face-auth.ts-ээс үзнэ).
  *
- * The error handling here is deliberately heavy. Researched failure modes
- * that this file exists to prevent, each with the reason it happens:
+ * Алдааны боловсруулалт санаатайгаар нягт. Судалж тогтоосон, энэ файлын урьдчилан
+ * сэргийлэх алдаанууд, тус бүрийн шалтгаантай:
  *
- *  - "The highest priority backend has not yet been initialized" — TFJS
- *    resolves its backend asynchronously; calling a model before `tf.ready()`
- *    races it. Fixed by awaiting readiness once, in loadFaceModels().
- *  - Memory leaks (face-api issues #205/#345/#25) — every detect call on a
- *    hand-built tensor allocates GPU memory the caller must dispose, and
- *    almost nobody does. Avoided entirely by passing the <video> ELEMENT,
- *    for which the library owns the intermediate tensors itself.
- *  - GPU memory creeping up over a long session — TFJS caches textures per
- *    input shape, so a varying input size allocates a new one every frame.
- *    Avoided with a fixed detector inputSize.
- *  - Detection silently returning nothing — a <video> that has a stream but
- *    no decoded frame yet reports width 0, and the detector dutifully finds
- *    zero faces in a zero-pixel image. Gated on readyState AND dimensions.
- *  - getUserMedia error names differ across browsers (Safari raises
- *    OverconstrainedError where Chrome raises NotFoundError for a missing
- *    camera), so every documented name is mapped, plus a fallback.
+ *  - "The highest priority backend has not yet been initialized" — TFJS backend-
+ *    ээ асинхрон тодорхойлдог; `tf.ready()`-ээс өмнө загвар дуудвал уралдана.
+ *    loadFaceModels()-д бэлэн болохыг нэг удаа хүлээснээр засав.
+ *  - Санах ойн алдагдал (face-api issue #205/#345/#25) — гараар үүсгэсэн тензор
+ *    дээрх detect бүр GPU санах ой авдаг, дуудагч чөлөөлөх ёстой ч бараг хэн ч
+ *    хийдэггүй. <video> ЭЛЕМЕНТ дамжуулснаар бүрмөсөн зайлсхийв — сан завсрын
+ *    тензоруудаа өөрөө хариуцна.
+ *  - Урт session-д GPU санах ой аажим өсөх — TFJS input хэлбэр бүрт texture
+ *    кэшлэдэг тул хувьсах хэмжээ frame бүрт шинийг авна. Тогтмол detector
+ *    inputSize-аар зайлсхийв.
+ *  - Detection чимээгүй юу ч буцаахгүй байх — stream-тэй ч decode хийгдсэн
+ *    frame-гүй <video> өргөн 0 гэж мэдээлдэг, detector 0 пикселийн зурагнаас
+ *    0 царай олдог. readyState БА хэмжээгээр хаалт тавив.
+ *  - getUserMedia алдааны нэр хөтөч бүрт өөр (Safari OverconstrainedError,
+ *    Chrome NotFoundError камергүй үед) тул баримтлагдсан нэр бүрийг + fallback-
+ *    ийг map хийв.
  */
 
 // TYPE-ONLY import: erased at compile time, so it costs nothing at runtime.

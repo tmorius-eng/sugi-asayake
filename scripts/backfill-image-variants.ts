@@ -1,25 +1,22 @@
-// Frontend performance audit (2026-09-02): converts already-stored product
-// and site-media photos to the WebP + 600px-derivative pipeline that new
-// uploads now use (server/_core/imageProcessing.ts's
-// processUploadedImageVariants + server/storage.ts's
-// storagePutImageVariants).
+// Frontend гүйцэтгэлийн аудит (2026-09-02): аль хэдийн хадгалагдсан барааны болон
+// site-media зургуудыг шинэ upload-ын ашигладаг WebP + 600px derivative pipeline
+// руу хөрвүүлнэ (server/_core/imageProcessing.ts processUploadedImageVariants +
+// server/storage.ts storagePutImageVariants).
 //
-// Why this exists: shared/image-variants.ts treats the `.webp` extension as
-// the signal that a grid derivative exists, so components only emit srcset
-// for images that actually have one. That makes the migration safe and
-// incremental -- but it also means the ~390 photos uploaded before this
-// shipped keep getting the full 1600px original on a 300px grid card until
-// they are converted. This converts them.
+// Яагаад: shared/image-variants.ts `.webp` өргөтгөлийг grid derivative байгаагийн
+// дохио гэж үздэг тул компонентууд зөвхөн бодитоор derivative-тэй зурагт srcset
+// гаргана. Энэ нь migration-ийг аюулгүй, алхам алхмаар болгодог — гэхдээ энэ
+// гарахаас өмнө upload хийгдсэн ~390 зураг хөрвүүлэгдэх хүртэл 300px grid картад
+// 1600px эхийг илгээсээр байна гэсэн үг. Энэ script тэдгээрийг хөрвүүлнэ.
 //
-// Safety properties:
-//   - Writes NEW objects under a fresh hash; never overwrites or deletes an
-//     existing R2 object, so the old URL keeps working until the DB row is
-//     updated, and nothing is destroyed if this is interrupted.
-//   - Updates each row's imageUrl only after both variants are stored.
-//   - Skips anything already `.webp` (idempotent -- safe to re-run).
-//   - --dry-run (the default) writes nothing at all; pass --apply to commit.
+// Аюулгүй байдлын шинжүүд:
+//   - ШИНЭ объектуудыг шинэ hash-аар бичнэ; байгаа R2 объектыг хэзээ ч дарж/устгахгүй
+//     тул DB мөр шинэчлэгдэх хүртэл хуучин URL ажиллана, тасалдвал юу ч устахгүй.
+//   - Мөр бүрийн imageUrl-ийг хоёр variant хадгалагдсаны дараа л шинэчилнэ.
+//   - Аль хэдийн `.webp` бол алгасна (idempotent — дахин ажиллуулахад аюулгүй).
+//   - --dry-run (анхдагч) юу ч бичихгүй; --apply өгвөл бичнэ.
 //
-// Usage:
+// Хэрэглээ:
 //   pnpm exec tsx scripts/backfill-image-variants.ts            # dry run
 //   pnpm exec tsx scripts/backfill-image-variants.ts --apply
 

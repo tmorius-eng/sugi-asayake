@@ -1,17 +1,16 @@
 /**
- * The admin face gate's PROOF: a signed, per-device cookie saying "this
- * browser passed a face check for this account". Pure -- jose, the cookie
- * header, env, shared constants. No database, so server/_core/trpc.ts can
- * enforce it on every admin-panel procedure without pulling the domain in.
+ * Admin царайны хаалганы БАТАЛГАА: "энэ хөтөч энэ дансанд царайн шалгалт давсан"
+ * гэсэн гарын үсэгтэй, төхөөрөмж бүрийн cookie. Цэвэр — jose, cookie header, env,
+ * shared тогтмолууд. DB-гүй тул server/_core/trpc.ts домэйн татахгүйгээр admin
+ * панелийн procedure бүрт шаардаж чадна.
  *
- * Split out of server/faceAuth.ts on 2026-09-12 after a real incident: the
- * idle lock (25 minutes, commit 618eeec) was enforced by the SCREEN only.
- * The proof cookie expired on time, but the tRPC procedures behind /admin
- * never asked for it, and a proof minted by the previous deploy (a flat
- * 8-hour `exp`, no `abs` claim) was accepted as-is until it ran out. Tom
- * left the laptop for two hours and came back to a working panel. Both
- * holes are closed here: legacy proofs are refused (readFaceProof), and
- * `assertFaceProofForPanelRole` is what every panel procedure runs.
+ * 2026-09-12-нд бодит incident-ийн дараа server/faceAuth.ts-ээс салгав: idle lock
+ * (25 минут, commit 618eeec) зөвхөн ДЭЛГЭЦ дээр хэрэгжиж байв. Proof cookie цагтаа
+ * дуусдаг ч /admin-ийн ард байгаа tRPC procedure-ууд хэзээ ч асуудаггүй, өмнөх
+ * deploy-ийн proof (тэгш 8 цагийн `exp`, `abs` claim-гүй) дуустал хүлээн зөвшөөрөгдөж
+ * байв. Tom лаптопоо хоёр цаг орхиод буцахад панель ажилласаар байсан. Хоёр цоорхой
+ * энд хаагдсан: хуучин proof татгалзагдана (readFaceProof), панелийн procedure бүр
+ * `assertFaceProofForPanelRole` ажиллуулна.
  */
 
 import { SignJWT, jwtVerify } from "jose";

@@ -1,24 +1,23 @@
-// Cloudflare edge hardening for https://sugi.karkaron.com (2026-09-13).
+// https://sugi.karkaron.com-ийн Cloudflare edge хамгаалалт (2026-09-13).
 //
-// Applies, idempotently, everything that lives on Cloudflare's side rather
-// than in this repo: zone TLS/HTTPS settings, one rate-limit rule, three WAF
-// custom rules, and -- only with --access -- a Zero Trust Access gate on
-// /admin for the owner's email. Tom removed that gate the same day so the
-// director and testers can reach /admin and exercise the app's own gate
-// (phone OTP + role + face); pass --access to put it back.
+// Энэ репо биш Cloudflare талд байх бүхнийг idempotent хэрэгжүүлнэ: zone-ийн
+// TLS/HTTPS тохиргоо, нэг rate-limit дүрэм, гурван WAF custom дүрэм, зөвхөн
+// --access-тэй үед /admin-д эзний имэйлээр Zero Trust Access хаалга. Tom тэр
+// өдөртөө захирал, тестлэгчид /admin-д орж аппын өөрийн хаалгыг (утас OTP + эрх +
+// царай) туршихын тулд хаалгыг хассан; буцаах бол --access өгнө.
 //
-// Needs an API token (never commit it) created at
-// https://dash.cloudflare.com/profile/api-tokens with:
+// https://dash.cloudflare.com/profile/api-tokens-оос үүсгэсэн API token хэрэгтэй
+// (хэзээ ч commit хийхгүй), эрхүүд:
 //   Account · Access: Apps and Policies · Edit
 //   Account · Access: Organizations, Identity Providers, and Groups · Edit
 //   Zone · Zone Settings · Edit      Zone · Zone WAF · Edit
 //   Zone · Firewall Services · Edit  (Zone Resources: karkaron.com)
-// Bot Fight Mode is NOT here -- it needs "Bot Management: Edit", which we
-// left off the token; toggle it in the dashboard (Security > Bots).
+// Bot Fight Mode энд БАЙХГҮЙ — "Bot Management: Edit" шаарддаг, token-д өгөөгүй;
+// dashboard-аас (Security > Bots) асаана.
 //
 //   node scripts/cloudflare-harden.mjs <path-to-token-file> [--access]
 //
-// Run from your own PowerShell with a scoped API token (see the header).
+// Хязгаарлагдсан API token-той өөрийн PowerShell-ээс ажиллуул (толгойг үзнэ).
 import { readFileSync } from "node:fs";
 
 const T = readFileSync(process.argv[2], "utf8").trim();

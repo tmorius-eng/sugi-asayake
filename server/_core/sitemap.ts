@@ -1,20 +1,19 @@
 /**
- * sitemap.xml and robots.txt (2026-09-13 gap audit).
+ * sitemap.xml ба robots.txt (2026-09-13 нээлтийн аудит).
  *
- * Until now robots.txt was a static file that told crawlers the sitemap
- * lived at the old Manus preview host (dead since August), and there was no
- * sitemap at all -- so Google had no list of the 980 product pages. Both
- * are served here, from the database, with the same 30 s storefront cache
- * the rest of the catalogue reads use.
+ * Одоог хүртэл robots.txt нь sitemap хуучин Manus preview host дээр (8-р сараас
+ * үхсэн) байна гэж crawler-т хэлдэг статик файл байсан бөгөөд sitemap огт байсангүй
+ * — тиймээс Google-д 980 барааны хуудасны жагсаалт байсангүй. Хоёулаа энд DB-ээс,
+ * каталогийн бусад уншилттай ижил 30 с storefront cache-тэй serve хийгдэнэ.
  *
- * What goes in: the storefront's public routes, every published category
- * (as the /shop?category= filter URL the site itself links to), every
- * published product with its last edit as <lastmod>, and every published
- * journal post. Nothing behind a login, nothing under /admin.
+ * Юу орох: storefront-ийн нийтийн route, нийтлэгдсэн ангилал бүр (сайтын өөрийн
+ * холбодог /shop?category= шүүлтүүрийн URL-аар), нийтлэгдсэн бараа бүр сүүлийн
+ * засвараа <lastmod>-оор, нийтлэгдсэн нийтлэл бүр. Нэвтрэлтийн ард, /admin доорх
+ * юу ч биш.
  *
- * The absolute origin comes from PUBLIC_BASE_URL when set (production),
- * else the request's own host -- so the tunnel domain and a future
- * sugiasayake.mn both produce correct URLs without a code change.
+ * Абсолют origin тавигдсан бол PUBLIC_BASE_URL-ээс (production), эс бөгөөс
+ * хүсэлтийн өөрийн host — tunnel домэйн, ирээдүйн sugiasayake.mn хоёулаа кодын
+ * өөрчлөлтгүй зөв URL гаргана.
  */
 
 import type { Request, Response } from "express";

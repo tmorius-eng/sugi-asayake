@@ -1,9 +1,9 @@
-// 2026-09-07 (WordPress-parity admin editor rebuild): self-hosted TinyMCE --
-// literally the engine WordPress's own classic editor runs, per Tom's
-// explicit choice over a look-alike (TipTap). Self-hosted via bundler
-// imports (not Tiny Cloud, no API key/account needed) -- `licenseKey="gpl"`
-// is TinyMCE's own documented declaration for free/open-source self-hosted
-// use, confirmed against TinyMCE 8's official React bundling guide.
+// 2026-09-07 (WordPress-той ижил admin editor): өөрөө hosting хийсэн TinyMCE —
+// WordPress-ийн classic editor-ийн яг тэр хөдөлгүүр; Tom-ийн шууд сонголтоор
+// төстэй TipTap биш. Bundler import-оор өөрөө hosting (Tiny Cloud биш, API
+// түлхүүр/данс хэрэггүй) — `licenseKey="gpl"` нь TinyMCE-ийн үнэгүй/нээлттэй
+// эхийн self-hosted хэрэглээний албан ёсны мэдэгдэл (TinyMCE 8-ийн React
+// bundling заавраар баталгаажсан).
 import { Editor } from "@tinymce/tinymce-react";
 
 import "tinymce/tinymce";

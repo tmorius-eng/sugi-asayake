@@ -1,10 +1,10 @@
-// Object storage backed by SUGI's own S3 (or S3-compatible: Cloudflare R2,
-// Backblaze B2, etc.) bucket. This replaces the previous "Forge" proxy that
-// routed every upload through Manus's platform.
+// SUGI-ийн өөрийн S3 (эсвэл S3-compatible: Cloudflare R2, Backblaze B2 г.м.) bucket
+// дээрх объект хадгалалт. Upload бүрийг Manus платформоор дамжуулдаг байсан өмнөх
+// "Forge" proxy-г орлоно.
 //
-// Required env vars: S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID,
-// S3_SECRET_ACCESS_KEY, S3_PUBLIC_BASE_URL. Optional: S3_ENDPOINT (only for
-// non-AWS S3-compatible providers).
+// Шаардлагатай env: S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY,
+// S3_PUBLIC_BASE_URL. Сонголттой: S3_ENDPOINT (зөвхөн AWS бус S3-compatible
+// провайдерт).
 
 import { randomUUID } from "node:crypto";
 import { S3Client, PutObjectCommand, HeadBucketCommand } from "@aws-sdk/client-s3";

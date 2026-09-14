@@ -1,8 +1,7 @@
-// Triggers a browser download for a base64-encoded file the server returned
-// (analytics Excel/PDF exports — see admin.analyticsExport in
-// server/routers.ts). Same download-via-blob-URL mechanics as
-// client/src/lib/csv.ts's downloadCsv, just starting from base64 instead of
-// building the text ourselves.
+// Серверийн буцаасан base64 файлыг хөтчөөр татуулна (analytics Excel/PDF export —
+// server/routers.ts-ийн admin.analyticsExport). client/src/lib/csv.ts-ийн
+// downloadCsv-тэй ижил blob-URL механизм, зөвхөн текст өөрсдөө бүтээхийн оронд
+// base64-ээс эхэлнэ.
 export function downloadBase64File(filename: string, dataBase64: string, mimeType: string) {
   const binary = atob(dataBase64);
   const bytes = new Uint8Array(binary.length);

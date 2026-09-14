@@ -1,32 +1,29 @@
 /**
- * Text moderation for customer-written content (2026-09-13).
+ * Харилцагчийн бичсэн контентын текстийн moderation (2026-09-13).
  *
- * Tom: only buyers may review, but a buyer can still write anything -- the
- * shop must refuse insults, profanity and abuse "in English, Russian,
- * Chinese, every country's swearing", analysed like a person would, not a
- * naive exact-word filter.
+ * Tom: зөвхөн худалдан авагч сэтгэгдэл бичнэ, гэхдээ худалдан авагч ч юу ч бичиж
+ * болно — дэлгүүр "англи, орос, хятад, улс бүрийн хараал"-ыг хүн шиг шинжилж
+ * татгалзах ёстой, гэнэн яг-үг шүүлт биш.
  *
- * Two layers, in order:
+ * Дарааллаар хоёр давхарга:
  *
- *  1. A local, always-on lexical screen. Text is normalised first (Unicode
- *     NFKC, lower-case, Latin look-alikes and leetspeak folded, separators
- *     between letters removed, so "f.u.c.k", "хyй" with a Latin y, and
- *     "s h i t" all read as the plain word), then matched against root
- *     patterns for Mongolian (Cyrillic and the Latin transliterations people
- *     actually type), Russian, English, Chinese, Japanese and Korean. Roots
- *     are matched at word starts so suffixed forms ("новштой", "fucking")
- *     count, and anchored so "class" and "Scunthorpe" do not.
+ *  1. Локал, үргэлж асаалттай lexical шүүлт. Текстийг эхлээд нормчилно (Unicode
+ *     NFKC, жижиг үсэг, латин ижил дүрс ба leetspeak fold, үсэг хоорондын
+ *     тусгаарлагч арилгах — "f.u.c.k", латин y-тэй "хyй", "s h i t" бүгд энгийн
+ *     үг болж уншигдана), дараа нь монгол (кирилл ба хүмүүсийн бодитоор бичдэг
+ *     латин галиг), орос, англи, хятад, япон, солонгос язгуурын pattern-тай тулгана.
+ *     Язгуур үгийн эхэнд таардаг тул дагавартай хэлбэр ("новштой", "fucking")
+ *     тоологдож, anchor-той тул "class", "Scunthorpe" тоологдохгүй.
  *
- *  2. When ANTHROPIC_API_KEY is configured, a Claude call that reads the
- *     review the way a moderator would -- insults without swear words,
- *     threats, sexual content, hate, harassment in any language -- and
- *     returns a verdict. Without the key this layer is skipped; with it, an
- *     API failure is logged and the lexical verdict stands (fail-open on the
- *     AI layer only, never on the lexical one), so an outage at Anthropic
- *     cannot stop customers from reviewing.
+ *  2. ANTHROPIC_API_KEY тохируулсан үед сэтгэгдлийг moderator шиг уншдаг гадны
+ *     хэлний загварын дуудлага — хараалгүй доромжлол, заналхийлэл, бэлгийн агуулга,
+ *     үзэн ядалт, ямар ч хэлний дарамт — шийдвэр буцаана. Түлхүүргүй бол энэ давхарга
+ *     алгасагдана; түлхүүртэй үед API-ийн алдаа log-логдож lexical шийдвэр хүчинтэй
+ *     (зөвхөн AI давхарга fail-open, lexical хэзээ ч биш) тул вендорын тасалдал
+ *     харилцагчийг сэтгэгдэл бичихээс зогсоохгүй.
  *
- * Verdicts are recorded (console + face of the caller) with the category
- * only, never the full text, so logs do not become a swear-word archive.
+ * Шийдвэрүүд зөвхөн ангиллаараа (бүтэн текст биш) бүртгэгдэнэ — log хараалын архив
+ * болохгүй.
  */
 
 import Anthropic from "@anthropic-ai/sdk";

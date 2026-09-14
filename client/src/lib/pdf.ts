@@ -1,4 +1,4 @@
-/** Saves a base64 PDF the server rendered (orders.invoicePdf, admin.packingSlipPdf) as a download. */
+/** Серверийн render хийсэн base64 PDF-ийг (orders.invoicePdf, admin.packingSlipPdf) татаж хадгална. */
 export function savePdfBase64(fileName: string, base64: string): void {
   const bytes = Uint8Array.from(atob(base64), char => char.charCodeAt(0));
   const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));

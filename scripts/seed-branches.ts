@@ -1,16 +1,13 @@
-// "Controls everything" admin overhaul (2026-09-08, Phase J): one-time seed
-// of the real 4 branches into the new `branches` table, migrating them out
-// of client/src/components/home/locations-data.ts's pure hardcoded array.
-// Real business data (same values as that file), not placeholders. Branch
-// 01 (the original, largest location) is marked isFulfillmentDefault --
-// Tom has not specified a different warehouse-of-record, and this is
-// editable via the admin Branches panel going forward, so it's a starting
-// default, not a permanent decision baked into code.
+// Admin шинэчлэл (2026-09-08, Phase J): бодит 4 салбарыг client/src/components/
+// home/locations-data.ts-ийн hardcode массиваас шинэ `branches` хүснэгт рүү нэг
+// удаа seed хийнэ. Placeholder биш, бодит бизнесийн өгөгдөл (тэр файлтай ижил утга).
+// 01-р салбар (анхны, хамгийн том байршил) isFulfillmentDefault — Tom өөр агуулах
+// заагаагүй бөгөөд admin Салбарын панелаар засварлагддаг тул кодонд тогтсон
+// шийдвэр биш, эхлэлийн анхдагч утга.
 //
-// Already run once against the real Aiven database (2026-09-08) -- kept
-// here as a permanent historical record, same convention as
-// scripts/backfill-order-districts.ts. Idempotent: skips any slug that
-// already exists, so re-running it is always safe.
+// Бодит DB дээр нэг удаа ажилласан (2026-09-08) — түүхийн бүртгэл болгож энд
+// үлдээв, scripts/backfill-order-districts.ts-тэй ижил конвенц. Idempotent: байгаа
+// slug-ийг алгасна тул дахин ажиллуулах аюулгүй.
 import "dotenv/config";
 import { eq } from "drizzle-orm";
 import { getDb } from "../server/db";

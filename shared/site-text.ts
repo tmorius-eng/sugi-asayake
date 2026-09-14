@@ -1,43 +1,36 @@
 /**
- * Admin-editable homepage copy, the text-equivalent of site-media.ts's
- * image slots. Tom asked (2026-08-31, alongside the CategoryMasonry v7
- * anchor-scrim fix) for the homepage's "related/associated text" to be
- * editable from /admin next to Content & Media, and confirmed scope covers
- * the whole homepage (Home.tsx and every client/src/components/home/*.tsx
- * section it renders), not just CategoryMasonry.
+ * Admin-ээр засварлагдах нүүрний текст, site-media.ts-ийн зургийн slot-ын текстийн
+ * аналог. Tom (2026-08-31, CategoryMasonry v7 anchor-scrim засвартай хамт) нүүрний
+ * "холбоотой текст"-ийг /admin-д Content & Media-ийн хажууд засварлагдах болгохыг
+ * хүссэн бөгөөд хамрах хүрээ зөвхөн CategoryMasonry биш нүүр бүхэлдээ (Home.tsx ба
+ * түүний зурдаг client/src/components/home/*.tsx хэсэг бүр) гэдгийг баталсан.
  *
- * Same shape and same rules as site-media.ts:
- *  - `key` is a stable slotKey stored in the site_text table (varchar(80),
- *    not an enum -- no migration needed to add more slots later).
- *  - `fallbackValue` is the CURRENT real copy already live on the site
- *    (copied verbatim from the component it came from), not new/invented
- *    marketing language -- editing a slot overrides it, clearing it
- *    restores this exact original text.
- *  - A 2-or-3-line heading's fallbackValue joins its lines with "\n" (one
- *    slot, one textarea in the admin UI) instead of a separate slot per
- *    line -- each component splits on "\n" and re-applies its own
- *    <br/>/<em>/<strong> treatment around the two plain-text lines. This
- *    keeps the admin UI to one intuitive multi-line box per heading rather
- *    than two disconnected single-line fields, at the cost of a small
- *    fixed simplification: a couple of headings that originally
- *    italicized only PART of one line (e.g. the care section's "Багахан
- *    <em>итгэл.</em>") now italicize a whole line instead -- documented at
- *    each call site, not a functional change.
+ * site-media.ts-тэй ижил хэлбэр, ижил дүрэм:
+ *  - `key` нь site_text хүснэгтэд хадгалагдах тогтвортой slotKey (varchar(80), enum
+ *    биш — дараа slot нэмэхэд migration хэрэггүй).
+ *  - `fallbackValue` нь сайтад аль хэдийн амьд ОДООГИЙН бодит текст (ирсэн
+ *    компонентоосоо үгчлэн хуулсан), шинэ/зохиомол маркетингийн хэл биш — slot засвал
+ *    дарж бичнэ, цэвэрлэвэл яг энэ анхны текст сэргэнэ.
+ *  - 2-3 мөрийн гарчгийн fallbackValue мөрүүдээ "\n"-ээр холбоно (нэг slot, admin
+ *    UI-д нэг textarea), мөр бүрд тусдаа slot биш — компонент бүр "\n"-ээр хувааж
+ *    хоёр энгийн мөрийн эргэн тойронд өөрийн <br/>/<em>/<strong>-оо дахин хэрэглэнэ.
+ *    Энэ нь admin UI-г гарчиг бүрт хоёр салангид нэг мөрийн талбар биш нэг ойлгомжтой
+ *    олон мөрийн хайрцаг байлгадаг, жижиг тогтмол хялбарчлалын үнээр: анх нэг мөрийн
+ *    зөвхөн ХЭСГИЙГ налуу болгодог байсан хос гарчиг (ж. care section-ийн "Багахан
+ *    <em>итгэл.</em>") одоо бүтэн мөрөө налуу болгоно — дуудлагын цэг бүрт
+ *    баримтжуулсан, функциональ өөрчлөлт биш.
  *
- * Deliberately NOT covered by this system (left as code, not a slot):
- *  - Anything that doubles as a functional key/link, where free-text
- *    editing could silently break behavior: category card `title` (also
- *    used as the exact-match /shop?category= filter value -- see
- *    shared/catalog-filter.ts), phone-number CTAs whose text embeds the
- *    literal number next to a tel: href, branch name/hours/address (real
- *    structured data from locations-data.ts).
- *  - Real, server-computed numbers and the sentences built around them
- *    (loyalty tier names/percentages, savings amounts, review counts,
- *    prices) -- these come from the DB via tRPC, same "never show a fake
- *    number" rule as everywhere else in this app.
- *  - Anything already covered by an existing real CMS: post titles/
- *    excerpts (content.latestPosts / the Posts admin panel), product
- *    names/descriptions (the Products admin panel).
+ * Энэ системд санаатайгаар ХАМРАГДААГҮЙ (slot биш код хэвээр):
+ *  - Функциональ түлхүүр/линк болж давхар ажилладаг, чөлөөт текст засвар зан төлөвийг
+ *    чимээгүй эвдэж болох юу ч: ангиллын картын `title` (/shop?category= шүүлтүүрийн
+ *    яг таарах утга — shared/catalog-filter.ts), tel: href-ийн хажууд дугаараа
+ *    агуулсан утасны CTA, салбарын нэр/цаг/хаяг (locations-data.ts-ийн бодит
+ *    бүтэцтэй өгөгдөл).
+ *  - Серверийн тооцоолсон бодит тоо, түүний эргэн тойрны өгүүлбэр (loyalty шатлалын
+ *    нэр/хувь, хэмнэлтийн дүн, сэтгэгдлийн тоо, үнэ) — DB-ээс tRPC-ээр ирнэ, аппын
+ *    бусад газрын "хуурамч тоо хэзээ ч харуулахгүй" дүрэм.
+ *  - Бодит CMS-ээр аль хэдийн хамрагдсан юу ч: нийтлэлийн гарчиг/товч (content.
+ *    latestPosts / Posts admin панель), барааны нэр/тайлбар (Products admin панель).
  */
 /** Icon names an admin may type into the "Яагаад биднийг сонгох вэ" icon
  *  slots (2026-09-12). The storefront maps each to a lucide icon
