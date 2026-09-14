@@ -875,6 +875,8 @@ export const UI_STRINGS: Record<string, { en: string; ja: string }> = {
   "Одоогоор бүх бараа нөөцгүй байна.": { en: "All of these products are currently out of stock.", ja: "現在すべての商品が在庫切れです。" },
   "Бүх {n} бараа сагсанд орлоо.": { en: "All {n} products are in your cart.", ja: "{n}点すべてをカートに追加しました。" },
   "{n} бараа сагсанд орлоо ({skipped} нөөцгүй тул алгассан).": { en: "{n} products added to your cart ({skipped} skipped — out of stock).", ja: "{n}点をカートに追加しました（在庫切れの{skipped}点はスキップ）。" },
+  // The shop hero kicker renders its three lines as separate nodes; the last one is Cyrillic.
+  "УЛААНБААТАР / MONGOLIA": { en: "ULAANBAATAR / MONGOLIA", ja: "ウランバートル / MONGOLIA" },
   "Агуулга руу очих": { en: "Skip to content", ja: "本文へ移動" },
   "Шууд орсон": { en: "Direct", ja: "直接アクセス" },
   "{label} хуудас нээх": { en: "Open our {label} page", ja: "{label}ページを開く" },

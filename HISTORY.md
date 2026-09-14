@@ -25,6 +25,7 @@ Tom энэ лаптоп дээр `.env`-ийн бүрэн агуулгыг (Orac
 - **Backup task энэ лаптопт байгаагүй** (CLAUDE.md "гэрийн лаптопт байдаг" гэж бичсэн нь ажлын лаптопыг хэлж байсан — 09-13-ны нэрийн залруулгыг үзнэ). Одоо `SUGI ASAYAKE Daily DB Backup` бүртгэгдсэн (19:00, `powershell.exe -File scripts/db-backup-daily.ps1`, StartWhenAvailable, 30 мин лимит). mysqldump 8.0.46 (`C:\Program Files\MySQL\MySQL Server 8.0\bin`).
 - `scripts/db-backup.ps1`: URL-ийн user/password-ыг `[uri]::UnescapeDataString` (HeatWave-ийн нууц үгэнд `%23`/`%40`); `--set-gtid-purged=OFF --no-tablespaces` (migrate-to-oracle-mysql.ps1-тэй ижил — HeatWave GTID-тэй, admin-д SUPER/PROCESS байхгүй; эс бөгөөс dump-ийг буцааж restore хийх боломжгүй). `scripts/db-backup-daily.ps1`: `DATABASE_ADMIN_URL`-ийг эхэлж авна (`sugi_app` нь SELECT/INSERT/UPDATE/DELETE л тул `--routines/--triggers` дутуу).
 - **Баталгаажуулалт**: tunnel хаалттай тул Aiven (7 хоног амьд) дээр тест-dump: 57 хүснэгт, 1.95 MB, `GTID_PURGED` 0 мөр, zip 253.6 KB. HeatWave дээрх бодит run — түлхүүр VM-д орсны дараа.
+- **2026-09-14 үргэлжлэл**: ажлын лаптоп түлхүүрийг VM-д нэмсний дараа ч denied хэвээр — `ssh -v` "Server accepts key" + `ssh-keygen -y` "incorrect passphrase" → PowerShell `-N '""'` нь `""` гэсэн нууц үг тавьсан байв. `ssh-keygen -p -P '""' -N ''` → VM-OK; tunnel 4 с-д 3307; HeatWave backup 258.6 KB (14 хадгална); `/health` database up; Playwright (ja) 6 public хуудас — UI кирилл 0. Скрипт засвар `98d39b5`.
 
 ## Каталогийн тайлбар + хэл солих алдаанууд (2026-09-12, гэрийн лаптоп, commit `527e000`)
 
