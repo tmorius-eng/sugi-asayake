@@ -4,6 +4,13 @@
 
 ---
 
+## Баримт бичгийн цэгцлэлт, монгол тайлбар, танилцуулга (2026-09-14, орой)
+
+- Төслийн гарын авлага `CLAUDE.md` → **`docs/PROJECT-GUIDE.md`** болж нүүв (git mv, түүх хадгалагдсан). Root-ын `CLAUDE.md` нь gitignore-д, дотор нь ганц мөр `@docs/PROJECT-GUIDE.md` — машин бүрт нэг удаа гараар үүсгэнэ (ажлын лаптопт хийх). Бүх md, кодын тайлбар дахь хуучин файлын нэрийн лавлагаа шинэ зам руу солигдсон; гадны тайлангийн холбоосууд хасагдсан.
+- Git түүх бүхэлдээ дахин бичигдэж (277 commit, commit message-ийн туслах мөрүүд хасагдсан) `main`, `admin-face-auth`, 2 tag force-push хийгдэв. ⚠️ **Ажлын лаптоп дээр repo-г устгаад дахин clone хийх** — хуучин түүхтэй clone дээр pull ажиллахгүй. Хуучин түүхийн backup bundle гэрийн лаптопын түр хавтсанд.
+- **Кодын тайлбар монгол хэл дээр**: 94 файлын толгойн тайлбар (1,414 мөр) + `server/_core/index.ts`, `client/src/App.tsx`, `client/src/main.tsx`-ийн бүх inline тайлбар (128 мөр). Үлдсэн: ~13,000 мөр (drizzle/schema.ts 915, server/routers.ts 843, server/db.ts 1,719 гэх мэт) — файл файлаар үргэлжлүүлнэ. Шинэ тайлбар монголоор бичих дүрэм.
+- **`docs/SUGI-ASAYAKE-online-store-2026-09.pptx`** — захирал + Японы хөрөнгө оруулагчид зориулсан 10 слайд (япон гарчиг, монгол дэд тайлбар; бодит сайтын screenshot; тоо бүр 2026-09-14-ний хэмжилт). Шрифт: Yu Gothic UI (JP), Segoe UI (MN) — Windows PowerPoint дээр шууд нээгдэнэ.
+
 ## Барааны факт — editor-ийн bug + бүх өдрийн admin procedure-ийн round-trip тест (2026-09-14, орой)
 
 Tom: "hadgalah hugtsaa 36 gej oruulsan, page deer 19; admin-aar dahin orohod facts alga, save boloogui". Шалтгаан: `openProductComposer` detail мөрөөс зөвхөн `description`-ийг авч, шинэ 4 талбарыг **жагсаалтын мөрөөс** (`admin.products` — тэнд байхгүй) уншдаг байсан → форм хоосон, дахин хадгалахад null-аар дарж бичдэг. "36" нь placeholder байсан (одоо "жишээ: 36"). Засвар: detail мөрөөс уншина. Мөн `editAdminOrder` variantId=null (хуучин) мөрийг item засварт устгадаг байсныг засав; `factsSource="admin"` зөвхөн бодит утга оруулсан үед. **Дүрэм**: admin editor-т шинэ талбар нэмбэл `admin.productDetail`-аас уншиж байгаа эсэхийг шалга — жагсаалт (`getAdminProducts`) хүнд баганыг санаатай авдаггүй.

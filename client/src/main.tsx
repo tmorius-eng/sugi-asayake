@@ -13,57 +13,56 @@ import "./index.css";
 
 captureTrafficSource();
 
-// PWA service worker (2026-09-13). Registered after the page has loaded so it
-// never competes with the first paint; scope "/" so /shop, /product/* and the
-// offline page are all covered. Dev is excluded on purpose.
+// PWA service worker (2026-09-13). Хуудас ачаалагдсаны дараа бүртгэгдэнэ тул
+// эхний paint-тай хэзээ ч өрсөлдөхгүй; scope "/" тул /shop, /product/*, офлайн
+// хуудас бүгд хамрагдана. Dev санаатай хасагдсан.
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => undefined);
   });
 }
 
-// Stale build after a deploy (2026-09-13): Vite fires this when a code-split
-// chunk or its CSS cannot be fetched -- the file was renamed by a deploy that
-// happened while this tab was open. Reload once so the tab picks up the new
-// build instead of showing an error screen; lazyRetry() covers the
-// React.lazy path the same way. See shared/chunk-error.ts.
+// Deploy-ийн дараах хуучин build (2026-09-13): code-split chunk эсвэл түүний CSS
+// татагдахгүй үед Vite үүнийг өдөөнө — энэ tab нээлттэй байхад болсон deploy
+// файлын нэрийг сольсон. Алдааны дэлгэц харуулахын оронд tab шинэ build-ийг
+// авахын тулд нэг удаа reload хийнэ; lazyRetry() React.lazy замыг ижил аргаар
+// хамарна. shared/chunk-error.ts.
 window.addEventListener("vite:preloadError", event => {
   if (reloadOnceForStaleChunk()) event.preventDefault();
 });
 
-// Error tracking (2026-09): same Honeybadger project as server/_core/
-// honeybadger.ts, a separate VITE_-prefixed key because only VITE_-prefixed
-// env vars are exposed to the client bundle -- Vite bakes it into the built
-// JS either way, but that's expected here (same trust model as Sentry's
-// public DSN, not a secret). No-ops entirely without a key, same as the
-// server side, so local dev without one behaves exactly as before.
+// Алдааны бүртгэл (2026-09): server/_core/honeybadger.ts-тэй ижил Honeybadger
+// төсөл, тусдаа VITE_-prefix түлхүүр — зөвхөн VITE_-prefix env хувьсагч client
+// bundle-д ил гардаг — Vite ямар ч тохиолдолд built JS-д шингээнэ, гэхдээ энд
+// хүлээгдсэн (Sentry-ийн public DSN-тэй ижил итгэлийн загвар, нууц биш).
+// Түлхүүргүй бол сервер талтай ижил бүрэн no-op тул түлхүүргүй локал dev өмнөх
+// шигээ ажиллана.
 const honeybadgerApiKey = import.meta.env.VITE_HONEYBADGER_API_KEY as string | undefined;
-// Bundle audit (2026-09-13): @honeybadger-io/react was 55KB of the main
-// chunk on every storefront visit, with no key configured on this
-// deployment. It is now a dynamic import that runs only when a key exists,
-// and even then after first paint -- error reporting that starts a second
-// late loses nothing; JS on the critical path costs LCP on a 4G phone.
+// Bundle аудит (2026-09-13): @honeybadger-io/react storefront-ийн зочилт бүрт
+// үндсэн chunk-ийн 55KB байсан атлаа энэ deploy дээр түлхүүр тохируулаагүй.
+// Одоо зөвхөн түлхүүр байгаа үед, тэр үед ч эхний paint-ийн дараа ажилладаг
+// dynamic import — нэг секунд хоцорч эхлэх алдааны мэдээлэл юу ч алдахгүй;
+// critical path дээрх JS 4G утсанд LCP-ийн үнэтэй.
 if (honeybadgerApiKey) {
   void import("@honeybadger-io/react").then(({ Honeybadger }) => {
     Honeybadger.configure({ apiKey: honeybadgerApiKey, environment: import.meta.env.DEV ? "development" : "production" });
   });
 }
 
-// Frontend performance audit (2026-09-02): with no defaultOptions, React
-// Query's own default staleTime is 0 -- every remount/window-refocus
-// re-fetches even data that just resolved moments earlier, a visible
-// loading flicker on repeat navigation. 30s matches current (2026) React
-// Query guidance for a client this shape.
+// Frontend гүйцэтгэлийн аудит (2026-09-02): defaultOptions-гүй бол React Query-
+// ийн анхдагч staleTime 0 — remount/цонх focus бүр саяхан ирсэн өгөгдлийг ч
+// дахин татдаг, давтан navigation-д харагдах ачааллын анивчилт. 30с нь ийм
+// хэлбэрийн client-д React Query-ийн одоогийн (2026) зөвлөмжтэй таарна.
 const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000 } } });
 
 const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;
   if (typeof window === "undefined") return;
 
-  // 2026-09-12: the server now refuses admin-panel calls without a live
-  // face proof (idle lock lapsed, or a proof from before the lock existed).
-  // Re-asking faceAuth.status is what puts the camera back on screen; the
-  // AdminFaceGate renders from that query alone.
+  // 2026-09-12: сервер одоо амьд царайны баталгаагүй admin панелийн дуудлагыг
+  // татгалзана (idle lock дууссан, эсвэл lock-оос өмнөх баталгаа). faceAuth.status-
+  // ийг дахин асуух нь камерыг дэлгэцэнд буцаана; AdminFaceGate зөвхөн тэр query-
+  // ээс render хийнэ.
   if (error.message === FACE_REQUIRED_ERR_MSG) {
     void queryClient.invalidateQueries({ predicate: query => Array.isArray(query.queryKey[0]) && (query.queryKey[0] as unknown[])[0] === "faceAuth" });
     return;
@@ -97,8 +96,8 @@ const trpcClient = trpc.createClient({
       url: "/api/trpc",
       transformer: superjson,
       fetch(input, init) {
-        // The admin face proof is bound to this tab (client/src/lib/adminTab.ts);
-        // harmless on every other call, so it is simply always sent.
+        // Admin царайны баталгаа энэ tab-д холбоотой (client/src/lib/adminTab.ts);
+        // бусад дуудлагад хор нөлөөгүй тул зүгээр л үргэлж илгээнэ.
         const headers = new Headers(init?.headers ?? {});
         headers.set("x-admin-tab", adminTabId());
         return globalThis.fetch(input, {
@@ -119,8 +118,8 @@ const app = (
   </trpc.Provider>
 );
 
-// The React error boundary that reports to Honeybadger lives in the same
-// package; without a key the plain ErrorBoundary inside App is the boundary.
+// Honeybadger-т мэдээлдэг React error boundary ижил багцад байдаг; түлхүүргүй
+// бол App доторх энгийн ErrorBoundary нь хил болно.
 createRoot(document.getElementById("root")!).render(app);
 if (honeybadgerApiKey) {
   void import("@honeybadger-io/react").then(({ Honeybadger }) => {

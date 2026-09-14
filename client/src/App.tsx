@@ -19,9 +19,9 @@ import { useConsentIconAutoHide } from "./lib/consentIconAutoHide";
 import { useScrollReveal } from "./hooks/useScrollReveal";
 
 const AdminDashboard = lazyRetry(() => import("./pages/AdminDashboard"));
-// Dev-only: the admin workspace in `preview` mode (no login, no face gate,
-// fallback data) so a panel's rendering can be checked with Playwright
-// without a real admin session. Tree-shaken out of production builds.
+// Зөвхөн dev: admin workspace `preview` горимд (нэвтрэлтгүй, царайны хаалгагүй,
+// fallback өгөгдөлтэй) — панелийн render-ийг бодит admin session-гүйгээр
+// Playwright-аар шалгахын тулд. Production build-аас tree-shake хийгдэнэ.
 const AdminPreview = import.meta.env.DEV ? lazyRetry(() => import("./components/AdminWorkspace").then(m => ({ default: () => <m.default preview /> }))) : null;
 const Checkout = lazyRetry(() => import("./pages/Checkout"));
 const ForgotPassword = lazyRetry(() => import("./pages/ForgotPassword"));
@@ -49,24 +49,24 @@ function RouteLoadingFallback() {
 }
 
 function Router() {
-  // 2026-09-09 deep audit: the reveal hook used to be called per page (Home,
-  // Shop, Profile only), so any [data-reveal] section on another page --
-  // the related-products shelf on every product page -- never got its
-  // .is-revealed class and stayed shifted 18px over the section below it.
-  // One observer here (it watches the DOM for new nodes) covers all routes.
+  // 2026-09-09 гүнзгий аудит: reveal hook өмнө нь хуудас бүрт (зөвхөн Home, Shop,
+  // Profile) дуудагддаг байсан тул өөр хуудасны [data-reveal] хэсэг — барааны
+  // хуудас бүрийн холбоотой барааны тавиур — .is-revealed классаа хэзээ ч аваагүй,
+  // доорх хэсгийн дээгүүр 18px шилжсэн хэвээр байв.
+  // Энд нэг observer (DOM-д шинэ node ажиглана) бүх route-ыг хамарна.
   useScrollReveal();
-  // Retires the permanently-parked cookie button 10s after a choice is made
-  // (the footer's "Күкийн тохиргоо" is the way back). See the hook.
+  // Сонголт хийснээс 10с-ийн дараа байнга зогсдог күкийн товчийг хураана
+  // (буцах зам нь footer-ийн "Күкийн тохиргоо"). Hook-ийг үзнэ.
   useConsentIconAutoHide();
-  // 2026-09-12: a forward navigation starts at the top of the new page;
-  // without this the old scroll offset carried over (see the hook).
+  // 2026-09-12: урагшлах navigation шинэ хуудасны дээрээс эхэлнэ; үүнгүйгээр
+  // хуучин scroll байрлал дамжиж байв (hook-ийг үзнэ).
   useScrollToTopOnNavigate();
   const [location] = useLocation();
   // 2026-09-12 (Tom: "./admin page ees busad buh page iig ene cosme kitchen
-  // shig design conceptoi bolgo"): the restyle is scoped to `.sugi-site`, so
-  // wrapping every route except /admin in it carries the white page, the
-  // type scale and the hairline surfaces across the whole storefront. The
-  // admin panel keeps its own palette and its own tokens, untouched.
+  // shig design conceptoi bolgo"): restyle `.sugi-site`-д хязгаарлагдсан тул
+  // /admin-аас бусад route бүрийг түүгээр ороох нь цагаан хуудас, шрифтийн хэмжээ,
+  // hairline гадаргууг storefront даяар хүргэнэ. Admin панель өөрийн палитр,
+  // токенуудаа хөндөгдөөгүй хэвээр хадгална.
   const storefront = !location.startsWith("/admin");
   return <div className={storefront ? "sugi-site" : undefined}>
     {storefront && <a href="#main-content" className="skip-link">Агуулга руу очих</a>}
@@ -99,8 +99,8 @@ function Router() {
 }
 
 function App() {
-  // A page that rendered is proof this tab holds a working build, so the
-  // next deploy (however many hours away) is allowed its own one-time reload.
+  // Render хийгдсэн хуудас нь энэ tab ажилладаг build-тэйн баталгаа тул дараагийн
+  // deploy (хэдэн цагийн дараа ч бай) өөрийн нэг удаагийн reload-ыг авна.
   useEffect(() => { markChunksHealthy(); }, []);
   useEffect(() => {
     const warm = () => {
@@ -108,7 +108,7 @@ function App() {
       void import("./pages/ProductDetail");
       void import("./pages/Checkout");
     };
-    // Safari has no requestIdleCallback; a short timer is the fallback.
+    // Safari-д requestIdleCallback байхгүй; богино timer нь fallback.
     const w = window as Window & { requestIdleCallback?: typeof requestIdleCallback; cancelIdleCallback?: typeof cancelIdleCallback };
     if (w.requestIdleCallback) {
       const id = w.requestIdleCallback(warm, { timeout: 4000 });
