@@ -46,6 +46,16 @@ export function invalidateCached(key: string): void {
   invalidatedAt.set(key, Date.now());
 }
 
+/** Drops every entry whose key starts with `prefix` -- for keys that carry a
+ *  parameter (`storefront:bestsellers:8`, `storefront:related:<id>:6`), which a
+ *  writer cannot enumerate. Same invalidation mark per dropped key as above. */
+export function invalidateCachedByPrefix(prefix: string): void {
+  for (const key of store.keys()) if (key.startsWith(prefix)) invalidateCached(key);
+  // A key not currently stored may be mid-compute; mark the prefix's known
+  // keys only -- an in-flight compute for an unseen key stores its result,
+  // which the 30 s TTL then bounds. Acceptable for these rails.
+}
+
 /** Test seam: forget everything, including the invalidation marks. */
 export function clearCacheForTests(): void {
   store.clear();

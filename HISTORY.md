@@ -4,6 +4,12 @@
 
 ---
 
+## Нүүрний rail-уудын cache + жижиг засварууд (2026-09-14, гэрийн лаптоп)
+
+Tom: "chi hiij chadah ymnuudaa hii yanzl bas saijruul! … uur hamaaralgui aldaa oldwol ter buriig ynzala". Амьд хэмжилт: нүүрний tRPC дуудлага бүр ~0.2 с, ихэнх нь UB→Токио сүлжээ; зөвхөн `catalog.bestsellers` cold 0.48 с бодит серверийн ажил. Тиймээс `getBestsellingProducts`/`getFeaturedBrands`/`getBrandDirectory`/`getPublishedProductCount`/`getRelatedProducts` одоо `STOREFRONT_CACHE_TTL_MS` (30 с) cache-тэй (`server/db.ts`), бичигчид (featured brand create/update/delete, product create/update/delete, POS sale, QPay paid, admin order update) түлхүүрээ шууд хаяна — шинэ `invalidateCachedByPrefix` (`server/_core/ttlCache.ts`) параметртэй түлхүүрт. Gated тест bestsellers/catalog 33/33, unit 656 ✓.
+
+Замдаа: барааны нэр 980-аас **1 л кирилл** ("Бараа (4901655440509)" — POS импортын placeholder, Tom /admin-аас нэрлэх) → барааны нэрний орчуулга хэрэггүй; `product_categories`-д **"Shampoo" (id 1, slug shampoos)** нийтлэгдсэн бараагүй хуучин ангилал — storefront-д гардаггүй, admin-д харагдана (Tom устгаж болно); privacy §4-ийн "Aiven" → "Oracle Cloud (Токио)" 3 хэлээр; брэндийн лого 9/9 бүгд R2-д (200) — утасны харанхуй логоны зурвас нь cache (дүрэм live CSS-д бий).
+
 ## Хуулийн 3 хуудас гурван хэлээр + cookie banner-ийн орчуулга (2026-09-14, гэрийн лаптоп)
 
 Tom (утасны screenshot, ja горимд cookie banner монголоор): "Cookie needs to be translated also!! And privacy and terms return policy needs to be translate … On /admin panel".

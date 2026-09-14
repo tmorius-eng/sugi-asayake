@@ -881,7 +881,6 @@ export const UI_STRINGS: Record<string, { en: string; ja: string }> = {
   "Зөвхөн сагс, нэвтрэлтэд хэрэгтэйг нь": { en: "Only what the cart and sign-in need", ja: "カートとログインに必要なもののみ" },
   "Күки гэж юу вэ?": { en: "What are cookies?", ja: "Cookieとは？" },
   "SUGI ASAYAKE сайт хоёр төрлийн күки хэрэглэдэг. Доороос аль нэгийг нь асааж, унтрааж болно.": { en: "SUGI ASAYAKE uses two kinds of cookies. You can switch either on or off below.", ja: "SUGI ASAYAKEは2種類のCookieを使用しています。以下でそれぞれオン・オフを切り替えられます。" },
-  "Хадгалах": { en: "Save", ja: "保存" },
   "Заавал хэрэгтэй (сагс, нэвтрэлт)": { en: "Essential (cart, sign-in)", ja: "必須（カート・ログイン）" },
   "Таны сагсанд хийсэн бараа, нэвтэрсэн төлөвийг санахад хэрэгтэй. Үүнгүйгээр сайт ажиллахгүй тул унтраах боломжгүй.": { en: "Needed to remember what is in your cart and that you are signed in. The site cannot work without it, so it cannot be switched off.", ja: "カートの中身とログイン状態を記憶するために必要です。これがないとサイトが動作しないため、オフにはできません。" },
   "Тоолуур (нэргүй статистик)": { en: "Counter (anonymous statistics)", ja: "カウンター（匿名の統計）" },

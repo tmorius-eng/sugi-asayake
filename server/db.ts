@@ -12,7 +12,7 @@ import { guessDistrictFromAddress, type UbDistrict } from "../shared/districts";
 import { computeDeliveryFeeMnt } from "../shared/delivery";
 import { getStoreSettingSlot, type StoreSettingKey } from "../shared/store-settings";
 import { decryptJson, encryptJson } from "./_core/crypto";
-import { getOrSetCached, invalidateCached } from "./_core/ttlCache";
+import { getOrSetCached, invalidateCached, invalidateCachedByPrefix } from "./_core/ttlCache";
 import { enqueueNotification, TEST_SUPPRESSED_MARKER } from "./notificationOutbox";
 import { applyBranchStockDelta, getStockLedgerDrift, recomputeVariantStockTotal, recomputeVariantTotalsForBranch, recordStockMovement, setBranchStockAbsolute } from "./stockLedger";
 import { INTEGRATION_META, INTEGRATION_PROVIDERS, mergeIntegrationSettings, validateIntegrationSettings, type IntegrationProvider } from "../shared/integrations";
@@ -735,10 +735,13 @@ export async function getPublishedCatalog() {
 // (which selects every column, joins reviews, and groups by product for the
 // full catalog) since the homepage only ever needs the number.
 export async function getPublishedProductCount(): Promise<number> {
-  const db = await getDb();
-  if (!db) return 0;
-  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(products).where(eq(products.isPublished, true));
-  return count;
+  // 2026-09-14: cached like the other storefront reads (see STOREFRONT_CACHE_TTL_MS).
+  return getOrSetCached("storefront:publishedCount", STOREFRONT_CACHE_TTL_MS, async () => {
+    const db = await getDb();
+    if (!db) return 0;
+    const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(products).where(eq(products.isPublished, true));
+    return count;
+  });
 }
 
 export type CatalogPageParams = {
@@ -878,117 +881,120 @@ export async function getPublishedProductsByIds(ids: number[]) {
  * sidesteps that without a SQL subquery.
  */
 export async function getBestsellingProducts(limit = 8) {
-  const db = await getDb();
-  if (!db) return [];
+  // 2026-09-14: cached like the other storefront reads (see STOREFRONT_CACHE_TTL_MS).
+  return getOrSetCached(`storefront:bestsellers:${limit}`, STOREFRONT_CACHE_TTL_MS, async () => {
+    const db = await getDb();
+    if (!db) return [];
 
-  const soldQtyExpr = sql<number>`SUM(${orderItems.quantity})`;
-  const soldRows = await db
-    .select({ productId: orderItems.productId, soldQuantity: soldQtyExpr })
-    .from(orderItems)
-    .innerJoin(orders, eq(orderItems.orderId, orders.id))
-    .where(settledSaleSql)
-    .groupBy(orderItems.productId)
-    .orderBy(desc(soldQtyExpr))
-    .limit(limit * 3); // headroom: some winners may since have gone unpublished
+    const soldQtyExpr = sql<number>`SUM(${orderItems.quantity})`;
+    const soldRows = await db
+      .select({ productId: orderItems.productId, soldQuantity: soldQtyExpr })
+      .from(orderItems)
+      .innerJoin(orders, eq(orderItems.orderId, orders.id))
+      .where(settledSaleSql)
+      .groupBy(orderItems.productId)
+      .orderBy(desc(soldQtyExpr))
+      .limit(limit * 3); // headroom: some winners may since have gone unpublished
 
-  const productIds = soldRows.map(row => row.productId).filter((id): id is number => id != null);
-  const soldQuantityByProduct = new Map(soldRows.map(row => [row.productId, Number(row.soldQuantity)]));
+    const productIds = soldRows.map(row => row.productId).filter((id): id is number => id != null);
+    const soldQuantityByProduct = new Map(soldRows.map(row => [row.productId, Number(row.soldQuantity)]));
 
-  const catalogColumns = {
-    id: products.id,
-    name: products.name,
-    slug: products.slug,
-    brand: products.brand,
-    priceMnt: products.priceMnt,
-    compareAtPriceMnt: products.compareAtPriceMnt,
-    imageUrl: products.imageUrl,
-    stockQuantity: products.stockQuantity,
-    avgRating: avgRatingExpr,
-    reviewCount: reviewCountExpr,
-  };
+    const catalogColumns = {
+      id: products.id,
+      name: products.name,
+      slug: products.slug,
+      brand: products.brand,
+      priceMnt: products.priceMnt,
+      compareAtPriceMnt: products.compareAtPriceMnt,
+      imageUrl: products.imageUrl,
+      stockQuantity: products.stockQuantity,
+      avgRating: avgRatingExpr,
+      reviewCount: reviewCountExpr,
+    };
 
-  const catalogRows = productIds.length
-    ? await db
-        .select(catalogColumns)
-        .from(products)
-        .leftJoin(productReviews, eq(productReviews.productId, products.id))
-        .where(and(inArray(products.id, productIds), eq(products.isPublished, true)))
-        .groupBy(products.id)
-    : [];
+    const catalogRows = productIds.length
+      ? await db
+          .select(catalogColumns)
+          .from(products)
+          .leftJoin(productReviews, eq(productReviews.productId, products.id))
+          .where(and(inArray(products.id, productIds), eq(products.isPublished, true)))
+          .groupBy(products.id)
+      : [];
 
-  const picked = catalogRows
-    .map(row => ({ ...row, soldQuantity: soldQuantityByProduct.get(row.id) ?? 0 }))
-    .sort((a, b) => b.soldQuantity - a.soldQuantity)
-    .slice(0, limit);
+    const picked = catalogRows
+      .map(row => ({ ...row, soldQuantity: soldQuantityByProduct.get(row.id) ?? 0 }))
+      .sort((a, b) => b.soldQuantity - a.soldQuantity)
+      .slice(0, limit);
 
-  if (picked.length >= limit) return picked;
+    if (picked.length >= limit) return picked;
 
-  /*
-   * 2026-09-11 (Tom): with 3 settled orders in the whole catalogue this rail
-   * rendered a single card in a full-width band -- a real empty-state defect,
-   * not a data problem that fixes itself. Same remedy, and the same ordering
-   * contract the removed category shelves used: genuinely sold products keep
-   * the top slots and their real sold counts, then the remaining slots fill
-   * from the brands an admin has already marked featured (/admin -> Брэнд,
-   * the `featured_brands` table that also backs the Топ брэнд rail), in that
-   * panel's own sortOrder. Nothing here writes or invents an order, so the
-   * moment real sales exist they displace the filler automatically and the
-   * section becomes a true ranking again.
-   *
-   * Round-robin across brands rather than brand-by-brand: PRIECLAT alone has
-   * 21 published products and would otherwise take every free slot, hiding
-   * the other featured brands the admin chose.
-   */
-  const excludeIds = picked.map(row => row.id);
-  const notAlreadyPicked = excludeIds.length
-    ? sql`${products.id} NOT IN (${sql.join(excludeIds, sql`, `)})`
-    : sql`1=1`;
+    /*
+     * 2026-09-11 (Tom): with 3 settled orders in the whole catalogue this rail
+     * rendered a single card in a full-width band -- a real empty-state defect,
+     * not a data problem that fixes itself. Same remedy, and the same ordering
+     * contract the removed category shelves used: genuinely sold products keep
+     * the top slots and their real sold counts, then the remaining slots fill
+     * from the brands an admin has already marked featured (/admin -> Брэнд,
+     * the `featured_brands` table that also backs the Топ брэнд rail), in that
+     * panel's own sortOrder. Nothing here writes or invents an order, so the
+     * moment real sales exist they displace the filler automatically and the
+     * section becomes a true ranking again.
+     *
+     * Round-robin across brands rather than brand-by-brand: PRIECLAT alone has
+     * 21 published products and would otherwise take every free slot, hiding
+     * the other featured brands the admin chose.
+     */
+    const excludeIds = picked.map(row => row.id);
+    const notAlreadyPicked = excludeIds.length
+      ? sql`${products.id} NOT IN (${sql.join(excludeIds, sql`, `)})`
+      : sql`1=1`;
 
-  const featuredRows = await db
-    .select({ ...catalogColumns, brandSort: featuredBrands.sortOrder, brandId: featuredBrands.id })
-    .from(products)
-    .innerJoin(featuredBrands, eq(featuredBrands.brandName, products.brand))
-    .leftJoin(productReviews, eq(productReviews.productId, products.id))
-    .where(and(
-      eq(featuredBrands.isActive, true),
-      eq(products.isPublished, true),
-      gte(products.stockQuantity, 1),
-      isNotNull(products.imageUrl),
-      ne(products.imageUrl, ""),
-      notAlreadyPicked,
-    ))
-    .groupBy(products.id, featuredBrands.id)
-    // products.id is the final tiebreak on purpose: createdAt ties are common
-    // here (bulk imports share a timestamp), and without a stable last key
-    // MySQL may order tied rows differently per query. The cold-start
-    // recommender asks for a deeper page of this same list and takes the
-    // tail, so an unstable prefix would leak one product into both homepage
-    // rails.
-    .orderBy(asc(featuredBrands.sortOrder), asc(featuredBrands.id), desc(products.createdAt), desc(products.id))
-    // Fixed cap, NOT a multiple of `limit`: rows come back in brand order, so
-    // a limit-scaled cap truncated later brands out of a small request while
-    // including them in a large one -- which changed how many queues the
-    // round-robin interleaved and produced exactly that leak. 400 covers
-    // every product behind the featured brands today (~180).
-    .limit(400);
+    const featuredRows = await db
+      .select({ ...catalogColumns, brandSort: featuredBrands.sortOrder, brandId: featuredBrands.id })
+      .from(products)
+      .innerJoin(featuredBrands, eq(featuredBrands.brandName, products.brand))
+      .leftJoin(productReviews, eq(productReviews.productId, products.id))
+      .where(and(
+        eq(featuredBrands.isActive, true),
+        eq(products.isPublished, true),
+        gte(products.stockQuantity, 1),
+        isNotNull(products.imageUrl),
+        ne(products.imageUrl, ""),
+        notAlreadyPicked,
+      ))
+      .groupBy(products.id, featuredBrands.id)
+      // products.id is the final tiebreak on purpose: createdAt ties are common
+      // here (bulk imports share a timestamp), and without a stable last key
+      // MySQL may order tied rows differently per query. The cold-start
+      // recommender asks for a deeper page of this same list and takes the
+      // tail, so an unstable prefix would leak one product into both homepage
+      // rails.
+      .orderBy(asc(featuredBrands.sortOrder), asc(featuredBrands.id), desc(products.createdAt), desc(products.id))
+      // Fixed cap, NOT a multiple of `limit`: rows come back in brand order, so
+      // a limit-scaled cap truncated later brands out of a small request while
+      // including them in a large one -- which changed how many queues the
+      // round-robin interleaved and produced exactly that leak. 400 covers
+      // every product behind the featured brands today (~180).
+      .limit(400);
 
-  const byBrand = new Map<number, typeof featuredRows>();
-  for (const row of featuredRows) {
-    const bucket = byBrand.get(row.brandId);
-    if (bucket) bucket.push(row); else byBrand.set(row.brandId, [row]);
-  }
-  const queues = Array.from(byBrand.values());
-  let cursor = 0;
-  while (picked.length < limit && queues.some(queue => queue.length)) {
-    const queue = queues[cursor % queues.length];
-    cursor += 1;
-    const next = queue.shift();
-    if (!next) continue;
-    const { brandSort: _brandSort, brandId: _brandId, ...row } = next;
-    picked.push({ ...row, soldQuantity: 0 });
-  }
+    const byBrand = new Map<number, typeof featuredRows>();
+    for (const row of featuredRows) {
+      const bucket = byBrand.get(row.brandId);
+      if (bucket) bucket.push(row); else byBrand.set(row.brandId, [row]);
+    }
+    const queues = Array.from(byBrand.values());
+    let cursor = 0;
+    while (picked.length < limit && queues.some(queue => queue.length)) {
+      const queue = queues[cursor % queues.length];
+      cursor += 1;
+      const next = queue.shift();
+      if (!next) continue;
+      const { brandSort: _brandSort, brandId: _brandId, ...row } = next;
+      picked.push({ ...row, soldQuantity: 0 });
+    }
 
-  return picked.slice(0, limit);
+    return picked.slice(0, limit);
+  });
 }
 
 /* 2026-09-11: getCategoryShelfProducts + getHomeCategoryShelves removed here.
@@ -1344,74 +1350,77 @@ export async function getRecommendedProducts(userId: number | null, limit = 8, p
 // match other products against -- same scoring math, no separate logic to
 // maintain. Public (no auth needed).
 export async function getRelatedProducts(productId: number, limit = 6) {
-  const db = await getDb();
-  if (!db) return [];
+  // 2026-09-14: cached like the other storefront reads (see STOREFRONT_CACHE_TTL_MS).
+  return getOrSetCached(`storefront:related:${productId}:${limit}`, STOREFRONT_CACHE_TTL_MS, async () => {
+    const db = await getDb();
+    if (!db) return [];
 
-  const viewedRows = await db.select({
-    categoryId: products.categoryId,
-    skinType: products.skinType,
-    skinConcerns: products.skinConcerns,
-    hairType: products.hairType,
-    hairConcerns: products.hairConcerns,
-    fragrancePreference: products.fragrancePreference,
-    wellnessInterests: products.wellnessInterests,
-    interiorStyle: products.interiorStyle,
-  }).from(products).where(eq(products.id, productId)).limit(1);
-  const viewed = viewedRows[0];
-  if (!viewed) return [];
-  const viewedAsPreference: PreferenceProfile = viewed;
+    const viewedRows = await db.select({
+      categoryId: products.categoryId,
+      skinType: products.skinType,
+      skinConcerns: products.skinConcerns,
+      hairType: products.hairType,
+      hairConcerns: products.hairConcerns,
+      fragrancePreference: products.fragrancePreference,
+      wellnessInterests: products.wellnessInterests,
+      interiorStyle: products.interiorStyle,
+    }).from(products).where(eq(products.id, productId)).limit(1);
+    const viewed = viewedRows[0];
+    if (!viewed) return [];
+    const viewedAsPreference: PreferenceProfile = viewed;
 
-  const candidates = await db.select({
-    id: products.id,
-    categoryId: products.categoryId,
-    name: products.name,
-    slug: products.slug,
-    brand: products.brand,
-    priceMnt: products.priceMnt,
-    compareAtPriceMnt: products.compareAtPriceMnt,
-    imageUrl: products.imageUrl,
-    stockQuantity: products.stockQuantity,
-    categoryName: productCategories.name,
-    categorySlug: productCategories.slug,
-    skinType: products.skinType,
-    skinConcerns: products.skinConcerns,
-    hairType: products.hairType,
-    hairConcerns: products.hairConcerns,
-    fragrancePreference: products.fragrancePreference,
-    wellnessInterests: products.wellnessInterests,
-    interiorStyle: products.interiorStyle,
-  }).from(products)
-    .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
-    .where(and(eq(products.isPublished, true), gte(products.stockQuantity, 1)));
+    const candidates = await db.select({
+      id: products.id,
+      categoryId: products.categoryId,
+      name: products.name,
+      slug: products.slug,
+      brand: products.brand,
+      priceMnt: products.priceMnt,
+      compareAtPriceMnt: products.compareAtPriceMnt,
+      imageUrl: products.imageUrl,
+      stockQuantity: products.stockQuantity,
+      categoryName: productCategories.name,
+      categorySlug: productCategories.slug,
+      skinType: products.skinType,
+      skinConcerns: products.skinConcerns,
+      hairType: products.hairType,
+      hairConcerns: products.hairConcerns,
+      fragrancePreference: products.fragrancePreference,
+      wellnessInterests: products.wellnessInterests,
+      interiorStyle: products.interiorStyle,
+    }).from(products)
+      .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
+      .where(and(eq(products.isPublished, true), gte(products.stockQuantity, 1)));
 
-  // Same paid-order sold-quantity signal getBestsellingProducts uses, as a
-  // tiebreaker only (ranked "by overlap then bestseller count" per plan).
-  const soldQtyExpr = sql<number>`SUM(${orderItems.quantity})`;
-  const soldRows = await db.select({ productId: orderItems.productId, soldQuantity: soldQtyExpr })
-    .from(orderItems).innerJoin(orders, eq(orderItems.orderId, orders.id))
-    .where(settledSaleSql).groupBy(orderItems.productId);
-  const soldByProduct = new Map(soldRows.map(row => [row.productId, Number(row.soldQuantity)]));
+    // Same paid-order sold-quantity signal getBestsellingProducts uses, as a
+    // tiebreaker only (ranked "by overlap then bestseller count" per plan).
+    const soldQtyExpr = sql<number>`SUM(${orderItems.quantity})`;
+    const soldRows = await db.select({ productId: orderItems.productId, soldQuantity: soldQtyExpr })
+      .from(orderItems).innerJoin(orders, eq(orderItems.orderId, orders.id))
+      .where(settledSaleSql).groupBy(orderItems.productId);
+    const soldByProduct = new Map(soldRows.map(row => [row.productId, Number(row.soldQuantity)]));
 
-  const scored = candidates
-    .filter(candidate => candidate.id !== productId)
-    .map(candidate => {
-      let score = scorePreferenceMatch(candidate, viewedAsPreference);
-      if (candidate.categoryId === viewed.categoryId) score += 1;
-      return { product: candidate, score, sold: soldByProduct.get(candidate.id) ?? 0 };
-    })
-    .filter(entry => entry.score > 0)
-    .sort((a, b) => b.score - a.score || b.sold - a.sold || tiebreakHash(productId, a.product.id) - tiebreakHash(productId, b.product.id));
+    const scored = candidates
+      .filter(candidate => candidate.id !== productId)
+      .map(candidate => {
+        let score = scorePreferenceMatch(candidate, viewedAsPreference);
+        if (candidate.categoryId === viewed.categoryId) score += 1;
+        return { product: candidate, score, sold: soldByProduct.get(candidate.id) ?? 0 };
+      })
+      .filter(entry => entry.score > 0)
+      .sort((a, b) => b.score - a.score || b.sold - a.sold || tiebreakHash(productId, a.product.id) - tiebreakHash(productId, b.product.id));
 
-  if (scored.length >= Math.min(3, limit)) return scored.slice(0, limit).map(entry => entry.product);
+    if (scored.length >= Math.min(3, limit)) return scored.slice(0, limit).map(entry => entry.product);
 
-  // Thin match (very likely today, given real tagging coverage) -- backfill
-  // with other same-category products rather than showing a near-empty rail.
-  const alreadyIncluded = new Set(scored.map(entry => entry.product.id));
-  const sameCategoryFillers = candidates
-    .filter(candidate => candidate.id !== productId && candidate.categoryId === viewed.categoryId && !alreadyIncluded.has(candidate.id))
-    .sort((a, b) => tiebreakHash(productId, a.id) - tiebreakHash(productId, b.id))
-    .slice(0, limit - scored.length);
-  return [...scored.map(entry => entry.product), ...sameCategoryFillers].slice(0, limit);
+    // Thin match (very likely today, given real tagging coverage) -- backfill
+    // with other same-category products rather than showing a near-empty rail.
+    const alreadyIncluded = new Set(scored.map(entry => entry.product.id));
+    const sameCategoryFillers = candidates
+      .filter(candidate => candidate.id !== productId && candidate.categoryId === viewed.categoryId && !alreadyIncluded.has(candidate.id))
+      .sort((a, b) => tiebreakHash(productId, a.id) - tiebreakHash(productId, b.id))
+      .slice(0, limit - scored.length);
+    return [...scored.map(entry => entry.product), ...sameCategoryFillers].slice(0, limit);
+  });
 }
 
 // Deterministic, per-viewed-product tiebreak for candidates that score
@@ -1973,6 +1982,7 @@ export type InStoreSaleInput = {
 };
 
 export async function recordInStoreSale(input: InStoreSaleInput) {
+  invalidateCachedByPrefix("storefront:bestsellers:");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   if (input.clientRequestId) {
@@ -2709,6 +2719,7 @@ export async function storeQPayPaymentAttemptResponse(input: { id: number; respo
 // already-cancelled order is never lost -- it is visible to finance as a
 // paid attempt on a closed order (logged below) and refundable from there.
 export async function markQPayPaymentAttemptPaid(input: { id: number; orderId: number; providerPaymentId: string | null }) {
+  invalidateCachedByPrefix("storefront:bestsellers:");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.update(paymentAttempts).set({ status: "paid", providerPaymentId: input.providerPaymentId, updatedAt: new Date() }).where(eq(paymentAttempts.id, input.id));
@@ -3113,6 +3124,7 @@ async function reverseStoreCreditForOrder(tx: OrderTx, orderId: number, reason: 
 }
 
 export async function updateAdminOrder(input: { id: number; status?: FulfilmentStatus; deliveryTrackingRef?: string | null; adminNote?: string | null; actorUserId?: number | null }) {
+  invalidateCachedByPrefix("storefront:bestsellers:");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const current = await db.select().from(orders).where(eq(orders.id, input.id)).limit(1);
@@ -3541,43 +3553,46 @@ export type FeaturedBrandWriteInput = { brandName: string; tagline?: string | nu
  * discipline as CategoryMasonry's per-category photo fallback.
  */
 export async function getFeaturedBrands() {
-  const db = await getDb();
-  if (!db) return [];
-  const brands = await db.select().from(featuredBrands).where(eq(featuredBrands.isActive, true)).orderBy(asc(featuredBrands.sortOrder));
+  // 2026-09-14: cached like the other storefront reads (see STOREFRONT_CACHE_TTL_MS).
+  return getOrSetCached("storefront:featuredBrands", STOREFRONT_CACHE_TTL_MS, async () => {
+    const db = await getDb();
+    if (!db) return [];
+    const brands = await db.select().from(featuredBrands).where(eq(featuredBrands.isActive, true)).orderBy(asc(featuredBrands.sortOrder));
 
-  /*
-   * 2026-09-11: this used to run one fallback query PER brand inside a
-   * Promise.all -- nine active brands, most without an uploaded photo, meant
-   * up to nine extra connections opened on every single homepage render
-   * against a pool of ten (mysql2's default), with Aiven ~174ms away. On a
-   * warm homepage that was the most expensive thing the page did.
-   *
-   * Now it is one query for all of them. MySQL has no DISTINCT ON, so the
-   * "newest imaged product per brand" pick is done here instead: order by
-   * createdAt descending and keep the first row seen for each brand. The
-   * result is identical to the old per-brand `ORDER BY createdAt DESC LIMIT 1`.
-   */
-  const needsFallback = brands.filter(brand => !brand.photoUrl).map(brand => brand.brandName);
-  if (!needsFallback.length) return brands;
+    /*
+     * 2026-09-11: this used to run one fallback query PER brand inside a
+     * Promise.all -- nine active brands, most without an uploaded photo, meant
+     * up to nine extra connections opened on every single homepage render
+     * against a pool of ten (mysql2's default), with Aiven ~174ms away. On a
+     * warm homepage that was the most expensive thing the page did.
+     *
+     * Now it is one query for all of them. MySQL has no DISTINCT ON, so the
+     * "newest imaged product per brand" pick is done here instead: order by
+     * createdAt descending and keep the first row seen for each brand. The
+     * result is identical to the old per-brand `ORDER BY createdAt DESC LIMIT 1`.
+     */
+    const needsFallback = brands.filter(brand => !brand.photoUrl).map(brand => brand.brandName);
+    if (!needsFallback.length) return brands;
 
-  const fallbackRows = await db
-    .select({ brand: products.brand, imageUrl: products.imageUrl, createdAt: products.createdAt })
-    .from(products)
-    .where(and(
-      inArray(products.brand, needsFallback),
-      eq(products.isPublished, true),
-      isNotNull(products.imageUrl),
-      ne(products.imageUrl, ""),
-    ))
-    .orderBy(desc(products.createdAt), desc(products.id));
+    const fallbackRows = await db
+      .select({ brand: products.brand, imageUrl: products.imageUrl, createdAt: products.createdAt })
+      .from(products)
+      .where(and(
+        inArray(products.brand, needsFallback),
+        eq(products.isPublished, true),
+        isNotNull(products.imageUrl),
+        ne(products.imageUrl, ""),
+      ))
+      .orderBy(desc(products.createdAt), desc(products.id));
 
-  const newestByBrand = new Map<string, string>();
-  for (const row of fallbackRows) {
-    if (row.brand && !newestByBrand.has(row.brand)) newestByBrand.set(row.brand, row.imageUrl ?? "");
-  }
-  return brands.map(brand => brand.photoUrl
-    ? brand
-    : { ...brand, photoUrl: newestByBrand.get(brand.brandName) || null });
+    const newestByBrand = new Map<string, string>();
+    for (const row of fallbackRows) {
+      if (row.brand && !newestByBrand.has(row.brand)) newestByBrand.set(row.brand, row.imageUrl ?? "");
+    }
+    return brands.map(brand => brand.photoUrl
+      ? brand
+      : { ...brand, photoUrl: newestByBrand.get(brand.brandName) || null });
+  });
 }
 
 export async function getAdminFeaturedBrands() {
@@ -3611,32 +3626,36 @@ export async function getDistinctRealBrands() {
  * a brand that has a logo shows it and every other brand still gets listed.
  */
 export async function getBrandDirectory() {
-  const db = await getDb();
-  if (!db) return [];
-  const [counts, featured] = await Promise.all([
-    db.select({ brand: products.brand, count: sql<number>`count(*)` }).from(products)
-      .where(and(eq(products.isPublished, true), sql`${products.brand} IS NOT NULL AND ${products.brand} <> ''`))
-      .groupBy(products.brand),
-    db.select().from(featuredBrands).where(eq(featuredBrands.isActive, true)),
-  ]);
-  const artwork = new Map(featured.map(row => [row.brandName, row]));
-  return counts
-    .filter((row): row is { brand: string; count: number } => Boolean(row.brand))
-    .map(row => {
-      const tile = artwork.get(row.brand);
-      return {
-        brandName: row.brand,
-        productCount: Number(row.count),
-        logoUrl: tile?.logoUrl ?? null,
-        isFeatured: Boolean(tile),
-      };
-    })
-    // Alphabetical by the visitor's locale, not MySQL's collation -- this list
-    // mixes Latin and Cyrillic brand names and is read as an A-Z index.
-    .sort((a, b) => a.brandName.localeCompare(b.brandName, "mn"));
+  // 2026-09-14: cached like the other storefront reads (see STOREFRONT_CACHE_TTL_MS).
+  return getOrSetCached("storefront:brandDirectory", STOREFRONT_CACHE_TTL_MS, async () => {
+    const db = await getDb();
+    if (!db) return [];
+    const [counts, featured] = await Promise.all([
+      db.select({ brand: products.brand, count: sql<number>`count(*)` }).from(products)
+        .where(and(eq(products.isPublished, true), sql`${products.brand} IS NOT NULL AND ${products.brand} <> ''`))
+        .groupBy(products.brand),
+      db.select().from(featuredBrands).where(eq(featuredBrands.isActive, true)),
+    ]);
+    const artwork = new Map(featured.map(row => [row.brandName, row]));
+    return counts
+      .filter((row): row is { brand: string; count: number } => Boolean(row.brand))
+      .map(row => {
+        const tile = artwork.get(row.brand);
+        return {
+          brandName: row.brand,
+          productCount: Number(row.count),
+          logoUrl: tile?.logoUrl ?? null,
+          isFeatured: Boolean(tile),
+        };
+      })
+      // Alphabetical by the visitor's locale, not MySQL's collation -- this list
+      // mixes Latin and Cyrillic brand names and is read as an A-Z index.
+      .sort((a, b) => a.brandName.localeCompare(b.brandName, "mn"));
+  });
 }
 
 export async function createFeaturedBrand(input: FeaturedBrandWriteInput) {
+  invalidateCached("storefront:featuredBrands"); invalidateCached("storefront:brandDirectory");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const inserted = await db.insert(featuredBrands).values({ ...input, tagline: input.tagline ?? null, photoUrl: input.photoUrl ?? null, logoUrl: input.logoUrl ?? null, sortOrder: input.sortOrder ?? 0, isActive: input.isActive ?? true });
@@ -3645,6 +3664,7 @@ export async function createFeaturedBrand(input: FeaturedBrandWriteInput) {
 }
 
 export async function updateFeaturedBrand(input: { id: number } & Partial<FeaturedBrandWriteInput>) {
+  invalidateCached("storefront:featuredBrands"); invalidateCached("storefront:brandDirectory");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const existing = await db.select().from(featuredBrands).where(eq(featuredBrands.id, input.id)).limit(1);
@@ -3656,6 +3676,7 @@ export async function updateFeaturedBrand(input: { id: number } & Partial<Featur
 }
 
 export async function deleteFeaturedBrand(id: number) {
+  invalidateCached("storefront:featuredBrands"); invalidateCached("storefront:brandDirectory");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.delete(featuredBrands).where(eq(featuredBrands.id, id));
@@ -4553,6 +4574,7 @@ export async function findProductBySku(sku: string) {
 }
 
 export async function createAdminProduct(input: ProductWriteInput) {
+  invalidateCachedByPrefix("storefront:bestsellers:"); invalidateCached("storefront:publishedCount"); invalidateCached("storefront:brandDirectory"); invalidateCachedByPrefix("storefront:related:");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
 
@@ -4672,6 +4694,7 @@ async function syncSoleVariantFromProduct(productId: number, changes: { priceMnt
 }
 
 export async function updateAdminProduct(input: { id: number } & Partial<ProductWriteInput>) {
+  invalidateCachedByPrefix("storefront:bestsellers:"); invalidateCached("storefront:publishedCount"); invalidateCached("storefront:brandDirectory"); invalidateCachedByPrefix("storefront:related:");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
 
@@ -4705,6 +4728,7 @@ export async function updateAdminProduct(input: { id: number } & Partial<Product
 }
 
 export async function deleteAdminProduct(id: number) {
+  invalidateCachedByPrefix("storefront:bestsellers:"); invalidateCached("storefront:publishedCount"); invalidateCached("storefront:brandDirectory"); invalidateCachedByPrefix("storefront:related:");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
 
