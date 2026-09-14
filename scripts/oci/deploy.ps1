@@ -54,5 +54,14 @@ $remote = $remote.Replace("__BUNDLE__", $bundle).Replace("`r`n", "`n")  # CRLF c
 $remote | ssh -o ClearAllForwardings=yes sugi-oci "tr -d '\r' | bash -s"
 
 Write-Host "==> public check" -ForegroundColor Cyan
-$code = (Invoke-WebRequest -Uri "https://sugi.karkaron.com/health" -UseBasicParsing -TimeoutSec 40).StatusCode
-Write-Host "https://sugi.karkaron.com/health -> $code"
+# pm2 has restarted the app by now, but it needs ~10 s to boot (TensorFlow,
+# the DB handshake) and Cloudflare answers 502 until then -- which is exactly
+# where the first two deploys "failed" after a successful restart. Retry.
+$code = 0
+foreach ($attempt in 1..18) {
+  try { $code = (Invoke-WebRequest -Uri "https://sugi.karkaron.com/health" -UseBasicParsing -TimeoutSec 15).StatusCode } catch { $code = 0 }
+  if ($code -eq 200) { break }
+  Start-Sleep -Seconds 5
+}
+Write-Host "https://sugi.karkaron.com/health -> $code (after $attempt attempt(s))"
+if ($code -ne 200) { throw "The site did not come back within 90 s -- check: ssh sugi-oci 'pm2 logs sugi --lines 40'" }
