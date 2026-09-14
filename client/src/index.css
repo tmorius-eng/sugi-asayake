@@ -4161,3 +4161,10 @@ html[data-storefront-theme="dark"] .sugi-site .qs-stage small { color: var(--ck-
    .phone-verify-*) style the internals; this only frames it. */
 .checkout-phone-verify { border: 1px solid var(--border); border-radius: 12px; padding: 14px; background: var(--muted); }
 .checkout-phone-verify .auth-card, .checkout-phone-verify .phone-verify-compact { margin: 10px 0 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
+
+/* Product facts (2026-09-14): ingredients / net content / origin / shelf life on the PDP. */
+.product-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 0; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--muted); }
+.product-facts > div { min-width: 0; }
+.product-facts-wide { grid-column: 1 / -1; }
+.product-facts dt { font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--muted-foreground); }
+.product-facts dd { margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: var(--foreground); overflow-wrap: anywhere; }

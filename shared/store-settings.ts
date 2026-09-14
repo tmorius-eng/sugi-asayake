@@ -265,6 +265,25 @@ export const storeSettingSlots = [
     tokens: ["{тоо}"] as const,
     fallbackValue: "SUGI ASAYAKE — {тоо} бараа нөөц дуусч байна",
   },
+  // Measurement (2026-09-14): GA4 and the Meta Pixel load ONLY after the
+  // visitor accepts the matching cookie category (analytics / marketing),
+  // from /vendor/analytics-init.js. Empty = tag never loads.
+  {
+    key: "analytics-ga4-measurement-id",
+    group: "SEO ба баталгаажуулалт",
+    type: "text" as const,
+    label: "Google Analytics 4 Measurement ID",
+    description: "analytics.google.com → Admin → Data streams → Web → \"G-XXXXXXXXXX\". Зочин \"Тоолуур\" күкийг зөвшөөрсний дараа л ачаалагдана; хоосон бол огт ачаалагдахгүй.",
+    fallbackValue: "",
+  },
+  {
+    key: "analytics-meta-pixel-id",
+    group: "SEO ба баталгаажуулалт",
+    type: "text" as const,
+    label: "Meta (Facebook) Pixel ID",
+    description: "business.facebook.com → Events Manager → Data sources → Pixel ID (15–16 орон). Зочин \"Маркетинг\" күкийг зөвшөөрсний дараа л ачаалагдана — Facebook сурталчилгааны хөрвүүлэлтийг (PageView, ViewContent, AddToCart, Purchase) хэмжинэ.",
+    fallbackValue: "",
+  },
   // Guest checkout phone verification (2026-09-14). "1" = a shopper with no
   // verified phone on their account must confirm the number on the order by
   // verify.mn SMS before the order is accepted; "0" = off (e.g. while the

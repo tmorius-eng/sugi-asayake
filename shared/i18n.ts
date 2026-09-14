@@ -118,6 +118,14 @@ export const UI_STRINGS: Record<string, { en: string; ja: string }> = {
   "Төлбөр баталгаажмагц {n} картын код энд, имэйл болон push мэдэгдлээр ирнэ.": { en: "Once payment is confirmed, the code for {n} card(s) will appear here and arrive by email and push notification.", ja: "お支払い確認後、{n} 枚分のコードがここに表示され、メールとプッシュ通知でも届きます。" },
   "Кодыг Профайл → Гишүүнчлэл → \"Бэлгийн карт ашиглах\" хэсэгт оруулахад дүн дэлгүүрийн зээл болно. Хүчинтэй хугацаа {n} сар.": { en: "Enter the code under Profile → Membership → \"Redeem a gift card\" and the amount becomes store credit. Valid for {n} months.", ja: "プロフィール → メンバーシップ → 「ギフトカードを使う」でコードを入力すると、金額がストアクレジットになります。有効期間は {n} か月です。" },
   "Цахим (бэлгийн карт)": { en: "Digital (gift card)", ja: "デジタル（ギフトカード）" },
+  // Product facts (2026-09-14)
+  "Хэмжээ": { en: "Net content", ja: "内容量" },
+  "Гарал үүсэл": { en: "Country of origin", ja: "原産国" },
+  "Хадгалах хугацаа": { en: "Shelf life", ja: "賞味・使用期限" },
+  "{n} сар (задлаагүй)": { en: "{n} months (unopened)", ja: "{n} か月（未開封）" },
+  "Найрлага": { en: "Ingredients", ja: "成分" },
+  "Баркод / SKU: {code}": { en: "Barcode / SKU: {code}", ja: "バーコード / SKU: {code}" },
+  "Япон": { en: "Japan", ja: "日本" },
   "Цахим бэлгийн карт — төлбөр баталгаажмагц код шууд ирнэ": { en: "Digital gift card — the code arrives as soon as payment is confirmed", ja: "デジタルギフトカード — お支払い確認後すぐにコードが届きます" },
   "Сагсанд зөвхөн бэлгийн карт байна — хүргэлт, салбар хэрэггүй. Төлбөр баталгаажмагц картын код профайлын захиалгын түүх, имэйл (өгсөн бол) болон push мэдэгдлээр ирнэ.": { en: "Your basket holds only gift cards — no delivery or branch needed. Once payment is confirmed, the codes arrive in your order history, by email (if given) and by push notification.", ja: "カートにはギフトカードのみが入っています — 配送や店舗の選択は不要です。お支払い確認後、コードは注文履歴、メール（入力した場合）、プッシュ通知で届きます。" },
 

@@ -35,7 +35,10 @@ function contentSecurityPolicy(nonce: string): string {
   // 'wasm-unsafe-eval' (2026-09-13): the admin face gate runs MediaPipe Face
   // Landmarker as WebAssembly (self-hosted under /face-models/mediapipe). It
   // permits compiling wasm only -- eval() and inline script stay blocked.
-  `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval'`,
+  // GA4 / Meta Pixel (2026-09-14): loaded by /vendor/analytics-init.js only
+  // after cookie consent and only when an id is set in /admin; the hosts
+  // are named here so the CSP does not silently block them then.
+  `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval' https://www.googletagmanager.com https://connect.facebook.net`,
   // 'unsafe-inline' here covers React/Radix/Tailwind's runtime `style={...}`
   // attributes, which CSP has no practical nonce-based alternative for.
   // Fonts are self-hosted since 2026-09-13; no third-party style/font hosts.
@@ -45,7 +48,7 @@ function contentSecurityPolicy(nonce: string): string {
   // host (S3_PUBLIC_BASE_URL) that varies per deployment, so it can't be
   // pinned to a single origin here.
   "img-src 'self' data: https:",
-  "connect-src 'self'",
+  "connect-src 'self' https://www.google-analytics.com https://analytics.google.com https://*.google-analytics.com https://www.googletagmanager.com https://www.facebook.com https://connect.facebook.net",
   "frame-ancestors 'self'",
   "base-uri 'self'",
   "form-action 'self'",

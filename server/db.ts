@@ -1475,6 +1475,10 @@ export async function getProductBySlug(slug: string) {
       galleryJson: products.galleryJson,
       stockQuantity: products.stockQuantity,
       kind: products.kind,
+      ingredients: products.ingredients,
+      netContent: products.netContent,
+      countryOfOrigin: products.countryOfOrigin,
+      shelfLifeMonths: products.shelfLifeMonths,
       categoryName: productCategories.name,
       categorySlug: productCategories.slug,
       skinType: products.skinType,
@@ -4896,6 +4900,12 @@ export type ProductWriteInput = {
   isPublished: boolean;
   /** Gift cards sold at checkout (2026-09-14) -- see the schema comment on products.kind. */
   kind?: "physical" | "gift_card";
+  /** Product facts (2026-09-14, migration 0079) -- see the schema comment. */
+  ingredients?: string | null;
+  netContent?: string | null;
+  countryOfOrigin?: string | null;
+  shelfLifeMonths?: number | null;
+  factsSource?: string | null;
   skinType?: "dry" | "oily" | "combination" | "sensitive" | "normal" | null;
   skinConcerns?: string | null;
   interiorStyle?: string | null;
@@ -4943,6 +4953,11 @@ export async function createAdminProduct(input: ProductWriteInput) {
       stockQuantity: input.stockQuantity,
       isPublished: input.isPublished,
       kind: input.kind ?? "physical",
+      ingredients: input.ingredients ?? null,
+      netContent: input.netContent ?? null,
+      countryOfOrigin: input.countryOfOrigin ?? null,
+      shelfLifeMonths: input.shelfLifeMonths ?? null,
+      factsSource: input.factsSource ?? (input.ingredients || input.netContent || input.countryOfOrigin || input.shelfLifeMonths ? "admin" : null),
       skinType: input.skinType ?? null,
       skinConcerns: input.skinConcerns ?? null,
       interiorStyle: input.interiorStyle ?? null,
@@ -5058,6 +5073,12 @@ export async function updateAdminProduct(input: { id: number } & Partial<Product
   if (input.stockQuantity !== undefined) changes.stockQuantity = input.stockQuantity;
   if (input.isPublished !== undefined) changes.isPublished = input.isPublished;
   if (input.kind !== undefined) changes.kind = input.kind;
+  if (input.ingredients !== undefined) changes.ingredients = input.ingredients;
+  if (input.netContent !== undefined) changes.netContent = input.netContent;
+  if (input.countryOfOrigin !== undefined) changes.countryOfOrigin = input.countryOfOrigin;
+  if (input.shelfLifeMonths !== undefined) changes.shelfLifeMonths = input.shelfLifeMonths;
+  if (input.factsSource !== undefined) changes.factsSource = input.factsSource;
+  else if (input.ingredients !== undefined || input.netContent !== undefined || input.countryOfOrigin !== undefined || input.shelfLifeMonths !== undefined) changes.factsSource = "admin";
   if (input.skinType !== undefined) changes.skinType = input.skinType;
   if (input.skinConcerns !== undefined) changes.skinConcerns = input.skinConcerns;
   if (input.interiorStyle !== undefined) changes.interiorStyle = input.interiorStyle;

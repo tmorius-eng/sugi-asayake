@@ -63,6 +63,13 @@ async function resolveValues(): Promise<Map<string, string>> {
     getStoreSettingValue("seo-google-site-verification"),
     getStoreSettingValue("seo-facebook-domain-verification"),
   ]);
+  // Measurement ids (2026-09-14): handed to /vendor/analytics-init.js as a
+  // JSON data block; the tags themselves load only after cookie consent.
+  const [ga4Id, pixelId] = await Promise.all([getStoreSettingValue("analytics-ga4-measurement-id"), getStoreSettingValue("analytics-meta-pixel-id")]);
+  const analyticsConfig = JSON.stringify({
+    ga4: /^G-[A-Z0-9]{4,20}$/i.test(ga4Id.trim()) ? ga4Id.trim() : "",
+    metaPixel: /^\d{6,20}$/.test(pixelId.trim()) ? pixelId.trim() : "",
+  }).replace(/</g, "\\u003c");
   // Search Console / Meta Business verification tokens (2026-09-14): pasted
   // in /admin -> Дэлгүүрийн тохиргоо, rendered as the <meta> each service
   // asks for. Empty setting = no tag at all.
@@ -134,6 +141,9 @@ async function resolveValues(): Promise<Map<string, string>> {
     ["COOKIE_ESSENTIAL_DESCRIPTION", escapeJsString(textFor("cookie-text-essential-description"))],
     ["COOKIE_ANALYTICS_LABEL", escapeJsString(textFor("cookie-text-analytics-label"))],
     ["COOKIE_ANALYTICS_DESCRIPTION", escapeJsString(textFor("cookie-text-analytics-description"))],
+    ["COOKIE_MARKETING_LABEL", escapeJsString(textFor("cookie-text-marketing-label"))],
+    ["COOKIE_MARKETING_DESCRIPTION", escapeJsString(textFor("cookie-text-marketing-description"))],
+    ["ANALYTICS_CONFIG_JSON", analyticsConfig],
   ]);
 
   cache = { renderedAt: now, values };
@@ -158,7 +168,7 @@ export async function renderIndexHtml(template: string, pathname = "/"): Promise
   // the site-wide values.
   const siteName = values.get("SEO_SITE_NAME") ?? getSiteTextSlot("seo-text-site-name").fallbackValue;
   const routeMeta = await resolveRouteMeta(pathname, siteName.replace(/&quot;/g, '"').replace(/&amp;/g, "&"));
-  return template.replace(/%((?:SEO|COOKIE)_[A-Z_]+)%/g, (match, key: string) => routeMeta?.get(key) ?? values.get(key) ?? fallbackFor(key) ?? match);
+  return template.replace(/%((?:SEO|COOKIE|ANALYTICS)_[A-Z_]+)%/g, (match, key: string) => routeMeta?.get(key) ?? values.get(key) ?? fallbackFor(key) ?? match);
 }
 
 /**
@@ -178,6 +188,8 @@ const COOKIE_FALLBACK_SLOTS: Record<string, SiteTextSlotKey> = {
   COOKIE_ESSENTIAL_DESCRIPTION: "cookie-text-essential-description",
   COOKIE_ANALYTICS_LABEL: "cookie-text-analytics-label",
   COOKIE_ANALYTICS_DESCRIPTION: "cookie-text-analytics-description",
+  COOKIE_MARKETING_LABEL: "cookie-text-marketing-label",
+  COOKIE_MARKETING_DESCRIPTION: "cookie-text-marketing-description",
 };
 
 /** Open Graph needs absolute URLs; storage URLs may already be absolute
@@ -203,6 +215,7 @@ function fallbackFor(key: string): string | undefined {
     case "SEO_OG_TYPE": return "website";
     case "SEO_OG_IMAGE_META": return "";
     case "SEO_VERIFICATION": return "";
+    case "ANALYTICS_CONFIG_JSON": return '{"ga4":"","metaPixel":""}';
     case "SEO_OG_IMAGE": return escapeAttribute(absoluteUrl(getSiteMediaSlot("home-hero").fallbackUrl));
     case "SEO_HERO_PRELOAD": {
       const fallback = getSiteMediaSlot("home-hero").fallbackUrl;

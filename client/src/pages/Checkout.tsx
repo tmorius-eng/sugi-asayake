@@ -1,5 +1,6 @@
 import { Check, CircleAlert, CreditCard, LoaderCircle, MapPin, ShoppingBag, Smartphone, Truck } from "lucide-react";
 import { newRequestId } from "@/lib/requestId";
+import { trackEvent } from "@/lib/analytics";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
@@ -212,6 +213,7 @@ export default function Checkout() {
       setUseStoreCredit(false);
       checkoutRequestIdRef.current = newRequestId();
       setPlacedOrder(order);
+      trackEvent("purchase", { value: order.totalMnt, transaction_id: order.orderNumber, items: cartItems.map(item => ({ item_id: item.sku, item_name: item.name, price: item.priceMnt, quantity: item.quantity })) });
       // Cash/pickup orders are confirmed the instant they're placed — see
       // isOrderConfirmed above, which renders OrderConfirmation once this
       // is set (no toast needed anymore, the takeover screen IS the

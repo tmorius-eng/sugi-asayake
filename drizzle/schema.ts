@@ -393,6 +393,20 @@ export const products = mysqlTable("products", {
   hairConcerns: varchar("hairConcerns", { length: 300 }),
   fragrancePreference: mysqlEnum("fragrancePreference", ["unscented", "light", "floral", "citrus"]),
   wellnessInterests: varchar("wellnessInterests", { length: 300 }),
+  /**
+   * Product facts (2026-09-14, migration 0079): ingredients list, net
+   * content ("170ml", "3 x 50g"), country of origin, shelf life in months
+   * (unopened; a period-after-opening is a different number and is left to
+   * the description). All nullable; factsSource records who filled them --
+   * "openfoodfacts" / "openbeautyfacts" / "openproductsfacts" by the enrich
+   * script, "admin" once a person edits them in /admin (the script then
+   * never overwrites that product again).
+   */
+  ingredients: text("ingredients"),
+  netContent: varchar("netContent", { length: 80 }),
+  countryOfOrigin: varchar("countryOfOrigin", { length: 80 }),
+  shelfLifeMonths: int("shelfLifeMonths"),
+  factsSource: varchar("factsSource", { length: 40 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => [

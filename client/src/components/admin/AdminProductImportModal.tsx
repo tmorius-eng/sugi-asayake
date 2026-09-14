@@ -35,6 +35,10 @@ const IMPORT_FIELDS: { key: string; label: string; required?: boolean }[] = [
   { key: "hairConcerns", label: "Үсний асуудал" },
   { key: "fragrancePreference", label: "Үнэрийн сонголт" },
   { key: "wellnessInterests", label: "Эрүүл мэндийн сонирхол" },
+  { key: "ingredients", label: "Найрлага" },
+  { key: "netContent", label: "Хэмжээ (170ml, 3×50g)" },
+  { key: "countryOfOrigin", label: "Гарал үүслийн улс" },
+  { key: "shelfLifeMonths", label: "Хадгалах хугацаа (сар)" },
 ];
 const IGNORE_FIELD = "__ignore__";
 

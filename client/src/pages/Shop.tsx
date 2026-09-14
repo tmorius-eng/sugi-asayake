@@ -1,3 +1,4 @@
+import { trackEvent } from "@/lib/analytics";
 import { X, ArrowDownUp, ArrowUpRight, ChevronLeft, ChevronRight, Eye, Grid3x3, Heart, LayoutGrid, MapPin, PackageCheck, Phone, RotateCcw, LoaderCircle, Search, ShoppingCart, SlidersHorizontal, Sparkles, Star, Truck, Wallet } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { scrollElementToTopNow } from "@/lib/scroll";
@@ -140,11 +141,12 @@ export default function Shop() {
   const addToCart = trpc.cart.addItem.useMutation({
     onError: error => toast.error(error instanceof Error ? error.message : "Сагсанд нэмж чадсангүй."),
   });
-  const addProductToCart = (product: { id: number; name: string }) => addToCart.mutate({ productId: product.id, quantity: 1 }, {
+  const addProductToCart = (product: { id: number; name: string; sku?: string; priceMnt?: number }) => addToCart.mutate({ productId: product.id, quantity: 1 }, {
     onSuccess: () => {
       utils.cart.current.invalidate();
       setCartOpen(true);
       notifyAddedToCart(`${product.name} сагсанд нэмэгдлээ.`);
+      trackEvent("add_to_cart", { value: product.priceMnt ?? 0, items: [{ item_id: product.sku ?? String(product.id), item_name: product.name, price: product.priceMnt ?? 0, quantity: 1 }] });
     },
   });
   const [quickViewProduct, setQuickViewProduct] = useState<QuickViewProduct | null>(null);

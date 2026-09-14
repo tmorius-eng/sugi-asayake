@@ -318,6 +318,11 @@ const productWriteSchema = z.object({
   isPublished: z.boolean(),
   // Gift cards sold at checkout (2026-09-14) -- see products.kind.
   kind: z.enum(["physical", "gift_card"]).optional(),
+  // Product facts (2026-09-14, migration 0079).
+  ingredients: nullableText(10_000),
+  netContent: nullableText(80),
+  countryOfOrigin: nullableText(80),
+  shelfLifeMonths: z.number().int().min(1).max(240).nullable().optional(),
   skinType: skinTypeSchema,
   skinConcerns: skinConcernsSchema,
   interiorStyle: interiorStyleSchema,
@@ -807,7 +812,11 @@ async function importProductsCsvRows(
         hairConcerns: csvCellToNullable(row.hairConcerns),
         fragrancePreference: csvCellToNullable(row.fragrancePreference),
         wellnessInterests: csvCellToNullable(row.wellnessInterests),
+        ingredients: csvCellToNullable(row.ingredients),
+        netContent: csvCellToNullable(row.netContent),
+        countryOfOrigin: csvCellToNullable(row.countryOfOrigin),
       };
+      if (row.shelfLifeMonths !== undefined) candidate.shelfLifeMonths = row.shelfLifeMonths.trim() === "" ? null : csvCellToInt(row.shelfLifeMonths, "shelfLifeMonths");
       if (row.priceMnt?.trim()) candidate.priceMnt = csvCellToInt(row.priceMnt, "priceMnt");
       if (row.compareAtPriceMnt !== undefined) candidate.compareAtPriceMnt = row.compareAtPriceMnt.trim() === "" ? null : csvCellToInt(row.compareAtPriceMnt, "compareAtPriceMnt");
       if (row.costMnt !== undefined) candidate.costMnt = row.costMnt.trim() === "" ? null : csvCellToInt(row.costMnt, "costMnt");

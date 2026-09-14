@@ -17,13 +17,22 @@
   if (!manager || !block) return;
   var text;
   try { text = JSON.parse(block.textContent || "{}"); } catch (_) { return; }
+  // Hands each decision to /vendor/analytics-init.js (which may load after
+  // this file, hence the queue). GA4 / Meta Pixel load only from there.
+  function notify(type, granted) {
+    if (typeof window.sugiConsent === "function") window.sugiConsent(type, granted);
+    else (window.__sugiConsentQueue = window.__sugiConsentQueue || []).push([type, granted]);
+  }
   manager.init({
     prompt: { position: "bottomRight" },
     icon: { position: "bottomLeft" },
     backdrop: { show: false },
     consentTypes: [
       { id: "essential", label: text.essentialLabel, description: text.essentialDescription, required: true },
-      { id: "analytics", label: text.analyticsLabel, description: text.analyticsDescription, required: false, defaultValue: false },
+      { id: "analytics", label: text.analyticsLabel, description: text.analyticsDescription, required: false, defaultValue: false,
+        onAccept: function () { notify("analytics", true); }, onReject: function () { notify("analytics", false); } },
+      { id: "marketing", label: text.marketingLabel, description: text.marketingDescription, required: false, defaultValue: false,
+        onAccept: function () { notify("marketing", true); }, onReject: function () { notify("marketing", false); } },
     ],
     text: {
       prompt: {

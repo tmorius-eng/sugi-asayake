@@ -86,6 +86,8 @@
       "essentialDescription": "%COOKIE_ESSENTIAL_DESCRIPTION%",
       "analyticsLabel": "%COOKIE_ANALYTICS_LABEL%",
       "analyticsDescription": "%COOKIE_ANALYTICS_DESCRIPTION%",
+      "marketingLabel": "%COOKIE_MARKETING_LABEL%",
+      "marketingDescription": "%COOKIE_MARKETING_DESCRIPTION%",
       "promptDescription": "%COOKIE_PROMPT_DESCRIPTION%",
       "acceptAll": "%COOKIE_ACCEPT_ALL%",
       "reject": "%COOKIE_REJECT%",
@@ -95,6 +97,10 @@
       "save": "%COOKIE_SAVE%"
     }</script>
     <script src="/vendor/silktide-consent-init.js"></script>
+    <!-- Measurement (2026-09-14): ids from /admin → Дэлгүүрийн тохиргоо; the
+         tags load in /vendor/analytics-init.js only after consent. -->
+    <script type="application/json" id="analytics-config">%ANALYTICS_CONFIG_JSON%</script>
+    <script src="/vendor/analytics-init.js" defer></script>
   </head>
 
   <body>

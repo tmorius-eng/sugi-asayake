@@ -46,7 +46,10 @@ const jsonLd = (data: unknown) => JSON.stringify(data).replace(/</g, "\\u003c");
 async function productMeta(slug: string, siteName: string): Promise<RouteMeta | null> {
   const product = await getProductBySlug(slug);
   if (!product) return null;
-  const description = clip(stripHtml(product.shortDescription || product.description || `${product.name} — ${siteName}`));
+  // The barcode leads the description (2026-09-14, Tom: a Google search for
+  // any of our SKUs must find us): it is the exact string a shopper or a
+  // competitor types, and Google indexes meta descriptions and visible text.
+  const description = clip(`Баркод ${product.sku} · ${stripHtml(product.shortDescription || product.description || `${product.name} — ${siteName}`)}`);
   // The share card is composed by /og/product/<slug>.jpg (see ogImage.ts):
   // always 1200x630, so Facebook draws the large-image layout whatever size
   // the catalogue photo is. Structured data keeps the real photo.
@@ -62,7 +65,8 @@ async function productMeta(slug: string, siteName: string): Promise<RouteMeta | 
     description,
     sku: product.sku,
     ...(product.brand ? { brand: { "@type": "Brand", name: product.brand } } : {}),
-    ...(/^\d{8,14}$/.test(product.sku) ? { gtin: product.sku } : {}),
+    productID: product.sku,
+    ...(/^\d{8,14}$/.test(product.sku) ? { gtin: product.sku, ...(product.sku.length === 13 ? { gtin13: product.sku } : product.sku.length === 8 ? { gtin8: product.sku } : {}) } : { mpn: product.sku }),
     offers: {
       "@type": "Offer",
       url,

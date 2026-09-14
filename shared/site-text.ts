@@ -1277,6 +1277,20 @@ export const siteTextSlots = [
     fallbackValue: "Тоолуур (нэргүй статистик)",
   },
   {
+    key: "cookie-text-marketing-label",
+    group: "Күкийн банер",
+    label: "Маркетингийн күкийн нэр",
+    description: "Meta Pixel (Facebook сурталчилгааны хэмжилт) энэ ангилалд багтана — Pixel ID тохируулаагүй бол ангилал харагдсан ч юу ч ачаалагдахгүй.",
+    fallbackValue: "Маркетинг (Facebook сурталчилгаа)",
+  },
+  {
+    key: "cookie-text-marketing-description",
+    group: "Күкийн банер",
+    label: "Маркетингийн күкийн тайлбар",
+    description: "⚠️ Энэ бол хуулийн мэдэгдэл — Meta Pixel юу хийдгийг үнэнээр тайлбарлана.",
+    fallbackValue: "Facebook-ийн Pixel манай сурталчилгаа хэр үр дүнтэйг хэмжинэ (аль хуудас, сагс, захиалга). Зөвшөөрөхгүй бол Facebook руу юу ч илгээгдэхгүй.",
+  },
+  {
     key: "cookie-text-analytics-description",
     group: "Күкийн банер",
     label: "Статистикийн күкийн тайлбар",
