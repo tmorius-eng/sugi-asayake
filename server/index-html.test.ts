@@ -125,7 +125,10 @@ describe("slot registries", () => {
     for (const slot of storeSettingSlots) {
       expect(slot.group, slot.key).toBeTruthy();
       expect(slot.label, slot.key).toBeTruthy();
-      expect(slot.fallbackValue, slot.key).toBeTruthy();
+      // An identifier slot (Search Console / Meta verification, GA4, Pixel;
+      // 2026-09-14) is legitimately empty until the admin pastes a value --
+      // empty means "no tag", which is the correct default.
+      expect(typeof slot.fallbackValue, slot.key).toBe("string");
     }
   });
 });
