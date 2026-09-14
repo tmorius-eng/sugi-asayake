@@ -1,5 +1,8 @@
 import { useState, type ReactNode } from "react";
-import { Banknote, Download, LayoutGrid, List, LoaderCircle, PackageCheck } from "lucide-react";
+import { Banknote, Download, FileText, LayoutGrid, List, LoaderCircle, PackageCheck, Pencil, Plus, Printer } from "lucide-react";
+import { savePdfBase64 } from "@/lib/pdf";
+import ManualOrderForm from "./admin/ManualOrderForm";
+import OrderEditForm from "./admin/OrderEditForm";
 import { toast } from "sonner";
 import { downloadCsv } from "@/lib/csv";
 import { trpc } from "@/lib/trpc";
@@ -46,6 +49,12 @@ export default function AdminOperationsPanel({ preview = false, query = "", role
   const canRefund = role === "admin" || role === "finance";
   const refundOrder = trpc.admin.refundOrder.useMutation({ onSuccess: () => { utils.admin.orders.invalidate(); toast.success("Буцаан олголт бүртгэгдлээ."); setRefundForm(null); }, onError: error => toast.error(messageFrom(error)) });
   const [refundForm, setRefundForm] = useState<{ orderId: number; amountMnt: string; note: string; restock: boolean } | null>(null);
+  // Staff-side order writes (2026-09-14): manual order form + in-place edit + PDFs.
+  const [showManualOrder, setShowManualOrder] = useState(false);
+  const [editingOrderId, setEditingOrderId] = useState<number | null>(null);
+  const packingSlip = trpc.admin.packingSlipPdf.useMutation({ onSuccess: ({ fileName, base64 }) => savePdfBase64(fileName, base64), onError: error => toast.error(messageFrom(error)) });
+  const staffInvoice = trpc.admin.orderInvoicePdf.useMutation({ onSuccess: ({ fileName, base64 }) => savePdfBase64(fileName, base64), onError: error => toast.error(messageFrom(error)) });
+  const isOpenOrder = (status: string) => status !== "completed" && status !== "cancelled" && status !== "returned";
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<number>>(new Set());
   const [bulkStatus, setBulkStatus] = useState<OrderStatus>("confirmed");
   // 2026-09-07 (Project "SUGI Desk" Phase 3): a real, visible Kanban board --
@@ -113,8 +122,12 @@ export default function AdminOperationsPanel({ preview = false, query = "", role
           </button>
         )}
       </div>
+      <div className="flex flex-wrap items-center gap-2">
+      {canManageFulfilment && <button type="button" disabled={preview} onClick={() => setShowManualOrder(current => !current)} className="inline-flex items-center gap-2 rounded-full bg-[var(--a-btn-dark)] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#df1f3d] disabled:opacity-60"><Plus size={14} />Гараар захиалга</button>}
       <button type="button" onClick={() => setShowExport(current => !current)} className="inline-flex items-center gap-2 rounded-full border border-[var(--a-border)] bg-[var(--a-card)] px-4 py-2.5 text-xs font-bold text-[var(--a-text-soft)] transition hover:border-[#df1f3d] hover:text-[#df1f3d]"><Download size={14} />Экспорт</button>
+      </div>
     </div>
+    {showManualOrder && !preview && <ManualOrderForm onDone={() => setShowManualOrder(false)} />}
     {showExport && <div className="flex flex-wrap items-end gap-3 rounded-2xl bg-[var(--a-soft)] p-4">
       <label className="grid gap-1.5 text-xs font-bold">Төлөв<select value={exportStatusFilter} onChange={event => setExportStatusFilter(event.target.value as typeof exportStatusFilter)} className="h-10 rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] px-2 text-xs font-normal outline-none focus:border-[#df1f3d]"><option value="all">Бүгд</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <label className="grid gap-1.5 text-xs font-bold">Эхлэх огноо<input type="date" value={exportDateFrom} onChange={event => setExportDateFrom(event.target.value)} className="h-10 rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" /></label>
@@ -163,6 +176,12 @@ export default function AdminOperationsPanel({ preview = false, query = "", role
               <select value={order.status} disabled={preview || !canManageFulfilment || updateOrder.isPending} onChange={event => updateOrder.mutate({ id: order.id, status: event.target.value as OrderStatus })} className="h-10 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-xs font-bold disabled:opacity-60">{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
               <input defaultValue={order.deliveryTrackingRef ?? ""} disabled={preview || !canManageFulfilment} onBlur={event => { if (!preview && event.target.value !== (order.deliveryTrackingRef ?? "")) updateOrder.mutate({ id: order.id, deliveryTrackingRef: event.target.value || null }); }} placeholder="Хүргэлтийн дугаар" className="h-10 flex-1 rounded-xl border border-[var(--a-border)] px-3 text-xs outline-none focus:border-[#df1f3d] disabled:opacity-60" />
             </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {canManageFulfilment && isOpenOrder(order.status) && <button type="button" disabled={preview} onClick={() => setEditingOrderId(current => current === order.id ? null : order.id)} className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--a-border)] px-3 text-[11px] font-bold text-[var(--a-text-soft)] hover:border-[#df1f3d] hover:text-[#df1f3d]"><Pencil size={12} />Засах</button>}
+              <button type="button" disabled={preview || packingSlip.isPending} onClick={() => packingSlip.mutate({ orderId: order.id })} className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--a-border)] px-3 text-[11px] font-bold text-[var(--a-text-soft)] hover:border-[#df1f3d] hover:text-[#df1f3d]"><Printer size={12} />Бэлтгэх хуудас</button>
+              <button type="button" disabled={preview || staffInvoice.isPending} onClick={() => staffInvoice.mutate({ orderId: order.id })} className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--a-border)] px-3 text-[11px] font-bold text-[var(--a-text-soft)] hover:border-[#df1f3d] hover:text-[#df1f3d]"><FileText size={12} />Баримт PDF</button>
+            </div>
+            {editingOrderId === order.id && <OrderEditForm order={order} onDone={() => setEditingOrderId(null)} />}
             <p className="mt-2 text-[11px] text-[var(--a-faint)]">И-баримт: {order.ebarimtStatus === "issued" ? order.ebarimtReceiptId : order.ebarimtStatus === "failed" ? <span className="font-bold text-[#df1f3d]">Алдаа гарсан</span> : "—"}</p>
             {/* Admin overhaul (2026-09-08, Phase E): refund is deliberately its
                 own action, not a 3rd option folded into the status <select>

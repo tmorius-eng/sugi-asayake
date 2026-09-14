@@ -211,7 +211,7 @@ import { classifyImageSafety, formatScores, IMAGE_SAFETY_REJECT_MESSAGE } from "
 import { MODERATION_REJECT_MESSAGE, screenText } from "./_core/moderation";
 import { canReplyToReview, createReviewReply, deleteAdminReviewReply, getAdminReviewReplies, toggleReviewLike, updateAdminReview, updateAdminReviewReply } from "./db";
 import { canAnswerQuestion, createProductQuestion, createQuestionAnswer, deleteQuestion, deleteQuestionAnswer, getAdminQuestions, getProductQuestions, setQuestionApproved } from "./db";
-import { renderOrderInvoice } from "./invoice";
+import { renderOrderInvoice, renderOrderInvoiceForStaff, renderPackingSlip } from "./invoice";
 import { deletePushSubscription, hasPushSubscription, issueGiftCards, listGiftCards, redeemGiftCard, upsertPushSubscription, voidGiftCard } from "./db";
 import { sendOrderStatusPush, sendPushToUser, webPushEnabled } from "./_core/webPush";
 // Admin face gate (2026-09-08) -- see server/faceAuth.ts.
@@ -232,7 +232,7 @@ import { assertImageSignature, imageContentTypes, processUploadedImageOrThrow } 
 import { INTEGRATION_PROVIDERS } from "../shared/integrations";
 import { buildNotificationMessage, NOTIFICATION_GROUP_LABELS, NOTIFICATION_GROUPS, NTFY_TOPIC_FIELD } from "../shared/notification-events";
 import { createNoOpVerificationSession, createVerificationSession, getSessionStatus, isNoOpSessionExpired, normalizePhoneForVerifyMn } from "./verifyMn";
-import { consumeCheckoutPhoneVerificationSession } from "./db";
+import { consumeCheckoutPhoneVerificationSession, createManualOrder, editAdminOrder, getAdminOrderWithItems } from "./db";
 import { getCategoryWriteViolation, getProductWriteViolation } from "./catalog-validation";
 import { getAnalyticsReport, exportAnalyticsExcel, exportAnalyticsPdf, getAllCustomersForCampaign, getDashboardHighlights, getPreferenceSegmentBreakdown, getRecommendationCoverage, getUsersByLoyaltyTier, getUsersBySegment, type PreferenceSegmentField } from "./analytics";
 import { siteMediaSlotKeys } from "../shared/site-media";
@@ -2569,6 +2569,74 @@ export const appRouter = router({
     // Phase K: the 4th Security Center tab -- an in-process ring buffer, not
     // a real DB-side query log (see server/_core/sqlQueryLog.ts).
     recentSqlQueries: adminProcedure.query(() => getOrSetCached("recentSqlQueries", 30_000, () => Promise.resolve(getRecentSqlQueries()))),
+    // Staff-side order writes (2026-09-14). Both warehouseProcedure: the
+    // Orders section is a warehouse/admin screen, and each write moves stock.
+    createManualOrder: warehouseProcedure.input(z.object({
+      clientRequestId: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
+      customerName: z.string().trim().min(2).max(160),
+      customerPhone: z.string().trim().min(6).max(40),
+      customerEmail: z.string().trim().email().max(320).nullable().optional(),
+      deliveryMethod: z.enum(["ub_delivery", "store_pickup"]),
+      deliveryAddress: z.string().trim().max(2_000).nullable().optional(),
+      district: districtSchema,
+      pickupBranch: z.string().trim().max(160).nullable().optional(),
+      paymentMethod: z.enum(["qpay", "storepay", "bank_transfer", "card", "cash_on_delivery"]),
+      salesChannel: z.enum(["phone", "messenger", "in_store"]),
+      items: z.array(z.object({ variantId: z.number().int().positive(), quantity: z.number().int().min(1).max(999) })).min(1).max(100),
+      adminNote: nullableText(5_000),
+    })).mutation(async ({ ctx, input }) => {
+      let order;
+      try {
+        order = await createManualOrder({ ...input, actorUserId: ctx.user.id });
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Захиалга үүсгэж чадсангүй." });
+      }
+      await logAdminAction({ actorUserId: ctx.user.id, action: "order.created_manually", entityType: "order", entityId: order.id, metadata: { orderNumber: order.orderNumber, salesChannel: input.salesChannel, totalMnt: order.totalMnt } });
+      if (!order.replayed) {
+        try {
+          await sendOrderConfirmationEmail(order);
+          await sendOrderPlacedSms(order);
+        } catch (error) {
+          console.error("[admin.createManualOrder] confirmation failed", error);
+        }
+      }
+      return order;
+    }),
+    editOrder: warehouseProcedure.input(z.object({
+      id: z.number().int().positive(),
+      customerName: z.string().trim().min(2).max(160).optional(),
+      customerPhone: z.string().trim().min(6).max(40).optional(),
+      customerEmail: z.string().trim().email().max(320).or(z.literal("")).nullable().optional(),
+      deliveryMethod: z.enum(["ub_delivery", "store_pickup"]).optional(),
+      deliveryAddress: z.string().trim().max(2_000).nullable().optional(),
+      district: districtSchema,
+      pickupBranch: z.string().trim().max(160).nullable().optional(),
+      items: z.array(z.object({ variantId: z.number().int().positive(), quantity: z.number().int().min(0).max(999) })).max(100).optional(),
+    })).mutation(async ({ ctx, input }) => {
+      let order;
+      try {
+        order = await editAdminOrder({ ...input, customerEmail: input.customerEmail === "" ? null : input.customerEmail, actorUserId: ctx.user.id });
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Захиалгыг засаж чадсангүй." });
+      }
+      await logAdminAction({ actorUserId: ctx.user.id, action: "order.edited", entityType: "order", entityId: order.id, metadata: { orderNumber: order.orderNumber, totalMnt: order.totalMnt, itemsChanged: input.items !== undefined, deliveryMethod: order.deliveryMethod } });
+      return order;
+    }),
+    orderDetail: ordersReadProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ input }) => {
+      const order = await getAdminOrderWithItems(input.id);
+      if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "Захиалга олдсонгүй." });
+      return order;
+    }),
+    packingSlipPdf: ordersReadProcedure.input(z.object({ orderId: z.number().int().positive() })).mutation(async ({ input }) => {
+      const result = await renderPackingSlip(input.orderId);
+      if (!result) throw new TRPCError({ code: "NOT_FOUND", message: "Захиалга олдсонгүй." });
+      return result;
+    }),
+    orderInvoicePdf: ordersReadProcedure.input(z.object({ orderId: z.number().int().positive() })).mutation(async ({ input }) => {
+      const result = await renderOrderInvoiceForStaff(input.orderId);
+      if (!result) throw new TRPCError({ code: "NOT_FOUND", message: "Захиалга олдсонгүй." });
+      return result;
+    }),
     updateOrder: warehouseProcedure.input(orderUpdateSchema).mutation(async ({ ctx, input }) => {
       let order;
       try {

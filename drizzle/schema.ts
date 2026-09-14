@@ -703,7 +703,9 @@ export const orders = mysqlTable("orders", {
   // in_store orders always use deliveryMethod:"store_pickup" too (a
   // register sale IS picked up on the spot), so this is the one column
   // that actually separates the two.
-  salesChannel: mysqlEnum("salesChannel", ["online", "in_store"]).notNull().default("online"),
+  // "phone" / "messenger" (2026-09-14, migration 0078): keyed in by staff
+  // for a customer who ordered by phone or Facebook Messenger.
+  salesChannel: mysqlEnum("salesChannel", ["online", "in_store", "phone", "messenger"]).notNull().default("online"),
   deliveryAddress: text("deliveryAddress"),
   /** Snapshotted at order time from the chosen address's district (same
    *  denormalization discipline as customerName/customerPhone below — a

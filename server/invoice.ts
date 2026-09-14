@@ -24,7 +24,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { eq } from "drizzle-orm";
 import { orderItems } from "../drizzle/schema";
-import { getDb, getOrderForUser, getStoreSettingValue } from "./db";
+import { getDb, getOrderById, getOrderForUser, getStoreSettingValue } from "./db";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 /** dist/index.js sits next to dist/assets; in dev the source tree has server/assets. */
@@ -45,6 +45,82 @@ export type InvoiceResult = { fileName: string; base64: string };
 export async function renderOrderInvoice(orderId: number, userId: number): Promise<InvoiceResult | null> {
   const order = await getOrderForUser(orderId, userId);
   if (!order) return null;
+  return renderInvoiceFor(order);
+}
+
+/** The same receipt, for staff printing it at the counter (2026-09-14). */
+export async function renderOrderInvoiceForStaff(orderId: number): Promise<InvoiceResult | null> {
+  const order = await getOrderById(orderId);
+  if (!order) return null;
+  return renderInvoiceFor(order);
+}
+
+type OrderRow = NonNullable<Awaited<ReturnType<typeof getOrderById>>>;
+
+/**
+ * Packing slip (2026-09-14): what the warehouse prints to pick an order --
+ * big order number, the customer's phone and delivery target, a tick box
+ * per line, SKU/barcode under every name, quantities in large type, no
+ * prices. One page for the typical order.
+ */
+export async function renderPackingSlip(orderId: number): Promise<InvoiceResult | null> {
+  const order = await getOrderById(orderId);
+  if (!order) return null;
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const items = await db.select({ productName: orderItems.productName, sku: orderItems.sku, unitPriceMnt: orderItems.unitPriceMnt, quantity: orderItems.quantity }).from(orderItems).where(eq(orderItems.orderId, orderId)).orderBy(orderItems.id);
+  const doc = new PDFDocument({ size: "A4", margin: 48, info: { Title: `Бэлтгэх хуудас ${order.orderNumber}`, Author: "SUGI ASAYAKE Mongolia" } });
+  const font = FONT_CANDIDATES.find(existsSync);
+  if (font) { doc.registerFont("body", font); doc.font("body"); }
+  const chunks: Buffer[] = [];
+  doc.on("data", chunk => chunks.push(chunk as Buffer));
+  const done = new Promise<Buffer>(resolve => doc.on("end", () => resolve(Buffer.concat(chunks))));
+  const ink = "#17181b", muted = "#545958", line = "#c9d0ca";
+  const left = doc.page.margins.left, right = doc.page.width - doc.page.margins.right;
+
+  doc.fillColor(muted).fontSize(9).text("SUGI ASAYAKE · БЭЛТГЭХ ХУУДАС", left, 48);
+  doc.fillColor(ink).fontSize(28).text(order.orderNumber, left, 62);
+  doc.fontSize(10).fillColor(muted)
+    .text(`Огноо: ${new Date(order.createdAt).toLocaleString("mn-MN", { timeZone: "Asia/Ulaanbaatar" })} · Төлөв: ${STATUS_LABEL[order.status] ?? order.status} · Төлбөр: ${PAYMENT_LABEL[order.paymentMethod] ?? order.paymentMethod} (${order.paymentStatus === "paid" ? "төлсөн" : "төлөөгүй"})`, left, 100);
+  doc.fillColor(ink).fontSize(11).text("Худалдан авагч", left, 128);
+  doc.fillColor(muted).fontSize(11).text(`${order.customerName ?? "—"} · ${order.customerPhone ?? ""}`, left, 144);
+  doc.fillColor(ink).fontSize(11).text(order.deliveryMethod === "store_pickup" ? "Салбараас авах" : "Хүргэлт", 320, 128);
+  doc.fillColor(muted).fontSize(11).text(order.deliveryMethod === "store_pickup" ? (order.pickupBranch ?? "Цахим (бэлгийн карт)") : [order.deliveryDistrict, order.deliveryAddress].filter(Boolean).join(", ") || "—", 320, 144, { width: right - 320 });
+  let y = 196;
+  if (order.adminNote) {
+    doc.fillColor(ink).fontSize(10).text("Тэмдэглэл:", left, y);
+    doc.fillColor(muted).text(order.adminNote, left + 70, y, { width: right - left - 70 });
+    y += Math.max(14, doc.heightOfString(order.adminNote, { width: right - left - 70 })) + 10;
+  }
+  doc.moveTo(left, y).lineTo(right, y).strokeColor(ink).lineWidth(1).stroke();
+  y += 8;
+  const col = { box: left, name: left + 30, qty: right - 70 };
+  doc.fillColor(muted).fontSize(8).text("", col.box, y).text("БАРАА / БАРКОД", col.name, y).text("ТОО", col.qty, y, { width: 70, align: "right" });
+  y += 16;
+  for (const item of items) {
+    if (y > doc.page.height - 130) { doc.addPage(); y = doc.page.margins.top; }
+    doc.rect(col.box, y + 1, 14, 14).strokeColor(ink).lineWidth(1).stroke();
+    doc.fillColor(ink).fontSize(12);
+    const nameHeight = doc.heightOfString(item.productName, { width: col.qty - col.name - 12 });
+    doc.text(item.productName, col.name, y, { width: col.qty - col.name - 12 });
+    doc.fontSize(18).text(String(item.quantity), col.qty, y - 3, { width: 70, align: "right" });
+    if (item.sku) doc.fillColor(muted).fontSize(10).text(item.sku, col.name, y + nameHeight + 2);
+    y += Math.max(nameHeight, 14) + (item.sku ? 15 : 4) + 8;
+    doc.moveTo(left, y - 4).lineTo(right, y - 4).strokeColor(line).lineWidth(0.5).stroke();
+  }
+  y += 8;
+  doc.fillColor(ink).fontSize(11).text(`Нийт ${items.reduce((sum, item) => sum + item.quantity, 0)} ширхэг · ${items.length} нэр төрөл`, left, y);
+  const footY = doc.page.height - 90;
+  doc.moveTo(left, footY).lineTo(right, footY).strokeColor(line).lineWidth(0.5).stroke();
+  doc.fillColor(muted).fontSize(10).text("Бэлтгэсэн: ______________________", left, footY + 12).text("Шалгасан: ______________________", 320, footY + 12);
+  doc.fontSize(8).text("Үнийн мэдээлэлгүй. Худалдан авагчийн баримт нь тусдаа (Баримт PDF).", left, footY + 40);
+  doc.end();
+  const pdf = await done;
+  return { fileName: `sugi-asayake-packing-${order.orderNumber}.pdf`, base64: pdf.toString("base64") };
+}
+
+async function renderInvoiceFor(order: OrderRow): Promise<InvoiceResult> {
+  const orderId = order.id;
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const items = await db.select({ productName: orderItems.productName, sku: orderItems.sku, unitPriceMnt: orderItems.unitPriceMnt, quantity: orderItems.quantity }).from(orderItems).where(eq(orderItems.orderId, orderId)).orderBy(orderItems.id);

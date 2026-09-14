@@ -2867,7 +2867,7 @@ export async function getAdminOrders(limit = 200) {
   const orderRows = await db.select().from(orders).orderBy(desc(orders.createdAt)).limit(limit);
   if (!orderRows.length) return [];
   const orderIds = orderRows.map(order => order.id);
-  const lineItems = await db.select({ orderId: orderItems.orderId, productName: orderItems.productName, sku: orderItems.sku, quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt }).from(orderItems).where(inArray(orderItems.orderId, orderIds));
+  const lineItems = await db.select({ orderId: orderItems.orderId, variantId: orderItems.variantId, productName: orderItems.productName, sku: orderItems.sku, quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt }).from(orderItems).where(inArray(orderItems.orderId, orderIds));
   return orderRows.map(order => ({ ...order, items: lineItems.filter(item => item.orderId === order.id) }));
 }
 
@@ -3250,6 +3250,253 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
   announceIssuedGiftCards(input.id, issuedGiftCards);
   const updated = await db.select().from(orders).where(eq(orders.id, input.id)).limit(1);
   return updated[0];
+}
+
+// ---------------------------------------------------------------------------
+// Staff-side order writes (2026-09-14, Tom: "admin захиалгыг засаж чадахгүй",
+// "утсаар/Messenger-ээр ирсэн захиалгыг бүртгэх газаргүй").
+// ---------------------------------------------------------------------------
+
+export type ManualOrderLine = { variantId: number; quantity: number };
+export type ManualOrderInput = {
+  customerName: string;
+  customerPhone: string;
+  customerEmail?: string | null;
+  deliveryMethod: "ub_delivery" | "store_pickup";
+  deliveryAddress?: string | null;
+  district?: UbDistrict | null;
+  pickupBranch?: string | null;
+  paymentMethod: "qpay" | "storepay" | "bank_transfer" | "card" | "cash_on_delivery";
+  salesChannel: "phone" | "messenger" | "in_store";
+  items: ManualOrderLine[];
+  adminNote?: string | null;
+  actorUserId: number;
+  clientRequestId?: string | null;
+};
+
+type OrderLineSource = { variantId: number; productId: number; productName: string; sku: string; priceMnt: number; kind: "physical" | "gift_card" };
+
+async function loadOrderLineSources(db: DbOrTx, variantIds: number[]): Promise<Map<number, OrderLineSource>> {
+  if (!variantIds.length) return new Map();
+  const rows = await db.select({ variantId: productVariants.id, productId: products.id, productName: products.name, sku: productVariants.sku, priceMnt: productVariants.priceMnt, kind: products.kind })
+    .from(productVariants).innerJoin(products, eq(products.id, productVariants.productId)).where(inArray(productVariants.id, variantIds));
+  return new Map(rows.map(row => [row.variantId, row]));
+}
+
+/** Same branch resolution as checkout: pickup at a STORE, delivery from the fulfilment default. */
+async function resolveFulfillingBranch(deliveryMethod: "ub_delivery" | "store_pickup", pickupBranch: string | null | undefined, digitalOnly: boolean) {
+  const active = await getActiveBranches();
+  const fulfilment = active.find(branch => branch.isFulfillmentDefault);
+  if (deliveryMethod === "store_pickup" && !digitalOnly) {
+    const matched = pickupBranch ? active.find(branch => branch.name === pickupBranch && branch.kind === "store") : undefined;
+    if (!matched) throw new Error("Авах салбараа зөв сонгоно уу.");
+    if (matched.countsTowardOnlineStock) return { fulfillingBranchId: matched.id, pickupBranch: matched.name };
+    if (!fulfilment) throw new Error("Үндсэн салбар тохируулаагүй байна.");
+    return { fulfillingBranchId: fulfilment.id, pickupBranch: matched.name };
+  }
+  if (!fulfilment) throw new Error("Үндсэн салбар тохируулаагүй байна.");
+  return { fulfillingBranchId: fulfilment.id, pickupBranch: null };
+}
+
+/** +delta puts goods back on the order's shelf, -delta takes them (guarded, never below zero). Mirrors restoreStockForOrder / decrementBranchStock. */
+async function adjustOrderLineStock(tx: OrderTx, branchId: number | null, variantId: number, delta: number, meta: { orderId: number; actorUserId: number | null; itemLabel: string }) {
+  if (delta === 0) return;
+  const hasPerBranchTracking = (await tx.select({ id: branchStock.id }).from(branchStock).where(eq(branchStock.variantId, variantId)).limit(1)).length > 0;
+  if (delta < 0) {
+    if (branchId === null) throw new Error("Энэ захиалгад салбар бүртгэгдээгүй тул бараа нэмэх боломжгүй.");
+    const tracked = await decrementBranchStock(tx, branchId, variantId, -delta, { requirePublished: false, itemLabel: meta.itemLabel });
+    if (tracked) await recordStockMovement(tx, branchId, variantId, delta, { type: "sale_online", refType: "order", refId: meta.orderId, actorUserId: meta.actorUserId });
+    return;
+  }
+  if (branchId !== null && hasPerBranchTracking) {
+    await applyBranchStockDelta(tx, branchId, variantId, delta, { type: "order_restock", refType: "order", refId: meta.orderId, actorUserId: meta.actorUserId }, { itemLabel: meta.itemLabel });
+  } else {
+    await tx.update(productVariants).set({ stockQuantity: sql`${productVariants.stockQuantity} + ${delta}`, updatedAt: new Date() }).where(eq(productVariants.id, variantId));
+  }
+}
+
+/**
+ * An order keyed in by staff for a customer who called or wrote on
+ * Messenger. No coupon / loyalty / store credit -- staff quote the shelf
+ * price; stock leaves the fulfilling branch exactly as an online order's
+ * would, unpublished products may be sold, and the warehouse push goes out
+ * so the pickers see it. Idempotent by clientRequestId like checkout.
+ */
+export async function createManualOrder(input: ManualOrderInput) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  if (!input.items.length) throw new Error("Захиалгад дор хаяж нэг бараа хэрэгтэй.");
+  if (input.clientRequestId) {
+    const replay = await findOrderForClientRequest(db, input.clientRequestId, undefined);
+    if (replay) return { ...replay, replayed: true as const };
+  }
+  const merged = new Map<number, number>();
+  for (const line of input.items) merged.set(line.variantId, (merged.get(line.variantId) ?? 0) + line.quantity);
+  const sources = await loadOrderLineSources(db, Array.from(merged.keys()));
+  const lines = Array.from(merged, ([variantId, quantity]) => {
+    const source = sources.get(variantId);
+    if (!source) throw new Error(`Бараа олдсонгүй (variant ${variantId}).`);
+    return { ...source, quantity };
+  });
+  const digitalOnly = lines.every(line => line.kind === "gift_card");
+  const branch = await resolveFulfillingBranch(input.deliveryMethod, input.pickupBranch, digitalOnly);
+  if (input.deliveryMethod === "ub_delivery" && !input.deliveryAddress?.trim()) throw new Error("Хүргэлтийн хаяг оруулна уу.");
+  const subtotalMnt = lines.reduce((sum, line) => sum + line.priceMnt * line.quantity, 0);
+  const [deliveryFeeUbMnt, freeShippingThresholdMnt] = await Promise.all([getStoreSettingNumber("delivery-fee-ub-mnt"), getStoreSettingNumber("free-shipping-threshold-mnt")]);
+  const deliveryFeeMnt = computeDeliveryFeeMnt({ deliveryMethod: input.deliveryMethod, subtotalMnt, deliveryFeeUbMnt, freeShippingThresholdMnt, digitalOnly });
+  const totalMnt = subtotalMnt + deliveryFeeMnt;
+  let orderId = 0;
+  const place = (orderNumber: string) => db.transaction(async tx => {
+    const inserted = await tx.insert(orders).values({
+      userId: null, orderNumber, paymentMethod: input.paymentMethod, deliveryMethod: input.deliveryMethod,
+      deliveryAddress: input.deliveryMethod === "ub_delivery" ? input.deliveryAddress?.trim() ?? null : null,
+      deliveryDistrict: input.deliveryMethod === "ub_delivery" ? input.district ?? null : null,
+      pickupBranch: branch.pickupBranch, fulfillingBranchId: branch.fulfillingBranchId,
+      salesChannel: input.salesChannel,
+      customerName: input.customerName.trim(), customerPhone: input.customerPhone.trim(), customerEmail: input.customerEmail?.trim() || null,
+      trafficSource: "staff", deviceType: "unknown", clientRequestId: input.clientRequestId ?? null,
+      adminNote: input.adminNote?.trim() || null,
+      subtotalMnt, deliveryFeeMnt, discountMnt: 0, couponDiscountMnt: 0, loyaltyDiscountMnt: 0, storeCreditAppliedMnt: 0, totalMnt,
+    });
+    orderId = Number(inserted[0].insertId);
+    await tx.insert(orderItems).values(lines.map(line => ({ orderId, productId: line.productId, variantId: line.variantId, productName: line.productName, sku: line.sku, unitPriceMnt: line.priceMnt, quantity: line.quantity })));
+    for (const line of lines) {
+      if (line.kind === "gift_card") continue;
+      await adjustOrderLineStock(tx, branch.fulfillingBranchId, line.variantId, -line.quantity, { orderId, actorUserId: input.actorUserId, itemLabel: line.productName });
+    }
+    await enqueueNotification(tx, "order.placed", {
+      orderNumber, totalMnt, itemCount: lines.reduce((sum, line) => sum + line.quantity, 0), deliveryMethod: input.deliveryMethod, paymentMethod: input.paymentMethod,
+      pickupBranchName: branch.pickupBranch,
+    }, { dedupeKey: `order:${orderId}` });
+  });
+  for (let attempt = 1; ; attempt++) {
+    try { await place(generateOrderNumber()); break; } catch (error) {
+      if (attempt < 3 && isDuplicateOrderNumberError(error)) continue;
+      if (input.clientRequestId && isDuplicateKeyError(error, "orders_client_request_unique")) {
+        const replay = await findOrderForClientRequest(db, input.clientRequestId, undefined);
+        if (replay) return { ...replay, replayed: true as const };
+      }
+      throw error;
+    }
+  }
+  invalidateCachedByPrefix("storefront:bestsellers:");
+  const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  return { ...order, replayed: false as const, items: lines.map(line => ({ name: line.productName, quantity: line.quantity, priceMnt: line.priceMnt, attributesJson: null as string | null })) };
+}
+
+export type OrderEditInput = {
+  id: number;
+  actorUserId: number;
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string | null;
+  deliveryMethod?: "ub_delivery" | "store_pickup";
+  deliveryAddress?: string | null;
+  district?: UbDistrict | null;
+  pickupBranch?: string | null;
+  /** The complete desired line list; a line missing here is removed, a new variantId is added. */
+  items?: ManualOrderLine[];
+};
+
+/**
+ * Edits an open order in place: contact and delivery details any time before
+ * it is completed/closed; the line items only while it is still UNPAID
+ * (money already taken must be refunded, not silently re-priced). Stock
+ * follows every line change on the order's own fulfilling branch, with the
+ * same ledger movements checkout and restock use. Discounts already granted
+ * are kept as they were (never recomputed -- a coupon that has since expired
+ * must not vanish from an order the customer was quoted); the delivery fee
+ * follows the rule for the new basket/method.
+ */
+export async function editAdminOrder(input: OrderEditInput) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const [current] = await db.select().from(orders).where(eq(orders.id, input.id)).limit(1);
+  if (!current) throw new Error("Захиалга олдсонгүй.");
+  if (current.status === "completed" || current.status === "cancelled" || current.status === "returned") throw new Error("Хаагдсан захиалгыг засах боломжгүй.");
+  const existingLines = await db.select({ id: orderItems.id, variantId: orderItems.variantId, productName: orderItems.productName, quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt, sku: orderItems.sku })
+    .from(orderItems).where(eq(orderItems.orderId, input.id));
+  const wantsItemChange = input.items !== undefined;
+  if (wantsItemChange && current.paymentStatus !== "unpaid") throw new Error("Төлбөр төлөгдсөн захиалгын бараа өөрчлөх боломжгүй — буцаан олголт хийгээд шинэ захиалга үүсгэнэ үү.");
+
+  // The desired line list, priced from the order's own snapshot for lines it
+  // already has and from the catalogue for new ones.
+  const desired = new Map<number, number>();
+  if (wantsItemChange) {
+    for (const line of input.items!) if (line.quantity > 0) desired.set(line.variantId, (desired.get(line.variantId) ?? 0) + line.quantity);
+    if (!desired.size) throw new Error("Захиалгад дор хаяж нэг бараа үлдэх ёстой.");
+  }
+  const newVariantIds = wantsItemChange ? Array.from(desired.keys()).filter(id => !existingLines.some(line => line.variantId === id)) : [];
+  const allVariantIds = wantsItemChange ? Array.from(desired.keys()) : existingLines.map(line => line.variantId).filter((id): id is number => id !== null);
+  const sources = await loadOrderLineSources(db, allVariantIds);
+  for (const id of newVariantIds) if (!sources.get(id)) throw new Error(`Бараа олдсонгүй (variant ${id}).`);
+
+  const deliveryMethod = input.deliveryMethod ?? current.deliveryMethod;
+  const finalLines = wantsItemChange
+    ? Array.from(desired, ([variantId, quantity]) => {
+        const existing = existingLines.find(line => line.variantId === variantId);
+        const source = sources.get(variantId);
+        return { variantId, quantity, unitPriceMnt: existing?.unitPriceMnt ?? source!.priceMnt, productName: existing?.productName ?? source!.productName, sku: existing?.sku ?? source!.sku, productId: source?.productId ?? null, kind: source?.kind ?? "physical" };
+      })
+    : existingLines.map(line => ({ variantId: line.variantId, quantity: line.quantity, unitPriceMnt: line.unitPriceMnt, productName: line.productName, sku: line.sku, productId: null, kind: (line.variantId !== null ? sources.get(line.variantId)?.kind : undefined) ?? "physical" }));
+  const digitalOnly = finalLines.length > 0 && finalLines.every(line => line.kind === "gift_card");
+  const pickupBranchInput = input.pickupBranch !== undefined ? input.pickupBranch : current.pickupBranch;
+  const branch = input.deliveryMethod !== undefined || input.pickupBranch !== undefined
+    ? await resolveFulfillingBranch(deliveryMethod, pickupBranchInput, digitalOnly)
+    : { fulfillingBranchId: current.fulfillingBranchId, pickupBranch: current.pickupBranch };
+  const deliveryAddress = input.deliveryAddress !== undefined ? input.deliveryAddress?.trim() || null : current.deliveryAddress;
+  if (deliveryMethod === "ub_delivery" && !deliveryAddress) throw new Error("Хүргэлтийн хаяг оруулна уу.");
+  const subtotalMnt = finalLines.reduce((sum, line) => sum + line.unitPriceMnt * line.quantity, 0);
+  const [deliveryFeeUbMnt, freeShippingThresholdMnt] = await Promise.all([getStoreSettingNumber("delivery-fee-ub-mnt"), getStoreSettingNumber("free-shipping-threshold-mnt")]);
+  const deliveryFeeMnt = computeDeliveryFeeMnt({ deliveryMethod, subtotalMnt, deliveryFeeUbMnt, freeShippingThresholdMnt, digitalOnly });
+  const totalMnt = Math.max(0, subtotalMnt + deliveryFeeMnt - current.discountMnt - current.couponDiscountMnt - current.loyaltyDiscountMnt - current.storeCreditAppliedMnt);
+
+  await db.transaction(async tx => {
+    if (wantsItemChange) {
+      // Removed or reduced lines give stock back; added or increased lines take it.
+      for (const line of existingLines) {
+        if (line.variantId === null) { if (!desired.has(-1)) await tx.delete(orderItems).where(eq(orderItems.id, line.id)); continue; }
+        const next = desired.get(line.variantId) ?? 0;
+        const delta = line.quantity - next; // positive = goods return
+        const kind = sources.get(line.variantId)?.kind ?? "physical";
+        if (delta !== 0 && kind !== "gift_card") await adjustOrderLineStock(tx, current.fulfillingBranchId, line.variantId, delta, { orderId: input.id, actorUserId: input.actorUserId, itemLabel: line.productName });
+        if (next === 0) await tx.delete(orderItems).where(eq(orderItems.id, line.id));
+        else if (next !== line.quantity) await tx.update(orderItems).set({ quantity: next }).where(eq(orderItems.id, line.id));
+      }
+      for (const variantId of newVariantIds) {
+        const source = sources.get(variantId)!;
+        const quantity = desired.get(variantId)!;
+        if (source.kind !== "gift_card") await adjustOrderLineStock(tx, current.fulfillingBranchId, variantId, -quantity, { orderId: input.id, actorUserId: input.actorUserId, itemLabel: source.productName });
+        await tx.insert(orderItems).values({ orderId: input.id, productId: source.productId, variantId, productName: source.productName, sku: source.sku, unitPriceMnt: source.priceMnt, quantity });
+      }
+    }
+    await tx.update(orders).set({
+      ...(input.customerName !== undefined ? { customerName: input.customerName.trim() } : {}),
+      ...(input.customerPhone !== undefined ? { customerPhone: input.customerPhone.trim() } : {}),
+      ...(input.customerEmail !== undefined ? { customerEmail: input.customerEmail?.trim() || null } : {}),
+      deliveryMethod,
+      deliveryAddress: deliveryMethod === "ub_delivery" ? deliveryAddress : null,
+      deliveryDistrict: deliveryMethod === "ub_delivery" ? (input.district !== undefined ? input.district : current.deliveryDistrict) : null,
+      pickupBranch: deliveryMethod === "store_pickup" ? branch.pickupBranch : null,
+      fulfillingBranchId: branch.fulfillingBranchId,
+      subtotalMnt, deliveryFeeMnt, totalMnt, updatedAt: new Date(),
+    }).where(eq(orders.id, input.id));
+  });
+  invalidateCachedByPrefix("storefront:bestsellers:");
+  const [updated] = await db.select().from(orders).where(eq(orders.id, input.id)).limit(1);
+  const items = await db.select({ productName: orderItems.productName, sku: orderItems.sku, quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt, variantId: orderItems.variantId }).from(orderItems).where(eq(orderItems.orderId, input.id));
+  return { ...updated, items };
+}
+
+/** The line items of one order as the staff panel and the PDFs need them (variantId included so an edit form can start from them). */
+export async function getAdminOrderWithItems(orderId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  if (!order) return null;
+  const items = await db.select({ id: orderItems.id, productId: orderItems.productId, variantId: orderItems.variantId, productName: orderItems.productName, sku: orderItems.sku, quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt })
+    .from(orderItems).where(eq(orderItems.orderId, orderId)).orderBy(asc(orderItems.id));
+  return { ...order, items };
 }
 
 // Admin overhaul (2026-09-08, Phase E): the refund/credit flow updateAdminOrder's
