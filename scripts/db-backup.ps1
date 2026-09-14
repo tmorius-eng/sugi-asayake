@@ -5,7 +5,7 @@
 .DESCRIPTION
   ROADMAP.md TIER 5: "automatic DB backup + documented restore plan".
   Reads connection details from $env:DATABASE_URL (same variable the app
-  itself uses - see CLAUDE.md) so no credentials are hard-coded in this
+  itself uses - see docs/PROJECT-GUIDE.md) so no credentials are hard-coded in this
   script. Writes <db>_<timestamp>.zip into the output directory (default:
   ./backups, already in .gitignore - never commit real data) and prunes old
   backups beyond -RetentionCount.
@@ -42,7 +42,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 if (-not $DatabaseUrl) {
-  throw "DATABASE_URL is not set. Pass -DatabaseUrl, or set `$env:DATABASE_URL first (see CLAUDE.md for the local dev value)."
+  throw "DATABASE_URL is not set. Pass -DatabaseUrl, or set `$env:DATABASE_URL first (see docs/PROJECT-GUIDE.md for the local dev value)."
 }
 
 $match = [regex]::Match($DatabaseUrl, '^mysql://(?<user>[^:@]+):(?<pass>[^@]*)@(?<host>[^:/]+)(:(?<port>\d+))?/(?<db>[^?]+)(\?.*)?$')

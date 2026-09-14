@@ -1,7 +1,7 @@
 // One-time migration: copies every object from a local MinIO bucket into
 // this machine's currently-configured S3-compatible destination (whatever
 // .env's S3_* vars point at). Written for the 2026-08-26 MinIO -> Cloudflare
-// R2 move (see CLAUDE.md's dated section) so both laptops read/write the
+// R2 move (see docs/PROJECT-GUIDE.md's dated section) so both laptops read/write the
 // same shared bucket instead of each having their own local MinIO copy --
 // no cross-machine sync needed at all once this has run once per machine.
 //
@@ -31,7 +31,7 @@ const SOURCE_ENDPOINT = process.env.SOURCE_S3_ENDPOINT || "http://127.0.0.1:9000
 const SOURCE_BUCKET = process.env.SOURCE_S3_BUCKET || "sugi-asayake";
 const SOURCE_ACCESS_KEY_ID = process.env.SOURCE_S3_ACCESS_KEY_ID || "minioadmin";
 const SOURCE_SECRET_ACCESS_KEY = process.env.SOURCE_S3_SECRET_ACCESS_KEY || "minioadmin";
-// CLAUDE.md's 2026-08-20 note: some local MinIO buckets on this project were
+// docs/PROJECT-GUIDE.md's 2026-08-20 note: some local MinIO buckets on this project were
 // created back when the region was mistakenly set to "Mongolia" instead of
 // the standard "us-east-1" -- ListObjectsV2 rejects a signature signed for
 // the wrong region with AuthorizationHeaderMalformed. Override here if this
@@ -46,7 +46,7 @@ async function main() {
     return;
   }
   if (ENV.s3Endpoint?.includes("127.0.0.1") || ENV.s3Endpoint?.includes("localhost")) {
-    console.error("Destination (.env S3_ENDPOINT) still points at local MinIO -- point it at R2 first (CLAUDE.md's 2026-08-26 section has the exact steps), then re-run this.");
+    console.error("Destination (.env S3_ENDPOINT) still points at local MinIO -- point it at R2 first (docs/PROJECT-GUIDE.md's 2026-08-26 section has the exact steps), then re-run this.");
     process.exitCode = 1;
     return;
   }

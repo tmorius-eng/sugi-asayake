@@ -18,24 +18,24 @@ Oracle **Always Free** (Tom баталгаажуулсан): **HeatWave MySQL н
 ## Алхам 0 — Tom (Oracle console, ~30 мин)
 1. https://cloud.oracle.com → Sign up. **Home region = Japan East (Tokyo)** — бүртгэлийн үед л сонгоно, дараа солигдохгүй. Карт (баталгаажуулалт; Always Free-д төлбөр авахгүй).
 2. **Networking → Virtual Cloud Networks → "Start VCN Wizard" → VCN with Internet Connectivity** → нэр `sugi-vcn`. Public subnet (VM-д) + private subnet (DB-д) хоёулаа үүснэ.
-3. **Databases → HeatWave MySQL → DB Systems → Create**: "Development or testing" / **Always Free** сонголт (shape `MySQL.Free`, 50GB). Нэр `sugi-db`. Username `admin`, хүчтэй нууц үг (Claude-д өгнө). Network: `sugi-vcn` → **private subnet**. Backups: автоматаар (Always Free 50GB). Create → 10–15 мин. Дараа нь DB System → Endpoints → **Private IP address** (ж: `10.0.1.x`) болон **Internal FQDN** → Claude-д.
+3. **Databases → HeatWave MySQL → DB Systems → Create**: "Development or testing" / **Always Free** сонголт (shape `MySQL.Free`, 50GB). Нэр `sugi-db`. Username `admin`, хүчтэй нууц үг (тэмдэглэ). Network: `sugi-vcn` → **private subnet**. Backups: автоматаар (Always Free 50GB). Create → 10–15 мин. Дараа нь DB System → Endpoints → **Private IP address** (ж: `10.0.1.x`) болон **Internal FQDN** → тэмдэглэ.
 4. **Compute → Instances → Create**: нэр `sugi-app`, Image **Ubuntu 24.04 (aarch64)**, Shape **Ampere VM.Standard.A1.Flex 2 OCPU / 12GB** (⚠️ Токиод "Out of host capacity" гарвал 1–2 цаг тутам давт — ердийн; муугаар бол VM.Standard.E2.1.Micro), Network `sugi-vcn` → **public subnet**, **Assign public IPv4 = Yes**, SSH keys → "Paste public keys":
    ```
    ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIG+271rKyBHl+55LMyMVDQJ+e8vCVlkbX0hZmnSDG6r sugi-asayake-oci
    ```
-   Create → **Public IP** → Claude-д.
+   Create → **Public IP** → тэмдэглэ.
 5. **Security lists**: private subnet-ийн security list-д Ingress: Source = public subnet CIDR (ж `10.0.0.0/24`), TCP **3306** ба **33060** (VM → DB). Public subnet-д 22 анхнаасаа нээлттэй — өөр юу ч нээхгүй (сайт cloudflared-аар гардаг, порт нээхгүй).
 
-Claude-д хэрэгтэй 4 зүйл: **VM public IP · HeatWave private IP · DB admin нууц үг · ажлын лаптопын public IP** (гэрийнх 64.119.23.175 мэдэгдэж байгаа).
+Хэрэгтэй 4 зүйл: **VM public IP · HeatWave private IP · DB admin нууц үг · ажлын лаптопын public IP** (гэрийнх 64.119.23.175 мэдэгдэж байгаа).
 
-## Алхам 1 — VM бэлтгэх (Claude, SSH, ~10 мин)
+## Алхам 1 — VM бэлтгэх (SSH, ~10 мин)
 ```bash
 scp -i ~/.ssh/sugi-oci scripts/oci/setup-vm.sh ubuntu@168.110.25.230:
 ssh -i ~/.ssh/sugi-oci ubuntu@168.110.25.230 'sudo bash setup-vm.sh'     # Node 22, pnpm, pm2, cloudflared, mysql-client, ufw, fail2ban, swap
 ```
 (`INSTALL_MYSQL=1` өгвөл VM дээр өөрөө MySQL суулгана — HeatWave ашиглаж байгаа тул хэрэггүй.)
 
-## Алхам 2 — Өгөгдөл зөөх (Claude, VM дээрээс — Токио↔Бангалор шууд)
+## Алхам 2 — Өгөгдөл зөөх (VM дээрээс — Токио↔Бангалор шууд)
 ```bash
 mysqldump -h sugi-asayake-db-project-4b75.h.aivencloud.com -P 25861 -u avnadmin -p --ssl-mode=REQUIRED \
   --single-transaction --set-gtid-purged=OFF --routines --no-tablespaces defaultdb > /tmp/aiven.sql

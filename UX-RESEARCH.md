@@ -1,6 +1,6 @@
 # SUGI ASAYAKE — UI/UX судалгаа: олон улсын жишиг + Монголын зах зээлийн онцлог
 
-`CLAUDE.md`, `ROADMAP.md`, `SECURITY.md`-ийн хамтрагч баримт бичиг. Эх сурвалж: 2026 оны олон улсын e-commerce UX судалгаа (Shopify, Baymard Institute, Salesforce) болон **shop.mn** (2000 гаруй Монгол дэлгүүрт үйлчилдэг платформ — AMMI.mn, Bebe зэрэг брэндүүд ашигладаг) шинжилгээ.
+`docs/PROJECT-GUIDE.md`, `ROADMAP.md`, `SECURITY.md`-ийн хамтрагч баримт бичиг. Эх сурвалж: 2026 оны олон улсын e-commerce UX судалгаа (Shopify, Baymard Institute, Salesforce) болон **shop.mn** (2000 гаруй Монгол дэлгүүрт үйлчилдэг платформ — AMMI.mn, Bebe зэрэг брэндүүд ашигладаг) шинжилгээ.
 
 ---
 

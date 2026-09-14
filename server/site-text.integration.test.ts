@@ -33,7 +33,7 @@ maybeDescribe("managed site-text integration", () => {
   // -- home-text-hero-eyebrow is a REAL, admin-editable production slot
   // (HeroSection.tsx's top-line eyebrow), not a throwaway fixture. Capture
   // whatever's really there before the test runs, put it back afterward no
-  // matter what the test did (see CLAUDE.md's "integration test-үүд бодит
+  // matter what the test did (see docs/PROJECT-GUIDE.md's "integration test-үүд бодит
   // production slot ашиглахгүй байх" note for why this matters).
   let originalValue: string | undefined;
 

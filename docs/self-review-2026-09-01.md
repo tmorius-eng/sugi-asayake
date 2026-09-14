@@ -1,6 +1,6 @@
 # Self-review — Preference Profile v2 / Recommendation Engine v2 build (2026-09-01)
 
-Written at Tom's explicit request, before the bulk auto-tag script is applied to the real catalog. This is not a status report — [CLAUDE.md](CLAUDE.md) already has one. This is a candid account of what I got wrong while building this feature, including the parts I only caught because Tom was watching the live page while I worked, not because I checked for them myself first.
+Written at Tom's explicit request, before the bulk auto-tag script is applied to the real catalog. This is not a status report — [PROJECT-GUIDE.md](docs/PROJECT-GUIDE.md) already has one. This is a candid account of what I got wrong while building this feature, including the parts I only caught because Tom was watching the live page while I worked, not because I checked for them myself first.
 
 ## What went wrong
 
@@ -30,11 +30,11 @@ My original plan explicitly scoped the auto-tag script to a keyword-matching tie
 
 ## A pattern worth naming across sessions, not just this one
 
-[CLAUDE.md](CLAUDE.md)'s own history already documents two earlier incidents with the same shape: the sunrise-ribbon marquee shipped as "infinite, so it's fine" without checking `prefers-reduced-motion` interference until Tom insisted twice; the local-vs-Aiven `DATABASE_URL` incident where "images are gone" was diagnosed from code inspection before anyone ran `SELECT COUNT(*) FROM orders` to notice the DB itself was wrong. This session added a third: a scoring formula that looked correct function-by-function but wasn't checked as a composed whole against a realistic input before being called finished.
+[PROJECT-GUIDE.md](docs/PROJECT-GUIDE.md)'s own history already documents two earlier incidents with the same shape: the sunrise-ribbon marquee shipped as "infinite, so it's fine" without checking `prefers-reduced-motion` interference until Tom insisted twice; the local-vs-Aiven `DATABASE_URL` incident where "images are gone" was diagnosed from code inspection before anyone ran `SELECT COUNT(*) FROM orders` to notice the DB itself was wrong. This session added a third: a scoring formula that looked correct function-by-function but wasn't checked as a composed whole against a realistic input before being called finished.
 
 The common failure isn't any single piece of code — it's presenting internal confidence (tests pass, typecheck is clean, the logic reads correctly) as equivalent to having verified the actual user-visible outcome. All three incidents were fixed within minutes once someone actually looked at the real thing. The fix isn't "be more careful" in the abstract — it's a concrete habit: before calling something done, produce the actual output a real user would see (a rendered list, a live page, a query result) with realistic-not-minimal input, and read it, every time, not just when something is flagged as unusually risky.
 
 ## What's still open as of this document
 
-- The bulk auto-tag script has only been dry-run, never applied to the real Aiven catalog. Tom asked for this self-review, a CLAUDE.md/HISTORY.md update, and a GitHub push to happen *before* that real write — this document is part of satisfying that sequencing, not a signal that the write has already happened.
+- The bulk auto-tag script has only been dry-run, never applied to the real Aiven catalog. Tom asked for this self-review, a PROJECT-GUIDE.md/HISTORY.md update, and a GitHub push to happen *before* that real write — this document is part of satisfying that sequencing, not a signal that the write has already happened.
 - I have not re-run the full `RecommendedForYou`/related-products UI against a *post-apply* catalog yet (only against the current 4/937-tagged production state, post-fix). Once `--apply` runs for real, the result lists should be spot-checked again the same way #1 was caught — multiple realistic profiles, read the actual output, not just the coverage percentage.

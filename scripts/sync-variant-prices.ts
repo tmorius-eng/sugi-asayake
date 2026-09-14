@@ -17,9 +17,8 @@
 //   pnpm exec tsx scripts/sync-variant-prices.ts            # dry run: shows what would change
 //   pnpm exec tsx scripts/sync-variant-prices.ts --apply    # writes, after saving a JSON backup
 //
-// Uses the app's own TLS connection plan (DATABASE_URL from .env). Claude
-// Code's auto-mode classifier refuses to run bulk writes against the live
-// database itself, so Tom runs this.
+// Uses the app's own TLS connection plan (DATABASE_URL from .env). Run it
+// deliberately, by hand -- it writes to the live catalogue.
 import "dotenv/config";
 import { writeFileSync } from "node:fs";
 import mysql from "mysql2/promise";

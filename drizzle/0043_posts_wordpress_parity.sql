@@ -1,6 +1,6 @@
 -- 2026-09-07: WordPress-classic-editor-parity admin Posts rebuild.
 -- Run directly against Aiven via the mysql CLI (drizzle/meta isn't exported
--- in this project, per CLAUDE.md) -- strip every "--> statement-breakpoint"
+-- in this project, per docs/PROJECT-GUIDE.md) -- strip every "--> statement-breakpoint"
 -- line first, MySQL 8 does not understand it.
 
 ALTER TABLE `posts`

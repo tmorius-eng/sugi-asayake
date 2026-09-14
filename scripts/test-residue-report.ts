@@ -5,7 +5,7 @@ import { branchStock, carts, orderItems, orders, productCategories, productVaria
 
 /**
  * Read-only inventory of throwaway rows earlier test runs left behind in the
- * live database (CLAUDE.md's open item, approved for deletion by Tom
+ * live database (docs/PROJECT-GUIDE.md's open item, approved for deletion by Tom
  * 2026-09-12). Prints exactly what a deletion would touch -- products, the
  * orders that reference them, and the users those orders belong to -- so the
  * decision is made on the real numbers rather than a name guess.

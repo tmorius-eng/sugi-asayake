@@ -22,7 +22,7 @@ Classification used throughout: **CONFIRMED** (reproduced by a test that fails o
 | **Debt #1** duplicated fee rule | `shared/delivery.ts` `computeDeliveryFeeMnt` used by both Checkout.tsx and `createOrderFromActiveCart`. | `delivery-fee.test.ts` (4 cases). |
 | **Debt #2** paymentStatus double meaning | Named explicitly: `refundOwedSql` (server) / `isRefundOwed` (shared) derived from the two columns — no new column that could drift. | Same tests as R2. |
 | **Debt #3** cached balance vs ledger | `getStoreCreditDrift()` on the admin System Health card ("Дэлгүүрийн зээлийн тэнцэл"), cached 60 s. | Test asserts 0 drifted accounts against the real database — and it caught my own test seed the first time it ran. |
-| **Debt #4** CLAUDE.md 208 KB | 36 dated sections moved verbatim into HISTORY.md; CLAUDE.md is 40 KB with a one-line index of what moved. | `grep "^## "` on both files. |
+| **Debt #4** PROJECT-GUIDE.md 208 KB | 36 dated sections moved verbatim into HISTORY.md; PROJECT-GUIDE.md is 40 KB with a one-line index of what moved. | `grep "^## "` on both files. |
 | **Waste** | `@hookform/resolvers` removed; `84abf….jpg` → `docs/reference/`, `self-review.md` → `docs/`; `.playwright-mcp/` gitignored; new `scripts/db-apply-migration.ts` replaces the per-session throwaway migration scripts. | `pnpm build` clean after removal. |
 
 Full suite after the second pass (`pnpm exec vitest run --no-file-parallelism`, all gates on, real Aiven): **570/570 tests, 62/62 files** (550 before this pass + 20 new, zero regressions). `pnpm check` and `pnpm build` clean. Post-run check for leftover marker rows on Aiven (orders/users/products/categories/payment attempts/ledger/discount codes from every suite and the browser QA): **all zero**. `rate_limit_buckets` holds only test buckets that expire on their own and are swept a day after expiry.
@@ -95,7 +95,7 @@ Not done, deliberately: a customer-facing "refund pending" **email template** se
 1. **Delivery-fee / free-shipping formula is implemented twice** — `Checkout.tsx` and `createOrderFromActiveCart`, byte-for-byte identical today, but no shared function in `shared/`. Classic "mathematical folklore" drift risk from the playbook. (Discount previews already go through the server; this one does not.)
 2. **`paymentStatus` carries two meanings** — "money collected" *and* "this sale counts". BUG-U3 papers over that with `settledSaleSql`; the honest long-term model is a distinct "refund owed" state (or `refundOwedAt`) set at cancel time, which would also give R2 its admin queue for free.
 3. **Store credit has two sources of truth** — the cached `users.storeCreditMnt` and the append-only `store_credit_ledger`, kept in sync only by code discipline (every writer must do both). A periodic reconciliation (`SUM(ledger) == balance`) would catch drift; BUG-U1 was exactly a drift nobody could see.
-4. **`CLAUDE.md` is 208 KB** and is loaded into every session. It is now mostly history rather than "current status/config/active issues" as its own header says. Moving the dated sections into `HISTORY.md` would cut per-session cost and make the genuinely active warnings visible again.
+4. **`docs/PROJECT-GUIDE.md` is 208 KB** and is loaded into every session. It is now mostly history rather than "current status/config/active issues" as its own header says. Moving the dated sections into `HISTORY.md` would cut per-session cost and make the genuinely active warnings visible again.
 
 ---
 
@@ -123,6 +123,6 @@ Not done, deliberately: a customer-facing "refund pending" **email template** se
 - **PHASE 2 — reliability/process**: R2 ("refund owed" visibility for finance + a customer-facing note), R5 (order-number retry), reconciliation check for store credit (debt #3).
 - **PHASE 3 — performance/scale**: R4 pagination (Users first), R3 when hosting is chosen.
 - **PHASE 4 — architecture**: shared delivery-fee function (debt #1), `refundOwed` state (debt #2).
-- **PHASE 6 — cleanup**: `pnpm remove @hookform/resolvers`; move/delete the two stray root files; trim `CLAUDE.md` into `HISTORY.md`.
+- **PHASE 6 — cleanup**: `pnpm remove @hookform/resolvers`; move/delete the two stray root files; trim `docs/PROJECT-GUIDE.md` into `HISTORY.md`.
 
 Each of these is independent; none should be batched with another.

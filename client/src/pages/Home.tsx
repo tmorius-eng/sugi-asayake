@@ -5,7 +5,7 @@
  * novelty effects, and oversized template-like compositions.
  *
  * 2026-09-06 homepage consolidation (external design review + Tom's explicit
- * "cut to ~6 sections" call -- see CLAUDE.md): the page used to stack up to
+ * "cut to ~6 sections" call -- see docs/PROJECT-GUIDE.md): the page used to stack up to
  * ~9 rail-like carousel blocks with almost no break between them (2
  * identical bestseller/recommended rails back-to-back, then up to 6 more
  * per-category rails with zero break), plus 3 separate sections doing

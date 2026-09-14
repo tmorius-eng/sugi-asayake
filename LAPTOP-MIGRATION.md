@@ -1,6 +1,6 @@
 # SUGI ASAYAKE — Ажлын компьютерээс гэрийн компьютер руу шилжих заавар
 
-`CLAUDE.md`-ийн хамтрагч баримт. 2026-08-20: Tom ажлын компьютер дээрээ хийж байсан ажлаа гэрийн компьютер дээрээ үргэлжлүүлэхийг хүссэн — энэ бол яг тэр процессын бүрэн заавар.
+`docs/PROJECT-GUIDE.md`-ийн хамтрагч баримт. 2026-08-20: Tom ажлын компьютер дээрээ хийж байсан ажлаа гэрийн компьютер дээрээ үргэлжлүүлэхийг хүссэн — энэ бол яг тэр процессын бүрэн заавар.
 
 **4 тусдаа зүйл зөөх ёстой:** (1) эх код, (2) MySQL-ийн бодит өгөгдөл (хэрэглэгч, бүтээгдэхүүн, захиалга), (3) MinIO-д хадгалагдсан зурган файлууд, (4) `.env` нууц утгууд (эдгээр нь `.gitignore`-т орсон тул git-ээр дамждаггүй). Доор бүгдийг нь тусад нь тайлбарлав.
 
@@ -56,7 +56,7 @@ pwsh scripts/db-backup.ps1
 
 ## 3. MinIO-ийн зурган файлууд
 
-> **⚠️ 2026-08-26-с хойш хуучирсан хэсэг.** Локал MinIO-г хоёр компьютер дээр тус тусад нь ажиллуулж, файлыг USB/cloud drive-аар гараар хуулах энэ доорх процессыг **Cloudflare R2**-руу шилжсэнээр бүрмөсөн орлуулсан — R2 бол хоёр компьютерийн ХООРОНД биш, хоёуланд нь **нэг ижил** cloud bucket тул ямар ч файл зөөх/sync хийх шаардлагагүй болсон. Дэлгэрэнгүй, яг ямар `.env` утга тавихыг CLAUDE.md-ийн 2026-08-26 "Cloudflare R2 руу шилжилт" хэсгээс үзнэ үү. Доорх түүхэн бичвэрийг устгаагүй — зөвхөн шинэ компьютер тохируулахдаа **дагаж болохгүй**, зөвхөн лавлагаанд үлдээв.
+> **⚠️ 2026-08-26-с хойш хуучирсан хэсэг.** Локал MinIO-г хоёр компьютер дээр тус тусад нь ажиллуулж, файлыг USB/cloud drive-аар гараар хуулах энэ доорх процессыг **Cloudflare R2**-руу шилжсэнээр бүрмөсөн орлуулсан — R2 бол хоёр компьютерийн ХООРОНД биш, хоёуланд нь **нэг ижил** cloud bucket тул ямар ч файл зөөх/sync хийх шаардлагагүй болсон. Дэлгэрэнгүй, яг ямар `.env` утга тавихыг PROJECT-GUIDE.md-ийн 2026-08-26 "Cloudflare R2 руу шилжилт" хэсгээс үзнэ үү. Доорх түүхэн бичвэрийг устгаагүй — зөвхөн шинэ компьютер тохируулахдаа **дагаж болохгүй**, зөвхөн лавлагаанд үлдээв.
 
 Одоогийн хэмжээ: **79 файл, ~45.6 MB** (`C:\minio\data`). Жижиг тул USB/cloud drive-аар шууд хуулахад хялбар.
 
@@ -69,7 +69,7 @@ pwsh scripts/db-backup.ps1
 
 `.env` файл `.gitignore`-т заавал орсон (зөв — нууц түлхүүрүүдийг нийтийн git repo-д хэзээ ч бүү тавь). Иймд GitHub/USB хэдийг ч ашигласан **`.env`-ийг тусад нь, аюулгүй сувгаар** (жишээ нь өөрийн хооронд OneDrive-ийн хувийн фолдер, эсвэл нууц үгийн менежерийн "secure note", USB диск) зөөх хэрэгтэй — имэйл/чат/олон нийтийн cloud drive-аар бүү дамжуул.
 
-Гэрийн компьютерт `C:\Sugi-asayake\.env` файлыг яг адилхнаар үүсгэ (эсвэл хуулаад буулга). Агуулга (CLAUDE.md-д бүрэн жагсаалттай): `DATABASE_URL`, `JWT_SECRET`, `OWNER_EMAIL`, `S3_BUCKET`, `S3_REGION=us-east-1` (⚠️ "Mongolia" биш), `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PUBLIC_BASE_URL`, `BREVO_API_KEY`, `BREVO_SENDER_EMAIL`, `BREVO_SENDER_NAME`, `BREVO_SMS_SENDER`.
+Гэрийн компьютерт `C:\Sugi-asayake\.env` файлыг яг адилхнаар үүсгэ (эсвэл хуулаад буулга). Агуулга (PROJECT-GUIDE.md-д бүрэн жагсаалттай): `DATABASE_URL`, `JWT_SECRET`, `OWNER_EMAIL`, `S3_BUCKET`, `S3_REGION=us-east-1` (⚠️ "Mongolia" биш), `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PUBLIC_BASE_URL`, `BREVO_API_KEY`, `BREVO_SENDER_EMAIL`, `BREVO_SENDER_NAME`, `BREVO_SMS_SENDER`.
 
 MinIO-г асаах PowerShell command-ийн `$env:MINIO_LICENSE` мөр (JWT түлхүүр) нь `.env`-д ороогүй, тусдаа асаах script/тэмдэглэлдээ хадгал — доорх хэсэгт бас байгаа.
 
@@ -79,8 +79,8 @@ MinIO-г асаах PowerShell command-ийн `$env:MINIO_LICENSE` мөр (JWT �
 
 - [ ] **Node.js** (LTS хувилбар) суулгах — [nodejs.org](https://nodejs.org)
 - [ ] **pnpm** суулгах: `npm install -g pnpm`
-- [ ] **MySQL 8** native Windows суулгалт (Docker биш — энэ төсөлд Docker-оос зайлсхийсэн шалтгаан CLAUDE.md-д бий):
-  - Суулгасны дараа `root`-ийн auth plugin-ийг заавал шалга (CLAUDE.md-ийн "MySQL-тэй холбоотой чухал зүйл" хэсэг):
+- [ ] **MySQL 8** native Windows суулгалт (Docker биш — энэ төсөлд Docker-оос зайлсхийсэн шалтгаан PROJECT-GUIDE.md-д бий):
+  - Суулгасны дараа `root`-ийн auth plugin-ийг заавал шалга (PROJECT-GUIDE.md-ийн "MySQL-тэй холбоотой чухал зүйл" хэсэг):
     ```sql
     ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '<шинэ-нууц-үг>';
     CREATE USER IF NOT EXISTS 'root'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY '<шинэ-нууц-үг>';
@@ -102,7 +102,7 @@ MinIO-г асаах PowerShell command-ийн `$env:MINIO_LICENSE` мөр (JWT �
 - [ ] `pnpm check` (0 алдаа байх ёстой), `pnpm test` (DATABASE_URL зарлаагүй энгийн горимоор ажиллуулаад л шалгаж болно)
 - [ ] `pnpm dev` → `http://localhost:3000` дээр сайт нээгдэж, `/admin`-аар өмнөх акаунтаараа нэвтэрч чадаж байгааг шалга.
 
-### Магадгүй тааралдах асуудлууд (CLAUDE.md-д дэлгэрэнгүй)
+### Магадгүй тааралдах асуудлууд (PROJECT-GUIDE.md-д дэлгэрэнгүй)
 - **`package.json`/`pnpm-lock.yaml`-ийн "High Mandatory Level"** — энэ бол ажлын компьютер дээр гарч байсан Windows-specific цоорхой (яагаад гарсан нь тодорхойгүй хэвээр). Шинэ клон дээр давтагдахгүй байж магадгүй, гэхдээ хэрэв `pnpm add`/`pnpm install` EPERM алдаа өгвөл elevated PowerShell-ээс `icacls <file> /setintegritylevel Medium`.
 - **MySQL `caching_sha2_password`** — дээрх checklist-д аль хэдийн тусгасан.
 

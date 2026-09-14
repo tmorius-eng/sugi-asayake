@@ -41,7 +41,7 @@ maybeDescribe("managed site-media integration", () => {
   // test unconditionally cleared it in afterEach, which meant every local
   // run of the full suite with RUN_MEDIA_INTEGRATION_TESTS=1 silently wiped
   // out whatever real photo an admin had actually uploaded for the
-  // homepage hero (this is exactly what happened once — see CLAUDE.md/
+  // homepage hero (this is exactly what happened once — see docs/PROJECT-GUIDE.md/
   // HISTORY.md's "orphaned R2 upload" incident). Snapshot-and-restore
   // instead of destroy-and-leave-empty: capture whatever's really there
   // before the test runs, put it back afterward no matter what the test did.

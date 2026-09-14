@@ -1487,7 +1487,7 @@ export type InsertEmailVerificationToken = typeof emailVerificationTokens.$infer
  * backs BOTH register (optional "verify your phone" step) and forgot-password
  * (a phone-based alternative to the email code above, added 2026-09-05
  * specifically because Brevo email delivery has been unreliable for Tom --
- * see CLAUDE.md). We never generate or check the SMS code ourselves;
+ * see docs/PROJECT-GUIDE.md). We never generate or check the SMS code ourselves;
  * verify.mn's own API does that match. This table only remembers which
  * local account/purpose a verify.mn sessionId unlocks, and guards against
  * replay via consumedAt.

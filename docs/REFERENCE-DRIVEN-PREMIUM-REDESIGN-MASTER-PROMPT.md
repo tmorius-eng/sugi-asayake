@@ -5,7 +5,7 @@
 
 > Note: This document preserves the complete prompt content available in the supplied attachment. The attachment itself was truncated by the chat export at 50,000 characters during the Quick Stats section; no missing text was invented or silently replaced.
 
-Доорх нь өмнө ярьсан **бүх reference image, бүх geometry, composition, responsive, functionality, safety, testing, Tier 0–6 шаардлагыг нэгтгэсэн бүрэн master prompt**. Үүнийг Claude AI Pro-д шууд хуулж өг. Reference зургуудыг мөн хамтад нь attach хийнэ.
+Доорх нь өмнө ярьсан **бүх reference image, бүх geometry, composition, responsive, functionality, safety, testing, Tier 0–6 шаардлагыг нэгтгэсэн бүрэн master prompt**. Үүнийг дизайны ажилд шууд ашиглана. Reference зургуудыг мөн хамтад нь attach хийнэ.
 
 ---
 

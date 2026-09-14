@@ -1431,7 +1431,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
    patterns (points/coupon/register strip, bestseller ranking, useful-info
    rail) -- restyled in SUGI's own ink/vermilion/gold palette rather than
    the reference site's yellow/pink, per Tom's "not a 1:1 copy" brief
-   (2026-08-26). See CLAUDE.md's matching dated section for the full audit. */
+   (2026-08-26). See docs/PROJECT-GUIDE.md's matching dated section for the full audit. */
 .membership-strip { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 .membership-panel { display: flex; align-items: center; gap: 14px; padding: 26px clamp(20px, 4vw, 40px); border-right: 1px solid var(--border); color: inherit; }
 .membership-panel:last-child { border-right: 0; }
@@ -2581,7 +2581,7 @@ html[data-admin-theme="dark"], html[data-admin-theme="dark"] body { background: 
    which silently broke `lg:hidden` on .admin-icon-btn -- the mobile menu
    button stayed visible on desktop because this file's `display: grid` won.
    Same cascade-layer trap as the `a { color: inherit }` bug noted in
-   CLAUDE.md. Inside @layer components, a utility on the element always wins,
+   docs/PROJECT-GUIDE.md. Inside @layer components, a utility on the element always wins,
    which is the behaviour every one of these classes actually wants. */
 @layer components {
 

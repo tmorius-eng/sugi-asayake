@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 
 // 2026-09-05: this machine's real .env now carries a real VERIFY_MN_API_KEY
-// (Tom went and got one, see CLAUDE.md) -- so the "no key configured"
+// (Tom went and got one, see docs/PROJECT-GUIDE.md) -- so the "no key configured"
 // premise this file's second test below relies on is no longer actually
 // true here, and it would otherwise fire a REAL request at verify.mn's live
 // API every time the suite runs (it did, once, before this fix: a real

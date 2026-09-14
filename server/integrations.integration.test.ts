@@ -46,7 +46,7 @@ describeWithDatabase("integration config admin API", () => {
   const staffEmail = `${marker}-staff@example.invalid`;
   let adminId = 0;
   let staffId = 0;
-  // 2026-09-11: snapshot-and-restore (CLAUDE.md rule). afterAll used to
+  // 2026-09-11: snapshot-and-restore (docs/PROJECT-GUIDE.md rule). afterAll used to
   // DELETE the ebarimt row unconditionally -- harmless while the table was
   // empty, but the same table now holds the live ntfy settings, and a test
   // run must never touch real configuration.

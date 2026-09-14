@@ -263,7 +263,7 @@ pnpm start      # NODE_ENV=production node dist/index.js
 
 | Файл | Агуулга |
 |---|---|
-| [CLAUDE.md](CLAUDE.md) | Одоогийн статус, орчны тохиргоо, идэвхтэй асуудал |
+| [PROJECT-GUIDE.md](docs/PROJECT-GUIDE.md) | Одоогийн статус, орчны тохиргоо, идэвхтэй асуудал |
 | [HISTORY.md](HISTORY.md) | Өдөр тутмын дэлгэрэнгүй ажлын лог, шийдвэрийн шалтгаан |
 | [ROADMAP.md](ROADMAP.md) | Төлөвлөсөн ажлууд |
 | [ADMIN-PANEL.md](ADMIN-PANEL.md) | Админ самбарын бүрэн боломжууд |

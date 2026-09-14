@@ -3,10 +3,10 @@
 Scope: Tom's 27-phase "FULL-STACK FORENSIC AUDIT + SCAFFOLD-TO-PRODUCTION REFINEMENT" playbook, run in execute-and-fix mode ("do not skip anything", "deep dig, fix everything"). Same classification discipline as [AUDIT-2026-09-09-order-unwind.md](AUDIT-2026-09-09-order-unwind.md): a finding is listed as fixed only when a test fails on the old code and passes on the new, or a browser/server measurement changed.
 
 **Full report (health scores /10 per area, bug register P0–P4, scaffold inventory A–G, AI-slop inventory, what was fixed / intentionally not changed, remaining work, readiness verdict):**
-https://claude.ai/code/artifact/97206a4e-517c-411d-bce4-a2f3c30c18e4
+(дотоод тайлан)
 
 **Visual architecture map (how the site operates, function architecture):**
-https://claude.ai/code/artifact/fed0a0dd-1d77-4d09-a99b-8e3f6cf0908d
+(дотоод тайлан)
 
 ## Verification
 

@@ -1,6 +1,6 @@
 # SUGI ASAYAKE — Admin панелийг дэлхийн жишигт хүргэх төлөвлөгөө
 
-`CLAUDE.md`, `ROADMAP.md`-ийн хамтрагч. Энэ бол Tom-ийн олж ирсэн "world-class admin panel" жагсаалтаас SUGI ASAYAKE-ийн бодит хэмжээ (нэг брэндийн дэлгүүр, community/marketplace биш)-нд тохируулж эрэмбэлсэн хувилбар.
+`docs/PROJECT-GUIDE.md`, `ROADMAP.md`-ийн хамтрагч. Энэ бол Tom-ийн олж ирсэн "world-class admin panel" жагсаалтаас SUGI ASAYAKE-ийн бодит хэмжээ (нэг брэндийн дэлгүүр, community/marketplace биш)-нд тохируулж эрэмбэлсэн хувилбар.
 
 **Дүрэм: TIER бүр дуусаад л дараагийнхаа руу шил.** Тест хийлгүй хэд хэдэн TIER-ийг зэрэг хийлгэвэл алдаа хуримтлагдаж, оношлоход хэцүү болно.
 
@@ -51,7 +51,7 @@
 
 **Хэрэгжилт:** `server/db.ts`-ийн `dbPing()` (`SELECT 1`), `server/storage.ts`-ийн `storagePing()` (`HeadBucketCommand`) — хоёулаа хэзээ ч throw хийдэггүй, `{ok, error?}` буцаадаг. `admin.systemHealth` (staffProcedure, мэдрэмтгий өгөгдөл биш тул staff-д ч харагдана) хоёуланг зэрэг дуудна. Client: `AdminDashboardHome.tsx`-д жижиг "СИСТЕМ: Database 🟢/🔴  Storage (S3) 🟢/🔴" мөр нэмсэн, 60 секунд тутам автоматаар шинэчлэгддэг, улаан үед `title` attribute-аар бодит алдааны мессеж харуулна.
 
-**Баталгаажуулалт:** `pnpm check`/`build` ✅, `pnpm test` бодит DB+S3 (MinIO)-той **57/62** ✅ (шинэ RBAC unit тест 1). Бодит HTTP-ээр **бүрэн урсгал** шалгасан (MinIO-г зориудаар унтраа/асаах замаар): 1) хоёулаа ажиллаж байхад `{db:{ok:true}, storage:{ok:true}}` ✅ 2) MinIO-г зогсоосны дараа `{db:{ok:true}, storage:{ok:false, error:"connect ECONNREFUSED..."}}`— **бодит алдааны мессежтэйгээр** ✅ 3) энэ үед `admin.dashboardSummary`/`admin.products` зэрэг бусад endpoint бүгд хэвийн 200 буцсан (S3 унтарсан ч admin панель бүхэлдээ унасангүй) ✅ 4) MinIO-г дахин асаахад автоматаар дахин ногоон болсон ✅. Энэ TIER-ийн хажуугаар хэрэглэгчийн хүссэнээр S3_REGION="Mongolia" гэсэн хуучирсан утгыг бүх docs-оос хайж (`grep -rn "S3_REGION"`) `us-east-1`-тэй бүрэн нийцүүлсэн (`CLAUDE.md`), мөн MinIO-г бодитоор `MINIO_SITE_REGION=us-east-1`-ээр асааж, admin панелиар **бодит зураг upload хийж, буцаад татаж авч** ("authorization header is malformed" алдаа гараагүй) баталгаажуулсан.
+**Баталгаажуулалт:** `pnpm check`/`build` ✅, `pnpm test` бодит DB+S3 (MinIO)-той **57/62** ✅ (шинэ RBAC unit тест 1). Бодит HTTP-ээр **бүрэн урсгал** шалгасан (MinIO-г зориудаар унтраа/асаах замаар): 1) хоёулаа ажиллаж байхад `{db:{ok:true}, storage:{ok:true}}` ✅ 2) MinIO-г зогсоосны дараа `{db:{ok:true}, storage:{ok:false, error:"connect ECONNREFUSED..."}}`— **бодит алдааны мессежтэйгээр** ✅ 3) энэ үед `admin.dashboardSummary`/`admin.products` зэрэг бусад endpoint бүгд хэвийн 200 буцсан (S3 унтарсан ч admin панель бүхэлдээ унасангүй) ✅ 4) MinIO-г дахин асаахад автоматаар дахин ногоон болсон ✅. Энэ TIER-ийн хажуугаар хэрэглэгчийн хүссэнээр S3_REGION="Mongolia" гэсэн хуучирсан утгыг бүх docs-оос хайж (`grep -rn "S3_REGION"`) `us-east-1`-тэй бүрэн нийцүүлсэн (`docs/PROJECT-GUIDE.md`), мөн MinIO-г бодитоор `MINIO_SITE_REGION=us-east-1`-ээр асааж, admin панелиар **бодит зураг upload хийж, буцаад татаж авч** ("authorization header is malformed" алдаа гараагүй) баталгаажуулсан.
 
 ## Контентын панелууд — Брэнд (`AdminBrandsPanel`) ✅ (2026-09-04, өргөтгөсөн 2026-09-10/11)
 

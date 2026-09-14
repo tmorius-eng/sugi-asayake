@@ -38,7 +38,7 @@ describeWithDatabase("loyalty tier discount integration", () => {
    * 500,000). Rather than weaken the assertions, this file now snapshots the
    * real ladder, installs the canonical one for the duration, and puts the
    * shop's own back afterwards. Same snapshot-and-restore discipline
-   * CLAUDE.md requires of every test that touches real admin-managed data.
+   * docs/PROJECT-GUIDE.md requires of every test that touches real admin-managed data.
    */
   let tierSnapshot: { id: number; name: string; discountPercent: number; minSpendMnt: number; sortOrder: number }[] = [];
   const CANONICAL_TIERS = [

@@ -12,6 +12,6 @@
 -- per-endpoint role reassignment (Phase B).
 --
 -- staff_invitations.role is intentionally left untouched -- that table is
--- dead code (no live invite flow reads/writes it, see CLAUDE.md), so
+-- dead code (no live invite flow reads/writes it, see docs/PROJECT-GUIDE.md), so
 -- widening its enum too would have no functional upside.
 ALTER TABLE `users` MODIFY `role` enum('user','staff','finance','marketing','warehouse','admin') NOT NULL DEFAULT 'user';

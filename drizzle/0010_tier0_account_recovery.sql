@@ -3,7 +3,7 @@
 -- IMPORTANT — apply this by hand (see 0009_independent_auth.sql for why
 -- `pnpm db:push` cannot be trusted yet), and remove every
 -- `--> statement-breakpoint` line first: MySQL 8 does not understand it
--- (see CLAUDE.md "Migration-уудыг ажиллуулах тухай").
+-- (see docs/PROJECT-GUIDE.md "Migration-уудыг ажиллуулах тухай").
 
 ALTER TABLE `users`
   ADD COLUMN `emailVerifiedAt` timestamp NULL AFTER `role`;

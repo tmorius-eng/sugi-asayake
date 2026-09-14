@@ -10,7 +10,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
  * List View gets every DocType saved filters, bulk actions, and consistent
  * paging for free from one shared engine — this component is that engine,
  * built in TypeScript on top of the existing tRPC data (see the approved
- * plan at .claude/plans/https-frappe-io-framework-deep-anaylyze-gentle-pudding.md).
+ * approved plan).
  *
  * Deliberately renders a plain `<table>` (in table mode) with the exact
  * classes the current Products table already used, rather than adopting the

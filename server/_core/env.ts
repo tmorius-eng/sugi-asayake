@@ -53,7 +53,7 @@ export const ENV = {
   // Admin overhaul (2026-09-08, Phase J): sendAccountSms already technically
   // works the moment brevoApiKey above is set (same Brevo account covers
   // both channels) -- but Tom has explicitly not yet confirmed SMS credits
-  // are purchased or that Mongolia's route/pricing is set up (see CLAUDE.md).
+  // are purchased or that Mongolia's route/pricing is set up (see docs/PROJECT-GUIDE.md).
   // A blanket "if the email key exists, allow SMS campaigns too" default
   // would be wrong specifically because of that non-confirmation, so mass
   // SMS campaigns need this separate, deliberately-off-by-default flag --

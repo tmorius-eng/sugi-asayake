@@ -3,7 +3,7 @@
 // catalog/products/<id>/, and points that product's imageUrl at it.
 //
 // This is a data-entry helper for the ongoing real-product-photo sourcing
-// effort (see CLAUDE.md / backups/image-sourcing-log.md) — it does NOT do
+// effort (see docs/PROJECT-GUIDE.md / backups/image-sourcing-log.md) — it does NOT do
 // any searching or verification itself. Verify the image is actually the
 // right product BEFORE calling this.
 //

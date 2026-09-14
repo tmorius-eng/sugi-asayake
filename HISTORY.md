@@ -1,6 +1,6 @@
 # SUGI ASAYAKE — Дэлгэрэнгүй түүхэн ажлын лог
 
-Энэ файл нь `CLAUDE.md`-г богино, session бүрт хурдан уншигдахуйц байлгах зорилгоор тусгаарласан **дэлгэрэнгүй, өдөр бүрийн narrative лог**. `CLAUDE.md` автоматаар session бүрийн эхэнд уншигддаг тул одоо зөвхөн "одоогийн статус/тохиргоо/идэвхтэй асуудал"-ыг л агуулна; энд бол бүх нарийн ширийн түүх, шалтгаан, баталгаажуулалтын алхам хадгалагдана. `CLAUDE.md` заавал шаардлагатай үед л (жишээ нь ижил төстэй bug дахин гарвал, эсвэл өмнөх шийдвэрийн шалтгааныг мэдэх хэрэгтэй үед) энд ирж хайж болно.
+Энэ файл нь `docs/PROJECT-GUIDE.md`-г богино, session бүрт хурдан уншигдахуйц байлгах зорилгоор тусгаарласан **дэлгэрэнгүй, өдөр бүрийн narrative лог**. `docs/PROJECT-GUIDE.md` автоматаар session бүрийн эхэнд уншигддаг тул одоо зөвхөн "одоогийн статус/тохиргоо/идэвхтэй асуудал"-ыг л агуулна; энд бол бүх нарийн ширийн түүх, шалтгаан, баталгаажуулалтын алхам хадгалагдана. `docs/PROJECT-GUIDE.md` заавал шаардлагатай үед л (жишээ нь ижил төстэй bug дахин гарвал, эсвэл өмнөх шийдвэрийн шалтгааныг мэдэх хэрэгтэй үед) энд ирж хайж болно.
 
 ---
 
@@ -24,7 +24,7 @@ Tom: "odoo ymar saijruulalt uldsen be?" → судалсан жагсаалт �
 
 **4+6. Сэтгэгдэл хүсэх job + урамшуулал; буцаалтын хүсэлт** (энэ commit). `orders.reviewRequestedAt/returnRequestedAt/returnRequestReason` (0080). Job `review-request` (6 цаг тутам, `runReviewRequestJob`): дууссанаас `review-request-days` (3) хоногийн дараа, 60 хоногоос хуучин биш, нэвтэрсэн худалдан авагчид push+имэйл нэг удаа (`email-subject/body-review-request`, `push-body-review-request`, `{урамшуулал}` мөр). `review-reward-mnt` > 0 бол `reviews.create` дараа `adjustStoreCredit` (verified-purchase учир бараа/хэрэглэгч бүрт нэг л удаа); PDP формд урамшууллын мөр, toast. `orders.requestReturn` (strict rate limit, `screenText`): өөрийн completed захиалга, `return-window-days` (14) дотор, нэг удаа → `order.return_requested` push (шалтгаан push-д орохгүй — PII байж болзошгүй); Profile "Буцаах хүсэлт" (prompt), admin Захиалгын мөрөнд шар pill + шалтгаан. Тест `review-request-return.integration.test.ts` (2).
 
-**7. Staging + CI DB тест**. HeatWave дээр **`sugi_staging`** схем (production dump-ийн бүрэн хуулбар 2026-09-14, `sugi_app`-д SELECT/INSERT/UPDATE/DELETE; ⚠️ `mysql.exe` Windows дээр `--default-character-set=utf8mb4 --binary-mode=1`-гүй бол кириллтэй dump-ийг "Unknown command '\''" гэж унагаадаг). VM: `~/sugi-asayake-staging/` (.env = prod-ынхаас `sugi_staging`, `PORT=3001`, `NOTIFICATIONS_DISPATCH=0`, `PUBLIC_BASE_URL=https://sugi-staging.karkaron.com`; `node_modules` → prod-ын symlink), cloudflared ingress `sugi-staging.karkaron.com → :3001`, pm2 `sugi-staging`. `deploy.ps1 -Staging`. ⚠️ **DNS CNAME `sugi-staging` → `bbd3128e-486e-481d-8c21-f9d3d240a56c.cfargotunnel.com` (proxied) Tom Cloudflare-аас нэмнэ** — түүнээс өмнө зөвхөн VM дотроос :3001. CI: `.github/workflows/ci.yml` `database-tests` job — mysql:8.4 service, `scripts/db-apply-all-migrations.ts` (multipleStatements; `-->` marker зөвхөн бүтэн мөрөнд), `scripts/ci-seed.ts` (4 салбар), auth+commerce gate-тэй бүрэн vitest. ⚠️ Эхний CI run улаан гарч болзошгүй — тестүүд production-ий бодит мөрөнд түшиглэсэн бол seed-д нэмнэ. HeatWave дээр `sugi_migtest` схем (migration chain туршилт) үлдсэн — Tom `DROP DATABASE sugi_migtest` (classifier DROP-ийг зөвшөөрдөггүй).
+**7. Staging + CI DB тест**. HeatWave дээр **`sugi_staging`** схем (production dump-ийн бүрэн хуулбар 2026-09-14, `sugi_app`-д SELECT/INSERT/UPDATE/DELETE; ⚠️ `mysql.exe` Windows дээр `--default-character-set=utf8mb4 --binary-mode=1`-гүй бол кириллтэй dump-ийг "Unknown command '\''" гэж унагаадаг). VM: `~/sugi-asayake-staging/` (.env = prod-ынхаас `sugi_staging`, `PORT=3001`, `NOTIFICATIONS_DISPATCH=0`, `PUBLIC_BASE_URL=https://sugi-staging.karkaron.com`; `node_modules` → prod-ын symlink), cloudflared ingress `sugi-staging.karkaron.com → :3001`, pm2 `sugi-staging`. `deploy.ps1 -Staging`. ⚠️ **DNS CNAME `sugi-staging` → `bbd3128e-486e-481d-8c21-f9d3d240a56c.cfargotunnel.com` (proxied) Tom Cloudflare-аас нэмнэ** — түүнээс өмнө зөвхөн VM дотроос :3001. CI: `.github/workflows/ci.yml` `database-tests` job — mysql:8.4 service, `scripts/db-apply-all-migrations.ts` (multipleStatements; `-->` marker зөвхөн бүтэн мөрөнд), `scripts/ci-seed.ts` (4 салбар), auth+commerce gate-тэй бүрэн vitest. ⚠️ Эхний CI run улаан гарч болзошгүй — тестүүд production-ий бодит мөрөнд түшиглэсэн бол seed-д нэмнэ. HeatWave дээр `sugi_migtest` схем (migration chain туршилт) үлдсэн — Tom `DROP DATABASE sugi_migtest` .
 
 **8.** Хайлтын autocomplete аль хэдийн байсан (`HeaderSearch` suggestions) — алдаатай үг тэсвэрлэх л алга. LocalBusiness JSON-LD аль хэдийн `Store` төрлөөр бий. Шинэ: `MessengerButton.tsx` — баруун доод хөвөгч "Чат" (m.me, Facebook URL тохиргооноос; /admin, /checkout, /help-д нуугдана), гуравдагч script-гүй.
 
@@ -67,7 +67,7 @@ Tom (iPhone): "Facebook share songood orhoor zgr facebook ongoij baina". Шал�
 
 - **Backup лаптопоос салав**: `scripts/oci/vm-backup.sh` (mysqldump admin/TLS, HeatWave-safe flags → gzip → `openssl enc -aes-256-cbc -pbkdf2 -iter 200000`, `BACKUP_PASSPHRASE` VM `.env`-д; гэрийн лаптопын `.env`-д хуулбар) + `scripts/oci/vm-backup-upload.mjs` (VM-ийн өөрийн `node_modules/@aws-sdk/client-s3`-ээр **тусдаа private bucket `sugi-asayake-backups`** (`db/` prefix; storefront-ийн bucket нь pub-*.r2.dev-ээр нийтэд ил тул тэнд хийхгүй), 30 хоногоос хуучныг устгана). `curl … | sudo bash` (rclone) classifier-т хаагдсан тул binary нэмээгүй. Эхний run: 250 KB, bucket үүссэн; **restore тест**: R2-оос татаж decrypt+gunzip → 61 `CREATE TABLE` ✓. Cron `0 19 * * *` UTC (03:00 УБ), лог `~/backup.log`. Хоёр скрипт deploy.ps1-д ордоггүй — өөрчилбөл гараар `scp`.
 - **Uptime**: `.github/workflows/uptime.yml` — GitHub cron 10 мин тутам `/health` 3 удаа; унавал ntfy-д priority-5 push. ⚠️ Repo secrets **`NTFY_URL`** (admin сэдвийн бүтэн URL), **`NTFY_TOKEN`** Tom нэмнэ (github MCP/gh CLI энэ лаптопт байхгүй); байхгүй үед workflow улаан болоод л зогсоно.
-- **Захиалгын push баталгаажлаа**: 09-08-аас хойш бодит захиалга байгаагүй тул VM dispatcher хэзээ ч ажиллаагүй байв (Tom-ийн утсанд зөвхөн 09-11-ний туршилт). Амьд сайт дээр Playwright-аар бэлэн мөнгө/салбараас авах туршилтын захиалга **`SAMU0NHNJY458K8X`** ("ТУРШИЛТ — Claude (цуцлана уу)", 88001122) → `order.placed` admin+warehouse хоёулаа **2 секундэд `sent`** (#2304/#2305). ⚠️ Tom /admin-аас цуцлах. VM логийн 2 "dispatch failed … connect ETIMEDOUT" нь 09-13 boot-ын blip.
+- **Захиалгын push баталгаажлаа**: 09-08-аас хойш бодит захиалга байгаагүй тул VM dispatcher хэзээ ч ажиллаагүй байв (Tom-ийн утсанд зөвхөн 09-11-ний туршилт). Амьд сайт дээр Playwright-аар бэлэн мөнгө/салбараас авах туршилтын захиалга **`SAMU0NHNJY458K8X`** ("ТУРШИЛТ (цуцлана уу)", 88001122) → `order.placed` admin+warehouse хоёулаа **2 секундэд `sent`** (#2304/#2305). ⚠️ Tom /admin-аас цуцлах. VM логийн 2 "dispatch failed … connect ETIMEDOUT" нь 09-13 boot-ын blip.
 - **PDP**: давхар "ХУВААЛЦАХ" шошго хасагдав (native share байхгүй хөтөчид л үг үлдэнэ); **`ProductSectionJumps`** — гарчгийн доор "★ N сэтгэгдэл / Эхний сэтгэгдлийг бичих" ба "N асуулт, хариулт / Асуулт асуух" pill линк → `#product-reviews`/`#product-questions` (scroll-margin-top 96/84px, smooth scroll, `questions.list` query dedupe). Tom: "хүмүүс тэр болгон анзаарахгүй байна".
 
 ## Барааны share + серверийн OG/JSON-LD + Google Merchant feed + Search Console (2026-09-14, гэрийн лаптоп)
@@ -121,7 +121,7 @@ Tom энэ лаптоп дээр `.env`-ийн бүрэн агуулгыг (Orac
 - `git fetch` эхэндээ `C:\Users\hero_`-оос ажиллуулснаас "dubious ownership in 'C:/'" гарсан — repo-ийн алдаа биш, буруу хавтас; `safe.directory C:/` нэмэхгүй. Repo дотроос 10 commit `--ff-only` татав (`541d4b0`).
 - `scripts/oci/setup-laptop.ps1` step 1: `~/.ssh/sugi-oci` (ed25519, comment `sugi-asayake-oci-MYDICK`), `Host sugi-oci` config, "SUGI OCI Tunnel" logon task. **Step 2 (VM-ийн `authorized_keys`-д public key нэмэх) ажлын лаптопоос л хийгдэнэ** — энэ session-ий төгсгөлд хараахан хийгдээгүй, `ssh sugi-oci` → "Permission denied (publickey)", 3307 хаалттай.
 - `oci-ca.pem`-ийг Tom-ийн paste хийсэн `MySQL_Endpoint_CA` сертификатаас шууд бичив (scp хэрэггүй болсон); `.env` → Oracle 3 мөр + `DATABASE_ADMIN_URL`, `PUBLIC_BASE_URL`, `DEV_ALLOWED_HOSTS`, `FACEBOOK_*`, `VAPID_*`; хуучин нь `.env.bak-aiven-2026-09-13`. Хоёулаа gitignored.
-- **Backup task энэ лаптопт байгаагүй** (CLAUDE.md "гэрийн лаптопт байдаг" гэж бичсэн нь ажлын лаптопыг хэлж байсан — 09-13-ны нэрийн залруулгыг үзнэ). Одоо `SUGI ASAYAKE Daily DB Backup` бүртгэгдсэн (19:00, `powershell.exe -File scripts/db-backup-daily.ps1`, StartWhenAvailable, 30 мин лимит). mysqldump 8.0.46 (`C:\Program Files\MySQL\MySQL Server 8.0\bin`).
+- **Backup task энэ лаптопт байгаагүй** (PROJECT-GUIDE.md "гэрийн лаптопт байдаг" гэж бичсэн нь ажлын лаптопыг хэлж байсан — 09-13-ны нэрийн залруулгыг үзнэ). Одоо `SUGI ASAYAKE Daily DB Backup` бүртгэгдсэн (19:00, `powershell.exe -File scripts/db-backup-daily.ps1`, StartWhenAvailable, 30 мин лимит). mysqldump 8.0.46 (`C:\Program Files\MySQL\MySQL Server 8.0\bin`).
 - `scripts/db-backup.ps1`: URL-ийн user/password-ыг `[uri]::UnescapeDataString` (HeatWave-ийн нууц үгэнд `%23`/`%40`); `--set-gtid-purged=OFF --no-tablespaces` (migrate-to-oracle-mysql.ps1-тэй ижил — HeatWave GTID-тэй, admin-д SUPER/PROCESS байхгүй; эс бөгөөс dump-ийг буцааж restore хийх боломжгүй). `scripts/db-backup-daily.ps1`: `DATABASE_ADMIN_URL`-ийг эхэлж авна (`sugi_app` нь SELECT/INSERT/UPDATE/DELETE л тул `--routines/--triggers` дутуу).
 - **Баталгаажуулалт**: tunnel хаалттай тул Aiven (7 хоног амьд) дээр тест-dump: 57 хүснэгт, 1.95 MB, `GTID_PURGED` 0 мөр, zip 253.6 KB. HeatWave дээрх бодит run — түлхүүр VM-д орсны дараа.
 - **2026-09-14 үргэлжлэл**: ажлын лаптоп түлхүүрийг VM-д нэмсний дараа ч denied хэвээр — `ssh -v` "Server accepts key" + `ssh-keygen -y` "incorrect passphrase" → PowerShell `-N '""'` нь `""` гэсэн нууц үг тавьсан байв. `ssh-keygen -p -P '""' -N ''` → VM-OK; tunnel 4 с-д 3307; HeatWave backup 258.6 KB (14 хадгална); `/health` database up; Playwright (ja) 6 public хуудас — UI кирилл 0. Скрипт засвар `98d39b5`.
@@ -270,7 +270,7 @@ Tom: "https://www.cosmekitchen-webstore.jp/ ene website playwright aar buh desig
 
 ## Forensic аудит — scaffold-оос production руу (2026-09-12, гэрийн лаптоп, 4 commit: `618eeec` → `3d3b05a`)
 
-Tom 27 үе шаттай "FULL-STACK FORENSIC AUDIT + SCAFFOLD-TO-PRODUCTION REFINEMENT" playbook илгээж, "do not skip anything", "deep dig, fix everything, no basic shits" гэв. Арга: код бүрийг уншиж, сэжигтэй зүйл бүрийг **тестээр нотолж** байж л засав; Playwright-ээр 1152/768/390/320 өргөнд storefront + 23 admin хэсгийг бүгдийг үзэв. Эцсийн тайлан (health score, scaffold/AI-slop inventory, P0–P4 bug register): artifact (доор CLAUDE.md-д линк).
+Tom 27 үе шаттай "FULL-STACK FORENSIC AUDIT + SCAFFOLD-TO-PRODUCTION REFINEMENT" playbook илгээж, "do not skip anything", "deep dig, fix everything, no basic shits" гэв. Арга: код бүрийг уншиж, сэжигтэй зүйл бүрийг **тестээр нотолж** байж л засав; Playwright-ээр 1152/768/390/320 өргөнд storefront + 23 admin хэсгийг бүгдийг үзэв. Эцсийн тайлан (health score, scaffold/AI-slop inventory, P0–P4 bug register): artifact (доор PROJECT-GUIDE.md-д линк).
 
 ### `618eeec` — /admin 25 минут idle → lock, царайг дахин асуух (Tom-ийн хүсэлт + "world standard"-ыг судал)
 - **Юу нь activity вэ** гэдэг нь чухал: панель өөрөө хонх/outbox-оор polling хийдэг тул request бүр session-ийг сунгавал лангуун дээр нээлттэй орхисон самбар хэзээ ч түгжигдэхгүй. Зөвхөн **бодит оролт** (pointer/key/touch/scroll) тоологдоно; browser хамгийн ихдээ 2 минут тутам heartbeat илгээнэ.
@@ -295,7 +295,7 @@ Tom 27 үе шаттай "FULL-STACK FORENSIC AUDIT + SCAFFOLD-TO-PRODUCTION REF
 - Цэвэрлэгээ: QA admin (`qa-admin-tmp@example.invalid`, id 6490) Aiven-ээс устгасан; gate-off 3101 dev server зогсоосон; `scripts/tmp-*.ts` gitignore.
 
 ### Мөн орой — ангиллын 3×2 grid нэг мөр, төгсгөлгүй swipe карусель болов
-Tom: "дээр нь 3, доор нь 3 биш, бүгдийг нэг мөрөнд, хуруугаараа/хулганаараа swipe, endless". `CategoryRail.tsx` (дэлгэрэнгүй CLAUDE.md). Playwright: 18 карт (6×3), 6 focusable, нэг мөр, дунд хуулбараас эхэлнэ, snap цэгээс wrap яг нэг set (2064px), хулганы 200px drag → 344px (нэг карт) хөдөлж click залгигдсан, сум нэг карт (344px), overflow 0, console цэвэр.
+Tom: "дээр нь 3, доор нь 3 биш, бүгдийг нэг мөрөнд, хуруугаараа/хулганаараа swipe, endless". `CategoryRail.tsx` (дэлгэрэнгүй PROJECT-GUIDE.md). Playwright: 18 карт (6×3), 6 focusable, нэг мөр, дунд хуулбараас эхэлнэ, snap цэгээс wrap яг нэг set (2064px), хулганы 200px drag → 344px (нэг карт) хөдөлж click залгигдсан, сум нэг карт (344px), overflow 0, console цэвэр.
 
 ### Мөн орой — "Яагаад биднийг сонгох вэ" хэсгийг лавлагаа зургаар дахин бүтээв
 Tom "Why Choose Us" лавлагаа зураг: цайвар панель, төвлөрсөн tracked eyebrow + bold гарчиг, 3 багана (өнгөт icon tile, 01/02/03, дунд багана 46px доош, 90px tile). Tom: "яг зураг шиг, гэхдээ цагаан дэвсгэрийг сайтын дэвсгэртэй адил болго"; сэтгэгдлийн блок доор нь үлдэнэ, 2 догол тайлбар хасагдана (асууж баталгаажуулсан). Хийхээс өмнө `backup/pre-wcu-redesign-2026-09-12` tag (remote дээр). `BrandStorySection.tsx` дахин бичигдэж (`<ul>` 3 `<li>`, h3, `{N}` interpolation; Tom дараа нь 01/02/03 дугаарыг хасуулж, eyebrow/гарчиг/картын текстийг сайтын өөрийн загвар болгуулж, icon + tile өнгийг /admin slot болгуулав — `WCU_ICON_NAMES` 12 нэр, hex шалгалттай, буруу утга анхдагч руу унана), `.wcu-*` CSS блок бүхэлдээ солигдов (section-scoped tile өнгө, 245/355/245 grid, 1040px мөр, reference-ийн 200/240px padding), site-text slot-ын default/label шинэчлэгдэв (key нэмэгдээгүй, хасагдаагүй). Эхний хувилбар лавлагааны 200/240px зайг яг дагасан (хэсэг 887px) — Tom "ямар том div вэ, дэндүү их сул зай" → хөрш band-уудтай ижил `clamp(48px,5.6vw,84px)`, гарчиг→багана 52, tile→гарчиг 22, stagger 32; хэсэг 548px (хөршүүд 737/809). Playwright: мөр 1040 төвд, багана 249/361/249, tile 44/90/44, overflow 0.
@@ -304,13 +304,13 @@ Tom "Why Choose Us" лавлагаа зураг: цайвар панель, тө
 `.mobile-sticky-bar` нь `height: 64px` (border-box) + `padding-bottom: env(safe-area-inset-bottom)` байсан тул Safari-ийн toolbar scroll хийхэд эвхэгдэж safe-area ~34px болоход icon+label 30px-д шахагдаж байв. Одоо `height: calc(64px + safe)`; label 10→11px. Бусад бүх offset (footer, toast, back-to-top, cookie icon) аль хэдийн bar+safe гэж тооцдог байсан тул зөрөхгүй.
 
 ### Мөн орой — production cookie banner CSP-д хаагдсан байсныг tunnel-ээр олов
-Tom `scripts/demo.ps1 -Tunnel` ажиллуулж `https://….trycloudflare.com` гаргав. Tunnel-ийн ард бүгд зөв (secure context, CSRF, API, probe 404, HSTS/CSP). Console-ийн ганц алдаа = CSP inline script → banner production-д огт байгаагүй (`bannerInDom:false`). JSON data block + external init файл; production build-ийг 3210 порт дээр ажиллуулж banner гарсныг баталгаажуулав. Дэлгэрэнгүй CLAUDE.md.
+Tom `scripts/demo.ps1 -Tunnel` ажиллуулж `https://….trycloudflare.com` гаргав. Tunnel-ийн ард бүгд зөв (secure context, CSRF, API, probe 404, HSTS/CSP). Console-ийн ганц алдаа = CSP inline script → banner production-д огт байгаагүй (`bannerInDom:false`). JSON data block + external init файл; production build-ийг 3210 порт дээр ажиллуулж banner гарсныг баталгаажуулав. Дэлгэрэнгүй PROJECT-GUIDE.md.
 
 ### Мөн орой — LAN/http checkout crash + scanner-blocker-ийн регресс
-Tom утаснаас checkout нээхэд "An unexpected error occurred". Playwright-аар `http://192.168.88.6:3000/checkout` (insecure context) дээр давтаж: `crypto.randomUUID is not a function` — миний 3d3b05a-д нэмсэн idempotency түлхүүр render дээр дуудагддаг байв. `newRequestId()` fallback. Мөн console-д `/vendor/silktide-consent-manager.js` 404 — f4555cb-ийн probe-blocker `vendor`-ыг блоклож cookie banner үхсэн байсныг олж засав (public 71 файлыг matcher-оор audit хийсэн скрипт). Дэлгэрэнгүй CLAUDE.md.
+Tom утаснаас checkout нээхэд "An unexpected error occurred". Playwright-аар `http://192.168.88.6:3000/checkout` (insecure context) дээр давтаж: `crypto.randomUUID is not a function` — миний 3d3b05a-д нэмсэн idempotency түлхүүр render дээр дуудагддаг байв. `newRequestId()` fallback. Мөн console-д `/vendor/silktide-consent-manager.js` 404 — f4555cb-ийн probe-blocker `vendor`-ыг блоклож cookie banner үхсэн байсныг олж засав (public 71 файлыг matcher-оор audit хийсэн скрипт). Дэлгэрэнгүй PROJECT-GUIDE.md.
 
 ### Мөн орой — утсан дээрх scroll-ийн 2 алдаа (Tom-ийн LAN тест)
-"Дараах" footer руу; шинэ хуудас доошоо. Хэмжилт + шалтгаан + засвар CLAUDE.md-ийн ижил нэртэй хэсэгт. Сургамж: **scroll хийхээсээ өмнө документын өндөр өөрчлөгдөх эсэхийг бод** — smooth scroll явж байхад layout өөрчлөгдвөл browser (ялангуяа Safari) clamp хийдэг; яг тодорхой газар буух scroll бол instant + render-ийн дараа. Мөн бүрэн suite 52e9e65 дээр 783/783 (84 файл); өмнөх run-ын loyalty timeout нь зэрэгцээ тест ажиллуулснаас үүссэн түр зуурын зүйл байв.
+"Дараах" footer руу; шинэ хуудас доошоо. Хэмжилт + шалтгаан + засвар PROJECT-GUIDE.md-ийн ижил нэртэй хэсэгт. Сургамж: **scroll хийхээсээ өмнө документын өндөр өөрчлөгдөх эсэхийг бод** — smooth scroll явж байхад layout өөрчлөгдвөл browser (ялангуяа Safari) clamp хийдэг; яг тодорхой газар буух scroll бол instant + render-ийн дараа. Мөн бүрэн suite 52e9e65 дээр 783/783 (84 файл); өмнөх run-ын loyalty timeout нь зэрэгцээ тест ажиллуулснаас үүссэн түр зуурын зүйл байв.
 
 ### Мөн орой — `.env` сканнер + терминалын лог
 Tom hosting-ийн access log-д `/.env.save`, `/laravel/.env`, `/sendgrid/.env`… 400-аар хариулагдсан 40 мөр харуулж, Reddit r/SaaS "Someone is trying really hard to get the .env file" thread-ийг (Playwright-аар уншсан — fetch хаагдсан) судлахыг хүсэв. Дүгнэлт: IPv4 бүхэлд нь сканнердаж буй бот, хэвийн; хамгаалалт = `.env` хэзээ ч serve хийгдэхгүй + 404 + давтагчийг ban + Cloudflare/fail2ban. Манай серверийг ижил замаар шалгахад бүгд **200 + index.html** буцааж байсан (SPA fallback). Одоо `scannerProbes.ts` (404, 5/ц → 403, loopback/private ban-гүй — анхны хувилбар өөрийн 127.0.0.1-ийг ban хийсэн, мөн `^/api/` allow-rule нь `/api/.env`-ийг нэвтрүүлж байсныг тест барив), `requestLog.ts` (`LOG_REQUESTS=1`), `LOG_SQL=1`. Бодит dev server дээр 9 probe зам 404, бодит замууд хэвээр.
@@ -322,12 +322,12 @@ Tom hosting-ийн access log-д `/.env.save`, `/laravel/.env`, `/sendgrid/.env`
 
 ## Амьд DB дээрх тестийн үлдэгдлийг цэвэрлэв (2026-09-12, Tom: "delete them")
 
-CLAUDE.md-д удаан хугацаанд нээлттэй байсан зүйл. Эхлээд **зөвхөн уншдаг** тайлан (`scripts/test-residue-report.ts`), дараа нь `scripts/test-residue-purge.ts --apply`.
+PROJECT-GUIDE.md-д удаан хугацаанд нээлттэй байсан зүйл. Эхлээд **зөвхөн уншдаг** тайлан (`scripts/test-residue-report.ts`), дараа нь `scripts/test-residue-purge.ts --apply`.
 
 **Замдаа олдсон 3 зүйл**:
 1. **`%test%`-ээр хайж болохгүй** — каталогт жинхэнэ 13 оронтой JAN баркодтой `Honey amproom tester`, `Ceramid amproom test` гэх 6 бараа байна. Тиймээс зөвхөн мэдэгдэж буй fixture-ийн нэрсээр таарна.
 2. **Тестийн захиалгууд нэрээр нь л олдоно** — `order_items.productId` нь SET NULL тул тестийн бараа устсаны дараа захиалга нь "жинхэнэ" мэт харагддаг. `Telemetry Test Shopper`-ийн 2 захиалга (2×22,000₮) ингэж борлуулалтын тоонд үлдсэн байжээ.
-3. ⚠️ **Устгасан 3 тестийн хэрэглэгчийн 2 нь `admin` эрхтэй** байв (`Order Notify Admin`, `Telemetry Test Admin`) — CLAUDE.md-ийн "admin 3" гэсэн тоо эндээс гарч байсан. Одоо амьд DB-д **ердөө 2 хэрэглэгч**: bataa (admin), zulaa (staff).
+3. ⚠️ **Устгасан 3 тестийн хэрэглэгчийн 2 нь `admin` эрхтэй** байв (`Order Notify Admin`, `Telemetry Test Admin`) — PROJECT-GUIDE.md-ийн "admin 3" гэсэн тоо эндээс гарч байсан. Одоо амьд DB-д **ердөө 2 хэрэглэгч**: bataa (admin), zulaa (staff).
 
 **Устгасан**: 3 хэрэглэгч, 2 захиалга (+ мөрүүд), 887 `suppressed` мэдэгдэл. Бараа/ангилал аль хэдийн цэвэр байв. **Шалгасан**: үлдэгдэл 0, ledger drift 0, борлуулалт 248,400₮ (дэлгүүрийн бодит POS борлуулалт) хэвээр.
 
@@ -379,7 +379,7 @@ Tom: "smart api rest api shde!! bas json", https://developer.smartsoftware.mn/, 
 
 **Хүсэлт (Tom)**: <https://github.com/binwiederhier/ntfy> судалж сайтад суулгах. Агуулахын ажилтан, admin, finance утсан дээрээ мэдэгдэл авах: сайтаар зарагдсан, нөөц дуусч байгаа, захиалга орж ирсэн, бараа орсон/гарсан. Агуулахаас дэлгүүр рүү бараа гаргахад агуулахаас хасч дэлгүүрт нэмэх. Ирээдүйд Smart Software-ийн inventory/loyalty/management API. Мөн "/admin интеграцийн хэсэгт REST API/OAuth2 байгаа юу, сайн ажиллаж байна уу". Замдаа нэмсэн хүсэлтүүд: шинэ бараа ирэхэд худалдааны зөвлөх (staff) код+ширхэгийг **A4 цаасан дээр бичээд group chat руу зураг явуулдаг** асуудлыг шийдэх; admin top bar-ын **хонх** дээр мэдэгдэл ирдэг болгох.
 
-**Төлөвлөгөө (6 phase, Tom баталсан)**: `C:\Users\hero_\.claude\plans\https-github-com-binwiederhier-ntfy-enii-happy-avalanche.md`. Tom-ийн шийдвэрүүд: ntfy.sh + урт санамсаргүй нууц topic (бүлэг бүрт нэг, PII ороохгүй); шилжүүлэг = агуулах "илгээх"-д хасагдана → дэлгүүрт **USB сканнераар уншуулж** автоматаар тоологдоно → илгээсэнтэй тулгана; **тусдаа агуулах** байршил, онлайн захиалга тэндээс; зөвлөхүүд одоогийн **`staff`** эрхээр; дэлгүүрүүд борлуулалтаа **зөвхөн Smart POS**-д бүртгэдэг (тиймээс Smart POS синк хүртэл онлайн нөөц = агуулахын нөөц); staff тооллого = draft, admin батална; REST API/OAuth2-ийг одоо бүтээхгүй.
+**Төлөвлөгөө (6 phase, Tom баталсан)**: (төлөвлөгөөний тэмдэглэл). Tom-ийн шийдвэрүүд: ntfy.sh + урт санамсаргүй нууц topic (бүлэг бүрт нэг, PII ороохгүй); шилжүүлэг = агуулах "илгээх"-д хасагдана → дэлгүүрт **USB сканнераар уншуулж** автоматаар тоологдоно → илгээсэнтэй тулгана; **тусдаа агуулах** байршил, онлайн захиалга тэндээс; зөвлөхүүд одоогийн **`staff`** эрхээр; дэлгүүрүүд борлуулалтаа **зөвхөн Smart POS**-д бүртгэдэг (тиймээс Smart POS синк хүртэл онлайн нөөц = агуулахын нөөц); staff тооллого = draft, admin батална; REST API/OAuth2-ийг одоо бүтээхгүй.
 
 **DB дээр хэмжсэн эхлэлийн байдал**: 4 салбар бүгд дэлгүүр, агуулах байхгүй; бүх 18,725 ширхэг "Орос элчин" (id 1) дээр; `integration_configs` хоосон; ажилтан: admin 1 (id 1 "bataa") + 2 тестийн admin үлдэгдэл, staff/warehouse 0.
 
@@ -438,7 +438,7 @@ Tom: "smart api rest api shde!! bas json", https://developer.smartsoftware.mn/, 
 - Тест: `stock-alerts.test.ts` (11 хослол + re-arm), `stock-alerts.integration.test.ts` (2: засвар чимээгүй / борлуулалт огтлоход нэг л удаа / out + total_out / нэг өдөрт давтахгүй).
 - `branch-stock.integration.test.ts`-ийн "default-ыг эхлээд унтраагаад дараа нь нөгөөг асаах" 2 алхамт загвар Phase 3-ийн хамгаалалтаар (default-гүй мөч үүсгэхгүй) BAD_REQUEST болсон → тест radio семантик руу шилжив (нөгөөг асаахад л энэ нь унтарна).
 
-**Ажлын лаптопоос татсан 9 commit** (энэ session-ий эхэнд, `d30dc06` хүртэл): баркод сканнераар сайтын аль ч хуудаснаас бараа руу үсрэх, Монгол хайлтын synonym, featured брэнд → брэндийн хуудас, README, /admin хэсэг бүрийн Монгол тайлбар (tip), SEO/cookie текст DB-ээс, хууль эрх зүйн 3 хуудас + лоялти түвшин + footer/холбоо барих /admin-аар засагдах (migration `0061`, Aiven дээр аль хэдийн ажилласан), hero 3 слайд, 42 ашиглагдаагүй компонент + 25 package устгав. Тэр ажлын CLAUDE.md/HISTORY.md тэмдэглэл ирээгүй — дэлгэрэнгүйг `git log f7b6563..d30dc06`-оос. ⚠️ Лоялти босго DB дээр 300k/500k/5M болсон (migration-ий seed 500k/1M/10M) — /admin-аар өөрчилсөн бололтой.
+**Ажлын лаптопоос татсан 9 commit** (энэ session-ий эхэнд, `d30dc06` хүртэл): баркод сканнераар сайтын аль ч хуудаснаас бараа руу үсрэх, Монгол хайлтын synonym, featured брэнд → брэндийн хуудас, README, /admin хэсэг бүрийн Монгол тайлбар (tip), SEO/cookie текст DB-ээс, хууль эрх зүйн 3 хуудас + лоялти түвшин + footer/холбоо барих /admin-аар засагдах (migration `0061`, Aiven дээр аль хэдийн ажилласан), hero 3 слайд, 42 ашиглагдаагүй компонент + 25 package устгав. Тэр ажлын PROJECT-GUIDE.md/HISTORY.md тэмдэглэл ирээгүй — дэлгэрэнгүйг `git log f7b6563..d30dc06`-оос. ⚠️ Лоялти босго DB дээр 300k/500k/5M болсон (migration-ий seed 500k/1M/10M) — /admin-аар өөрчилсөн бололтой.
 
 ---
 
@@ -446,7 +446,7 @@ Tom: "smart api rest api shde!! bas json", https://developer.smartsoftware.mn/, 
 
 Tom: "Ui ux bolon fronted bolon backend bugdiin deep audit hiij deep inspect analyze hiij aldaa ol!!! Bas ymarch utag uchirgui feature baiwal hai! ... AI slop oor hiigegu ym shig haragduulmaar baina, website design bol still 2019 style tai bgaa teriign sudal!! 2026 onii best designi AI or Design MCP sudal!!" Дараа нь: "Start take action make my website better!!!"
 
-Бүрэн тайлан (artifact): https://claude.ai/code/artifact/6d3cc4d4-aa77-4b9f-959c-ffe8ffc43c2c
+Бүрэн тайлан (artifact): (дотоод тайлан)
 
 ### Аудитын арга
 
@@ -491,7 +491,7 @@ Tom: "Ui ux bolon fronted bolon backend bugdiin deep audit hiij deep inspect ana
 
 ### Баталгаажуулалт
 
-28 хослол (7 хуудас × 1440/1024/390/320): hэвтээ overflow 0, давхцал 0, контрастын алдаа 0, эвдэрсэн зураг 0, `<h1>` хуудас бүрт 1. `pnpm check`/`pnpm build` цэвэр. Бүрэн suite **578/578 тест ✅ (62/63 файл)** — `order-unwind` нь зөвхөн бүрэн ачаалалтын үед файлын түвшинд унадаг ба дангаараа **12/12, 55 секунд** давдаг; энэ бол CLAUDE.md-д аль хэдийн бичигдсэн pre-existing flake.
+28 хослол (7 хуудас × 1440/1024/390/320): hэвтээ overflow 0, давхцал 0, контрастын алдаа 0, эвдэрсэн зураг 0, `<h1>` хуудас бүрт 1. `pnpm check`/`pnpm build` цэвэр. Бүрэн suite **578/578 тест ✅ (62/63 файл)** — `order-unwind` нь зөвхөн бүрэн ачаалалтын үед файлын түвшинд унадаг ба дангаараа **12/12, 55 секунд** давдаг; энэ бол PROJECT-GUIDE.md-д аль хэдийн бичигдсэн pre-existing flake.
 
 ---
 
@@ -503,7 +503,7 @@ Tom: "Ui ux bolon fronted bolon backend bugdiin deep audit hiij deep inspect ana
 
 ### 0. ⚠️ ХАМГИЙН ЧУХАЛ САНАМЖ — session эхлэхэд ЗААВАЛ `git fetch` хийх
 
-**Энэ session-ий хамгийн том алдаа**: Claude session-ийг эхлүүлэхдээ git remote-ыг огт шалгаагүй. Үр дагавар:
+**Энэ session-ий хамгийн том алдаа**: ажлын session-ийг эхлүүлэхдээ git remote-ыг огт шалгаагүй. Үр дагавар:
 
 - Гэрийн лаптоп `audit-2026-09-09-order-unwind` branch дээр, `origin/main`-аас **2 commit хоцорсон** байсан.
 - Ажлын лаптоп өчигдөр (2026-09-10 14:24) `5d7ceee` commit-ыг `origin/main`-руу push хийсэн байв: **"Rebuild Top Brands against the Matsuya Ginza reference, add /brands, and raise homepage legibility"** — 15 файл, 1188 нэмэлт мөр.
@@ -629,7 +629,7 @@ Tom screenshot илгээж `/shop` эвдэрсэн гэв. Шалгасан з
 - `pnpm check` (tsc --noEmit) цэвэр, `pnpm build` цэвэр.
 - **28 хослол** (7 хуудас: `/`, `/shop`, `/brands`, `/journal`, `/returns`, `/track-order`, `/login` × 4 өргөн: 1440/1024/390/320): хэвтээ overflow **0**, хэсгийн давхцал **0**, контрастын алдаа **0**, эвдэрсэн зураг **0**, хуудас бүрт `<h1>` яг **1**.
 - `server/bestsellers.integration.test.ts` (3) + `server/catalog-filter.test.ts` (21) = **24/24 ✅**. Bestseller тестүүд "нийтлэгдээгүй бараа гаргахгүй", "төлөгдөөгүй захиалгын тоо ширхэгийг тоолохгүй" гэдгийг баталсан хэвээр — filler нь `isPublished` + нөөц + зураг шаарддаг тул үндсэн гэрээг зөрчөөгүй.
-- Design canvas (Linen сонгогдсон, Paper лавлагаа болж үлдсэн): https://claude.ai/code/artifact/921ed8f2-f99f-4076-8a6d-b46cbf56b0ec
+- Design canvas (Linen сонгогдсон, Paper лавлагаа болж үлдсэн): (дотоод тайлан)
 
 ### Git
 
@@ -689,7 +689,7 @@ Tom "энэ website world-class харагдаад маш хурдан ачаа�
 
 3 agent зэрэг ажиллуулж кодыг file:line-аар баталгаажуулсан аудит хийв:
 - **Frontend performance**: vendor chunk байхгүй, cache header огт байхгүй (content-hash-тай асset хүртэл), `loading="lazy"` ердөө 1 газарт, `srcset` хаана ч байхгүй, React Query staleTime тохируулаагүй, **хамгийн том олдвор**: `Shop.tsx` бүх 937/938 барааны бүрэн metadata-г /shop хуудас бүр ачаалах бүрд шилжүүлдэг байсан (client-side filter/sort/paginate).
-- **Backend architecture**: rate limiting/CSP/CSRF сайн хийгдсэн, raw SQL injection алга (аль хэдийн баталгаажуулсан), гэхдээ `getAdminOrders` бүрэн хязгааргүй query, `orders.paymentStatus`/`createdAt`-д index алга, Aiven connection pool-д timeout/keepAlive алга (CLAUDE.md-ийн баримтжуулсан Aiven latency асуудалтай шууд холбоотой), unhandledRejection handler алга, health endpoint tRPC procedure хэлбэртэй (uuptime monitor-д тохиромжгүй).
+- **Backend architecture**: rate limiting/CSP/CSRF сайн хийгдсэн, raw SQL injection алга (аль хэдийн баталгаажуулсан), гэхдээ `getAdminOrders` бүрэн хязгааргүй query, `orders.paymentStatus`/`createdAt`-д index алга, Aiven connection pool-д timeout/keepAlive алга (PROJECT-GUIDE.md-ийн баримтжуулсан Aiven latency асуудалтай шууд холбоотой), unhandledRejection handler алга, health endpoint tRPC procedure хэлбэртэй (uuptime monitor-д тохиромжгүй).
 - **Design consistency**: **хамгийн чухал олдвор** — `CommerceHeader.tsx` (Shop/ProductDetail/Checkout/Profile) гар утсан дээр hamburger цэс огт байхгүй байхад index.css-ийн `@media(max-width:760px)` дүрэм "Дэлгүүр"/wishlist холбоосыг **нуучихдаг**, хүрэх өөр зам байхгүй — bug, эстетикийн асуудал биш. Мөн Home.tsx-ийн redesign token (`--shadow-sm/md/lg`) зөвхөн Home-ийн component-д ашиглагдаж, Shop/Checkout/ProductDetail өөр өөр гараар бичсэн ойролцоо утга ашигладаг байв.
 
 Гадаад судалгаа (2026 Core Web Vitals, зургийн формат, **Монголын дундаж 17 Mbps mobile хурд/92ms latency — глобал дундаж 33.9 Mbps-ээс 2 дахин удаан**, "quiet luxury" дизайны чиг хандлага, Cloudflare-ийн үнэгүй tier-ийн боломж).
@@ -699,7 +699,7 @@ Plan agent эдгээрийг нэгтгэж 6 Phase-той төлөвлөгөө
 ### Phase 1 — Гүйцэтгэл ба найдвартай байдлын код-л засвар
 
 - **1a (хамгийн том нөлөөтэй)**: `getPublishedCatalog()`-ийг ашиглан шинэ `getPublishedCatalogPage()` функц нэмж, `catalog.list` procedure-д category/skinType/inStockOnly/sort/page/pageSize input нэмэв. Одоо байгаа `shared/catalog-filter.ts`-ийн pure функцуудыг (filter/sort) **server талд дахин ашиглаж**, ижил семантик хадгалав. Client-side facet (categories/skinTypes) full catalog-оос тооцоологдож хэвээр (Shop.tsx-ийн одоогийн зан төлөвтэй яг таарна). Шинэ `catalog.byIds` endpoint нэмж, "Таны сүүлд үзсэн" rail-ийг тусад нь тэжээв (өмнө нь бүх catalog-ийг санах ойд байлгаж арга хэрэглэдэг байсан). **Playwright-ээр баталгаажуулсан**: анхны ачаалт 18KB (өмнө нь 937/938 барааны бүрэн metadata байсан), category/sort/page солиход яг 1 шинэ жижиг (~12KB) хүсэлт явна.
-  - ⚠️ **Aiven latency-ийн эрсдэл олж, шийдэв**: pagination нэмэхэд `getPublishedCatalogPage` нь click бүрд Aiven руу дахин бүтэн query явуулах болсон — CLAUDE.md-ийн баримтжуулсан Aiven latency асуудалтай давхцаж болзошгүй регресс. 10 секундийн in-memory TTL кэш (**зөвхөн энэ функцэд**, `getPublishedCatalog()`-ийн бусад хэрэглэгчид (admin write-ийн дараах шууд унших, `commerce.database.integration.test.ts`) огт нөлөөгүй) нэмж шийдэв.
+  - ⚠️ **Aiven latency-ийн эрсдэл олж, шийдэв**: pagination нэмэхэд `getPublishedCatalogPage` нь click бүрд Aiven руу дахин бүтэн query явуулах болсон — PROJECT-GUIDE.md-ийн баримтжуулсан Aiven latency асуудалтай давхцаж болзошгүй регресс. 10 секундийн in-memory TTL кэш (**зөвхөн энэ функцэд**, `getPublishedCatalog()`-ийн бусад хэрэглэгчид (admin write-ийн дараах шууд унших, `commerce.database.integration.test.ts`) огт нөлөөгүй) нэмж шийдэв.
 - **1b**: Vite static serving-д `Cache-Control` header нэмэв (`assets/`-д мөнхийн immutable cache, root-level файлд no-cache — index.html хуучирсан hash-руу заахаас сэргийлнэ). S3 `PutObjectCommand`-д мөн адил. `storageProxy.ts`-ийн 302 redirect-д cache header нэмэв. `compression` (gzip) middleware шинээр нэмэв.
 - **1c**: `loading="lazy"` 7 газарт нэмэв (Shop grid+recently-viewed, RecommendedForYou, Home 2 rail, ProductDetail 2 rail). `vite.config.ts`-д `manualChunks` нэмж React/react-query/trpc-г тусдаа vendor chunk болгов (473KB → 375KB main + 97KB vendor).
 - **1d**: React Query `staleTime: 30_000` тохируулав (өмнө нь 0, remount бүрд дахин ачаалдаг байсан).
@@ -743,7 +743,7 @@ Plan agent эдгээрийг нэгтгэж 6 Phase-той төлөвлөгөө
 
 ## Санал болголтын чанар: 246 зураг сэргээв, tagging дүрэм засав, 2 bug олов (2026-09-01, гэрийн лаптоп)
 
-Tom: "ажлын лаптоп дээр хийж байсан ажлыг гэрийн лаптоп дээр үргэлжлүүл, localhost:3000 асаа, 937 tag бараг бүрэн болсон байх ёстой". Эхлээд CLAUDE.md-ийн эхний 83 мөр, `HISTORY.md`, `self-review.md`-г уншсан.
+Tom: "ажлын лаптоп дээр хийж байсан ажлыг гэрийн лаптоп дээр үргэлжлүүл, localhost:3000 асаа, 937 tag бараг бүрэн болсон байх ёстой". Эхлээд PROJECT-GUIDE.md-ийн эхний 83 мөр, `HISTORY.md`, `self-review.md`-г уншсан.
 
 ### Синк
 
@@ -875,7 +875,7 @@ Tom дээрх "S-Select-ийн зураг онлайнд байдаггүй" г
 
 Tom бодит GitHub Actions-ийн гаралтыг илгээв: `server/integrations.integration.test.ts`-ийн "integration config encryption (unit)" 2 тест `INTEGRATIONS_ENCRYPTION_KEY must be set to a 64-character hex string`-ээр унаж, ажил урсгал бүхэлдээ exit 1 болж байв.
 
-**Шалтгаан**: `.github/workflows/ci.yml` нь өмнөх session-д `INTEGRATIONS_ENCRYPTION_KEY: ${{ secrets.INTEGRATIONS_ENCRYPTION_KEY }}` гэж бичигдсэн байсан ба CLAUDE.md-д "Tom repo settings дээр secret-ийг гараар нэмэх шаардлагатай" гэж тэмдэглэгдсэн байв. Secret хэзээ ч нэмэгдээгүй тул илэрхийлэл **хоосон мөр** болж, `server/_core/env.ts`-ийн `process.env.INTEGRATIONS_ENCRYPTION_KEY ?? ""` хоосон утга авч, `server/_core/crypto.ts`-ийн `getKey()` шууд шатаж байв. Энэ 2 тест нь тухайн файлын бусад тестээс ялгаатай нь `RUN_*_INTEGRATION_TESTS` gate-ийн ард биш, **үргэлж ажилладаг**.
+**Шалтгаан**: `.github/workflows/ci.yml` нь өмнөх session-д `INTEGRATIONS_ENCRYPTION_KEY: ${{ secrets.INTEGRATIONS_ENCRYPTION_KEY }}` гэж бичигдсэн байсан ба PROJECT-GUIDE.md-д "Tom repo settings дээр secret-ийг гараар нэмэх шаардлагатай" гэж тэмдэглэгдсэн байв. Secret хэзээ ч нэмэгдээгүй тул илэрхийлэл **хоосон мөр** болж, `server/_core/env.ts`-ийн `process.env.INTEGRATIONS_ENCRYPTION_KEY ?? ""` хоосон утга авч, `server/_core/crypto.ts`-ийн `getKey()` шууд шатаж байв. Энэ 2 тест нь тухайн файлын бусад тестээс ялгаатай нь `RUN_*_INTEGRATION_TESTS` gate-ийн ард биш, **үргэлж ажилладаг**.
 
 **Шийдэл сонгох**: Санал болгож болох 3 зам байв — (а) Tom repo secret нэмэх, (б) ci.yml-д түлхүүрийг hardcode хийх, (в) тестийг өөрөө түлхүүрээ өгдөг болгох.
 
@@ -883,7 +883,7 @@ Tom бодит GitHub Actions-ийн гаралтыг илгээв: `server/inte
 
 **Хэрэгжүүлэлт**: `server/_test-setup.ts` (энэ session-д dotenv-д зориулж үүсгэсэн setup файл) нь орчинд түлхүүр **байхгүй** үед л түр зуурын түлхүүр тавьдаг болов. Бодит `.env`/орчны утга байвал үргэлж тэр нь давамгайлна — энэ нь зөвхөн цоорхойг нөхнө, хэзээ ч дарж бичихгүй.
 
-⚠️ **Чухал ялгаа**: CLAUDE.md өмнө нь "санамсаргүй insecure dev fallback нэмэхээс болгоомжил" гэж анхааруулсан нь **аппликейшний код** (`env.ts`/`crypto.ts`)-д fallback тавихыг хэлж байсан — тэгвэл жинхэнэ production сул түлхүүрээр чимээгүй ажиллах эрсдэлтэй. Энд тэр код **огт хөндөгдөөгүй**: жинхэнэ сервер бодит түлхүүргүйгээр юу ч шифрлэхээс татгалзсан хэвээр. Fallback зөвхөн vitest-ийн setup файлд, зөвхөн тестийн процесст л оршино.
+⚠️ **Чухал ялгаа**: PROJECT-GUIDE.md өмнө нь "санамсаргүй insecure dev fallback нэмэхээс болгоомжил" гэж анхааруулсан нь **аппликейшний код** (`env.ts`/`crypto.ts`)-д fallback тавихыг хэлж байсан — тэгвэл жинхэнэ production сул түлхүүрээр чимээгүй ажиллах эрсдэлтэй. Энд тэр код **огт хөндөгдөөгүй**: жинхэнэ сервер бодит түлхүүргүйгээр юу ч шифрлэхээс татгалзсан хэвээр. Fallback зөвхөн vitest-ийн setup файлд, зөвхөн тестийн процесст л оршино.
 
 `ci.yml`-ээс env блокыг бүрэн хасав — GitHub repo secret одоо **огт шаардлагагүй**, шинэ clone дээр ямар ч тохиргоогүйгээр `pnpm test` ногоон гарна.
 
@@ -901,7 +901,7 @@ Tom Profile хуудасны "Хувийн профайл" таб хэт basic, 
 
 **Судалгаа/төлөвлөлт**: 3 Explore agent зэрэг ажиллуулав (1: одоогийн Profile preferences + recommendation engine кодын байдал, 2: одоогийн admin Analytics-ийн бүрэн inventory, 3: websearch — Curology/Typology/The Ordinary/Ulta/Function of Beauty/Glossier-ийн quiz UX pattern, home-goods personalization, recommendation engine best-practice, 2026 admin analytics trend). Дараа нь Plan agent (**бодит Aiven DB-ээс шууд query асуусан**: 937 барааны зөвхөн 4 нь tag-тай, 0 interior бараа байгаа, 767/937 (82%) generic shortDescription-той гэдгийг олж, эдгээр бодит тоо дээр үндэслэсэн боловсронгуй төлөвлөгөө гаргав). AskUserQuestion-оор 3 чухал шийдвэрийг Tom-оос тодорхой асуув: (a) UI хэлбэр — **quiz wizard** (segmented card биш) сонгов, (b) `catalog.recommended` **public** (guest-д ч bestseller fallback) болгохыг сонгов, (c) bulk auto-tag script-ийг **эхлээд dry-run тайлан үзүүлж, "za" гэсний дараа** бодит Aiven дээр ажиллуулахыг сонгов.
 
-**Хэрэгжүүлэлт** (дэлгэрэнгүй файл жагсаалт CLAUDE.md-д):
+**Хэрэгжүүлэлт** (дэлгэрэнгүй файл жагсаалт PROJECT-GUIDE.md-д):
 - Migration 0038: 8 шинэ `users` талбар, 4 шинэ `products` талбар (mirror).
 - `shared/catalog-filter.ts`-д recommendation engine v2-ийн цэвэр scoring функцууд (`scorePreferenceMatch`/`scorePriceBandAffinity`/`applyDiversityCap`/`computeCategoryAffinity`) + бүх шинэ vocabulary/label/option — Profile.tsx-ийн хуучин локал массивуудыг эндээс дахин ашигладаг болгосон (label drift багасгасан).
 - `shared/product-tagging.ts` (шинэ): rule-based keyword `suggestTagsForProduct` — таамаглахгүй, зөвхөн бодит signal олдвол л tag санал болгоно.
@@ -919,7 +919,7 @@ Tom Profile хуудасны "Хувийн профайл" таб хэт basic, 
 
 **Баталгаажуулалт**: `pnpm check`/`pnpm build` олон checkpoint дээр цэвэр. Шинэ unit тестүүд: `catalog-filter.test.ts` (+17, scoring функцууд), `product-tagging.test.ts` (6, dryness-bug-ийн regression тест орсон) — бүгд ✅. `profile.integration.test.ts`-д +2 шинэ тест (v2 талбарууд, invalid enum rejection) — 14/14 ✅. Playwright-ээр (throwaway staff→admin эрхтэй хэрэглэгчээр, дараа нь DB-ээс бүрэн устгасан): wizard бүрэн 6 алхам+review дуусгаж, reload хийсний дараа ч хадгалагдсан хэвээр байгааг баталгаажуулсан; Shop/Home "Танд санал болгож байна", ProductDetail related-products бүгд render хийж байгааг баталгаажуулсан; admin Analytics шинэ секц, catalog product edit-ийн шинэ талбарууд бүгд ажиллаж байгааг баталгаажуулсан; console алдаагүй.
 
-**✅ Дуусав**: commit/push + CLAUDE.md/HISTORY.md + docs/self-review-2026-09-01.md-г (2026-09-09-нд root-оос зөөсөн) Tom-ийн шаардсан дараалалаар дуусгасны дараа Tom эцсийн "за"-г AskUserQuestion-оор өгсөн. `scripts/db-backup.ps1`-ээр backup аваад (`backups/defaultdb_2026-09-01_194214.zip`), `scripts/auto-tag-products.ts --apply` бодит Aiven дээр ажиллуулж **937/937 бараа tag-тай болгов**, шууд DB query-ээр давхар баталгаажуулав.
+**✅ Дуусав**: commit/push + PROJECT-GUIDE.md/HISTORY.md + docs/self-review-2026-09-01.md-г (2026-09-09-нд root-оос зөөсөн) Tom-ийн шаардсан дараалалаар дуусгасны дараа Tom эцсийн "за"-г AskUserQuestion-оор өгсөн. `scripts/db-backup.ps1`-ээр backup аваад (`backups/defaultdb_2026-09-01_194214.zip`), `scripts/auto-tag-products.ts --apply` бодит Aiven дээр ажиллуулж **937/937 бараа tag-тай болгов**, шууд DB query-ээр давхар баталгаажуулав.
 
 **Apply хийх явцад олдсон 3 дахь bug**: цэвэр ганц signal-тэй хэрэглэгчид (жишээ нь зөвхөн "Хуурай үс") `getRecommendedProducts` 0 үр дүн буцааж байсан — Tier 2 category-default ихэнх hair барааг "normal"-аар л tag хийсэн (яг "dry" тохирох цөөн) + production дээр 0 paid захиалга байгаа тул bestseller fallback ч хоосон — 2 fallback tier зэрэг хоосон гарсан. 3 дахь, эцсийн fallback tier (ямар ч нийтлэгдсэн, нөөцтэй бараагаар дүүргэх, score claim-гүй) нэмж section хэзээ ч бүрэн хоосон харагдахгүй болгов. `pnpm check`/`pnpm build` дахин цэвэр, throwaway хэрэглэгчээр (2 өөр реалист профайл) apply-ийн дараа шууд дахин баталгаажуулав.
 
@@ -927,7 +927,7 @@ Tom Profile хуудасны "Хувийн профайл" таб хэт basic, 
 
 ## Quick Stats infinity graph — зочны төлөвт огт харагдаагүй bug, reference fidelity засвар (2026-08-31)
 
-Tom нүүр хуудасны Quick Stats хэсгийг reference зурагтай харьцуулаад "too basic" гэж татгалзсан, "Claude AI Pro олон удаа буруу хийсэн" гэж мэдэгдсэн. Plan mode-т орж, зөвхөн код унших замаар (dev server ажиллуулахгүйгээр) `InfinityGraph.tsx`/`QuickStatsSection.tsx`-ийг master-prompt баримт бичгийн §16-тай нэг мөр нэгээр харьцуулж, 6 тодорхой mismatch (Finding A-F) олов. Хамгийн том нь: **Finding F — зочны төлөвт infinity graph огт харагдаагүй**, зөвхөн 4 талбарын box харагддаг байсан. Tom баталгаажуулав: тэрбээр яг зочны төлөвөөр харьцуулж байсан тул энэ нь гол шалтгаан байв.
+Tom нүүр хуудасны Quick Stats хэсгийг reference зурагтай харьцуулаад "too basic" гэж татгалзсан, "олон удаа буруу хийсэн" гэж мэдэгдсэн. Plan mode-т орж, зөвхөн код унших замаар (dev server ажиллуулахгүйгээр) `InfinityGraph.tsx`/`QuickStatsSection.tsx`-ийг master-prompt баримт бичгийн §16-тай нэг мөр нэгээр харьцуулж, 6 тодорхой mismatch (Finding A-F) олов. Хамгийн том нь: **Finding F — зочны төлөвт infinity graph огт харагдаагүй**, зөвхөн 4 талбарын box харагддаг байсан. Tom баталгаажуулав: тэрбээр яг зочны төлөвөөр харьцуулж байсан тул энэ нь гол шалтгаан байв.
 
 Хийсэн засвар:
 1. Зочны төлөвт `shared/loyalty.ts`-ийн бодит функцээс тооцоолсон жишээ утгаар (₮600,000 → Хүрэл 3%) мөн адил InfinityGraph харуулж, дэлгэц дээр тод "ЖИШЭЭ ХАРУУЛАЛТ" шошго нэмэв.
@@ -949,7 +949,7 @@ Tom нүүр хуудасны Quick Stats хэсгийг reference зурагт�
 
 **⚠️ Чухал нээлт**: энэ (гэрийн) лаптопын `.env` аль хэдийн Aiven shared DB руу заасан байсан (937 бараа, бодит захиалга баталгаажлаа) — өмнөх "гэрийн лаптоп дээр 0 бараа" тэмдэглэл хуучирсан байв.
 
-**Дараа нь Tom Categories хэсгийг reference зурагтай нарийн харьцуулаад татгалзсан** (grid-мэт харагдаж байгаа, overlap/staggered/photo-led card байхгүй гэж). Дэлгэрэнгүй audit + v3 fix spec: `C:\Users\Inspiron\.claude\plans\the-attached-image-is-virtual-kite.md`. `CategoryMasonry.tsx` бүтэн дахин бичигдэж (`.cat-mosaic-top` 2-багана мөр heading+anchor, `.cat-mosaic-grid` 6 картын 3x2 grid доор нь, 2 карт image-led+overlap, 2 карт staggered offset) — session tokens дуусаж, баталгаажуулалт хийгдээгүй commit+push хийгдсэн.
+**Дараа нь Tom Categories хэсгийг reference зурагтай нарийн харьцуулаад татгалзсан** (grid-мэт харагдаж байгаа, overlap/staggered/photo-led card байхгүй гэж). Дэлгэрэнгүй audit + v3 fix spec: (төлөвлөгөөний тэмдэглэл). `CategoryMasonry.tsx` бүтэн дахин бичигдэж (`.cat-mosaic-top` 2-багана мөр heading+anchor, `.cat-mosaic-grid` 6 картын 3x2 grid доор нь, 2 карт image-led+overlap, 2 карт staggered offset) — session tokens дуусаж, баталгаажуулалт хийгдээгүй commit+push хийгдсэн.
 
 ### CategoryMasonry v2 баталгаажуулалт дуусав (гэрийн лаптоп, дараагийн session)
 Playwright-аар screenshot + `getBoundingClientRect()` pixel-хэмжилт хийж 3 бодит bug олж засав:
@@ -1197,9 +1197,9 @@ Playwright-ээр (throwaway `visual-qa-admin@example.invalid` акаунт + sy
 
 Commit+push (2 commit: `Tier D` тусад нь, `Tier E/F/G/I` хамт).
 
-## CLAUDE.md-ээс зөөсөн session бүрийн тэмдэглэл (2026-08-26 → 2026-09-08), зөөсөн огноо 2026-09-09
+## PROJECT-GUIDE.md-ээс зөөсөн session бүрийн тэмдэглэл (2026-08-26 → 2026-09-08), зөөсөн огноо 2026-09-09
 
-Доорх хэсгүүд CLAUDE.md-д session бүрийн төгсгөлд бичигдэж байсан бүрэн тэмдэглэлүүд — CLAUDE.md-г богино байлгахын тулд 2026-09-09-нд бүрэн эхээр нь, анхны дарааллаар нь энд зөөсөн (юу ч хасаагүй, найруулаагүй).
+Доорх хэсгүүд PROJECT-GUIDE.md-д session бүрийн төгсгөлд бичигдэж байсан бүрэн тэмдэглэлүүд — PROJECT-GUIDE.md-г богино байлгахын тулд 2026-09-09-нд бүрэн эхээр нь, анхны дарааллаар нь энд зөөсөн (юу ч хасаагүй, найруулаагүй).
 
 ## ✅ (2026-09-08) /admin бүхэлдээ reference дизайнаар дахин бүтээгдэв + харанхуй горим + хүссэн огноогоор шүүх
 
@@ -1207,7 +1207,7 @@ Tom `docs/reference/admin-dashboard-reference-2026-09-08.jpg` (root-оос 2026-
 
 **🔴 Хамгийн чухал олдвор — Tom-ийн дэлгэц дээр дизайн задарч байсан жинхэнэ шалтгаан**: түүний browser-ийн CSS viewport ~1233px (лаптоп + zoom) байсан бол миний KPI мөр `xl:grid-cols-5` (≥1280px) байсан тул **5 карт 2 багана болж задардаг**, хоёр баганат мөрүүд нь бүрэн доош унадаг байв — өөрөөр хэлбэл код зөв, breakpoint буруу. `grid-cols-[repeat(auto-fit,minmax(140px,1fr))]` болон `min-[880px]:` болгож зассаны дараа л reference шиг харагдав. **Сургамж: reference-тэй тааруулах ажлыг 1440px дээр биш, Tom-ийн бодит ~1233px дээр шалгах.**
 
-**🔴 Cascade-layer bug (CLAUDE.md-д аль хэдийн тэмдэглэсэн `a { color: inherit }`-тэй яг ижил төрөл)**: index.css-д нэмсэн `.admin-icon-btn { display: grid }` зэрэг дүрмүүд **@layer-гүй** байсан тул Tailwind-ийн бүх utility-г дийлж, `lg:hidden` ажиллахгүй болж **гар утасны ☰ товч desktop дээр давхар харагдаж** байв (Tom өөрөө олж заасан). Бүх admin CSS-ийг `@layer components`-д боосноор шийдэгдсэн.
+**🔴 Cascade-layer bug (PROJECT-GUIDE.md-д аль хэдийн тэмдэглэсэн `a { color: inherit }`-тэй яг ижил төрөл)**: index.css-д нэмсэн `.admin-icon-btn { display: grid }` зэрэг дүрмүүд **@layer-гүй** байсан тул Tailwind-ийн бүх utility-г дийлж, `lg:hidden` ажиллахгүй болж **гар утасны ☰ товч desktop дээр давхар харагдаж** байв (Tom өөрөө олж заасан). Бүх admin CSS-ийг `@layer components`-д боосноор шийдэгдсэн.
 
 **🔴 Dark mode ажиллахгүй байсан 3 үе шаттай шалтгаан** (Tom "not rendering correctly!!" гэж 3 удаа буцаасан):
 1. Панелууд бүгд hardcode-лэгдсэн hex өнгөтэй байсан (240×`#df1f3d`, 92×`#77787d`, 86×`#f8f5ef` г.м.) — shell харанхуй болсон ч дотор нь цагаан карт, цайвар текст хэвээр. **34 файлд codemod** ажиллуулж `--a-*` token руу шилжүүлэв (гэрэл горимд утга нь яг ижил тул визуал өөрчлөлтгүй).
@@ -1273,7 +1273,7 @@ Tom `collect.ekyc.mn`-ийн холбоос илгээж, `/admin` хандах 
 
 ## ✅ (2026-09-07) Admin "Шинэ мэдээ" WordPress classic-editor parity болгож дахин бүтээв (`admin-posts-wordpress-editor` branch, main-д merge хийгээгүй)
 
-Tom WordPress-ийн "Add New Post" дэлгэцийн screenshot илгээж яг тэр шиг харагдаж, ажиллахыг шаардсан ("i wont accept it if claude ai code works is different than the photo"), гэхдээ improvise хийхийг зөвшөөрсөн, мөн Aiven/Cloudflare-той бодитоор холбогдож, алдаагүй байхыг тодорхой шаардсан. Хуучин "Шинэ мэдээ" (`AdminOperationsPanel.tsx`, Захиалгатай хуваалцсан файл) зөвхөн энгийн `<textarea>`-тэй, формат/медиа сан/ангилал/тег/SEO/scheduling/trash огт байгаагүй.
+Tom WordPress-ийн "Add New Post" дэлгэцийн screenshot илгээж яг тэр шиг харагдаж, ажиллахыг шаардсан ("i wont accept it if it works different than the photo"), гэхдээ improvise хийхийг зөвшөөрсөн, мөн Aiven/Cloudflare-той бодитоор холбогдож, алдаагүй байхыг тодорхой шаардсан. Хуучин "Шинэ мэдээ" (`AdminOperationsPanel.tsx`, Захиалгатай хуваалцсан файл) зөвхөн энгийн `<textarea>`-тэй, формат/медиа сан/ангилал/тег/SEO/scheduling/trash огт байгаагүй.
 
 **Хийгдсэн**: Self-hosted TinyMCE (`licenseKey="gpl"`, өөрийн серверт бандл хийсэн — cloud API key хэрэггүй), lazy-loaded (`/admin`-ийн бусад хэсгүүд TinyMCE-ийг татахгүй, `pnpm build`-аар баталгаажуулсан: admin chunk 2MB→730KB, TinyMCE өөрөө тусдаа 1.27MB chunk болсон). Шинэ бодит **Медиа сан** (`media_library` хүснэгт, "Add Media" хайх/сонгох боломжтой модал — энэ кодын сан анх удаа жинхэнэ медиа сантай болов). Шинэ **ангилал+тег** taxonomy (many-to-many, шинэ 4 хүснэгт), Нийтлэх box (Ноорог/Нийтлэх/жинхэнэ **Preview** — staff өөрийн нийтлээгүй постыг бодит /slug хаягаар харах боломжтой/**Товлох** (ирээдүйн огноогоор, cron хэрэггүй — `publishedAt <= NOW()` gate)/**Хогийн сан→Сэргээх→Бүрмөсөн устгах** (шинэ `deletedAt` soft-delete, хуучин нэг товчлуурын hard delete-ийг орлуулсан)), **SEO** box (metaTitle/metaDescription — WordPress-ийн Custom Fields-ийг илүү үнэ цэнэтэй зүйлээр орлуулсан, учир нь энэ кодын санд өмнө ХААНА Ч per-page SEO талбар байгаагүй), Format radio (зөвхөн дүр төрхийн зорилгоор, бодит WP-ийн адилаар одоохондоо template-д ашиглагдахгүй). **Санаатайгаар оруулаагүй** (тодорхой шалтгаантай): Discussion (сайтад ямар ч сэтгэгдлийн систем байхгүй), Send Trackbacks (хуучирсан, spam эрсдэлтэй, юу ч хийхгүй хоосон checkbox болно байсан).
 
@@ -1361,7 +1361,7 @@ Tom "Хувийн профайл" таб хэт basic байна, "Гоо сай
 
 Tom "хэт олон uncommitted өөрчлөлт, хэт олон branch байна" гэж мэдэгдэж, бүх branch-ийг нэг `main`-руу нэгтгэхийг шаардав. Хийсэн зүйл:
 - **Branch судалгаа**: `main` хуучирсан (0dbcd005) байсан бол `home-redesign-categorymasonry-v2` (өөр session/agent-ийн үргэлжлүүлсэн CategoryMasonry v2→v8 iteration + site-text CMS + sunrise ribbon бүгдийг агуулсан) хамгийн ахисан байв. `agents/ai-assisted-website-creation` аль хэдийн ancestor байсан (нэмэлт merge хэрэггүй). `agents/minio-r2-cloudflare-setup`-д 5 давхцаагүй commit байсан (Aiven DB backup scheduling, Shop pagination URL-state fix — сүүлийнх нь `home-redesign` талд аль хэдийн bugfix-той хувилбараар давхцаж байсан).
-- **Merge**: `agents/minio-r2-cloudflare-setup`-ийг нэгтгэхэд 3 conflict гарав (`CLAUDE.md`, `HISTORY.md` — хоёулаа prose лог, аль алиных нь агуулгыг хадгалж нэгтгэсэн; `client/src/pages/Shop.tsx` — хоёр branch яг ижил feature-ийг тусад нь хэрэгжүүлсэн байсан тул bugfix-той хувилбарыг сонгосон). `main`-ийг fast-forward хийж push хийв.
+- **Merge**: `agents/minio-r2-cloudflare-setup`-ийг нэгтгэхэд 3 conflict гарав (`docs/PROJECT-GUIDE.md`, `HISTORY.md` — хоёулаа prose лог, аль алиных нь агуулгыг хадгалж нэгтгэсэн; `client/src/pages/Shop.tsx` — хоёр branch яг ижил feature-ийг тусад нь хэрэгжүүлсэн байсан тул bugfix-той хувилбарыг сонгосон). `main`-ийг fast-forward хийж push хийв.
 - **CategoryMasonry v8 сэргээлт**: Working directory-д өөр session-ий committed-ХЭЗЭЭ БОЛООГҮЙ бодит WIP (heading text disappearing bug fix, product photo cropping→contain fix) байсныг `git stash`-аар аюулгүй хадгалж, merge дараа буцаан нэгтгэв — алдагдаагүй.
 - **CI**: `.github/workflows/ci.yml`-д `INTEGRATIONS_ENCRYPTION_KEY`-г GitHub secret-ээс дамжуулахаар нэмэв. **⚠️ Энэ арга 2026-09-01-нд ОРЛУУЛАГДСАН** — secret нь repo дээр хэзээ ч нэмэгдээгүй тул хоосон утга орж CI улаан хэвээр байсан. Одоо `server/_test-setup.ts` түр түлхүүр өгдөг болсон тул secret огт шаардлагагүй, ci.yml-ээс env блокыг хассан (дээрх шийдэгдсэн тэмдэглэлийг үзнэ үү).
 - **Цэвэрлэгээ**: миний `home-redesign-categorymasonry-v2` branch (local+remote) устгав (бүрэн `main`-д орсон). `agents/*` 3 worktree branch (`ai-assisted-website-creation`, `minio-r2-cloudflare-setup`, `pixel-perfect-ui-tailwind-css`) идэвхтэй worktree-д checkout хийгдсэн хэвээр байгаа тул **зориудаар устгаагүй** — өөр session идэвхтэй ашиглаж байж болзошгүй тул устгах эсэхийг Tom өөрөө шийдэх хэрэгтэй.
@@ -1404,13 +1404,13 @@ Tom "зурагнууд server restart болгонд алга болоод ба
 4. **Гэхдээ Cloudflare R2 bucket-ыг шууд `ListObjectsV2Command`-ээр шалгахад Tom-ийн бодитоор upload хийсэн бүх зураг (`sugi-professional-hero`, `sugi-care-retail`, `sugi-professional-assortment`, `sugi-professional-family`, `sugi-sunrise-editorial-hero`, `sugi-symbol`) бүгд бодит хэмжээтэй (3-5MB), Aug 26 ~03:33-т upload хийгдсэн хэвээрээ байсан** — файл хэзээ ч устаагүй.
 5. Aiven DB-г (Tom-ийн dashboard-с өгсөн connection string-ээр) шууд `mysql2`-оор холбож шалгахад: **937 бараа, 4 бодит захиалга, `site_media`-д яг 7 мөр** (`home-hero`, `home-categories`, `home-family`, `home-stores`, 3 summer-slide) — Tom-ийн upload хийсэн зурагтай **яг таарч байв**.
 
-**Root cause**: CLAUDE.md-ийн "Локал орчны тохиргоо" хэсгийн жишээ blockнь `DATABASE_URL=mysql://root:...@127.0.0.1/...`-г "чухал тохиргоо" мэтээр харуулж байсан нь бодит зорилго (Aiven-ыг ашиглах) -тай зөрчилдөж байв — доор нь "Aiven MySQL is the shared source of truth" гэж өөр өгүүлбэрт бичигдсэн байсан ч дээрх жишээ block илүү анзаарагдахуйц байсан. Хэн нэгэн (өмнөх session эсвэл Tom өөрөө) энэ жишээг шууд хуулсны улмаас `.env` Aiven-аас local руу буцсан байх магадлалтай.
+**Root cause**: PROJECT-GUIDE.md-ийн "Локал орчны тохиргоо" хэсгийн жишээ blockнь `DATABASE_URL=mysql://root:...@127.0.0.1/...`-г "чухал тохиргоо" мэтээр харуулж байсан нь бодит зорилго (Aiven-ыг ашиглах) -тай зөрчилдөж байв — доор нь "Aiven MySQL is the shared source of truth" гэж өөр өгүүлбэрт бичигдсэн байсан ч дээрх жишээ block илүү анзаарагдахуйц байсан. Хэн нэгэн (өмнөх session эсвэл Tom өөрөө) энэ жишээг шууд хуулсны улмаас `.env` Aiven-аас local руу буцсан байх магадлалтай.
 
 **Засвар**:
 - `.env`-ийг Tom-оос авсан бодит Aiven connection string руу буцаан тохируулав (`avnadmin@sugi-asayake-db-project-4b75.h.aivencloud.com:25861/defaultdb`).
 - Хуучин node процессийг PowerShell-ээр (`Stop-Process`, taskkill classifier-т blocked-той тул) зогсоож, dev server-ийг шинэ `.env`-тэйгээр дахин асаав.
 - Баталгаажуулалт: `curl http://localhost:3000/api/trpc/content.siteMedia` бодит 7 мөрийг буцаав; `/manus-storage/site-media/1/sugi-professional-hero-...png`-ийг curl -L хийхэд R2-ийн бодит 4,148,819 byte файл руу 302→200 redirect хийж байгааг баталгаажуулав; Playwright screenshot-оор нүүр хуудсан дээр бодит hero зураг (лааз, ургамал бүхий lifestyle фото) харагдаж байгааг нүдээр баталгаажуулав (placeholder gradient биш).
-- CLAUDE.md-ийн "Локал орчны тохиргоо" жишээ blockыг Aiven-руу засаж, яагаад чухал болохыг тодорхой тайлбарлав (энэ бичлэг өөрөө).
+- PROJECT-GUIDE.md-ийн "Локал орчны тохиргоо" жишээ blockыг Aiven-руу засаж, яагаад чухал болохыг тодорхой тайлбарлав (энэ бичлэг өөрөө).
 
 **✅ Дуусав**: Auto mode-ийн classifier анх Aiven руу шууд schema-mutating тушаал (`CREATE TABLE site_text`) явуулахыг блоклосон байсан ч Tom тодорхой зөвшөөрсний дараа дахин оролдоход амжилттай — `site_text` хүснэгт одоо Aiven дээр бодитоор үүссэн (баталгаажуулсан: `curl .../api/trpc/content.siteText` → `[]`, хоосон, зөв — учир нь admin override хараахан нэмэгдээгүй, бүх slot fallback утгаараа харагдана). Нууц үг агуулсан түр migration script устгасан.
 
@@ -1421,7 +1421,7 @@ Tom "зурагнууд server restart болгонд алга болоод ба
 CategoryMasonry v7-ийн дараа Tom тодорхой асуусан: "хажуудаа related холбоотой хамааралтай текстийг ч бас admin-аар засварлаж болдог болгох" гэдгийг ямар хэмжээгээр хийхийг асуухад **"Бүх нүүр хуудас (Home.tsx)"** гэж тодорхой хариулав — зөвхөн CategoryMasonry биш, Hero/TrustStrip/Бидний ялгаа/WhyChooseUs/CategoryMasonry/Их зарагддаг бараанууд/Гэр бүлийн арчилгаа/SUGI Journal/Салбарууд/Quick Stats/Эцсийн CTA гэсэн **бүх 12 хэсгийн** маркетинг-текстийг хамруулав.
 
 **Архитектур**: `shared/site-media.ts`-тэй яг ижил pattern (slotKey → утга, upsert-by-unique-key, enum биш plain varchar тул миграци шаардлагагүй), зөвхөн зурган URL-ийн оронд чөлөөт текст:
-- **DB**: шинэ `site_text` хүснэгт (`drizzle/0037_site_text.sql`) — `slotKey varchar(80) unique`, `textValue text`, `updatedByUserId`, timestamps. Локал MySQL-д гараар ажиллуулж баталгаажуулсан (CLAUDE.md-ийн "--> statement-breakpoint устгах" зааврын дагуу).
+- **DB**: шинэ `site_text` хүснэгт (`drizzle/0037_site_text.sql`) — `slotKey varchar(80) unique`, `textValue text`, `updatedByUserId`, timestamps. Локал MySQL-д гараар ажиллуулж баталгаажуулсан (PROJECT-GUIDE.md-ийн "--> statement-breakpoint устгах" зааврын дагуу).
 - **shared/site-text.ts**: **74 slot**-ын бүртгэл, `group`-оор ангилагдсан (жишээ нь "Hero", "Яагаад биднийг сонгох вэ", "Гэр бүлийн арчилгаа" гэх мэт), тус бүрийн `fallbackValue` нь одоо сайт дээр бодитоор байгаа эх текст (шинэ зохиомол текст биш).
 - **server**: `content.siteText` (public, `getSiteText`), `admin.siteText` (staff query), `admin.updateSiteText`/`admin.clearSiteText` (staffProcedure mutation, `server/db.ts`-ийн `upsertSiteText`/`deleteSiteText`, `site_media`-тай яг ижил upsert-by-unique-key shape).
 - **client**: шинэ `client/src/hooks/useSiteText.ts` hook (`imageFor()`-той ижил зарчим) — Home.tsx болон бүх 6 `home/*.tsx` section компонент дотор шууд дуудагдана (`trpc.content.siteText.useQuery()` нь react-query-ээр deduped тул олон компонент дуудсан ч 1 network request).
@@ -1435,7 +1435,7 @@ CategoryMasonry v7-ийн дараа Tom тодорхой асуусан: "ха�
 - **"800+"** тоо 4 өөр газарт (Hero badge, TrustStrip, CategoryMasonry тайлбар, WhyChooseUs карт) давхардсан хэвээр байгаа — тус бүр ӨӨР ӨӨРИЙН slot-той тул нэгийг нь өөрчлөхөд бусад автоматаар өөрчлөгдөхгүй (админ UI-д энэ тухай тодорхой anхааруулга бичсэн).
 - 2-мөртэй гарчиг бүр (жишээ: "Японы чанарыг / ойртуулна.") **нэг slot**-д "\n"-ээр холбогдсон 2 мөр хэлбэрээр хадгалагдана (74 slot-ыг 2 дахин нэмэхийн оронд), компонент бүр `.split("\n")`-ээр задалж өөрийн `<br/>`/`<em>` дүрслэлийг хэвээр хадгална. Нэг жижиг дизайны хялбарчлал: анх "Багахан **итгэл.**" гэж зөвхөн нэг үгийг тод өнгөтэй байсан бол одоо бүтэн эхний мөр адилхан онцлогтойгоор харагдана.
 
-**Баталгаажуулалт**: `pnpm check`/`pnpm build` цэвэр. Шинэ `server/site-text.integration.test.ts` (3 тест: admin засвар → public query-д харагдах → reset → устах; буруу slotKey/хоосон утга rejected; admin бус caller rejected) — `site-media.integration.test.ts`-тэй ижил **snapshot-and-restore** discipline ашигласан (CLAUDE.md-ийн "бодит production slot ашиглахгүй" сануулгын дагуу). Бүрэн suite **33 файл, 168/168 тест ✅**. Playwright-ээр (түр суулгаад дараа нь бүрэн хассан): (1) 1440px-д бүх 9 харагдаж буй хэсгийг (Hero→QuickStats→Бидний ялгаа→WhyChooseUs→CategoryMasonry→Гэр бүл→Салбарууд→Эцсийн CTA) scroll хийж screenshot авахад бүгд визуал регресс алгүй зөв харагдав, overflow=0, console алдаагүй; (2) throwaway `staff` эрхтэй хэрэглэгчээр бодитоор нэвтэрч, admin → Content & Media → Текст таб нээж, нэг slot-ыг шинэ утгаар хадгалж, нүүр хуудсан дээр шууд тусгагдсаныг баталгаажуулсан (`QA-MARKER` тестийн текст), дараа нь slot-ыг устгаж, throwaway хэрэглэгч болон audit log мөрүүдийг DB-ээс бүрэн устгасан.
+**Баталгаажуулалт**: `pnpm check`/`pnpm build` цэвэр. Шинэ `server/site-text.integration.test.ts` (3 тест: admin засвар → public query-д харагдах → reset → устах; буруу slotKey/хоосон утга rejected; admin бус caller rejected) — `site-media.integration.test.ts`-тэй ижил **snapshot-and-restore** discipline ашигласан (PROJECT-GUIDE.md-ийн "бодит production slot ашиглахгүй" сануулгын дагуу). Бүрэн suite **33 файл, 168/168 тест ✅**. Playwright-ээр (түр суулгаад дараа нь бүрэн хассан): (1) 1440px-д бүх 9 харагдаж буй хэсгийг (Hero→QuickStats→Бидний ялгаа→WhyChooseUs→CategoryMasonry→Гэр бүл→Салбарууд→Эцсийн CTA) scroll хийж screenshot авахад бүгд визуал регресс алгүй зөв харагдав, overflow=0, console алдаагүй; (2) throwaway `staff` эрхтэй хэрэглэгчээр бодитоор нэвтэрч, admin → Content & Media → Текст таб нээж, нэг slot-ыг шинэ утгаар хадгалж, нүүр хуудсан дээр шууд тусгагдсаныг баталгаажуулсан (`QA-MARKER` тестийн текст), дараа нь slot-ыг устгаж, throwaway хэрэглэгч болон audit log мөрүүдийг DB-ээс бүрэн устгасан.
 
 **Bestseller/Journal хэсгүүд screenshot дээр харагдаагүй** (одоогийн dev DB-д бодит захиалга/пост байхгүй тул арчилгааны дагуу бүхэлдээ нуугддаг, өмнө нь ч тэгж баримталж байсан зарчим) — эдгээр 2 хэсгийн wiring зөвхөн typecheck + кодын шалгалтаар баталгаажсан, бусад 9 хэсэгтэй яг ижил механик хэлбэрээр хийгдсэн тул итгэлтэй байна.
 
@@ -1512,7 +1512,7 @@ Tom v2 (icon+text давхар зурагтай) хувилбарыг мөн "pr
 
 ## ✅ (2026-08-31) Quick Stats infinity graph — зочны төлөвт огт харагдаагүй bug засав + reference-тэй тааруулав
 
-Tom reference зурагтай харьцуулаад "too basic" гэж татгалзсан. Root cause: **зочны (нэвтрээгүй) төлөвт infinity graph огт харагдаагүй** — зөвхөн 4 талбарын box харагдаж байсан (`QuickStatsSection.tsx`-ийн хуучин `.qs-guest-tiers` fallback). Тому reference-ийг зочноор харж байсныг баталгаажуулсан тул энэ бол гол шалтгаан байв. Дэлгэрэнгүй reasoning audit: `C:\Users\hero_\.claude\plans\aiven-msql-yg-connect-stateless-mitten.md`.
+Tom reference зурагтай харьцуулаад "too basic" гэж татгалзсан. Root cause: **зочны (нэвтрээгүй) төлөвт infinity graph огт харагдаагүй** — зөвхөн 4 талбарын box харагдаж байсан (`QuickStatsSection.tsx`-ийн хуучин `.qs-guest-tiers` fallback). Тому reference-ийг зочноор харж байсныг баталгаажуулсан тул энэ бол гол шалтгаан байв. Дэлгэрэнгүй reasoning audit: (төлөвлөгөөний тэмдэглэл).
 
 Засварууд (`InfinityGraph.tsx`, `QuickStatsSection.tsx`, `client/src/index.css`-ийн `.ig-*`/`.qs-*`):
 - **Зочны төлөвт мөн адил infinity graph харагдана** — `shared/loyalty.ts`-ийн бодит `getLoyaltyTier`/`getNextLoyaltyTier`-ээс тооцоолсон жишээ утгаар (₮600,000 зарцуулалт → Хүрэл 3%), дэлгэц дээр тод **"ЖИШЭЭ ХАРУУЛАЛТ"** гэсэн шошготой — хэзээ ч хэрэглэгчийн бодит өгөгдөл гэж андуурагдахгүй.
@@ -1578,7 +1578,7 @@ Tom "Error tracking (Honeybadger) — hosting хүлээхгүйгээр эхл�
 
 **Ухамсартай сонголт — Honeybadger (Sentry биш)**: үнэгүй tier нь сарын 5,000 event, зээлийн карт шаардахгүй, hosting шийдэгдэхээс өмнө өнөөдрөөс эхлэн ажиллаж эхэлнэ, hosting сонгогдсоны дараа ч зан төлөв өөрчлөгдөхгүй.
 
-**⚠️ Одоогоор бодит үйлдэлгүй — key оруулаагүй байгаа тул**: `HONEYBADGER_API_KEY`/`VITE_HONEYBADGER_API_KEY` хоёулаа `.env`-д хоосон/байхгүй. Tom [honeybadger.io](https://www.honeybadger.io)-д (эсвэл багийн gpt/claude-той зөвлөлдөж өөр вэндорыг) үнэгүй бүртгүүлж, төслийн API key-г хоёр газарт (server `.env`-ийн `HONEYBADGER_API_KEY`, client-д зориулсан `VITE_HONEYBADGER_API_KEY`, хоёулаа ижил утга) тавихад л идэвхжинэ — код талд нэмэлт өөрчлөлт шаардлагагүй.
+**⚠️ Одоогоор бодит үйлдэлгүй — key оруулаагүй байгаа тул**: `HONEYBADGER_API_KEY`/`VITE_HONEYBADGER_API_KEY` хоёулаа `.env`-д хоосон/байхгүй. Tom [honeybadger.io](https://www.honeybadger.io)-д (эсвэл өөр вэндорыг) үнэгүй бүртгүүлж, төслийн API key-г хоёр газарт (server `.env`-ийн `HONEYBADGER_API_KEY`, client-д зориулсан `VITE_HONEYBADGER_API_KEY`, хоёулаа ижил утга) тавихад л идэвхжинэ — код талд нэмэлт өөрчлөлт шаардлагагүй.
 
 **Баталгаажуулалт**: `pnpm check`/`pnpm build` цэвэр. **Бүрэн `pnpm exec vitest run --no-file-parallelism` 204/204 ✅ (35/35 файл)** — Honeybadger нэмэлт ямар ч регресс үүсгээгүй (key байхгүй тул бүх код зам no-op хэвээр). `curl http://localhost:3000/health` 200 хэвээр, dev server hot-reload-оор асуудалгүй ажиллав. Playwright screenshot-оор дахин баталгаажуулаагүй (key байхгүй үед UI-д ямар ч харагдах өөрчлөлт байхгүй тул шаардлагагүй гэж дүгнэв).
 
@@ -1649,7 +1649,7 @@ Tom "Phase 3: Shop → ProductDetail → Checkout → Profile-г дараала�
 
 ## ✅ (2026-09-04) Phase B — хуваалцсан эх сурвалж (formatMnt/ангилал/800+/ProductCard) дуусав
 
-Дээрх "Яагаад нэг бүтэн бүтээгдэхүүн мэт биш" судалгааны Phase B хэсгийг (`C:\Users\hero_\.claude\plans\za-odoo-ene-website-zesty-koala.md`) хэрэгжүүлэв — cohesion audit-ийн олдсон бодит давхардлуудыг засав:
+Дээрх "Яагаад нэг бүтэн бүтээгдэхүүн мэт биш" судалгааны Phase B хэсгийг ((төлөвлөгөөний тэмдэглэл)) хэрэгжүүлэв — cohesion audit-ийн олдсон бодит давхардлуудыг засав:
 
 - **`shared/format.ts`**: `formatMnt` 23 тусдаа файлд copy-paste хийгдсэн байсныг нэг эх сурвалж болгов (21 client + 2 server файл, бүгд функционал хувьд ижил байсан тул зан төлөв өөрчлөгдөөгүй).
 - **`client/src/components/home/categories-data.ts`** (шинэ): Home.tsx болон Shop.tsx тус бүр 6 ангиллыг өөр өөрөөр (өөр дараалал, өөр тайлбар, Shop 4/6-г л агуулж байсан) hardcode хийж байсныг нэг эх сурвалж болгов (`locations-data.ts`-тэй ижил загвар). Shop-ийн хоосон-каталогийн "discovery" карт одоо бодит 6 (өмнө нь 4) харуулна, 2 шинэ CSS tone (`peach`/`sand`) нэмэв.
@@ -1690,7 +1690,7 @@ Tom screenshot-оор "05" (Journal) "06" (Салбарууд, буруу "04" �
 
 **Баталгаажуулалт**: `pnpm check`/`pnpm build` цэвэр. **Бүрэн `pnpm exec vitest run --no-file-parallelism` 211/211 ✅ (37/37 файл)**. Playwright-ээр (түр суулгаад бүрэн хассан) DOM-оос бүх дугаарыг хуудасны бодит эрэмбээр уншиж, 01/02/03/04/05/06 давхцалгүй/эргэлтгүй болохыг баталгаажуулав.
 
-## ✅ (2026-09-06) Гадны "Claude AI Pro" дизайны шүүмж — 3 удаагийн research pass-аар баталгаажуулж, нүүр хуудсыг ~6 хэсэг рүү нэгтгэв
+## ✅ (2026-09-06) Гадны дизайны шүүмж — 3 удаагийн research pass-аар баталгаажуулж, нүүр хуудсыг ~6 хэсэг рүү нэгтгэв
 
 Tom гадны chatbot-с авсан нүүр хуудасны дизайны шүүмжийг бүхэлд нь бичиж илгээгээд "бүгдийг заслаарай" гэж шаардав. Юу ч засахаасаа өмнө 3 зэрэгцээ research agent явуулж, шүүмжийн ЗААЛТ бүрийг бодит код/DB-тэй тулгаж баталгаажуулав (энэ төслийн "баталгаажаагүй мэдэгдэлд итгэхгүй" зарчмын дагуу).
 
@@ -1765,7 +1765,7 @@ Tom бодит хуудасны HTML paste хийж "remove the padding!! every 
 
 ## ✅ (2026-09-06) Гүнзгий full-stack аудит (9 bug) — бүгд заслаа: JWT fallback secret, 6 ашиглагдаагүй dependency (75→10 vulnerability), phone-session race, checkout isPublished цоорхой, CSRF/index-ийн сайжруулалт
 
-Гадны chatbot-с/Claude Code-оор бэлтгэсэн 30-хэсэгтэй "Deep Full-Stack Audit" master prompt-ыг Tom бүхэлд нь бичиж илгээж "FIX ALL of this right now!!" гэж шаардав. Аудитыг өөрөө (bug олох урд алхам) энэ session-ий өмнөх хариулт дээр аль хэдийн бодит код/`pnpm audit`-аар баталгаажуулж хийсэн байсан — доор зөвхөн **заслыг** тэмдэглэв.
+Гадны 30-хэсэгтэй "Deep Full-Stack Audit" master prompt-ыг Tom бүхэлд нь бичиж илгээж "FIX ALL of this right now!!" гэж шаардав. Аудитыг өөрөө (bug олох урд алхам) энэ session-ий өмнөх хариулт дээр аль хэдийн бодит код/`pnpm audit`-аар баталгаажуулж хийсэн байсан — доор зөвхөн **заслыг** тэмдэглэв.
 
 **🔴 BUG-001 (CRITICAL, заслаа)**: `server/_core/context.ts`-ийн `secretKey()` нь `JWT_SECRET` тохируулаагүй үед **олон нийтэд ил, GitHub дээр committed** `"insecure-development-secret-change-me"` гэсэн тогтмол утга руу чимээгүй унадаг байсан — production дээр санамсаргүй `JWT_SECRET` дутуу орвол хэн ч энэ мэдэгдэж буй string-ээр ЯМАР ч хэрэглэгчийн (admin оролцуулан) session JWT хуурамчаар үүсгэх боломжтой байв. Засвар: (1) fallback-ыг **тухайн процессын хугацаанд л хүчинтэй санамсаргүй 32 байтын түлхүүр**-ээр сольсон (committed string биш), (2) шинэ `assertProductionSecrets()` (`server/_core/index.ts`-ийн `startServer()`-ийн эхэнд дуудагдана) — `NODE_ENV=production`-д `JWT_SECRET` хоосон бол сервер эхлэхээс татгалзана (`INTEGRATIONS_ENCRYPTION_KEY`/`VERIFY_MN_API_KEY`-тэй ижил "чанга бүтэлгүйтэх" зарчим). 3 шинэ unit тест (`server/_core/context.test.ts`).
 

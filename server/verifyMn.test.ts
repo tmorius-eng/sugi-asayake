@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 // 2026-09-05: this machine's real .env now carries a real VERIFY_MN_API_KEY
-// (Tom went and got one, see CLAUDE.md) -- so "no key is set in this test
+// (Tom went and got one, see docs/PROJECT-GUIDE.md) -- so "no key is set in this test
 // environment" is no longer actually true here, and this test would
 // otherwise fire a REAL request at verify.mn's live API every time the
 // suite runs (it did, once, before this fix: a real session for

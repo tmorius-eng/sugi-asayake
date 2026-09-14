@@ -4,7 +4,7 @@ import { sweepPath } from "@/lib/svg-arc";
 // R=88 unchanged; center spacing tightened from 140px to 166px so the two
 // loops overlap by only 10px (176 - 166) instead of the old 36px -- a
 // near-pinch crossing, not a lens-shaped double-stroke blob. See the
-// approved plan's Finding E (C:\Users\hero_\.claude\plans\aiven-msql-yg-connect-stateless-mitten.md).
+// approved plan's Finding E (approved plan).
 const CX_LEFT = 177;
 const CX_RIGHT = 303;
 const CY = 120;

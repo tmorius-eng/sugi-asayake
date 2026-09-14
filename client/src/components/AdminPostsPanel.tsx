@@ -76,7 +76,7 @@ const emptyForm = {
  * WordPress-classic-editor-parity rebuild (2026-09-07) of the old plain-
  * textarea "LIVE POST COMPOSER" (previously inside AdminOperationsPanel.tsx,
  * shared with Orders -- Orders now stands alone there, this is its own file).
- * See CLAUDE.md / the approved plan for the full feature-scope rationale
+ * See docs/PROJECT-GUIDE.md / the approved plan for the full feature-scope rationale
  * (what's built 1:1 vs adapted vs deliberately excluded from the reference
  * screenshot).
  */

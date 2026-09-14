@@ -8,7 +8,7 @@ import { attachVerifyMnSessionId, createPendingPhoneVerificationSession, deleteP
 // Added specifically because Brevo email delivery has been unreliable for
 // Tom (recurring "unauthorized IP" errors) -- this gives forgot-password a
 // working alternative that doesn't depend on Brevo at all, plus an optional
-// phone-verification step at register. See CLAUDE.md and the approved plan
+// phone-verification step at register. See docs/PROJECT-GUIDE.md and the approved plan
 // this was built from for the full history/reasoning.
 const VERIFY_MN_BASE_URL = "https://api.verify.mn";
 const SHORTCODE = "144773";

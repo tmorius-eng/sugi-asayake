@@ -9,13 +9,13 @@ import { getDb } from "../server/db";
  * points at, through the app's own connection (so Aiven TLS, the UTC
  * session time_zone and the query log all apply exactly as in production).
  *
- * Why this exists (2026-09-09): CLAUDE.md's documented way to run a
+ * Why this exists (2026-09-09): docs/PROJECT-GUIDE.md's documented way to run a
  * migration was to pipe the file into a local `mysql.exe`, which does not
  * carry Aiven's TLS settings and silently does nothing useful against the
  * shared production database -- every session since the Aiven move has
  * re-invented a throwaway script for this. drizzle-kit's own `db:push` is
  * also not trusted here because `drizzle/meta` was never exported (see
- * CLAUDE.md, "Migration-уудыг ажиллуулах тухай").
+ * docs/PROJECT-GUIDE.md, "Migration-уудыг ажиллуулах тухай").
  *
  * Usage:
  *   pnpm exec tsx scripts/db-apply-migration.ts drizzle/0056_discount_code_per_customer_cap.sql
@@ -25,7 +25,7 @@ import { getDb } from "../server/db";
  * a file is NOT one transaction -- re-running a half-applied file fails on
  * the already-applied statement, which is the honest outcome). The
  * `--> statement-breakpoint` marker drizzle-kit emits is stripped, since
- * MySQL does not understand it (the same rule CLAUDE.md documents for the
+ * MySQL does not understand it (the same rule docs/PROJECT-GUIDE.md documents for the
  * manual path).
  */
 async function main() {

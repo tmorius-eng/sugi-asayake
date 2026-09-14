@@ -84,7 +84,7 @@ export async function getDb() {
       // Backend audit (2026-09-02): drizzle(connectionString) used to pass
       // a bare string, which lets mysql2 apply its own defaults for
       // everything (connectionLimit: 10, queueLimit: 0/unbounded, no
-      // connectTimeout, no keepAlive). CLAUDE.md documents real, repeated
+      // connectTimeout, no keepAlive). docs/PROJECT-GUIDE.md documents real, repeated
       // Aiven network-latency spikes serious enough that vitest's own test
       // timeout had to be raised from 5s to 30s; production code had zero
       // handling for the same kind of blip -- a slow Aiven response just
@@ -785,7 +785,7 @@ export type CatalogPageParams = {
 // page/sort change (previously the browser fetched the full catalog once
 // per VISIT and did all filtering/pagination client-side) -- each of those
 // still needs the full catalog to filter/sort/paginate against server-side.
-// Aiven has documented, real network-latency spikes (CLAUDE.md; vitest's
+// Aiven has documented, real network-latency spikes (docs/PROJECT-GUIDE.md; vitest's
 // integration-test timeout was raised from 5s to 30s specifically because
 // of this), so re-querying it on every click would trade "one large
 // payload over a slow client connection" for "one Aiven round trip per

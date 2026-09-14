@@ -10,7 +10,7 @@ import { getStockLedgerDrift, recordStockMovement } from "../server/stockLedger"
  * branch and variant, to exactly what branch_stock holds. It stops adding up
  * when something changes branch_stock WITHOUT recording a movement -- in this
  * project most likely the OTHER laptop running code from before the ledger
- * existed, against the same shared Aiven database (CLAUDE.md, "ХОЁР
+ * existed, against the same shared Aiven database (docs/PROJECT-GUIDE.md, "ХОЁР
  * ЛАПТОП"), or a hand-written SQL fix. The admin System Health card shows
  * the count; this script closes each gap with one 'rebaseline' movement
  * whose delta is exactly the difference, so history is never rewritten --

@@ -18,8 +18,7 @@
 //
 //   node scripts/cloudflare-harden.mjs <path-to-token-file> [--access]
 //
-// Claude Code's auto-mode classifier refuses to run writes against the
-// Cloudflare API itself, so Tom runs this from his own PowerShell.
+// Run from your own PowerShell with a scoped API token (see the header).
 import { readFileSync } from "node:fs";
 
 const T = readFileSync(process.argv[2], "utf8").trim();

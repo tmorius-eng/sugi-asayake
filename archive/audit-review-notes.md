@@ -1,6 +1,6 @@
 # Supplied audit review — extracted findings
 
-The two supplied Claude AI reviews contain the same substantive technical and business audit. They correctly identify the current stack as React, TypeScript, tRPC, Drizzle, MySQL, Express, and Vite, and describe existing safeguards such as schema validation, magic-byte image checks, server-derived order totals, QPay payment re-verification, and hashed expiring staff-invitation tokens.
+The two supplied external reviews contain the same substantive technical and business audit. They correctly identify the current stack as React, TypeScript, tRPC, Drizzle, MySQL, Express, and Vite, and describe existing safeguards such as schema validation, magic-byte image checks, server-derived order totals, QPay payment re-verification, and hashed expiring staff-invitation tokens.
 
 ## Findings to validate and address in this project
 

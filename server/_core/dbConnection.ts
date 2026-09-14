@@ -12,7 +12,7 @@
 // handshake -- crossed the public Internet to Bangalore in plaintext.
 //
 // Rules, in order:
-// 1. Loopback hosts (local MySQL, the offline fallback in CLAUDE.md) stay
+// 1. Loopback hosts (local MySQL, the offline fallback in docs/PROJECT-GUIDE.md) stay
 //    plaintext -- TLS there is pointless and the local server has no cert.
 // 2. Everything else gets TLS. If DATABASE_CA_CERT (PEM text) or
 //    DATABASE_CA_CERT_PATH (file) is set, the server certificate is

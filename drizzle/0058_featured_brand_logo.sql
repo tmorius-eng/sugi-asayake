@@ -14,5 +14,5 @@
 -- ("зөвхөн лого зураг") over a name-wordmark fallback.
 --
 -- Run directly against Aiven via scripts/db-apply-migration.ts (drizzle/meta
--- is not exported in this project, per CLAUDE.md).
+-- is not exported in this project, per docs/PROJECT-GUIDE.md).
 ALTER TABLE `featured_brands` ADD COLUMN `logoUrl` text;

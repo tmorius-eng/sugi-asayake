@@ -25,7 +25,7 @@ import { FACE_DESCRIPTOR_LENGTH, FACE_MODEL_VERSION } from "../shared/face-auth"
  *
  * Same RUN_AUTH_INTEGRATION_TESTS gate as the rest of the auth suite. Every
  * row this file creates is a throwaway with a marker phone/name and is
- * deleted in afterAll, following the standing rule in CLAUDE.md that tests
+ * deleted in afterAll, following the standing rule in docs/PROJECT-GUIDE.md that tests
  * must never touch real production rows.
  */
 const describeWithDatabase = process.env.RUN_AUTH_INTEGRATION_TESTS === "1" ? describe : describe.skip;

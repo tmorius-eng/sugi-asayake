@@ -9,14 +9,14 @@
     - creates an SSH key ~/.ssh/sugi-oci if missing and PRINTS the public key
     - writes the `Host sugi-oci` block into ~/.ssh/config (jump VM + 3307 forward)
     - registers the "SUGI OCI Tunnel" logon task (scripts/oci/tunnel.ps1)
-  Step 2 (Claude, from a laptop that already has access): adds the printed
+  Step 2 (from a laptop that already has access): adds the printed
     public key to the VM's ~/.ssh/authorized_keys.
   Step 3 (this script again, with -Finish): fetches oci-ca.pem from the VM
     and tells you which three .env lines to copy from the other laptop.
 
   Usage:
-    .\scripts\oci\setup-laptop.ps1            # step 1 -> send the printed key to Claude
-    .\scripts\oci\setup-laptop.ps1 -Finish    # step 3, after Claude confirms the key is on the VM
+    .\scripts\oci\setup-laptop.ps1            # step 1 -> add the printed key on the VM
+    .\scripts\oci\setup-laptop.ps1 -Finish    # step 3, once the key is on the VM
 #>
 param([switch]$Finish)
 $ErrorActionPreference = "Stop"
@@ -57,7 +57,7 @@ Host sugi-oci
   }
   & (Join-Path $PSScriptRoot "register-tunnel-task.ps1")
   Write-Host ""
-  Write-Host "=== SEND THIS LINE TO CLAUDE (public key) ===" -ForegroundColor Cyan
+  Write-Host "=== ADD THIS LINE TO THE VM's ~/.ssh/authorized_keys (public key) ===" -ForegroundColor Cyan
   Get-Content "$key.pub"
   Write-Host "=============================================" -ForegroundColor Cyan
   Write-Host "Then run:  .\scripts\oci\setup-laptop.ps1 -Finish"

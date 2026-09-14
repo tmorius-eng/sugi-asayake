@@ -12,7 +12,7 @@ import { ENV } from "./env";
  * be "/manus-storage/{key}" -- a leftover name from the original Manus-hosted
  * deployment, kept post-migration purely so already-saved DB URLs wouldn't
  * need a rewrite. Storage itself has been 100% Cloudflare R2 for a long time
- * (see CLAUDE.md) -- "manus-storage" was never anything but a URL path
+ * (see docs/PROJECT-GUIDE.md) -- "manus-storage" was never anything but a URL path
  * string, not a real remaining dependency. Renamed to a vendor-neutral "/cdn/"
  * (not "/r2-storage/") so a future storage migration doesn't repeat this
  * exact problem. All 541 existing DB rows referencing the old prefix were

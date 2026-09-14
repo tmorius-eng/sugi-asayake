@@ -118,7 +118,7 @@ backups/
 # Playwright MCP screenshot/snapshot output (QA only, never committed)
 .playwright-mcp/
 
-# Aiven CA certificate (per CLAUDE.md: never commit)
+# Aiven CA certificate (per docs/PROJECT-GUIDE.md: never commit)
 aiven-ca.pem
 *.pem
 
@@ -131,3 +131,6 @@ variant-price-backup-*.json
 # never commit env backups (2026-09-13: one slipped into a commit and was force-removed)
 .env.bak*
 .env.*.bak
+
+# Local editor/assistant pointer to docs/PROJECT-GUIDE.md -- per machine, not shared
+/CLAUDE.md

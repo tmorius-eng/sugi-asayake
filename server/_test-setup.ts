@@ -28,7 +28,7 @@
  *    This deliberately does NOT relax the application: server/_core/env.ts
  *    and crypto.ts are untouched, so a real server still refuses to encrypt
  *    anything unless a real key is configured. The weak-default risk that
- *    CLAUDE.md warns about would come from putting a fallback THERE, not
+ *    docs/PROJECT-GUIDE.md warns about would come from putting a fallback THERE, not
  *    here. Setting it here also means CI needs no repository secret, and a
  *    fresh clone can run `pnpm test` green with no setup.
  *

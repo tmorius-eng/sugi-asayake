@@ -1308,7 +1308,7 @@ export const appRouter = router({
       .input(z.object({ productId: z.number().int().positive(), rating: z.number().int().min(1).max(5), comment: nullableText(2_000) }))
       .mutation(async ({ ctx, input }) => {
         // Abuse screen (Tom, 2026-09-13): buyers may review, but not insult.
-        // Lexical layer always; Claude layer when ANTHROPIC_API_KEY is set.
+        // Lexical layer always; the Anthropic API layer when ANTHROPIC_API_KEY is set.
         if (input.comment?.trim()) {
           const verdict = await screenText(input.comment);
           if (!verdict.allowed) {
