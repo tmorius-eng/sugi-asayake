@@ -162,7 +162,6 @@ export const siteDocumentTranslations: Record<SiteDocumentKey, { en: SiteDocumen
       title: "Careers",
       lead: "If you would like to work at SUGI ASAYAKE, please get in touch.",
       sections: [
-        ["Open positions", "There are no open positions advertised at the moment. New openings are posted on this page, so it is worth checking back from time to time."],
         ["Who we hire", "We recruit for roles such as store consultant, cashier, warehouse staff, online order operator and delivery driver. We look for people who are interested in beauty and skincare products, who deal with customers courteously, and who work well in a team."],
         ["What we offer", "A formal employment contract, social insurance, a staff discount, training on the Japanese products we carry, and a regular working schedule."],
         ["How to apply", "Send your application and CV to asayake0307@gmail.com, or call 9450-9911 for more information. Please put the position you are interested in in the subject line."],
@@ -173,7 +172,6 @@ export const siteDocumentTranslations: Record<SiteDocumentKey, { en: SiteDocumen
       title: "採用情報",
       lead: "SUGI ASAYAKE で働くことにご関心のある方は、ぜひご連絡ください。",
       sections: [
-        ["募集中の職種", "現在、募集中の職種はございません。新しい募集はこのページに掲載しますので、ときどきご確認ください。"],
         ["どのような方を求めているか", "店舗コンサルタント、レジ担当、倉庫スタッフ、オンライン注文オペレーター、配送ドライバーなどの職種で採用を行っています。化粧品やスキンケア商品に関心があり、お客様に丁寧に対応でき、チームで働ける方を求めています。"],
         ["待遇", "正式な雇用契約、社会保険、従業員割引、取り扱う日本商品に関する研修、規則的な勤務シフト。"],
         ["応募方法", "応募書類と履歴書を asayake0307@gmail.com までお送りいただくか、9450-9911 までお電話ください。件名にご希望の職種をご記入ください。"],

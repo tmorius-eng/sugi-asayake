@@ -4191,3 +4191,44 @@ html[data-storefront-theme="dark"] .sugi-site .qs-stage small { color: var(--ck-
 .messenger-fab:hover { background: #006fd6; color: #fff; }
 .messenger-fab-label { line-height: 1; }
 @media (max-width: 760px) { .messenger-fab { padding: 0 12px; } .messenger-fab-label { display: none; } }
+
+/* ---------------------------------------------------------------------------
+   /careers — нээлттэй ажлын байр (2026-09-14).
+
+   Tom-ийн өгсөн лавлагааны бүтэц: зүүн талд наалдац гарчиг + холбоо барих,
+   баруун талд ажлын байрны мөрүүд (hairline тусгаарлагчтай), доор нь хуудасны
+   тайлбарын багана. Өнгө нь ЛАВЛАГААНЫХ БИШ, сайтын өөрийн токенууд —
+   var(--border)/var(--card)/var(--muted-foreground) тул харанхуй горимд
+   давхар дүрэм бичихгүйгээр дагаж солигдоно.
+   --------------------------------------------------------------------------- */
+.careers-main { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 66px 0 110px; }
+.careers-layout { display: grid; gap: 40px; margin-top: 40px; align-items: start; }
+@media (min-width: 900px) { .careers-layout { grid-template-columns: 310px 1fr; gap: 60px; } .careers-aside { position: sticky; top: 92px; } }
+.careers-aside h1 { margin: 12px 0 0; font-family: var(--font-display); font-size: clamp(34px, 4.6vw, 54px); font-weight: 650; letter-spacing: -.065em; line-height: .98; }
+.careers-lead { margin: 18px 0 0; color: var(--muted-foreground); font-size: 14px; line-height: 1.75; }
+.careers-contact-label { margin: 30px 0 9px; color: var(--muted-foreground); font-size: 10px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+.careers-contact-link { display: inline-flex; align-items: center; gap: 7px; margin-top: 5px; color: var(--primary-text); font-size: 14px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.careers-contact-link + .careers-contact-link { display: flex; }
+
+.careers-list { border-top: 1px solid var(--border); }
+.careers-empty { margin: 0; padding: 30px 0; border-bottom: 1px solid var(--border); color: var(--muted-foreground); font-size: 14px; line-height: 1.7; }
+.careers-role { padding: 26px 0; border-bottom: 1px solid var(--border); }
+.careers-role-eyebrow { margin: 0 0 9px; color: var(--primary-text); font-size: 10px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+.careers-role-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.careers-role-title { min-width: 0; flex: 1 1 260px; }
+.careers-role-title h2 { margin: 0; font-family: var(--font-display); font-size: clamp(21px, 2.5vw, 29px); font-weight: 650; letter-spacing: -.05em; line-height: 1.14; }
+.careers-role-meta { display: flex; flex-wrap: wrap; align-items: center; margin: 11px 0 0; color: var(--muted-foreground); font-size: 13px; }
+.careers-role-meta i { margin: 0 9px; color: var(--border); font-style: normal; }
+.careers-role-actions { display: flex; flex-shrink: 0; align-items: center; gap: 10px; }
+.careers-role-toggle { display: grid; width: 40px; height: 40px; place-items: center; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--foreground); transition: border-color .15s, background .15s; }
+.careers-role-toggle:hover { border-color: var(--foreground); }
+.careers-role-toggle svg { transition: transform .2s var(--ease-out, ease); }
+.careers-role-toggle svg.is-open { transform: rotate(180deg); }
+.careers-role-apply { display: inline-flex; align-items: center; gap: 7px; height: 42px; padding: 0 20px; border-radius: 999px; background: #c81b34; color: #fff; font-size: 13px; font-weight: 700; text-decoration: none; transition: background .15s; }
+.careers-role-apply:hover { background: #a5122a; color: #fff; }
+/* Админы бичсэн мөр дамжуулалтыг хүндэтгэнэ (энгийн текст талбар). */
+.careers-role-body { max-width: 70ch; margin: 16px 0 0; color: var(--muted-foreground); font-size: 14px; line-height: 1.78; white-space: pre-line; }
+
+.careers-notes { display: grid; gap: 26px; margin-top: 38px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+.careers-note-label { display: inline-block; margin: 0 0 10px; padding: 5px 12px; border-radius: 999px; background: var(--surface-tint, var(--muted)); color: var(--foreground); font-size: 11px; font-weight: 700; }
+.careers-note p { margin: 0; color: var(--muted-foreground); font-size: 14px; line-height: 1.78; }

@@ -1568,6 +1568,41 @@ export type InsertDiscountCode = typeof discountCodes.$inferInsert;
  * app never decrypts it back out to a client; admin credential edits are
  * write-only, the same principle as a password field.
  */
+/**
+ * Нээлттэй ажлын байрны зар (/careers, 2026-09-14).
+ *
+ * Хуудасны БИЧВЭР (танилцуулга, хэрхэн өргөдөл гаргах, мэдээллийн нууцлал) нь
+ * site_documents-ийн "careers" мөрөнд гурван хэлээр байдаг; энэ хүснэгт зөвхөн
+ * ТООЛОГДОХ зүйлийг — нээлттэй ажлын байр тус бүрийг — хадгална. Хоёрыг салгасан
+ * шалтгаан: зар нь ирж очиж байдаг жагсаалт (нэмэх/нуух), бичвэр нь ховор
+ * өөрчлөгддөг баримт. Зар байхгүй үед хуудас бичвэрээ л харуулна.
+ *
+ * Талбарууд чөлөөт текст (enum биш): "Бүтэн цаг"/"Цагийн" гэх мэт ангиллыг
+ * дэлгүүр өөрөө шийднэ, шинэ төрөл бүрт deploy хийлгүй.
+ */
+export const jobPostings = mysqlTable("job_postings", {
+  id: int("id").autoincrement().primaryKey(),
+  title: varchar("title", { length: 160 }).notNull(),
+  employmentType: varchar("employmentType", { length: 60 }).notNull().default(""),
+  location: varchar("location", { length: 120 }).notNull().default(""),
+  salaryRange: varchar("salaryRange", { length: 80 }).notNull().default(""),
+  description: text("description"),
+  applyEmail: varchar("applyEmail", { length: 320 }),
+  applyUrl: varchar("applyUrl", { length: 300 }),
+  isPublished: boolean("isPublished").notNull().default(false),
+  sortOrder: int("sortOrder").notNull().default(0),
+  // RESTRICT: зар нь хөдөлмөрийн харилцааны нийтлэг мэдээлэл — нэмсэн админыг
+  // устгах гэж байгаа бол эхлээд зараа шилжүүлэх/устгах ёстой.
+  createdByUserId: int("createdByUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  index("job_postings_published_idx").on(table.isPublished, table.sortOrder),
+]);
+
+export type JobPosting = typeof jobPostings.$inferSelect;
+export type InsertJobPosting = typeof jobPostings.$inferInsert;
+
 export const integrationConfigs = mysqlTable("integration_configs", {
   id: int("id").autoincrement().primaryKey(),
   // The one provider list (shared/integrations.ts) -- migration 0062 widened

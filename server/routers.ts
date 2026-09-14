@@ -109,6 +109,11 @@ import {
   getPublishedProductBySku,
   getPublishedCategories,
   getSiteDocuments,
+  getPublishedJobPostings,
+  getAdminJobPostings,
+  createJobPosting,
+  updateJobPosting,
+  deleteJobPosting,
   upsertSiteDocument,
   deleteSiteDocument,
   getLoyaltyTierTable,
@@ -1379,6 +1384,8 @@ export const appRouter = router({
     // Only the rows an admin has actually saved; the client merges them
     // over shared/site-documents.ts so an unedited page still renders.
     siteDocuments: publicProcedure.query(() => getSiteDocuments()),
+    // Нээлттэй ажлын байр (/careers). Нийтлэгдсэн мөр л буцна.
+    jobPostings: publicProcedure.query(() => getPublishedJobPostings()),
     // The live discount ladder. publicProcedure because the homepage's
     // membership section shows it to signed-out visitors as the reason to
     // register -- it is marketing, not account data.
@@ -3233,6 +3240,44 @@ export const appRouter = router({
       await deleteSiteDocument(input.documentKey, input.locale);
       await logAdminAction({ actorUserId: ctx.user.id, action: "site_document.cleared", entityType: "site_document", entityId: null, metadata: { documentKey: input.documentKey, locale: input.locale } });
       return { documentKey: input.documentKey, locale: input.locale };
+    }),
+
+    // ---- Ажлын байрны зар (2026-09-14) -------------------------------
+    // marketingProcedure: нийтлэгдсэн хуудасны агуулга, баримт бичигтэй ижил
+    // жин. Тайлбар нь энгийн текст (HTML биш) тул sanitizer шаардахгүй —
+    // /careers хуудас мөр бүрийг текстээр зурна.
+    jobPostings: marketingProcedure.query(() => getAdminJobPostings()),
+    saveJobPosting: marketingProcedure.input(z.object({
+      id: z.number().int().positive().optional(),
+      title: z.string().trim().min(2).max(160),
+      employmentType: z.string().trim().max(60).default(""),
+      location: z.string().trim().max(120).default(""),
+      salaryRange: z.string().trim().max(80).default(""),
+      description: nullableText(4_000),
+      applyEmail: z.string().trim().email().max(320).nullable().optional(),
+      applyUrl: z.string().trim().url().max(300).nullable().optional(),
+      isPublished: z.boolean().default(false),
+      sortOrder: z.number().int().min(0).max(9_999).default(0),
+    })).mutation(async ({ ctx, input }) => {
+      const values = {
+        title: input.title,
+        employmentType: input.employmentType,
+        location: input.location,
+        salaryRange: input.salaryRange,
+        description: input.description ?? null,
+        applyEmail: input.applyEmail ?? null,
+        applyUrl: input.applyUrl ?? null,
+        isPublished: input.isPublished,
+        sortOrder: input.sortOrder,
+      };
+      const saved = input.id ? await updateJobPosting(input.id, values) : await createJobPosting(values, ctx.user.id);
+      await logAdminAction({ actorUserId: ctx.user.id, action: input.id ? "job_posting.updated" : "job_posting.created", entityType: "job_posting", entityId: saved.id, metadata: { title: input.title, isPublished: input.isPublished } });
+      return saved;
+    }),
+    deleteJobPosting: marketingProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      await deleteJobPosting(input.id);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "job_posting.deleted", entityType: "job_posting", entityId: input.id, metadata: {} });
+      return { id: input.id };
     }),
 
     // ---- Loyalty ladder (2026-09-12) ----------------------------------

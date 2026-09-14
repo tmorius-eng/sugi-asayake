@@ -4,7 +4,7 @@ import { sqlInt } from "./_core/sqlSafe";
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lt, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { describeTransport, planMysqlConnection } from "./_core/dbConnection";
-import { adminAuditLogs, branches, branchStock, cartItems, carts, discountCodes, faceAttempts, faceChallenges, faceEnrollments, featuredBrands, InsertProduct, InsertProductCategory, integrationConfigs, loginAttempts, notificationOutbox, stockMovements,loyaltyTiers, marketingSpend, mediaLibrary, orderItems, orders, paymentAttempts, phoneVerificationSessions, postCategories, postCategoryLinks, posts, postTagLinks, postTags, productCategories, productReviews, productReviewReplies, productReviewLikes, productQuestions, productQuestionAnswers, productVariants, giftCards, pushSubscriptions, products, routines, routineSteps, scheduledJobRuns, siteDocuments, siteMedia, siteText, sitePromotions, storeCreditLedger, storeSettings, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
+import { adminAuditLogs, branches, branchStock, cartItems, carts, discountCodes, faceAttempts, faceChallenges, faceEnrollments, featuredBrands, InsertProduct, InsertProductCategory, integrationConfigs, jobPostings, loginAttempts, notificationOutbox, stockMovements,loyaltyTiers, marketingSpend, mediaLibrary, orderItems, orders, paymentAttempts, phoneVerificationSessions, postCategories, postCategoryLinks, posts, postTagLinks, postTags, productCategories, productReviews, productReviewReplies, productReviewLikes, productQuestions, productQuestionAnswers, productVariants, giftCards, pushSubscriptions, products, routines, routineSteps, scheduledJobRuns, siteDocuments, siteMedia, siteText, sitePromotions, storeCreditLedger, storeSettings, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
 import { slugify } from "../shared/slugify";
 import { looksLikeBarcode, normaliseBarcode } from "../shared/barcode";
 import { expandQueryGroups, normaliseSearchText } from "../shared/search-synonyms";
@@ -4105,6 +4105,7 @@ const STOREFRONT_CACHE_KEYS = {
   categories: "storefront:categories",
   loyaltyTiers: "storefront:loyaltyTiers",
   posts: "storefront:posts",
+  jobPostings: "storefront:jobPostings",
 } as const;
 
 type StorefrontCacheKey = keyof typeof STOREFRONT_CACHE_KEYS;
@@ -4384,6 +4385,76 @@ export async function deleteSiteDocument(documentKey: string, locale: string) {
   if (!db) throw new Error("Database is not available");
   await db.delete(siteDocuments).where(and(eq(siteDocuments.documentKey, documentKey), eq(siteDocuments.locale, locale)));
   return { documentKey, locale };
+}
+
+/**
+ * Нээлттэй ажлын байр (/careers, 2026-09-14).
+ *
+ * Нийтийн хуудас зөвхөн нийтлэгдсэн мөрийг харна; админ бүгдийг (ноорог
+ * хамт) хардаг. Дараалал нь sortOrder — ижил байвал шинэ нь дээрээ, учир нь
+ * шинээр зарласан ажлын байрыг эхэнд харуулах нь хамгийн энгийн хүлээлт.
+ */
+export async function getPublishedJobPostings() {
+  return getOrSetCached(STOREFRONT_CACHE_KEYS.jobPostings, STOREFRONT_CACHE_TTL_MS, async () => {
+    const db = await getDb();
+    if (!db) return [];
+    return db
+      .select({
+        id: jobPostings.id,
+        title: jobPostings.title,
+        employmentType: jobPostings.employmentType,
+        location: jobPostings.location,
+        salaryRange: jobPostings.salaryRange,
+        description: jobPostings.description,
+        applyEmail: jobPostings.applyEmail,
+        applyUrl: jobPostings.applyUrl,
+      })
+      .from(jobPostings)
+      .where(eq(jobPostings.isPublished, true))
+      .orderBy(asc(jobPostings.sortOrder), desc(jobPostings.createdAt));
+  });
+}
+
+export async function getAdminJobPostings() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(jobPostings).orderBy(asc(jobPostings.sortOrder), desc(jobPostings.createdAt));
+}
+
+export type JobPostingWriteInput = {
+  title: string;
+  employmentType: string;
+  location: string;
+  salaryRange: string;
+  description: string | null;
+  applyEmail: string | null;
+  applyUrl: string | null;
+  isPublished: boolean;
+  sortOrder: number;
+};
+
+export async function createJobPosting(input: JobPostingWriteInput, actorUserId: number) {
+  invalidateStorefront("jobPostings");
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const [result] = await db.insert(jobPostings).values({ ...input, createdByUserId: actorUserId });
+  return { id: Number(result.insertId) };
+}
+
+export async function updateJobPosting(id: number, input: Partial<JobPostingWriteInput>) {
+  invalidateStorefront("jobPostings");
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.update(jobPostings).set({ ...input, updatedAt: new Date() }).where(eq(jobPostings.id, id));
+  return { id };
+}
+
+export async function deleteJobPosting(id: number) {
+  invalidateStorefront("jobPostings");
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.delete(jobPostings).where(eq(jobPostings.id, id));
+  return { id };
 }
 
 /**

@@ -27,6 +27,7 @@ const Checkout = lazyRetry(() => import("./pages/Checkout"));
 const ForgotPassword = lazyRetry(() => import("./pages/ForgotPassword"));
 const Journal = lazyRetry(() => import("./pages/Journal"));
 const Brands = lazyRetry(() => import("./pages/Brands"));
+const Careers = lazyRetry(() => import("./pages/Careers"));
 const Legal = lazyRetry(() => import("./pages/Legal"));
 const Help = lazyRetry(() => import("./pages/Help"));
 const Login = lazyRetry(() => import("./pages/Login"));
@@ -87,7 +88,7 @@ function Router() {
     <Route path={"/terms"} component={Legal} />
     <Route path={"/returns"} component={Legal} />
     <Route path={"/about"} component={Legal} />
-    <Route path={"/careers"} component={Legal} />
+    <Route path={"/careers"} component={Careers} />
     <Route path={"/help"} component={Help} />
     <Route path={"/404"} component={NotFound} />
     {/* Must come before the /:slug catch-all below, or "/journal" would be
