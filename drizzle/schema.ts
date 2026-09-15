@@ -1600,6 +1600,43 @@ export const jobPostings = mysqlTable("job_postings", {
   index("job_postings_published_idx").on(table.isPublished, table.sortOrder),
 ]);
 
+/**
+ * /careers-аас ирсэн анкетууд (2026-09-14).
+ *
+ * "Өргөдөл илгээх" нь mailto: биш болсон: нэр, утас, имэйл, захидал, CV файл
+ * энд бүртгэгдэж, админ /admin → Баримт бичиг → "Ирсэн анкетууд" дээр харна,
+ * төлөв (шинэ / харсан / холбогдсон / татгалзсан) тавьж, тэмдэглэл бичнэ.
+ *
+ * `cvKey` нь R2 дээрх түлхүүр — олон нийтийн /cdn/ URL-аар ХЭЗЭЭ Ч зурагдахгүй
+ * (bucket нийтэд нээлттэй тул түлхүүр нь санамсаргүй UUID агуулна), админ
+ * гарын үсэгтэй нэг цагийн URL-ээр нээнэ (admin.jobApplicationCvUrl).
+ * `positionTitle` snapshot: зар устсан ч анкет аль ажлын байрынх гэдгээ хадгална.
+ * Ажилд авах сонголт дуусмагц админ устгана (careers баримтад амласан).
+ */
+export const jobApplications = mysqlTable("job_applications", {
+  id: int("id").autoincrement().primaryKey(),
+  jobPostingId: int("jobPostingId").references(() => jobPostings.id, { onDelete: "set null" }),
+  positionTitle: varchar("positionTitle", { length: 160 }).notNull(),
+  fullName: varchar("fullName", { length: 120 }).notNull(),
+  phone: varchar("phone", { length: 20 }).notNull(),
+  email: varchar("email", { length: 320 }),
+  message: text("message"),
+  cvKey: varchar("cvKey", { length: 300 }),
+  cvFileName: varchar("cvFileName", { length: 200 }),
+  cvSizeBytes: int("cvSizeBytes"),
+  status: mysqlEnum("status", ["new", "reviewed", "contacted", "rejected"]).notNull().default("new"),
+  adminNote: text("adminNote"),
+  ipAddress: varchar("ipAddress", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  index("job_applications_status_idx").on(table.status, table.createdAt),
+  index("job_applications_posting_idx").on(table.jobPostingId),
+]);
+
+export type JobApplication = typeof jobApplications.$inferSelect;
+export type InsertJobApplication = typeof jobApplications.$inferInsert;
+
 export type JobPosting = typeof jobPostings.$inferSelect;
 export type InsertJobPosting = typeof jobPostings.$inferInsert;
 

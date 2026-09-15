@@ -24,6 +24,7 @@ import AdminOperationsPanel from "./AdminOperationsPanel";
 import AdminProductImportModal from "./admin/AdminProductImportModal";
 import ProductQrModal, { type QrProduct } from "./admin/ProductQrModal";
 import AdminJobPostingsPanel from "./admin/AdminJobPostingsPanel";
+import AdminJobApplicationsPanel from "./admin/AdminJobApplicationsPanel";
 import AdminPostsPanel from "./AdminPostsPanel";
 import AdminReviewsPanel from "./AdminReviewsPanel";
 import AdminQuestionsPanel from "./AdminQuestionsPanel";
@@ -759,7 +760,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
             {section === "campaigns" && !preview && <AdminCampaignsPanel />}
             {section === "campaigns" && preview && <div className="rounded-3xl bg-[var(--a-soft)] p-8 text-center text-sm text-[var(--a-muted)]">Preview горимд кампанит ажил харагдахгүй.</div>}
             {section === "storeSettings" && <AdminStoreSettingsPanel preview={preview} />}
-            {section === "documents" && <><AdminDocumentsPanel preview={preview} /><AdminJobPostingsPanel preview={preview} /></>}
+            {section === "documents" && <><AdminDocumentsPanel preview={preview} /><AdminJobPostingsPanel preview={preview} />{role === "admin" && <AdminJobApplicationsPanel preview={preview} />}</>}
             {section === "loyalty" && <AdminLoyaltyTiersPanel preview={preview} />}
             {section === "integrations" && !preview && <AdminIntegrationsPanel />}
             {section === "integrations" && preview && <div className="rounded-3xl bg-[var(--a-soft)] p-8 text-center text-sm text-[var(--a-muted)]">Preview горимд интеграцийн тохиргоо харагдахгүй.</div>}

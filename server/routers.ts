@@ -114,6 +114,11 @@ import {
   createJobPosting,
   updateJobPosting,
   deleteJobPosting,
+  createJobApplication,
+  getJobApplication,
+  getAdminJobApplications,
+  updateJobApplication,
+  deleteJobApplication,
   upsertSiteDocument,
   deleteSiteDocument,
   getLoyaltyTierTable,
@@ -223,7 +228,7 @@ import { sendOrderStatusPush, sendPushToUser, webPushEnabled } from "./_core/web
 import { clearFaceProofCookie, completeFaceVerification, hasValidFaceProof, isFaceGateEnabled, lockFaceSession, refreshFaceProof, startFaceVerification } from "./faceAuth";
 import { FACE_DESCRIPTOR_LENGTH, FACE_DIAGNOSTIC_MAX, FACE_IDLE_TIMEOUT_MS, FACE_MODEL_VERSION, isAdminPanelRole, isValidFaceDescriptor } from "../shared/face-auth";
 import { adminProcedure, anyStaffProcedure, catalogReadProcedure, contentReadProcedure, financeProcedure, lenientRateLimitedProcedure, marketingProcedure, moderateRateLimitedProcedure, ordersReadProcedure, phoneVerifyRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure, usersReadProcedure, warehouseProcedure } from "./_core/trpc";
-import { storagePing, storagePut, storagePutImageVariants } from "./storage";
+import { storageGetSignedUrl, storagePing, storagePut, storagePutImageVariants } from "./storage";
 import { IMAGE_MAX_DIMENSION, processUploadedImageVariants } from "./_core/imageProcessing";
 import { createQPayInvoice, parseQPayInvoicePayload, getQPayAvailability } from "./qpay";
 import { sendNtfyTest } from "./notifications";
@@ -1343,6 +1348,68 @@ export const appRouter = router({
         return { ...review, rewardMnt };
       }),
   }),
+  // ---- Ажлын анкет (2026-09-14) ---------------------------------------
+  // "Өргөдөл илгээх" нь mailto: байхад юу ч бүртгэгдэхгүй байсан. Одоо
+  // анкет job_applications-д, CV нь R2 дээр санамсаргүй түлхүүрээр (олон
+  // нийтийн /cdn/ замаар зурагдахгүй), админд push (нэр, утасгүй).
+  // strictRateLimitedProcedure: нэвтрээгүй хүн илгээдэг тул спамаас
+  // хамгаална; захидлын текст сэтгэгдэлтэй ижил moderation-оор явна.
+  careers: router({
+    apply: strictRateLimitedProcedure.input(z.object({
+      jobPostingId: z.number().int().positive().nullable(),
+      fullName: z.string().trim().min(2).max(120),
+      phone: z.string().trim().min(8).max(20).regex(/^\+?[\d\s-]{8,20}$/, "Утасны дугаар буруу байна."),
+      email: z.string().trim().email().max(320).nullable(),
+      message: nullableText(2_000),
+      cv: z.object({
+        fileName: z.string().trim().min(1).max(200),
+        contentType: z.enum(["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]),
+        dataBase64: z.string().min(16).max(7_200_000),
+      }).nullable(),
+    })).mutation(async ({ ctx, input }) => {
+      if (input.message) {
+        const verdict = await screenText(input.message);
+        if (!verdict.allowed) throw new TRPCError({ code: "BAD_REQUEST", message: MODERATION_REJECT_MESSAGE });
+      }
+      // Аль ажлын байрт: зар байвал түүний нэр (snapshot), байхгүй бол ерөнхий.
+      let positionTitle = "Ерөнхий анкет";
+      if (input.jobPostingId !== null) {
+        const posting = (await getAdminJobPostings()).find(row => row.id === input.jobPostingId && row.isPublished);
+        if (!posting) throw new TRPCError({ code: "NOT_FOUND", message: "Энэ ажлын байрны зар хаагдсан байна." });
+        positionTitle = posting.title;
+      }
+      let cvKey: string | null = null, cvFileName: string | null = null, cvSizeBytes: number | null = null;
+      if (input.cv) {
+        const raw = input.cv.dataBase64.includes(",") ? input.cv.dataBase64.slice(input.cv.dataBase64.indexOf(",") + 1) : input.cv.dataBase64;
+        const buffer = Buffer.from(raw, "base64");
+        if (buffer.length === 0 || buffer.length > 5 * 1024 * 1024) throw new TRPCError({ code: "BAD_REQUEST", message: "CV файл 1 байт – 5 МБ хооронд байх ёстой." });
+        // Файлын толгойгоор төрлийг шалгана: PDF "%PDF", DOCX zip "PK\x03\x04", хуучин DOC OLE "\xD0\xCF\x11\xE0".
+        const head = buffer.subarray(0, 4);
+        const looksPdf = head.toString("latin1").startsWith("%PDF");
+        const looksZip = head[0] === 0x50 && head[1] === 0x4b && head[2] === 0x03 && head[3] === 0x04;
+        const looksOle = head[0] === 0xd0 && head[1] === 0xcf && head[2] === 0x11 && head[3] === 0xe0;
+        const expected = input.cv.contentType === "application/pdf" ? looksPdf : input.cv.contentType === "application/msword" ? looksOle : looksZip;
+        if (!expected) throw new TRPCError({ code: "BAD_REQUEST", message: "CV нь PDF эсвэл Word файл байх ёстой." });
+        const extension = input.cv.contentType === "application/pdf" ? "pdf" : input.cv.contentType === "application/msword" ? "doc" : "docx";
+        const safeBase = input.cv.fileName.replace(/\.[^.]*$/, "").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "cv";
+        const stored = await storagePut(`applications/${randomBytes(16).toString("hex")}/${safeBase}.${extension}`, buffer, input.cv.contentType);
+        cvKey = stored.key; cvFileName = `${safeBase}.${extension}`; cvSizeBytes = buffer.length;
+      }
+      const { id } = await createJobApplication({
+        jobPostingId: input.jobPostingId,
+        positionTitle,
+        fullName: input.fullName,
+        phone: input.phone,
+        email: input.email ?? null,
+        message: input.message ?? null,
+        cvKey, cvFileName, cvSizeBytes,
+        ipAddress: ctx.req.ip ?? null,
+      });
+      await recordNotification("careers.application_received", { positionTitle, hasCv: cvKey !== null }, `application:${id}`);
+      return { id };
+    }),
+  }),
+
   content: router({
     latestPosts: publicProcedure.query(() => getPublishedPosts()),
     // Same underlying query as latestPosts (getPublishedPosts already has no
@@ -3278,6 +3345,34 @@ export const appRouter = router({
       await deleteJobPosting(input.id);
       await logAdminAction({ actorUserId: ctx.user.id, action: "job_posting.deleted", entityType: "job_posting", entityId: input.id, metadata: {} });
       return { id: input.id };
+    }),
+
+    // ---- Ирсэн анкетууд (2026-09-14) -----------------------------------
+    // adminProcedure, marketingProcedure БИШ: нэр, утас, CV бол хувийн
+    // мэдээлэл — маркетингийн ажилтан үзэх шаардлагагүй.
+    jobApplications: adminProcedure.query(() => getAdminJobApplications()),
+    updateJobApplication: adminProcedure.input(z.object({
+      id: z.number().int().positive(),
+      status: z.enum(["new", "reviewed", "contacted", "rejected"]).optional(),
+      adminNote: nullableText(2_000).optional(),
+    })).mutation(async ({ ctx, input }) => {
+      const patch: { status?: "new" | "reviewed" | "contacted" | "rejected"; adminNote?: string | null } = {};
+      if (input.status) patch.status = input.status;
+      if (input.adminNote !== undefined) patch.adminNote = input.adminNote ?? null;
+      await updateJobApplication(input.id, patch);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "job_application.updated", entityType: "job_application", entityId: input.id, metadata: { status: input.status ?? null } });
+      return { id: input.id };
+    }),
+    deleteJobApplication: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      await deleteJobApplication(input.id);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "job_application.deleted", entityType: "job_application", entityId: input.id, metadata: {} });
+      return { id: input.id };
+    }),
+    /** Нэг цагийн гарын үсэгтэй URL — CV нь /cdn/ (302 → нийтийн R2) замаар хэзээ ч гарахгүй. */
+    jobApplicationCvUrl: adminProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ input }) => {
+      const application = await getJobApplication(input.id);
+      if (!application?.cvKey) throw new TRPCError({ code: "NOT_FOUND", message: "Энэ анкетад CV хавсаргаагүй." });
+      return { url: await storageGetSignedUrl(application.cvKey), fileName: application.cvFileName ?? "cv" };
     }),
 
     // ---- Loyalty ladder (2026-09-12) ----------------------------------

@@ -1,71 +1,80 @@
 import { useState } from "react";
-import { ArrowLeft, ArrowUpRight, ChevronDown, Mail } from "lucide-react";
+import { ArrowUpRight, ChevronDown, LayoutGrid, Search } from "lucide-react";
 import { Link } from "wouter";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import SiteFooter from "@/components/SiteFooter";
+import JobApplicationModal, { type ApplyTarget } from "@/components/JobApplicationModal";
+import { footerLogoUrl } from "@/components/site-footer-data";
 import { trpc } from "@/lib/trpc";
 import { useLocale, useT } from "@/hooks/useLocale";
 import { useShopContact } from "@/hooks/useShopContact";
 import { getSiteDocumentFallbackFor } from "@shared/site-documents";
 
 /**
- * /careers — нээлттэй ажлын байр (2026-09-14).
+ * /careers — нээлттэй ажлын байр (2026-09-14, Tom-ийн лавлагаа дизайнаар).
  *
- * Хоёр эх сурвалжийг нэг хуудсанд нийлүүлнэ, аль аль нь /admin-аас засагдана:
- *  • ЗАР бүр `job_postings` хүснэгтийн мөр (Баримт бичиг хэсгийн доод талд
- *    нэмж, засаж, нуудаг). Нэг ч нийтлэгдсэн зар байхгүй бол жагсаалтын оронд
- *    "одоогоор нээлттэй ажлын байр байхгүй" гэсэн мөр гарна — хоосон хуудас
- *    хэзээ ч харагдахгүй.
- *  • БИЧВЭР (танилцуулга, хэрхэн өргөдөл гаргах, мэдээллийн нууцлал) нь
- *    site_documents-ийн "careers" мөр, гурван хэлээр; мөр байхгүй хэл дээрээ
- *    shared/site-documents.ts-ийн fallback-аа хэвээр зурна.
+ * Зохион байгуулалт нь лавлагаа зургийг яг дагана: цайвар шар дэвсгэр дээр
+ * хөвж буй том цагаан дугуй булантай карт; картын дээд мөрөнд лого, цэс, дугуй
+ * товч; доор нь хоёр багана — зүүн талд асар том гарчиг ("Нээлттэй / ажлын
+ * байр"), "ЭСВЭЛ ХОЛБОГДООРОЙ" шошго, доогуур зураастай имэйл, хамгийн доор
+ * гурван жижиг холбоос; баруун талд hairline-аар тусгаарлагдсан зарын мөрүүд
+ * (цэнхэр eyebrow, том гарчиг, саарал мета мөр, дугуй сум, өнгөт "Өргөдөл
+ * илгээх" pill), доор нь chip гарчигтай тайлбарын хоёр багана.
  *
- * Зохион байгуулалт нь Tom-ийн өгсөн лавлагаа зурган дээрхтэй ижил: зүүн талд
- * наалдац (sticky) гарчиг + холбоо барих имэйл, баруун талд ажлын байрны мөр
- * бүр (нэр, төрөл/цалин/байршил, дэлгэрэнгүйг нээх сум, өргөдөл илгээх товч).
- * Өнгө, шрифт, hairline хүрээ, 4px радиус нь сайтын өөрийн токенууд — лавлагааны
- * улбар шар биш, манай улаан (`--primary-text`).
+ * Өгөгдөл: зар бүр `job_postings` хүснэгтээс (/admin → Баримт бичиг), бичвэр
+ * нь site_documents-ийн "careers" мөр гурван хэлээр, холбоо барих мэдээлэл
+ * store settings-ээс — hardcode текст алга. Зар байхгүй бол жагсаалтын оронд
+ * нэг мөр гарна; хуудас хоосон харагдахгүй.
  */
 export default function Careers() {
   const t = useT();
   const locale = useLocale();
   const contact = useShopContact();
   const [openId, setOpenId] = useState<number | null>(null);
+  const [applyFor, setApplyFor] = useState<ApplyTarget | null>(null);
 
   const fallback = getSiteDocumentFallbackFor("careers", locale);
   const documentsQuery = trpc.content.siteDocuments.useQuery();
   const saved = documentsQuery.data?.find(row => row.documentKey === "careers" && row.locale === locale);
   const title = saved?.title || fallback.title;
-  const lead = saved?.lead ?? fallback.lead;
 
   const postingsQuery = trpc.content.jobPostings.useQuery();
   const postings = postingsQuery.data ?? [];
 
   useDocumentMeta(`${title} — SUGI ASAYAKE`, null);
 
-  /** Өргөдлийн холбоос: тусгай маягт > зарын имэйл > дэлгүүрийн ерөнхий имэйл. */
-  const applyHref = (posting: { title: string; applyEmail: string | null; applyUrl: string | null }) => {
-    if (posting.applyUrl) return posting.applyUrl;
-    const email = posting.applyEmail || contact.email;
-    return `mailto:${email}?subject=${encodeURIComponent(`${t("Ажлын байр")}: ${posting.title}`)}`;
-  };
 
   return (
-    <div className="doc-shell">
-      <main className="careers-main">
-        <Link href="/" className="doc-back"><ArrowLeft size={15} />{t("Нүүр хуудас руу буцах")}</Link>
+    <div className="careers-page">
+      <div className="careers-card">
+        <header className="careers-nav">
+          <Link href="/" className="careers-nav-logo" aria-label="SUGI ASAYAKE"><img src={footerLogoUrl} alt="SUGI ASAYAKE" /></Link>
+          <nav className="careers-nav-links" aria-label={t("Цэс")}>
+            <Link href="/">{t("Нүүр хуудас")}</Link>
+            <Link href="/shop">{t("Дэлгүүр")}</Link>
+            <Link href="/brands">{t("Брэндүүд")}</Link>
+            <Link href="/about">{t("Бидний тухай")}</Link>
+            <Link href="/help">{t("Холбоо барих")}</Link>
+          </nav>
+          <Link href="/shop" className="careers-nav-cta" aria-label={t("Дэлгүүр")}><LayoutGrid size={18} /></Link>
+        </header>
 
-        <div className="careers-layout">
-          <aside className="careers-aside">
-            <p className="doc-kicker">SUGI ASAYAKE MONGOLIA</p>
-            <h1>{title}</h1>
-            {lead && <p className="careers-lead">{lead}</p>}
-            <p className="careers-contact-label">{t("Эсвэл шууд холбогдоорой")}</p>
-            <a className="careers-contact-link" href={`mailto:${contact.email}`}><Mail size={14} aria-hidden="true" />{contact.email}</a>
-            <a className="careers-contact-link" href={`tel:${contact.phoneHref}`}>{contact.phone}</a>
+        <div className="careers-grid">
+          <aside className="careers-side">
+            <div>
+              <h1>{t("Нээлттэй ажлын байр")}</h1>
+              <p className="careers-side-label">{t("Эсвэл шууд холбогдоорой")}</p>
+              <a className="careers-side-email" href={`mailto:${contact.email}`}>{contact.email}</a>
+              <button type="button" className="careers-side-apply" onClick={() => setApplyFor({ id: null, title: t("Ерөнхий анкет") })}>{t("Анкетаа илгээх")}</button>
+            </div>
+            <nav className="careers-side-links" aria-label={t("Холбоосууд")}>
+              <Link href="/shop?focus=search"><Search size={13} aria-hidden="true" />{t("Хайх")}</Link>
+              <Link href="/shop">{t("Бүтээгдэхүүн")}</Link>
+              <Link href="/about">{t("Компани")}</Link>
+            </nav>
           </aside>
 
-          <section className="careers-list" aria-label={title}>
+          <section className="careers-roles" aria-label={title}>
             {postingsQuery.isLoading ? (
               <p className="careers-empty">{t("Уншиж байна…")}</p>
             ) : postings.length === 0 ? (
@@ -76,51 +85,41 @@ export default function Careers() {
                 const meta = [posting.employmentType, posting.salaryRange, posting.location].filter(Boolean);
                 return (
                   <article key={posting.id} className="careers-role">
-                    <p className="careers-role-eyebrow">{t("Нээлттэй ажлын байр")}</p>
-                    <div className="careers-role-head">
-                      <div className="careers-role-title">
-                        <h2>{posting.title}</h2>
-                        {meta.length > 0 && (
-                          <p className="careers-role-meta">
-                            {meta.map((item, index) => (
-                              <span key={item}>{index > 0 && <i aria-hidden="true">•</i>}{item}</span>
-                            ))}
-                          </p>
-                        )}
-                      </div>
-                      <div className="careers-role-actions">
-                        {posting.description && (
-                          <button
-                            type="button"
-                            className="careers-role-toggle"
-                            aria-expanded={isOpen}
-                            aria-label={`${posting.title} — ${t("дэлгэрэнгүй")}`}
-                            onClick={() => setOpenId(isOpen ? null : posting.id)}
-                          ><ChevronDown size={17} className={isOpen ? "is-open" : undefined} /></button>
-                        )}
-                        <a
-                          className="careers-role-apply"
-                          href={applyHref(posting)}
-                          {...(posting.applyUrl ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-                        >{t("Өргөдөл илгээх")}<ArrowUpRight size={15} aria-hidden="true" /></a>
-                      </div>
+                    <div className="careers-role-main">
+                      <p className="careers-role-eyebrow">{t("Нээлттэй ажлын байр")}</p>
+                      <h2>{posting.title}</h2>
+                      {meta.length > 0 && (
+                        <p className="careers-role-meta">
+                          {meta.map((item, index) => <span key={item}>{index > 0 && <i aria-hidden="true" />}{item}</span>)}
+                        </p>
+                      )}
+                      {posting.description && isOpen && <p className="careers-role-body">{posting.description}</p>}
                     </div>
-                    {posting.description && isOpen && <p className="careers-role-body">{posting.description}</p>}
+                    <div className="careers-role-actions">
+                      <button
+                        type="button"
+                        className="careers-role-toggle"
+                        aria-expanded={isOpen}
+                        aria-label={`${posting.title} — ${t("дэлгэрэнгүй")}`}
+                        disabled={!posting.description}
+                        onClick={() => setOpenId(isOpen ? null : posting.id)}
+                      ><ChevronDown size={18} className={isOpen ? "is-open" : undefined} /></button>
+                      {posting.applyUrl
+                        ? <a className="careers-role-apply" href={posting.applyUrl} target="_blank" rel="noopener noreferrer">{t("Өргөдөл илгээх")}<ArrowUpRight size={16} aria-hidden="true" /></a>
+                        : <button type="button" className="careers-role-apply" onClick={() => setApplyFor({ id: posting.id, title: posting.title })}>{t("Өргөдөл илгээх")}<ArrowUpRight size={16} aria-hidden="true" /></button>}
+                    </div>
                   </article>
                 );
               })
             )}
 
-            {/* Хуудасны бичвэр: зар байгаа эсэхээс үл хамааран үргэлж доор нь.
-                Админ хадгалсан бол түүний HTML (бичих үед сервер дээр sanitize
-                хийгддэг, Legal.tsx-тэй ижил гэрээ), эс бөгөөс кодын fallback. */}
             {saved?.contentHtml
               ? <div className="careers-notes doc-body" lang={locale} dangerouslySetInnerHTML={{ __html: saved.contentHtml }} />
               : (
                 <div className="careers-notes">
                   {fallback.sections.map(([heading, body]) => (
                     <div key={heading} className="careers-note">
-                      <p className="careers-note-label">{heading}</p>
+                      <span className="careers-note-chip">{heading}</span>
                       <p>{body}</p>
                     </div>
                   ))}
@@ -128,7 +127,8 @@ export default function Careers() {
               )}
           </section>
         </div>
-      </main>
+      </div>
+      <JobApplicationModal target={applyFor} onClose={() => setApplyFor(null)} />
       <SiteFooter />
     </div>
   );

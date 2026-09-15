@@ -4,7 +4,7 @@ import { sqlInt } from "./_core/sqlSafe";
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lt, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { describeTransport, planMysqlConnection } from "./_core/dbConnection";
-import { adminAuditLogs, branches, branchStock, cartItems, carts, discountCodes, faceAttempts, faceChallenges, faceEnrollments, featuredBrands, InsertProduct, InsertProductCategory, integrationConfigs, jobPostings, loginAttempts, notificationOutbox, stockMovements,loyaltyTiers, marketingSpend, mediaLibrary, orderItems, orders, paymentAttempts, phoneVerificationSessions, postCategories, postCategoryLinks, posts, postTagLinks, postTags, productCategories, productReviews, productReviewReplies, productReviewLikes, productQuestions, productQuestionAnswers, productVariants, giftCards, pushSubscriptions, products, routines, routineSteps, scheduledJobRuns, siteDocuments, siteMedia, siteText, sitePromotions, storeCreditLedger, storeSettings, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
+import { adminAuditLogs, branches, branchStock, cartItems, carts, discountCodes, faceAttempts, faceChallenges, faceEnrollments, featuredBrands, InsertProduct, InsertProductCategory, integrationConfigs, jobApplications, jobPostings, loginAttempts, notificationOutbox, stockMovements,loyaltyTiers, marketingSpend, mediaLibrary, orderItems, orders, paymentAttempts, phoneVerificationSessions, postCategories, postCategoryLinks, posts, postTagLinks, postTags, productCategories, productReviews, productReviewReplies, productReviewLikes, productQuestions, productQuestionAnswers, productVariants, giftCards, pushSubscriptions, products, routines, routineSteps, scheduledJobRuns, siteDocuments, siteMedia, siteText, sitePromotions, storeCreditLedger, storeSettings, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
 import { slugify } from "../shared/slugify";
 import { looksLikeBarcode, normaliseBarcode } from "../shared/barcode";
 import { expandQueryGroups, normaliseSearchText } from "../shared/search-synonyms";
@@ -4455,6 +4455,59 @@ export async function deleteJobPosting(id: number) {
   if (!db) throw new Error("Database is not available");
   await db.delete(jobPostings).where(eq(jobPostings.id, id));
   return { id };
+}
+
+/**
+ * /careers-аас ирсэн анкетууд (2026-09-14). Storefront кэшгүй — зөвхөн админ
+ * уншдаг, нийтийн хуудас хэзээ ч жагсаадаггүй.
+ */
+export type JobApplicationInput = {
+  jobPostingId: number | null;
+  positionTitle: string;
+  fullName: string;
+  phone: string;
+  email: string | null;
+  message: string | null;
+  cvKey: string | null;
+  cvFileName: string | null;
+  cvSizeBytes: number | null;
+  ipAddress: string | null;
+};
+
+export async function createJobApplication(input: JobApplicationInput) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const [result] = await db.insert(jobApplications).values(input);
+  return { id: Number(result.insertId) };
+}
+
+export async function getJobApplication(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const [row] = await db.select().from(jobApplications).where(eq(jobApplications.id, id)).limit(1);
+  return row ?? null;
+}
+
+/** Сүүлийн 500 анкет, шинэ нь дээрээ. CV-ийн түлхүүр нь клиентэд ил гардаг ч /cdn-аар зурагдахгүй (гарын үсэгтэй URL л нээнэ). */
+export async function getAdminJobApplications() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(jobApplications).orderBy(desc(jobApplications.createdAt)).limit(500);
+}
+
+export async function updateJobApplication(id: number, patch: { status?: "new" | "reviewed" | "contacted" | "rejected"; adminNote?: string | null }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.update(jobApplications).set({ ...patch, updatedAt: new Date() }).where(eq(jobApplications.id, id));
+  return { id };
+}
+
+export async function deleteJobApplication(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const existing = await getJobApplication(id);
+  await db.delete(jobApplications).where(eq(jobApplications.id, id));
+  return { id, cvKey: existing?.cvKey ?? null };
 }
 
 /**

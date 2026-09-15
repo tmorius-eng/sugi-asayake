@@ -73,6 +73,8 @@ export type NotificationPayloads = {
   "refund.recorded": { orderNumber: string; refundMnt: number; restocked: boolean };
   /** The customer asked to return a completed order from their profile (2026-09-14). The reason text stays out of the push (free text could carry PII). */
   "order.return_requested": { orderNumber: string; totalMnt: number };
+  /** /careers-аас анкет ирлээ (2026-09-14). Нэр, утас, имэйл push-д ОРОХГҮЙ — зөвхөн албан тушаал. */
+  "careers.application_received": { positionTitle: string; hasCv: boolean };
   "stock.low_digest": { count: number; items: { sku: string; name: string; quantity: number }[] };
   "receipt.posted": { code: string; branchName: string; supplierName: string | null; lineCount: number; pieces: number; unknownCount: number };
   "count.submitted": { code: string; branchName: string; lineCount: number; varianceLines: number };
@@ -109,6 +111,7 @@ export const NOTIFICATION_EVENTS: Record<NotificationEventType, EventSpec> = {
   "order.cancelled_by_customer": { label: "Харилцагч захиалгаа цуцалсан", groups: ["warehouse", "admin"], priority: 4, tags: ["x"], clickSection: "orders" },
   "refund.recorded": { label: "Буцаан олголт бүртгэгдсэн", groups: ["finance", "admin"], priority: 3, tags: ["money_with_wings"], clickSection: "orders" },
   "order.return_requested": { label: "Буцаалтын хүсэлт ирсэн", groups: ["warehouse", "finance", "admin"], priority: 4, tags: ["leftwards_arrow_with_hook"], clickSection: "orders" },
+  "careers.application_received": { label: "Ажлын анкет ирсэн", groups: ["admin"], priority: 3, tags: ["briefcase"], clickSection: "documents" },
   "stock.low_digest": { label: "Нөөц дуусч буй бараа (өдрийн тойм)", groups: ["warehouse", "admin"], priority: 3, tags: ["chart_with_downwards_trend"], clickSection: "products" },
   "receipt.posted": { label: "Бараа хүлээн авсан", groups: ["warehouse", "admin"], priority: 3, tags: ["inbox_tray"], clickSection: "receiving" },
   "count.submitted": { label: "Тооллого батлуулахаар ирсэн", groups: ["warehouse", "admin"], priority: 4, tags: ["clipboard"], clickSection: "receiving" },
@@ -163,6 +166,10 @@ export function buildNotificationMessage<K extends NotificationEventType>(type: 
     case "order.return_requested": {
       const p = payload as NotificationPayloads["order.return_requested"];
       return { title: `Буцаалтын хүсэлт ${p.orderNumber}`, message: `Харилцагч ${formatMnt(p.totalMnt)}-ийн захиалгаа буцаахыг хүслээ. Шалтгааныг Захиалга хэсгээс үзээд шийднэ үү.` };
+    }
+    case "careers.application_received": {
+      const p = payload as NotificationPayloads["careers.application_received"];
+      return { title: `Шинэ анкет: ${p.positionTitle}`, message: `${p.hasCv ? "CV хавсаргасан. " : ""}Админ → Баримт бичиг → Ирсэн анкетууд хэсгээс үзнэ үү.` };
     }
     case "refund.recorded": {
       const p = payload as NotificationPayloads["refund.recorded"];
