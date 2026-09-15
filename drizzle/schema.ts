@@ -403,6 +403,9 @@ export const products = mysqlTable("products", {
    * never overwrites that product again).
    */
   ingredients: text("ingredients"),
+  /** Smart Retail feed (0083, 2026-09-15): "instructions"/"termsOfUse" and "warning". */
+  usageInstructions: text("usageInstructions"),
+  warnings: text("warnings"),
   netContent: varchar("netContent", { length: 80 }),
   countryOfOrigin: varchar("countryOfOrigin", { length: 80 }),
   shelfLifeMonths: int("shelfLifeMonths"),

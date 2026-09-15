@@ -155,6 +155,7 @@ browser → /api/trpc/<router>.<procedure>
 ### 3.6 Интеграцууд (`server/integrations/`)
 
 - **`inventorySync.ts`** — вендороос хамааралгүй "гэрээ" + бүртгэл. Урсгалууд: `push` (манай хөдөлгөөн → вендор, 2 минутын хоцролт, `refType='external'` эргэж явахгүй), `sales` (вендорын борлуулалт → манай ledger, `external_refs`-ээр нэг удаа), **`snapshot`** (вендорын үлдэгдэл → **батлах хүлээсэн тооллого**, нөөц хэзээ ч шууд бичигдэхгүй). Бүх функц `SyncOptions {namespace, lagSeconds}` авдаг тул тест бодит cursor-ыг хөндөхгүй.
+- **`vendorCatalog.ts`** (2026-09-15) — вендорын **үнэ, хөнгөлөлт, найрлага/заавар/анхааруулга**-г зөрүүний жагсаалт болгож, зөвхөн сонгосон баркодыг бичнэ. Клиент утга илгээхгүй (сервер дахин татна); үнэ хоёр хүснэгтэд, факт нь `factsSource="admin"` барааг хөндөхгүй.
 - **`smartSoftware.ts`** — бодит adapter. OAuth2 password grant; `fetch` БИШ `node:http(s)` (баримтын token дуудлага GET дээр body явуулдаг); token cache; `listLocations`, `pullStockSnapshot`. Вендорын POS API-д **борлуулалтын жагсаалт байхгүй** тул `pullSales` хэрэгждэггүй — шударгаар тэмдэглэсэн.
 
 ### 3.7 Бусад
@@ -273,7 +274,7 @@ pnpm lint    # ESLint flat config: typescript-eslint recommended + react-hooks (
 | Интеграц | Төлөв |
 |---|---|
 | ntfy (утасны мэдэгдэл) | ✅ бодитоор ажиллаж байгааг Tom-ийн iPhone дээр баталгаажуулсан |
-| Smart Software | ✅ код бэлэн — нэвтрэх нэр/нууц үг хүлээж байна |
+| Smart Software | ✅ код бэлэн — нэвтрэх нэр/нууц үг хүлээж байна (холбогдмогц үлдэгдэл **автомат**, үнэ/факт батлуулдаг) |
 | StorePay | ✅ код бэлэн — 7 утга хүлээж байна |
 | QPay | ✅ код бэлэн — merchant (эсвэл sandbox) эрх хүлээж байна |
 | Brevo имэйл, verify.mn SMS, R2, Honeybadger | ✅ `.env`-ээр |

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { escapeAttribute, escapeJsString } from "./_core/indexHtml";
-import { fillTemplate, storeSettingSlots, tokensIn } from "@shared/store-settings";
+import { checkStoreSettingFormat, getStoreSettingFormat, storeSettingSlots, fillTemplate, tokensIn, type StoreSettingKey } from "@shared/store-settings";
 import { siteTextSlots } from "@shared/site-text";
 
 /**
@@ -130,5 +130,62 @@ describe("slot registries", () => {
       // empty means "no tag", which is the correct default.
       expect(typeof slot.fallbackValue, slot.key).toBe("string");
     }
+  });
+});
+
+/**
+ * 2026-09-15. Before the slot registry carried a `format`, the GA4/Pixel
+ * regexes existed only inside indexHtml.ts's renderer, which silently
+ * substituted "" for anything malformed. The result was the worst kind of
+ * failure: the save succeeded with a green toast and the tag then never
+ * loaded, with nothing in /admin to show why. These tests pin the single
+ * source of truth so the admin screen, the mutation and the renderer cannot
+ * drift apart again.
+ */
+describe("store setting formats", () => {
+  it("compiles every declared pattern, and its own example passes it", () => {
+    for (const slot of storeSettingSlots) {
+      const format = getStoreSettingFormat(slot.key);
+      if (!format) continue;
+      expect(() => new RegExp(format.pattern, format.flags), slot.key).not.toThrow();
+      expect(checkStoreSettingFormat(slot.key, format.example), slot.key).toBeNull();
+      expect(format.message.trim().length, slot.key).toBeGreaterThan(10);
+    }
+  });
+
+  it("accepts a real GA4 id and rejects the ways it is usually mistyped", () => {
+    const key: StoreSettingKey = "analytics-ga4-measurement-id";
+    for (const good of ["G-ABCD1234", "g-abcd1234", "  G-XYZ98765  "]) expect(checkStoreSettingFormat(key, good), good).toBeNull();
+    // A GTM container id, the property number, the whole snippet, a typo:
+    // every one of these used to save green and then never load.
+    for (const bad of ["GTM-ABCD123", "UA-12345-1", "123456789", "G-", "nope", "<script>gtag</script>"]) {
+      expect(checkStoreSettingFormat(key, bad), bad).toBeTruthy();
+    }
+  });
+
+  it("accepts a real Meta pixel id and rejects non-numeric input", () => {
+    const key: StoreSettingKey = "analytics-meta-pixel-id";
+    for (const good of ["123456789012345", " 987654321098765 "]) expect(checkStoreSettingFormat(key, good), good).toBeNull();
+    for (const bad of ["G-ABCD1234", "12345", "12345678901234567890123", "pixel-123", "123 456"]) {
+      expect(checkStoreSettingFormat(key, bad), bad).toBeTruthy();
+    }
+  });
+
+  it("never rejects an empty value: clearing is how a tag is switched off", () => {
+    expect(checkStoreSettingFormat("analytics-ga4-measurement-id", "")).toBeNull();
+    expect(checkStoreSettingFormat("analytics-meta-pixel-id", "   ")).toBeNull();
+  });
+
+  it("leaves slots without a declared format alone", () => {
+    expect(getStoreSettingFormat("contact-phone")).toBeNull();
+    expect(checkStoreSettingFormat("contact-phone", "ямар ч утга")).toBeNull();
+  });
+
+  it("uses the same regexes the renderer blanks with", () => {
+    // indexHtml.ts now calls checkStoreSettingFormat rather than carrying its
+    // own copy; this asserts the shapes it relied on are still the ones in
+    // the registry, so a future edit to either cannot silently diverge.
+    expect(getStoreSettingFormat("analytics-ga4-measurement-id")?.pattern).toBe("^G-[A-Z0-9]{4,20}$");
+    expect(getStoreSettingFormat("analytics-meta-pixel-id")?.pattern).toBe("^[0-9]{6,20}$");
   });
 });

@@ -1,4 +1,4 @@
-import { LayoutDashboard, PackagePlus, CheckCircle2, CreditCard, FilePenLine, FileText, Star, ListChecks, Megaphone, Tag, Tags, ImageUp, UsersRound, ChartColumnIncreasing, ShieldAlert, Plug, CalendarDays, Send, Settings, MapPin, ShoppingBag, Smartphone, ScanBarcode, LogOut, Menu, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, LineChart, PackagePlus, CheckCircle2, CreditCard, FilePenLine, FileText, Star, ListChecks, Megaphone, Tag, Tags, ImageUp, UsersRound, ChartColumnIncreasing, ShieldAlert, Plug, CalendarDays, Send, Settings, MapPin, ShoppingBag, Smartphone, ScanBarcode, LogOut, Menu, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import type { AdminSection } from "../AdminWorkspace";
@@ -41,6 +41,7 @@ const flatGroup: NavItem[] = [
   { key: "documents", label: "Баримт бичиг", Icon: FileText },
   { key: "campaigns", label: "Кампанит ажил", Icon: Send },
   { key: "storeSettings", label: "Дэлгүүрийн тохиргоо", Icon: Settings },
+  { key: "measurement", label: "Хэмжилт", Icon: LineChart },
   { key: "branches", label: "Салбарууд", Icon: MapPin },
   { key: "pos", label: "Дэлгүүрийн худалдаа", Icon: ShoppingBag },
   { key: "receiving", label: "Бараа хүлээн авах", Icon: ScanBarcode },
@@ -87,6 +88,9 @@ const SECTION_ROLES: Record<AdminSection, ReadonlySet<string>> = {
   loyalty: new Set(["admin"]),
   campaigns: new Set(["marketing", "admin"]),
   storeSettings: new Set(["marketing", "admin"]),
+  // Same marketingProcedure weight as storeSettings: these are the same two
+  // store_settings rows, moved onto a screen of their own.
+  measurement: new Set(["marketing", "admin"]),
   // Phase J: same marketingProcedure weight/CRUD shape as `brands` above.
   branches: new Set(["marketing", "admin"]),
   // Phase M: same warehouseProcedure weight as the stock-editing endpoints

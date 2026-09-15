@@ -34,6 +34,7 @@ const samples: { [K in NotificationEventType]: NotificationPayloads[K] } = {
   "stock.out": { branchName: "Агуулах", productName: "Бараа А", sku: "4900000000001" },
   "stock.total_out": { productName: "Бараа А", sku: "4900000000001" },
   "stock.ledger_drift": { count: 3 },
+  "stock.vendor_sync_blocked": { previous: 937, current: 120, dropPercent: 87 },
   "transfer.stale": { code: "TR-260911-QW3E", toBranchName: "Их наяд плаза", hours: 50 },
   "integration.test": { groupLabel: "Агуулах" },
 };

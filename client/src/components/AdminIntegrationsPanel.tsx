@@ -1,8 +1,12 @@
 import { useState } from "react";
-import { CheckCircle2, CircleDashed, KeyRound, LoaderCircle, Plus, RefreshCw, Send, TriangleAlert, Trash2, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, CircleDashed, KeyRound, LoaderCircle, Plus, RefreshCw, Send, TriangleAlert, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { INTEGRATION_META, validateIntegrationSettings, type IntegrationProvider } from "@shared/integrations";
+import IntegrationConnectCard, { type ConnectResult } from "./admin/IntegrationConnectCard";
+import { IntegrationCardHeader, integrationStatus } from "./admin/integrationVisuals";
+import VendorCatalogPanel from "./admin/VendorCatalogPanel";
+import VendorStockAutoApplySwitch from "./admin/VendorStockAutoApplySwitch";
 import { NOTIFICATION_EVENTS, NOTIFICATION_GROUP_LABELS, NTFY_TOPIC_FIELD, type NotificationEventType, type NotificationGroup } from "@shared/notification-events";
 
 /**
@@ -61,6 +65,11 @@ function ProviderCard({ row }: { row: IntegrationRow }) {
   const [extraRows, setExtraRows] = useState<{ key: string; value: string }[]>([]);
   const [replaceAll, setReplaceAll] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  // Lifted out of SmartSoftwareSyncPanel so a successful connect can hand the
+  // vendor's location list straight to the branch-mapping form below.
+  const [locations, setLocations] = useState<{ id: string; name: string }[]>([]);
+  const [skippedConnect, setSkippedConnect] = useState(false);
+  const [showCredentials, setShowCredentials] = useState(false);
 
   const refresh = () => Promise.all([utils.admin.integrations.invalidate(), utils.notifications.mySubscriptions.invalidate()]);
 
@@ -97,22 +106,54 @@ function ProviderCard({ row }: { row: IntegrationRow }) {
     return run(`clear:${key}`, () => updateIntegration.mutateAsync({ provider: row.provider, clearKeys: [key] }), "Устгалаа.");
   };
 
+  // "Connected" is per-field, never row.hasCredentials -- that one is true as
+  // soon as ANY key was saved (server/db.ts: Boolean(row.encryptedConfig)), so
+  // a saved base URL alone would look like a finished sign-in.
+  const connectMeta = meta.connect;
+  const connected = !connectMeta || connectMeta.requiredFields.every(key => row.fields.find(field => field.key === key)?.isSet);
+  const showConnect = Boolean(connectMeta) && !connected && !row.decryptFailed && !skippedConnect;
+  const showEditor = !showConnect && (!connectMeta || !connected || showCredentials);
+
+  /** Save the typed credentials, then ask the vendor whether they work. */
+  const connectProvider = async (set: Record<string, string>): Promise<ConnectResult> => {
+    if (Object.keys(set).length) await updateIntegration.mutateAsync({ provider: row.provider, set });
+    if (row.provider !== "smartsoftware") { await refresh(); return { ok: true, detail: "Хадгаллаа." }; }
+    const result = await testIntegration.mutateAsync({ provider: "smartsoftware" });
+    // Only a PASSING test refreshes the parent query. `connected` is derived
+    // from isSet, so refreshing after a failure would swap this card for the
+    // operational panel and tell the admin it worked when it did not.
+    if (!result.ok) return { ok: false, detail: result.detail ?? "Холбогдсонгүй." };
+    setLocations(result.locations ?? []);
+    toast.success("Холбогдлоо · " + result.detail);
+    await refresh();
+    return { ok: true, detail: result.detail };
+  };
+
   const knownKeys = new Set(meta.fields.map(field => field.key));
   const handTypedKeys = row.fields.filter(field => !knownKeys.has(field.key));
   const hasDirty = Object.values(drafts).some(value => value.trim()) || extraRows.some(extra => extra.key.trim() && extra.value.trim());
 
   return (
-    <div className="rounded-3xl border border-[var(--a-border)] bg-[var(--a-card)] p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">{row.provider.toUpperCase()}</p>
-          <h3 className="mt-1 font-bold">{meta.label}</h3>
-          <p className="mt-1 text-xs text-[var(--a-muted)]">{meta.note}</p>
-          {!meta.wiredUp && <p className="mt-2 flex items-start gap-1.5 text-[11px] font-bold text-[var(--a-warn)]"><TriangleAlert size={13} className="mt-0.5 shrink-0" />"Идэвхтэй" гэдэг нь зөвхөн энэ тохиргоог хадгалсан гэсэн үг — захиалга/төлбөрийн урсгалд одоогоор холбогдоогүй тул харилцагчид харагдахгүй, нөлөөлөхгүй.</p>}
-        </div>
-        <button type="button" onClick={() => run("toggle", () => updateIntegration.mutateAsync({ provider: row.provider, isActive: !row.isActive }))} disabled={busyKey !== null} className={`shrink-0 rounded-full px-3 py-1.5 text-[10px] font-extrabold transition ${row.isActive ? "bg-[var(--a-pos-soft)] text-[var(--a-pos)]" : "bg-[var(--a-soft)] text-[var(--a-muted)]"}`}>
-          {busyKey === "toggle" ? <LoaderCircle className="animate-spin" size={12} /> : row.isActive ? "Идэвхтэй" : "Идэвхгүй"}
+    <div className="admin-card p-5">
+      <IntegrationCardHeader meta={meta} status={integrationStatus(meta, row)} accentKey={meta.accent ?? "slate"} iconKey={meta.icon ?? "store"} />
+      {!meta.wiredUp && <p className="mt-2 flex items-start gap-1.5 text-[11px] font-bold text-[var(--a-warn)]"><TriangleAlert size={13} className="mt-0.5 shrink-0" />"Идэвхтэй" гэдэг нь зөвхөн энэ тохиргоог хадгалсан гэсэн үг — захиалга/төлбөрийн урсгалд одоогоор холбогдоогүй тул харилцагчид харагдахгүй, нөлөөлөхгүй.</p>}
+      {/* The switch is its own control now. While it doubled as the status
+          pill, a provider that was configured but switched off looked exactly
+          like one with nothing saved at all. */}
+      <div className="mt-3 flex flex-wrap items-center gap-2.5 rounded-xl bg-[var(--a-soft)] px-3 py-2.5">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={row.isActive}
+          aria-label={meta.label + " идэвхжүүлэх"}
+          disabled={busyKey !== null}
+          onClick={() => run("toggle", () => updateIntegration.mutateAsync({ provider: row.provider, isActive: !row.isActive }))}
+          className={`relative h-6 w-11 shrink-0 rounded-full transition disabled:opacity-50 ${row.isActive ? "bg-[var(--a-pos)]" : "bg-[var(--a-border-strong)]"}`}
+        >
+          <span className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-all ${row.isActive ? "left-[22px]" : "left-0.5"}`} />
         </button>
+        <span className="text-[11px] font-extrabold">{busyKey === "toggle" ? "Хадгалж байна…" : row.isActive ? "Идэвхтэй" : "Идэвхгүй"}</span>
+        <span className="min-w-0 flex-1 text-[11px] leading-4 text-[var(--a-muted)]">Унтраасан үед тохиргоо хадгалагдсан хэвээр байх ч ажиллахгүй.</span>
       </div>
       {meta.guidance && <p className="mt-3 rounded-xl bg-[var(--a-info-soft)] p-3 text-[11px] leading-4 text-[var(--a-info)]">{meta.guidance}</p>}
       {row.decryptFailed && (
@@ -122,7 +163,24 @@ function ProviderCard({ row }: { row: IntegrationRow }) {
         </div>
       )}
 
-      {meta.fields.length > 0 && (
+      {showConnect && connectMeta && (
+        <IntegrationConnectCard
+          provider={row.provider}
+          connect={connectMeta}
+          onConnect={connectProvider}
+          onSkip={() => setSkippedConnect(true)}
+        />
+      )}
+
+      {/* Without this, the base-URL fields become unreachable the moment the
+          sign-in succeeds -- the connect card only ever shows requiredFields. */}
+      {connectMeta && connected && !row.decryptFailed && (
+        <button type="button" onClick={() => setShowCredentials(current => !current)} className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-[var(--a-border)] bg-[var(--a-card)] px-3 py-1.5 text-[10px] font-extrabold text-[var(--a-text-soft)] hover:border-[var(--a-info)] hover:text-[var(--a-info)]">
+          <ChevronDown size={12} className={showCredentials ? "rotate-180 transition" : "transition"} />Нэвтрэх мэдээлэл солих
+        </button>
+      )}
+
+      {showEditor && meta.fields.length > 0 && (
         <div className="mt-4 grid gap-2">
           {meta.fields.map(field => {
             const state = row.fields.find(item => item.key === field.key);
@@ -164,7 +222,7 @@ function ProviderCard({ row }: { row: IntegrationRow }) {
         </div>
       )}
 
-      {meta.freeForm && (
+      {showEditor && meta.freeForm && (
         <div className="mt-4 rounded-2xl bg-[var(--a-soft)] p-3">
           <p className="text-[10px] font-extrabold tracking-[.08em] text-[var(--a-info)]">НЭМЭЛТ ТҮЛХҮҮРҮҮД</p>
           {handTypedKeys.length > 0 ? (
@@ -185,7 +243,7 @@ function ProviderCard({ row }: { row: IntegrationRow }) {
         </div>
       )}
 
-      {(hasDirty || replaceAll) && (
+      {showEditor && (hasDirty || replaceAll) && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button type="button" onClick={save} disabled={busyKey !== null} className="inline-flex items-center gap-2 rounded-full bg-[#df1f3d] px-4 py-2 text-[11px] font-extrabold text-white disabled:opacity-60">{busyKey === "save" && <LoaderCircle className="animate-spin" size={12} />}Хадгалах</button>
           <button type="button" onClick={() => { setDrafts({}); setExtraRows([]); setReplaceAll(false); }} className="text-[11px] font-extrabold text-[var(--a-muted)]">Цуцлах</button>
@@ -194,7 +252,7 @@ function ProviderCard({ row }: { row: IntegrationRow }) {
       )}
 
       {row.provider === "ntfy" && <NotificationOutboxLog />}
-      {row.provider === "smartsoftware" && <SmartSoftwareSyncPanel />}
+      {row.provider === "smartsoftware" && !showConnect && <SmartSoftwareSyncPanel locations={locations} setLocations={setLocations} />}
     </div>
   );
 }
@@ -242,14 +300,13 @@ function NotificationOutboxLog() {
  * Тооллого. Stock is never written from here -- see
  * server/integrations/inventorySync.ts's runPullSnapshot.
  */
-function SmartSoftwareSyncPanel() {
+function SmartSoftwareSyncPanel({ locations, setLocations }: { locations: { id: string; name: string }[]; setLocations: (next: { id: string; name: string }[]) => void }) {
   const utils = trpc.useUtils();
   const statusQuery = trpc.admin.inventorySyncStatus.useQuery();
   const setCode = trpc.admin.setBranchExternalId.useMutation();
   const testConnection = trpc.admin.testIntegration.useMutation();
   const pullStock = trpc.admin.pullVendorStock.useMutation();
   const [drafts, setDrafts] = useState<Record<number, string>>({});
-  const [locations, setLocations] = useState<{ id: string; name: string }[]>([]);
   const [pulled, setPulled] = useState<Awaited<ReturnType<typeof pullStock.mutateAsync>> | null>(null);
   const data = statusQuery.data;
   if (statusQuery.isLoading || !data) return <p className="mt-3 flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={13} />Уншиж байна…</p>;
@@ -278,7 +335,10 @@ function SmartSoftwareSyncPanel() {
       setPulled(result);
       await Promise.all([utils.admin.inventorySyncStatus.invalidate(), utils.inventory.counts.invalidate()]);
       const created = result.ran ? result.branches.filter(branch => branch.countId).length : 0;
-      toast.success(created ? `${created} салбарт батлах тооллого үүслээ.` : "Зөрүү олдсонгүй — Smart POS-той таарч байна.");
+      const applied = result.ran ? result.autoApplied.length : 0;
+      toast.success(!created
+        ? "Зөрүү олдсонгүй — Smart POS-той таарч байна."
+        : applied ? `${applied} салбарын үлдэгдэл шинэчлэгдлээ.` : `${created} салбарт батлах тооллого үүслээ.`);
     } catch (error) { toast.error(messageFrom(error)); }
   };
 
@@ -287,9 +347,10 @@ function SmartSoftwareSyncPanel() {
     <div className="mt-4 grid gap-3 [&>*]:min-w-0">
       <p className={`rounded-xl p-3 text-[11px] leading-4 ${data.credentialsSet ? "bg-[var(--a-pos-soft)] text-[var(--a-pos)]" : "bg-[var(--a-soft)] text-[var(--a-muted)]"}`}>
         {data.credentialsSet
-          ? data.isActive ? "Нэвтрэх мэдээлэл тохирсон, идэвхтэй — 15 минут тутам үлдэгдэл татаж, зөрүүг батлах тооллого болгоно." : "Нэвтрэх мэдээлэл тохирсон. Автомат синк эхлэхийн тулд дээрх \"Идэвхтэй\" товчийг асаана уу (одоо ч гараар татаж болно)."
+          ? data.isActive ? "Нэвтрэх мэдээлэл тохирсон, идэвхтэй — 15 минут тутам үлдэгдэл татна." : "Нэвтрэх мэдээлэл тохирсон. Автомат синк эхлэхийн тулд дээрх \"Идэвхтэй\" товчийг асаана уу (одоо ч гараар татаж болно)."
           : "Смарт Ложикоос ирсэн нэвтрэх нэр, нууц үгээ дээр оруулаад хадгална уу."}
       </p>
+      <VendorStockAutoApplySwitch />
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={test} disabled={busy} className="inline-flex items-center gap-1.5 rounded-full border border-[var(--a-border)] bg-[var(--a-card)] px-3 py-1.5 text-[10px] font-extrabold text-[var(--a-text-soft)] hover:border-[var(--a-info)] hover:text-[var(--a-info)] disabled:opacity-50">
           {testConnection.isPending ? <LoaderCircle className="animate-spin" size={11} /> : <RefreshCw size={11} />}Холболт шалгах
@@ -322,11 +383,14 @@ function SmartSoftwareSyncPanel() {
           {pulled.branches.map(branch => (
             <p key={branch.branchId} className="mt-1 text-[var(--a-muted)]">{branch.branchName} ({branch.locationId}): {branch.countId ? <span className="font-bold text-[var(--a-info)]">{branch.code} — {branch.lines} зөрүүтэй бараа, батлахыг хүлээж байна</span> : "зөрүүгүй"}</p>
           ))}
+          {pulled.autoApplied.length > 0 && <p className="mt-1 font-bold text-[var(--a-pos)]">Автоматаар бичигдлээ: {pulled.autoApplied.reduce((sum, branch) => sum + branch.adjustedLines, 0)} бараа, {pulled.autoApplied.length} салбарт.</p>}
+          {pulled.autoApplySkipped && <p className="mt-1 font-bold text-[var(--a-warn)]">{pulled.autoApplySkipped}</p>}
           {pulled.unmappedLocations.length > 0 && <p className="mt-1 text-[var(--a-warn)]">Салбарт холбоогүй байршил: {pulled.unmappedLocations.join(", ")}</p>}
           {pulled.unknownSkuCount > 0 && <p className="mt-1 text-[var(--a-muted)]">Манайд байхгүй {pulled.unknownSkuCount} баркод алгаслаа{pulled.unknownSkus.length ? ` (${pulled.unknownSkus.slice(0, 5).join(", ")}…)` : ""}.</p>}
           {pulled.problems.map(problem => <p key={problem} className="mt-1 text-[var(--a-neg)]">{problem}</p>)}
         </div>
       )}
+      <VendorCatalogPanel />
       {data.streams.length > 0 && (
         <div className="grid gap-1.5">
           {data.streams.map(stream => (
@@ -341,7 +405,7 @@ function SmartSoftwareSyncPanel() {
 function EnvStatusCard() {
   const statusQuery = trpc.admin.envIntegrationStatus.useQuery();
   return (
-    <div className="rounded-3xl border border-[var(--a-border)] bg-[var(--a-card)] p-5">
+    <div className="admin-card p-5">
       <p className="text-[10px] font-extrabold tracking-[.14em] text-[var(--a-info)]">СЕРВЕРИЙН ТОХИРГОО (.env)</p>
       <h3 className="mt-1 font-bold">Сервер дээр тохируулдаг үйлчилгээнүүд</h3>
       <p className="mt-1 text-xs text-[var(--a-muted)]">Эдгээрийг энэ дэлгэцээс өөрчлөхгүй — зөвхөн тохируулагдсан эсэхийг харуулна. Нууц утга хэзээ ч харагдахгүй.</p>
@@ -370,11 +434,17 @@ export default function AdminIntegrationsPanel() {
 
   return (
     <div className="grid gap-4 [&>*]:min-w-0">
-      <div className="rounded-3xl border border-[var(--a-border)] bg-[var(--a-card)] p-5">
-        <div className="flex items-center justify-between gap-3">
-          <div><p className="text-[10px] font-extrabold tracking-[.14em] text-[var(--a-info)]">QPAY</p><h3 className="mt-1 font-bold">QPay төлбөр</h3><p className="mt-1 text-xs text-[var(--a-muted)]">Тохиргоог `.env`-ээр удирддаг, энэ дэлгэцээс өөрчлөх боломжгүй.</p></div>
-          {qpayQuery.isLoading ? <LoaderCircle className="animate-spin text-[var(--a-muted)]" size={16} /> : <span className={`rounded-full px-3 py-1 text-[10px] font-extrabold ${qpayQuery.data?.configured ? "bg-[var(--a-pos-soft)] text-[var(--a-pos)]" : "bg-[var(--a-soft)] text-[var(--a-muted)]"}`}>{qpayQuery.data?.configured ? "Тохируулагдсан" : "Тохируулаагүй"}</span>}
-        </div>
+      <div className="admin-card p-5">
+        <IntegrationCardHeader
+          meta={{ label: "QPay төлбөр", note: "Тохиргоог сервер дээрх .env файлаар удирддаг, энэ дэлгэцээс өөрчлөх боломжгүй." }}
+          status={qpayQuery.isLoading
+            ? { label: "Шалгаж байна…", className: "bg-[var(--a-soft)] text-[var(--a-muted)]" }
+            : qpayQuery.data?.configured
+              ? { label: "Тохируулагдсан", className: "bg-[var(--a-pos-soft)] text-[var(--a-pos)]" }
+              : { label: "Тохируулаагүй", className: "bg-[var(--a-soft)] text-[var(--a-muted)]" }}
+          accentKey="green"
+          iconKey="wallet"
+        />
       </div>
 
       {integrationsQuery.isLoading && <p className="flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>}

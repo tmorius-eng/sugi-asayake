@@ -235,9 +235,10 @@ import { sendNtfyTest } from "./notifications";
 import { notificationsRouter } from "./notificationsRouter";
 import { inventoryRouter } from "./inventoryRouter";
 import { getInventorySyncProvider, getInventorySyncStatus, runInventorySync, runPullSnapshot, setBranchExternalId } from "./integrations/inventorySync";
+import { applyVendorCatalog, buildVendorCatalogDiff } from "./integrations/vendorCatalog";
 import { createStorepayLoan, getStorepayAvailability, normaliseMobileNumber, storepayPossibleAmount } from "./storepay";
 // Registers the Smart Software adapter on import (side effect).
-import "./integrations/smartSoftware";
+import { clearSmartSoftwareTokenCache } from "./integrations/smartSoftware";
 import { assertImageSignature, imageContentTypes, processUploadedImageOrThrow } from "./_core/imageUpload";
 import { INTEGRATION_PROVIDERS } from "../shared/integrations";
 import { buildNotificationMessage, NOTIFICATION_GROUP_LABELS, NOTIFICATION_GROUPS, NTFY_TOPIC_FIELD } from "../shared/notification-events";
@@ -248,7 +249,7 @@ import { getAnalyticsReport, exportAnalyticsExcel, exportAnalyticsPdf, getAllCus
 import { siteMediaSlotKeys } from "../shared/site-media";
 import { siteTextSlotKeys } from "../shared/site-text";
 import { isRefundOwed } from "../shared/orders";
-import { storeSettingKeys, getStoreSettingSlot, fillTemplate, tokensIn, type StoreSettingKey } from "../shared/store-settings";
+import { storeSettingKeys, getStoreSettingSlot, checkStoreSettingFormat, fillTemplate, tokensIn, type StoreSettingKey } from "../shared/store-settings";
 import { formatMnt } from "@shared/format";
 
 const slugSchema = z.string().trim().min(2).max(200).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens only.");
@@ -2380,6 +2381,13 @@ export const appRouter = router({
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Тохиргоог хадгалж чадсангүй." });
       }
+      // clearSmartSoftwareTokenCache() documents itself as the reason a
+      // rotated password takes effect immediately, but until 2026-09-15
+      // nothing outside its own test ever called it: the cache is keyed
+      // baseUrl|username, so correcting a password under the same username
+      // kept using the old token for up to an hour. The connect card IS the
+      // credential-rotation flow, which makes this the path that needs it.
+      if (input.provider === "smartsoftware" && (Object.keys(set).length || input.clearKeys?.length || input.replaceAll)) clearSmartSoftwareTokenCache();
       // Key NAMES only, never values.
       await logAdminAction({ actorUserId: ctx.user.id, action: "integration.updated", entityType: "integration", metadata: { provider: input.provider, isActive: input.isActive, keysSet: Object.keys(set), keysCleared: input.clearKeys ?? [], replaceAll: Boolean(input.replaceAll) } });
       return result;
@@ -2465,6 +2473,41 @@ export const appRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Үлдэгдэл татаж чадсангүй." });
       }
       await logAdminAction({ actorUserId: ctx.user.id, action: "integration.stock_pulled", entityType: "integration", metadata: { provider: "smartsoftware", counts: result.ran ? result.branches.filter(branch => branch.countId).length : 0 } });
+      return result;
+    }),
+    // The vendor's prices and label text, as a list of DIFFERENCES
+    // (2026-09-15). A mutation rather than a query because it calls the
+    // vendor over the network: it should run when someone asks for it, not
+    // whenever a component mounts. Nothing is written here.
+    vendorCatalogDiff: adminProcedure.mutation(async ({ ctx }) => {
+      const provider = await getInventorySyncProvider({ requireActive: false });
+      if (!provider) throw new TRPCError({ code: "BAD_REQUEST", message: "Smart Software-ийн нэвтрэх нэр, нууц үгээ оруулаад хадгална уу." });
+      try {
+        const diff = await buildVendorCatalogDiff(provider);
+        await logAdminAction({ actorUserId: ctx.user.id, action: "integration.catalog_compared", entityType: "integration", metadata: { provider: "smartsoftware", priceRows: diff.priceRows.length, factRows: diff.factRows.length } });
+        return diff;
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Барааны мэдээлэл татаж чадсангүй." });
+      }
+    }),
+    // adminProcedure, not warehouseProcedure: a price is money. The input
+    // carries only WHICH barcodes to apply -- the server re-fetches and
+    // writes the vendor's own values, so a tampered request cannot set a
+    // price of its choosing.
+    applyVendorCatalog: adminProcedure.input(z.object({
+      kind: z.enum(["price", "facts"]),
+      skus: z.array(z.string().trim().min(1).max(80)).min(1).max(500),
+    })).mutation(async ({ ctx, input }) => {
+      const provider = await getInventorySyncProvider({ requireActive: false });
+      if (!provider) throw new TRPCError({ code: "BAD_REQUEST", message: "Smart Software-ийн нэвтрэх нэр, нууц үгээ оруулаад хадгална уу." });
+      let result;
+      try {
+        result = await applyVendorCatalog(provider, { kind: input.kind, skus: input.skus, actorUserId: ctx.user.id });
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Хэрэглэж чадсангүй." });
+      }
+      // Old -> new for every row, so a price change is answerable later.
+      await logAdminAction({ actorUserId: ctx.user.id, action: "integration.catalog_applied", entityType: "integration", metadata: { provider: "smartsoftware", kind: input.kind, applied: result.applied, changes: result.changes } });
       return result;
     }),
     // Sales/customer/district analytics for the people running the
@@ -3266,6 +3309,12 @@ export const appRouter = router({
       // this slot doesn't fill would be sent to a real customer as literal
       // text, so a typo is rejected here rather than discovered in an
       // inbox. A slot with no declared tokens accepts none at all.
+      // A slot can also declare the SHAPE its value must have (a GA4
+      // measurement id, a Meta pixel id). Before this existed the renderer
+      // simply dropped anything malformed, so a typo saved with a green
+      // toast and the tag then never loaded, with nothing to see in admin.
+      const formatProblem = checkStoreSettingFormat(input.settingKey, input.settingValue);
+      if (formatProblem) throw new TRPCError({ code: "BAD_REQUEST", message: formatProblem });
       const allowedTokens: readonly string[] = ("tokens" in slot ? slot.tokens : []) ?? [];
       const unknownTokens = tokensIn(input.settingValue).filter(token => !allowedTokens.includes(token));
       if (unknownTokens.length) {

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { LoaderCircle, RotateCcw, Save, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { storeSettingSlots, type StoreSettingKey } from "@shared/store-settings";
+import { PANEL_OWNED_GROUPS, checkStoreSettingFormat, storeSettingSlots, type StoreSettingKey } from "@shared/store-settings";
 
 type SettingRow = { settingKey: string; settingValue: string; updatedAt: Date };
 
@@ -12,7 +12,7 @@ const messageFrom = (error: unknown) => error instanceof Error ? error.message :
 // ContentTextPanel.tsx's homepage-copy groups -- this is that same pattern
 // applied to business-rule values (delivery fee, email template prose)
 // instead of marketing copy.
-const GROUPS = Array.from(new Set(storeSettingSlots.map(slot => slot.group)));
+const GROUPS = Array.from(new Set(storeSettingSlots.map(slot => slot.group))).filter(group => !PANEL_OWNED_GROUPS.includes(group));
 
 export default function AdminStoreSettingsPanel({ preview = false }: { preview?: boolean }) {
   const utils = trpc.useUtils();
@@ -33,12 +33,16 @@ export default function AdminStoreSettingsPanel({ preview = false }: { preview?:
     if (preview) return toast.message("Preview горим", { description: "Бодит хадгалалт зөвхөн хамгаалагдсан admin хэсэгт ажиллана." });
     const draft = drafts[settingKey];
     const value = (draft ?? settingByKey.get(settingKey)?.settingValue ?? fallbackValue).trim();
-    if (!value) return toast.error("Хоосон утга хадгалах боломжгүй.");
+    if (!value && !settingByKey.has(settingKey)) return toast.error("Хоосон утга хадгалах боломжгүй.");
+    const problem = value ? checkStoreSettingFormat(settingKey, value) : null;
+    if (problem) return toast.error(problem);
     setActiveKey(settingKey);
     try {
-      await updateSetting.mutateAsync({ settingKey, settingValue: value });
+      if (value) await updateSetting.mutateAsync({ settingKey, settingValue: value });
+      else await clearSetting.mutateAsync({ settingKey });
+      if (!value) setDrafts(current => { const next = { ...current }; delete next[settingKey]; return next; });
       await refresh();
-      toast.success("Тохиргоог хадгаллаа.");
+      toast.success(value ? "Тохиргоог хадгаллаа." : "Анхны утгыг сэргээлээ.");
     } catch (error) {
       toast.error(messageFrom(error));
     } finally {
@@ -110,14 +114,17 @@ export default function AdminStoreSettingsPanel({ preview = false }: { preview?:
                           ))}
                         </p>
                       )}
-                      {slot.type === "number" ? (
+                      {slot.type === "number" || ("inputType" in slot && slot.inputType === "line") ? (
                         <input
-                          type="number"
-                          min={0}
+                          type={slot.type === "number" ? "number" : "text"}
+                          min={slot.type === "number" ? 0 : undefined}
                           aria-label={slot.label}
                           value={value}
+                          placeholder={"placeholder" in slot ? slot.placeholder : undefined}
+                          autoComplete="off"
+                          spellCheck={false}
                           onChange={event => setDrafts(current => ({ ...current, [slot.key]: event.target.value }))}
-                          className="mt-3 h-11 w-full max-w-xs rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#3970a7]"
+                          className={`mt-3 h-11 w-full rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#3970a7] ${slot.type === "number" ? "max-w-xs" : "max-w-xl"}`}
                         />
                       ) : (
                         <textarea

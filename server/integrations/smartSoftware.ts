@@ -1,7 +1,7 @@
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { SMART_SOFTWARE_DEFAULT_INVENTORY_URL, SMART_SOFTWARE_DEFAULT_POS_URL } from "../../shared/integrations";
-import { registerInventorySyncProvider, type InventorySyncProvider, type StockSnapshot } from "./inventorySync";
+import { registerInventorySyncProvider, type CatalogSnapshot, type InventorySyncProvider, type StockSnapshot, type VendorDiscount, type VendorProduct } from "./inventorySync";
 
 /**
  * The Smart Software (Smart POS / Smart Inventory) adapter (2026-09-12) --
@@ -84,6 +84,64 @@ const tokenCache = new Map<string, CachedToken>();
 /** For the tests, and so a rotated password takes effect immediately. */
 export function clearSmartSoftwareTokenCache() { tokenCache.clear(); }
 
+/**
+ * Their newer (Retail-family) services wrap every payload as
+ * { Success, Message, ErrorCode, ExceptionType, Data: [...] } while the older
+ * Inventory endpoints answer with a bare array. Our default inventory host IS
+ * the Retail one, so accepting only the bare array would have failed against
+ * the documented response the moment real credentials arrived.
+ */
+function unwrapList(payload: unknown, what: string): unknown[] {
+  if (Array.isArray(payload)) return payload;
+  if (payload && typeof payload === "object") {
+    const envelope = payload as { Success?: unknown; Message?: unknown; Data?: unknown };
+    if (Array.isArray(envelope.Data)) return envelope.Data;
+    if (envelope.Success === false) throw new SmartSoftwareError(`${what}: ${typeof envelope.Message === "string" && envelope.Message ? envelope.Message : "вендор татгалзлаа."}`);
+  }
+  throw new SmartSoftwareError(`${what}: массив хүлээж байсан.`);
+}
+
+const asText = (value: unknown): string | null => {
+  const text = typeof value === "string" ? value.trim() : "";
+  return text ? text : null;
+};
+const asMoney = (value: unknown): number | null => {
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount > 0 ? Math.round(amount) : null;
+};
+
+/** A YYYY-MM-DD (or ISO) day, compared as a day and never as an instant. */
+const asDay = (value: unknown): string | null => {
+  const text = asText(value);
+  if (!text) return null;
+  const day = text.slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : null;
+};
+
+function readDiscounts(raw: unknown, today: string): { active: VendorDiscount | null; upcoming: VendorDiscount[] } {
+  const all: VendorDiscount[] = [];
+  for (const entry of Array.isArray(raw) ? raw : []) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const row = entry as { begin_date?: unknown; end_date?: unknown; percent?: unknown; amount?: unknown };
+    const percent = Number(row.percent);
+    const discount: VendorDiscount = {
+      beginDate: asDay(row.begin_date),
+      endDate: asDay(row.end_date),
+      percent: Number.isFinite(percent) && percent > 0 ? percent : null,
+      amountMnt: asMoney(row.amount),
+    };
+    if (discount.percent === null && discount.amountMnt === null) continue;
+    all.push(discount);
+  }
+  const started = (discount: VendorDiscount) => !discount.beginDate || discount.beginDate <= today;
+  const ended = (discount: VendorDiscount) => Boolean(discount.endDate) && discount.endDate! < today;
+  const live = all.filter(discount => started(discount) && !ended(discount));
+  // Their docs describe the list as "in force now plus what is coming"; when
+  // several overlap, the deepest one is what the shop's own till would ring.
+  const active = live.sort((a, b) => (b.percent ?? 0) - (a.percent ?? 0) || (b.amountMnt ?? 0) - (a.amountMnt ?? 0))[0] ?? null;
+  return { active, upcoming: all.filter(discount => !started(discount)) };
+}
+
 function parseJson(body: string, what: string): unknown {
   try { return JSON.parse(body); } catch { throw new SmartSoftwareError(`${what}: хариу JSON биш байна (${body.slice(0, 80).replace(/\s+/g, " ")})`); }
 }
@@ -150,16 +208,28 @@ export class SmartSoftwareProvider implements InventorySyncProvider {
       .filter(row => row.id);
   }
 
-  /** Every product the vendor knows, with its count at every location. A
-   *  product with no entry for a location simply has no number there. */
-  async pullStockSnapshot(): Promise<StockSnapshot> {
+  /**
+   * Every product the vendor knows: its count at every location, its price,
+   * the discounts on it, and its label text. One request -- their own docs
+   * call this the "refresh prices and stock overnight" endpoint, with no
+   * paging and no filter.
+   *
+   * Two settings on THEIR side decide what arrives, and both have bitten
+   * integrations before (their docs say so outright): "ECommerce борлуулах
+   * бараа" limits the feed to products flagged for online sale, and "Онлайн
+   * худалдааны үлдэгдэл татах" limits which locations report stock at all.
+   * A short feed is therefore a configuration signal, never permission to
+   * zero a catalogue -- see runPullSnapshot's sanity gate.
+   */
+  async pullCatalogSnapshot(): Promise<CatalogSnapshot> {
     const raw = await this.getJson(this.inventoryBaseUrl, "/api/inventory/products", "Барааны жагсаалт");
-    if (!Array.isArray(raw)) throw new SmartSoftwareError("Барааны жагсаалт: массив хүлээж байсан.");
-    const products: StockSnapshot["products"] = [];
+    const rows = unwrapList(raw, "Барааны жагсаалт");
+    const today = new Date(this.now()).toISOString().slice(0, 10);
+    const products: VendorProduct[] = [];
     const locationIds = new Set<string>();
-    for (const row of raw) {
+    for (const row of rows) {
       if (typeof row !== "object" || row === null) continue;
-      const product = row as { barcode?: unknown; name?: unknown; id?: unknown; stock_locations?: unknown };
+      const product = row as Record<string, unknown>;
       // Barcode is the shared key with our catalogue (products.sku /
       // product_variants.sku); a product without one cannot be matched.
       const sku = typeof product.barcode === "string" ? product.barcode.trim() : String(product.barcode ?? "").trim();
@@ -175,9 +245,42 @@ export class SmartSoftwareProvider implements InventorySyncProvider {
         locationIds.add(locationId);
         stock[locationId] = (stock[locationId] ?? 0) + quantity;
       }
-      products.push({ sku, name: typeof product.name === "string" ? product.name : String(product.id ?? sku), stock });
+      const discounts = readDiscounts(product.item_discounts, today);
+      // "instructions" and "termsOfUse" are two label fields that both answer
+      // "how do I use this"; a product can carry either or both.
+      const instructions = asText(product.instructions);
+      const termsOfUse = asText(product.termsOfUse);
+      products.push({
+        sku,
+        name: typeof product.name === "string" && product.name.trim() ? product.name.trim() : String(product.id ?? sku),
+        stock,
+        priceMnt: asMoney(product.price),
+        basePriceMnt: asMoney(product.baseprice),
+        activeDiscount: discounts.active,
+        upcomingDiscounts: discounts.upcoming,
+        facts: {
+          ingredients: asText(product.ingredients),
+          usageInstructions: instructions && termsOfUse && instructions !== termsOfUse ? `${instructions}\n\n${termsOfUse}` : instructions ?? termsOfUse,
+          warnings: asText(product.warning),
+          brand: asText(product.brandName),
+          category: asText(product.itemSubCategoryName) ?? asText(product.itemCatogoryName),
+          nameEng: asText(product.nameeng),
+          vendorName: asText(product.vendorName),
+        },
+        isActive: String(product.activeStatus ?? "Y").trim().toUpperCase() !== "N",
+      });
     }
     return { products, locationIds: Array.from(locationIds), fetchedAt: new Date(this.now()) };
+  }
+
+  /** The counts alone, for the stock path that has always consumed them. */
+  async pullStockSnapshot(): Promise<StockSnapshot> {
+    const snapshot = await this.pullCatalogSnapshot();
+    return {
+      products: snapshot.products.map(product => ({ sku: product.sku, name: product.name, stock: product.stock })),
+      locationIds: snapshot.locationIds,
+      fetchedAt: snapshot.fetchedAt,
+    };
   }
 
   /** Never throws: the admin card shows `detail` either way. */

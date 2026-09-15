@@ -167,6 +167,11 @@ export default function Shop() {
     return () => clearTimeout(handle);
   }, [search]);
   const isSearching = debouncedSearch.length >= 2;
+  // On the DEBOUNCED term, never the raw input: firing per keystroke would
+  // send GA one "search" hit per letter and make the report meaningless.
+  useEffect(() => {
+    if (debouncedSearch.length >= 2) trackEvent("search", { search_term: debouncedSearch });
+  }, [debouncedSearch]);
   // Frontend performance audit (2026-09-02): category/skinType/in-stock/
   // sort/pagination now happen server-side (see getPublishedCatalogPage's
   // own comment) instead of shipping the full ~937-row catalog to the

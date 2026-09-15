@@ -135,7 +135,18 @@ export default function Checkout() {
   const storeCreditBalanceQuery = trpc.cart.myStoreCreditBalance.useQuery(undefined, { enabled: isAuthenticated });
   const storeCreditBalanceMnt = storeCreditBalanceQuery.data ?? 0;
   const [useStoreCredit, setUseStoreCredit] = useState(false);
-  const cartItems = cartQuery.data?.items ?? [];
+  // Memoised so the begin_checkout effect below has a stable dependency
+  // rather than a fresh array identity on every render.
+  const cartItems = useMemo(() => cartQuery.data?.items ?? [], [cartQuery.data]);
+  // GA4/Meta funnel step between add_to_cart and purchase. Fired once, when
+  // the cart first has contents on this screen -- without the ref, every
+  // quantity change on the checkout page would count as a new checkout.
+  const beginCheckoutFiredRef = useRef(false);
+  useEffect(() => {
+    if (beginCheckoutFiredRef.current || !cartItems.length) return;
+    beginCheckoutFiredRef.current = true;
+    trackEvent("begin_checkout", { value: cartItems.reduce((sum, item) => sum + item.priceMnt * item.quantity, 0), items: cartItems.map(item => ({ item_id: item.sku, item_name: item.name, price: item.priceMnt, quantity: item.quantity })) });
+  }, [cartItems]);
   // Gift cards only (2026-09-14): nothing to deliver, no branch to pick from.
   // The server applies the same rule (shared/gift-cards.ts) and ignores
   // whatever delivery fields it is sent for such a basket.

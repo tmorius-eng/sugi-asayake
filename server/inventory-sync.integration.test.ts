@@ -23,7 +23,10 @@ const describeWithDatabase = process.env.RUN_AUTH_INTEGRATION_TESTS === "1" && p
 describeWithDatabase("inventory sync runners (fake provider)", () => {
   const marker = `sync${Date.now().toString(36)}`;
   const namespace = `test-${marker}`;
-  const options = { namespace, lagSeconds: 0 };
+  // autoApply is pinned per test rather than read from the shop's settings
+  // row: these cases are about the bookkeeping, and the default (on) is
+  // exercised by its own describe block at the bottom of this file.
+  const options = { namespace, lagSeconds: 0, autoApply: false };
   const skuA = `98${Date.now().toString().slice(-11)}`;
   const skuB = `97${Date.now().toString().slice(-11)}`;
   const locationId = `LOC-${marker}`;
@@ -172,6 +175,88 @@ describeWithDatabase("inventory sync runners (fake provider)", () => {
     const lines = await (await db()).select().from(stockCountLines).where(eq(stockCountLines.countId, result.branches[0].countId!));
     // Stored under OUR barcode, not the vendor's spacing.
     expect(lines[0]).toMatchObject({ scannedCode: skuA, countedQty: 21 });
+  });
+
+
+  // ---- auto-apply (2026-09-15) ------------------------------------------
+  // Tom's call: stock posts by itself, so nobody approves a stocktake every
+  // fifteen minutes. What must still hold is that it posts THROUGH the count
+  // path -- on the ledger, with a stocktake left behind as the record -- and
+  // that it stops itself when the vendor's feed stops making sense.
+  const autoOptions = { ...options, autoApply: true };
+
+  it("posts the vendor's figures straight to stock, on the ledger, with no person attached", async () => {
+    const database = await db();
+    const provider = new FakeInventorySyncProvider();
+    const before = await shelf(variantA);
+    provider.snapshot = snapshotOf({ [skuA]: { [locationId]: before + 5 }, [skuB]: { [locationId]: 0 } });
+
+    const result = await runPullSnapshot(provider, autoOptions);
+    expect(result.ran).toBe(true);
+    if (!result.ran) return;
+    expect(result.autoApplied).toHaveLength(1);
+    expect(result.autoApplySkipped).toBeNull();
+    expect(await shelf(variantA)).toBe(before + 5);
+
+    const countId = result.branches[0].countId!;
+    const [count] = await database.select().from(stockCounts).where(eq(stockCounts.id, countId)).limit(1);
+    // Posted, not merely closed: the stocktake is the history of what moved.
+    expect(count.status).toBe("posted");
+    // An automatic adjustment is never attributed to whoever was logged in.
+    expect(count.postedByUserId).toBeNull();
+    const movements = await database.select().from(stockMovements).where(and(eq(stockMovements.refType, "count"), eq(stockMovements.refId, countId)));
+    expect(movements).toHaveLength(1);
+    expect(movements[0].actorUserId).toBeNull();
+    expect(movements[0].delta).toBe(5);
+  });
+
+  it("leaves a product the vendor did not send completely alone", async () => {
+    const database = await db();
+    await applyBranchStockDelta(database, branchId, variantB, 6, { type: "receipt", note: `${marker} keep` });
+    const kept = await shelf(variantB);
+    const provider = new FakeInventorySyncProvider();
+    // Only A is in the feed. B must not be read as "the vendor says zero".
+    provider.snapshot = snapshotOf({ [skuA]: { [locationId]: 3 } });
+    await runPullSnapshot(provider, autoOptions);
+    expect(await shelf(variantB)).toBe(kept);
+  });
+
+  it("stops itself when the vendor's list collapses, and says so", async () => {
+    const database = await db();
+    const provider = new FakeInventorySyncProvider();
+    // A full feed first, so the next run has something to compare against.
+    provider.snapshot = snapshotOf({ [skuA]: { [locationId]: 9 }, [skuB]: { [locationId]: 9 } });
+    await runPullSnapshot(provider, { ...autoOptions, sanityDropPercent: 30 });
+    const settled = await shelf(variantA);
+
+    // Their docs' own warning made real: untick "ECommerce борлуулах бараа"
+    // in Retail and the feed shrinks. Applied blindly, the rest of the
+    // catalogue would be zeroed in one run.
+    provider.snapshot = snapshotOf({ [skuA]: { [locationId]: 1 } });
+    const result = await runPullSnapshot(provider, { ...autoOptions, sanityDropPercent: 30 });
+    expect(result.ran).toBe(true);
+    if (!result.ran) return;
+    expect(result.autoApplied).toHaveLength(0);
+    expect(result.autoApplySkipped).toContain("%");
+    expect(await shelf(variantA)).toBe(settled);
+
+    const countId = result.branches[0].countId!;
+    const [count] = await database.select().from(stockCounts).where(eq(stockCounts.id, countId)).limit(1);
+    expect(count.status).toBe("submitted"); // back in the approval queue
+    const alerts = await database.select().from(notificationOutbox).where(eq(notificationOutbox.eventType, "stock.vendor_sync_blocked"));
+    expect(alerts.length).toBeGreaterThan(0);
+  });
+
+  it("keeps the approval queue quiet while it is posting its own counts", async () => {
+    const database = await db();
+    const provider = new FakeInventorySyncProvider();
+    const before = (await database.select({ id: notificationOutbox.id }).from(notificationOutbox).where(eq(notificationOutbox.eventType, "count.submitted"))).length;
+    provider.snapshot = snapshotOf({ [skuA]: { [locationId]: (await shelf(variantA)) + 2 } });
+    await runPullSnapshot(provider, autoOptions);
+    const after = (await database.select({ id: notificationOutbox.id }).from(notificationOutbox).where(eq(notificationOutbox.eventType, "count.submitted"))).length;
+    // A "please approve this" push every fifteen minutes for something
+    // nobody has to approve is how a notification channel gets muted.
+    expect(after).toBe(before);
   });
 
   it("pushes only movements at a mapped branch, never the ones that came from the vendor", async () => {

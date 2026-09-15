@@ -2,9 +2,10 @@ import { and, asc, eq, gt, inArray, lt, ne, or, isNull, sql } from "drizzle-orm"
 import { sqlInt } from "../_core/sqlSafe";
 import { branches, branchStock, externalRefs, integrationSyncState, stockMovements } from "../../drizzle/schema";
 import { normaliseBarcode } from "../../shared/barcode";
-import { getDb, getActiveIntegrationConfig, getIntegrationSettings } from "../db";
-import { createSnapshotCount, resolveCodes } from "../inventory";
+import { getDb, getActiveIntegrationConfig, getIntegrationSettings, getStoreSettingNumber, getStoreSettingValue } from "../db";
+import { SYSTEM_INVENTORY_ACTOR, createSnapshotCount, postCount, resolveCodes } from "../inventory";
 import { applyBranchStockDelta } from "../stockLedger";
+import { enqueueNotification } from "../notificationOutbox";
 
 /**
  * Syncing stock with the shop's POS vendor, Smart Software (2026-09-11,
@@ -38,6 +39,41 @@ export type ExternalSale = { externalId: string; branchExternalId: string; occur
 /** One product line per barcode, with its count at each vendor location. */
 export type StockSnapshot = { products: { sku: string; name: string; stock: Record<string, number> }[]; locationIds: string[]; fetchedAt: Date };
 
+/**
+ * Everything the vendor's product feed carries, not just the counts
+ * (2026-09-15). The same endpoint the stock snapshot already reads returns
+ * the selling price, the discounts in force, and the label text (ingredients,
+ * how to use, warnings) -- all of which we were parsing past and throwing
+ * away. Prices and facts never move on their own: they reach a diff screen
+ * where a person picks the rows to apply. Stock is the only stream that
+ * posts by itself, and only through the stocktake path.
+ */
+export type VendorDiscount = { beginDate: string | null; endDate: string | null; percent: number | null; amountMnt: number | null };
+export type VendorFacts = {
+  ingredients: string | null;
+  usageInstructions: string | null;
+  warnings: string | null;
+  brand: string | null;
+  category: string | null;
+  nameEng: string | null;
+  vendorName: string | null;
+};
+export type VendorProduct = {
+  sku: string;
+  name: string;
+  stock: Record<string, number>;
+  priceMnt: number | null;
+  basePriceMnt: number | null;
+  /** The discount in force at fetch time, already resolved from the list. */
+  activeDiscount: VendorDiscount | null;
+  /** Dated later than today. Shown, never scheduled -- that is our promo system's job. */
+  upcomingDiscounts: VendorDiscount[];
+  facts: VendorFacts;
+  /** The vendor's own "sell this" flag; "N" means retired in their system. */
+  isActive: boolean;
+};
+export type CatalogSnapshot = { products: VendorProduct[]; locationIds: string[]; fetchedAt: Date };
+
 export interface InventorySyncProvider {
   readonly name: string;
   testConnection(): Promise<{ ok: boolean; detail: string }>;
@@ -46,6 +82,8 @@ export interface InventorySyncProvider {
   pullSales?(cursor: string | null): Promise<{ sales: ExternalSale[]; nextCursor: string | null }>;
   /** The vendor's own stock figures, per location code. */
   pullStockSnapshot?(): Promise<StockSnapshot>;
+  /** The same feed, with price, discounts and label text kept. */
+  pullCatalogSnapshot?(): Promise<CatalogSnapshot>;
   /** The vendor's location codes, for the branch mapping form. */
   listLocations?(): Promise<{ id: string; name: string }[]>;
 }
@@ -54,7 +92,18 @@ const PROVIDER = "smartsoftware";
 const PUSH_LAG_SECONDS = 120;
 const PUSH_BATCH = 200;
 
-export type SyncOptions = { namespace?: string; lagSeconds?: number };
+export type SyncOptions = {
+  namespace?: string;
+  lagSeconds?: number;
+  /**
+   * Overrides the vendor-stock-auto-apply store setting. Only the tests pass
+   * it: a runner whose behaviour depended on the shop's current settings row
+   * would assert something different on every machine.
+   */
+  autoApply?: boolean;
+  /** Overrides vendor-stock-sanity-drop-percent, for the same reason. */
+  sanityDropPercent?: number;
+};
 const namespaceOf = (options?: SyncOptions) => options?.namespace ?? PROVIDER;
 
 let registered: ((config: Record<string, string>) => InventorySyncProvider | null) | null = null;
@@ -194,10 +243,25 @@ export async function runPullSales(provider: InventorySyncProvider, options: Syn
  * unmatched barcodes and any unmapped location come back in the result so
  * the admin card can say what was skipped and why.
  */
+/**
+ * How many products the last successful pull carried, so the next one can
+ * tell "the shop retired a few lines" from "their feed just collapsed".
+ * Parked in the snapshot cursor, which nothing displays; an older run that
+ * stored a bare timestamp simply reports no previous size.
+ */
+function previousSnapshotSize(cursor: string | null | undefined): number | null {
+  if (!cursor) return null;
+  try {
+    const parsed = JSON.parse(cursor) as { products?: unknown };
+    return typeof parsed.products === "number" ? parsed.products : null;
+  } catch { return null; }
+}
+
 export async function runPullSnapshot(provider: InventorySyncProvider, options: SyncOptions = {}) {
   if (!provider.pullStockSnapshot) return { ran: false as const, skipped: "provider cannot report stock" };
   const namespace = namespaceOf(options);
   const db = await requireDb();
+  const previousState = await readState("snapshot", namespace);
   const snapshot = await provider.pullStockSnapshot();
   const refs = await branchExternalIds(namespace);
   const resolved = await resolveCodes(snapshot.products.map(product => product.sku));
@@ -214,6 +278,18 @@ export async function runPullSnapshot(provider: InventorySyncProvider, options: 
     matched.set(product.sku, variantId);
     if (!skuByVariant.has(variantId)) skuByVariant.set(variantId, normaliseBarcode(product.sku));
   }
+
+  // ---- auto-apply decision (2026-09-15, Tom's call) --------------------
+  // Stock posts by itself. The gate below is not an approval step -- it is
+  // the guard against the one failure their own docs warn about: unticking
+  // "ECommerce борлуулах бараа" in Retail shrinks the feed to a handful of
+  // products, and applying that blindly would zero the rest of the catalogue.
+  const autoApplyWanted = options.autoApply ?? (await getStoreSettingValue("vendor-stock-auto-apply")).trim() !== "0";
+  const previousSize = previousSnapshotSize(previousState?.cursor);
+  const dropLimit = options.sanityDropPercent ?? await getStoreSettingNumber("vendor-stock-sanity-drop-percent");
+  const dropPercent = previousSize && previousSize > 0 ? Math.round(((previousSize - snapshot.products.length) / previousSize) * 100) : 0;
+  const sanityBlocked = dropLimit > 0 && dropPercent > dropLimit;
+  const willAutoApply = autoApplyWanted && !sanityBlocked;
 
   const stamp = snapshot.fetchedAt.toISOString().slice(0, 16).replace("T", " ");
   const results: { branchId: number; branchName: string; locationId: string; countId: number | null; code: string | null; lines: number }[] = [];
@@ -239,14 +315,45 @@ export async function runPullSnapshot(provider: InventorySyncProvider, options: 
     const [branchRow] = await db.select({ name: branches.name }).from(branches).where(eq(branches.id, branchId)).limit(1);
     if (!lines.length) { results.push({ branchId, branchName: branchRow?.name ?? String(branchId), locationId, countId: null, code: null, lines: 0 }); continue; }
     try {
-      const count = await createSnapshotCount({ branchId, sourceLabel: `${locationId} · ${stamp}`, lines });
+      const count = await createSnapshotCount({ branchId, sourceLabel: `${locationId} · ${stamp}`, lines, silent: willAutoApply });
       results.push({ branchId, branchName: count.branchName, locationId, countId: count.id, code: count.code, lines: lines.length });
     } catch (error) {
       problems.push(`${branchRow?.name ?? branchId}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
   const unmappedLocations = snapshot.locationIds.filter(locationId => !refs.byTheirs.has(locationId));
-  await writeState("snapshot", { cursor: snapshot.fetchedAt.toISOString(), ok: !problems.length, error: problems.length ? problems.slice(0, 3).join("; ") : null }, namespace);
+
+  // The counts above post straight away unless the gate stopped them.
+  // Posting goes through postCount, so every figure still moves on the
+  // stock_movements ledger and leaves a stocktake behind as its history --
+  // "no manual work" must not mean "no record of what changed".
+  const autoApplied: { branchId: number; countId: number; adjustedLines: number }[] = [];
+  if (willAutoApply) {
+    for (const result of results) {
+      if (!result.countId) continue;
+      try {
+        const posted = await postCount(SYSTEM_INVENTORY_ACTOR, result.countId, { automatic: true });
+        autoApplied.push({ branchId: result.branchId, countId: result.countId, adjustedLines: posted.adjustedLines });
+      } catch (error) {
+        problems.push(`${result.branchName}: батлахад алдаа гарлаа — ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  }
+  const autoApplySkipped = autoApplyWanted && sanityBlocked
+    ? `Вендорын жагсаалт ${previousSize} → ${snapshot.products.length} болж ${dropPercent}%-иар багассан тул автоматаар бичсэнгүй. Бараа хүлээн авах → Тооллого дээр шалгаад батална уу.`
+    : null;
+  if (autoApplySkipped) {
+    problems.push(autoApplySkipped);
+    // Deduped per day: a feed that stays short would otherwise re-alert every
+    // 15 minutes, which is how a real warning gets muted.
+    await enqueueNotification(db, "stock.vendor_sync_blocked", { previous: previousSize ?? 0, current: snapshot.products.length, dropPercent }, { dedupeKey: `vendor-sync-blocked:${namespace}:${snapshot.fetchedAt.toISOString().slice(0, 10)}` });
+  }
+
+  await writeState("snapshot", {
+    cursor: JSON.stringify({ at: snapshot.fetchedAt.toISOString(), products: snapshot.products.length }),
+    ok: !problems.length,
+    error: problems.length ? problems.slice(0, 3).join("; ") : null,
+  }, namespace);
   return {
     ran: true as const,
     products: snapshot.products.length,
@@ -256,6 +363,9 @@ export async function runPullSnapshot(provider: InventorySyncProvider, options: 
     branches: results,
     unmappedLocations,
     problems,
+    autoApplied,
+    autoApplySkipped,
+    previousProducts: previousSize,
   };
 }
 

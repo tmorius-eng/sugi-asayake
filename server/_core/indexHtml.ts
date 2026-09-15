@@ -1,5 +1,6 @@
 import { getSiteMedia, getSiteText, getStoreSettingValue, getStorefrontBranches } from "../db";
 import { getSiteTextSlot, type SiteTextSlotKey } from "../../shared/site-text";
+import { checkStoreSettingFormat } from "../../shared/store-settings";
 import { getSiteMediaSlot } from "../../shared/site-media";
 import { ENV } from "./env";
 import { resolveRouteMeta } from "./routeMeta";
@@ -66,9 +67,15 @@ async function resolveValues(): Promise<Map<string, string>> {
   // Measurement ids (2026-09-14): handed to /vendor/analytics-init.js as a
   // JSON data block; the tags themselves load only after cookie consent.
   const [ga4Id, pixelId] = await Promise.all([getStoreSettingValue("analytics-ga4-measurement-id"), getStoreSettingValue("analytics-meta-pixel-id")]);
+  // The format lives in shared/store-settings.ts so the admin screen, the
+  // save mutation and this renderer cannot disagree. Blanking a malformed id
+  // stays as defence in depth -- a row saved before the format existed is
+  // still readable, and must not reach gtag().
+  const keepValid = (key: "analytics-ga4-measurement-id" | "analytics-meta-pixel-id", value: string) =>
+    checkStoreSettingFormat(key, value) ? "" : value.trim();
   const analyticsConfig = JSON.stringify({
-    ga4: /^G-[A-Z0-9]{4,20}$/i.test(ga4Id.trim()) ? ga4Id.trim() : "",
-    metaPixel: /^\d{6,20}$/.test(pixelId.trim()) ? pixelId.trim() : "",
+    ga4: keepValid("analytics-ga4-measurement-id", ga4Id),
+    metaPixel: keepValid("analytics-meta-pixel-id", pixelId),
   }).replace(/</g, "\\u003c");
   // Search Console / Meta Business verification tokens (2026-09-14): pasted
   // in /admin -> Дэлгүүрийн тохиргоо, rendered as the <meta> each service

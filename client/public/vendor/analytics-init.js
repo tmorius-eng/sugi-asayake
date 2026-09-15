@@ -75,6 +75,9 @@
       var name = FB_EVENT[event];
       var fbParams = { currency: params.currency || "MNT", value: params.value };
       if (params.items) { fbParams.content_ids = params.items.map(function (i) { return i.item_id; }); fbParams.content_type = "product"; }
+      // GA4 calls it search_term, Meta's Search event expects search_string.
+      // Rebuilding fbParams from scratch dropped it entirely.
+      if (params.search_term) fbParams.search_string = params.search_term;
       if (name) window.fbq("track", name, fbParams); else window.fbq("trackCustom", event, fbParams);
     }
   };

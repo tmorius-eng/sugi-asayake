@@ -98,6 +98,7 @@ pnpm exec vitest run --no-file-parallelism
 
 **Шалгагдаагүй/хараахан идэвхгүй:**
 - QPay төлбөр (жинхэнэ merchant credential шаардана; ⚠️ 2026-09-12: QPay-д **sandbox** орчин байдаг — `QPAY_ENVIRONMENT=sandbox` + sandbox merchant эрхээр бүх урсгалыг гэрээний өмнө туршиж болно)
+- **Smart Software** (код бэлэн, эрх хүлээж байна): холбогдмогц 15 мин тутам үлдэгдэл татаж **автоматаар** нөөц болно (Бараа хүлээн авах → Тооллого нь түүх). Үнэ/хөнгөлөлт/найрлага-заавар-анхааруулга нь **батлуулдаг** зөрүүний дэлгэцээр. ⚠️ Эхний таталтыг заавал `vendor-stock-auto-apply=0`-оор, 1 салбар дээр хийж нүдээр шалгаад л автоматыг ас.
 - **StorePay** (2026-09-12, код бэлэн, туршигдаагүй): 4 салбар бүгд StorePay хүлээн авдаг тул сайтад нэмэв. Tom StorePay-ээс **7 утга** авах хэрэгтэй: auth хаяг, api хаяг, апп-ын нэр/нууц үг, үндсэн нэр/нууц үг, дэлгүүрийн код (storeId) → /admin → Интеграцууд → StorePay. Бүгд орж, "Идэвхтэй" болтол checkout дээр харагдахгүй. ⚠️ Онлайн төлбөр (QPay ба StorePay) зөвхөн **нэвтэрсэн** хэрэглэгчид харагдана.
 - SMS (Brevo) — SMS кредит/route-ийг Tom баталгаажуулаагүй хэвээр (имэйл тал ажиллаж байгаа нь баталгаажсан, доор "Brevo API" хэсгийг үзнэ үү)
 - eBarimt, StorePay, шууд карт төлбөр, эльч (eBuuhia) хүргэлт — бүгд Tom-ийн биечлэн хийх бизнесийн алхам шаардана, код бэлэн биш (eBarimt зөвхөн inert schema бэлэн — [EBARIMT.md](EBARIMT.md))
@@ -109,6 +110,7 @@ pnpm exec vitest run --no-file-parallelism
 Өдөр бүрийн бүрэн тэмдэглэл HISTORY.md-д байна — тодорхой bug/шийдвэрийн
 шалтгааныг мэдэх хэрэгтэй үед л тэнд гарчгаар хайна.
 
+- (09-15) **Хэмжилт (GA4/Pixel) дэлгэц**, Smart Software холболтын карт, **вендорын үлдэгдэл автомат** + үнэ/факт батлах дэлгэц (0083)
 - (09-15) **Токен хэмнэлт** — энэ гарын авлага 165 KB → ~25 KB; дүрэм: [docs/TOKEN-USAGE.md](TOKEN-USAGE.md)
 - (09-14) **Zochil-той харьцуулалт** — /about, /careers хуудас, ажлын байрны зар (`job_postings`, 0081) + ирсэн анкет (`job_applications`, 0082), барааны QR код, YouTube холбоос
 - (09-14) **Танилцуулга v4** (`docs/SUGI-ASAYAKE-presentation-v4.pptx`) — 16 хэсэг, 46 frame, Morph, QR
@@ -137,6 +139,8 @@ pnpm exec vitest run --no-file-parallelism
 - Захиалга бичдэг шинэ зам бүр `clientRequestId` (idempotency) авна.
 - Борлуулалтын тоо `settledSaleSql` (`paid AND status<>'cancelled'`) — өөрөө нөхцөл бичихгүй.
 - Барааны үнэ ХОЁР газар (`products.priceMnt` + `product_variants.priceMnt`) — шинэ зам хоёуланг бичих эсэхийг шалга.
+- Вендорын үлдэгдэл **автоматаар** нөөц болдог (`vendor-stock-auto-apply=1`) ч зөвхөн тооллогын замаар — `postCount(..., { automatic: true })`. Шинэ автомат бичигч гаргахгүй.
+- Store setting-д формат шаардлагатай бол `format` slot-д бич — regex-ийг хоёр дахь газар хуулахгүй (`checkStoreSettingFormat`).
 - zod update schema-д `.partial()` биш **`partialForUpdate()`** (zod 4-д `.default()` partial дотор ч хэрэгждэг).
 - Migration нэг нэгээр: `pnpm exec tsx scripts/db-apply-migration.ts drizzle/00NN_*.sql` (admin эрхээр, `DATABASE_ADMIN_URL`).
 
@@ -191,9 +195,10 @@ session-ий тэмдэглэл HISTORY.md-д, дүрэм л энд. Ажилл�
 
 ## ⚠️ Tom-оос хүлээж буй (2026-09-14, "Za bugdiin hii"-ийн дараа)
 - **Staging DNS**: Cloudflare → karkaron.com → DNS → CNAME `sugi-staging` → `bbd3128e-486e-481d-8c21-f9d3d240a56c.cfargotunnel.com`, proxied. Дараа нь `https://sugi-staging.karkaron.com` (өөрийн `sugi_staging` схем — prod-ын 2026-09-14-ний хуулбар, туршилтын захиалга энд хийнэ; push илгээхгүй).
-- **Хэмжилт**: GA4 Measurement ID + Meta Pixel ID → /admin → Дэлгүүрийн тохиргоо → SEO ба баталгаажуулалт. Хоосон бол юу ч ачаалагдахгүй.
+- **Хэмжилт**: GA4 Measurement ID + Meta Pixel ID → /admin → **Хэмжилт** (09-15-аас тусдаа цэс). Буруу форматтай ID одоо хадгалагдахгүй — өмнө нь ногоон хадгалагдаад чимээгүй ачаалагддаггүй байв.
 - **Захиалгын SMS** асаах бол Brevo SMS кредит → `sms-order-notifications=1`. verify.mn үлдэгдэл дуусвал `checkout-guest-phone-verification=0`.
 - **Сэтгэгдлийн урамшуулал**: `review-reward-mnt` (жишээ 2000) тавибал асна.
+- **2 junk захиалгыг цуцлах/устгах** (автомат residue тайлан нэрээр нь олдоггүй): `#6802 SAMU21BHE3OSC20F` "Checkout Test", бэлгийн карт 200,000₮, 2026-09-15 (бүтэн suite ажиллаж байхад зэрэгцүүлэн скрипт ажиллуулснаас нэг тест унаж үүсгэсэн) ба `#6655 SAMU0NHNJY458K8X` "ТУРШИЛТ — Claude (цуцлана уу)", 26,980₮, 2026-09-14. Хоёул `pending/unpaid` тул борлуулалтад тоологдохгүй ч /admin-д хүлээгдэж буй захиалга мэт харагдана. ⚠️ Бэлгийн картынх нь картын код үүсгэсэн эсэхийг устгахын өмнө шалгах.
 - HeatWave дээр `sugi_migtest` схемийг устгах (`DROP DATABASE sugi_migtest` — migration chain туршилтын үлдэгдэл, хоосон).
 - GitHub Actions → `database-tests` job-ийн эхний үр дүнг харах (улаан бол seed-д нэмэх мөр байна).
 

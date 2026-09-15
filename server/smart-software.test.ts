@@ -133,3 +133,118 @@ describe("SmartSoftwareProvider", () => {
     expect(result.detail).toContain("/oauth/token");
   });
 });
+
+/**
+ * 2026-09-15: the product feed carries far more than counts. These pin the
+ * shapes their published docs (api-30159312) describe, because none of it can
+ * be checked against the real service until the API contract is signed.
+ */
+describe("SmartSoftwareProvider catalogue", () => {
+  beforeEach(() => clearSmartSoftwareTokenCache());
+
+  const productRow = {
+    id: "1001",
+    name: "Cocochi Essence",
+    nameeng: "Cocochi Essence",
+    barcode: "4589805170013",
+    baseprice: 120000,
+    price: 100000,
+    activeStatus: "Y",
+    brandName: "Cocochi",
+    itemCatogoryName: "Арьс арчилгаа",
+    itemSubCategoryName: "Сэрум",
+    vendorName: "Cocochi Japan",
+    ingredients: "Water, Glycerin",
+    instructions: "Өглөө, оройд 2-3 дусал.",
+    termsOfUse: "Нүүрээ угаасны дараа.",
+    warning: "Нүдэнд хүргэхээс болгоомжил.",
+    stock_locations: [{ location_id: "001", count_on_hand: 4, price: 100000, baseprice: 120000 }],
+    item_discounts: [],
+  };
+
+  const feed = (rows: unknown[], wrapped = false) => stub(request =>
+    request.url.endsWith("/oauth/token")
+      ? { status: 200, body: tokenBody }
+      : { status: 200, body: JSON.stringify(wrapped ? { Success: true, Message: "", ErrorCode: "", ExceptionType: "", Data: rows } : rows) });
+
+  it("reads the Retail envelope as well as a bare array", async () => {
+    for (const wrapped of [false, true]) {
+      clearSmartSoftwareTokenCache();
+      const provider = new SmartSoftwareProvider(credentials, feed([productRow], wrapped).transport);
+      const snapshot = await provider.pullCatalogSnapshot();
+      expect(snapshot.products, `wrapped=${wrapped}`).toHaveLength(1);
+      expect(snapshot.products[0].sku).toBe("4589805170013");
+      expect(snapshot.products[0].stock).toEqual({ "001": 4 });
+    }
+  });
+
+  it("surfaces the vendor's own message when the envelope reports failure", async () => {
+    const { transport } = stub(request => request.url.endsWith("/oauth/token")
+      ? { status: 200, body: tokenBody }
+      : { status: 200, body: JSON.stringify({ Success: false, Message: "Эрх хүрэхгүй байна.", Data: null }) });
+    const provider = new SmartSoftwareProvider(credentials, transport);
+    await expect(provider.pullCatalogSnapshot()).rejects.toThrow("Эрх хүрэхгүй байна.");
+  });
+
+  it("keeps price, label text and the vendor's active flag", async () => {
+    const provider = new SmartSoftwareProvider(credentials, feed([productRow]).transport);
+    const [product] = (await provider.pullCatalogSnapshot()).products;
+    expect(product.priceMnt).toBe(100000);
+    expect(product.basePriceMnt).toBe(120000);
+    expect(product.isActive).toBe(true);
+    expect(product.facts.ingredients).toBe("Water, Glycerin");
+    // instructions and termsOfUse both answer "how do I use this"; a product
+    // carrying both keeps both rather than silently losing one.
+    expect(product.facts.usageInstructions).toContain("2-3 дусал");
+    expect(product.facts.usageInstructions).toContain("Нүүрээ угаасны дараа");
+    expect(product.facts.warnings).toBe("Нүдэнд хүргэхээс болгоомжил.");
+    expect(product.facts.category).toBe("Сэрум");
+  });
+
+  it("separates the discount in force from one dated later", async () => {
+    const now = Date.parse("2026-09-15T04:00:00Z");
+    const rows = [{
+      ...productRow,
+      item_discounts: [
+        { warehouse_id: null, begin_date: "2026-09-01", end_date: "2026-09-30", percent: 20, amount: 0 },
+        { warehouse_id: null, begin_date: "2026-11-01", end_date: "2026-11-30", percent: 50, amount: 0 },
+        { warehouse_id: null, begin_date: "2026-08-01", end_date: "2026-08-31", percent: 70, amount: 0 },
+      ],
+    }];
+    const provider = new SmartSoftwareProvider(credentials, feed(rows).transport, () => now);
+    const [product] = (await provider.pullCatalogSnapshot()).products;
+    expect(product.activeDiscount?.percent).toBe(20);
+    // Expired stays out; the November one is listed but never applied here --
+    // scheduling is our promo system's job, not the sync's.
+    expect(product.upcomingDiscounts.map(discount => discount.percent)).toEqual([50]);
+  });
+
+  it("still answers the stock-only shape the sync has always consumed", async () => {
+    const provider = new SmartSoftwareProvider(credentials, feed([productRow]).transport);
+    const snapshot = await provider.pullStockSnapshot();
+    expect(snapshot.locationIds).toEqual(["001"]);
+    expect(snapshot.products[0]).toEqual({ sku: "4589805170013", name: "Cocochi Essence", stock: { "001": 4 } });
+  });
+
+  it("skips a row with no barcode, since nothing could be matched to it", async () => {
+    const provider = new SmartSoftwareProvider(credentials, feed([{ ...productRow, barcode: "  " }, productRow]).transport);
+    expect((await provider.pullCatalogSnapshot()).products).toHaveLength(1);
+  });
+
+  it("does not reuse a cached token once the cache is cleared", async () => {
+    // The rotation path: an admin fixes a password under the SAME username,
+    // so the cache key is unchanged. Until 2026-09-15 nothing in production
+    // called clearSmartSoftwareTokenCache and the stale token lived an hour.
+    let issued = 0;
+    const { transport } = stub(request => request.url.endsWith("/oauth/token")
+      ? { status: 200, body: JSON.stringify({ access_token: `tok-${++issued}`, expires_in: 3600 }) }
+      : { status: 200, body: "[]" });
+    const provider = new SmartSoftwareProvider(credentials, transport);
+    await provider.token("https://retailapiv2.smartlogic.mn");
+    await provider.token("https://retailapiv2.smartlogic.mn");
+    expect(issued).toBe(1);
+    clearSmartSoftwareTokenCache();
+    await provider.token("https://retailapiv2.smartlogic.mn");
+    expect(issued).toBe(2);
+  });
+});

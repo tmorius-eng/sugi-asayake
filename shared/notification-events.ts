@@ -86,6 +86,7 @@ export type NotificationPayloads = {
   "stock.out": { branchName: string; productName: string; sku: string };
   "stock.total_out": { productName: string; sku: string };
   "stock.ledger_drift": { count: number };
+  "stock.vendor_sync_blocked": { previous: number; current: number; dropPercent: number };
   "transfer.stale": { code: string; toBranchName: string; hours: number };
   "integration.test": { groupLabel: string };
 };
@@ -125,6 +126,9 @@ export const NOTIFICATION_EVENTS: Record<NotificationEventType, EventSpec> = {
   "stock.out": { label: "Нөөц дууссан", groups: ["warehouse", "admin"], priority: 4, tags: ["x"], clickSection: "products" },
   "stock.total_out": { label: "Онлайн нөөц дууссан", groups: ["admin", "warehouse"], priority: 4, tags: ["no_entry"], clickSection: "products" },
   "stock.ledger_drift": { label: "Нөөцийн бүртгэлийн зөрүү", groups: ["admin"], priority: 3, tags: ["mag"], clickSection: "dashboard" },
+  // Loud on purpose: the automatic stock sync stopped itself, so the shelf
+  // figures are now as stale as the last successful pull until someone looks.
+  "stock.vendor_sync_blocked": { label: "Вендорын үлдэгдэл автоматаар бичигдсэнгүй", groups: ["warehouse", "admin"], priority: 5, tags: ["warning"], clickSection: "receiving" },
   "transfer.stale": { label: "Хүлээн аваагүй шилжүүлэг", groups: ["admin", "warehouse"], priority: 3, tags: ["hourglass"], clickSection: "receiving" },
   "integration.test": { label: "Туршилтын мэдэгдэл", groups: [], priority: 3, tags: ["bell"], clickSection: "notifications" },
 };
@@ -192,6 +196,10 @@ export function buildNotificationMessage<K extends NotificationEventType>(type: 
     case "count.posted": {
       const p = payload as NotificationPayloads["count.posted"];
       return { title: `${p.isOpening ? "Эхний үлдэгдэл" : "Тооллого"} батлагдлаа ${p.code}`, message: `${p.branchName}: ${p.adjustedLines} бараа засагдсан, нийт ${p.netDelta > 0 ? "+" : ""}${p.netDelta} ширхэг.` };
+    }
+    case "stock.vendor_sync_blocked": {
+      const p = payload as NotificationPayloads["stock.vendor_sync_blocked"];
+      return { title: "Вендорын үлдэгдэл шалгуулж байна", message: `Smart POS-ын жагсаалт ${p.previous} → ${p.current} бараа болж ${p.dropPercent}%-иар багассан тул автоматаар бичсэнгүй. Бараа хүлээн авах → Тооллого дээр шалгаад батална уу.` };
     }
     case "transfer.sent": {
       const p = payload as NotificationPayloads["transfer.sent"];

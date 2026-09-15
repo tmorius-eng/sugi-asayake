@@ -80,6 +80,53 @@ maybeDescribe("managed store-settings integration", () => {
   it("rejects a non-staff caller", async () => {
     await expect(publicCaller.admin.updateStoreSetting({ settingKey: numberKey, settingValue: "12000" })).rejects.toThrow();
   });
+
+  /**
+   * 2026-09-15. These two keys are the site's measurement tags. Before the
+   * slot registry carried a `format`, a typo saved with a green toast and
+   * then vanished at render time (indexHtml.ts blanked anything that failed
+   * its own private regex), so the shop's analytics were simply off with
+   * nothing in /admin to say why.
+   *
+   * Snapshot-and-restore: analytics-ga4-measurement-id is a REAL production
+   * slot, so whatever Tom has saved is put back in afterEach.
+   */
+  describe("measurement ids", () => {
+    const ga4Key = "analytics-ga4-measurement-id" as const;
+    let originalGa4: string | undefined;
+
+    beforeEach(async () => {
+      const before = await adminCaller.admin.storeSettings();
+      originalGa4 = before.find(row => row.settingKey === ga4Key)?.settingValue;
+    });
+
+    afterEach(async () => {
+      if (originalGa4 !== undefined) await adminCaller.admin.updateStoreSetting({ settingKey: ga4Key, settingValue: originalGa4 }).catch(() => undefined);
+      else await adminCaller.admin.clearStoreSetting({ settingKey: ga4Key }).catch(() => undefined);
+    });
+
+    it("saves a well-formed measurement id and serves it to the storefront", async () => {
+      await adminCaller.admin.updateStoreSetting({ settingKey: ga4Key, settingValue: "G-TESTONLY01" });
+      const settings = await publicCaller.content.storeSettings();
+      expect(settings.find(row => row.settingKey === ga4Key)).toMatchObject({ settingValue: "G-TESTONLY01" });
+    });
+
+    it("refuses the ids that used to save green and then never load", async () => {
+      // A GTM container id, the old UA property, and a plain typo: each one
+      // was accepted before and then silently dropped by the renderer.
+      for (const bad of ["GTM-ABCD123", "UA-12345-1", "nope"]) {
+        await expect(adminCaller.admin.updateStoreSetting({ settingKey: ga4Key, settingValue: bad }), bad)
+          .rejects.toMatchObject({ code: "BAD_REQUEST" });
+      }
+    });
+
+    it("clears without validating, because clearing is how a tag is switched off", async () => {
+      await adminCaller.admin.updateStoreSetting({ settingKey: ga4Key, settingValue: "G-TESTONLY01" });
+      await adminCaller.admin.clearStoreSetting({ settingKey: ga4Key });
+      const settings = await publicCaller.content.storeSettings();
+      expect(settings.find(row => row.settingKey === ga4Key)).toBeUndefined();
+    });
+  });
 });
 
 // Phase B: the actual checkout-wiring half of the plan -- proves the

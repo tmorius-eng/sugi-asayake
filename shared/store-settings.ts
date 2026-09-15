@@ -24,6 +24,18 @@ import { UB_DELIVERY_FEE_MNT } from "./const";
  * code-owned, exactly matching site-text.ts's "editable prose + code-owned
  * structure" boundary for the homepage's 2-line headings.
  */
+/**
+ * Two groups are NOT rendered by the generic store-settings accordion: each
+ * has a panel of its own that needs a status pill, live format validation and
+ * an off switch the generic slot renderer deliberately does not grow. Listing
+ * them here (and filtering them out in AdminStoreSettingsPanel) keeps ONE home
+ * per key -- a setting that appeared in two screens would be edited in two
+ * screens and disagree with itself.
+ */
+export const MEASUREMENT_GROUP = "Хэмжилт";
+export const VENDOR_SYNC_GROUP = "Вендорын синк";
+export const PANEL_OWNED_GROUPS: readonly string[] = [MEASUREMENT_GROUP, VENDOR_SYNC_GROUP];
+
 export const storeSettingSlots = [
   // ---- Холбоо барих (Contact) — 2026-09-12 ------------------------------
   // The shop's own contact facts. Before this group existed, the phone
@@ -43,6 +55,8 @@ export const storeSettingSlots = [
     key: "contact-phone",
     group: "Холбоо барих",
     type: "text" as const,
+    inputType: "line" as const,
+    placeholder: "9450-9911",
     label: "Утасны дугаар (харагдах хэлбэр)",
     description: "Сайт даяар (footer, салбарын хэсэг, /shop, профайл) харагдах утасны дугаар.",
     fallbackValue: "9450-9911",
@@ -51,6 +65,8 @@ export const storeSettingSlots = [
     key: "contact-phone-tel",
     group: "Холбоо барих",
     type: "text" as const,
+    inputType: "line" as const,
+    placeholder: "+97694509911",
     label: "Утасны дугаар (залгах холбоос)",
     description: "Дарахад залгагдах жинхэнэ дугаар. Зай, зураасгүй, зөвхөн цифр (жишээ: 94509911).",
     fallbackValue: "94509911",
@@ -59,6 +75,8 @@ export const storeSettingSlots = [
     key: "contact-email",
     group: "Холбоо барих",
     type: "text" as const,
+    inputType: "line" as const,
+    placeholder: "info@example.mn",
     label: "Холбоо барих имэйл",
     description: "Footer, профайлын тусламж, хуулийн хуудсанд харагдах имэйл хаяг.",
     fallbackValue: "asayake0307@gmail.com",
@@ -75,6 +93,8 @@ export const storeSettingSlots = [
     key: "contact-facebook-url",
     group: "Холбоо барих",
     type: "text" as const,
+    inputType: "line" as const,
+    placeholder: "https://www.facebook.com/...",
     label: "Facebook хуудасны холбоос",
     description: "Footer-ийн Facebook icon. Icon-ыг нуухын тулд холбоосын оронд \"-\" бичнэ (http-ээр эхлээгүй утгыг холбоос биш гэж үзэж, icon-ыг харуулахгүй).",
     fallbackValue: "https://www.facebook.com/AsayakeJapaneseDrugstore/",
@@ -83,6 +103,8 @@ export const storeSettingSlots = [
     key: "contact-instagram-url",
     group: "Холбоо барих",
     type: "text" as const,
+    inputType: "line" as const,
+    placeholder: "https://www.instagram.com/...",
     label: "Instagram хуудасны холбоос",
     description: "Footer-ийн Instagram icon. Icon-ыг нуухын тулд холбоосын оронд \"-\" бичнэ.",
     fallbackValue: "https://www.instagram.com/asayake_japan_cosmetics/",
@@ -91,6 +113,8 @@ export const storeSettingSlots = [
     key: "contact-youtube-url",
     group: "Холбоо барих",
     type: "text" as const,
+    inputType: "line" as const,
+    placeholder: "https://www.youtube.com/@...",
     label: "YouTube хаяг",
     description: "Бүтэн URL. Сувгийн бичлэг байхгүй бол \"-\" гэж бичвэл дүрс харагдахгүй.",
     fallbackValue: "-",
@@ -236,6 +260,8 @@ export const storeSettingSlots = [
     key: "seo-google-site-verification",
     group: "SEO ба баталгаажуулалт",
     type: "text" as const,
+    inputType: "line" as const,
+    placeholder: "google-site-verification утга",
     label: "Google Search Console баталгаажуулах код",
     description: "Search Console → Property → HTML tag: content=\"...\" доторх утгыг л буулгана. Хоосон бол tag гарахгүй.",
     fallbackValue: "",
@@ -244,6 +270,8 @@ export const storeSettingSlots = [
     key: "seo-facebook-domain-verification",
     group: "SEO ба баталгаажуулалт",
     type: "text" as const,
+    inputType: "line" as const,
+    placeholder: "facebook-domain-verification утга",
     label: "Meta (Facebook) домэйн баталгаажуулах код",
     description: "Meta Business Suite → Brand safety → Domains → Meta-tag verification: content=\"...\" доторх утга. Business verification-д хэрэгтэй.",
     fallbackValue: "",
@@ -335,16 +363,25 @@ export const storeSettingSlots = [
   // from /vendor/analytics-init.js. Empty = tag never loads.
   {
     key: "analytics-ga4-measurement-id",
-    group: "SEO ба баталгаажуулалт",
+    group: MEASUREMENT_GROUP,
     type: "text" as const,
+    inputType: "line" as const,
+    placeholder: "G-XXXXXXXXXX",
+    // The SAME regex server/_core/indexHtml.ts renders with. It used to live
+    // only there, which is why a typo saved green and then silently never
+    // loaded: the renderer blanked it and nothing told the admin.
+    format: { pattern: "^G-[A-Z0-9]{4,20}$", flags: "i", message: "Measurement ID нь G- гэж эхэлж, ард нь 4-20 үсэг/тоо байх ёстой (жишээ: G-ABCD1234).", example: "G-ABCD1234" } as const,
     label: "Google Analytics 4 Measurement ID",
-    description: "analytics.google.com → Admin → Data streams → Web → \"G-XXXXXXXXXX\". Зочин \"Тоолуур\" күкийг зөвшөөрсний дараа л ачаалагдана; хоосон бол огт ачаалагдахгүй.",
+    description: "analytics.google.com → Admin → Data streams → Web → \"G-XXXXXXXXXX\". Зочин \"Тоолуур\" күкийг зөвшөөрсний дараа л ачаалагдана; хоосон бол огт ачаалагдахгүй. Google Tag Manager (GTM-…) дэмжигдэхгүй.",
     fallbackValue: "",
   },
   {
     key: "analytics-meta-pixel-id",
-    group: "SEO ба баталгаажуулалт",
+    group: MEASUREMENT_GROUP,
     type: "text" as const,
+    inputType: "line" as const,
+    placeholder: "123456789012345",
+    format: { pattern: "^[0-9]{6,20}$", message: "Pixel ID нь зөвхөн тооноос (6-20 орон) бүрдэнэ (жишээ: 123456789012345).", example: "123456789012345" } as const,
     label: "Meta (Facebook) Pixel ID",
     description: "business.facebook.com → Events Manager → Data sources → Pixel ID (15–16 орон). Зочин \"Маркетинг\" күкийг зөвшөөрсний дараа л ачаалагдана — Facebook сурталчилгааны хөрвүүлэлтийг (PageView, ViewContent, AddToCart, Purchase) хэмжинэ.",
     fallbackValue: "",
@@ -358,6 +395,8 @@ export const storeSettingSlots = [
     key: "checkout-guest-phone-verification",
     group: "Захиалга",
     type: "text" as const,
+    inputType: "line" as const,
+    placeholder: "1",
     label: "Зочны захиалгад утас баталгаажуулах (1 = тийм, 0 = үгүй)",
     description: "1 бол бүртгэлгүй (эсвэл утасгүй) худалдан авагч захиалгаа батлахын өмнө утасны дугаараа verify.mn SMS-ээр баталгаажуулна — хуурамч бэлэн мөнгөний захиалгаас хамгаална. verify.mn-ийн үлдэгдэл дууссан үед 0 болгож түр унтраана.",
     fallbackValue: "1",
@@ -370,6 +409,8 @@ export const storeSettingSlots = [
     key: "sms-order-notifications",
     group: "Захиалга",
     type: "text" as const,
+    inputType: "line" as const,
+    placeholder: "0",
     label: "Захиалгын SMS мэдэгдэл (1 = тийм, 0 = үгүй)",
     description: "1 бол захиалга орох болон төлөв бүр солигдоход харилцагчийн утсанд SMS очно (Brevo SMS кредит шаардана). Имэйл/push-аас үл хамааран ажиллана.",
     fallbackValue: "0",
@@ -391,6 +432,30 @@ export const storeSettingSlots = [
     description: "Төлөв бүр солигдоход илгээх SMS.",
     tokens: ["{захиалга}", "{төлөв}"] as const,
     fallbackValue: "SUGI ASAYAKE: {захиалга} захиалга — {төлөв}. Асуулт байвал 9450-9911.",
+  },
+  // Vendor stock sync (2026-09-15). The Smart Software pull posts straight to
+  // stock: "Идэвхтэй" plus auto-apply means nobody approves anything by hand.
+  // The sanity gate is not an approval step, it is the guard against the one
+  // failure their own docs warn about -- unticking "ECommerce борлуулах бараа"
+  // in Retail shrinks the feed to a handful of products, and a blind apply
+  // would zero the whole catalogue.
+  {
+    key: "vendor-stock-auto-apply",
+    group: VENDOR_SYNC_GROUP,
+    type: "text" as const,
+    inputType: "line" as const,
+    placeholder: "1",
+    label: "Вендорын үлдэгдлийг автоматаар нөөцөд бичих (1 = тийм, 0 = үгүй)",
+    description: "1 бол Smart Software-оос татсан үлдэгдэл шууд нөөц болно (өөрчлөлт бүр ledger-т бүртгэгдэж, Бараа хүлээн авах → Тооллого дээр түүх болж үлдэнэ). 0 бол урьдын адил хүн батлах хүртэл хүлээнэ.",
+    fallbackValue: "1",
+  },
+  {
+    key: "vendor-stock-sanity-drop-percent",
+    group: VENDOR_SYNC_GROUP,
+    type: "number" as const,
+    label: "Автомат бичихийг зогсоох уналтын хувь",
+    description: "Вендорын илгээсэн барааны тоо өмнөх амжилттай таталтаас энэ хувиас илүү буурвал автоматаар бичихгүй — тооллого батлахыг хүлээж, утсанд мэдэгдэнэ. 0 бол хаалга огт ажиллахгүй (санал болгохгүй).",
+    fallbackValue: "30",
   },
 ] as const;
 
@@ -415,3 +480,44 @@ export const storeSettingKeys = storeSettingSlots.map(slot => slot.key) as [Stor
 
 export const getStoreSettingSlot = (key: StoreSettingKey) =>
   storeSettingSlots.find(slot => slot.key === key)!;
+
+export type StoreSettingFormat = { pattern: string; flags?: string; message: string; example: string };
+
+/** The declared format of a slot, if it has one. */
+export function getStoreSettingFormat(key: StoreSettingKey): StoreSettingFormat | null {
+  const slot = getStoreSettingSlot(key);
+  return "format" in slot ? slot.format : null;
+}
+
+/**
+ * The one place a settingValue is checked against its slot's declared format.
+ * Called client-side before the round trip and again in the mutation, exactly
+ * like validateIntegrationSettings in shared/integrations.ts.
+ *
+ * Only WRITES are checked. A value stored before a format existed is never
+ * retro-rejected -- it keeps being served, and the admin screen flags it --
+ * because refusing to read it would take a working site down to fix a label.
+ * Clearing is likewise never validated: an empty value IS the off switch.
+ */
+export function checkStoreSettingFormat(key: StoreSettingKey, value: string): string | null {
+  const format = getStoreSettingFormat(key);
+  if (!format) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return new RegExp(format.pattern, format.flags).test(trimmed) ? null : format.message;
+}
+
+export type StoreSettingStatus = "unset" | "active" | "invalid" | "dirty";
+
+/** What a measurement-style status pill should say for one slot. */
+export function storeSettingStatus(key: StoreSettingKey, saved: string | null | undefined, draft?: string): StoreSettingStatus {
+  const current = (saved ?? "").trim();
+  if (draft !== undefined && draft.trim() !== current) {
+    // A malformed draft reports WHY before it reports that it is unsaved:
+    // "unsaved" is something the save button already says, and the pill is
+    // the only at-a-glance place the shape problem can appear.
+    return checkStoreSettingFormat(key, draft) ? "invalid" : "dirty";
+  }
+  if (!current) return "unset";
+  return checkStoreSettingFormat(key, current) ? "invalid" : "active";
+}

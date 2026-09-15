@@ -407,8 +407,19 @@ export async function submitCount(actor: InventoryActor, id: number) {
  * count at first scan); a full count also zeroes unscanned items. Recorded
  * as 'opening' for an opening count, else 'count_adjust'.
  */
-export async function postCount(actor: InventoryActor, id: number) {
-  if (actor.role !== "admin" && actor.role !== "warehouse") throw new InventoryError("Тооллогыг зөвхөн агуулах эсвэл админ батална.", "FORBIDDEN");
+/**
+ * Stands in for a person when the vendor sync posts its own snapshot
+ * (2026-09-15). Never written to the database: `automatic` makes postCount
+ * store NULL for both postedByUserId and the ledger's actorUserId, so an
+ * automated adjustment is never attributed to whoever happened to be logged
+ * in. It exists only to satisfy the branch guard, which admins pass for any
+ * branch.
+ */
+export const SYSTEM_INVENTORY_ACTOR: InventoryActor = { id: 0, role: "admin", branchId: null };
+
+export async function postCount(actor: InventoryActor, id: number, options: { automatic?: boolean } = {}) {
+  if (!options.automatic && actor.role !== "admin" && actor.role !== "warehouse") throw new InventoryError("Тооллогыг зөвхөн агуулах эсвэл админ батална.", "FORBIDDEN");
+  const actorUserId = options.automatic ? null : actor.id;
   const count = await requireOpenCount(actor, id, ["draft", "submitted"]);
   const detail = await getCount(actor, id);
   const unknown = detail.lines.filter(line => line.variantId === null);
@@ -417,7 +428,7 @@ export async function postCount(actor: InventoryActor, id: number) {
   let adjustedLines = 0;
   let netDelta = 0;
   await db.transaction(async tx => {
-    const flipped = await tx.update(stockCounts).set({ status: "posted", postedByUserId: actor.id, postedAt: new Date() })
+    const flipped = await tx.update(stockCounts).set({ status: "posted", postedByUserId: actorUserId, postedAt: new Date() })
       .where(and(eq(stockCounts.id, id), inArray(stockCounts.status, ["draft", "submitted"])));
     if (Number(flipped[0].affectedRows ?? 0) !== 1) throw new InventoryError("Тооллогыг өөр хүн дөнгөж сая баталсан байна.", "CONFLICT");
     for (const line of detail.lines) {
@@ -426,15 +437,15 @@ export async function postCount(actor: InventoryActor, id: number) {
       const current = Number(shelf?.quantity ?? 0);
       const firstScan = line.systemQtyAtFirstScan ?? current;
       const target = Math.max(0, current + (line.countedQty - firstScan));
-      const { before, after } = await setBranchStockAbsolute(tx, count.branchId, line.variantId, target, { type, refType: "count", refId: id, actorUserId: actor.id, note: `Тооллого ${count.code}` });
+      const { before, after } = await setBranchStockAbsolute(tx, count.branchId, line.variantId, target, { type, refType: "count", refId: id, actorUserId, note: `Тооллого ${count.code}${options.automatic ? " (автомат)" : ""}` });
       await tx.update(stockCountLines).set({ postedDelta: after - before }).where(eq(stockCountLines.id, line.id));
       if (after !== before) { adjustedLines++; netDelta += after - before; }
     }
     for (const item of detail.unscanned) {
-      const { before, after } = await setBranchStockAbsolute(tx, count.branchId, item.variantId, 0, { type, refType: "count", refId: id, actorUserId: actor.id, note: `Тооллого ${count.code}: уншуулаагүй` });
+      const { before, after } = await setBranchStockAbsolute(tx, count.branchId, item.variantId, 0, { type, refType: "count", refId: id, actorUserId, note: `Тооллого ${count.code}: уншуулаагүй` });
       if (after !== before) { adjustedLines++; netDelta += after - before; }
     }
-    await enqueueNotification(tx, "count.posted", { code: count.code, branchName: detail.branchName, adjustedLines, netDelta, isOpening: count.isOpening }, { dedupeKey: `count:${id}` });
+    if (!options.automatic) await enqueueNotification(tx, "count.posted", { code: count.code, branchName: detail.branchName, adjustedLines, netDelta, isOpening: count.isOpening }, { dedupeKey: `count:${id}` });
   });
   return { ...(await getCount(actor, id)), adjustedLines, netDelta, skippedUnknown: unknown.length };
 }
@@ -453,7 +464,7 @@ export async function postCount(actor: InventoryActor, id: number) {
  */
 export const SNAPSHOT_COUNT_NOTE_PREFIX = "Smart POS-ын үлдэгдлээс";
 
-export async function createSnapshotCount(input: { branchId: number; sourceLabel: string; lines: { variantId: number; sku: string; countedQty: number; systemQty: number }[] }) {
+export async function createSnapshotCount(input: { branchId: number; sourceLabel: string; silent?: boolean; lines: { variantId: number; sku: string; countedQty: number; systemQty: number }[] }) {
   const db = await requireDb();
   const name = await branchName(input.branchId);
   const code = generateInventoryCode("CT");
@@ -468,7 +479,11 @@ export async function createSnapshotCount(input: { branchId: number; sourceLabel
     if (input.lines.length) {
       await tx.insert(stockCountLines).values(input.lines.map(line => ({ countId, scannedCode: line.sku, variantId: line.variantId, countedQty: line.countedQty, systemQtyAtFirstScan: line.systemQty })));
     }
-    await enqueueNotification(tx, "count.submitted", { code, branchName: name, lineCount: input.lines.length, varianceLines }, { dedupeKey: `count:${countId}` });
+    // `silent` is the vendor sync posting its own snapshot moments later:
+    // every 15 minutes, a "please approve" push for something nobody has to
+    // approve is noise that trains people to ignore the channel. The alerts
+    // that matter (stock.low / stock.out) still come from the ledger write.
+    if (!input.silent) await enqueueNotification(tx, "count.submitted", { code, branchName: name, lineCount: input.lines.length, varianceLines }, { dedupeKey: `count:${countId}` });
   });
   return { id: countId, code, branchName: name, lineCount: input.lines.length, varianceLines };
 }

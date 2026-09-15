@@ -35,6 +35,32 @@ export type IntegrationField = {
   defaultValue?: string;
 };
 
+/**
+ * A provider's visual identity in /admin (2026-09-15). Both are STRING KEYS,
+ * never a colour literal and never a React component: this module is imported
+ * by server/db.ts, so a lucide import here would pull React into the server
+ * bundle, and a hex would skip the admin's dark-mode tokens.
+ */
+export type IntegrationAccent = "amber" | "blue" | "green" | "violet" | "slate";
+export type IntegrationIcon = "receipt" | "wallet" | "card" | "truck" | "phone" | "store";
+
+/**
+ * The "not connected yet" hero card. A provider that declares this gets a
+ * single centred sign-in card (logo tile, title, the required fields, one
+ * primary button) instead of the generic key-by-key editor, which is the
+ * right shape for the one thing an admin does here first: connect it.
+ * Everything else about the provider stays exactly as it is -- this only
+ * changes what the card shows while `requiredFields` are still unset.
+ */
+export type IntegrationConnect = {
+  title: string;
+  subtitle: string;
+  /** Every one must be set before the provider counts as connected. */
+  requiredFields: readonly string[];
+  cta: string;
+  footnote: string;
+};
+
 export type IntegrationMeta = {
   label: string;
   note: string;
@@ -46,6 +72,9 @@ export type IntegrationMeta = {
   freeForm: boolean;
   /** Whether the admin screen offers a "send a test" button. */
   testable: boolean;
+  accent?: IntegrationAccent;
+  icon?: IntegrationIcon;
+  connect?: IntegrationConnect;
 };
 
 /** ntfy topic names: letters, digits, `_` and `-`, at most 64 characters. */
@@ -76,6 +105,8 @@ export const INTEGRATION_META: Record<IntegrationProvider, IntegrationMeta> = {
   // left (they are for the accountant, not the vendor).
   ebarimt: {
     label: "И-баримт",
+    accent: "violet" as const,
+    icon: "receipt" as const,
     note: "Татварын албаны цахим баримт (SmartSoftware эсвэл POS API 3.0)",
     wiredUp: false,
     guidance: "2026-09-12: гурван зам тодорхой боллоо. (A) Smart POS-ын /api/sale/sale нь борлуулалт илгээхэд И-БАРИМТЫГ ӨӨРӨӨ гаргаж ДДТД/QR/сугалааг буцаадаг -- энэ тохиолдолд ЭНД юу ч оруулах шаардлагагүй, зөвхөн Smart Software картыг тохируулна. (B) Татварын албаны POS API 3.0 -- дэлгүүрийн өөрийн машин дээр PosService (127.0.0.1:7080) ажиллуулахыг шаарддаг тул манай cloud серверээс дуудагдахгүй. (C) QPay-ээр төлсөн захиалгад QPay өөрөө и-баримт гаргаж чадна. Аль замыг сонгохоос өмнө EBARIMT.md-ийн нягтлангийн 2 асуултад (НӨАТ/НХАТ, иргэн vs байгууллагын баримт) хариу хэрэгтэй.",
@@ -88,6 +119,8 @@ export const INTEGRATION_META: Record<IntegrationProvider, IntegrationMeta> = {
   // -- plus the store id; their own Go SDK takes exactly these seven values.
   storepay: {
     label: "StorePay",
+    accent: "green" as const,
+    icon: "wallet" as const,
     note: "Хэсэгчилсэн төлбөр (BNPL) — харилцагч StorePay апп дээрээ зөвшөөрнө",
     wiredUp: true,
     guidance: "StorePay-ээс мерчантын мэдээлэл авахдаа ХОЁР хос нэр/нууц үг (апп-ын болон үндсэн), дэлгүүрийн код (storeId), мөн auth/api хаягийг асууна. Долоо нь бүгд бөглөгдөж, \"Идэвхтэй\" болсон үед л худалдан авагчид төлбөрийн сонголт болж харагдана. Захиалгын дүнг StorePay руу илгээхэд харилцагч апп дээрээ зөвшөөрч, бид зөвшөөрснийг нь өөрсдөө шалгаад захиалгыг баталгаажуулна.",
@@ -103,10 +136,12 @@ export const INTEGRATION_META: Record<IntegrationProvider, IntegrationMeta> = {
     freeForm: false,
     testable: false,
   },
-  card_golomt: { label: "Голомт банк (карт)", note: "Visa/Mastercard шууд төлбөр (e-Merchant)", wiredUp: false, guidance: "Кодыг бичихийн өмнө Голомтоос дараахыг авна: e-Merchant гэрээ, мерчант ID, нууц түлхүүр, туршилтын (sandbox) орчны хаяг, төлбөр амжилттай болоход манай сервер рүү мэдэгдэх callback-ийн бүтэц. Эдгээр ирмэгц QPay/StorePay-тэй ижил хэлбэрээр (claim → callback → бид өөрсдөө шалгах) хийгдэнэ.", fields: [], freeForm: true, testable: false },
-  courier_ebuuhia: { label: "eBuuhia хүргэлт", note: "Эльчийн хүргэлтийн үйлчилгээ", wiredUp: false, guidance: "Хүргэлтийн компаниас авах зүйлс: гэрээ, API түлхүүр, захиалга үүсгэх endpoint, хүргэлтийн төлөв мэдэгдэх webhook, дүүрэг тус бүрийн тариф. Тариф ирвэл shared/delivery.ts дэх одоогийн нэг үнийн дүрмийг дүүргээр өргөтгөнө.", fields: [], freeForm: true, testable: false },
+  card_golomt: { accent: "slate", icon: "card", label: "Голомт банк (карт)", note: "Visa/Mastercard шууд төлбөр (e-Merchant)", wiredUp: false, guidance: "Кодыг бичихийн өмнө Голомтоос дараахыг авна: e-Merchant гэрээ, мерчант ID, нууц түлхүүр, туршилтын (sandbox) орчны хаяг, төлбөр амжилттай болоход манай сервер рүү мэдэгдэх callback-ийн бүтэц. Эдгээр ирмэгц QPay/StorePay-тэй ижил хэлбэрээр (claim → callback → бид өөрсдөө шалгах) хийгдэнэ.", fields: [], freeForm: true, testable: false },
+  courier_ebuuhia: { accent: "slate", icon: "truck", label: "eBuuhia хүргэлт", note: "Эльчийн хүргэлтийн үйлчилгээ", wiredUp: false, guidance: "Хүргэлтийн компаниас авах зүйлс: гэрээ, API түлхүүр, захиалга үүсгэх endpoint, хүргэлтийн төлөв мэдэгдэх webhook, дүүрэг тус бүрийн тариф. Тариф ирвэл shared/delivery.ts дэх одоогийн нэг үнийн дүрмийг дүүргээр өргөтгөнө.", fields: [], freeForm: true, testable: false },
   ntfy: {
     label: "Утасны мэдэгдэл (ntfy)",
+    accent: "blue" as const,
+    icon: "phone" as const,
     note: "Захиалга, төлбөр, нөөцийн мэдэгдлийг ажилтнуудын утас руу push-ээр илгээнэ",
     wiredUp: true,
     guidance: "Бүлэг бүрт \"Сэдэв үүсгэх\" дарж санамсаргүй нууц нэр үүсгэнэ. Ажилтнууд \"Утасны мэдэгдэл\" хэсгээс өөрийн бүлгийн QR кодыг ntfy апп-аар уншуулж бүртгүүлнэ. Сэдвийн нэрийг мэддэг хүн бүр мессежийг уншиж чадах тул мессежид харилцагчийн нэр, утас, хаяг хэзээ ч ордоггүй. Ажилтан гарвал тухайн бүлгийн сэдвийг дахин үүсгэнэ.",
@@ -129,6 +164,8 @@ export const INTEGRATION_META: Record<IntegrationProvider, IntegrationMeta> = {
   // barcode; each store's location code is mapped on the same card.
   smartsoftware: {
     label: "Smart Software (Smart POS)",
+    accent: "amber" as const,
+    icon: "store" as const,
     note: "Дэлгүүрийн касс -- байршил бүрийн нөөцийг татаж, батлах тооллого болгоно",
     wiredUp: true,
     guidance: "Смарт Ложик ХХК-тай API холболтын гэрээ хийсний дараа имэйлээр ирэх НЭВТРЭХ НЭР, НУУЦ ҮГ-ийг энд оруулна (API түлхүүр биш). Дараа нь \"Холболт шалгах\" дарж байршлуудыг татаад, дэлгүүр бүрийн Smart POS байршлыг доор сонгоно. 15 минут тутам (эсвэл \"Одоо синк\" дарахад) байршил бүрийн үлдэгдэл татагдаж, зөрүүтэй бараа нь Бараа хүлээн авах → Тооллого хэсэгт БАТЛАХ хүлээсэн тооллого болно -- нөөц хэзээ ч шууд дарж бичигдэхгүй. Бараа баркодоор таардаг тул Smart POS дахь баркод манай SKU-тэй ижил байх ёстой.",
@@ -140,6 +177,13 @@ export const INTEGRATION_META: Record<IntegrationProvider, IntegrationMeta> = {
     ],
     freeForm: false,
     testable: true,
+    connect: {
+      title: "Smart Logic",
+      subtitle: "ERP интеграци — бараа, үлдэгдэл, үнэ",
+      requiredFields: ["username", "password"],
+      cta: "Холбох",
+      footnote: "Смарт Ложик ХХК-тай API холболтын гэрээ хийсний дараа имэйлээр ирэх нэвтрэх мэдээллээ оруулна уу.",
+    },
   },
 };
 

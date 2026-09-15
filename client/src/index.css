@@ -2482,6 +2482,13 @@ html[data-admin-theme] {
   --a-warn-soft: #fdf3e0;
   --a-info: #2f6fb5;
   --a-info-soft: #e9f1fb;
+  /* Vendor brand accents (measurement cards, integration icon tiles) */
+  --a-brand-ga: #c2551a;
+  --a-brand-ga-soft: #fbeee5;
+  --a-brand-meta: #1b66d8;
+  --a-brand-meta-soft: #e7effc;
+  --a-accent-violet: #6d4ab5;
+  --a-accent-violet-soft: #efeafb;
   /* Chart */
   --a-chart-1: #1c7a4c;
   --a-chart-2: #4fc262;
@@ -2530,6 +2537,13 @@ html[data-admin-theme="dark"] .admin-shell {
   --a-warn-soft: rgba(224, 166, 60, .14);
   --a-info: #6aa8e8;
   --a-info-soft: rgba(106, 168, 232, .14);
+  /* Vendor brand accents (measurement cards, integration icon tiles) */
+  --a-brand-ga: #f0914f;
+  --a-brand-ga-soft: rgba(240, 145, 79, .14);
+  --a-brand-meta: #6fa6f5;
+  --a-brand-meta-soft: rgba(111, 166, 245, .14);
+  --a-accent-violet: #a88ce8;
+  --a-accent-violet-soft: rgba(168, 140, 232, .14);
   --a-chart-1: #2fa96a;
   --a-chart-2: #6fdc85;
   --a-chart-grid: #23262c;
