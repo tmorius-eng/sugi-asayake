@@ -1355,7 +1355,10 @@ export const appRouter = router({
   // strictRateLimitedProcedure: нэвтрээгүй хүн илгээдэг тул спамаас
   // хамгаална; захидлын текст сэтгэгдэлтэй ижил moderation-оор явна.
   careers: router({
-    apply: strictRateLimitedProcedure.input(z.object({
+    // ⚠️ `apply` гэж нэрлэж БОЛОХГҮЙ — tRPC v11 Function.prototype-ийн нэрсийг
+    // хориглодог бөгөөд алдаа нь ЗӨВХӨН ажиллах үед шидэгдэнэ (tsc барьдаггүй;
+    // 2026-09-15-нд production 2 минут унасан).
+    submit: strictRateLimitedProcedure.input(z.object({
       jobPostingId: z.number().int().positive().nullable(),
       fullName: z.string().trim().min(2).max(120),
       phone: z.string().trim().min(8).max(20).regex(/^\+?[\d\s-]{8,20}$/, "Утасны дугаар буруу байна."),

@@ -31,7 +31,7 @@ export default function JobApplicationModal({ target, onClose }: { target: Apply
   const [file, setFile] = useState<File | null>(null);
   const [done, setDone] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const apply = trpc.careers.apply.useMutation();
+  const apply = trpc.careers.submit.useMutation();
 
   // Шинэ зар руу нээхэд өмнөх "амжилттай" төлөв үлдэхгүй.
   useEffect(() => { if (target) setDone(false); }, [target]);
