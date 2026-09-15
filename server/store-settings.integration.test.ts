@@ -101,8 +101,17 @@ maybeDescribe("managed store-settings integration", () => {
     });
 
     afterEach(async () => {
-      if (originalGa4 !== undefined) await adminCaller.admin.updateStoreSetting({ settingKey: ga4Key, settingValue: originalGa4 }).catch(() => undefined);
+      // An EMPTY original has to be restored by clearing, not by saving "":
+      // updateStoreSetting rejects a blank value, and the first version of
+      // this hook swallowed that rejection -- which left the placeholder id
+      // live in the shop's real settings, and on the storefront, until it
+      // was noticed by hand (2026-09-15). Restoring must not depend on a
+      // mutation that can refuse the value it is restoring.
+      if (originalGa4?.trim()) await adminCaller.admin.updateStoreSetting({ settingKey: ga4Key, settingValue: originalGa4 });
       else await adminCaller.admin.clearStoreSetting({ settingKey: ga4Key }).catch(() => undefined);
+      const after = await adminCaller.admin.storeSettings();
+      const restored = after.find(row => row.settingKey === ga4Key)?.settingValue ?? "";
+      expect(restored, "the real measurement id must never keep a test value").toBe(originalGa4?.trim() ?? "");
     });
 
     it("saves a well-formed measurement id and serves it to the storefront", async () => {
