@@ -151,9 +151,20 @@ export default function AdminUserDetailDrawer({ userId, role, onClose }: { userI
     }
   };
 
+  // Escape → хаах (дээрх модалийн тайлбарыг үз).
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
+    // 2026-09-16: энэ бол модаль цонх атлаа зүгээр л <div> байсан — role/
+    // aria-modal байхгүй тул дэлгэц уншигч үүнийг цонх гэж зарладаггүй, Escape
+    // дарахад хаагддаггүй (зөвхөн ард талыг товшиход). Хоёуланг нь нэмэв;
+    // харагдац хэвээр.
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={onClose}>
-      <div className="h-full w-full max-w-md overflow-y-auto bg-[var(--a-card)] p-6" onClick={event => event.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-label="Хэрэглэгчийн дэлгэрэнгүй" className="h-full w-full max-w-md overflow-y-auto bg-[var(--a-card)] p-6" onClick={event => event.stopPropagation()}>
         <div className="flex items-center justify-between">
           <p className="text-[10px] font-extrabold tracking-[.14em] text-[#df1f3d]">USER DETAIL</p>
           <button type="button" onClick={onClose} aria-label="Хаах" className="rounded-full p-1.5 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)]"><X size={16} /></button>

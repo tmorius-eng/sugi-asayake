@@ -1,7 +1,7 @@
-import type { Page } from "@playwright/test";
 import { expect, test } from "./helpers/fixtures";
 import { E2E_MARKER } from "./helpers/environment";
-import { signInAs } from "./helpers/session";
+import { ensureE2EUser, signInAs } from "./helpers/session";
+import { openAdminSection } from "./helpers/admin";
 
 /**
  * /admin — эрхийн хаалга ба бүтээгдэхүүний бодит CRUD.
@@ -13,20 +13,6 @@ import { signInAs } from "./helpers/session";
  *
  * Бүх бичилт `sugi_staging` схемд явна (e2e/helpers/environment.ts).
  */
-/** Хэсэг сонгох: 1024px-ээс доош ижил цэс нь зүүн талын drawer-т байдаг
- *  (AdminSidebar-ийн `lg:block` + Sheet) тул эхлээд "Цэс нээх". Утаснаас
- *  ажилладаг ажилтны хувьд энэ нь бодит зам — POS/бараа хүлээн авах хоёр
- *  голдуу утсан дээр хийгддэг. */
-async function openAdminSection(page: Page, label: string) {
-  const menuButton = page.getByRole("button", { name: "Цэс нээх" });
-  const sectionButton = page.getByRole("button", { name: label, exact: true });
-  // Панель ачаалагдтал ХОЁУЛАА байхгүй тул эхлээд аль нэг нь гарч ирэхийг
-  // хүлээнэ — эс бөгөөс `isVisible()` шууд false буцааж, утсан дээр байхгүй
-  // хажуугийн цэсийг дарах гэж оролдоно.
-  await expect(menuButton.or(sectionButton).first()).toBeVisible();
-  if (await menuButton.isVisible()) await menuButton.click();
-  await sectionButton.click();
-}
 
 test.describe("admin", () => {
   test("энгийн хэрэглэгч admin панелийг харахгүй", async ({ page, context, baseURL }) => {
@@ -90,5 +76,62 @@ test.describe("admin", () => {
     page.once("dialog", dialog => dialog.accept());
     await deleteButton.click();
     await expect(deleteButton).toHaveCount(0, { timeout: 20_000 });
+  });
+});
+
+/**
+ * Хэрэглэгчийн удирдлага — docs/PROJECT-GUIDE.md-д "хэзээ ч шалгагдаагүй" гэж
+ * тэмдэглэгдсэн цорын ганц хэсэг байсан. Эрх солих, түр хаах/сэргээх нь
+ * дэлгүүрийн хамгийн эрсдэлтэй удирдлагууд (ажилтны хандалт) тул бодит
+ * дараалалаар шалгана. Бүх бичилт `sugi_staging`-д.
+ */
+test.describe("admin — хэрэглэгчийн удирдлага", () => {
+  test("эрх солих, буцаах", async ({ page, context, baseURL }) => {
+    await signInAs(context, "admin", baseURL!);
+    const target = await ensureE2EUser("user");
+    await page.goto("/admin");
+    await openAdminSection(page, "Хэрэглэгч");
+
+    await page.getByPlaceholder("Нэр эсвэл имэйл хайх").fill(target.name ?? "");
+    const roleSelect = page.getByLabel("Эрх").first();
+    await expect(roleSelect).toBeVisible();
+    await expect(roleSelect).toHaveValue("user");
+
+    await roleSelect.selectOption("staff");
+    await expect(roleSelect).toHaveValue("staff");
+    // Дахин ачаалахад сервер дээр бодитоор хадгалагдсан эсэх.
+    await page.reload();
+    await openAdminSection(page, "Хэрэглэгч");
+    await page.getByPlaceholder("Нэр эсвэл имэйл хайх").fill(target.name ?? "");
+    await expect(page.getByLabel("Эрх").first()).toHaveValue("staff");
+
+    await page.getByLabel("Эрх").first().selectOption("user");
+    await expect(page.getByLabel("Эрх").first()).toHaveValue("user");
+  });
+
+  test("дэлгэрэнгүй цонх: түр хаах, хандалт сэргээх", async ({ page, context, baseURL }) => {
+    await signInAs(context, "admin", baseURL!);
+    const target = await ensureE2EUser("user");
+    await page.goto("/admin");
+    await openAdminSection(page, "Хэрэглэгч");
+    await page.getByPlaceholder("Нэр эсвэл имэйл хайх").fill(target.name ?? "");
+
+    await page.getByRole("button", { name: "Дэлгэрэнгүй" }).first().click();
+    const drawer = page.getByRole("dialog");
+    await expect(drawer.getByRole("heading", { name: target.name ?? "" })).toBeVisible();
+
+    // "Түр хаах" нь window.confirm асуудаг (идэвхтэй session шууд хүчингүй
+    // болдог тул зөв) — Playwright анхдагчаар цонхыг ТАТГАЛЗДАГ.
+    page.once("dialog", dialog => dialog.accept());
+    await drawer.getByRole("button", { name: "Түр хаах" }).click();
+    await expect(drawer.getByRole("button", { name: "Хандалт сэргээх" })).toBeVisible({ timeout: 20_000 });
+
+    // Цэвэрлэгээ: тестийн хэрэглэгч хаалттай үлдэх ёсгүй.
+    await drawer.getByRole("button", { name: "Хандалт сэргээх" }).click();
+    await expect(drawer.getByRole("button", { name: "Түр хаах" })).toBeVisible({ timeout: 20_000 });
+
+    // Модаль цонх Escape-ээр хаагдана.
+    await page.keyboard.press("Escape");
+    await expect(drawer).toHaveCount(0);
   });
 });

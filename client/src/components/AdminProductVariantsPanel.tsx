@@ -65,8 +65,20 @@ export default function AdminProductVariantsPanel({ productId }: { productId: nu
   };
   const closeForm = () => { setFormOpen(false); setForm(emptyForm()); };
 
-  const save = async (event: React.FormEvent) => {
-    event.preventDefault();
+  /**
+   * ⚠️ 2026-09-16 (E2E-ийн явцад олдсон бодит алдаа): энэ хэсэг нь барааны
+   * маягтын ДОТОР render хийгддэг (AdminWorkspace.tsx-ийн бүтээгдэхүүний
+   * <form>). Өмнө нь өөрөө ч бас <form> байсан — HTML-д <form> дотор <form>
+   * байж БОЛОХГҮЙ бөгөөд хөтөч дотоод маягтын `submit` товчийг ГАДААД маягтад
+   * харьяалуулсан тул "Variant үүсгэх" дарахад variant үүсэхийн оронд БАРААНЫ
+   * маягт илгээгдэж, editor хаагддаг байв. Өөрөөр хэлбэл admin-аас хоёр дахь
+   * variant нэмэх нь ХЭЗЭЭ Ч ажилладаггүй байсан (автомат тестүүд tRPC
+   * procedure-ийг шууд дууддаг тул үүнийг хардаггүй).
+   *
+   * Одоо энэ нь маягт биш <div>, товч нь `type="button"` — гаднах маягт
+   * хөндөгдөхгүй.
+   */
+  const save = async () => {
     if (!form.sku.trim()) { toast.error("SKU/баркод оруулна уу."); return; }
     const attributes: Record<string, string> = {};
     for (const row of form.attributes) { const key = row.key.trim(); if (key) attributes[key] = row.value.trim(); }
@@ -123,7 +135,7 @@ export default function AdminProductVariantsPanel({ productId }: { productId: nu
         {variants.length === 0 && <p className="py-3 text-center text-xs text-[var(--a-faint)]">Variant алга.</p>}
       </div>}
 
-      {formOpen && <form onSubmit={save} className="mt-3 rounded-xl border border-[#3970a7]/25 bg-[var(--a-card)] p-3">
+      {formOpen && <div className="mt-3 rounded-xl border border-[#3970a7]/25 bg-[var(--a-card)] p-3">
         <div className="grid gap-2 sm:grid-cols-2">
           <label className="grid gap-1 text-xs font-bold">SKU/баркод<input required value={form.sku} onChange={event => setForm(current => ({ ...current, sku: event.target.value }))} className="h-10 rounded-lg border border-[var(--a-border)] px-2.5 text-xs outline-none focus:border-[#3970a7]" /></label>
           <label className="grid gap-1 text-xs font-bold">Үнэ (₮)<input required min="0" type="number" value={form.priceMnt} onChange={event => setForm(current => ({ ...current, priceMnt: event.target.value }))} className="h-10 rounded-lg border border-[var(--a-border)] px-2.5 text-xs outline-none focus:border-[#3970a7]" /></label>
@@ -141,10 +153,10 @@ export default function AdminProductVariantsPanel({ productId }: { productId: nu
         </div>
         <label className="mt-3 flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={form.isDefault} onChange={event => setForm(current => ({ ...current, isDefault: event.target.checked }))} className="size-4 accent-[#3970a7]" />Үндсэн (default) variant болгох</label>
         <div className="mt-3 flex items-center gap-2">
-          <button type="submit" disabled={isSaving} className="inline-flex items-center gap-2 rounded-full bg-[#3970a7] px-4 py-2 text-[10px] font-extrabold text-white disabled:opacity-60">{isSaving && <LoaderCircle className="animate-spin" size={12} />}{form.id ? "Хадгалах" : "Variant үүсгэх"}</button>
+          <button type="button" onClick={() => void save()} disabled={isSaving} className="inline-flex items-center gap-2 rounded-full bg-[#3970a7] px-4 py-2 text-[10px] font-extrabold text-white disabled:opacity-60">{isSaving && <LoaderCircle className="animate-spin" size={12} />}{form.id ? "Хадгалах" : "Variant үүсгэх"}</button>
           <button type="button" onClick={closeForm} className="text-[10px] font-extrabold text-[var(--a-muted)]">Цуцлах</button>
         </div>
-      </form>}
+      </div>}
     </div>
   );
 }
