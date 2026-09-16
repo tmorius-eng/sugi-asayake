@@ -92,7 +92,7 @@ pnpm exec vitest run --no-file-parallelism
 ### E2E тест (Playwright, 2026-09-16-аас)
 
 ```powershell
-pnpm build ; pnpm e2e                      # 54 тест: компьютер + утас
+pnpm build ; pnpm e2e                      # 68 тест: компьютер + утас
 pnpm e2e --project=desktop e2e/cart.spec.ts
 pnpm e2e --headed                          # нүдээр харах
 ```
@@ -133,6 +133,7 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
 Өдөр бүрийн бүрэн тэмдэглэл HISTORY.md-д байна — тодорхой bug/шийдвэрийн
 шалтгааныг мэдэх хэрэгтэй үед л тэнд гарчгаар хайна.
 
+- (09-16) **Сайтыг апп болгон суулгах** — footer-т "Аппаар суулгах" товч (компьютер + Android жинхэнэ цонх, iPhone-д заавар); manifest-д `id` ба `screenshots`. PWA нь 09-13-аас бэлэн байсан ч **суулгах гарц байгаагүй**
 - (09-16) **Камергүй компьютер дээр admin-д нэвтрэх QR handoff** (0085) — утсаар царайгаа уншуулж компьютероо нээнэ; [docs/FACE-HANDOFF-PLAN.md](FACE-HANDOFF-PLAN.md)
 - (09-16) **E2E тест анх удаа** (Playwright, 54 тест, компьютер+утас) — замдаа 9 бодит алдаа олж зассан, тэдгээрийн нэг нь **variant нэмэх admin-аас хэзээ ч ажилладаггүй байсан** (үүрлэсэн `<form>`)
 - (09-16) **Ачааллын бэлтгэл** — pool 25, кэшийн single-flight, cluster-д аюулгүй, Cloudflare cache rules, k6; **эхний ачаалалт 188 → 152 KB gzip**; **купоны хязгаар атомик (0084)**; admin AA контраст; **гарчгийн шрифт Cormorant Garamond**; "Хамт авдаг" cross-sell; Dependabot

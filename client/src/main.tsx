@@ -9,9 +9,15 @@ import App from "./App";
 import { startLogin } from "./const";
 import { captureTrafficSource } from "./lib/trafficSource";
 import { reloadOnceForStaleChunk } from "./lib/lazyRetry";
+import { startInstallWatch } from "./lib/pwaInstall";
 import "./index.css";
 
 captureTrafficSource();
+
+// "Аппаар суулгах" (2026-09-16). ЗААВАЛ render-ээс өмнө: Chrome нь
+// `beforeinstallprompt`-ийг эхний зурагдалтаас ч өмнө шиддэг тул компонент
+// дотроос сонсвол эвент аль хэдийн өнгөрсөн байдаг. lib/pwaInstall.ts.
+startInstallWatch();
 
 // PWA service worker (2026-09-13). Хуудас ачаалагдсаны дараа бүртгэгдэнэ тул
 // эхний paint-тай хэзээ ч өрсөлдөхгүй; scope "/" тул /shop, /product/*, офлайн

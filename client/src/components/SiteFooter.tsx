@@ -1,5 +1,6 @@
 import { Facebook, Instagram, Phone, Youtube } from "lucide-react";
 import { Link } from "wouter";
+import InstallAppButton from "@/components/InstallAppButton";
 import { trpc } from "@/lib/trpc";
 import { useCategories } from "@/hooks/useCategories";
 import { useShopContact } from "@/hooks/useShopContact";
@@ -73,6 +74,11 @@ export default function SiteFooter({ ctaBanner }: { ctaBanner?: FooterCtaBanner 
           <div className="footer-socials" aria-label="SUGI ASAYAKE сошиал хуудаснууд">
             {socials.map(({ label, href, Icon }) => <a className="footer-social-link" href={href} target="_blank" rel="noreferrer" aria-label={`${label} хуудас нээх`} key={label}><Icon size={17} strokeWidth={1.8} /><span>{label}</span></a>)}
           </div>
+          {/* 2026-09-16: суулгах боломжтой хөтөч дээр л өөрөө гарч ирнэ
+              (суулгасны дараа болон Firefox дээр юу ч зурагдахгүй). Энэ нь
+              дээрх §9-ийн "app-store badge оруулахгүй" дүрмийн эсрэг биш —
+              дэлгүүрийн лого биш, хөтчийн өөрийнх нь суулгах үйлдэл. */}
+          <InstallAppButton />
         </div>
         <div className="footer-column">
           <span>{textFor("footer-text-column-shop", "Дэлгүүр")}</span>
