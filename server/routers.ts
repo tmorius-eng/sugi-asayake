@@ -31,6 +31,9 @@ import {
   changeUserPassword,
   clearWishlistNotifyFlagsForProduct,
   createAdminCategory,
+  deleteAdminCategory,
+  deleteAdminOrder,
+  deleteAdminPostCategory,
   createAdminPost,
   createAdminPostCategory,
   createAdminProduct,
@@ -2992,6 +2995,39 @@ export const appRouter = router({
       await logAdminAction({ actorUserId: ctx.user.id, action: "order.refunded", entityType: "order", entityId: order.id, metadata: { refundAmountMnt: order.refundAmountMnt, restockItems: input.restockItems } });
       return order;
     }),
+    /**
+     * Захиалгыг бүрмөсөн устгах (2026-09-16, Tom-ийн хүсэлт).
+     *
+     * ⚠️ `adminProcedure` — буцаан олголтоос (finance) ч, хүргэлтээс
+     * (warehouse) ч ДЭЭГҮҮР эрх. Шалтгаан: цуцлах нь түүх үлдээдэг бол
+     * устгах нь мөрийг бүрмөсөн арилгана, хаанаас ч сэргээгдэхгүй.
+     * Хаалтууд (цуцлагдсан + төлөгдөөгүй, мөнгө/эрхийн мөргүй, нөөцийн
+     * нийлбэр 0) өгөгдлийн давхаргад — `deleteAdminOrder`-ийн тайлбарыг үз.
+     * Аудитын мөрөнд захиалгын хуулбарыг бүтнээр нь үлдээнэ.
+     */
+    deleteOrder: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      let removed;
+      try {
+        removed = await deleteAdminOrder({ id: input.id });
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Захиалга устгаж чадсангүй." });
+      }
+      await logAdminAction({
+        actorUserId: ctx.user.id,
+        action: "order.deleted",
+        entityType: "order",
+        entityId: removed.id,
+        metadata: {
+          orderNumber: removed.orderNumber,
+          customerName: removed.customerName,
+          totalMnt: removed.totalMnt,
+          createdAt: removed.createdAt?.toISOString() ?? null,
+          deletedItemCount: removed.deletedItemCount,
+          deletedMovementCount: removed.deletedMovementCount,
+        },
+      });
+      return removed;
+    }),
     createPost: staffProcedure.input(postWriteSchema).mutation(async ({ ctx, input }) => {
       await validatePostSlug(input.slug);
       const post = await createAdminPost({ ...input, createdByUserId: ctx.user.id });
@@ -3026,6 +3062,21 @@ export const appRouter = router({
       const category = await createAdminPostCategory(input.name);
       await logAdminAction({ actorUserId: ctx.user.id, action: "postCategory.created", entityType: "postCategory", entityId: category.id, metadata: { name: category.name } });
       return category;
+    }),
+    /**
+     * 2026-09-16. `post_category_links` нь cascade тул MySQL холбоосыг өөрөө
+     * арилгах ч тэр нь чимээгүй болно — нийтлэлтэй ангиллыг устгахаас
+     * татгалзаж, хэдэн нийтлэл хамаарч байгааг хэлнэ.
+     */
+    deletePostCategory: staffProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      let removed;
+      try {
+        removed = await deleteAdminPostCategory(input.id);
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Ангилал устгаж чадсангүй." });
+      }
+      await logAdminAction({ actorUserId: ctx.user.id, action: "postCategory.deleted", entityType: "postCategory", entityId: removed.id, metadata: { name: removed.name } });
+      return removed;
     }),
     // NEWVISION.md §5 "Топ брэндүүд" -- same staffProcedure weight as
     // Posts/Discount Codes (Tom's explicit correction to the original plan,
@@ -3388,6 +3439,22 @@ export const appRouter = router({
       const category = await updateAdminCategory(input);
       await logAdminAction({ actorUserId: ctx.user.id, action: "category.updated", entityType: "category", entityId: category.id, metadata: { slug: category.slug } });
       return category;
+    }),
+    /**
+     * 2026-09-16 (Tom: "ангилал устгах ямар ч сонголт алга"). Устгах нь
+     * `createCategory`/`updateCategory`-тэй ижил `warehouseProcedure` —
+     * каталогийн бүтэц нэг эрхийн доор байна. Бараатай ангиллыг өгөгдлийн
+     * давхарга татгалзаж, ХЭДЭН бараа саад болж байгааг хэлнэ.
+     */
+    deleteCategory: warehouseProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      let removed;
+      try {
+        removed = await deleteAdminCategory(input.id);
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Ангилал устгаж чадсангүй." });
+      }
+      await logAdminAction({ actorUserId: ctx.user.id, action: "category.deleted", entityType: "category", entityId: removed.id, metadata: { name: removed.name } });
+      return removed;
     }),
     updateSiteMedia: marketingProcedure.input(z.object({
       slotKey: siteMediaSlotSchema,

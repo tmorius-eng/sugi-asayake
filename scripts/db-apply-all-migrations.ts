@@ -22,7 +22,7 @@ import { planMysqlConnection } from "../server/_core/dbConnection";
 
 const dir = join(process.cwd(), "drizzle");
 const files = readdirSync(dir).filter(name => /^\d{4}_.*\.sql$/.test(name)).sort();
-const SKIPPABLE = /already exists|Duplicate column|Duplicate key name|Duplicate entry|check that column\/key exists|Can't DROP|doesn't exist|Multiple primary key/i;
+const SKIPPABLE = /Duplicate foreign key constraint|already exists|Duplicate column|Duplicate key name|Duplicate entry|check that column\/key exists|Can't DROP|doesn't exist|Multiple primary key/i;
 // The marker on a line of its own -- a comment that merely mentions the
 // marker (0010 does) must not split a statement.
 const BREAKPOINT = /^\s*-->\s*statement-breakpoint\s*$/m;

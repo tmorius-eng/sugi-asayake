@@ -39,6 +39,8 @@ describeWithDatabase("telemetry pageview integration (Tier E)", () => {
   const orderIds: number[] = [];
   let userId = 0;
   let productId = 0;
+  // Зөвхөн ЭНЭ тест үүсгэсэн бол устгана — бодит ангиллыг хэзээ ч хөндөхгүй.
+  let createdCategoryId = 0;
 
   afterAll(async () => {
     const db = await getDb();
@@ -49,6 +51,7 @@ describeWithDatabase("telemetry pageview integration (Tier E)", () => {
     }
     if (productId) await db.delete(products).where(eq(products.id, productId)); // cascades the variant
     if (userId) await db.delete(users).where(eq(users.id, userId));
+    if (createdCategoryId) await db.delete(productCategories).where(eq(productCategories.id, createdCategoryId));
     for (const token of sessionTokens) await db.delete(visitorSessions).where(eq(visitorSessions.sessionToken, token));
   });
 
@@ -107,9 +110,18 @@ describeWithDatabase("telemetry pageview integration (Tier E)", () => {
     const db = await getDb();
     if (!db) throw new Error("Database unavailable");
 
-    const [category] = await db.select({ id: productCategories.id }).from(productCategories).limit(1);
-    if (!category) throw new Error("No product category exists to attach the test product to.");
-    const productInsert = await db.insert(products).values({ categoryId: category.id, name: "Telemetry Test Product", slug: `${marker}-product`, priceMnt: 22_000, sku: `${marker}-sku`, stockQuantity: 10, isPublished: true });
+    // ⚠️ 2026-09-16: өмнө нь "ямар нэг ангилал байгаа" гэж НАЙДАЖ, байхгүй
+    // бол шидэж байв. Хөгжүүлэгчийн DB-д ангилал үргэлж байдаг тул энэ нь
+    // хэзээ ч мэдэгддэггүй байсан ба CI-ийн ЦЭВЭР схемд (seed-гүй) яг энд
+    // унадаг байв. Тест өөрийн шаардлагатай өгөгдлөө өөрөө үүсгэнэ.
+    const [existing] = await db.select({ id: productCategories.id }).from(productCategories).limit(1);
+    let categoryId = existing?.id;
+    if (!categoryId) {
+      const created = await db.insert(productCategories).values({ name: `${marker} ангилал`, slug: `${marker}-cat`, sortOrder: 9999 });
+      categoryId = Number(created[0].insertId);
+      createdCategoryId = categoryId;
+    }
+    const productInsert = await db.insert(products).values({ categoryId, name: "Telemetry Test Product", slug: `${marker}-product`, priceMnt: 22_000, sku: `${marker}-sku`, stockQuantity: 10, isPublished: true });
     productId = Number(productInsert[0].insertId);
     await db.insert(productVariants).values({ productId, sku: `${marker}-sku`, priceMnt: 22_000, stockQuantity: 10, isDefault: true });
 

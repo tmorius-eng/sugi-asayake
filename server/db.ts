@@ -3732,6 +3732,72 @@ export async function refundOrder(input: { id: number; refundAmountMnt: number; 
   return updated[0];
 }
 
+/**
+ * Захиалгыг бүрмөсөн устгах (2026-09-16, Tom-ийн хүсэлт).
+ *
+ * Захиалга бол САНХҮҮГИЙН бичлэг тул энэ нь панелийн хамгийн эмзэг үйлдэл.
+ * Тиймээс "цуцлах" (төлөв солих, түүх үлдэнэ) ба "устгах" (мөр алга болно)
+ * хоёр нь ТУСДАА: устгах нь зөвхөн туршилтын/хог мөрийг арилгах зориулалттай.
+ *
+ * Дөрвөн хаалт, дараалалтайгаар:
+ *  1. Зөвхөн `cancelled` — идэвхтэй захиалгыг устгаж болохгүй.
+ *  2. Зөвхөн `unpaid` — мөнгө хөдөлсөн бол (paid/refunded) бичлэг үлдэнэ.
+ *  3. Мөнгө/эрх үүсгэсэн мөр байвал татгалзана: бэлгийн карт (код гарт
+ *     байж магад), дэлгүүрийн зээл, купоны ашиглалт, сэтгэгдэл.
+ *  4. Нөөцийн хөдөлгөөний НИЙЛБЭР 0 байх ёстой. Цуцлагдсан захиалгад
+ *     `sale_online` (-N) ба `order_restock` (+N) хосоороо байдаг тул 0
+ *     гарна; 0 биш бол устгавал ledger ба `branch_stock` зөрнө (гарын
+ *     авлагын "ledger drift" дүрэм).
+ */
+export async function deleteAdminOrder(input: { id: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const [order] = await db.select().from(orders).where(eq(orders.id, input.id)).limit(1);
+  if (!order) throw new Error("Захиалга олдсонгүй.");
+
+  if (order.status !== "cancelled") {
+    throw new Error("Зөвхөн ЦУЦЛАГДСАН захиалгыг устгана. Эхлээд цуцлаарай.");
+  }
+  if (order.paymentStatus !== "unpaid") {
+    throw new Error(`Төлбөрийн төлөв "${order.paymentStatus}" — мөнгө хөдөлсөн захиалга нь санхүүгийн бичлэг тул устгахгүй.`);
+  }
+
+  const [giftCard] = await db.select({ id: giftCards.id }).from(giftCards).where(eq(giftCards.purchaseOrderId, order.id)).limit(1);
+  if (giftCard) throw new Error("Энэ захиалга бэлгийн карт гаргасан байна — устгахгүй (код хэрэглэгчийн гарт байж болно).");
+  const [credit] = await db.select({ id: storeCreditLedger.id }).from(storeCreditLedger).where(eq(storeCreditLedger.orderId, order.id)).limit(1);
+  if (credit) throw new Error("Энэ захиалгад дэлгүүрийн зээлийн хөдөлгөөн холбогдсон байна — устгахгүй.");
+  const [redemption] = await db.select({ id: discountCodeRedemptions.id }).from(discountCodeRedemptions).where(eq(discountCodeRedemptions.orderId, order.id)).limit(1);
+  if (redemption) throw new Error("Энэ захиалгад купоны ашиглалт бүртгэгдсэн байна — устгахгүй.");
+  const [review] = await db.select({ id: productReviews.id }).from(productReviews).where(eq(productReviews.orderId, order.id)).limit(1);
+  if (review) throw new Error("Энэ захиалгад сэтгэгдэл холбогдсон байна — устгахгүй.");
+
+  const moves = await db.select().from(stockMovements).where(and(eq(stockMovements.refType, "order"), eq(stockMovements.refId, order.id)));
+  const netDelta = moves.reduce((sum, move) => sum + Number(move.delta), 0);
+  if (netDelta !== 0) {
+    throw new Error(`Нөөцийн хөдөлгөөний нийлбэр ${netDelta} (0 биш) — устгавал агуулахын үлдэгдэл зөрнө. Эхлээд тооллогоор тэнцүүлнэ үү.`);
+  }
+
+  const items = await db.select().from(orderItems).where(eq(orderItems.orderId, order.id));
+  await db.transaction(async tx => {
+    await tx.delete(stockMovements).where(and(eq(stockMovements.refType, "order"), eq(stockMovements.refId, order.id)));
+    await tx.delete(paymentAttempts).where(eq(paymentAttempts.orderId, order.id));
+    await tx.delete(orderItems).where(eq(orderItems.orderId, order.id));
+    await tx.delete(orders).where(eq(orders.id, order.id));
+  });
+
+  // Аудитын мөрөнд бүтнээр нь буцаана: устгасны дараа өөр хаанаас ч
+  // сэргээх боломжгүй тул юу устсаныг бичлэг дээр үлдээх ёстой.
+  return {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    customerName: order.customerName,
+    totalMnt: order.totalMnt,
+    createdAt: order.createdAt,
+    deletedItemCount: items.length,
+    deletedMovementCount: moves.length,
+  };
+}
+
 // Admin overhaul (2026-09-08, Phase F): guest checkout customers have never
 // had any way to check their order status after leaving the confirmation
 // page -- this is the first one. Phone-first (not email) to match this
@@ -4016,6 +4082,27 @@ export async function postCategoryNameExists(name: string) {
   if (!db) throw new Error("Database is not available");
   const rows = await db.select({ id: postCategories.id }).from(postCategories).where(eq(postCategories.name, name)).limit(1);
   return Boolean(rows[0]);
+}
+
+/**
+ * Нийтлэлийн ангилал устгах (2026-09-16, Tom: "устгах юу ч алга").
+ *
+ * `post_category_links` нь `onDelete: "cascade"` тул MySQL холбоосыг өөрөө
+ * арилгана — гэхдээ тэр нь ЧИМЭЭГҮЙ болно: админ 12 нийтлэлтэй ангиллыг
+ * устгаад тэдгээр нийтлэл ангилалгүй үлдсэнийг мэдэхгүй. Тиймээс холбоос
+ * байвал татгалзаж, хэдэн нийтлэл байгааг хэлнэ.
+ */
+export async function deleteAdminPostCategory(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const [category] = await db.select().from(postCategories).where(eq(postCategories.id, id)).limit(1);
+  if (!category) throw new Error("Ангилал олдсонгүй.");
+  const links = await db.select({ postId: postCategoryLinks.postId }).from(postCategoryLinks).where(eq(postCategoryLinks.categoryId, id));
+  if (links.length > 0) {
+    throw new Error(`Энэ ангилалд ${links.length} нийтлэл хамаарч байна. Эхлээд тэдгээрээс ангиллыг нь салгана уу.`);
+  }
+  await db.delete(postCategories).where(eq(postCategories.id, id));
+  return { id, name: category.name };
 }
 
 export async function createAdminPostCategory(name: string) {
@@ -5454,6 +5541,28 @@ export async function updateAdminCategory(input: { id: number } & Partial<Catego
   await db.update(productCategories).set(changes).where(eq(productCategories.id, input.id));
   const updated = await db.select().from(productCategories).where(eq(productCategories.id, input.id)).limit(1);
   return updated[0];
+}
+
+/**
+ * Барааны ангилал устгах (2026-09-16, Tom: "ангилал устгах ямар ч сонголт алга").
+ *
+ * `products.categoryId` нь `onDelete: "restrict"` тул бараатай ангиллыг MySQL
+ * өөрөө татгалзана — гэвч тэр алдаа нь ойлгомжгүй SQL текст болж админд
+ * хүрнэ. Эндээс урьдчилж шалгаж, ХЭДЭН бараа саад болж байгааг хэлнэ:
+ * "яагаад болохгүй байна" гэдэг нь "болохгүй" гэдгээс илүү хэрэгтэй.
+ */
+export async function deleteAdminCategory(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const [category] = await db.select().from(productCategories).where(eq(productCategories.id, id)).limit(1);
+  if (!category) throw new Error("Ангилал олдсонгүй.");
+  const used = await db.select({ id: products.id }).from(products).where(eq(products.categoryId, id));
+  if (used.length > 0) {
+    throw new Error(`Энэ ангилалд ${used.length} бараа байна. Эхлээд тэдгээрийг өөр ангилал руу зөөнө үү.`);
+  }
+  await db.delete(productCategories).where(eq(productCategories.id, id));
+  invalidateStorefront("categories");
+  return { id, name: category.name };
 }
 
 // Audit 2026-09-09 (R4): server-side page + search, instead of shipping the

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Banknote, Download, FileText, LayoutGrid, List, LoaderCircle, PackageCheck, Pencil, Plus, Printer } from "lucide-react";
+import { Banknote, Download, FileText, LayoutGrid, List, LoaderCircle, PackageCheck, Pencil, Plus, Printer, Trash2 } from "lucide-react";
 import { savePdfBase64 } from "@/lib/pdf";
 import ManualOrderForm from "./admin/ManualOrderForm";
 import OrderEditForm from "./admin/OrderEditForm";
@@ -47,7 +47,10 @@ export default function AdminOperationsPanel({ preview = false, query = "", role
   // check), and warehouse never gets refund authority (financeProcedure).
   const canManageFulfilment = role === "admin" || role === "warehouse";
   const canRefund = role === "admin" || role === "finance";
+  // Устгах нь зөвхөн admin (2026-09-16) — буцаан олгохоос ч дээгүүр эрх.
+  const canDeleteOrder = role === "admin";
   const refundOrder = trpc.admin.refundOrder.useMutation({ onSuccess: () => { utils.admin.orders.invalidate(); toast.success("Буцаан олголт бүртгэгдлээ."); setRefundForm(null); }, onError: error => toast.error(messageFrom(error)) });
+  const deleteOrder = trpc.admin.deleteOrder.useMutation({ onSuccess: result => { utils.admin.orders.invalidate(); toast.success(`${result.orderNumber} захиалгыг устгалаа.`); }, onError: error => toast.error(messageFrom(error)) });
   const [refundForm, setRefundForm] = useState<{ orderId: number; amountMnt: string; note: string; restock: boolean } | null>(null);
   // Staff-side order writes (2026-09-14): manual order form + in-place edit + PDFs.
   const [showManualOrder, setShowManualOrder] = useState(false);
@@ -206,6 +209,24 @@ export default function AdminOperationsPanel({ preview = false, query = "", role
               ) : (
                 <button type="button" disabled={preview} onClick={() => setRefundForm({ orderId: order.id, amountMnt: String(order.totalMnt), note: "", restock: false })} className="mt-3 inline-flex h-10 items-center gap-2 rounded-full border border-[#df1f3d]/30 px-4 text-xs font-bold text-[#df1f3d] transition hover:bg-[var(--a-neg-soft)]"><Banknote size={14} />Буцаан олгох</button>
               )
+            )}
+            {/* 2026-09-16 (Tom-ийн хүсэлт). Устгах нь буцаан олгохоос ч
+                дээгүүр эрх шаардана (admin): цуцлах нь түүх үлдээдэг бол
+                устгах нь мөрийг бүрмөсөн арилгана. Зөвхөн ЦУЦЛАГДСАН,
+                ТӨЛӨГДӨӨГҮЙ захиалгад харагдана — сервер мөн ижил хаалттай,
+                энэ нь зөвхөн ажиллахгүй товч үзүүлэхгүйн тулд. */}
+            {canDeleteOrder && order.status === "cancelled" && order.paymentStatus === "unpaid" && (
+              <button
+                type="button"
+                disabled={preview || deleteOrder.isPending}
+                onClick={() => {
+                  if (!window.confirm(`${order.orderNumber} захиалгыг бүрмөсөн устгах уу?\n\nЭнэ үйлдэл буцаах боломжгүй. Захиалгын мөр, барааны жагсаалт, нөөцийн хөдөлгөөн бүгд арилна.`)) return;
+                  deleteOrder.mutate({ id: order.id });
+                }}
+                className="mt-3 ml-2 inline-flex h-10 items-center gap-2 rounded-full border border-[var(--a-neg)] px-4 text-xs font-bold text-[var(--a-neg)] transition hover:bg-[var(--a-neg-soft)] disabled:opacity-60"
+              >
+                {deleteOrder.isPending ? <LoaderCircle className="animate-spin" size={13} /> : <Trash2 size={14} />}Захиалга устгах
+              </button>
             )}
           </article>
         )}

@@ -12,6 +12,14 @@ import type { TrpcContext } from "./_core/context";
 // an actual cookie -> DB row -> cookie cycle across separate requests, not
 // just that the pure functions compile.
 const describeWithDatabase = process.env.COMMERCE_INTEGRATION_TESTS === "1" ? describe : describe.skip;
+// ⚠️ 2026-09-16: бүртгэл нь verify.mn-ийн OTP-оор явдаг бөгөөд
+// `server/_core/env.ts` нь түлхүүргүй үед ЧИМЭЭГҮЙ no-op болохын оронд
+// зориуд алдаа шиддэг (бусад интеграцаас ялгаатай). CI-д тэр түлхүүр
+// байдаггүй тул энэ тест "VERIFY_MN_API_KEY тохируулаагүй байна" гэж
+// унадаг байв — аппын алдаа биш, тохиргоогүй орчин. Тиймээс бусад
+// интеграцын адил хаалттай болгов; зочны checkout-ийн тест нь түлхүүр
+// шаарддаггүй тул хэвээрээ ажиллана.
+const hasVerifyMn = Boolean(process.env.VERIFY_MN_API_KEY);
 
 /** A context whose `res.cookie` calls are captured, so a "next request" can replay them. */
 function makeGuestContext(existingGuestToken?: string): { ctx: TrpcContext; cookiesSet: Record<string, string> } {
@@ -131,7 +139,7 @@ describeWithDatabase("guest checkout integration", () => {
     expect(cartAfterCheckout).toBeNull();
   });
 
-  it("merges a guest's cart into their account the moment they register", async () => {
+  it.skipIf(!hasVerifyMn)("merges a guest's cart into their account the moment they register", async () => {
     const guestCtx = makeGuestContext();
     await appRouter.createCaller(guestCtx.ctx).cart.addItem({ productId, quantity: 1 });
     const guestToken = guestCtx.cookiesSet[GUEST_CART_COOKIE_NAME];

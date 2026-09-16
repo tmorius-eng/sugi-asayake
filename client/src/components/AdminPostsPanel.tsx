@@ -90,6 +90,7 @@ export default function AdminPostsPanel({ preview = false }: { preview?: boolean
   const restorePost = trpc.admin.restorePost.useMutation({ onSuccess: () => utils.admin.posts.invalidate(), onError: error => toast.error(messageFrom(error)) });
   const permanentlyDeletePost = trpc.admin.permanentlyDeletePost.useMutation({ onSuccess: () => utils.admin.posts.invalidate(), onError: error => toast.error(messageFrom(error)) });
   const createPostCategory = trpc.admin.createPostCategory.useMutation({ onSuccess: () => utils.admin.postCategories.invalidate(), onError: error => toast.error(messageFrom(error)) });
+  const deletePostCategory = trpc.admin.deletePostCategory.useMutation({ onSuccess: result => { utils.admin.postCategories.invalidate(); toast.success(`“${result.name}” ангиллыг устгалаа.`); }, onError: error => toast.error(messageFrom(error)) });
   const uploadCoverImage = trpc.admin.uploadPostCoverImage.useMutation();
 
   const [form, setForm] = useState(emptyForm);
@@ -367,10 +368,27 @@ export default function AdminPostsPanel({ preview = false }: { preview?: boolean
           <p className="text-[10px] font-extrabold tracking-[.14em] text-[var(--a-text-soft)]">АНГИЛАЛ</p>
           <div className="mt-3 grid max-h-40 gap-2 overflow-y-auto">
             {categories.map(category => (
-              <label key={category.id} className="flex items-center gap-2 text-sm">
-                <Checkbox checked={form.categoryIds.includes(category.id)} onCheckedChange={checked => setForm(current => ({ ...current, categoryIds: checked ? [...current.categoryIds, category.id] : current.categoryIds.filter(id => id !== category.id) }))} />
-                {category.name}
-              </label>
+              <div key={category.id} className="flex items-center gap-2 text-sm">
+                <label className="flex flex-1 items-center gap-2">
+                  <Checkbox checked={form.categoryIds.includes(category.id)} onCheckedChange={checked => setForm(current => ({ ...current, categoryIds: checked ? [...current.categoryIds, category.id] : current.categoryIds.filter(id => id !== category.id) }))} />
+                  {category.name}
+                </label>
+                {/* 2026-09-16: ангилал нэмэх боломжтой атлаа устгах арга
+                    байгаагүй. Нийтлэлтэй ангиллыг сервер татгалзана. */}
+                <button
+                  type="button"
+                  disabled={deletePostCategory.isPending}
+                  onClick={() => {
+                    if (!window.confirm(`“${category.name}” ангиллыг устгах уу?`)) return;
+                    deletePostCategory.mutate({ id: category.id });
+                  }}
+                  aria-label={`${category.name} устгах`}
+                  title="Устгах"
+                  className="grid size-7 shrink-0 place-items-center rounded-lg text-[var(--a-muted)] transition hover:bg-[var(--a-neg-soft)] hover:text-[var(--a-neg)] disabled:opacity-40"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
             ))}
             {categories.length === 0 && <p className="text-xs text-[var(--a-faint)]">Ангилал алга.</p>}
           </div>
