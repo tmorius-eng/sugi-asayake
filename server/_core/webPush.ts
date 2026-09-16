@@ -15,7 +15,8 @@
 
 import webpush from "web-push";
 import { ENV } from "./env";
-import { deletePushSubscription, getPushSubscriptionsForUser, touchPushSubscriptions } from "../db";
+import { deletePushSubscription, getPushSubscriptionsForUser, getStoreSettingValue, touchPushSubscriptions } from "../db";
+import { fillTemplate, type StoreSettingKey } from "../../shared/store-settings";
 
 let configured = false;
 export function webPushEnabled(): boolean {
@@ -50,23 +51,36 @@ export async function sendPushToUser(userId: number, payload: PushPayload): Prom
   return delivered.length;
 }
 
-const STATUS_TEXT: Record<string, { title: string; body: string }> = {
-  confirmed: { title: "Захиалга баталгаажлаа", body: "Захиалга {n} баталгаажлаа. Бид бэлтгэж эхэллээ." },
-  processing: { title: "Захиалгыг бэлтгэж байна", body: "Захиалга {n}-г бэлтгэж байна." },
-  shipped: { title: "Хүргэлтэд гарлаа", body: "Захиалга {n} хүргэлтэд гарлаа. Удахгүй хүрнэ." },
-  delivered: { title: "Хүргэгдлээ", body: "Захиалга {n} хүргэгдлээ. Баярлалаа!" },
-  completed: { title: "Захиалга дууслаа", body: "Захиалга {n} амжилттай дууслаа. Сэтгэгдэл үлдээгээрэй." },
-  cancelled: { title: "Захиалга цуцлагдлаа", body: "Захиалга {n} цуцлагдлаа. Асуулт байвал бидэнтэй холбогдоорой." },
-  ready_for_pickup: { title: "Салбараас авахад бэлэн", body: "Захиалга {n} салбар дээр танийг хүлээж байна." },
-};
+const PUSH_STATUSES = new Set(["confirmed", "processing", "shipped", "delivered", "completed", "cancelled", "ready_for_pickup"]);
 
-/** Fire-and-forget order status push; safe to await inside the same try as the email. */
+/**
+ * Fire-and-forget order status push; safe to await inside the same try as the email.
+ *
+ * 2026-09-16: гарчиг/текст нь ХАТУУ бичигдсэн байснаа `store_settings` рүү
+ * шилжив (`shared/store-settings.ts`-ийн "Автомат мэдэгдэл (push)" бүлэг) —
+ * Tom: *"admin тохиргоо сайн суу, editable, on/off, юу явуулахаа засварлаж
+ * болдог"*. Унтраах хоёр зам: `push-order-notifications = 0` (бүгд), эсвэл
+ * тухайн төлөвийн **биеийг хоосон болгох** (зөвхөн тэр нэг).
+ */
 export async function sendOrderStatusPush(order: { id: number; userId: number | null; orderNumber: string; status: string }): Promise<void> {
   if (!order.userId) return;
-  const text = STATUS_TEXT[order.status];
-  if (!text) return;
+  if (!PUSH_STATUSES.has(order.status)) return;
   try {
-    await sendPushToUser(order.userId, { title: text.title, body: text.body.replace("{n}", order.orderNumber), url: "/profile?tab=orders", tag: `order-${order.id}` });
+    if ((await getStoreSettingValue("push-order-notifications")).trim() === "0") return;
+    const [title, body] = await Promise.all([
+      getStoreSettingValue(`push-title-order-${order.status}` as StoreSettingKey),
+      getStoreSettingValue(`push-body-order-${order.status}` as StoreSettingKey),
+    ]);
+    // Хоосон бие = энэ төлөвийг унтраасан. Гарчиг нь хоосон бол мэдэгдэл
+    // нэргүй гарах тул мөн илгээхгүй.
+    if (!body.trim() || !title.trim()) return;
+    const values = { "{захиалга}": order.orderNumber };
+    await sendPushToUser(order.userId, {
+      title: fillTemplate(title, values),
+      body: fillTemplate(body, values),
+      url: "/profile?tab=orders",
+      tag: `order-${order.id}`,
+    });
   } catch (error) {
     console.warn("[push] order status push failed", error instanceof Error ? error.message : error);
   }

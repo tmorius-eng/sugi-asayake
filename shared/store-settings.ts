@@ -256,6 +256,94 @@ export const storeSettingSlots = [
     description: "Утасны push мэдэгдэл асаасан хэрэглэгчид сагсандаа бараа үлдээгээд 24 цаг өнгөрөхөд очно (гарчиг нь имэйлийнхтэй ижил). {нэр} = хэрэглэгчийн нэр.",
     fallbackValue: "{нэр}, таны сагсанд сонгосон бараа хүлээж байна. Нэг товшилтоор захиалгаа дуусгаарай.",
   },
+  /**
+   * Захиалгын явцын push мэдэгдэл (2026-09-16). 2026-09-13-аас хойш эдгээр
+   * текст `server/_core/webPush.ts`-ийн `STATUS_TEXT` дотор ХАТУУ бичигдсэн
+   * байсан — өөрчлөхийн тулд deploy хэрэгтэй, унтраах ямар ч арга байгаагүй.
+   *
+   * On/off нь тусдаа туг БИШ: **биеийг нь хоосон болговол тэр төлөвийн
+   * мэдэгдэл илгээгдэхгүй.** Ингэснээр 7 төлөв × 3 талбар (21 мөр) болохын
+   * оронд 14 мөр болж, "юу илгээхээ засах" ба "илгээхгүй байх" хоёр нэг л
+   * газраас удирдагдана. Бүгдийг нэг дор унтраах бол `push-order-notifications`.
+   */
+  {
+    key: "push-order-notifications",
+    group: "Автомат мэдэгдэл (push)",
+    type: "text" as const,
+    inputType: "line" as const,
+    placeholder: "1",
+    label: "Захиалгын явцын мэдэгдэл (1 = тийм, 0 = үгүй)",
+    description: "0 бол доорх бүх төлөвийн мэдэгдэл огт илгээгдэхгүй. Мэдэгдэл асаасан, нэвтэрсэн харилцагчид л хүрнэ.",
+    fallbackValue: "1",
+  },
+  // ⚠️ Долоон төлөв бүрийн хос нь ГАРААР бичигдсэн, давталтаар үүсгээгүй:
+  // `StoreSettingKey` нь энэ массивын `key`-үүдээс гаралтай тул зүйрлэлт
+  // (template literal) бүхий flatMap нь бүх түлхүүрийг `string` болгож,
+  // төслийн бүх `getStoreSettingValue("…")` дуудлагын үсгийн алдааг барихаа
+  // болино (2026-09-16-нд бодитоор тохиолдсон).
+  {
+    key: "push-title-order-confirmed", group: "Автомат мэдэгдэл (push)", type: "text" as const, inputType: "line" as const,
+    label: "Баталгаажсан — гарчиг", description: "", tokens: ["{захиалга}"] as const, fallbackValue: "Захиалга баталгаажлаа",
+  },
+  {
+    key: "push-body-order-confirmed", group: "Автомат мэдэгдэл (push)", type: "text" as const,
+    label: "Баталгаажсан — текст", description: "Хоосон болговол энэ төлөвт мэдэгдэл илгээгдэхгүй.", tokens: ["{захиалга}"] as const,
+    fallbackValue: "Захиалга {захиалга} баталгаажлаа. Бид бэлтгэж эхэллээ.",
+  },
+  {
+    key: "push-title-order-processing", group: "Автомат мэдэгдэл (push)", type: "text" as const, inputType: "line" as const,
+    label: "Бэлтгэж байгаа — гарчиг", description: "", tokens: ["{захиалга}"] as const, fallbackValue: "Захиалгыг бэлтгэж байна",
+  },
+  {
+    key: "push-body-order-processing", group: "Автомат мэдэгдэл (push)", type: "text" as const,
+    label: "Бэлтгэж байгаа — текст", description: "Хоосон болговол энэ төлөвт мэдэгдэл илгээгдэхгүй.", tokens: ["{захиалга}"] as const,
+    fallbackValue: "Захиалга {захиалга}-г бэлтгэж байна.",
+  },
+  {
+    key: "push-title-order-shipped", group: "Автомат мэдэгдэл (push)", type: "text" as const, inputType: "line" as const,
+    label: "Хүргэлтэд гарсан — гарчиг", description: "", tokens: ["{захиалга}"] as const, fallbackValue: "Хүргэлтэд гарлаа",
+  },
+  {
+    key: "push-body-order-shipped", group: "Автомат мэдэгдэл (push)", type: "text" as const,
+    label: "Хүргэлтэд гарсан — текст", description: "Хоосон болговол энэ төлөвт мэдэгдэл илгээгдэхгүй.", tokens: ["{захиалга}"] as const,
+    fallbackValue: "Захиалга {захиалга} хүргэлтэд гарлаа. Удахгүй хүрнэ.",
+  },
+  {
+    key: "push-title-order-delivered", group: "Автомат мэдэгдэл (push)", type: "text" as const, inputType: "line" as const,
+    label: "Хүргэгдсэн — гарчиг", description: "", tokens: ["{захиалга}"] as const, fallbackValue: "Хүргэгдлээ",
+  },
+  {
+    key: "push-body-order-delivered", group: "Автомат мэдэгдэл (push)", type: "text" as const,
+    label: "Хүргэгдсэн — текст", description: "Хоосон болговол энэ төлөвт мэдэгдэл илгээгдэхгүй.", tokens: ["{захиалга}"] as const,
+    fallbackValue: "Захиалга {захиалга} хүргэгдлээ. Баярлалаа!",
+  },
+  {
+    key: "push-title-order-completed", group: "Автомат мэдэгдэл (push)", type: "text" as const, inputType: "line" as const,
+    label: "Дууссан — гарчиг", description: "", tokens: ["{захиалга}"] as const, fallbackValue: "Захиалга дууслаа",
+  },
+  {
+    key: "push-body-order-completed", group: "Автомат мэдэгдэл (push)", type: "text" as const,
+    label: "Дууссан — текст", description: "Хоосон болговол энэ төлөвт мэдэгдэл илгээгдэхгүй.", tokens: ["{захиалга}"] as const,
+    fallbackValue: "Захиалга {захиалга} амжилттай дууслаа. Сэтгэгдэл үлдээгээрэй.",
+  },
+  {
+    key: "push-title-order-cancelled", group: "Автомат мэдэгдэл (push)", type: "text" as const, inputType: "line" as const,
+    label: "Цуцлагдсан — гарчиг", description: "", tokens: ["{захиалга}"] as const, fallbackValue: "Захиалга цуцлагдлаа",
+  },
+  {
+    key: "push-body-order-cancelled", group: "Автомат мэдэгдэл (push)", type: "text" as const,
+    label: "Цуцлагдсан — текст", description: "Хоосон болговол энэ төлөвт мэдэгдэл илгээгдэхгүй.", tokens: ["{захиалга}"] as const,
+    fallbackValue: "Захиалга {захиалга} цуцлагдлаа. Асуулт байвал бидэнтэй холбогдоорой.",
+  },
+  {
+    key: "push-title-order-ready_for_pickup", group: "Автомат мэдэгдэл (push)", type: "text" as const, inputType: "line" as const,
+    label: "Салбараас авахад бэлэн — гарчиг", description: "", tokens: ["{захиалга}"] as const, fallbackValue: "Салбараас авахад бэлэн",
+  },
+  {
+    key: "push-body-order-ready_for_pickup", group: "Автомат мэдэгдэл (push)", type: "text" as const,
+    label: "Салбараас авахад бэлэн — текст", description: "Хоосон болговол энэ төлөвт мэдэгдэл илгээгдэхгүй.", tokens: ["{захиалга}"] as const,
+    fallbackValue: "Захиалга {захиалга} салбар дээр танийг хүлээж байна.",
+  },
   {
     key: "seo-google-site-verification",
     group: "SEO ба баталгаажуулалт",

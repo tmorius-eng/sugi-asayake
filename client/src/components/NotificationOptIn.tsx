@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { ArrowUpRight, Bell } from "lucide-react";
 import { Link } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -32,12 +32,30 @@ import { toast } from "sonner";
  *    (`push.subscribe` нь protected) нэвтрэх шаардлагатайг тайлбарлана.
  *    Чимээгүй бүтэлгүйтэхгүй.
  */
+/**
+ * ⚠️ Бүртгэлийн төлөв нь МОДУЛИЙН хэмжээнд, компонент бүрт биш (2026-09-16).
+ *
+ * Товч хоёр газар зурагддаг (☰ цэс ба footer). Төлөв нь компонент бүрт
+ * тусдаа байсан тул цэснээс асаасны дараа footer-ийнх нь "асаагаагүй" гэж
+ * үлдэж, дахин дарахад ДАХИН нэг туршилтын мэдэгдэл илгээгддэг байв. Tom-ийн
+ * дэлгэц дээр яг ижил мэдэгдэл 5 удаа давхарласан нь үүний бодит үр дүн.
+ * `busy` нь мөн энд: нэг дарсны дараа хоёр товч хоёулаа түгжигдэнэ.
+ */
+let sharedSubscribed: boolean | null = null;
+let sharedBusy = false;
+const stateListeners = new Set<() => void>();
+const emitState = () => { for (const listener of stateListeners) listener(); };
+const subscribeState = (listener: () => void) => { stateListeners.add(listener); return () => { stateListeners.delete(listener); }; };
+const stateSnapshot = () => `${sharedSubscribed}|${sharedBusy}`;
+
 export default function NotificationOptIn({ variant = "footer", onAction }: { variant?: "footer" | "row"; onAction?: () => void } = {}) {
   const t = useT();
   const { user } = useAuth();
   const [support, setSupport] = useState<PushSupport>("unsupported");
-  const [subscribed, setSubscribed] = useState<boolean | null>(null);
   const [dialog, setDialog] = useState<null | "needs-install" | "denied" | "login">(null);
+  useSyncExternalStore(subscribeState, stateSnapshot, () => "null|false");
+  const subscribed = sharedSubscribed;
+  const busy = sharedBusy;
   const keyQuery = trpc.push.publicKey.useQuery(undefined, { staleTime: 10 * 60_000 });
   const subscribe = trpc.push.subscribe.useMutation();
   const test = trpc.push.test.useMutation();
@@ -46,10 +64,13 @@ export default function NotificationOptIn({ variant = "footer", onAction }: { va
   // сервер талын render (байхгүй ч) болон hydration-ий зөрүүнээс сэргийлнэ.
   useEffect(() => {
     setSupport(pushSupport());
-    void currentPushSubscription().then(sub => setSubscribed(Boolean(sub)));
+    if (sharedSubscribed === null) {
+      void currentPushSubscription().then(sub => { sharedSubscribed = Boolean(sub); emitState(); });
+    }
   }, []);
 
   const enable = useCallback(async () => {
+    if (sharedBusy) return;
     onAction?.();
     // Дараалал санаатай: (1) төхөөрөмжийн хатуу хориг — iPhone дээр
     // суулгаагүй бол юу ч хийж болохгүй, (2) манай өөрсдийн урьдчилсан
@@ -62,18 +83,26 @@ export default function NotificationOptIn({ variant = "footer", onAction }: { va
     if (support === "denied") { setDialog("denied"); return; }
     const key = keyQuery.data?.key;
     if (!key) { toast.error(t("Мэдэгдэл одоогоор тохируулагдаагүй байна.")); return; }
-    const sub = await subscribeToPush(key);
-    // Зөвшөөрөл асуухад "Block" дарсан бол хөтөч дахин асуухгүй — тохиргооноос
-    // нь буцааж нээхийг зааж өгөх нь ганц бодит гарц.
-    if (!sub) { setSupport(pushSupport()); setDialog("denied"); return; }
-    await subscribe.mutateAsync(sub);
-    setSubscribed(true);
-    // Шууд нэг мэдэгдэл илгээж, хүн ажиллаж байгааг НҮДЭЭР хардаг байх —
-    // "асаалаа" гэсэн toast нь юу ч баталгаажуулдаггүй.
-    const delivered = await test.mutateAsync().catch(() => ({ delivered: 0 }));
-    toast.success(delivered.delivered > 0
-      ? t("Мэдэгдэл асаалаа — туршилтын мэдэгдэл илгээлээ.")
-      : t("Мэдэгдэл асаалаа."));
+    // Товчийг ЭНД түгжинэ — зөвшөөрлийн цонх гарч ирэх хүртэл хэдэн секунд
+    // өнгөрдөг бөгөөд тэр зуур хүн дахин дардаг (Tom-ийн 5 давхардсан
+    // мэдэгдлийн шалтгаан).
+    sharedBusy = true; emitState();
+    try {
+      const sub = await subscribeToPush(key);
+      // Зөвшөөрөл асуухад "Block" дарсан бол хөтөч дахин асуухгүй — тохиргооноос
+      // нь буцааж нээхийг зааж өгөх нь ганц бодит гарц.
+      if (!sub) { setSupport(pushSupport()); setDialog("denied"); return; }
+      await subscribe.mutateAsync(sub);
+      sharedSubscribed = true; emitState();
+      // Шууд нэг мэдэгдэл илгээж, хүн ажиллаж байгааг НҮДЭЭР хардаг байх —
+      // "асаалаа" гэсэн toast нь юу ч баталгаажуулдаггүй.
+      const delivered = await test.mutateAsync().catch(() => ({ delivered: 0 }));
+      toast.success(delivered.delivered > 0
+        ? t("Мэдэгдэл асаалаа — туршилтын мэдэгдэл илгээлээ.")
+        : t("Мэдэгдэл асаалаа."));
+    } finally {
+      sharedBusy = false; emitState();
+    }
   }, [keyQuery.data?.key, onAction, subscribe, support, t, test, user]);
 
   // Тохируулагдаагүй сервер, дэмждэггүй хөтөч, эсвэл аль хэдийн асаалттай
@@ -87,12 +116,12 @@ export default function NotificationOptIn({ variant = "footer", onAction }: { va
   return (
     <>
       {variant === "row" ? (
-        <button type="button" className="commerce-mobile-menu-row" onClick={() => void enable()}>
+        <button type="button" className="commerce-mobile-menu-row" disabled={busy} onClick={() => void enable()}>
           <span className="flex items-center gap-2"><Bell size={15} aria-hidden="true" />{label}</span>
           <ArrowUpRight size={16} aria-hidden="true" />
         </button>
       ) : (
-        <button type="button" className="footer-notify" onClick={() => void enable()}>
+        <button type="button" className="footer-notify" disabled={busy} onClick={() => void enable()}>
           <Bell size={17} strokeWidth={1.8} aria-hidden="true" />
           <span>{label}</span>
         </button>
