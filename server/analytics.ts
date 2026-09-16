@@ -482,6 +482,18 @@ export async function getCartAbandonment(input: DateRangeInput = {}) {
  *  how many products are out of stock vs. running low, mirroring the
  *  low-stock widget already on the main dashboard (AdminDashboardHome)
  *  but as one summary tile here instead of a live product list. */
+/**
+ * Stock KPIs for the admin dashboard.
+ *
+ * Gift cards are excluded (2026-09-16). They are `products.kind = 'gift_card'`
+ * rows carrying a placeholder stockQuantity that means "unlimited", not a
+ * shelf count -- on the live catalogue four of them sat at 999 each and added
+ * 374,625,000₮ of imaginary stock, 27% of the figure this card was showing.
+ * The same placeholder also makes them permanently invisible to the
+ * out-of-stock and low-stock alarms, so counting them served nothing: a gift
+ * card can never be out of stock. Every merchandising view that measures
+ * shelves (sell-through, dead stock, days of cover) must filter the same way.
+ */
 export async function getInventorySnapshot() {
   const db = await getDb();
   if (!db) return { publishedProductCount: 0, outOfStockCount: 0, lowStockCount: 0, stockValueMnt: 0 };
@@ -493,7 +505,7 @@ export async function getInventorySnapshot() {
       stockValueMnt: sql<number>`coalesce(sum(${products.priceMnt} * ${products.stockQuantity}), 0)`,
     })
     .from(products)
-    .where(eq(products.isPublished, true));
+    .where(and(eq(products.isPublished, true), eq(products.kind, "physical")));
   return {
     publishedProductCount: Number(row?.publishedProductCount ?? 0),
     outOfStockCount: Number(row?.outOfStockCount ?? 0),
