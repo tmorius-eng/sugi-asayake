@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { translate } from "@shared/i18n";
-import { useLocale } from "@/hooks/useLocale";
+import { useLocale, useTranslationsVersion } from "@/hooks/useLocale";
 
 /**
  * Translates the rendered page (2026-09-12).
@@ -35,6 +35,9 @@ let everTranslated = false;
 
 export default function TranslateSurface() {
   const locale = useLocale();
+  // Орчуулгын толь нь тусдаа chunk (2026-09-16) — ирэхээс өмнө хийсэн орчуулгын
+  // алхам эх монголоор үлддэг тул толь ирмэгц дахин ажиллана.
+  const translationsVersion = useTranslationsVersion();
 
   useEffect(() => {
     if (locale === "mn" && !everTranslated) return;
@@ -110,7 +113,7 @@ export default function TranslateSurface() {
     // caught, and nothing else notices an attribute changing on its own.
     observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributeFilter: [...ATTRS] });
     return () => { observer.disconnect(); if (pending) clearTimeout(pending); };
-  }, [locale]);
+  }, [locale, translationsVersion]);
 
   return null;
 }

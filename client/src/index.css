@@ -2472,20 +2472,36 @@ html[data-admin-theme] {
   --a-rail-text-strong: #ffffff;
   --a-rail-border: rgba(255, 255, 255, .08);
   /* Type */
+  /* 2026-09-16 (WCAG AA): --a-faint нь #9a9ca2 байхдаа цагаан дэвсгэр дээр
+     ЗӨВХӨН 2.74:1 байсан — энэ нь жижиг үсгийн шаардлага (4.5:1) төдийгүй том
+     үсгийнхийг (3:1) ч хангадаггүй. Гэтэл энэ токен нь admin даяарх жижиг
+     UPPERCASE шошгуудад ("ROLE MANAGEMENT", "USER DETAIL", KPI-ийн тайлбар)
+     хэрэглэгддэг. --a-faint 4.94:1 (зөөлөн дэвсгэр дээр 4.65:1) болов.
+     --a-muted мөн бага зэрэг гүнзгийрч (өмнө 4.54:1, одоо 6.18:1) "faint-ээс
+     тод" гэсэн шатлал хэвээр үлдэв. Хэмжилт: WCAG 2.x харьцааны томьёо. */
   --a-text: #16181c;
   --a-text-soft: #4c4e54;
-  --a-muted: #74767c;
-  --a-faint: #9a9ca2;
+  --a-muted: #5f6169;
+  --a-faint: #6e7078;
   /* Inverse (the reference's black pill button) */
   --a-invert-bg: #16181c;
   --a-invert-bg-hover: #2b2d33;
   --a-invert-text: #ffffff;
   /* Semantics */
-  --a-pos: #1f8a53;
+  /* 2026-09-16 (WCAG AA): статусын өнгөнүүд жижиг үсэгт (10–12px "Ноорог",
+     "Нийтлэгдсэн" шошго) хэрэглэгддэг атлаа --a-pos 4.36:1 / --a-warn 4.00:1
+     (зөөлөн дэвсгэр дээр 3.84 / 3.63) байв. Өнгөний ая хэвээр, зөвхөн гүн нь
+     нэмэгдэв: pos 5.85:1, warn 5.24:1 (зөөлөн дэвсгэр дээр 5.16 / 4.76). */
+  --a-pos: #1a7347;
   --a-pos-soft: #e6f4ec;
   --a-neg: #cf2440;
+  /* --a-neg дээр бичих үсгийн өнгө: гэрэл горимд --a-neg гүн улаан тул цагаан
+     болно; харанхуй горимд --a-neg нь цайвар ягаан (#ff6b81) бөгөөд түүн дээр
+     цагаан бичвэл 2.74:1 болдог (2026-09-16-нд мэдэгдлийн тоолуур дээр
+     хэмжсэн) тул гүн өнгө болно. */
+  --a-neg-on: #ffffff;
   --a-neg-soft: #fdecef;
-  --a-warn: #b07207;
+  --a-warn: #96610a;
   --a-warn-soft: #fdf3e0;
   --a-info: #2f6fb5;
   --a-info-soft: #e9f1fb;
@@ -2532,13 +2548,15 @@ html[data-admin-theme="dark"] .admin-shell {
   --a-text: #eef0f3;
   --a-text-soft: #c3c6cc;
   --a-muted: #9296a0;
-  --a-faint: #74787f;
+  /* Харанхуй горимд ч 4.00:1 (жижиг үсэгт хүрэхгүй) байсныг 5.48:1 болгов. */
+  --a-faint: #8b8f98;
   --a-invert-bg: #eef0f3;
   --a-invert-bg-hover: #ffffff;
   --a-invert-text: #16181c;
   --a-pos: #43c07f;
   --a-pos-soft: rgba(67, 192, 127, .14);
   --a-neg: #ff6b81;
+  --a-neg-on: #3a0b14;
   --a-neg-soft: rgba(255, 107, 129, .14);
   --a-warn: #e0a63c;
   --a-warn-soft: rgba(224, 166, 60, .14);

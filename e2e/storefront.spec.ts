@@ -76,7 +76,15 @@ test.describe("нүүр хуудас", () => {
     await page.locator(".locale-switch-trigger").click();
     await page.getByRole("menuitemradio", { name: "English" }).click();
     await expect.poll(() => page.evaluate(() => document.documentElement.lang)).toBe("en");
+    // Орчуулгын толь 2026-09-16-аас ТУСДАА chunk болсон (эхний ачаалалт 112 KB
+    // хөнгөрсөн) тул үгс хэсэг хугацааны дараа солигдоно — бодит орчуулагдсан
+    // үгийг хүлээж, толь үнэхээр ирснийг батална.
+    // textContent (innerText биш): утасны өргөнд цэс хаалттай байдаг ч DOM-д
+    // байдаг тул хоёр project-д ижил ажиллана.
+    const translated = () => page.evaluate(() => document.body.textContent?.includes("Top brands") ?? false);
+    await expect.poll(translated, { timeout: 15_000 }).toBe(true);
     await page.reload();
     expect(await page.evaluate(() => document.documentElement.lang), "сонголт refresh-ийг давах ёстой").toBe("en");
+    await expect.poll(translated, { timeout: 15_000 }).toBe(true);
   });
 });

@@ -603,7 +603,10 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
     {
       id: "stock",
       header: "ҮЛДЭГДЭЛ",
-      render: product => <span className={product.stockQuantity === 0 ? "font-bold text-[#df1f3d]" : "font-bold"}>{product.stockQuantity} ш</span>,
+      // 2026-09-16: брэндийн улаан (#df1f3d) нь харанхуй горимын картан дээр
+      // 3.72:1 — жижиг үсэгт AA хүрэхгүй. --a-neg токен нь горим тус бүрдээ
+      // тохируулагдсан (гэрэлд #cf2440, харанхуйд #ff6b81) тул түүнийг ашиглана.
+      render: product => <span className={product.stockQuantity === 0 ? "font-bold text-[var(--a-neg)]" : "font-bold"}>{product.stockQuantity} ш</span>,
     },
     {
       id: "status",

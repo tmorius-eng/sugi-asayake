@@ -119,7 +119,7 @@ export default function AdminNotificationBell({ preview, attentionCount, attenti
       <button type="button" onClick={toggle} className="admin-icon-btn relative" title={label} aria-label={label} aria-expanded={open} aria-haspopup="dialog">
         <Bell size={17} />
         {badge > 0 ? (
-          <span className="admin-pop absolute -right-0.5 -top-0.5 grid min-w-[18px] place-items-center rounded-full px-1 text-[10px] font-extrabold leading-[18px] text-white" style={{ background: "var(--a-neg)" }} aria-hidden="true">{badge > 99 ? "99+" : badge}</span>
+          <span className="admin-pop absolute -right-0.5 -top-0.5 grid min-w-[18px] place-items-center rounded-full px-1 text-[10px] font-extrabold leading-[18px]" style={{ background: "var(--a-neg)", color: "var(--a-neg-on)" }} aria-hidden="true">{badge > 99 ? "99+" : badge}</span>
         ) : attentionCount > 0 && (
           <span className="absolute right-2 top-2 size-2">
             <span className="admin-ping" aria-hidden="true" />
