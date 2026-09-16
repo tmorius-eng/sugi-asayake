@@ -92,7 +92,7 @@ pnpm exec vitest run --no-file-parallelism
 ### E2E тест (Playwright, 2026-09-16-аас)
 
 ```powershell
-pnpm build ; pnpm e2e                      # 80 тест: компьютер + утас
+pnpm build ; pnpm e2e                      # 76 тест: компьютер + утас
 pnpm e2e --project=desktop e2e/cart.spec.ts
 pnpm e2e --headed                          # нүдээр харах
 ```
@@ -139,7 +139,7 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
 - (09-16) **Сайтыг апп болгон суулгах** — ☰ цэсний эхний мөр ба footer-т "Аппаар суулгах" (компьютер + Android жинхэнэ цонх, iPhone-д зурагтай 4 алхамт заавар); manifest-д `id` ба `screenshots`. PWA нь 09-13-аас бэлэн байсан ч **суулгах гарц байгаагүй**
 - (09-16) **Камергүй компьютер дээр admin-д нэвтрэх QR handoff** (0085) — утсаар царайгаа уншуулж компьютероо нээнэ; [docs/FACE-HANDOFF-PLAN.md](FACE-HANDOFF-PLAN.md)
 - (09-16) **E2E тест анх удаа** (Playwright, 54 тест, компьютер+утас) — замдаа 9 бодит алдаа олж зассан, тэдгээрийн нэг нь **variant нэмэх admin-аас хэзээ ч ажилладаггүй байсан** (үүрлэсэн `<form>`)
-- (09-16) **Ачааллын бэлтгэл** — pool 25, кэшийн single-flight, cluster-д аюулгүй, Cloudflare cache rules, k6; **эхний ачаалалт 188 → 152 KB gzip**; **купоны хязгаар атомик (0084)**; admin AA контраст; **гарчгийн шрифт Cormorant Garamond**; "Хамт авдаг" cross-sell; Dependabot
+- (09-16) **Ачааллын бэлтгэл** — pool 25, кэшийн single-flight, cluster-д аюулгүй, Cloudflare cache rules, k6; **эхний ачаалалт 188 → 152 KB gzip**; **купоны хязгаар атомик (0084)**; admin AA контраст; "Хамт авдаг" cross-sell; Dependabot
 - (09-16) **Мерчандайзингийн судалгаа** — [docs/MERCHANDISING-PLAN.md](MERCHANDISING-PLAN.md): бодит тоо (983/984 бараа нэг ч удаа зарагдаагүй, 975 нь `stockQuantity=20` жишиг утга), 4 сохор цэг, Bitrix24-тэй харьцуулалт, 5 үе шаттай төлөвлөгөө. **Tom-оос 3 шийдвэр хүлээж байна** (§8)
 - (09-15) **Хэмжилт (GA4/Pixel) дэлгэц**, Smart Software холболтын карт, **вендорын үлдэгдэл автомат** + үнэ/факт батлах дэлгэц (0083)
 - (09-15) **Токен хэмнэлт** — энэ гарын авлага 165 KB → ~25 KB; дүрэм: [docs/TOKEN-USAGE.md](TOKEN-USAGE.md)

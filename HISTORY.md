@@ -4,6 +4,18 @@
 
 ---
 
+## Гарчгийн шрифтийг БУЦААВ — Golos Text руу (2026-09-16, шөнө)
+
+**Tom**: *"bas ene website iin fontiig solison ym bn shde te!!! butsaagaad asahi.mn shig fontoi bolgood hiisen ajilaa undo hii!!!"*
+
+Тэр өдрийн өглөө нэмсэн **Cormorant Garamond** гарчгийн шрифтийг `git revert 9f372b8`-аар бүрэн буцаав: `--font-display` нь `--font-body`-тэй ижил `"Golos Text", sans-serif` болж, 4 woff2 файл, `@font-face` блокууд, serif-т тохируулж өөрчилсөн 20 дүрмийн `letter-spacing` (-.02em → хуучин -.05..-.085em), мөн `e2e/typography.spec.ts` бүгд арилав. Дараа нь нэмэгдсэн CSS (`.footer-install`, `.footer-notify`, `.pref-toggle-row > div span`) auto-merge-ээр бүрэн хадгалагдсан.
+
+⚠️ **Сургамж**: шрифт бол хэмжигдэхүүн биш, ХЭВ ЗАГВАРЫН шийдвэр. Тэр өдрийн ажлын жагсаалтад "display шрифт нэмэх" гэж байсан ч Tom-оос ямар шрифт болохыг асуугаагүй — техникийн шалгуураар (кирилл глифийн бүрэн бүтэн байдал) сонгож, шууд production-д гаргасан. 2026-09-09-ний "чиглэлгүй редизайн" татгалзалтай ижил ангийн алдаа: **харагдах байдал өөрчлөх ажлыг эзэнтэй нь тохироогүй бол хийхгүй**. Гарчгийн шрифт хэрэгтэй хэвээр бол Tom эхлээд жишээ (asahi.mn гэх мэт) өгнө.
+
+Кирилл глифийн дүрэм нь хүчинтэй хэвээр (гарын авлагад): шинэ гарчгийн шрифт нэмэх бол Ө/Ү-г ХӨТӨЧ ДЭЭР хэмжиж шалгана — Playfair Display-д cyrillic-ext огт байхгүй, Unbounded-д Ө/Ү/ө/ү дөрвүүлээ байхгүй нь тэр өдөр бодитоор хэмжигдсэн.
+
+---
+
 ## Автомат мэдэгдэл /admin-аас засварлагддаг болов + давхардлын засвар (2026-09-16, шөнө)
 
 **Tom** (iPhone дээрээ аппыг суулгаж, мэдэгдлийг бодитоор хүлээн авсны дараа): *"Za irlee ghdee ene admin tohirgoo sain suuj editable auto tohirgoo bas on off edit hiij yu yvuulahaa zaswarlaj boldof zde?"*
