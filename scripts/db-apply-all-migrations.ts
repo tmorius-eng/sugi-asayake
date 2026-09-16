@@ -26,6 +26,23 @@ const SKIPPABLE = /already exists|Duplicate column|Duplicate key name|Duplicate 
 // The marker on a line of its own -- a comment that merely mentions the
 // marker (0010 does) must not split a statement.
 const BREAKPOINT = /^\s*-->\s*statement-breakpoint\s*$/m;
+/**
+ * 2026-09-16 (CI-ийн `database-tests` job-ийн ЭХНИЙ бодит ажиллалт улаан гарав):
+ * drizzle-kit-ийн ЭХНИЙ 7 файл (0000–0006) тэмдгээ өөрийн мөрөнд биш, statement-
+ * ийн ард нааж бичдэг байсан:
+ *
+ *     CREATE INDEX `orders_user_idx` ON `orders` (`userId`);--> statement-breakpoint
+ *
+ * Дээрх мөрийн эхлэлд тулгуурласан regex үүнийг хуваадаггүй тул MySQL-д тэмдэг нь
+ * SQL-ийн нэг хэсэг болж очиж, "You have an error in your SQL syntax ... near
+ * '--> statement-breakpoint'" гэж унадаг байв. Өөрөөр хэлбэл chain нь ХООСОН DB
+ * дээр хэзээ ч бүрэн ажиллаж байгаагүй.
+ *
+ * `;`-ийн ард ирсэн тэмдгийг өөрийн мөрөнд буулгаж нормчилно. Зөвхөн `;`-ийн
+ * дараах хэлбэрийг хүлээн авдаг тул тэмдгийг ЗҮГЭЭР дурдсан тайлбар (0010) хуваагдах
+ * эрсдэл хэвээр байхгүй.
+ */
+const normaliseBreakpoints = (sql: string) => sql.replace(/;[ \t]*-->[ \t]*statement-breakpoint/g, ";\n--> statement-breakpoint");
 /** True when the chunk holds something other than `--` / block comments. */
 const hasStatement = (chunk: string) => chunk.replace(/\/\*[\s\S]*?\*\//g, "").split("\n").some(line => line.trim() && !line.trim().startsWith("--"));
 
@@ -35,7 +52,7 @@ async function main() {
   const connection = await mysql.createConnection({ ...plan.options, multipleStatements: true, timezone: "Z" });
   let applied = 0, skipped = 0;
   for (const file of files) {
-    const chunks = readFileSync(join(dir, file), "utf8").split(BREAKPOINT).map(chunk => chunk.trim()).filter(hasStatement);
+    const chunks = normaliseBreakpoints(readFileSync(join(dir, file), "utf8")).split(BREAKPOINT).map(chunk => chunk.trim()).filter(hasStatement);
     for (const chunk of chunks) {
       try {
         await connection.query(chunk);

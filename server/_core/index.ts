@@ -33,6 +33,7 @@ import { limitApiTraffic, protectStateChangingApiRequests, setSecurityHeaders } 
 import { blockScannerProbes } from "./scannerProbes";
 import { logRequests } from "./requestLog";
 import { serveStatic, setupVite } from "./vite";
+import { describeClusterRole, isBackgroundJobRunner } from "./clusterRole";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -154,7 +155,15 @@ async function startServer() {
   registerHoneybadgerErrorMiddleware(app);
 
   const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
+  // Ачааллын бэлтгэл (2026-09-16): "завгүй бол дараагийн порт" гэдэг нь ЗӨВХӨН
+  // локал хөгжүүлэлтийн тав тух (хоёр `pnpm dev` зэрэг). Production-д энэ нь
+  // чимээгүй эвдрэл байв: cloudflared тунель болон deploy-ийн health шалгалт
+  // хоёул тогтсон порт руу заадаг тул сервер 3001 дээр "амжилттай" гарахад
+  // сайт гаднаасаа 502 хэвээр үлдэнэ. Мөн pm2-ийн cluster горимд worker бүр
+  // ижил порт дээр (нэг сокетыг хуваалцан) сонсох ЁСТОЙ — тэнд порт "завгүй"
+  // мэт харагдвал worker бүр өөр порт руу тарах байсан. Production-д завгүй
+  // порт бол чанга унана: pm2 дахин эхлүүлж, log-д шалтгаан үлдэнэ.
+  const port = process.env.NODE_ENV === "development" ? await findAvailablePort(preferredPort) : preferredPort;
 
   if (port !== preferredPort) {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
@@ -172,6 +181,11 @@ async function startServer() {
   // Admin шинэчлэл (2026-09-08, Phase D-F): энэ аппын цорын ганц процесс доторх
   // scheduler — server/_core/scheduler.ts, дээр нь бүртгэгдсэн бодит job-уудыг
   // server/automation.ts-ээс үзнэ.
+  // 2026-09-16: олон процесс (pm2 cluster) үед ЗӨВХӨН нэг instance эзэмшинэ —
+  // эс бөгөөс орхигдсон сагсны сануулга, вендорын таталт бүр N дахин явна
+  // (server/_core/clusterRole.ts).
+  console.log(`[cluster] ${describeClusterRole()}`);
+  if (!isBackgroundJobRunner()) return;
   registerAbandonedCartReminderJob();
   registerReviewRequestJob();
   registerLowStockDigestJob();

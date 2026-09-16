@@ -77,6 +77,30 @@ function isDuplicateOrderNumberError(error: unknown): boolean {
   return isDuplicateKeyError(error, "orderNumber");
 }
 
+/**
+ * Ачааллын бэлтгэл (2026-09-16): pool-ийн хэмжээ. mysql2-ийн анхдагч
+ * `connectionLimit` нь 10 бөгөөд энэ нь нэг процессын зэрэг боловсруулж чадах
+ * DB-д хүрэх хүсэлтийн тоог 10-аар тогтоодог — Бангалор/Токиогийн RTT дээр яг
+ * энэ нь нүүр хуудсыг 30–60 query/с-т тулгадаг таг байв.
+ *
+ * Бодитоор хэмжсэн хязгаар (2026-09-16, HeatWave `sugi-db`): `max_connections`
+ * = 200, түүхэн дээд нь `Max_used_connections` = 33. Нэг ижил DB-г production,
+ * staging, хоёр лаптоп, өдөр тутмын backup дөрвүүлээ хуваалцдаг тул pool
+ * бүрийг 200-д багтаах ёстой: анхдагч 25 × (prod + staging + 2 лаптоп) = 100,
+ * үлдсэн тал нь backup/migration/гар script-т үлдэнэ.
+ *
+ * `maxIdle`/`idleTimeout` нь оргил ачаалал өнгөрсний дараа сул холболтыг буцааж
+ * өгнө — эс бөгөөс нэг оргил 25 холболтыг `wait_timeout` (8 цаг) хүртэл эзэмшинэ.
+ *
+ * `DB_POOL_SIZE`-аар дарж болно (cluster горимд ажиллуулбал НЭГ worker-т ногдох
+ * тоог өгнө — server/_core/clusterRole.ts-ийн тайлбарыг үзнэ үү).
+ */
+function poolSizing(): { connectionLimit: number; maxIdle: number; idleTimeout: number } {
+  const parsed = Number.parseInt(process.env.DB_POOL_SIZE ?? "", 10);
+  const connectionLimit = Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 100) : 25;
+  return { connectionLimit, maxIdle: Math.min(10, connectionLimit), idleTimeout: 60_000 };
+}
+
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
@@ -118,7 +142,7 @@ export async function getDb() {
       // notification dispatcher on every start, Aborted_connects climbing
       // on the server. A slow handshake is not a dead server; 30s bounds
       // a genuinely unreachable host well enough.
-      _db = drizzle({ connection: { ...plan.options, connectTimeout: 30_000, enableKeepAlive: true }, logger: sqlQueryLogger });
+      _db = drizzle({ connection: { ...plan.options, connectTimeout: 30_000, enableKeepAlive: true, ...poolSizing() }, logger: sqlQueryLogger });
       // drizzle-orm's mysql `timestamp` column hard-assumes the DB session
       // is UTC: it reads a raw wire value and appends "+0000" (see
       // node_modules/drizzle-orm/mysql-core/columns/timestamp.js), and
@@ -797,13 +821,23 @@ export type CatalogPageParams = {
 // visible on /shop within CATALOG_PAGE_CACHE_TTL_MS instead of instantly --
 // an acceptable trade at this traffic level.
 const CATALOG_PAGE_CACHE_TTL_MS = 10_000;
-let catalogPageCache: { expiresAt: number; rows: Awaited<ReturnType<typeof getPublishedCatalog>> } | null = null;
+
+/**
+ * Ачааллын бэлтгэл (2026-09-16): өөрийн гэсэн `let`-ээс нийтийн ttlCache руу
+ * шилжив. Хоёр шалтгаан, хоёулаа ачааллын:
+ *  1. **Thundering herd.** Хуучин хувилбарт 10 секунд дуусах агшинд ирсэн бүх
+ *     зэрэгцээ хүсэлт бүгд бүтэн каталогийн query-г зэрэг эхлүүлдэг байв —
+ *     энэ нь /shop-ийн хамгийн хүнд query. ttlCache одоо нэг түлхүүрт нэг л
+ *     тооцоолол явуулж, бусдыг нь түүнд нэгтгэнэ.
+ *  2. **Admin-ий засвар шууд харагдана.** Бүтээгдэхүүн бичигч бүр энэ түлхүүрийг
+ *     `invalidateCached`-ээр унагаадаг болсон тул "10 секунд хүлээх" шинж
+ *     (дээрх тайлбарын хүлээн зөвшөөрсөн буулт) бодитоор арилав; TTL нь зөвхөн
+ *     нөгөө лаптоп/скрипт шууд DB-д бичсэн тохиолдлын хамгаалалт болж үлдэнэ.
+ */
+const CATALOG_SOURCE_CACHE_KEY = "storefront:catalogSource";
 
 async function getPublishedCatalogCached() {
-  if (catalogPageCache && catalogPageCache.expiresAt > Date.now()) return catalogPageCache.rows;
-  const rows = await getPublishedCatalog();
-  catalogPageCache = { expiresAt: Date.now() + CATALOG_PAGE_CACHE_TTL_MS, rows };
-  return rows;
+  return getOrSetCached(CATALOG_SOURCE_CACHE_KEY, CATALOG_PAGE_CACHE_TTL_MS, () => getPublishedCatalog());
 }
 
 /**
@@ -2470,6 +2504,7 @@ export async function createProductReview(input: { userId: number; productId: nu
     comment: input.comment,
   });
   const created = await db.select().from(productReviews).where(eq(productReviews.id, Number(inserted[0].insertId))).limit(1);
+  invalidateCachedByPrefix("storefront:featuredReviews:");
   return created[0];
 }
 
@@ -2583,6 +2618,7 @@ export async function updateAdminReview(input: { id: number; rating?: number; co
   if (input.rating !== undefined) patch.rating = input.rating;
   if (input.comment !== undefined) patch.comment = input.comment;
   await db.update(productReviews).set(patch).where(eq(productReviews.id, input.id));
+  invalidateCachedByPrefix("storefront:featuredReviews:");
   const [row] = await db.select().from(productReviews).where(eq(productReviews.id, input.id)).limit(1);
   return row ?? null;
 }
@@ -2625,31 +2661,37 @@ export async function deleteAdminReviewReply(id: number) {
  * as the bestseller rail's empty state).
  */
 export async function getFeaturedReviews(limit = 8) {
-  const db = await getDb();
-  if (!db) return [];
-  return db
-    .select({
-      id: productReviews.id,
-      rating: productReviews.rating,
-      comment: productReviews.comment,
-      createdAt: productReviews.createdAt,
-      reviewerName: users.name,
-      productId: products.id,
-      productName: products.name,
-      productSlug: products.slug,
-      productImageUrl: products.imageUrl,
-    })
-    .from(productReviews)
-    .innerJoin(users, eq(users.id, productReviews.userId))
-    .innerJoin(products, eq(products.id, productReviews.productId))
-    .where(and(
-      eq(productReviews.isApproved, true),
-      eq(products.isPublished, true),
-      gte(productReviews.rating, 4),
-      sql`${productReviews.comment} IS NOT NULL AND ${productReviews.comment} <> ''`,
-    ))
-    .orderBy(desc(productReviews.createdAt))
-    .limit(limit);
+  // Ачааллын бэлтгэл (2026-09-16): энэ нь нүүр хуудсыг нээх бүрт дуудагддаг
+  // атлаа бусад storefront уншилтуудаас (bestsellers, брэнд, site_media …)
+  // ялгаатай нь кэшлэгдээгүй ганц нь байв — 3 хүснэгтийн JOIN бүхий query
+  // зочин бүрт DB рүү очиж байсан. Ижил TTL, ижил хүчингүй болголтын загвар.
+  return getOrSetCached(`storefront:featuredReviews:${limit}`, STOREFRONT_CACHE_TTL_MS, async () => {
+    const db = await getDb();
+    if (!db) return [];
+    return db
+      .select({
+        id: productReviews.id,
+        rating: productReviews.rating,
+        comment: productReviews.comment,
+        createdAt: productReviews.createdAt,
+        reviewerName: users.name,
+        productId: products.id,
+        productName: products.name,
+        productSlug: products.slug,
+        productImageUrl: products.imageUrl,
+      })
+      .from(productReviews)
+      .innerJoin(users, eq(users.id, productReviews.userId))
+      .innerJoin(products, eq(products.id, productReviews.productId))
+      .where(and(
+        eq(productReviews.isApproved, true),
+        eq(products.isPublished, true),
+        gte(productReviews.rating, 4),
+        sql`${productReviews.comment} IS NOT NULL AND ${productReviews.comment} <> ''`,
+      ))
+      .orderBy(desc(productReviews.createdAt))
+      .limit(limit);
+  });
 }
 
 /** Whether the current user has already reviewed this product, and whether
@@ -2697,6 +2739,7 @@ export async function setReviewApproval(id: number, isApproved: boolean) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.update(productReviews).set({ isApproved, updatedAt: new Date() }).where(eq(productReviews.id, id));
+  invalidateCachedByPrefix("storefront:featuredReviews:");
   return { id, isApproved };
 }
 
@@ -2704,6 +2747,7 @@ export async function deleteAdminReview(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.delete(productReviews).where(eq(productReviews.id, id));
+  invalidateCachedByPrefix("storefront:featuredReviews:");
   return { id };
 }
 
@@ -5104,7 +5148,7 @@ export async function findProductBySku(sku: string) {
 }
 
 export async function createAdminProduct(input: ProductWriteInput) {
-  invalidateCachedByPrefix("storefront:bestsellers:"); invalidateCached("storefront:publishedCount"); invalidateCached("storefront:brandDirectory"); invalidateCachedByPrefix("storefront:related:");
+  invalidateCachedByPrefix("storefront:bestsellers:"); invalidateCached("storefront:publishedCount"); invalidateCached("storefront:brandDirectory"); invalidateCachedByPrefix("storefront:related:"); invalidateCached(CATALOG_SOURCE_CACHE_KEY);
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
 
@@ -5230,7 +5274,7 @@ async function syncSoleVariantFromProduct(productId: number, changes: { priceMnt
 }
 
 export async function updateAdminProduct(input: { id: number } & Partial<ProductWriteInput>) {
-  invalidateCachedByPrefix("storefront:bestsellers:"); invalidateCached("storefront:publishedCount"); invalidateCached("storefront:brandDirectory"); invalidateCachedByPrefix("storefront:related:");
+  invalidateCachedByPrefix("storefront:bestsellers:"); invalidateCached("storefront:publishedCount"); invalidateCached("storefront:brandDirectory"); invalidateCachedByPrefix("storefront:related:"); invalidateCached(CATALOG_SOURCE_CACHE_KEY);
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
 
@@ -5274,7 +5318,7 @@ export async function updateAdminProduct(input: { id: number } & Partial<Product
 }
 
 export async function deleteAdminProduct(id: number) {
-  invalidateCachedByPrefix("storefront:bestsellers:"); invalidateCached("storefront:publishedCount"); invalidateCached("storefront:brandDirectory"); invalidateCachedByPrefix("storefront:related:");
+  invalidateCachedByPrefix("storefront:bestsellers:"); invalidateCached("storefront:publishedCount"); invalidateCached("storefront:brandDirectory"); invalidateCachedByPrefix("storefront:related:"); invalidateCached(CATALOG_SOURCE_CACHE_KEY);
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
 

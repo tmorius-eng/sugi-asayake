@@ -18,8 +18,23 @@
           "sugi-staging" in ~/sugi-asayake-staging on port 3001, its own
           .env pointing at the sugi_staging schema, reached at
           https://sugi-staging.karkaron.com once the DNS record exists)
+          .\scripts\oci\deploy.ps1 -Instances 2   (load prep, 2026-09-16)
+
+  -Instances > 1 starts the app in pm2's CLUSTER mode, where N processes
+  share port 3000 and the kernel spreads connections across them. The app is
+  cluster-safe as of 2026-09-16 (server/_core/clusterRole.ts: only instance 0
+  runs the scheduler and the notification dispatcher), but the CURRENT VM is
+  the wrong place for it: 2 vCPU and 954 MB of RAM total, with production
+  (~126 MB) and staging (~91 MB) both already resident and ~312 MB free.
+  Raise the instance count only after the VM has more memory -- until then
+  the caching and the Cloudflare cache rules are where the headroom is.
+
+  pm2 cannot switch an already-running app between fork and cluster mode with
+  a restart, so changing -Instances deletes and re-creates the pm2 app (a few
+  seconds of 502 on that app, which is why it is opt-in rather than default).
 #>
-param([switch]$Staging)
+param([switch]$Staging, [int]$Instances = 1)
+if ($Instances -lt 1) { throw "-Instances must be at least 1" }
 $ErrorActionPreference = "Stop"
 $app = if ($Staging) { "sugi-staging" } else { "sugi" }
 $dir = if ($Staging) { "sugi-asayake-staging" } else { "sugi-asayake" }
@@ -52,12 +67,24 @@ new=$(md5sum pnpm-lock.yaml | cut -c1-32)
 if [ "$old" != "$new" ]; then echo "lockfile changed -> pnpm install --prod"; pnpm install --prod --frozen-lockfile 2>&1 | tail -2; fi
 # `pm2 restart` only knows an app that has been started once; staging is
 # started here on first deploy (production was started by hand on 2026-09-13).
-if pm2 describe __APP__ >/dev/null 2>&1; then pm2 restart __APP__ --update-env >/dev/null; else PORT=__PORT__ pm2 start dist/index.js --name __APP__ --max-memory-restart 700M >/dev/null && pm2 save >/dev/null; fi
+# The running app's mode has to match the requested instance count; pm2 can
+# only change that by re-creating the app (see the header).
+want=__INSTANCES__
+mode=$(pm2 jlist 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const a=JSON.parse(d||'[]').find(x=>x.name==='__APP__');console.log(a?a.pm2_env.exec_mode+':'+(a.pm2_env.instances||1):'')})" 2>/dev/null)
+have_mode=${mode%%:*}; have_count=${mode##*:}
+if [ -n "$mode" ] && { { [ "$want" -gt 1 ] && [ "$have_mode" != "cluster_mode" ]; } || { [ "$want" = "1" ] && [ "$have_mode" = "cluster_mode" ]; } || [ "$want" != "$have_count" ]; }; then
+  echo "pm2 mode $have_mode/$have_count -> cluster x$want; re-creating"; pm2 delete __APP__ >/dev/null; mode=""
+fi
+# `-i 1` is NOT the same as no flag: it puts pm2 in cluster mode with one
+# worker. The default path has to stay fork mode, exactly as production runs
+# today.
+if [ "$want" -gt 1 ]; then inst="-i $want"; else inst=""; fi
+if [ -n "$mode" ]; then pm2 restart __APP__ --update-env >/dev/null; else PORT=__PORT__ pm2 start dist/index.js --name __APP__ $inst --max-memory-restart 700M >/dev/null && pm2 save >/dev/null; fi
 sleep 8
 curl -s --max-time 20 http://localhost:__PORT__/health; echo
 pm2 status __APP__ | grep __APP__ | cut -c1-100
 '@
-$remote = $remote.Replace("__BUNDLE__", $bundle).Replace("__DIR__", $dir).Replace("__APP__", $app).Replace("__PORT__", "$port").Replace("`r`n", "`n")  # CRLF checkout -> LF for the remote bash
+$remote = $remote.Replace("__BUNDLE__", $bundle).Replace("__DIR__", $dir).Replace("__APP__", $app).Replace("__PORT__", "$port").Replace("__INSTANCES__", "$Instances").Replace("`r`n", "`n")  # CRLF checkout -> LF for the remote bash
 # Sent over stdin, not as an argument: passed as an argument the script is
 # re-split by the remote shell and its quotes are lost ("[: missing ]").
 # tr strips the CR that PowerShell appends to every line when it pipes a

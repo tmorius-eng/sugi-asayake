@@ -44,6 +44,24 @@ if (!process.env.INTEGRATIONS_ENCRYPTION_KEY) {
   process.env.INTEGRATIONS_ENCRYPTION_KEY = "0".repeat(64);
 }
 
+// 2a. Мөн ижил шалтгаанаар түр JWT_SECRET (2026-09-16, GitHub Actions-ийн
+//     `check-test-build` job улаан гарснаар илэрсэн). server/face-idle.test.ts
+//     нь хуучин хэлбэрийн proof-ыг ГАРААР гарын үсэг зурахдаа
+//     `new TextEncoder().encode(ENV.cookieSecret)`-ийг шууд ашигладаг: .env-гүй
+//     орчинд энэ нь тэг урттай түлхүүр болж jose "Zero-length key is not
+//     supported" гэж шидэж байв. Түүнчлэн ENV.cookieSecret хоосон үед
+//     server/_core/faceProof.ts САНАМСАРГҮЙ dev fallback түлхүүр үүсгэдэг тул
+//     тест гарын үсэг зурсан token нь аппын шалгах түлхүүртэй хэзээ ч таарахгүй
+//     байсан — өөрөөр хэлбэл энэ тест зөвхөн хөгжүүлэгчийн .env байгаа үед л
+//     ажиллана гэсэн далд хамаарал байв.
+//
+//     Утга нь ач холбогдолгүй: тест процесс өөрийн зохиосон token-оо гарын үсэг
+//     зурж, шалгадаг. Аппликейшн хөндөгдөөгүй — бодит сервер production-д
+//     JWT_SECRET-гүй бол эхлэхээс татгалзсан хэвээр (assertProductionSecrets).
+if (!process.env.JWT_SECRET) {
+  process.env.JWT_SECRET = "vitest-only-secret-not-used-outside-tests";
+}
+
 // 3. Phone push notifications (2026-09-11). The integration suites place
 //    real orders on the shared Aiven database; without this, the "new order"
 //    pushes they cause would be queued as real and delivered to the shop

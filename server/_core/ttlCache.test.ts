@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { getOrSetCached } from "./ttlCache";
+import { getOrSetCached, invalidateCached } from "./ttlCache";
 
 // Admin overhaul (2026-09-08, Phase L). Pure in-process logic, no DB needed.
 describe("getOrSetCached", () => {
@@ -31,5 +31,49 @@ describe("getOrSetCached", () => {
     // here and wrongly get "all-rows" back for the filtered query.
     expect(await getOrSetCached(`${base}:filtered`, 10_000, computeFiltered)).toBe("filtered-rows");
     expect(computeFiltered).toHaveBeenCalledTimes(1);
+  });
+
+  // Ачааллын бэлтгэл (2026-09-16): thundering herd. TTL дуусах агшинд ирсэн
+  // зэрэгцээ дуудагчид бүгд өөрсдийн query-г эхлүүлэх ёсгүй.
+  it("нэг түлхүүрийн зэрэгцээ дуудагчид нэг тооцоололд нэгдэнэ", async () => {
+    const key = `ttl-herd-${Date.now()}`;
+    let release: (value: string) => void = () => {};
+    const compute = vi.fn(() => new Promise<string>(resolve => { release = resolve; }));
+    const callers = [getOrSetCached(key, 10_000, compute), getOrSetCached(key, 10_000, compute), getOrSetCached(key, 10_000, compute)];
+    release("one-query");
+    expect(await Promise.all(callers)).toEqual(["one-query", "one-query", "one-query"]);
+    expect(compute).toHaveBeenCalledTimes(1);
+  });
+
+  // ...гэхдээ "нэгдэх" нь admin-ий засварыг залгих ёсгүй: хүчингүй болголтын
+  // ДАРАА ирсэн дуудагч явж буй (хуучин) тооцоололд нэгдэхгүй.
+  it("хүчингүй болголтын дараах дуудагч явж буй хуучин тооцоололд нэгдэхгүй", async () => {
+    const key = `ttl-herd-invalidate-${Date.now()}`;
+    let release: (value: string) => void = () => {};
+    const stale = vi.fn(() => new Promise<string>(resolve => { release = resolve; }));
+    const first = getOrSetCached(key, 10_000, stale);
+    invalidateCached(key);
+    // Хүчингүй болголт болон дараагийн уншилтыг ӨӨР миллисекундэд байлгана:
+    // ижил ms дотор бол cache нь зориуд болгоомжтой ажиллаж үр дүнг хадгалдаггүй
+    // (getOrSetCached-ийн `lastInvalidated >= startedAt`), тэр нь энд шалгаж буй
+    // зүйл биш бөгөөд тестийг тогтворгүй болгоно.
+    await new Promise(resolve => setTimeout(resolve, 3));
+    const fresh = vi.fn(async () => "after-write");
+    const second = getOrSetCached(key, 10_000, fresh);
+    release("before-write");
+    expect(await first).toBe("before-write");
+    expect(await second).toBe("after-write");
+    expect(fresh).toHaveBeenCalledTimes(1);
+    // Хуучин тооцоолол дууссаны дараа ч кэшэд хуучин утга үлдэхгүй.
+    expect(await getOrSetCached(key, 10_000, async () => "unused")).toBe("after-write");
+  });
+
+  it("алдаа гарсан тооцоолол кэшлэгдэхгүй, дараагийн дуудагч дахин оролдоно", async () => {
+    const key = `ttl-error-${Date.now()}`;
+    const failing = vi.fn(async () => { throw new Error("DB алга"); });
+    await expect(getOrSetCached(key, 10_000, failing)).rejects.toThrow("DB алга");
+    const ok = vi.fn(async () => "recovered");
+    expect(await getOrSetCached(key, 10_000, ok)).toBe("recovered");
+    expect(ok).toHaveBeenCalledTimes(1);
   });
 });

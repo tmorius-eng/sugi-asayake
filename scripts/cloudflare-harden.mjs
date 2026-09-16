@@ -94,6 +94,41 @@ const waf = await cf("PUT", `/zones/${ZONE}/rulesets/phases/http_request_firewal
 });
 ok(`WAF custom rules = ${waf.rules.length}`);
 
+// Cache rules (ачааллын бэлтгэл, 2026-09-16) --------------------------------
+// Cloudflare анхдагчаараа зөвхөн ТӨРЛИЙН ӨРГӨТГӨЛӨӨР (.js/.css/.png/.woff2…)
+// кэшилдэг. Тиймээс манай хамгийн үнэтэй, кэшлэгдэх ЁСТОЙ хариунууд нь өргөтгөлгүй
+// эсвэл кэшлэгддэггүй өргөтгөлтэй тул бүгд origin руу тусдаа хүсэлт болж очдог байв:
+//   • /og/product/<slug> — хуваалцах бүрт sharp-аар 1200×630 зураг зурдаг
+//     (954 MB RAM-тай VM дээр хамгийн үнэтэй нь; Facebook/Messenger scraper
+//     нэг бараанд олон удаа ирдэг). Origin аль хэдийн 7 хоногийн max-age өгдөг.
+//   • /cdn/<key> — барааны зураг бүрийн 302 redirect. Нүүр хуудсанд хэдэн арван
+//     зураг байдаг тул зочин бүр тэр бүрт нэг origin hop төлдөг. Түлхүүр нь
+//     hash-тай (storageProxy.ts) тул "immutable" нь бодитоор үнэн.
+//   • /sitemap.xml, /robots.txt, /feeds/google-merchant.xml — crawler-ийн
+//     давтамжтай татдаг, origin дээр 10 мин / 1 цагийн TTL-тэй.
+// "respect_origin" гэдэг нь TTL-ийн шийдвэр кодод (нэг эх сурвалж) үлдэнэ гэсэн үг.
+const cache = await cf("PUT", `/zones/${ZONE}/rulesets/phases/http_request_cache_settings/entrypoint`, {
+  rules: [
+    {
+      description: "Cache generated-but-cacheable origin responses (respect origin TTL)",
+      expression:
+        '(starts_with(http.request.uri.path, "/og/product/")) or (starts_with(http.request.uri.path, "/cdn/")) or (starts_with(http.request.uri.path, "/manus-storage/")) or (starts_with(http.request.uri.path, "/feeds/")) or (http.request.uri.path in {"/sitemap.xml" "/robots.txt" "/manifest.webmanifest"})',
+      action: "set_cache_settings",
+      action_parameters: { cache: true, edge_ttl: { mode: "respect_origin" }, browser_ttl: { mode: "respect_origin" } },
+    },
+    // Сүүлийн тохирсон дүрэм давамгайлдаг тул энэ нь жагсаалтын ТӨГСГӨЛД байна:
+    // дээрх дүрэм хэзээ ч /api/ эсвэл /admin-д хүрэхгүй ч, хожим нэмэгдэх дүрэм
+    // санамсаргүй хүрэхээс сэргийлсэн тогтмол хаалт.
+    {
+      description: "Never cache the API or the admin panel",
+      expression: '(starts_with(http.request.uri.path, "/api/")) or (starts_with(http.request.uri.path, "/admin"))',
+      action: "set_cache_settings",
+      action_parameters: { cache: false },
+    },
+  ],
+});
+ok(`cache rules = ${cache.rules.length}`);
+
 // Optional Access gate on /admin -------------------------------------------
 // Access matches paths by segment, so "/api/trpc/admin" alone did not cover
 // tRPC's "/api/trpc/admin.users" (verified 2026-09-13) -- hence the wildcard.
@@ -126,5 +161,15 @@ if (withAccess) {
 for (const p of ["/", "/admin", "/api/trpc/catalog.bestsellers?input=%7B%7D", "/wp-login.php"]) {
   const r = await fetch(`https://${HOST}${p}`, { redirect: "manual" });
   console.log(`TEST ${p.padEnd(45)} -> ${r.status}${r.status === 302 ? " (Access)" : ""}`);
+}
+// Кэшийн дүрэм бодитоор ажиллаж байгаа эсэх: эхний хүсэлт MISS, хоёр дахь нь HIT
+// байх ёстой (DYNAMIC гарвал дүрэм тухайн зам дээр хүрээгүй гэсэн үг).
+for (const p of ["/sitemap.xml", "/robots.txt"]) {
+  const statuses = [];
+  for (let i = 0; i < 2; i++) {
+    const r = await fetch(`https://${HOST}${p}`, { redirect: "manual", headers: { "cache-control": "no-transform" } });
+    statuses.push(r.headers.get("cf-cache-status") ?? "-");
+  }
+  console.log(`TEST ${p.padEnd(45)} -> cf-cache-status ${statuses.join(" then ")}`);
 }
 console.log("DONE");

@@ -10,7 +10,10 @@ import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
 
 export default tseslint.config(
-  { ignores: ["dist/**", "node_modules/**", "client/public/**", ".playwright-mcp/**", "scratchpad/**", "scripts/*.mjs"] },
+  // scripts/load/** нь k6-ийн өөрийн (Node биш) runtime дээр ажилладаг: "k6/http"
+  // модулиуд болон `__ENV` глобал нь энэ repo-д хэзээ ч суулгагдахгүй тул
+  // ESLint-д зөвхөн худал "no-undef" өгнө.
+  { ignores: ["dist/**", "node_modules/**", "client/public/**", ".playwright-mcp/**", "scratchpad/**", "scripts/*.mjs", "scripts/load/**"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
