@@ -1857,7 +1857,7 @@ export const appRouter = router({
         return safeUser;
       }),
     updateNotifications: protectedProcedure
-      .input(z.object({ emailOptIn: z.boolean().optional(), smsOptIn: z.boolean().optional() }))
+      .input(z.object({ emailOptIn: z.boolean().optional(), smsOptIn: z.boolean().optional(), pushOptIn: z.boolean().optional() }))
       .mutation(async ({ ctx, input }) => {
         const updated = await updateNotificationPreferences(ctx.user.id, input);
         if (!updated) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Тохиргоо хадгалж чадсангүй." });
@@ -2683,13 +2683,20 @@ export const appRouter = router({
     // works with) since Tom has not confirmed SMS credits/route are set up.
     sendCampaign: marketingProcedure.input(z.object({
       userIds: z.array(z.number().int().positive()).min(1).max(2_000),
-      channel: z.enum(["email", "sms"]),
+      channel: z.enum(["email", "sms", "push"]),
       subject: z.string().trim().min(1).max(200),
       body: z.string().trim().min(1).max(5_000),
+      // Зөвхөн push: мэдэгдэл дээр дарахад нээгдэх хуудас. Гадаад холбоос
+      // хориотой — мэдэгдлийг фишингийн тээвэр болгож болохгүй тул зөвхөн
+      // энэ сайтын дотоод зам (2026-09-16).
+      url: z.string().trim().max(300).regex(/^\/[^\s]*$/, "Холбоос \"/\"-ээр эхлэх дотоод зам байх ёстой.").optional(),
       sourceLabel: z.string().trim().max(120).optional(),
     })).mutation(async ({ ctx, input }) => {
       if (input.channel === "sms" && !ENV.smsCampaignsEnabled) {
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "SMS кампанит ажил идэвхжээгүй байна. Тохиргоог админтай холбогдоно уу." });
+      }
+      if (input.channel === "push" && !webPushEnabled()) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Push мэдэгдэл тохируулагдаагүй байна (VAPID түлхүүр)." });
       }
       // 2026-09-12 audit: a double click, a retried request or a second tab
       // used to send the whole campaign twice -- up to 2,000 people, each
@@ -2704,16 +2711,26 @@ export const appRouter = router({
         throw new TRPCError({ code: "CONFLICT", message: `Яг энэ кампанит ажлыг ${minutesAgo} минутын өмнө аль хэдийн илгээсэн байна. Дахин илгээх бол 10 минутын дараа оролдоно уу.` });
       }
       const recipients = await getUsersForCampaignSend(input.userIds);
-      const eligible = recipients.filter(user => input.channel === "email" ? user.emailOptIn && Boolean(user.email) : user.smsOptIn && Boolean(user.phone));
+      // Суваг бүр өөрийн зөвшөөрөл + өөрийн хүрэх хаягийг шаардана. Push-д
+      // "хаяг" нь бүртгүүлсэн хөтөч: тугтай ч бүртгэлгүй хүн рүү юу ч
+      // хүрэхгүй тул түүнийг эрхшээлгүйд тооцно (2026-09-16).
+      const eligible = recipients.filter(user =>
+        input.channel === "email" ? user.emailOptIn && Boolean(user.email)
+          : input.channel === "sms" ? user.smsOptIn && Boolean(user.phone)
+            : user.pushOptIn && Number(user.pushSubscriptionCount) > 0);
 
       let sentCount = 0;
       let failedCount = 0;
       const BATCH_SIZE = 20;
       for (let i = 0; i < eligible.length; i += BATCH_SIZE) {
         const batch = eligible.slice(i, i + BATCH_SIZE);
-        const outcomes = await Promise.all(batch.map(user => input.channel === "email"
-          ? sendAccountEmail({ to: user.email!, subject: input.subject, content: input.body })
-          : sendAccountSms({ to: user.phone!, content: input.body })));
+        const outcomes = await Promise.all(batch.map(async user => {
+          if (input.channel === "email") return sendAccountEmail({ to: user.email!, subject: input.subject, content: input.body });
+          if (input.channel === "sms") return sendAccountSms({ to: user.phone!, content: input.body });
+          // Нэг хүн олон төхөөрөмжтэй байж болно; ядаж нэгд нь хүрсэн бол
+          // илгээгдсэнд тооцно (`sendPushToUser` үхсэн бүртгэлийг өөрөө цэвэрлэнэ).
+          return (await sendPushToUser(user.id, { title: input.subject, body: input.body, url: input.url, tag: `campaign-${fingerprint.slice(0, 8)}` })) > 0;
+        }));
         sentCount += outcomes.filter(Boolean).length;
         failedCount += outcomes.filter(ok => !ok).length;
       }
@@ -2731,7 +2748,25 @@ export const appRouter = router({
     // of only failing after the admin has already filled out a message --
     // ENV.smsCampaignsEnabled itself is server-only config, not something
     // the client can read directly.
-    campaignConfig: marketingProcedure.query(() => ({ smsCampaignsEnabled: ENV.smsCampaignsEnabled })),
+    campaignConfig: marketingProcedure.query(() => ({ smsCampaignsEnabled: ENV.smsCampaignsEnabled, pushCampaignsEnabled: webPushEnabled() })),
+    /**
+     * Сонгосон хүлээн авагчдаас тухайн сувгаар ХЭД нь бодитоор хүрэх вэ
+     * (2026-09-16). Push-д энэ нь ялангуяа чухал: имэйл/утас нь бараг бүх
+     * мөрөнд байдаг бол мэдэгдэл асаасан хүн эхэндээ цөөхөн байна. Үүнгүйгээр
+     * админ "500 хүнд илгээлээ" гэж харах атлаа хэн ч хүлээж авахгүй байж
+     * болно — илгээхийн ӨМНӨ бодит тоог харуулна.
+     */
+    campaignReach: marketingProcedure.input(z.object({
+      userIds: z.array(z.number().int().positive()).min(1).max(2_000),
+      channel: z.enum(["email", "sms", "push"]),
+    })).query(async ({ input }) => {
+      const recipients = await getUsersForCampaignSend(input.userIds);
+      const reachable = recipients.filter(user =>
+        input.channel === "email" ? user.emailOptIn && Boolean(user.email)
+          : input.channel === "sms" ? user.smsOptIn && Boolean(user.phone)
+            : user.pushOptIn && Number(user.pushSubscriptionCount) > 0).length;
+      return { selected: input.userIds.length, reachable };
+    }),
     suspendUser: adminProcedure.input(z.object({ userId: z.number().int().positive(), reason: z.string().trim().max(300).optional() })).mutation(async ({ ctx, input }) => {
       if (ctx.user.id === input.userId) throw new TRPCError({ code: "BAD_REQUEST", message: "You cannot suspend your own account." });
       try {

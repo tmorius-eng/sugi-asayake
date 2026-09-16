@@ -32,6 +32,7 @@ export function testSessionUser(overrides: Partial<SessionUser> & { id: number }
     occupation: null,
     emailOptIn: false,
     smsOptIn: false,
+    pushOptIn: false,
     facebookId: null,
     email: null,
     role: "user",

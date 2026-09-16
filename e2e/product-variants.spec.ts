@@ -76,7 +76,14 @@ test.describe("барааны хувилбар", () => {
     await page.getByRole("button", { name: /Сагс нээх/ }).click();
     const drawer = page.getByRole("dialog");
     await expect(drawer.getByRole("heading", { name })).toBeVisible();
-    await expect(drawer.getByText("Хэмжээ: 400мл")).toBeVisible();
+    // ⚠️ Шошгыг ЭНЭ барааны мөрөн дотор шалгана, сагс даяар биш (2026-09-16).
+    // Сагс нь хэрэглэгчид тогтмол хадгалагддаг тул өмнөх УНАСАН ажиллалтын
+    // үлдэгдэл ижил "Хэмжээ: 400мл" шошготой мөр үлдээж, шалгалт "2 элемент
+    // олдлоо" гээд унадаг байв — бодит алдаа нь аль хэдийн өнгөрсөн, харин
+    // буруутгагдах нь дараагийн ажиллалт болно. Мөрөөр хүрээлснээр үлдэгдэл
+    // хамаагүй болж, шалгалтын утга нь ч хатуурна: шошго яг тэр бараанд.
+    const cartRow = drawer.locator("div.border-b").filter({ has: page.getByRole("heading", { name }) });
+    await expect(cartRow.getByText("Хэмжээ: 400мл")).toBeVisible();
 
     // 5) Цэвэрлэгээ: сагсыг хоослоод, барааг устгана.
     await drawer.getByRole("button", { name: `${name} — сагснаас хасах` }).click();

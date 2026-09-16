@@ -374,7 +374,7 @@ export async function updateUserPreferences(userId: number, input: {
   return getUserById(userId);
 }
 
-export async function updateNotificationPreferences(userId: number, input: { emailOptIn?: boolean; smsOptIn?: boolean }) {
+export async function updateNotificationPreferences(userId: number, input: { emailOptIn?: boolean; smsOptIn?: boolean; pushOptIn?: boolean }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.update(users).set({ ...input, updatedAt: new Date() }).where(eq(users.id, userId));
@@ -5495,7 +5495,33 @@ export async function getAdminUsers(input: { search?: string; page?: number; pag
 export async function getUsersForCampaignSend(userIds: number[]) {
   const db = await getDb();
   if (!db || userIds.length === 0) return [];
-  return db.select({ id: users.id, name: users.name, email: users.email, phone: users.phone, emailOptIn: users.emailOptIn, smsOptIn: users.smsOptIn }).from(users).where(inArray(users.id, userIds));
+  // `pushSubscriptionCount` (2026-09-16): push сувгийн эрхшээл нь зөвхөн туг
+  // биш — тухайн хүн ЯМАР НЭГЭН хөтөч дээр бүртгүүлсэн байх ёстой. Үүнгүйгээр
+  // админ "500 хүнд илгээлээ" гэж харах атлаа хэн ч хүлээж авахгүй.
+  //
+  // ⚠️ Хоёр асуулгаар. Эхний хувилбар нь `sql`-ийн дотор хамаарсан дэд асуулга
+  // (`select count(*) from ${pushSubscriptions} where …`) байсан бөгөөд
+  // бодит мөр байхад ч ТЭГ буцааж байв — алдаа шиддэггүй, зүгээр л чимээгүй
+  // буруу. (Түүхий SQL-ээр тоолоход 1, ижил дуудлагад дэд асуулга 0.) Тоолол
+  // тусдаа асуулга болсноор юу ажиллаж байгаа нь харагдана.
+  const rows = await db.select({
+    id: users.id,
+    name: users.name,
+    email: users.email,
+    phone: users.phone,
+    emailOptIn: users.emailOptIn,
+    smsOptIn: users.smsOptIn,
+    pushOptIn: users.pushOptIn,
+  }).from(users).where(inArray(users.id, userIds));
+
+  const subscriptionCounts = await db
+    .select({ userId: pushSubscriptions.userId, total: sql<number>`count(*)` })
+    .from(pushSubscriptions)
+    .where(inArray(pushSubscriptions.userId, userIds))
+    .groupBy(pushSubscriptions.userId);
+  const byUser = new Map(subscriptionCounts.map(row => [row.userId, Number(row.total)]));
+
+  return rows.map(row => ({ ...row, pushSubscriptionCount: byUser.get(row.id) ?? 0 }));
 }
 
 export async function getAdminUserDetail(userId: number) {

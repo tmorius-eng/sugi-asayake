@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { testSessionUser } from "./_test-helpers";
 import { eq, like } from "drizzle-orm";
-import { adminAuditLogs, users } from "../drizzle/schema";
+import { adminAuditLogs, pushSubscriptions, users } from "../drizzle/schema";
 
 // Admin overhaul (2026-09-08, Phase J): mass email/SMS campaigns. Stub
 // sendAccountEmail so this test verifies sendCampaign's own counting/filter
@@ -92,6 +92,43 @@ describeWithDatabase("mass campaign integration", () => {
   it("blocks SMS campaigns while SMS_CAMPAIGNS_ENABLED is unset", async () => {
     const marketing = callerFor(marketingUser());
     await expect(marketing.admin.sendCampaign({ userIds: [optedInId], channel: "sms", subject: "x", body: "x" })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+  });
+
+  /**
+   * Push суваг (2026-09-16). Хамгийн чухал дүрэм: тугтай ч БҮРТГЭЛГҮЙ хүн
+   * эрхшээлгүй. Үүнгүйгээр админ "бүгдэд илгээлээ" гэж харах атлаа хэн ч
+   * хүлээж авахгүй байж болно (`push_subscriptions` production дээр 0 байсан).
+   */
+  it("push сувагт зөвхөн мэдэгдлээ асаасан хүн эрхшээлтэй", async () => {
+    const marketing = callerFor(marketingUser());
+    const db = await getDb();
+    if (!db) throw new Error("DB required");
+
+    // Хоёулаа pushOptIn=true (анхдагч), гэвч зөвхөн нэг нь бүртгэлтэй.
+    await db.insert(pushSubscriptions).values({
+      userId: optedInId,
+      endpoint: `https://push.example.invalid/${marker}-a`,
+      p256dh: "BJ3QFm5cQxV9hfQOTBiG6dsRp6cDjT0SwIbGcIcD1nQ",
+      auth: "cGFzc3dvcmRwYXNzd29yZA",
+    });
+
+    const reach = await marketing.admin.campaignReach({ userIds: [optedInId, optedOutId, noEmailId], channel: "push" });
+    expect(reach.selected).toBe(3);
+    expect(reach.reachable, "бүртгэлтэй ганц хүн").toBe(1);
+
+    // pushOptIn-ийг унтраавал бүртгэлтэй ч эрхшээлгүй — зар нь захиалгын
+    // мэдэгдлээс ТУСДАА зөвшөөрөл (migration 0086).
+    await db.update(users).set({ pushOptIn: false }).where(eq(users.id, optedInId));
+    const afterOptOut = await marketing.admin.campaignReach({ userIds: [optedInId], channel: "push" });
+    expect(afterOptOut.reachable).toBe(0);
+    await db.update(users).set({ pushOptIn: true }).where(eq(users.id, optedInId));
+
+    // Гадаад холбоос хориотой: мэдэгдлийг фишингийн тээвэр болгож болохгүй.
+    await expect(marketing.admin.sendCampaign({
+      userIds: [optedInId], channel: "push", subject: "QA push", body: "QA push body", url: "https://evil.example.com/",
+    })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, optedInId));
   });
 
   it("keeps campaigns marketing/admin-only, rejecting finance and warehouse", async () => {

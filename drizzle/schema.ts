@@ -87,6 +87,11 @@ export const users = mysqlTable("users", {
    *  not a blanket promise every future email/SMS respects them yet. */
   emailOptIn: boolean("emailOptIn").notNull().default(true),
   smsOptIn: boolean("smsOptIn").notNull().default(true),
+  /** 2026-09-16 (migration 0086): маркетингийн push зөвшөөрөл. Хэрэглэгч
+   *  мэдэгдлээ асаахдаа ЗАХИАЛГЫН ЯВЦАД зөвшөөрөл өгсөн тул зар/урамшуулал
+   *  нь тусдаа тугтай байх ёстой — `emailOptIn`/`smsOptIn`-тэй яг ижил үүрэг.
+   *  Захиалгын мэдэгдэл үүнээс ХАМААРАХГҮЙ (гүйлгээний мэдэгдэл). */
+  pushOptIn: boolean("pushOptIn").notNull().default(true),
   /**
    * 2026-09-05: no longer the login identifier (see `phone` above) and no
    * longer collected at registration -- kept nullable so legacy accounts

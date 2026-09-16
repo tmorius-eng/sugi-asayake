@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, LoaderCircle, Mail, MessageSquareText, Send, ShieldCheck, X } from "lucide-react";
+import { AlertTriangle, Bell, LoaderCircle, Mail, MessageSquareText, Send, ShieldCheck, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
 // 2026-09-12: the ladder is admin-editable, so the segment dropdown lists
@@ -92,9 +92,11 @@ export default function AdminCampaignsPanel() {
     if (availableTiers.some(tier => tier.name === loyaltyTier)) return;
     setLoyaltyTier(availableTiers[0].name);
   }, [availableTiers, loyaltyTier]);
-  const [channel, setChannel] = useState<"email" | "sms">("email");
+  const [channel, setChannel] = useState<"email" | "sms" | "push">("email");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  // Зөвхөн push: мэдэгдэл дээр дарахад нээгдэх дотоод зам (2026-09-16).
+  const [url, setUrl] = useState("");
   const [confirming, setConfirming] = useState(false);
 
   const segmentsQuery = trpc.admin.customerSegments.useQuery();
@@ -112,10 +114,20 @@ export default function AdminCampaignsPanel() {
   const isResolvingRecipients = (recipientSource === "all" && allUsersQuery.isLoading) || (recipientSource === "loyalty" && loyaltyUsersQuery.isLoading);
 
   const smsDisabled = !configQuery.data?.smsCampaignsEnabled;
-  const canSend = recipientIds.length > 0 && subject.trim().length > 0 && body.trim().length > 0 && !(channel === "sms" && smsDisabled);
+  const pushDisabled = !configQuery.data?.pushCampaignsEnabled;
+  // Илгээхийн ӨМНӨ бодит хүрэх тоо. Push-д ялангуяа чухал: имэйл/утас бараг
+  // бүх мөрөнд байдаг бол мэдэгдэл асаасан хүн эхэндээ цөөхөн байна — үүнгүйгээр
+  // "500 хүнд илгээлээ" гэж харагдаад хэн ч хүлээж авахгүй байж болно.
+  const reachQuery = trpc.admin.campaignReach.useQuery(
+    { userIds: recipientIds, channel },
+    { enabled: recipientIds.length > 0 && recipientIds.length <= 2_000 },
+  );
+  const urlInvalid = channel === "push" && url.trim().length > 0 && !/^\/[^\s]*$/.test(url.trim());
+  const canSend = recipientIds.length > 0 && subject.trim().length > 0 && body.trim().length > 0
+    && !(channel === "sms" && smsDisabled) && !(channel === "push" && pushDisabled) && !urlInvalid;
 
   const resetComposer = () => {
-    setRecipientSource(null); setSegmentRecipients(null); setChannel("email"); setSubject(""); setBody(""); setConfirming(false); sendCampaign.reset();
+    setRecipientSource(null); setSegmentRecipients(null); setChannel("email"); setSubject(""); setBody(""); setUrl(""); setConfirming(false); sendCampaign.reset();
   };
 
   const onUseRecipients = (ids: number[], sourceLabel: string) => {
@@ -130,7 +142,7 @@ export default function AdminCampaignsPanel() {
 
   const onConfirmSend = async () => {
     try {
-      const result = await sendCampaign.mutateAsync({ userIds: recipientIds, channel, subject: subject.trim(), body: body.trim(), sourceLabel: recipientLabel || undefined });
+      const result = await sendCampaign.mutateAsync({ userIds: recipientIds, channel, subject: subject.trim(), body: body.trim(), url: channel === "push" && url.trim() ? url.trim() : undefined, sourceLabel: recipientLabel || undefined });
       toast.success(`Илгээлээ: ${result.sentCount}/${result.eligibleCount} амжилттай.`);
       setConfirming(false);
     } catch (error) {
@@ -174,14 +186,43 @@ export default function AdminCampaignsPanel() {
               <div className="mt-3 flex gap-2">
                 <button type="button" onClick={() => setChannel("email")} className={`inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-xs font-bold transition ${channel === "email" ? "border-[#df1f3d] bg-[var(--a-neg-soft)] text-[var(--a-neg)]" : "border-[var(--a-border)] text-[var(--a-text-soft)]"}`}><Mail size={14} />Имэйл</button>
                 <button type="button" disabled={smsDisabled} onClick={() => setChannel("sms")} className={`inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-40 ${channel === "sms" ? "border-[#df1f3d] bg-[var(--a-neg-soft)] text-[var(--a-neg)]" : "border-[var(--a-border)] text-[var(--a-text-soft)]"}`}><MessageSquareText size={14} />SMS</button>
+                {/* Push (2026-09-16): утас/компьютерийн дэлгэц дээр шууд
+                    гарна, SMS-ээс ялгаатай нь ТӨЛБӨРГҮЙ. Зөвхөн мэдэгдлээ
+                    асаасан хүн хүлээж авна (доорх хүрэх тоог үзнэ үү). */}
+                <button type="button" disabled={pushDisabled} onClick={() => setChannel("push")} className={`inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-40 ${channel === "push" ? "border-[#df1f3d] bg-[var(--a-neg-soft)] text-[var(--a-neg)]" : "border-[var(--a-border)] text-[var(--a-text-soft)]"}`}><Bell size={14} />Мэдэгдэл</button>
               </div>
               {smsDisabled && <p className="mt-2 flex items-start gap-1.5 text-[11px] text-[var(--a-warn)]"><AlertTriangle size={13} className="mt-0.5 shrink-0" />SMS кампанит ажил идэвхжээгүй байна (SMS кредит/route баталгаажаагүй). Тохиргоог админтай холбогдоно уу.</p>}
+              {pushDisabled && <p className="mt-2 flex items-start gap-1.5 text-[11px] text-[var(--a-warn)]"><AlertTriangle size={13} className="mt-0.5 shrink-0" />Мэдэгдэл тохируулагдаагүй байна (VAPID түлхүүр).</p>}
+              {/* Хүрэх тоо: сонгосон бүх хүнд биш, зөвхөн энэ сувгаар
+                  бодитоор хүрэх хүнд очно. Push-д энэ зөрүү маш том байж
+                  болно, тиймээс илгээхийн ӨМНӨ ил харуулна. */}
+              {recipientIds.length > 0 && reachQuery.data && (
+                <p className={`mt-3 text-[11px] font-bold ${reachQuery.data.reachable === 0 ? "text-[var(--a-neg)]" : "text-[var(--a-muted)]"}`}>
+                  {reachQuery.data.reachable === 0
+                    ? `Сонгосон ${reachQuery.data.selected} хүний ХЭН НЬ Ч энэ сувгаар хүлээж авахгүй — илгээх нь утгагүй.`
+                    : `Сонгосон ${reachQuery.data.selected} хүнээс ${reachQuery.data.reachable} нь энэ сувгаар хүлээж авна.`}
+                  {channel === "push" && " Мэдэгдлээ асааж, зар хүлээн авахыг зөвшөөрсөн хүн."}
+                </p>
+              )}
             </section>
 
             <section className="rounded-3xl border border-[var(--a-border)] p-5">
               <h3 className="font-[var(--font-display)] text-lg font-semibold tracking-[-.04em]">3. Мессеж</h3>
               <label className="mt-3 grid gap-1.5 text-xs font-bold">Гарчиг<input value={subject} onChange={event => setSubject(event.target.value)} maxLength={200} placeholder="Жишээ: Намрын хямдрал эхэллээ" className="h-10 rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" /></label>
               <label className="mt-3 grid gap-1.5 text-xs font-bold">Агуулга<textarea value={body} onChange={event => setBody(event.target.value)} maxLength={5000} rows={7} placeholder="Мессежийн бүтэн текст…" className="rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] p-3 text-xs font-normal leading-5 outline-none focus:border-[#df1f3d]" /></label>
+              {channel === "push" && (
+                <>
+                  <label className="mt-3 grid gap-1.5 text-xs font-bold">Дарахад нээгдэх хуудас (сонголттой)
+                    <input value={url} onChange={event => setUrl(event.target.value)} maxLength={300} placeholder="/shop?category=Арьс арчилгаа" className="h-10 rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" />
+                  </label>
+                  {/* Гадаад холбоос хориотой: мэдэгдлийг фишингийн тээвэр
+                      болгож болохгүй (сервер талд мөн шалгагдана). */}
+                  {urlInvalid
+                    ? <p className="mt-1.5 text-[11px] font-bold text-[var(--a-neg)]">Зөвхөн энэ сайтын дотоод зам — "/"-ээр эхэлнэ (жишээ: /shop).</p>
+                    : <p className="mt-1.5 text-[11px] text-[var(--a-muted)]">Хоосон орхивол захиалгын хуудас нээгдэнэ. Зөвхөн дотоод зам (жишээ: /shop, /journal).</p>}
+                  <p className="mt-3 text-[11px] text-[var(--a-muted)]">Мэдэгдэл нь утас/компьютерийн дэлгэц дээр шууд гарна (дэлгэц унтарсан ч). Гарчиг богино байх тусмаа сайн — утсан дээр ~50 тэмдэгт харагдана.</p>
+                </>
+              )}
             </section>
 
             {!confirming ? (
@@ -189,7 +230,7 @@ export default function AdminCampaignsPanel() {
             ) : (
               <div className="rounded-3xl border border-[#df1f3d]/25 bg-[var(--a-neg-soft)] p-5">
                 <p className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-[.13em] text-[var(--a-neg)]"><ShieldCheck size={13} />ИЛГЭЭХЭЭС ӨМНӨ БАТАЛГААЖУУЛНА УУ</p>
-                <p className="mt-2 text-sm">{recipientIds.length} харилцагч руу <strong>{channel === "email" ? "имэйл" : "SMS"}</strong> илгээх гэж байна.</p>
+                <p className="mt-2 text-sm">{recipientIds.length} харилцагч руу <strong>{channel === "email" ? "имэйл" : channel === "sms" ? "SMS" : "мэдэгдэл"}</strong> илгээх гэж байна.</p>
                 <p className="mt-1 text-xs text-[var(--a-muted)]">Гарчиг: {subject}</p>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button type="button" onClick={() => setConfirming(false)} disabled={sendCampaign.isPending} className="rounded-full border border-[var(--a-border)] bg-[var(--a-card)] px-4 py-2.5 text-xs font-bold text-[var(--a-text-soft)] transition hover:border-black/20">Буцах</button>

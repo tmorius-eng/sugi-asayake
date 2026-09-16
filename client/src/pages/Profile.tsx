@@ -766,6 +766,14 @@ function NotificationsTab() {
         <label className="switch"><input type="checkbox" checked={user?.smsOptIn ?? true} onChange={event => update.mutate({ smsOptIn: event.target.checked })} /><span className="switch-track" /></label>
       </div>
       <PushToggleRow />
+      {/* 2026-09-16 (migration 0086): дээрх шилжүүлэгч нь ЗАХИАЛГЫН явцад
+          зөвшөөрөл өгдөг. Зар/урамшуулал нь тусдаа сонголт байх ёстой —
+          эс бөгөөс "захиалгаа хянана" гэж асаасан хүн рүү сурталчилгаа
+          илгээх нь амлалт зөрчинө (`emailOptIn`/`smsOptIn`-тэй ижил үүрэг). */}
+      <div className="pref-toggle-row">
+        <div><strong>Урамшуулал, шинэ бараа</strong><span>Хямдрал, шинэ бараа, гишүүнчлэлийн саналыг мэдэгдлээр авах (захиалгын мэдэгдэл үүнээс хамаарахгүй)</span></div>
+        <label className="switch"><input type="checkbox" checked={user?.pushOptIn ?? true} onChange={event => update.mutate({ pushOptIn: event.target.checked })} /><span className="switch-track" /></label>
+      </div>
     </section>
   );
 }
