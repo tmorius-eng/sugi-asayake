@@ -1944,6 +1944,39 @@ export type FaceChallenge = typeof faceChallenges.$inferSelect;
  * than blind trust in a library default, and this column is the only way to
  * see the actual distribution of real successes and failures.
  */
+/**
+ * Камергүй компьютер дээр admin-д нэвтрэх "handoff" хүсэлт (2026-09-16,
+ * migration 0085). Дэлгэрэнгүй: docs/FACE-HANDOFF-PLAN.md.
+ *
+ * Компьютер QR үүсгэж, утас түүнийг уншаад царайгаар баталгаажуулна. QR-ийг
+ * БАТАЛГААЖУУЛАХ ШААРДЛАГАТАЙ компьютер өөрөө үүсгэдэг нь гол зарчим: утас
+ * шинэ сесс үүсгэдэггүй, зөвхөн аль хэдийн нэвтэрсэн тухайн сессийг нээдэг
+ * (OWASP-ийн QRLJacking-ийн механизмыг таслана).
+ */
+export const faceHandoffRequests = mysqlTable("face_handoff_requests", {
+  id: int("id").autoincrement().primaryKey(),
+  /** sha256(token) — түүхий token хэзээ ч хадгалагдахгүй. */
+  tokenHash: varchar("tokenHash", { length: 64 }).notNull().unique(),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** Нууц үг солих / бүх төхөөрөмжөөс гарахад хүлээгдэж буй handoff үхнэ. */
+  sessionVersion: int("sessionVersion").notNull(),
+  /** Proof яг энэ табд очно (x-admin-tab) — табын шаардлага тойрогдохгүй. */
+  adminTabId: varchar("adminTabId", { length: 64 }).notNull(),
+  /** Компьютер дээр харагдах 2 оронтой тоо; утсан дээр сонголтуудаас таарна. */
+  matchNumber: int("matchNumber").notNull(),
+  desktopIp: varchar("desktopIp", { length: 64 }),
+  desktopAgent: varchar("desktopAgent", { length: 200 }),
+  status: mysqlEnum("status", ["pending", "approved", "used", "denied", "expired"]).notNull().default("pending"),
+  approvedByIp: varchar("approvedByIp", { length: 64 }),
+  approvedAt: timestamp("approvedAt"),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  index("face_handoff_requests_user_idx").on(table.userId, table.status),
+  index("face_handoff_requests_expiry_idx").on(table.expiresAt),
+]);
+export type FaceHandoffRequest = typeof faceHandoffRequests.$inferSelect;
+
 export const faceAttempts = mysqlTable("face_attempts", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").references(() => users.id, { onDelete: "cascade" }),

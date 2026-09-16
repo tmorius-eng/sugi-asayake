@@ -2,7 +2,19 @@
 
 **Огноо**: 2026-09-16 · **Асуусан** (Tom): *"computer-н camera байхгүй бол admin эрхээр яаж орж нүүрээ таниулах билээ? QR код гарч ирж утсаараа тэрийг уншуулаад web рүү шидээд, утсаараа face-ээ уншуулаад буцаад компьютер дээр login хийх."*
 
-Энэ бол **хэрэгжүүлэх төлөвлөгөө**, хэрэгжүүлсэн код БИШ. Кодыг бичихээс өмнө §9-ийн шийдвэрүүдийг Tom баталгаажуулна.
+> ✅ **ХЭРЭГЖСЭН (2026-09-16)** — Tom §9-ийн дөрвөн шийдвэрийг өгсний дараа
+> нэг дор бичигдэв. Код: `server/faceHandoff.ts`, `drizzle/0085_*.sql`,
+> `client/src/components/admin/FaceHandoffPanel.tsx` (компьютер),
+> `client/src/pages/FaceApprove.tsx` (утас), `server/face-handoff.integration.test.ts`
+> (10 тест). Доорх дизайн нь хэрэгжсэн байдлыг тайлбарлана; төлөвлөгөөнөөс
+> **ялгаатай 4 зүйл** §12-т.
+>
+> ⏳ **Үлдсэн цорын ганц алхам**: Tom бодит утсаар staging дээр нэг удаа туршиж
+> үзэх (жинхэнэ царай шаардлагатай тул автомат тест үүнийг орлохгүй).
+
+Tom-ийн шийдвэрүүд (§9-ийн хариу): утас **өөр сүлжээнд байж болно**;
+**бүх panel role** ашиглана; идэвхгүй түгжээ **10 минут**; BLE/Bluetooth
+**хэрэггүй**, зөвхөн QR.
 
 ---
 
@@ -225,3 +237,21 @@ Playwright дээр хоёр context ашиглах жишээ манай `store
 - CISA — Implementing Number Matching in MFA Applications: https://www.cisa.gov/sites/default/files/publications/fact-sheet-implement-number-matching-in-mfa-applications-508c.pdf
 - MDN — `enumerateDevices()` / `getUserMedia()` алдааны төрлүүд: https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/enumerateDevices · https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia
 - Yubico — QR кодын аж ахуйн нэгжийн хэрэглээ: https://www.yubico.com/blog/qr-codes-within-enterprise-security-key-considerations-and-best-practices/
+
+
+---
+
+## 12. Хэрэгжилт төлөвлөгөөнөөс юугаараа зөрсөн бэ
+
+1. **Тоог царайнаас ӨМНӨ шалгадаг болов.** Төлөвлөгөөнд царай → тоо гэсэн
+   дараалалтай байв. Буруу тоо нь халдлагын шинж тул царайны шалгалтыг огт
+   эхлүүлэхгүй, `face_challenges`-ийн challenge ч зарцуулахгүй шууд хаах нь
+   зөв (`assertHandoffApprovable` → `completeFaceVerification` → `approveFaceHandoff`).
+2. **IP-ийн хязгаарлалт байхгүй** (Tom: "утас өөр IP байсан ч болно"). IP нь
+   зөвхөн утсан дээр ХАРАГДАНА, өөр сүлжээ бол улаан анхааруулга гарна.
+3. **Царайн БҮРТГЭЛ handoff-оор хийгдэхгүй** — бүртгэл нь олон өнцгийн зураг
+   шаарддаг тул камертай төхөөрөмж дээр л хийгдэнэ. Гарц нь зөвхөн бүртгэлтэй
+   хүнд санал болгогдоно (`status.enrolled && !status.modelStale`).
+4. **Proof-ийн idle цонх токен дотроо явдаг болов** (`idle` claim). Үүнгүйгээр
+   эхний heartbeat 10 минутын цонхыг 25 болгож чимээгүй уртасгах байсан —
+   `refreshFaceProof` токеныхоо өөрийн цонхоор дахин гарын үсэг зурна.

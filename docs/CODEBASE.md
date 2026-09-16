@@ -59,6 +59,7 @@ browser → /api/trpc/<router>.<procedure>
 | `index.ts` | процессын эхлэл (§1) | ажлын бүртгэл, dispatcher энд эхэлдэг |
 | `context.ts` | tRPC контекст: cookie → user | `assertProductionSecrets()` энд; session token JWT. User мөр **5 с cache** (`getSessionUserById`, түлхүүр = user id, token БИШ) — session-ийн эрхийг өөрчилдөг бичигч бүр `forgetSessionUser` дуудна (§8 дүрэм 10) |
 | `trpc.ts` | procedure-ийн төрлүүд (**panel builder бүр face proof шаардана**) | `publicProcedure`, `protectedProcedure`, `adminProcedure`, `financeProcedure`, `staffProcedure`, **`inventoryProcedure`** (admin+warehouse+staff), `strictRateLimitedProcedure`. Эрхийн шалгалт бүхэлдээ ЭНД, дэд router-үүд өөрсдөө эрх шалгадаггүй |
+| `faceProof.ts` | admin царайны proof cookie | таб тус бүр (`x-admin-tab`), 8 цагийн дээд хугацаа, идэвхгүй цонх нь **токен дотроо** явдаг (`idle` claim) тул handoff-ийн 10 минут heartbeat-аар уртсахгүй |
 | `clusterRole.ts` | олон процессын үед хэн ард ажиллах ажлуудыг эзэмшихийг шийднэ | pm2 cluster горимд ЗӨВХӨН instance 0; `RUN_BACKGROUND_JOBS=0/1` дардаг. Үгүй бол орхигдсон сагсны сануулга, вендорын таталт N дахин явна |
 | `security.ts` | header, rate limit tier, CSRF | `limitApiTraffic` (IP тутам 300/15мин), `protectStateChangingApiRequests`, `limitQPayCallbackTraffic` |
 | `scannerProbes.ts` | `.env`/`.git`/`*.php`/CMS-ийн сканнер probe → шууд 404; IP тутам 1 ц/5 probe → 403 ban | loopback/private хаяг хэзээ ч ban болохгүй (proxy-ийн ард бүгд нэг IP болох эрсдэл); `isScannerProbe` цэвэр, 2 жагсаалтаар тестлэгдсэн |

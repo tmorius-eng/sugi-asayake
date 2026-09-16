@@ -6,6 +6,7 @@ import { ubDateKey } from "../shared/notification-events";
 import { sendAccountEmail, notifyOwner } from "./_core/notification";
 import { sendPushToUser } from "./_core/webPush";
 import { registerJob } from "./_core/scheduler";
+import { purgeExpiredFaceHandoffs } from "./faceHandoff";
 
 /**
  * "Controls everything" admin overhaul (2026-09-08, Phases E/F): the two
@@ -152,7 +153,11 @@ export async function runNotificationOutboxPurgeJob(): Promise<void> {
 // purgeStaleTelemetry for the retention periods and why they are safe.
 export async function runDataRetentionJob(): Promise<void> {
   const { visitorSessions, loginAttempts } = await purgeStaleTelemetry();
-  if (visitorSessions || loginAttempts) console.log(`[retention] removed ${visitorSessions} visitor session(s) older than 24 months, ${loginAttempts} login attempt(s) older than 12 months`);
+  // QR handoff-ийн хүсэлтүүд 90 секундын настай — нэг өдрөөс хуучин мөр нь
+  // зөвхөн аудитын хог (жинхэнэ түүх нь admin_audit_logs-д үлддэг).
+  // Шинэ job гаргалгүй энд хавсаргав (2026-09-16).
+  const handoffs = await purgeExpiredFaceHandoffs(24);
+  if (visitorSessions || loginAttempts || handoffs) console.log(`[retention] removed ${visitorSessions} visitor session(s) older than 24 months, ${loginAttempts} login attempt(s) older than 12 months, ${handoffs} face handoff request(s) older than 24 hours`);
 }
 
 export function registerDataRetentionJob() {

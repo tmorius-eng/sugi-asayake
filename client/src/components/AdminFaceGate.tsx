@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, CameraOff, CheckCircle2, KeyRound, LoaderCircle, ScanFace, ShieldCheck } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import FaceHandoffPanel from "./admin/FaceHandoffPanel";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
   FACE_HEARTBEAT_INTERVAL_MS,
@@ -75,6 +76,7 @@ import { faceBackendName, warmUpFaceModels } from "@/lib/faceEngine";
  *    enforced, exactly as before (ADMIN_FACE_LIVENESS_ENFORCED).
  */
 export default function AdminFaceGate({ children }: { children: React.ReactNode }) {
+  const [handoff, setHandoff] = useState(false);
   const statusQuery = trpc.faceAuth.status.useQuery(undefined, {
     // The gate decides whether the admin panel renders at all, so a stale
     // cached "verified" must never be what lets someone in.
@@ -116,11 +118,20 @@ export default function AdminFaceGate({ children }: { children: React.ReactNode 
     );
   }
 
+  // Камергүй компьютер (2026-09-16, Tom): QR -> утас -> буцаад энд. Царайн
+  // БҮРТГЭЛ хийхэд камер зайлшгүй тул handoff зөвхөн бүртгэлтэй хүнд
+  // санал болгоно — бүртгэлгүй хүн камертай төхөөрөмж дээр нэг удаа
+  // бүртгүүлэх ёстой (docs/FACE-HANDOFF-PLAN.md).
+  const canHandoff = status.enrolled && !status.modelStale;
+  if (handoff && canHandoff) {
+    return <FaceHandoffPanel onPassed={() => { setHandoff(false); void statusQuery.refetch(); }} onBack={() => setHandoff(false)} />;
+  }
   return (
     <FaceGateFlow
       needsEnrollment={!status.enrolled || status.modelStale}
       modelStale={status.modelStale}
       onPassed={() => statusQuery.refetch()}
+      onUseHandoff={canHandoff ? () => setHandoff(true) : undefined}
     />
   );
 }
@@ -270,7 +281,22 @@ function nextFrame(): Promise<void> {
   return new Promise(resolve => requestAnimationFrame(() => resolve()));
 }
 
-function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollment: boolean; modelStale: boolean; onPassed: () => void }) {
+export type FaceVerificationSubmit = (payload: {
+  challengeId: number;
+  descriptor: number[];
+  livenessPassed: boolean;
+  diagnostic: string;
+}) => Promise<{ ok: boolean; reason?: string; distance?: number }>;
+
+/**
+ * `submitVerification` (2026-09-16): камергүй компьютерийн QR handoff-д
+ * УТАС энэ урсгалыг яг тэр чигт нь ажиллуулдаг — ялгаа нь зөвхөн сүүлийн
+ * дуудлага: `faceAuth.completeVerification` (өөрийн төхөөрөмжийг нээх)
+ * эсвэл `faceAuth.approveHandoff` (компьютерийг нээх). Камер, амьд байдал,
+ * дескриптор, алдааны мессеж бүгд ганц эх сурвалжтай хэвээр — утсанд
+ * зориулж хоёр дахь камерын код бичих нь тэр даруй хоцрох байсан.
+ */
+export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVerification, onUseHandoff }: { needsEnrollment: boolean; modelStale: boolean; onPassed: () => void; submitVerification?: FaceVerificationSubmit; onUseHandoff?: () => void }) {
   const [phase, setPhase] = useState<Phase>(needsEnrollment ? "consent" : "camera");
   const [hint, setHint] = useState<string>("Бэлтгэж байна…");
   const [fatalError, setFatalError] = useState<string | null>(null);
@@ -601,7 +627,8 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
       if (descriptors.length === 0) throw new Error("CAPTURE_TIMEOUT");
       setProgress(90);
 
-      const result = await completeVerification.mutateAsync({
+      const submit: FaceVerificationSubmit = submitVerification ?? (payload => completeVerification.mutateAsync(payload));
+      const result = await submit({
         challengeId,
         descriptor: averageFaceDescriptors(descriptors),
         livenessPassed: capture.blinks > 0,
@@ -657,7 +684,7 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
       }
       setPhase("camera");
     }
-  }, [needsEnrollment, waitForVideo, runRingEnrollment, describeSnapshots, runLoginCapture, enroll, startVerification, completeVerification, cleanup, onPassed]);
+  }, [needsEnrollment, waitForVideo, runRingEnrollment, describeSnapshots, runLoginCapture, enroll, startVerification, completeVerification, submitVerification, cleanup, onPassed]);
 
   // Auto-start for the verify-only path. Enrollment waits for explicit
   // consent first -- capturing a face before someone has agreed to it being
@@ -764,6 +791,13 @@ function FaceGateFlow({ needsEnrollment, modelStale, onPassed }: { needsEnrollme
             Дахин оролдох
           </button>
         )}
+
+        {/* Камергүй/эвдэрсэн камертай компьютерийн цорын ганц зам. Алдаа
+            гарсан үед ТОМООР, бусад үед чимээгүй холбоосоор — камертай хүнд
+            энэ нь илүү удаан зам тул түрүүлж санал болгохгүй. */}
+        {onUseHandoff && (fatalError
+          ? <button type="button" className="face-gate-btn face-gate-btn-quiet" onClick={onUseHandoff}>Утсаараа баталгаажуулах</button>
+          : <button type="button" className="face-gate-link" onClick={onUseHandoff}>Энэ компьютерт камер алга — утсаараа баталгаажуулах</button>)}
 
         {/* Practical advice, always visible rather than hidden behind a
             "why did this fail?" link -- these are the real causes of failure

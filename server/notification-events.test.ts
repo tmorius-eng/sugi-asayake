@@ -33,6 +33,7 @@ const samples: { [K in NotificationEventType]: NotificationPayloads[K] } = {
   "stock.low": { branchName: "Агуулах", productName: "Бараа А", sku: "4900000000001", quantity: 4, threshold: 5 },
   "stock.out": { branchName: "Агуулах", productName: "Бараа А", sku: "4900000000001" },
   "stock.total_out": { productName: "Бараа А", sku: "4900000000001" },
+  "admin.handoff_approved": { device: "Chrome · Windows" },
   "stock.ledger_drift": { count: 3 },
   "stock.vendor_sync_blocked": { previous: 937, current: 120, dropPercent: 87 },
   "transfer.stale": { code: "TR-260911-QW3E", toBranchName: "Их наяд плаза", hours: 50 },

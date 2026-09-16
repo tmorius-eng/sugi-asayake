@@ -1,0 +1,129 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import QRCode from "qrcode";
+import { LoaderCircle, RefreshCw, Smartphone } from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import { FACE_HANDOFF_TTL_MS } from "@shared/face-auth";
+
+/**
+ * Камергүй компьютер дээр admin-д нэвтрэх QR дэлгэц (2026-09-16).
+ * Бүрэн дизайн ба аюулгүй байдлын үндэслэл: docs/FACE-HANDOFF-PLAN.md.
+ *
+ * Энэ бүрэлдэхүүн юу ХИЙХГҮЙ вэ гэдэг нь чухал: энэ нь нэвтрэлт биш. Хэрэглэгч
+ * аль хэдийн (утас + нууц үг + OTP-ээр) нэвтэрсэн байх ёстой; энд зөвхөн
+ * ХОЁР ДАХЬ фактор болох царайны шалгалт утас руу шилждэг. Утас ямар ч сесс
+ * үүсгэхгүй — зөвхөн энэ компьютерийн энэ табыг нээнэ.
+ */
+export default function FaceHandoffPanel({ onPassed, onBack }: { onPassed: () => void; onBack: () => void }) {
+  const start = trpc.faceAuth.startHandoff.useMutation();
+  const status = trpc.faceAuth.handoffStatus.useMutation();
+  const [token, setToken] = useState<string | null>(null);
+  const [matchNumber, setMatchNumber] = useState<number | null>(null);
+  const [expiresAt, setExpiresAt] = useState<number>(0);
+  const [secondsLeft, setSecondsLeft] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [approved, setApproved] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const approveUrl = useMemo(() => (token ? `${window.location.origin}/face-approve?token=${encodeURIComponent(token)}` : null), [token]);
+
+  const request = useMemo(() => async () => {
+    setError(null);
+    setApproved(false);
+    try {
+      const created = await start.mutateAsync();
+      setToken(created.token);
+      setMatchNumber(created.matchNumber);
+      setExpiresAt(new Date(created.expiresAt).getTime());
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "QR код үүсгэж чадсангүй.");
+    }
+    // start.mutateAsync is stable enough for this one-shot call; including the
+    // whole mutation object here would re-create the callback on every render
+    // and restart the effect below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => { void request(); }, [request]);
+
+  // QR-ийг canvas дээр зурна (`qrcode` санг барааны QR-т аль хэдийн ашигладаг).
+  useEffect(() => {
+    if (!approveUrl || !canvasRef.current) return;
+    void QRCode.toCanvas(canvasRef.current, approveUrl, { width: 232, margin: 1, color: { dark: "#17181b", light: "#ffffff" } });
+  }, [approveUrl]);
+
+  // Үлдсэн хугацаа. setInterval (requestAnimationFrame БИШ): арын таб дээр
+  // rAF зогсдог тул хугацаа дуусахыг анзаарахгүй өнгөрнө.
+  useEffect(() => {
+    if (!expiresAt) return;
+    const tick = () => setSecondsLeft(Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000)));
+    tick();
+    const timer = setInterval(tick, 500);
+    return () => clearInterval(timer);
+  }, [expiresAt]);
+
+  // Компьютер өөрөө асууна: батлагдмагц ЭНЭ хариулт дээр proof cookie ирнэ.
+  useEffect(() => {
+    if (!token || approved || secondsLeft <= 0) return;
+    let stopped = false;
+    const poll = async () => {
+      try {
+        const result = await status.mutateAsync({ token });
+        if (stopped) return;
+        if (result.status === "approved") {
+          setApproved(true);
+          onPassed();
+        } else if (result.status === "denied") {
+          setError("Утсан дээрээс татгалзсан байна.");
+          setToken(null);
+        }
+      } catch {
+        // Сүлжээний түр саатал — дараагийн давталт дахин оролдоно.
+      }
+    };
+    const timer = setInterval(() => { void poll(); }, 2000);
+    return () => { stopped = true; clearInterval(timer); };
+  }, [token, approved, secondsLeft, status, onPassed]);
+
+  const expired = secondsLeft <= 0 && !approved;
+
+  return (
+    <div className="face-gate" role="dialog" aria-modal="true" aria-label="Утсаар баталгаажуулах">
+      <div className="face-gate-card">
+        <p className="face-gate-eyebrow"><Smartphone size={14} aria-hidden="true" /> УТСААР БАТАЛГААЖУУЛАХ</p>
+        <h1 className="face-gate-title">Утсаараа QR-ыг уншуулна уу</h1>
+        <p className="face-gate-lead">
+          Энэ компьютерт камер алга. Утсаараа доорх QR-ыг уншуулж, өөрийн дансаараа нэвтэрсэн байдалдаа
+          царайгаа уншуулбал энэ компьютер дээрх admin хэсэг нээгдэнэ.
+        </p>
+
+        {error && <div className="face-gate-alert" role="alert">{error}</div>}
+
+        {approved ? (
+          <p className="face-gate-hint" aria-live="polite">Баталгаажлаа — нээж байна…</p>
+        ) : expired || !token ? (
+          <button type="button" className="face-gate-btn" onClick={() => void request()} disabled={start.isPending}>
+            {start.isPending ? <LoaderCircle className="animate-spin" size={16} /> : <RefreshCw size={16} />} Шинэ QR код гаргах
+          </button>
+        ) : (
+          <>
+            <div className="face-handoff-qr">
+              <canvas ref={canvasRef} aria-label="Утсаар уншуулах QR код" />
+            </div>
+            {/*
+              Тоо тааруулах: утсан дээр гурван сонголт гарах бөгөөд зөвхөн энэ
+              дэлгэцийг БОДИТООР харж байгаа хүн зөвийг нь мэднэ. BLE-ийн
+              ойролцооны шалгалтыг орлох арга (docs/FACE-HANDOFF-PLAN.md §4).
+            */}
+            <p className="face-handoff-number-label">Утсан дээрээ энэ тоог сонгоно уу</p>
+            <p className="face-handoff-number">{matchNumber}</p>
+            <p className="face-gate-hint" aria-live="polite">
+              {secondsLeft} секундын дараа энэ код хүчингүй болно ({Math.round(FACE_HANDOFF_TTL_MS / 1000)} секунд тутамд шинэчилнэ).
+            </p>
+          </>
+        )}
+
+        <button type="button" className="face-gate-link" onClick={onBack}>← Камераар оролдох</button>
+      </div>
+    </div>
+  );
+}

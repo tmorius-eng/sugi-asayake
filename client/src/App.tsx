@@ -25,6 +25,9 @@ const AdminDashboard = lazyRetry(() => import("./pages/AdminDashboard"));
 const AdminPreview = import.meta.env.DEV ? lazyRetry(() => import("./components/AdminWorkspace").then(m => ({ default: () => <m.default preview /> }))) : null;
 const Checkout = lazyRetry(() => import("./pages/Checkout"));
 const ForgotPassword = lazyRetry(() => import("./pages/ForgotPassword"));
+// Камергүй компьютерийн admin хандалтыг утсаар баталгаажуулах хуудас
+// (2026-09-16, docs/FACE-HANDOFF-PLAN.md). Зөвхөн QR-аар л хүрдэг тул lazy.
+const FaceApprove = lazyRetry(() => import("./pages/FaceApprove"));
 const Journal = lazyRetry(() => import("./pages/Journal"));
 const Brands = lazyRetry(() => import("./pages/Brands"));
 const Careers = lazyRetry(() => import("./pages/Careers"));
@@ -82,6 +85,7 @@ function Router() {
     {AdminPreview && <Route path={"/__admin-preview"} component={AdminPreview} />}
     <Route path={"/login"} component={Login} />
     <Route path={"/forgot-password"} component={ForgotPassword} />
+    <Route path={"/face-approve"} component={FaceApprove} />
     <Route path={"/track-order"} component={TrackOrder} />
     <Route path={"/privacy"} component={Legal} />
     <Route path={"/terms"} component={Legal} />

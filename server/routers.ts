@@ -226,7 +226,8 @@ import { renderOrderInvoice, renderOrderInvoiceForStaff, renderPackingSlip } fro
 import { deletePushSubscription, hasPushSubscription, issueGiftCards, listGiftCards, redeemGiftCard, upsertPushSubscription, voidGiftCard } from "./db";
 import { sendOrderStatusPush, sendPushToUser, webPushEnabled } from "./_core/webPush";
 // Admin face gate (2026-09-08) -- see server/faceAuth.ts.
-import { clearFaceProofCookie, completeFaceVerification, hasValidFaceProof, isFaceGateEnabled, lockFaceSession, refreshFaceProof, startFaceVerification } from "./faceAuth";
+import { clearFaceProofCookie, completeFaceVerification, faceProofIdleTimeoutMs, isFaceGateEnabled, lockFaceSession, refreshFaceProof, startFaceVerification } from "./faceAuth";
+import { approveFaceHandoff, assertHandoffApprovable, claimFaceHandoff, denyFaceHandoff, getFaceHandoffContext, startFaceHandoff } from "./faceHandoff";
 import { FACE_DESCRIPTOR_LENGTH, FACE_DIAGNOSTIC_MAX, FACE_IDLE_TIMEOUT_MS, FACE_MODEL_VERSION, isAdminPanelRole, isValidFaceDescriptor } from "../shared/face-auth";
 import { adminProcedure, anyStaffProcedure, catalogReadProcedure, contentReadProcedure, financeProcedure, lenientRateLimitedProcedure, marketingProcedure, moderateRateLimitedProcedure, ordersReadProcedure, phoneVerifyRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure, usersReadProcedure, warehouseProcedure } from "./_core/trpc";
 import { storageGetSignedUrl, storagePing, storagePut, storagePutImageVariants } from "./storage";
@@ -2032,7 +2033,11 @@ export const appRouter = router({
         return { gateEnabled, enrolled: true, verified: true, modelStale: false, idleTimeoutMs: FACE_IDLE_TIMEOUT_MS };
       }
       const enrollment = await getFaceEnrollment(ctx.user.id);
-      const hasProof = await hasValidFaceProof(ctx.req, ctx.user.id, ctx.user.sessionVersion);
+      // The proof's OWN idle window, not the global constant: a session
+      // unlocked by phone handoff runs on 10 minutes (2026-09-16), and the
+      // browser's countdown has to match what the server enforces.
+      const proofIdleMs = await faceProofIdleTimeoutMs(ctx.req, ctx.user.id, ctx.user.sessionVersion);
+      const hasProof = proofIdleMs !== null;
       // A proof cookie only counts while an enrollment actually exists.
       //
       // Without this the two were independent, so clearing someone's
@@ -2052,7 +2057,7 @@ export const appRouter = router({
         modelStale: !!enrollment && enrollment.modelVersion !== FACE_MODEL_VERSION,
         // The browser needs the window to run its own countdown and warning;
         // the server enforces it regardless, through the proof's own `exp`.
-        idleTimeoutMs: FACE_IDLE_TIMEOUT_MS,
+        idleTimeoutMs: proofIdleMs ?? FACE_IDLE_TIMEOUT_MS,
       };
     }),
 
@@ -2171,6 +2176,89 @@ export const appRouter = router({
           res: ctx.res,
         });
       }),
+
+    /**
+     * === Камергүй компьютер: QR -> утас -> буцаад компьютер (2026-09-16) ===
+     * Бүрэн дизайн, аюулгүй байдлын үндэслэл: docs/FACE-HANDOFF-PLAN.md.
+     * Сервер талын логик: server/faceHandoff.ts.
+     */
+
+    /** Компьютер дуудна: QR-д хийх token + дэлгэц дээр харуулах тоо. */
+    startHandoff: strictRateLimitedProtectedProcedure.mutation(async ({ ctx }) => {
+      if (!isAdminPanelRole(ctx.user.role)) throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+      const started = await startFaceHandoff({ userId: ctx.user.id, sessionVersion: ctx.user.sessionVersion, req: ctx.req });
+      return { token: started.token, matchNumber: started.matchNumber, expiresAt: started.expiresAt.toISOString() };
+    }),
+
+    /**
+     * Компьютер 2 секунд тутам дуудна. Батлагдсан бол ЭНЭ хариулт дээр proof
+     * cookie мөнгөлөгдөнө — тиймээс query биш **mutation** (tRPC-ийн query нь
+     * GET, батчлагдаж/кэшлэгдэж болзошгүй).
+     */
+    handoffStatus: protectedProcedure.input(z.object({ token: z.string().min(10).max(120) })).mutation(async ({ ctx, input }) => {
+      if (!isAdminPanelRole(ctx.user.role)) throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+      const claim = await claimFaceHandoff({ token: input.token, userId: ctx.user.id, sessionVersion: ctx.user.sessionVersion, req: ctx.req, res: ctx.res });
+      return { status: claim.status, expiresAt: claim.expiresAt ? claim.expiresAt.toISOString() : null };
+    }),
+
+    /** Утас дуудна: юуг баталж байгаагаа харуулах контекст + тооны сонголт. */
+    handoffContext: protectedProcedure.input(z.object({ token: z.string().min(10).max(120) })).query(async ({ ctx, input }) => {
+      if (!isAdminPanelRole(ctx.user.role)) throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+      const context = await getFaceHandoffContext({ token: input.token, userId: ctx.user.id, sessionVersion: ctx.user.sessionVersion, req: ctx.req });
+      return {
+        device: context.device,
+        ip: context.ip,
+        requestedAt: context.requestedAt.toISOString(),
+        expiresAt: context.expiresAt.toISOString(),
+        numberChoices: context.numberChoices,
+        differentNetwork: context.differentNetwork,
+      };
+    }),
+
+    /**
+     * Утас дуудна: тоог таарууулж, царайгаа уншуулсны дараа.
+     *
+     * Царайны шалгалт нь ердийн `completeVerification`-ийн ЯГ ижил код
+     * (challenge, liveness, дескрипторын харьцуулалт) — ялгаа нь зөвхөн
+     * `issueProof: false`: утас proof авахгүй, зөвхөн handoff батлагдана.
+     */
+    approveHandoff: strictRateLimitedProtectedProcedure
+      .input(z.object({
+        token: z.string().min(10).max(120),
+        matchNumber: z.number().int().min(10).max(99),
+        challengeId: z.number().int().positive(),
+        descriptor: z.array(z.number()).length(FACE_DESCRIPTOR_LENGTH),
+        livenessPassed: z.boolean(),
+        diagnostic: z.string().max(FACE_DIAGNOSTIC_MAX).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (!isAdminPanelRole(ctx.user.role)) throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+        // Тоог ЭХЛЭЭД: буруу бол царайны шалгалт огт эхлэхгүй, challenge
+        // зарцуулагдахгүй, хүсэлт шууд хаагдана (server/faceHandoff.ts).
+        await assertHandoffApprovable({ token: input.token, userId: ctx.user.id, sessionVersion: ctx.user.sessionVersion, matchNumber: input.matchNumber, req: ctx.req });
+        const verification = await completeFaceVerification({
+          userId: ctx.user.id,
+          sessionVersion: ctx.user.sessionVersion,
+          challengeId: input.challengeId,
+          descriptor: input.descriptor,
+          livenessPassed: input.livenessPassed,
+          diagnostic: input.diagnostic,
+          issueProof: false,
+          req: ctx.req,
+          res: ctx.res,
+        });
+        if (!verification.ok) return verification;
+        // Царай таарсны ДАРАА л төлвийг ахиулна: тоо буруу бол энд шидэж,
+        // handoff `denied` болно (server/faceHandoff.ts).
+        await approveFaceHandoff({ token: input.token, userId: ctx.user.id, sessionVersion: ctx.user.sessionVersion, matchNumber: input.matchNumber, req: ctx.req });
+        return verification;
+      }),
+
+    /** Утас "энэ би биш" гэж дарвал — хүсэлт хаагдаж, audit-д бичигдэнэ. */
+    denyHandoff: protectedProcedure.input(z.object({ token: z.string().min(10).max(120) })).mutation(async ({ ctx, input }) => {
+      await denyFaceHandoff({ token: input.token, userId: ctx.user.id });
+      return { ok: true as const };
+    }),
 
     /** Lets someone re-enroll their own face without an admin (new glasses,
      *  a beard, a different camera). Clears the enrollment and the proof

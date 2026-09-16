@@ -71,13 +71,20 @@ export function tabIdFrom(req: Request): string {
   return typeof value === "string" && /^[A-Za-z0-9-]{8,64}$/.test(value) ? value : NO_TAB;
 }
 
-async function signFaceProof(userId: number, sessionVersion: number, absoluteDeadlineMs: number, tabs: readonly string[]): Promise<string> {
+async function signFaceProof(userId: number, sessionVersion: number, absoluteDeadlineMs: number, tabs: readonly string[], idleTimeoutMs: number): Promise<string> {
   // Two deadlines in one token. `exp` is the IDLE one and slides forward on
   // real activity (see refreshFaceProof); `abs` is the absolute one and is
   // copied unchanged through every refresh, so renewing can extend a working
   // session but can never outlast the shift-length cap.
-  const idleDeadline = Math.min(Date.now() + FACE_IDLE_TIMEOUT_MS, absoluteDeadlineMs);
-  return new SignJWT({ sub: String(userId), sv: sessionVersion, abs: absoluteDeadlineMs, tabs: tabs.slice(-MAX_BOUND_TABS) })
+  //
+  // `idle` (2026-09-16) carries the proof's OWN idle window so a shorter one
+  // survives a heartbeat. A handoff-unlocked session gets 10 minutes instead
+  // of 25 (shared/face-auth.ts FACE_HANDOFF_IDLE_TIMEOUT_MS); without this
+  // claim the very first heartbeat would re-sign it with the standard window
+  // and silently hand it the longer session it was deliberately denied.
+  const window = Math.min(Math.max(idleTimeoutMs, 60_000), FACE_IDLE_TIMEOUT_MS);
+  const idleDeadline = Math.min(Date.now() + window, absoluteDeadlineMs);
+  return new SignJWT({ sub: String(userId), sv: sessionVersion, abs: absoluteDeadlineMs, idle: window, tabs: tabs.slice(-MAX_BOUND_TABS) })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(new Date(idleDeadline))
@@ -86,7 +93,7 @@ async function signFaceProof(userId: number, sessionVersion: number, absoluteDea
 
 /** The proof this request carries, or null when there is not a valid one.
  *  Shared by the status check and the heartbeat so they can never disagree. */
-async function readFaceProof(req: Request, userId: number, sessionVersion: number, options: { anyTab?: boolean } = {}): Promise<{ absoluteDeadlineMs: number; idleDeadlineMs: number; tabs: string[] } | null> {
+async function readFaceProof(req: Request, userId: number, sessionVersion: number, options: { anyTab?: boolean } = {}): Promise<{ absoluteDeadlineMs: number; idleDeadlineMs: number; idleTimeoutMs: number; tabs: string[] } | null> {
   const raw = parseCookieHeader(req.headers.cookie ?? "")[ADMIN_FACE_COOKIE_NAME];
   if (!raw) return null;
   try {
@@ -113,7 +120,11 @@ async function readFaceProof(req: Request, userId: number, sessionVersion: numbe
     const tabs = Array.isArray(payload.tabs) ? payload.tabs.filter((t): t is string => typeof t === "string") : null;
     if (!tabs || tabs.length === 0) return null;
     if (!options.anyTab && !tabs.includes(tabIdFrom(req))) return null;
-    return { absoluteDeadlineMs, idleDeadlineMs, tabs };
+    // A proof minted before the `idle` claim existed keeps the standard
+    // window -- the sanity check above already bounds it.
+    const claimed = Number(payload.idle);
+    const idleTimeoutMs = Number.isFinite(claimed) ? Math.min(Math.max(claimed, 60_000), FACE_IDLE_TIMEOUT_MS) : FACE_IDLE_TIMEOUT_MS;
+    return { absoluteDeadlineMs, idleDeadlineMs, idleTimeoutMs, tabs };
   } catch {
     return null;
   }
@@ -127,6 +138,14 @@ async function readFaceProof(req: Request, userId: number, sessionVersion: numbe
  * tampered, or belonging to a different user or a superseded session — so a
  * bad cookie simply means "verify again", not a broken admin panel.
  */
+/** The live proof's own idle window, for the client's countdown -- a
+ *  handoff-unlocked session runs on the shorter one (10 minutes), and the
+ *  browser has to show the same number the server will enforce. */
+export async function faceProofIdleTimeoutMs(req: Request, userId: number, sessionVersion: number): Promise<number | null> {
+  const proof = await readFaceProof(req, userId, sessionVersion);
+  return proof ? proof.idleTimeoutMs : null;
+}
+
 export async function hasValidFaceProof(req: Request, userId: number, sessionVersion: number): Promise<boolean> {
   // readFaceProof parses the raw header rather than reading `req.cookies`:
   // this app has no cookie-parser middleware, so `req.cookies` is ALWAYS
@@ -155,7 +174,7 @@ export async function hasValidFaceProof(req: Request, userId: number, sessionVer
  * completeFaceVerification below, and the idle-timeout tests, which have to
  * exercise the real cookie rather than a re-implementation of it.
  */
-export async function issueFaceProof(input: { req: Request; res: Response; userId: number; sessionVersion: number }): Promise<void> {
+export async function issueFaceProof(input: { req: Request; res: Response; userId: number; sessionVersion: number; idleTimeoutMs?: number }): Promise<void> {
   // A second tab that passes the camera JOINS the existing proof (its
   // absolute window and its other tabs kept) rather than replacing it, so
   // two open admin tabs do not keep locking each other out.
@@ -163,18 +182,23 @@ export async function issueFaceProof(input: { req: Request; res: Response; userI
   const tab = tabIdFrom(input.req);
   const tabs = existing ? [...existing.tabs.filter(t => t !== tab), tab] : [tab];
   const absolute = existing ? existing.absoluteDeadlineMs : Date.now() + FACE_VERIFICATION_TTL_MS;
-  const proof = await signFaceProof(input.userId, input.sessionVersion, absolute, tabs);
+  // Joining an existing proof keeps the SHORTER of the two idle windows: a
+  // handoff-unlocked session must not be widened by later verifying on a
+  // second tab, and a normal session is never shortened by accident either --
+  // whichever is stricter wins.
+  const idleTimeoutMs = Math.min(input.idleTimeoutMs ?? FACE_IDLE_TIMEOUT_MS, existing?.idleTimeoutMs ?? FACE_IDLE_TIMEOUT_MS);
+  const proof = await signFaceProof(input.userId, input.sessionVersion, absolute, tabs, idleTimeoutMs);
   input.res.cookie(ADMIN_FACE_COOKIE_NAME, proof, faceProofCookieOptions(input.req));
 }
 
 export async function refreshFaceProof(input: { req: Request; res: Response; userId: number; sessionVersion: number }): Promise<{ ok: boolean; idleExpiresAt: number | null; absoluteExpiresAt: number | null }> {
   const proof = await readFaceProof(input.req, input.userId, input.sessionVersion);
   if (!proof) return { ok: false, idleExpiresAt: null, absoluteExpiresAt: null };
-  const renewed = await signFaceProof(input.userId, input.sessionVersion, proof.absoluteDeadlineMs, proof.tabs);
+  const renewed = await signFaceProof(input.userId, input.sessionVersion, proof.absoluteDeadlineMs, proof.tabs, proof.idleTimeoutMs);
   input.res.cookie(ADMIN_FACE_COOKIE_NAME, renewed, faceProofCookieOptions(input.req));
   return {
     ok: true,
-    idleExpiresAt: Math.min(Date.now() + FACE_IDLE_TIMEOUT_MS, proof.absoluteDeadlineMs),
+    idleExpiresAt: Math.min(Date.now() + proof.idleTimeoutMs, proof.absoluteDeadlineMs),
     absoluteExpiresAt: proof.absoluteDeadlineMs,
   };
 }

@@ -85,6 +85,13 @@ export type NotificationPayloads = {
   "stock.low": { branchName: string; productName: string; sku: string; quantity: number; threshold: number };
   "stock.out": { branchName: string; productName: string; sku: string };
   "stock.total_out": { productName: string; sku: string };
+  /**
+   * Камергүй компьютер дээр admin панель утсаар баталгаажуулж нээгдлээ
+   * (2026-09-16, docs/FACE-HANDOFF-PLAN.md). ⚠️ Зориуд ЗӨВХӨН хөтөч/OS:
+   * ntfy-ийн сэдэв нээлттэй тул IP, байршил, нэр энд ОРОХГҮЙ — тэдгээрийг
+   * баталгаажуулж буй хүн УТСАН дээрээ (нэвтэрсэн хуудсан дээр) харна.
+   */
+  "admin.handoff_approved": { device: string };
   "stock.ledger_drift": { count: number };
   "stock.vendor_sync_blocked": { previous: number; current: number; dropPercent: number };
   "transfer.stale": { code: string; toBranchName: string; hours: number };
@@ -125,6 +132,7 @@ export const NOTIFICATION_EVENTS: Record<NotificationEventType, EventSpec> = {
   "stock.low": { label: "Нөөц бага болсон", groups: ["warehouse", "admin"], priority: 3, tags: ["chart_with_downwards_trend"], clickSection: "products" },
   "stock.out": { label: "Нөөц дууссан", groups: ["warehouse", "admin"], priority: 4, tags: ["x"], clickSection: "products" },
   "stock.total_out": { label: "Онлайн нөөц дууссан", groups: ["admin", "warehouse"], priority: 4, tags: ["no_entry"], clickSection: "products" },
+  "admin.handoff_approved": { label: "Утсаар баталгаажуулж admin нээгдсэн", groups: ["admin"], priority: 4, tags: ["closed_lock_with_key"], clickSection: "security" },
   "stock.ledger_drift": { label: "Нөөцийн бүртгэлийн зөрүү", groups: ["admin"], priority: 3, tags: ["mag"], clickSection: "dashboard" },
   // Loud on purpose: the automatic stock sync stopped itself, so the shelf
   // figures are now as stale as the last successful pull until someone looks.
@@ -225,6 +233,10 @@ export function buildNotificationMessage<K extends NotificationEventType>(type: 
     case "stock.total_out": {
       const p = payload as NotificationPayloads["stock.total_out"];
       return { title: `Онлайнд дууслаа: ${p.productName}`, message: `Сайт дээр зарагдах нөөц 0 боллоо — худалдан авагч захиалах боломжгүй.\n${p.sku}` };
+    }
+    case "admin.handoff_approved": {
+      const p = payload as NotificationPayloads["admin.handoff_approved"];
+      return { title: "Admin панель утсаар нээгдлээ", message: `Камергүй компьютер (${p.device}) дээрх admin хандалтыг царайгаар баталгаажууллаа. Хэрэв энэ та биш бол нууц үгээ яг одоо солиод бүх төхөөрөмжөөс гарна уу.` };
     }
     case "stock.ledger_drift": {
       const p = payload as NotificationPayloads["stock.ledger_drift"];

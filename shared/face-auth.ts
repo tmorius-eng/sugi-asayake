@@ -106,6 +106,29 @@ export const FACE_IDLE_TIMEOUT_MS = 1000 * 60 * 25;
  *  security one — the lock happens either way. */
 export const FACE_IDLE_WARNING_MS = 1000 * 60 * 2;
 
+/**
+ * QR-аар утсаар баталгаажуулах шилжүүлэг (handoff, 2026-09-16, Tom-ийн
+ * шийдвэр) — камергүй компьютер дээр admin-д нэвтрэх цорын ганц зам.
+ * Дэлгэрэнгүй дизайн ба аюулгүй байдлын үндэслэл: docs/FACE-HANDOFF-PLAN.md.
+ *
+ * TTL нь 90 секунд: QR-ийг гэрэл зургаар авч дараа нь ашиглах цонхыг аль болох
+ * богино байлгана (аж үйлдвэрийн зөвлөмж 60–180с, аюулгүй байдлын өндөр
+ * шаардлагатайд 60–90с), гэхдээ утсаа гаргаж, камераа нээж, царайгаа
+ * уншуулахад хүрэлцэнэ. Хугацаа дуусвал компьютер шинэ QR өгнө.
+ */
+export const FACE_HANDOFF_TTL_MS = 1000 * 90;
+
+/**
+ * Handoff-оор нээгдсэн сессийн идэвхгүй түгжээ (Tom: "idle tugjeeg 10min
+ * bolgo"). Ердийн 25 минутаас богино: камергүй компьютер дээр дахин түгжвэл
+ * дахин утас хэрэгтэй болдог ч, тэр компьютерийг орхиод явахад admin панель
+ * нээлттэй үлдэх хугацаа хамгийн богино байх ёстой.
+ */
+export const FACE_HANDOFF_IDLE_TIMEOUT_MS = 1000 * 60 * 10;
+
+/** Тоо тааруулахад утсан дээр харагдах сонголтын тоо (зөв нь нэг). */
+export const FACE_HANDOFF_NUMBER_CHOICES = 3;
+
 /** How often a browser WITH real activity tells the server it is still there.
  *  Far below the idle timeout, so one dropped request cannot lock somebody
  *  out mid-sentence; far above "every request", so it is not chatty. */

@@ -38,7 +38,7 @@ import {
 // server/_core/faceProof.ts so the tRPC layer can enforce it without a
 // domain import; re-exported here so existing callers and tests keep
 // their import path.
-export { clearFaceProofCookie, hasValidFaceProof, isFaceGateEnabled, issueFaceProof, refreshFaceProof } from "./_core/faceProof";
+export { clearFaceProofCookie, faceProofIdleTimeoutMs, hasValidFaceProof, isFaceGateEnabled, issueFaceProof, refreshFaceProof } from "./_core/faceProof";
 import { clearFaceProofCookie, issueFaceProof } from "./_core/faceProof";
 
 /**
@@ -105,6 +105,14 @@ export async function completeFaceVerification(input: {
   /** Client-measured values, for tuning only -- never trusted for the
    *  pass/fail decision. See the router's own note. */
   diagnostic?: string;
+  /**
+   * Whether a successful match should mint the proof cookie on `res`
+   * (2026-09-16). False for the QR handoff: the PHONE passes the camera
+   * check, but the proof belongs to the desktop and is minted later, on the
+   * desktop's own polling request (server/faceHandoff.ts). Minting here too
+   * would hand the phone admin access it never asked for.
+   */
+  issueProof?: boolean;
   req: Request;
   res: Response;
 }): Promise<FaceVerificationResult> {
@@ -197,8 +205,10 @@ export async function completeFaceVerification(input: {
     return { ok: false, reason: "no_match", distance };
   }
 
-  await issueFaceProof({ req: input.req, res: input.res, userId: input.userId, sessionVersion: input.sessionVersion });
+  if (input.issueProof !== false) {
+    await issueFaceProof({ req: input.req, res: input.res, userId: input.userId, sessionVersion: input.sessionVersion });
+  }
   await touchFaceVerified(input.userId);
-  await recordFaceAttempt({ userId: input.userId, outcome: "verified", distance: distanceMilli, detail: challenge.action, ip });
+  await recordFaceAttempt({ userId: input.userId, outcome: "verified", distance: distanceMilli, detail: input.issueProof === false ? `handoff ${challenge.action}`.slice(0, 160) : challenge.action, ip });
   return { ok: true, distance };
 }
