@@ -1,5 +1,10 @@
 # SUGI ASAYAKE — Олон улсын жишигт хүргэх бүрэн замын зураглал
 
+> ✅ **Төлөв 2026-09-16-нд бүрэн шалгагдсан**: доорх зүйл бүрийг кодоос
+> баталгаажуулж тэмдэглэв. `[~]` = хэсэгчлэн (юу үлдсэнийг мөрөнд нь бичсэн).
+> Өдөр тутмын нээлттэй жагсаалт нь [docs/PROJECT-GUIDE.md](docs/PROJECT-GUIDE.md)-ийн
+> "Дараагийн ажлын санал" хэсэгт — энэ файл нь урт хугацааны зураглал.
+
 Энэ файл `docs/PROJECT-GUIDE.md`-ийн хамтрагч баримт бичиг. Хөгжүүлэгч үүнийг уншаад, доорх TIER-үүдийг **дараалан, нэг нэгээр нь** ажиллах ёстой — бүгдийг нэг дор хийлгэх гэж бүү оролд, учир нь энэ бол бодитоор хэдэн долоо хоногийн ажил.
 
 **Хэрэглэх заавар:** "TIER 0-г бүхэлд нь хий" гэж эхэл. Тухайн TIER дуусаад bодитоор туршиж (localhost дээрээ) баталгаажуулсны дараа л дараагийн TIER рүү шилж.
@@ -49,44 +54,44 @@ Manus-с email+password руу шилжихдээ би дараах чухал �
 
 - [x] **Зурган боловсруулалт** — ДУУССАН (2026-08-25). `sharp` нэмэгдсэн, upload бүр (бүтээгдэхүүн/site-media/avatar) одоо resize+compress хийгддэг. Дэлгэрэнгүй [PROJECT-GUIDE.md](docs/PROJECT-GUIDE.md)-ийн "2026-08-25 (үргэлжлэл)" хэсэгт.
 - [x] **Хайлт сервер талд шилжсэн** — ДУУССАН (2026-08-25). MySQL FULLTEXT index (`products_search_idx`), `catalog.search` procedure. Дэлгэрэнгүй [PROJECT-GUIDE.md](docs/PROJECT-GUIDE.md)-ийн "2026-08-25 (үргэлжлэл)" хэсэгт.
-- [ ] Захиалга цуцлах/буцаах (refund) урсгал — админ талд `updateAdminOrder` бий ч, буцаалтын логик (нөөц буцаах, төлбөр буцаах) бүрэн шалгагдаагүй
+- [x] **Захиалга цуцлах/буцаах (refund)** — ДУУССАН. `refundOrder` нь `financeProcedure`-ээр хамгаалагдсан, нөөцийг ledger-ээр буцаана, дэлгүүрийн зээлийг эргүүлнэ, бэлгийн картыг хүчингүй болгоно. `order-refunds.integration.test.ts` + `order-unwind.integration.test.ts` (шалгасан 2026-09-16).
 - [x] Захиалгын баталгаажуулах имэйл, хүргэлтийн статус мэдэгдэл — ДУУССАН (2026-08-25). `checkout.createOrder` (амжилттай захиалга бүрд, `customerEmail` байгаа тохиолдолд, барааны задаргаатай) болон `admin.updateOrder`/`admin.bulkUpdateOrderStatus` (зөвхөн `status` бодитоор өөрчлөгдсөн үед, зөвхөн `deliveryTrackingRef`/`adminNote`-ийн засвар бол дахин илгээхгүй) — хоёулаа `server/routers.ts`-ийн `sendOrderConfirmationEmail`/`sendOrderStatusUpdateEmail`-ийг ашигладаг, best-effort (имэйл амжилтгүй болсон ч захиалга/статус өөрчлөлт хэзээ ч буцаагдахгүй). Шинэ `server/order-notifications.integration.test.ts` (4 тест, бодит DB+cart+order). **Энэ явцад олдсон, засагдсан stale тест bug**: `checkout.guest.integration.test.ts`-ийн "merges a guest's cart" тест 2026-08-20-ийн OTP шилжилтийн дараа хуучирсан байсан (`auth.register` одоо шууд session олгодоггүй тул cart merge хийгддэггүй байсан — `auth.confirmRegistration`-д л шилжсэн) — тест `confirmRegistration` алхмыг дуудахгүй байсан тул үргэлж бүтэлгүйтдэг байсныг олж, зассан. Бодит HTTP-ээр (dev сервер, Brevo log-fallback) бүрэн урсгал шалгасан: guest checkout (имэйлтэй) → баталгаажуулах имэйл лог-д гарсан (барааны нэр, тоо ширхэг, дүн зөв) → admin status "confirmed" болгосон → шинэчлэлтийн имэйл гарсан → зөвхөн tracking ref засахад **дахин илгээгээгүй**.
 - [x] Зочин (guest) checkout боломж — ДУУССАН (2026-08-20), дэлгэрэнгүй [UX-RESEARCH.md](UX-RESEARCH.md)
 - [x] **Хэрэглэгчийн профайл хуудас (`/profile`)** — ДУУССАН (2026-08-21), дэлхийн жишигт (SSENSE/Sephora загварчлал) нийцүүлсэн sidebar+tab архитектуртай. Тойм (dashboard), Захиалга (timeline + Дахин захиалах), Хувийн профайл (нэр/утас + Гоо сайхны/Гэрийн preference), Хүслийн жагсаалт (wishlist + back-in-stock мэдэгдэл, `Shop.tsx`-ийн бүтээгдэхүүний карт дээр ч ♥ товч), Хаяг (address book, нэг нь автоматаар "үндсэн"), Мэдэгдэл (email/SMS opt-in), Аюулгүй байдал (нууц үг солих session-оо алдалгүй, бүх төхөөрөмжөөс гарах, акаунт устгах), Тусламж (FAQ). `CommerceHeader`-т профайл icon, `Checkout`-д профайл/үндсэн хаягаас автомат бөглөлт. Схем: `users.phone/avatarUrl/skinType/skinConcerns/interiorStyle/emailOptIn/smsOptIn` + `user_addresses` + `wishlist_items` хүснэгтүүд (`drizzle/0019_customer_profile.sql`, `drizzle/0020_profile_expansion.sql`). 77/77 тест (бүх integration gate идэвхтэй). Дэлгэрэнгүй, олдсон 2 bug (MinIO bucket public-read policy дутуу байсан нь **бүх зураг** browser дээр харагдахгүй байх шалтгаан болж байсан; pre-existing хуучирсан guest-checkout тест) болон **зориудаар хойшлуулсан 5 хэсэг** (Payment Methods vault, Google Maps, 2FA, PDF нэхэмжлэх, Loyalty — эзэмшигчийн шийдвэр/нөөц шаардана): [PROJECT-GUIDE.md](docs/PROJECT-GUIDE.md)-ийн "2026-08-21" хэсэгт.
-- [ ] Хямдралын код/купон систем — байхгүй бол нэмэх эсэхийг шийдэх
-- [ ] Бүтээгдэхүүний сэтгэгдэл/үнэлгээ (reviews) — олон улсын жишиг дэлгүүрт түгээмэл, одоогоор байхгүй
-- [ ] **Store Credit** (буцаалтаас бий болсон дансны үлдэгдэл) — profile-ийн "Payment Methods" ирээдүйн эхний алхам болгож санал болгож байна (жинхэнэ картын дугаар хадгалахаас ялгаатай, PCI compliance асуудалгүй)
+- [x] **Хямдралын код/купон** — ДУУССАН. `discount_codes` (percent/fixed, доод дүн, хугацаа, нийт болон НЭГ ХЭРЭГЛЭГЧИЙН хязгаар), нийт хязгаар атомик UPDATE-ээр, нэг хэрэглэгчийнх нь 2026-09-16-нд `discount_code_redemptions` дэвтрээр атомик боллоо. 11 integration тест.
+- [x] **Сэтгэгдэл/үнэлгээ** — ДУУССАН. Зөвхөн баталгаажсан худалдан авагч бичнэ, admin moderation, хариу/like, сэтгэгдэл хүсэх автомат job, урамшуулал (`review-reward-mnt`), контентын аюулгүй байдлын шалгуур.
+- [x] **Store Credit** — ДУУССАН. `store_credit_ledger`, checkout дээр ашиглана, буцаалт/цуцлалтад эргэнэ, admin гараар нэмж/хасна, `store-credit.integration.test.ts`.
 - [ ] **QPay saved-card / tokenized төлбөр** — QPay merchant API нь өөрөө "saved card" дэмждэг эсэхийг судлах хэрэгтэй; жинхэнэ картын дугаарыг ӨӨРСДӨӨ хадгалахгүй байхыг зөвлөж байна (PCI-DSS)
 - [ ] **Хаягийн Google Maps pin** — Google Maps API key + billing account эзэмшигчээс шаардана
-- [ ] **2FA (2-step verification)** — profile "Аюулгүй байдал" tab-д нэмэх эсэхийг шийдэх (TOTP+QR+backup codes)
-- [ ] **PDF нэхэмжлэх/баримт татах** (Digital Receipt) — шинэ PDF library (жишээ нь `pdfkit`) нэмэх шаардлагатай
-- [ ] **Урамшууллын оноо/VIP зэрэглэл (Loyalty)** — эзэмшигчийн бизнесийн дүрэм (хэдэн худалдан авалтад хэдэн оноо, ямар шатлал) тодорхойлогдсоны дараа хийх
+- [ ] **2FA (TOTP)** — хэрэгжүүлээгүй. ⚠️ Гэхдээ нэвтрэлт нь аль хэдийн 2 алхамт (утас + OTP) бөгөөд /admin-д царайны баталгаа нэмэгддэг тул ач холбогдол нь буурсан — хэрэгтэй эсэхийг шийдэх.
+- [x] **PDF нэхэмжлэх/баримт** — ДУУССАН (`pdfkit`, `server/invoice.ts`; захиалгын хуудас, савлагааны хуудас).
+- [x] **Гишүүнчлэлийн зэрэглэл (Loyalty)** — ДУУССАН. Бодит төлөгдсөн худалдан авалтаар зэрэглэл, checkout дээр автомат хямдрал, admin-аас зэрэглэлийг засна (`loyalty.integration.test.ts`).
 
 ## TIER 3 — Frontend чанар, хэрэглэгчийн туршлага
 
-- [ ] **Хандалт (accessibility)**: alt text бүх зурган дээр, keyboard navigation, color contrast (WCAG AA), aria-label-ууд — бүрэн audit хийгээгүй
-- [ ] Бүх хуудсанд ачаалах/алдааны төлөв нэгдсэн, тогтвортой байдлаар харагдаж байгааг шалгах
-- [ ] Гар утасны дэлгэц дээр бүх урсгалыг (checkout, admin панель) дахин шалгах
+- [~] **Хандалт (accessibility)** — хэсэгчлэн. ДУУССАН: storefront-ийн 7 хуудас x 4 өргөнд AA контраст 0 алдаа (2026-09-11), admin-ий AA контраст автомат тесттэй (2026-09-16), skip link (эхний Tab), гарын хөтлөлт, aria-label-ууд. ҮЛДСЭН: бүх зургийн alt текстийн бүрэн аудит, дэлгэц уншигчаар бодит туршилт.
+- [~] Ачаалах/алдааны төлөв — skeleton (`ProductCardSkeleton`, `CarouselShelf`), алдааны карт, `ErrorBoundary`, chunk-ийн алдааны сэргээлт бий. Хуудас бүрээр нэг мөр шалгах нь ҮЛДСЭН.
+- [~] Утасны урсгал — 2026-09-14-нд 390px sweep, 2026-09-16-аас E2E-ийн `mobile` project (Pixel 7) сагс/дэлгүүр/admin-ийг давтана; тэр явцад admin-ий маягт утсан дээр бүх хуудсыг жижигрүүлдэг алдааг олж зассан. Checkout-ийн БҮРЭН захиалга утсан дээр гараар шалгах нь ҮЛДСЭН.
 - [ ] Код форматлалт — `prettier` аль хэдийн devDependency-д байгаа тул `pnpm exec prettier --write .` ажиллуулж, JSX-ийн нягт бичлэгийг цэгцлэх
 - [x] **Хэрэглэгддэггүй код устгах** — ДУУССАН (2026-08-25). `ComponentShowcase.tsx`/`AIChatBox.tsx`/`ManusDialog.tsx`/`AdminPreview.tsx` (нийт 1868 мөр) устгасан, 9 хуучирсан Manus-эриний баримт бичгийг `archive/`-руу зөөсөн. `pnpm exec prettier --write .` хараахан хийгээгүй (томоохон, эрсдэлтэй diff тул зориудаар алгассан — доор тайлбарласан).
-- [ ] SEO: бүтээгдэхүүн бүрийн meta tag, structured data (Product schema.org), sitemap автоматаар шинэчлэгддэг эсэхийг шалгах
-- [ ] Performance: зураг lazy-load хийгдэж байгаа эсэх, bundle size, Lighthouse score
+- [x] **SEO** — ДУУССАН. Route бүрийн OG/meta нь серверээс шингэдэг, бараа бүрд JSON-LD + 1200x630 OG зураг, динамик sitemap/robots, Google Merchant feed, Search Console.
+- [~] **Гүйцэтгэл** — зураг lazy + srcset, assets жилийн кэш, storefront уншилтын кэш + single-flight, орчуулгын толь тусдаа chunk (эхний ачаалалт gzip 188 -> 152 KB, 2026-09-16). ҮЛДСЭН: Lighthouse-ийн бодит хэмжилт, k6-г staging дээр ажиллуулах.
 
 ## TIER 4 — Тест, чанарын баталгаажуулалт
 
-- [ ] **E2E тест байхгүй** (Playwright/Cypress) — одоогоор зөвхөн vitest unit/integration тест (27ш). Гол урсгалуудад (бүртгэл→нэвтрэлт→сагслах→захиалга, admin CRUD) E2E тест нэмэх
-- [ ] Тестийн хамрах хүрээг (coverage) нэмэгдүүлэх
+- [x] **E2E тест** — ДУУССАН (2026-09-16). Playwright, 54 тест, компьютер + утас: нүүр, дэлгүүрийн хөтлөлт, сагс, checkout, admin CRUD, эрхийн хаалга, хэрэглэгчийн удирдлага, хувилбартай бараа, контраст, шрифт. `pnpm build && pnpm e2e`.
+- [~] Тестийн хамрах хүрээ — 1,010 vitest тест (716 ногоон + gate-ээр skip) + 54 E2E. Хэмжилттэй coverage тайлан хараахан тохируулаагүй.
 
 ## TIER 5 — Дэд бүтэц, үйл ажиллагаа (жинхэнэ нээлтийн өмнө заавал)
 
 - [x] **CI pipeline** — ДУУССАН (2026-08-20, зөвхөн локал бэлтгэл, GitHub-руу push хийгээгүй). Төсөл анх удаа git repo болсон (`git init`, Git суулгасан — өмнө нь огт суугаагүй байсан). `.github/workflows/ci.yml` нэмсэн: push/PR бүрд `pnpm check && pnpm test && pnpm build` ажиллана (MySQL/S3 service шаардахгүй, учир нь DB-gated integration тестүүд өөрсдөө env var байхгүй үед skip хийдэг — баталгаажсан, TIER 0/1-ийн тэмдэглэл харна уу). **Дараагийн алхам (хэрэглэгч өөрөө хийх ёстой):** GitHub дээр repo үүсгэж `git remote add origin ... && git push -u origin main` хийвэл л Actions идэвхжинэ.
-- [ ] Staging орчин (prod-с тусдаа)
-- [ ] Алдааны хяналт (Sentry эсвэл ижил төстэй)
-- [ ] Бүтэцтэй logging
+- [x] **Staging орчин** — ДУУССАН (2026-09-14). VM дээр 2 дахь pm2 апп (`sugi-staging`, 3001 порт), өөрийн `sugi_staging` схемтэй. ⚠️ Migration автоматаар очдоггүй — шинэ `.sql` бүрийг тэнд ч гараар ажиллуул. DNS CNAME нь Tom дээр үлдсэн.
+- [x] **Алдааны хяналт** — Honeybadger сервер+клиент талд холбогдсон (түлхүүргүй бол чимээгүй no-op). Tom API key тавихад идэвхжинэ.
+- [x] **Логгинг** — хүсэлтийн access log (`LOG_REQUESTS`), SQL query log (admin-д ring buffer), admin аудит лог, мэдэгдлийн outbox.
 - [x] **Автомат DB backup + сэргээх төлөвлөгөө** — ДУУССАН (2026-08-20, локал dev DB-д зориулав). `scripts/db-backup.ps1` (`mysqldump` → zip, `DATABASE_URL`-аас холбогдоно, сүүлийн 14 backup хадгална) болон `scripts/db-restore.ps1` (**анхдагч байдлаараа `<db>_restore_drill` нэртэй тусдаа DB рүү сэргээдэг — жинхэнэ өгөгдлийг санамсаргүй дарахгүй**, зөвхөн `-Force`-той үед жинхэнэ DB рүү бичдэг). **Windows Task Scheduler**-д `SugiAsayake-DbBackup` нэртэй, өдөр бүр 03:00 цагт ажилладаг task бүртгэгдсэн (`Register-ScheduledTask`, System32-ийн `powershell.exe`-ээр — `pwsh.exe` нь WindowsApps багцын хязгаарлалтаас болж Task Scheduler-т ажилладаггүйг олж, засав). **Бодитоор бүрэн шалгасан**: backup → drill DB руу restore → эх болон сэргээсэн DB-ийн бүх хүснэгтийн бодит мөрийн тоо (COUNT(*), FK constraint 15ш) яг таарч байгааг баталгаажуулсан; Task Scheduler-ээр гар аргаар нэг удаа асааж (`Start-ScheduledTask`) `LastTaskResult=0`, шинэ backup файл бодитоор үүссэнийг харсан. **Жинхэнэ нээлтийн production төлөвлөгөө** (одоогоор prod host сонгогдоогүй тул зөвхөн баримтжуулалт): hosting provider-ийн managed MySQL байвал түүний built-in автомат backup (жишээ нь daily snapshot + PITR) ашиглах; өөрөө удирддаг VPS бол дээрхтэй адилхан script-ийг systemd timer-ээр (`crontab`-ын оронд) ажиллуулж, backup файлыг **тухайн серверээс тусдаа** байршилд (S3/R2 bucket, эсвэл өөр серверт rsync) хадгалах ёстой — ганцхан серверт л байгаа backup нь диск бүтэн эвдрэхэд юу ч хамгаалахгүй. Сар тутам сэргээх drill хийж, script бодитоор ажиллаж байгаа эсэхийг баталгаажуулж байх санал.
-- [ ] S3/R2-ийн өмнө CDN тавих (зурган ачаалалт хурдасгах)
-- [ ] Uptime/health monitoring
-- [ ] Жинхэнэ нээлтийн өмнө load testing
+- [x] **CDN** — сайт Cloudflare-ийн ард; assets жилийн immutable кэш, 2026-09-16-нд `/og/product/*`, `/cdn/*`, feed/sitemap-д cache rules нэмэгдсэн (`scripts/cloudflare-harden.mjs`).
+- [x] **Uptime** — `/health` (DB-г бодитоор шалгадаг) + GitHub Actions-ийн `uptime.yml`.
+- [~] **Load testing** — k6 скрипт бэлэн (`scripts/load/storefront.js`, зөвхөн staging). Бодитоор ажиллуулж тасрах цэгийг хэмжих нь ҮЛДСЭН.
 
 ## TIER 6 — Хууль эрх зүй, нийцэл (Монголын дэлгүүрт зориулсан)
 

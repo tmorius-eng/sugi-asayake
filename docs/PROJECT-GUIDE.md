@@ -9,7 +9,13 @@
 
 ## Локал орчны тохиргоо (чухал — эдгээрийг мэдэхгүй бол дахин цаг алдана)
 
-⚠️ **`DATABASE_URL` нь ЗААВАЛ Aiven руу заасан байх ёстой, local MySQL руу БИШ** (2026-09-01 бодит incident-ээр баталгаажсан шалтгаан доор):
+⚠️ **Энэ блокийн ХАЯГУУД ХУУЧИРСАН** (тэмдэглэв 2026-09-16): өгөгдлийн сан
+2026-09-13-нд **Aiven → Oracle HeatWave (Токио)** руу нүүсэн. Бодит `DATABASE_URL`
+нь `mysql://…@127.0.0.1:3307/defaultdb` — ssh тунелиар (`scripts/oci/tunnel.ps1`,
+машин асахад автоматаар) HeatWave-ийн хувийн сүлжээнд холбогдоно, CA файл нь
+`oci-ca.pem`. Доорх Aiven-ий жишээ зөвхөн бүтцийг харуулж байна.
+⚠️ **`DATABASE_URL` нь ЗААВАЛ хуваалцсан бодит DB руу заасан байх ёстой, local
+MySQL руу БИШ** (2026-09-01 бодит incident-ээр баталгаажсан шалтгаан доор):
 
 ```
 DATABASE_URL=mysql://avnadmin:<Aiven password>@sugi-asayake-db-project-4b75.h.aivencloud.com:25861/defaultdb?ssl-mode=REQUIRED
@@ -83,6 +89,23 @@ pnpm exec vitest run --no-file-parallelism
 ```
 Сүүлд БОДИТООР хэмжсэн бүрэн тоо: **783/783 ✅ (84/84 файл, регресс 0)**, `52e9e65` дээр (2026-09-12, SQL injection probe-той). ⚠️ Бүрэн suite ажиллаж байхад **зэрэгцүүлэн өөр тест/скрипт ижил Aiven дээр ажиллуулахгүй** — 2026-09-12-нд ингэснээс `loyalty.integration` hook 10 с timeout-оор нэг удаа унасан (485 с), цэвэр дараалсан run-д ногоон. Мөн **`pnpm check`** одоо 2 tsc (апп + `tsconfig.tests.json`-оор тест/скрипт) ба **`pnpm lint`** (ESLint, CI-д ч ажиллана) — commit хийхээсээ өмнө хоёуланг ажиллуул. Шинэ integration тест fake session user бичихгүй, `server/_test-helpers.ts`-ийн `testSessionUser({id,...})`-ийг ашиглана (CI горимд gate-үүд идэвхгүй тул ихэнх integration файл skip болно — хэвийн). ⚠️ Strict rate-limit tier-үүд одоо DB дээр тоолдог (`rate_limit_buckets`) тул тестэд **тогтмол IP** ашиглавал 15 минутын дотор дахин ажиллуулахад блоклогдоно — `callerFor`-ийн санамсаргүй/per-run IP загварыг дага.
 
+### E2E тест (Playwright, 2026-09-16-аас)
+
+```powershell
+pnpm build ; pnpm e2e                      # 54 тест: компьютер + утас
+pnpm e2e --project=desktop e2e/cart.spec.ts
+pnpm e2e --headed                          # нүдээр харах
+```
+⛔ **Бодит дэлгүүрийн схем рүү ХЭЗЭЭ Ч заахгүй**: E2E нь хэрэглэгч үүсгэж, сагс
+дүүргэж, admin-аар бичдэг тул `e2e/helpers/environment.ts` нь `defaultdb` рүү
+заасан бол ажиллахаас татгалзана; анхдагчаар ижил HeatWave дээрх `sugi_staging`.
+Нэвтрэлт нь аппын өөрийн `signSessionToken`-оор богиносгогддог — OTP-г тойрох
+арын хаалга аппликейшнд НЭМЭХГҮЙ. Сервер production build (`node dist/index.js`)
+дээр асдаг тул CSP/compression/статик зам бодитоор шалгагдана — эхлээд `pnpm build`.
+⚠️ **staging deploy нь migration ажиллуулдаггүй** (2026-09-16-нд /careers болон
+admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр илэрсэн) — тиймээс E2E эхлэхийн
+өмнө `e2e/global-setup.ts` схемийн зөрүүг шалгаж, дутуу migration-ийг нэрлэнэ.
+
 ✅ **CI-ийн `INTEGRATIONS_ENCRYPTION_KEY` цоорхой ШИЙДЭГДСЭН (2026-09-01)**: `server/integrations.integration.test.ts`-ийн "encryption (unit)" 2 тест gate-гүйгээр ажилладаг ба `server/_core/crypto.ts`-ийн `getKey()` нь 64-тэмдэгт hex түлхүүргүй бол шууд шатдаг тул бодит GitHub Actions дээр улаан гарч байв. Эдгээр нь **зөвхөн round-trip болон tamper-detection шалгадаг цэвэр unit тест** бөгөөд түлхүүрийн утга нь огт хамаагүй. Тиймээс `server/_test-setup.ts` орчинд түлхүүр байхгүй үед л **түр зуурын түлхүүр өгдөг** болгов (бодит `.env` утга байвал үргэлж түүнийг хүндэтгэнэ). **Аппликейшний код (`env.ts`/`crypto.ts`) огт хөндөгдөөгүй** — жинхэнэ сервер бодит түлхүүргүйгээр юу ч шифрлэхээс татгалзсан хэвээр, өөрөөр хэлбэл аюултай "insecure dev fallback" НЭМЭЭГҮЙ. Улмаар `ci.yml`-д repo secret огт хэрэггүй болж, шинэ clone дээр `pnpm test` тохиргоогүйгээр ногоон гарна.
 
 ### Шинэ S3/R2 bucket байгуулах бүрт (production, шинэ орчин) мартаж болохгүй 2 алхам
@@ -110,6 +133,8 @@ pnpm exec vitest run --no-file-parallelism
 Өдөр бүрийн бүрэн тэмдэглэл HISTORY.md-д байна — тодорхой bug/шийдвэрийн
 шалтгааныг мэдэх хэрэгтэй үед л тэнд гарчгаар хайна.
 
+- (09-16) **E2E тест анх удаа** (Playwright, 54 тест, компьютер+утас) — замдаа 9 бодит алдаа олж зассан, тэдгээрийн нэг нь **variant нэмэх admin-аас хэзээ ч ажилладаггүй байсан** (үүрлэсэн `<form>`)
+- (09-16) **Ачааллын бэлтгэл** — pool 25, кэшийн single-flight, cluster-д аюулгүй, Cloudflare cache rules, k6; **эхний ачаалалт 188 → 152 KB gzip**; **купоны хязгаар атомик (0084)**; admin AA контраст; **гарчгийн шрифт Cormorant Garamond**; "Хамт авдаг" cross-sell; Dependabot
 - (09-15) **Хэмжилт (GA4/Pixel) дэлгэц**, Smart Software холболтын карт, **вендорын үлдэгдэл автомат** + үнэ/факт батлах дэлгэц (0083)
 - (09-15) **Токен хэмнэлт** — энэ гарын авлага 165 KB → ~25 KB; дүрэм: [docs/TOKEN-USAGE.md](TOKEN-USAGE.md)
 - (09-14) **Zochil-той харьцуулалт** — /about, /careers хуудас, ажлын байрны зар (`job_postings`, 0081) + ирсэн анкет (`job_applications`, 0082), барааны QR код, YouTube холбоос
@@ -143,6 +168,12 @@ pnpm exec vitest run --no-file-parallelism
 - Store setting-д формат шаардлагатай бол `format` slot-д бич — regex-ийг хоёр дахь газар хуулахгүй (`checkStoreSettingFormat`).
 - zod update schema-д `.partial()` биш **`partialForUpdate()`** (zod 4-д `.default()` partial дотор ч хэрэгждэг).
 - Migration нэг нэгээр: `pnpm exec tsx scripts/db-apply-migration.ts drizzle/00NN_*.sql` (admin эрхээр, `DATABASE_ADMIN_URL`).
+- **Хуудаслалттай query бүрт тогтвортой эцсийн тэнцвэр** (`id`) — `createdAt` тэнцүү
+  мөрүүдийн дарааллыг MySQL баталгаажуулдаггүй тул худалдан авагч нэг барааг хоёр
+  хуудсанд харах, эсвэл огт харахгүй өнгөрөх боломжтой (2026-09-16).
+- **staging схемд migration автоматаар ОЧИХГҮЙ**: `deploy.ps1 -Staging` зөвхөн кодыг
+  зөөдөг. Шинэ migration бүрийг `sugi_staging`-д мөн гараар ажиллуул (DATABASE_ADMIN_URL-ийн
+  замыг солино) — эс бөгөөс staging чимээгүй 500 өгнө.
 
 **Admin, аюулгүй байдал**
 - Шинэ admin procedure бичихдээ `protectedProcedure` БИШ, role builder (`adminProcedure`/`marketingProcedure`/…) — эс бөгөөс царайны proof шалгагдахгүй.
@@ -158,11 +189,24 @@ pnpm exec vitest run --no-file-parallelism
 - Шинэ storefront текстийг React `{expr}`-тэй бол template literal-аар НЭГ text node болго (орчуулга таарахгүй).
 - Fixed доод элементэд `env(safe-area-inset-bottom)`-ийг өндөр ДОТОР нь биш ДЭЭР нь нэм.
 - `scroll-snap-type` нь marquee-г зогсооно — `.hero-rail`-д тавихгүй.
+- **`<form>` дотор `<form>` БИЧИХГҮЙ** — HTML зөвшөөрдөггүй ба хөтөч дотоод submit
+  товчийг ГАДААД маягтад харьяалуулдаг. 2026-09-16 хүртэл variant нэмэх нь яг
+  үүнээс болж ажилладаггүй байсан. Дотор нь маягт хэрэгтэй бол `<div>` + `type="button"`.
+- Grid/flex доторх `select`/`textarea`-д `min-width: 0` — анхдагч `min-width: auto`
+  нь хамгийн урт сонголтынхоо өргөнөөс жижгэрэхийг хориглож, утсан дээр бүх
+  хуудсыг жижигрүүлдэг (2026-09-16, admin маягт).
+- Reset дүрмийг ЗААВАЛ `@layer base` дотор бич — давхаргагүй CSS нь Tailwind-ийн
+  utility-г дардаг (`a { color: inherit }`-ийн урхи; `e2e/css-layers.spec.ts` хамгаална).
+- Шинэ гарчгийн шрифт нэмэх бол монгол Ө/Ү (cyrillic-ext) глифийг ХӨТӨЧ ДЭЭР
+  хэмжиж шалга — олон display шрифт cyrillic-ext-гүй эсвэл дутуу
+  (`e2e/typography.spec.ts`).
 
 **Тест, deploy**
 - Тест: `pnpm exec vitest run --no-file-parallelism` (параллель горим race үүсгэдэг).
 - Integration тестэд fake session user бичихгүй — `server/_test-helpers.ts`-ийн `testSessionUser()`; IP санамсаргүй (rate limit 15 мин).
 - Бодит production slot/мөрийг тестээр болзолгүй устгахгүй (snapshot-and-restore).
+- E2E (`pnpm e2e`) production схем рүү ХЭЗЭЭ Ч заахгүй — `sugi_staging` (заавал
+  татгалздаг хамгаалалттай, `e2e/helpers/environment.ts`).
 - `deploy.ps1` PowerShell-д exit code 7 өгдөг нь stderr noise — health 200 бол амжилттай.
 - Commit хийхээс өмнө `pnpm check` + `pnpm lint`.
 - **AI attribution хэзээ ч бичихгүй** (commit trailer, docs, код) — Tom сайтыг өөрийнхөөрөө танилцуулдаг.
@@ -202,23 +246,26 @@ session-ий тэмдэглэл HISTORY.md-д, дүрэм л энд. Ажилл�
 - HeatWave дээр `sugi_migtest` схемийг устгах (`DROP DATABASE sugi_migtest` — migration chain туршилтын үлдэгдэл, хоосон).
 - GitHub Actions → `database-tests` job-ийн эхний үр дүнг харах (улаан бол seed-д нэмэх мөр байна).
 
-## Дараагийн ажлын санал (2026-09-12-ний байдлаар НЭЭЛТТЭЙ зүйлс л — хаагдсан бүх зүйл HISTORY.md-д)
-0. **10k зэрэгцээ хэрэглэгч (Tom-ийн асуулт, 2026-09-09)** — одоогийн архитектур (нэг Node process, in-memory rate limiter, mysql2 pool 10, Бангалор RTT ~174ms, cache зөвхөн /shop каталогийн 10с TTL) статик HTML-ийг даана (5.4k req/s хэмжсэн) харин DB-д хүрэх бүх зүйл ~30–60 query/с-т тулна. Дараалал: (a) нүүр/каталог/site_media/site_text/brands/bestsellers read-үүдэд 30–60с in-memory cache (`catalogPageCache` загвар) — хамгийн том ялалт, backend өөрчлөлт бага; (b) Aiven-ийг Токио руу (Console → Change cloud) + `connectionLimit` 10→25–50 (Aiven plan-ий max_connections шалгах); (c) hosting дээр Node-ийг `cluster`/PM2-ээр CPU бүрт + Cloudflare CDN (HTML "no-cache" тул зөвхөн assets, /cdn/*); (d) хэрэв олон instance бол R3-ийн in-memory tier + `catalogPageCache`-ийг Redis руу; (e) global limiter 300/15мин/IP нь оффисын NAT-ад бага байж болзошгүй — hosting дээр бодит тоогоор тааруулах. Бодит 10k-ийн өмнө staging дээр k6-ээр нүүр хуудасны бүрэн flow-г ачааллах.
-1. **Барааны бодит зураг — үлдсэн 415** (`docs/products-needing-photos.csv`): автомат эх сурвалжууд шавхагдсан (HISTORY.md, "Зургийн эх сурвалжийн бүрэн эрэл"), дэлгүүрт өөрөө зураг авах л үлдсэн.
-2. **Tom-ийн бизнесийн алхам шаардах зүйлс** (код бэлэн, тохиргоо/гэрээ л дутуу): QPay merchant credential (R6/R7 засвартай), eBarimt ([EBARIMT.md](EBARIMT.md)-ийн 6 асуулт), StorePay/хүргэлтийн гэрээ, Honeybadger API key (`HONEYBADGER_API_KEY` + `VITE_HONEYBADGER_API_KEY`), Brevo SMS кредит/route (mass SMS campaign-ийн өмнө), hosting сонголт (дараа нь `PUBLIC_BASE_URL`, staging/CDN/uptime, R3-ийн in-memory tier-үүдийг шаардлагатай бол Redis).
-3. ✅ **Амьд Aiven дээрх тестийн үлдэгдэл ЦЭВЭРЛЭГДЛЭЭ (2026-09-12, Tom зөвшөөрсөн)** — `scripts/test-residue-report.ts` (зөвхөн уншина) + `scripts/test-residue-purge.ts --apply`. Устгасан: 3 тестийн хэрэглэгч (⚠️ тэдгээрийн **2 нь admin эрхтэй** байсан: `Order Notify Admin`, `Telemetry Test Admin`), `Telemetry Test Shopper`-ийн 2 захиалга (тус бүр 22,000₮ борлуулалтад тоологдож байсан), 887 `suppressed` мэдэгдлийн мөр. Бараа/ангилал үлдээгүй байв. **Үлдсэн хэрэглэгч: bataa (admin), zulaa (staff) — өөр данс байхгүй.** Ledger drift 0 хэвээр. ⚠️ Скрипт нь `%test%`-ээр хайдаггүй (каталогт жинхэнэ `Honey amproom tester` гэх бараа бий) бөгөөд сүүлийн 1 цагт үүссэн мөрийг алгасдаг (тест яг ажиллаж байж болзошгүй).
-4. ⚠️ **`a { color: inherit }` cascade-layer bug** — зөвхөн 5 баталгаажсан тохиолдол `!`-ээр засагдсан; `index.css`-ийн reset дүрмийг `@layer base`-д шилжүүлж сайт даяар засах (screenshot баталгаажуулалттай).
-5. **Product Variants** — олон variant-тай бодит бараагаар Playwright screenshot баталгаажуулалт хараахан хийгдээгүй (автомат тест + DB probe л).
-16. ⚠️ **Tom-оос хүлээж буй (2026-09-12)**: (a) `posts`-ийн 5 junk нийтлэл болон 8 брэндийн лого — **Tom өөрөө хийнэ гэсэн**; (b) chat-д нэг удаа бичигдсэн ntfy access token-ийг ntfy.sh дээр **rotate** хийж /admin → Интеграцууд-д шинээр хадгалах; (c) Smart Logic username/password, StorePay 7 утга, QPay sandbox эрх; (d) нягтлангаас НӨАТ/НХАТ хариу (EBARIMT.md); (e) production host дээр `NOTIFICATIONS_DISPATCH=1`.
-6. **Admin face gate** — Tom 50 хүнээр false-reject rate хэмжих; `ADMIN_FACE_LIVENESS_ENFORCED`-ийг бодит тоон дээр шийдэх. Aiven байршил Бангалор (median 174ms) → Токио (Console → Change cloud).
-7. **NEWVISION §14 / PREMIUM TIER 5 үлдэгдэл**: density toggle, үнийн faceted filter, "Pairs well with" cross-sell; referral, abandoned-cart имэйл.
-8. **Купоны per-customer cap race**: нэг хэрэглэгч сүүлчийн зөвшөөрөгдсөн ашиглалтыг 2 зэрэгцээ checkout-оор давж болно (global `maxUses` атомик хэвээр) — хэрэгтэй бол (code, customer, n) unique key.
-9. `--a-faint` (admin жижиг uppercase шошго) гэрэл горимд 2.74:1 — WCAG AA-д хүрэхгүй (codemod-оос өмнө ч ижил байсан, регресс биш).
-10. ⚠️ **`/shop` "баруун тийш шахагдсан" (Tom, 2026-09-11) — НӨХӨН ҮЗҮҮЛЭГДЭЭГҮЙ**: 1024–3200px хүртэл 15 өргөнд `scrollWidth - clientWidth` хэмжихэд бүгдэд нь 0 гарсан. Дахин гарвал Tom-оос **цонхны бодит өргөн + browser zoom хувь**-ийг асуух (zoom нь `vw` нэгжүүдийг өөрчилдөг).
-11. ⚠️ **Брэндийн лого — 9-өөс ганц нь л байна** (Cocochi). 2026-09-12-оос лого зурвас **брэнд бүрд тусдаа**: логотой брэндийн зургийн доор цагаан зурвас (лавлагаа: зураг → доор нь лого), логогүй брэнд зай авахгүй. **/admin → Брэнд дээр 8 лого оруулбал** бүгд ижил харагдана. ⚠️ Cocochi-ийн "лого" гэж хадгалсан файл нь бодит лого биш, кампанит зураг (618×323) — Tom жинхэнэ лого (тунгалаг PNG) оруулах.
-13. **Display шрифт нэмэх** — Golos Text ганцаараа бүх 643 элементийг тохируулж байна (68px hero-гоос 8px шошго хүртэл), хуудсанд дуу хоолой алга. ⚠️ Кирилл глифийг заавал шалгах.
-14. **9-өөс 7 хэсэг бүтэн өргөний хэвтээ band** — 2 хэсгийг тэгш бус bento болгож гаргах (2026-ийн чиглэл, HISTORY.md-ийн эх сурвалжууд).
-15. **Skip link аль ч хуудсанд байхгүй** (WCAG 2.4.1 Level A). Мөн эхний ачаалалтын 643 KB-аас 462 KB нь үндсэн JS chunk.
-12. **Bestseller filler-ийг брэндээр хязгаарлах** — одоо `featured_brands`-ийн БҮХ идэвхтэй брэнд round-robin-д ордог. Хэрэв зөвхөн тодорхой 3-4 брэнд харагдах ёстой бол admin → Брэнд дээр бусдыг нь идэвхгүй болгох, эсвэл filler-д зориулсан тусдаа тугийн багана нэмэх.
+## Дараагийн ажлын санал (2026-09-16-ний байдлаар НЭЭЛТТЭЙ зүйлс л — хаагдсан бүх зүйл HISTORY.md-д)
+
+**Tom-ийн шийдвэр хүлээж буй (код бичихээс өмнө)**
+1. **Bento зохиомж** — "2 хэсгийг тэгш бус bento" гэсэн зорилт. Судалсан дүн: WhyChooseUs аль хэдийн 245/355/245 тэгш бус grid, CategoryMasonry masonry, StoreLocator 3 бүсийн зохиомж. Үлдсэн "жирийн зурвас" нь **EditorialBanner** ба **StoreLocator** хоёр. Аль хоёрыг, ямар агуулгыг аль хайрцагт тавихыг Tom сонговол хийнэ (2026-09-09-ний "чиглэлгүй restyle" татгалзлыг давтахгүйн тулд).
+2. **Referral** — код үүсгэх нь хялбар; шийдэх ёстой нь бизнесийн дүрэм: хэн (урьсан/уригдсан аль нь), хэзээ (эхний захиалга төлөгдсөний дараа уу), хэдэн төгрөг/хувь, нэг хүн хэдэн удаа, буруу ашиглалтыг хэрхэн таслах. Loyalty зэрэглэлтэй ижил — дүрэм ирмэгц хэрэгжүүлнэ.
+
+**Код талд нээлттэй**
+3. **10k зэрэгцээ хэрэглэгч — үлдсэн хэсэг**: (a) ✅ storefront уншилтын кэш + single-flight, (b) ✅ pool 25 + `DB_POOL_SIZE`, (c) ✅ Cloudflare cache rules, (d) ✅ cluster-д аюулгүй код. ⛔ Үлдсэн: **VM-ийн RAM** (2 vCPU / 954 MB дээр prod+staging хоёулаа; `-Instances 2` энд ашиггүй), **k6-г staging дээр бодитоор ажиллуулж тасрах цэгийг олох**, олон instance болбол кэш/rate-limit-ийг Redis рүү.
+4. **Bestseller filler-ийг брэндээр хязгаарлах** — одоо `featured_brands`-ийн БҮХ идэвхтэй брэнд round-robin-д ордог. Зөвхөн тодорхой 3–4 брэнд харагдах ёстой бол admin → Брэнд дээр бусдыг идэвхгүй болгох, эсвэл filler-д зориулсан тусдаа тугийн багана нэмэх.
+5. ⚠️ **`/shop` "баруун тийш шахагдсан" (Tom, 2026-09-11) — НӨХӨН ҮЗҮҮЛЭГДЭЭГҮЙ**: 1024–3200px хүртэл 15 өргөнд `scrollWidth - clientWidth` бүгд 0. Дахин гарвал **цонхны бодит өргөн + browser zoom хувь**-ийг асуух (zoom нь `vw` нэгжийг өөрчилдөг).
+6. **Admin face gate** — Tom 50 хүнээр false-reject rate хэмжих; `ADMIN_FACE_LIVENESS_ENFORCED`-ийг бодит тоон дээр шийдэх.
+7. **Эхний ачаалалт** — үндсэн chunk 484 KB (gzip 152). Дараагийн том хэсэг нь Home.tsx + хуваалцсан компонентууд; Home-ийг lazy болгох нь LCP-д сөрөг тул эхлээд хэмжилт хэрэгтэй.
+
+**Tom-ийн биечлэн хийх (код бэлэн)**
+8. **Барааны бодит зураг — үлдсэн 415** (`docs/products-needing-photos.csv`): автомат эх сурвалж шавхагдсан, дэлгүүрт өөрөө авах л үлдсэн.
+9. **Брэндийн лого — 9-өөс ганц нь** (Cocochi, тэр нь ч бодит лого биш кампанит зураг). /admin → Брэнд дээр 8 лого оруулбал зурвас жигдэрнэ.
+10. **Бизнесийн алхам шаардах**: QPay merchant (sandbox эрх ч болно), eBarimt ([EBARIMT.md](EBARIMT.md)-ийн 6 асуулт), StorePay-ийн 7 утга, Smart Software нэвтрэх нэр/нууц үг, Brevo SMS кредит, Honeybadger API key, GA4/Pixel ID, staging DNS, production host дээр `NOTIFICATIONS_DISPATCH=1`, ntfy token rotate.
+11. **GitHub → Settings → Code security → Dependabot alerts** асаах (шинэчлэлтийн PR-ууд `.github/dependabot.yml`-аар аль хэдийн тохируулагдсан, харин сэрэмжлүүлэг нь repo-ийн тохиргоо).
+12. **2 junk захиалга цуцлах/устгах**: `#6802 SAMU21BHE3OSC20F` (бэлгийн карт 200,000₮, 2026-09-15) ба `#6655 SAMU0NHNJY458K8X` ("ТУРШИЛТ — Claude", 26,980₮, 2026-09-14). Хоёул `pending/unpaid` тул борлуулалтад тоологдохгүй ч /admin-д хүлээгдэж буй мэт харагдана. ⚠️ Бэлгийн картынх нь код үүсгэсэн эсэхийг устгахын өмнө шалгах.
+13. **HeatWave дээрх `sugi_migtest` схем** — migration chain туршилтын үлдэгдэл. ⚠️ Гарын авлагад "хоосон" гэж бичигдсэн байсан нь БУРУУ: 61 хүснэгттэй (2026-09-16-нд шалгасан). Аппын хэрэглэгчид харагддаггүй тул зөвхөн admin эрхээр л устгана.
+
 
 Дэлгэрэнгүй бүх session-ий бүрэн түүх, шалтгаан, screenshot-ын баталгаажуулалт: **[HISTORY.md](HISTORY.md)**.

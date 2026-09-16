@@ -59,6 +59,7 @@ browser → /api/trpc/<router>.<procedure>
 | `index.ts` | процессын эхлэл (§1) | ажлын бүртгэл, dispatcher энд эхэлдэг |
 | `context.ts` | tRPC контекст: cookie → user | `assertProductionSecrets()` энд; session token JWT. User мөр **5 с cache** (`getSessionUserById`, түлхүүр = user id, token БИШ) — session-ийн эрхийг өөрчилдөг бичигч бүр `forgetSessionUser` дуудна (§8 дүрэм 10) |
 | `trpc.ts` | procedure-ийн төрлүүд (**panel builder бүр face proof шаардана**) | `publicProcedure`, `protectedProcedure`, `adminProcedure`, `financeProcedure`, `staffProcedure`, **`inventoryProcedure`** (admin+warehouse+staff), `strictRateLimitedProcedure`. Эрхийн шалгалт бүхэлдээ ЭНД, дэд router-үүд өөрсдөө эрх шалгадаггүй |
+| `clusterRole.ts` | олон процессын үед хэн ард ажиллах ажлуудыг эзэмшихийг шийднэ | pm2 cluster горимд ЗӨВХӨН instance 0; `RUN_BACKGROUND_JOBS=0/1` дардаг. Үгүй бол орхигдсон сагсны сануулга, вендорын таталт N дахин явна |
 | `security.ts` | header, rate limit tier, CSRF | `limitApiTraffic` (IP тутам 300/15мин), `protectStateChangingApiRequests`, `limitQPayCallbackTraffic` |
 | `scannerProbes.ts` | `.env`/`.git`/`*.php`/CMS-ийн сканнер probe → шууд 404; IP тутам 1 ц/5 probe → 403 ban | loopback/private хаяг хэзээ ч ban болохгүй (proxy-ийн ард бүгд нэг IP болох эрсдэл); `isScannerProbe` цэвэр, 2 жагсаалтаар тестлэгдсэн |
 | `requestLog.ts` | `LOG_REQUESTS=1` үед access-log мөр | dependency-гүй; dev-д Vite-ийн модулиуд алгасагдана. `LOG_SQL=1` нь `sqlQueryLog.ts`-д |
@@ -256,6 +257,19 @@ pnpm exec vitest run --no-file-parallelism   # ~17 минут, бодит Aiven 
 pnpm check   # tsc (app) + tsc -p tsconfig.tests.json (тест/скрипт) — 2026-09-12-оос тестүүд ч type-check хийгдэнэ
 pnpm lint    # ESLint flat config: typescript-eslint recommended + react-hooks (rules-of-hooks, exhaustive-deps). CI-д ч ажиллана
 ```
+
+**E2E (Playwright, 2026-09-16-аас — `e2e/`)**
+
+```powershell
+pnpm build ; pnpm e2e        # 54 тест, компьютер + утас, production build дээр
+```
+
+⛔ Бодит дэлгүүрийн схем рүү хэзээ ч заахгүй — `e2e/helpers/environment.ts` нь
+`defaultdb`-г татгалзаж, анхдагчаар `sugi_staging` руу заана. Нэвтрэлт нь аппын
+өөрийн `signSessionToken`-оор (OTP-г тойрох арын хаалга аппликейшнд НЭМЭЭГҮЙ).
+`e2e/global-setup.ts` нь схемийн зөрүүг эхлээд шалгана (staging deploy migration
+ажиллуулдаггүй). Туслахууд: `helpers/fixtures.ts` (күүкийн самбарыг урьдчилан
+шийдсэн context), `helpers/session.ts`, `helpers/admin.ts`.
 
 **`server/_test-helpers.ts` `testSessionUser({id, ...overrides})`** — appRouter.createCaller-т өгөх бүрэн session user. Тест бүр өөрийн fake user бичдэг байсан нь `users`-т багана нэмэгдэх бүрт хоцордог байв (type-check асаахад 90 алдаа). Шинэ integration тест ЭНИЙГ ашиглана.
 
