@@ -3,6 +3,7 @@ import { isAdminPanelRole } from "../shared/face-auth";
 import { sqlInt } from "./_core/sqlSafe";
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lt, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import { alias } from "drizzle-orm/mysql-core";
 import { describeTransport, planMysqlConnection } from "./_core/dbConnection";
 import { adminAuditLogs, branches, branchStock, cartItems, carts, discountCodeRedemptions, discountCodes, faceAttempts, faceChallenges, faceEnrollments, featuredBrands, InsertProduct, InsertProductCategory, integrationConfigs, jobApplications, jobPostings, loginAttempts, notificationOutbox, stockMovements,loyaltyTiers, marketingSpend, mediaLibrary, orderItems, orders, paymentAttempts, phoneVerificationSessions, postCategories, postCategoryLinks, posts, postTagLinks, postTags, productCategories, productReviews, productReviewReplies, productReviewLikes, productQuestions, productQuestionAnswers, productVariants, giftCards, pushSubscriptions, products, routines, routineSteps, scheduledJobRuns, siteDocuments, siteMedia, siteText, sitePromotions, storeCreditLedger, storeSettings, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
 import { slugify } from "../shared/slugify";
@@ -919,6 +920,51 @@ export async function getPublishedProductsByIds(ids: number[]) {
     .leftJoin(productReviews, eq(productReviews.productId, products.id))
     .where(and(eq(products.isPublished, true), inArray(products.id, ids)))
     .groupBy(products.id, productCategories.id);
+}
+
+/**
+ * "Хамт авдаг" — NEWVISION.md §14-ийн cross-sell (2026-09-16).
+ *
+ * Энэ нь PDP дээрх өмнөх хоёр зөвлөмжөөс ЯЛГААТАЙ: `getRelatedProducts` нь
+ * шинж чанараар (ангилал, арьсны төрөл …) "үүнтэй төстэй" барааг олдог,
+ * `RoutineCrossSell` нь admin-ий гараар зассан routine-ийг харуулдаг. Энд бол
+ * бодит захиалгын түүх: тухайн барааг авсан хүмүүс ижил захиалгад өөр юу авсан
+ * бэ. Гараар засах зүйл байхгүй, худал өгөгдөл байхгүй.
+ *
+ * Зөвхөн ТӨЛӨГДСӨН, цуцлагдаагүй захиалгыг тоолно (`settledSaleSql` — bestseller
+ * rail-тай ижил "бодитоор болсон" шалгуур). Түүх хангалтгүй бол хоосон буцаана
+ * — дуудагч тал хэсгийг бүхэлд нь нуух ёстой (энэ төслийн "хоосон хэсгийг
+ * зохиомол өгөгдлөөр дүүргэхгүй" дүрэм).
+ *
+ * Хоёр query: нэгд хамтын тоо, хоёрт каталогийн мөрүүд — order_items ба
+ * product_reviews-ийг нэг query-д хамт join хийвэл тоо олшрох урхи
+ * (getBestsellingProducts-ийн ижил тайлбарыг үз).
+ */
+export async function getFrequentlyBoughtTogether(productId: number, limit = 4) {
+  return getOrSetCached(`storefront:boughtTogether:${productId}:${limit}`, STOREFRONT_CACHE_TTL_MS, async () => {
+    const db = await getDb();
+    if (!db) return [];
+
+    const partner = alias(orderItems, "partner");
+    const togetherExpr = sql<number>`COUNT(DISTINCT ${orders.id})`;
+    const rows = await db
+      .select({ productId: partner.productId, together: togetherExpr })
+      .from(orderItems)
+      .innerJoin(orders, eq(orderItems.orderId, orders.id))
+      .innerJoin(partner, eq(partner.orderId, orders.id))
+      .where(and(eq(orderItems.productId, sqlInt(productId)), ne(partner.productId, sqlInt(productId)), settledSaleSql))
+      .groupBy(partner.productId)
+      .orderBy(desc(togetherExpr), asc(partner.productId))
+      .limit(limit * 3); // нөөц: заримыг нь нийтлэлээс хассан байж болно
+
+    const ids = rows.map(row => row.productId).filter((id): id is number => id != null);
+    if (!ids.length) return [];
+    const togetherById = new Map(rows.map(row => [row.productId, Number(row.together)]));
+    const published = await getPublishedProductsByIds(ids);
+    return published
+      .sort((a, b) => (togetherById.get(b.id) ?? 0) - (togetherById.get(a.id) ?? 0) || a.id - b.id)
+      .slice(0, limit);
+  });
 }
 
 /**

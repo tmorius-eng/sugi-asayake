@@ -94,6 +94,27 @@ function RoutineCrossSell({ productId, onAdded }: { productId: number; onAdded: 
 // always falls back to the generic /product-placeholder.svg (not the
 // category-specific one this grid used to use) -- deliberate, matching every
 // other CarouselShelf on the site, not a regression.
+/**
+ * "Хамт авдаг" (NEWVISION.md §14, 2026-09-16) — бодит захиалгын түүхээс: энэ
+ * барааг авсан хүмүүс ижил захиалгад өөр юу авсан бэ. Доорх RelatedProducts нь
+ * ШИНЖ ЧАНАРААР төстэйг, RoutineCrossSell нь admin-ий гараар бүрдүүлсэн
+ * дарааллыг харуулдаг — энэ гурав өөр өөр асуултад хариулдаг.
+ *
+ * Хангалттай түүх хуримтлагдаагүй бол сервер хоосон буцаадаг тул хэсэг
+ * БҮХЭЛДЭЭ алга болно (хоосон rail эсвэл зохиомол өгөгдөл харуулахгүй).
+ */
+function BoughtTogether({ productId }: { productId: number }) {
+  const query = trpc.catalog.boughtTogether.useQuery({ productId });
+  const products = query.data ?? [];
+  if (!products.length) return null;
+
+  return <div className="mt-10">
+    <CarouselShelf eyebrow="ХАМТ АВДАГ" title={<>Ихэвчлэн <em>хамт авдаг</em></>} emptyState={null} cardWidth={200} inset>
+      {products.map(product => <ShelfProductCard product={product} key={product.id} />)}
+    </CarouselShelf>
+  </div>;
+}
+
 function RelatedProducts({ productId }: { productId: number }) {
   const relatedQuery = trpc.catalog.related.useQuery({ productId });
   const related = relatedQuery.data ?? [];
@@ -244,7 +265,7 @@ export default function ProductDetail() {
     sticky bar below (live-confirmed on bsb.mn: they never show both an
     inline add-to-cart row AND a sticky one on the same screen) -- desktop/
     tablet keeps this exact row unchanged. */}
-<div className="hidden items-center gap-4 min-[761px]:flex"><div className="inline-flex items-center rounded-full border border-border bg-white"><button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="grid size-11 place-items-center" aria-label="Тоо хасах"><Minus size={16} /></button><span className="grid min-w-10 place-items-center font-bold">{quantity}</span><button type="button" disabled={quantity >= activeStockQuantity} onClick={() => setQuantity(quantity + 1)} className="grid size-11 place-items-center disabled:opacity-40" aria-label="Тоо нэмэх"><Plus size={16} /></button></div><button type="button" disabled={addItem.isPending || activeStockQuantity === 0} onClick={addToCart} className="min-h-12 flex-1 rounded-full bg-[#df1f3d] px-6 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-55">{addItem.isPending ? <LoaderCircle className="mx-auto animate-spin" size={17} /> : activeStockQuantity === 0 ? "Нөөц дууссан" : `Сагсанд нэмэх — ${formatMnt(activePriceMnt * quantity)}`}</button></div><div className="mt-8 grid gap-3 sm:grid-cols-2"><div className="flex gap-3 rounded-2xl bg-white p-4"><Truck className="shrink-0 text-[#df1f3d]" size={19} /><p className="text-xs leading-5"><strong className="block text-foreground">УБ хүргэлт — {formatMnt(deliveryFeeUbMnt)}</strong><span className="text-muted-foreground">24–48 цагийн дотор · Салбараас үнэгүй авах</span></p></div><div className="flex gap-3 rounded-2xl bg-white p-4"><ShieldCheck className="shrink-0 text-[#df1f3d]" size={19} /><p className="text-xs leading-5"><strong className="block text-foreground">Албан ёсны баталгаа</strong><span className="text-muted-foreground">SUGI Drug Store Japan</span></p></div></div></section></div><RoutineCrossSell productId={product.id} onAdded={() => setCartOpen(true)} /><RelatedProducts productId={product.id} /><ReviewsSection productId={product.id} /><QuestionsSection productId={product.id} /></main>
+<div className="hidden items-center gap-4 min-[761px]:flex"><div className="inline-flex items-center rounded-full border border-border bg-white"><button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="grid size-11 place-items-center" aria-label="Тоо хасах"><Minus size={16} /></button><span className="grid min-w-10 place-items-center font-bold">{quantity}</span><button type="button" disabled={quantity >= activeStockQuantity} onClick={() => setQuantity(quantity + 1)} className="grid size-11 place-items-center disabled:opacity-40" aria-label="Тоо нэмэх"><Plus size={16} /></button></div><button type="button" disabled={addItem.isPending || activeStockQuantity === 0} onClick={addToCart} className="min-h-12 flex-1 rounded-full bg-[#df1f3d] px-6 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-55">{addItem.isPending ? <LoaderCircle className="mx-auto animate-spin" size={17} /> : activeStockQuantity === 0 ? "Нөөц дууссан" : `Сагсанд нэмэх — ${formatMnt(activePriceMnt * quantity)}`}</button></div><div className="mt-8 grid gap-3 sm:grid-cols-2"><div className="flex gap-3 rounded-2xl bg-white p-4"><Truck className="shrink-0 text-[#df1f3d]" size={19} /><p className="text-xs leading-5"><strong className="block text-foreground">УБ хүргэлт — {formatMnt(deliveryFeeUbMnt)}</strong><span className="text-muted-foreground">24–48 цагийн дотор · Салбараас үнэгүй авах</span></p></div><div className="flex gap-3 rounded-2xl bg-white p-4"><ShieldCheck className="shrink-0 text-[#df1f3d]" size={19} /><p className="text-xs leading-5"><strong className="block text-foreground">Албан ёсны баталгаа</strong><span className="text-muted-foreground">SUGI Drug Store Japan</span></p></div></div></section></div><RoutineCrossSell productId={product.id} onAdded={() => setCartOpen(true)} /><BoughtTogether productId={product.id} /><RelatedProducts productId={product.id} /><ReviewsSection productId={product.id} /><QuestionsSection productId={product.id} /></main>
 {/* 2026-09-07 (bsb.mn mobile-UX pass): mobile-only sticky "quantity + Add to
     cart" bar, replacing BottomNavBar.tsx here (see that component's own
     `hidden` check for /product/*) -- live-confirmed on bsb.mn's real product

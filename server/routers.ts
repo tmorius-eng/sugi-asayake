@@ -136,6 +136,7 @@ import {
   searchPublishedCatalog,
   getPublishedRoutineBySlug,
   getRecommendedProducts,
+  getFrequentlyBoughtTogether,
   getRelatedProducts,
   getPublishedPosts,
   getPublishedPostBySlug,
@@ -1183,6 +1184,11 @@ export const appRouter = router({
     // rail -- product-to-product tag overlap, no user/auth concept at all
     // (see getRelatedProducts), so this is always public.
     related: publicProcedure.input(z.object({ productId: z.number().int().positive() })).query(({ input }) => getRelatedProducts(input.productId)),
+    // "Хамт авдаг" (NEWVISION.md §14 cross-sell, 2026-09-16): `related`-аас
+    // ялгаатай нь шинж чанараар биш, БОДИТ захиалгын түүхээр — энэ барааг
+    // авсан хүмүүс ижил захиалгад өөр юу авсан бэ. Түүх хангалтгүй бол хоосон
+    // буцаж, PDP тэр хэсгийг бүхэлд нь нуудаг (getFrequentlyBoughtTogether).
+    boughtTogether: publicProcedure.input(z.object({ productId: z.number().int().positive() })).query(({ input }) => getFrequentlyBoughtTogether(input.productId)),
     // Homepage "Их зарагддаг бараа" rail — real paid-order history, not a
     // manually curated list. See getBestsellingProducts.
     bestsellers: publicProcedure.query(() => getBestsellingProducts(8)),
