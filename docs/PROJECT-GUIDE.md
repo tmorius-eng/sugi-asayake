@@ -236,6 +236,11 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
 
 **Тест, deploy**
 - **"Локал ногоон" нь "CI ногоон" гэсэн үг БИШ**: локал DB бол жинхэнэ production схем, CI-нх бол migration гинжээс байгуулсан схем. Гинжийг хөндвөл шинэ схем дээр ажиллуулж шалга (2026-09-16: `openId` нэг мөрөөс болж 42 файл CI-д унасан).
+- **Шинэ integration тест нь хөгжүүлэгчийн DB-д байдаг зүйлд НАЙДАХГҮЙ**: `actorUserId: 1`, `variantId: 1`, "ямар нэг ангилал байгаа" гэх мэт нь локал дээр мөнхөд ногоон, цэвэр схемд мөнхөд улаан. Шаардлагатай өгөгдлөө өөрөө үүсгэ, эсвэл `scripts/ci-seed.ts`-д лавлах мөр болгож нэм (2026-09-16).
+- **CI-г эндээс харах**: `gh` суулгасан. `gh auth login` нь `read:org` шаарддаг тул `GH_TOKEN`-оор дамжуулна: `export GH_TOKEN=$(printf "protocol=https
+host=github.com
+
+" | git credential fill | sed -n "s/^password=//p")`, дараа нь `"/c/Program Files/GitHub CLI/gh.exe" run list --repo tmorius-eng/sugi-asayake`.
 - Тест: `pnpm exec vitest run --no-file-parallelism` (параллель горим race үүсгэдэг).
 - Integration тестэд fake session user бичихгүй — `server/_test-helpers.ts`-ийн `testSessionUser()`; IP санамсаргүй (rate limit 15 мин).
 - Бодит production slot/мөрийг тестээр болзолгүй устгахгүй (snapshot-and-restore).
