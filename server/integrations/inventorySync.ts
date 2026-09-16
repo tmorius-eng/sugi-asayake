@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, lt, ne, or, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, lte, ne, or, isNull, sql } from "drizzle-orm";
 import { sqlInt } from "../_core/sqlSafe";
 import { branches, branchStock, externalRefs, integrationSyncState, stockMovements } from "../../drizzle/schema";
 import { normaliseBarcode } from "../../shared/barcode";
@@ -178,7 +178,12 @@ export async function runPushMovements(provider: InventorySyncProvider, options:
   const refs = await branchExternalIds(namespace);
   const rows = await db.select({ id: stockMovements.id, branchId: stockMovements.branchId, sku: stockMovements.sku, delta: stockMovements.delta, type: stockMovements.type, createdAt: stockMovements.createdAt })
     .from(stockMovements)
-    .where(and(gt(stockMovements.id, after), lt(stockMovements.createdAt, sql`NOW() - INTERVAL ${sqlInt(lagSeconds)} SECOND`), or(isNull(stockMovements.refType), ne(stockMovements.refType, "external"))))
+    // ⚠️ `lte`, `lt` БИШ (2026-09-16). `createdAt` нь секундын нарийвчлалтай
+    // тул `lag = 0` үед `createdAt < NOW()` нь ЯГ ТЭР СЕКУНДЭД үүссэн
+    // хөдөлгөөнийг хасна — хурдан машин дээр (CI) хөдөлгөөн үүсгээд push-ийг
+    // нэг секундэд багтаан дуудахад юу ч илгээгдэхгүй. Хязгаарын мөр нь
+    // "хангалттай хуучин" тул оруулах нь зөв; lag > 0 үед утга өөрчлөгдөхгүй.
+    .where(and(gt(stockMovements.id, after), lte(stockMovements.createdAt, sql`NOW() - INTERVAL ${sqlInt(lagSeconds)} SECOND`), or(isNull(stockMovements.refType), ne(stockMovements.refType, "external"))))
     .orderBy(asc(stockMovements.id)).limit(PUSH_BATCH);
   const batch: ExternalMovement[] = [];
   let cursor = after;

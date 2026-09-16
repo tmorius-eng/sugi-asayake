@@ -655,8 +655,16 @@ export async function completeRegistrationViaPhoneSession(input: { sessionId: nu
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const session = await getPhoneVerificationSessionByLocalId(input.sessionId);
-  if (!session || session.purpose !== "register" || session.userId) throw new Error("Баталгаажуулалт олдсонгүй.");
+  if (!session || session.purpose !== "register") throw new Error("Баталгаажуулалт олдсонгүй.");
+  // ⚠️ `consumedAt`-ийг `userId`-аас ӨМНӨ шалгана (2026-09-16). Ялагч нь
+  // дарааллаар: (1) сессийг атомикаар эзэмшиж `consumedAt` тавина, (2)
+  // хэрэглэгч үүсгэнэ, (3) сесс дээр `userId` бичнэ. Хожигдогч (3)-ын
+  // ДАРАА уншвал өмнө нь `userId` шалгалт эхэлж "Баталгаажуулалт
+  // олдсонгүй" гэж ТӨӨРӨГДҮҮЛЭХ мессеж өгдөг байв — сесс нь байгаа,
+  // зүгээр л дөнгөж ашиглагдсан. Хурдан DB дээр (CI) хожигдогч үргэлж
+  // (3)-ын дараа уншдаг тул мессеж орчноос хамаарч хоёр янз гарч байв.
   if (session.consumedAt) throw new Error("Энэ баталгаажуулалт аль хэдийн ашиглагдсан байна.");
+  if (session.userId) throw new Error("Баталгаажуулалт олдсонгүй.");
   if (session.expiresAt.getTime() <= Date.now()) throw new Error("Баталгаажуулалтын хугацаа дууссан байна.");
   if (session.status !== "verified") throw new Error("Утасны дугаараа эхлээд баталгаажуулна уу.");
 
@@ -5049,7 +5057,14 @@ export async function getStoreCreditLedger(userId: number) {
   }).from(storeCreditLedger)
     .leftJoin(users, eq(users.id, storeCreditLedger.actorUserId))
     .where(eq(storeCreditLedger.userId, userId))
-    .orderBy(desc(storeCreditLedger.createdAt));
+    // ⚠️ `id` тэнцвэр ЗААВАЛ (2026-09-16). `createdAt` нь секундын
+    // нарийвчлалтай тул нэг секундэд хийгдсэн хоёр гүйлгээ тэнцэж, MySQL
+    // дурын дарааллаар буцаана — админ "сүүлийн хөдөлгөөн" гэж буруу мөр
+    // харна. CI (локал MySQL, латенц бараг тэг) дээр хоёр мөр үргэлж нэг
+    // секундэд багтдаг тул яг энд баригдсан; HeatWave-ийн тунелийн
+    // саатлаас болж хөгжүүлэгчийн машин дээр санамсаргүй ногоон гардаг байв.
+    // Гарын авлагын "хуудаслалтад тогтвортой тэнцвэр" дүрэмтэй ижил анги.
+    .orderBy(desc(storeCreditLedger.createdAt), desc(storeCreditLedger.id));
 }
 
 /** Tier F: CAC's one input. Same upsert-by-unique-key shape as
