@@ -51,4 +51,20 @@
       },
     },
   });
+
+  // Tab-ийн дараалал (2026-09-16, E2E-ийн явцад олдсон): sangijn `init()` нь
+  // өөрийн бүрхүүлээ `document.body.insertBefore(wrapper, body.firstChild)`-ээр
+  // хамгийн ЭХЭНД оруулдаг. Улмаас гар ашигладаг зочны эхний Tab нь сайтын
+  // "Агуулга руу очих" (skip link) дээр биш, күүкийн жижиг дүрсэн товч дээр
+  // буудаг байв — зөвшөөрлөө аль хэдийн өгсөн, самбар харагдахгүй байсан ч.
+  // Бүрхүүлийг төгсгөлд нь зөөнө: сан нь зөвхөн өөрийн хадгалсан заалтаар
+  // (this.wrapper) ажилладаг тул зөөх нь түүнд нөлөөлөхгүй, бүх элемент нь
+  // fixed байрлалтай тул харагдац ч өөрчлөгдөхгүй.
+  function moveConsentUiToEnd(attempt) {
+    var wrapper = document.getElementById("stcm-wrapper");
+    if (wrapper) { document.body.appendChild(wrapper); return; }
+    // requestAnimationFrame БИШ (арын таб дээр зогсдог — docs/PROJECT-GUIDE.md).
+    if ((attempt || 0) < 20) setTimeout(function () { moveConsentUiToEnd((attempt || 0) + 1); }, 50);
+  }
+  moveConsentUiToEnd(0);
 })();

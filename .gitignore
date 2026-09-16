@@ -136,3 +136,8 @@ variant-price-backup-*.json
 /CLAUDE.md
 docs/SUGI-ASAYAKE-online-store-2026-09.pptx
 docs/~$*.pptx
+
+# Playwright (E2E, 2026-09-16)
+/playwright-report/
+/test-results/
+/blob-report/

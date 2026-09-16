@@ -762,7 +762,14 @@ export async function getPublishedCatalog() {
     .leftJoin(productReviews, eq(productReviews.productId, products.id))
     .where(eq(products.isPublished, true))
     .groupBy(products.id, productCategories.id)
-    .orderBy(asc(productCategories.sortOrder), desc(products.createdAt));
+    // `products.id`-ийн эцсийн тэнцвэр ЗААВАЛ хэрэгтэй (2026-09-16, E2E-ийн
+    // хуудаслалтын тест тогтворгүй болсноор илэрсэн): 937 бараа нь нэг импортоор
+    // орсон тул олон мөр яг ижил `createdAt`-тай. Ижил түлхүүртэй мөрүүдийн
+    // дарааллыг MySQL баталгаажуулдаггүй — гүйцэтгэл бүрт өөр байж болно.
+    // /shop нь энэ жагсаалтыг хуудаслах тул тогтворгүй дараалал гэдэг нь
+    // худалдан авагч 2-р хуудсанд 1-р хуудсанд харсан бараагаа дахин харах,
+    // эсвэл нэг барааг ОГТ харахгүй өнгөрөх боломж юм.
+    .orderBy(asc(productCategories.sortOrder), desc(products.createdAt), asc(products.id));
 }
 
 // 2026-09-04 cohesion audit: the "800+" product-count claim on the homepage
@@ -3953,7 +3960,7 @@ export async function getAdminMediaLibrary(options: { search?: string; page?: nu
   const page = Math.max(options.page ?? 1, 1);
   const whereClause = options.search ? like(mediaLibrary.fileName, `%${options.search}%`) : undefined;
   const [items, countRows] = await Promise.all([
-    db.select().from(mediaLibrary).where(whereClause).orderBy(desc(mediaLibrary.createdAt)).limit(pageSize).offset((page - 1) * pageSize),
+    db.select().from(mediaLibrary).where(whereClause).orderBy(desc(mediaLibrary.createdAt), desc(mediaLibrary.id)).limit(pageSize).offset((page - 1) * pageSize),
     db.select({ count: sql<number>`count(*)` }).from(mediaLibrary).where(whereClause),
   ]);
   return { items, total: Number(countRows[0]?.count ?? 0) };
@@ -5041,7 +5048,9 @@ export async function getLoginHistory(filters: { email?: string; success?: boole
   const [rows, [{ count: totalCount }]] = await Promise.all([
     db.select().from(loginAttempts)
       .where(where)
-      .orderBy(desc(loginAttempts.createdAt))
+      // Ижил секундэд олон оролдлого бичигддэг (нэг халдлага) тул хуудаслалтад
+      // тогтвортой дараалал шаардлагатай — id нь эцсийн тэнцвэр (2026-09-16).
+      .orderBy(desc(loginAttempts.createdAt), desc(loginAttempts.id))
       .limit(pageSize)
       .offset((page - 1) * pageSize),
     db.select({ count: sql<number>`count(*)` }).from(loginAttempts).where(where),

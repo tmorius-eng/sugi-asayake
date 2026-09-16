@@ -1,0 +1,61 @@
+# Dependabot (2026-09-16, Tom: "github dependabot asaachlaa").
+#
+# Энэ файл нь хамаарлын ШИНЭЧЛЭЛТИЙН PR-уудыг асаана. Аюулгүй байдлын
+# сэрэмжлүүлэг (Dependabot alerts) нь repo-ийн тохиргоо тул нэг удаа гараар:
+#   GitHub → Settings → Code security → Dependabot alerts: Enable
+#   (мөн "Dependabot security updates" — эмзэг хувилбарт автомат PR гаргана)
+#
+# Долоо хоногт нэг өдөр, БҮЛЭГЛЭСЭН PR: 90 гаруй хамаарлыг тус тусад нь PR
+# болговол долоо хоног бүр 10+ PR ирж, хэн ч уншихаа болино. patch/minor нэг
+# PR-д нийлнэ; major нь тусдаа ирнэ — React 19→20 шиг зүйл нүдээр харагдах ёстой.
+version: 2
+updates:
+  - package-ecosystem: "npm" # pnpm-ийг мөн энэ ecosystem уншина (pnpm-lock.yaml)
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Ulaanbaatar"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+    groups:
+      # Хөгжүүлэлтийн хэрэгсэл (vitest, eslint, playwright, tsc…) — эдгээр нь
+      # production-д хүрдэггүй тул нэг PR-д нийлээд сард нэг уншихад хангалттай.
+      dev-tooling:
+        dependency-type: "development"
+        update-types: ["minor", "patch"]
+      # Production хамаарлын patch/minor нэг PR. CI (pnpm check + lint + test +
+      # build, дээр нь database-tests) ногоон бол аюулгүй гэдгийн бодит нотолгоо.
+      production-minor:
+        dependency-type: "production"
+        update-types: ["minor", "patch"]
+    ignore:
+      # Эдгээрийн major хувилбар нь тус бүрдээ төлөвлөгөөтэй ажил (breaking API):
+      # tRPC 11→12, React 19→20, Tailwind 3→4, Express 4→5, drizzle, zod.
+      - dependency-name: "@trpc/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "tailwindcss"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "express"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "drizzle-orm"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "zod"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      timezone: "Asia/Ulaanbaatar"
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        patterns: ["*"]

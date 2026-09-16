@@ -120,9 +120,19 @@ export default function Shop() {
   const [maxPrice, setMaxPrice] = useState(() => initialParams.get("maxPrice") ?? "");
   const parsedMinPrice = minPrice.trim() ? Number(minPrice) : undefined;
   const parsedMaxPrice = maxPrice.trim() ? Number(maxPrice) : undefined;
-  const [skinTypeFilter, setSkinTypeFilter] = useState<SkinType | "all">("all");
-  const [inStockOnly, setInStockOnly] = useState(false);
-  const [sort, setSort] = useState<CatalogSortOption>("featured");
+  // 2026-09-16: эдгээр гурав нь URL-д БИЧИГДДЭГГҮЙ байсан цорын ганц шүүлтүүрүүд
+  // байв — q/category/brand/minPrice/maxPrice/page бүгд хадгалагддаг атлаа
+  // "Эрэмбэ", "Арьсны төрөл", "Бэлэн нөөцтэй" гурав нь refresh хийхэд, бараа
+  // харчихаад буцахад, эсвэл хаягаа найздаа илгээхэд чимээгүй тэглэгддэг байв.
+  const [skinTypeFilter, setSkinTypeFilter] = useState<SkinType | "all">(() => {
+    const value = initialParams.get("skinType");
+    return value && ["dry", "oily", "combination", "sensitive", "normal"].includes(value) ? value as SkinType : "all";
+  });
+  const [inStockOnly, setInStockOnly] = useState(() => initialParams.get("inStock") === "1");
+  const [sort, setSort] = useState<CatalogSortOption>(() => {
+    const value = initialParams.get("sort");
+    return value === "price-low" || value === "price-high" || value === "name-asc" ? value : "featured";
+  });
   const [density, setDensity] = useState<GridDensity>(() => {
     try { return window.localStorage.getItem(DENSITY_KEY) === "compact" ? "compact" : "comfortable"; } catch { return "comfortable"; }
   });
@@ -251,6 +261,9 @@ export default function Shop() {
     if (brand !== "all") params.set("brand", brand); else params.delete("brand");
     if (minPrice.trim()) params.set("minPrice", minPrice.trim()); else params.delete("minPrice");
     if (maxPrice.trim()) params.set("maxPrice", maxPrice.trim()); else params.delete("maxPrice");
+    if (skinTypeFilter !== "all") params.set("skinType", skinTypeFilter); else params.delete("skinType");
+    if (inStockOnly) params.set("inStock", "1"); else params.delete("inStock");
+    if (sort !== "featured") params.set("sort", sort); else params.delete("sort");
     window.history.replaceState(null, "", `${window.location.pathname}${params.toString() ? `?${params}` : ""}`);
   }, [search, category, brand, minPrice, maxPrice, skinTypeFilter, inStockOnly, sort]);
   useEffect(() => { if (!catalogLoading && page > totalPages) setPage(totalPages); }, [catalogLoading, totalPages, page]);

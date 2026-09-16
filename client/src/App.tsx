@@ -70,7 +70,6 @@ function Router() {
   // токенуудаа хөндөгдөөгүй хэвээр хадгална.
   const storefront = !location.startsWith("/admin");
   return <div className={storefront ? "sugi-site" : undefined}>
-    {storefront && <a href="#main-content" className="skip-link">Агуулга руу очих</a>}
     <div id="main-content" tabIndex={-1}><Suspense fallback={<RouteLoadingFallback />}><Switch>
     <Route path={"/"} component={Home} />
     <Route path={"/product/:slug"} component={ProductDetail} />
@@ -101,6 +100,19 @@ function Router() {
   </Switch></Suspense></div></div>;
 }
 
+/**
+ * "Агуулга руу очих" (WCAG 2.4.1). Router-ийн ДОТОР биш, аппын хамгийн эхний
+ * элемент болгож зориуд гаргав (2026-09-16, E2E-ийн явцад олдсон): өмнө нь
+ * Router-ийн дотор байсан тул DOM-ийн дараалалд SitePromo-ийн "Зарыг хаах"
+ * товчны АРД байж, гар ашигладаг зочны эхний Tab тэр товч дээр буудаг байв.
+ * Skip link бол хуудсын эхний товших цэг байх ёстой зүйл.
+ */
+function SkipLink() {
+  const [location] = useLocation();
+  if (location.startsWith("/admin")) return null;
+  return <a href="#main-content" className="skip-link">Агуулга руу очих</a>;
+}
+
 function App() {
   // Render хийгдсэн хуудас нь энэ tab ажилладаг build-тэйн баталгаа тул дараагийн
   // deploy (хэдэн цагийн дараа ч бай) өөрийн нэг удаагийн reload-ыг авна.
@@ -123,6 +135,7 @@ function App() {
   return <ErrorBoundary>
     <ThemeProvider defaultTheme="light">
       <TooltipProvider>
+        <SkipLink />
         <Toaster />
         <PageviewTracker />
         {/* Translates whatever the storefront renders; see the component. */}

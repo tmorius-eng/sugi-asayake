@@ -2628,6 +2628,20 @@ html[data-admin-theme="dark"], html[data-admin-theme="dark"] body { background: 
 .admin-stagger > *:nth-child(9) { animation-delay: .42s; }
 .admin-stagger > *:nth-child(n + 10) { animation-delay: .47s; }
 
+/* Утсан дээр admin-ий маягт бүхэл хуудсыг "жижигрүүлж" байсныг зассан
+   (2026-09-16, E2E-ийн явцад хэмжсэн). Бүтээгдэхүүний маягтыг нээхэд layout
+   viewport 412px-ээс 856px болж, хөтөч бүх хуудсыг хоёр дахин жижигрүүлж
+   харуулдаг байв — үсэг уншигдахгүй, "Бүтээгдэхүүн үүсгэх" товч хуруунд
+   таарахгүй. Шалтгаан: grid/flex-ийн доторх элементийн анхдагч
+   `min-width: auto` нь агуулгынхаа доод өргөнөөс жижгэрэхийг хориглодог ба
+   <select>-ийн доод өргөн нь хамгийн урт сонголтынхоо (жишээ нь урт ангиллын
+   нэр) бүтэн өргөн, <textarea>-д мөн адил. Нэг нь ч багтахгүй бол бүх хуудас
+   өргөсдөг. min-width: 0 нь зөвхөн ЖИЖГЭРЭХ эрх өгнө — харагдацыг өөрчлөхгүй. */
+.admin-shell label,
+.admin-shell input,
+.admin-shell select,
+.admin-shell textarea { min-width: 0; max-width: 100%; }
+
 /* Card lift on hover — the reference's cards are static, but Tom explicitly
    asked for motion; this is the restrained version (2px, no scale). */
 .admin-card {
