@@ -18,14 +18,14 @@ jobs:
   check-test-build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # No `version:` here on purpose — pnpm/action-setup reads the pinned
       # version from package.json's "packageManager" field. Setting both
       # causes ERR_PNPM_BAD_PM_VERSION (two pnpm versions specified).
       - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -74,9 +74,9 @@ jobs:
       ADMIN_FACE_GATE_ENABLED: "0"
       MODERATION_MODEL: "0"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
