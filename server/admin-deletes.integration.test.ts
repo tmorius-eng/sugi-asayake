@@ -4,7 +4,7 @@ import { appRouter } from "./routers";
 import { getDb } from "./db";
 import { testSessionUser } from "./_test-helpers";
 import { hashPassword } from "./_core/password";
-import { adminAuditLogs, orderItems, orders, postCategories, postCategoryLinks, posts, productCategories, products, stockMovements, users } from "../drizzle/schema";
+import { adminAuditLogs, branches, orderItems, orders, postCategories, postCategoryLinks, posts, productCategories, productVariants, products, stockMovements, users } from "../drizzle/schema";
 import type { TrpcContext } from "./_core/context";
 
 /**
@@ -30,6 +30,7 @@ function callerFor(user: TrpcContext["user"]) {
 describeWithDatabase("admin delete procedures", () => {
   const marker = `del${Date.now().toString(36)}`;
   let adminId = 0;
+  let movementProductId = 0;
 
   beforeAll(async () => {
     const db = await getDb();
@@ -49,6 +50,7 @@ describeWithDatabase("admin delete procedures", () => {
     await db.delete(productCategories).where(like(productCategories.slug, `${marker}%`));
     await db.delete(postCategories).where(like(postCategories.slug, `${marker}%`));
     await db.delete(posts).where(like(posts.slug, `${marker}%`));
+    if (movementProductId) await db.delete(products).where(eq(products.id, movementProductId));
     if (adminId) await db.delete(users).where(eq(users.id, adminId));
   });
 
@@ -114,9 +116,25 @@ describeWithDatabase("admin delete procedures", () => {
 
     // 3) Нөөцийн хөдөлгөөний нийлбэр 0 биш бол устгахгүй — эс бөгөөс
     //    агуулахын үлдэгдэл ledger-тэй зөрнө.
+    //
+    // ⚠️ 2026-09-16: эхэндээ `variantId: 1` гэж ХАТУУ бичсэн байв. Хөгжүүлэгчийн
+    // DB-д 1 дугаартай variant үргэлж байдаг тул локал дээр ногоон гарч,
+    // CI-ийн цэвэр схемд гадаад түлхүүр унаж байв. Тест өөрийн бараа,
+    // variant-аа өөрөө үүсгэнэ.
     await db.update(orders).set({ paymentStatus: "unpaid" }).where(eq(orders.id, orderId));
+    const [seedCategory] = await db.select({ id: productCategories.id }).from(productCategories).limit(1);
+    if (!seedCategory) throw new Error("Лавлах ангилал алга (scripts/ci-seed.ts).");
+    const productInsert = await db.insert(products).values({
+      categoryId: seedCategory.id, name: `${marker} бараа`, slug: `${marker}-mvprod`, priceMnt: 1000, sku: `${marker}-mvsku`, stockQuantity: 5,
+    });
+    movementProductId = Number(productInsert[0].insertId);
+    const variantInsert = await db.insert(productVariants).values({
+      productId: movementProductId, sku: `${marker}-mvsku`, priceMnt: 1000, stockQuantity: 5, isDefault: true,
+    });
+    const [branch] = await db.select({ id: branches.id }).from(branches).limit(1);
+    if (!branch) throw new Error("Лавлах салбар алга (scripts/ci-seed.ts).");
     const movementInsert = await db.insert(stockMovements).values({
-      branchId: 1, variantId: 1, sku: `${marker}-mv`, delta: -1, balanceAfter: 0, type: "sale_online", refType: "order", refId: orderId,
+      branchId: branch.id, variantId: Number(variantInsert[0].insertId), sku: `${marker}-mvsku`, delta: -1, balanceAfter: 0, type: "sale_online", refType: "order", refId: orderId,
     });
     await expect(admin().admin.deleteOrder({ id: orderId }))
       .rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringContaining("нийлбэр") });

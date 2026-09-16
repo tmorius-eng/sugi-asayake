@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { testSessionUser } from "./_test-helpers";
 import { eq, inArray } from "drizzle-orm";
-import { cartItems, carts, orderItems, orders, productCategories, productVariants, products, users } from "../drizzle/schema";
+import { adminAuditLogs, cartItems, carts, orderItems, orders, productCategories, productVariants, products, users } from "../drizzle/schema";
 import { createOrderFromActiveCart, getAdminProducts, getDb, getPublishedCatalog, updateAdminOrder } from "./db";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
@@ -9,10 +9,19 @@ import type { TrpcContext } from "./_core/context";
 // Admin overhaul (2026-09-08, Phase B): admin.products/admin.updateProduct
 // moved from staffProcedure to warehouseProcedure -- this was named
 // staffContext when staff still owned the catalog; renamed to match.
+/**
+ * ⚠️ 2026-09-16: `id: 1` гэж ХАТУУ бичигдсэн байв. Хөгжүүлэгчийн DB-д 1
+ * дугаартай хэрэглэгч үргэлж байдаг тул энэ нь хэзээ ч мэдэгддэггүй,
+ * харин CI-ийн цэвэр схемд `admin_audit_logs.actorUserId` -> `users.id`
+ * гадаад түлхүүр унана ("Cannot add or update a child row"). Одоо
+ * beforeAll-д бодит агуулахын хэрэглэгч үүсгэж түүний id-г ашиглана.
+ */
+let warehouseUserId = 0;
+
 function warehouseContext(): TrpcContext {
   return {
     user: testSessionUser({
-      id: 1, email: "warehouse-test@example.com", name: "Phase 2 Test Warehouse", role: "warehouse",
+      id: warehouseUserId, email: "warehouse-test@example.com", name: "Phase 2 Test Warehouse", role: "warehouse",
       emailVerifiedAt: null, sessionVersion: 0, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date(),
     }),
     req: { protocol: "https", headers: {}, ip: "198.51.100.9", socket: { remoteAddress: "198.51.100.9" } } as unknown as TrpcContext["req"],
@@ -44,6 +53,14 @@ describeWithDatabase("commerce database integration", () => {
       role: "user",
     });
     userId = Number(userResult[0].insertId);
+
+    const warehouseResult = await db.insert(users).values({
+      name: "Commerce integration warehouse",
+      email: `${marker}-warehouse@example.invalid`,
+      passwordHash: "test:test",
+      role: "warehouse",
+    });
+    warehouseUserId = Number(warehouseResult[0].insertId);
 
     const categoryResult = await db.insert(productCategories).values({
       name: "Integration test category",
@@ -100,6 +117,12 @@ describeWithDatabase("commerce database integration", () => {
     if (publishedProductId || unpublishedProductId) await db.delete(products).where(inArray(products.id, [publishedProductId, unpublishedProductId].filter(Boolean)));
     if (categoryId) await db.delete(productCategories).where(eq(productCategories.id, categoryId));
     if (userId) await db.delete(users).where(eq(users.id, userId));
+    // Аудитын мөр нь RESTRICT тул хэрэглэгчийг устгахын өмнө өөрийнх нь
+    // үлдээсэн бичлэгийг арилгана (энэ тест зөвхөн өөрийн мөрийг хөнддөг).
+    if (warehouseUserId) {
+      await db.delete(adminAuditLogs).where(eq(adminAuditLogs.actorUserId, warehouseUserId));
+      await db.delete(users).where(eq(users.id, warehouseUserId));
+    }
   });
 
   it("only exposes published products through the live catalog query", async () => {

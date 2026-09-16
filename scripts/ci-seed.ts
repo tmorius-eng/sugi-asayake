@@ -4,8 +4,18 @@
 // дараа ажиллуулна. Idempotent: байгаа slug-ийг хөндөхгүй.
 import "dotenv/config";
 import { eq } from "drizzle-orm";
-import { branches } from "../drizzle/schema";
+import { branches, productCategories } from "../drizzle/schema";
 import { getDb } from "../server/db";
+
+/**
+ * 2026-09-16: барааны ангилал нь салбаруудтай ижил "лавлах мөр". Долоон
+ * integration багц ("No product category exists to attach the test product
+ * to") бараагаа хавсаргах ангилал БАЙГАА гэж үздэг — хөгжүүлэгчийн DB-д 8
+ * ангилал байдаг тул энэ таамаг хэзээ ч мэдэгддэггүй, харин CI-ийн цэвэр
+ * схемд яг энд унана. Ганц лавлах ангилал хангалттай: тестүүд түүнд бараагаа
+ * хавсаргаад өөрсдийнхөө өгөгдлийг өөрсдөө үүсгэдэг.
+ */
+const CATEGORY = { name: "Арьс арчилгаа", slug: "skincare", description: "CI reference category" };
 
 const STORES = [
   { name: "Орос элчингийн салбар", slug: "russian-embassy", address: "Chin Van Handdorj St, SBD - 4 khoroo, Ulaanbaatar 13120", isFulfillmentDefault: true },
@@ -25,6 +35,14 @@ async function main() {
     created += 1;
   }
   console.log(`branches: ${created} created, ${STORES.length - created} already present`);
+
+  const [existingCategory] = await db.select({ id: productCategories.id }).from(productCategories).where(eq(productCategories.slug, CATEGORY.slug)).limit(1);
+  if (existingCategory) {
+    console.log("categories: already present");
+  } else {
+    await db.insert(productCategories).values({ name: CATEGORY.name, slug: CATEGORY.slug, description: CATEGORY.description, sortOrder: 1, isActive: true });
+    console.log("categories: 1 created");
+  }
   process.exit(0);
 }
 main().catch(error => { console.error(error); process.exit(1); });
