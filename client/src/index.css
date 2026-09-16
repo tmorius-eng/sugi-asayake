@@ -2506,6 +2506,42 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .face-gate-card--scan .face-gate-instruction { box-shadow: none; }
 .face-gate-shell--dark { background: #070c16; }
 
+/* Аргаа сонгох дэлгэц (2026-09-16, Tom-ийн лавлагааны дагуу: хоёр мөр —
+   энэ төхөөрөмж / утас). Сканнерын харанхуй картын дотор амьдардаг тул
+   өнгө нь тэндээсээ. */
+.face-gate-back { position: absolute; top: 18px; left: 18px; display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 10px; background: rgba(255,255,255,.07); color: #cdd9ea; cursor: pointer; transition: background .16s ease; }
+.face-gate-back:hover { background: rgba(255,255,255,.14); }
+.face-gate-card--scan { position: relative; }
+
+.face-choice-list { display: grid; gap: 12px; margin-top: 22px; }
+/* 64px доод өндөр: хулгана болон хуруунд ижил тав тухтай, мөн хоёр сонголт
+   ижил жинтэй харагдах ёстой — аль нэгийг нь "гол зам" мэт харуулахгүй. */
+.face-choice { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; min-height: 64px; padding: 14px 16px; border: 1px solid rgba(255,255,255,.14); border-radius: 14px; background: rgba(255,255,255,.04); color: #e8eef7; text-align: left; cursor: pointer; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
+.face-choice:hover, .face-choice:focus-visible { border-color: rgba(111,208,255,.55); background: rgba(111,208,255,.10); transform: translateY(-1px); }
+.face-choice svg:first-child { color: #6fd0ff; }
+.face-choice svg:last-child { color: #7f8ea6; }
+.face-choice strong { display: block; font-size: 14px; font-weight: 700; }
+.face-choice small { display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: #93a3bb; }
+
+.face-choice-tips { list-style: disc; margin: 20px 0 0; padding: 14px 16px 14px 32px; border-radius: 14px; background: rgba(255,255,255,.04); color: #93a3bb; font-size: 12px; line-height: 1.7; }
+.face-choice-tips li { margin: 0; }
+
+/* Харанхуй картан дээрх handoff-ийн бичвэрүүд (2026-09-16 screenshot-оор
+   баригдсан: тоо нь бараан дэвсгэр дээр бараан бичигдэж уншигдахгүй байв —
+   тэр тоо бол баталгаажуулалтын ГОЛ элемент, хамгийн тод байх ёстой). */
+.face-gate-card--scan .face-handoff-number { color: #f4f8ff; }
+.face-gate-card--scan .face-handoff-number-label { color: #93a3bb; }
+.face-gate-card--scan .face-handoff-qr { background: #fff; box-shadow: none; }
+.face-gate-card--scan .face-handoff-qr-loading { color: #93a3bb; }
+.face-gate-card--scan .face-gate-link { color: #6fd0ff; }
+/* Буцах сум гарчигтай давхцахгүй байх зай. */
+.face-gate-head--with-back { padding-left: 44px; }
+
+@media (max-width: 520px) {
+  .face-choice { grid-template-columns: auto 1fr; }
+  .face-choice svg:last-child { display: none; }
+}
+
 
 /* Entrance + state transitions. Everything below animates transform/opacity
    only, which the compositor can handle without relayout -- important next to

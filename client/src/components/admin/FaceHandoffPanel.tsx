@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { LoaderCircle, RefreshCw, Smartphone } from "lucide-react";
+import { ArrowLeft, LoaderCircle, RefreshCw, Smartphone } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { FACE_HANDOFF_TTL_MS } from "@shared/face-auth";
 
@@ -77,17 +77,42 @@ export default function FaceHandoffPanel({ onPassed, onBack }: { onPassed: () =>
     return () => clearInterval(timer);
   }, [expiresAt]);
 
-  // Компьютер өөрөө асууна: батлагдмагц ЭНЭ хариулт дээр proof cookie ирнэ.
+  /**
+   * Компьютер өөрөө 2 секунд тутам асууна: батлагдмагц ЭНЭ хариулт дээр proof
+   * cookie ирнэ.
+   *
+   * ⚠️ 2026-09-16, БОДИТ АЛДАА (Tom: "утсаараа нүүрээ уншуулсанч нэвтэрхгүй
+   * байна"): эхний хувилбарын хамаарлын жагсаалтад `secondsLeft` байсан.
+   * Тэр нь 500мс тутам өөрчлөгддөг тул effect нь секундэд хоёр удаа дахин
+   * үүсч, 2000мс-ийн `setInterval` нэг ч удаа ажиллаж амжихгүй цэвэрлэгддэг
+   * байв — өөрөөр хэлбэл компьютер СЕРВЕР РҮҮ ОГТ АСУУГААГҮЙ. Утас зөв
+   * баталж, push ч ирж байсан ч компьютер мэдэхгүй үлдэж QR нь хугацаа
+   * дуусдаг байв.
+   *
+   * Дүрэм: интервалтай effect-ийн хамаарал нь интервалаас ХУРДАН өөрчлөгддөг
+   * утга агуулж болохгүй. Дуудлагууд (`mutateAsync`, `onPassed`) нь render
+   * бүрт шинэ объект тул мөн ref-ээр дамжина.
+   */
+  const claimRef = useRef(status.mutateAsync);
+  claimRef.current = status.mutateAsync;
+  const passedRef = useRef(onPassed);
+  passedRef.current = onPassed;
+
   useEffect(() => {
-    if (!token || approved || secondsLeft <= 0) return;
+    if (!token || approved) return;
     let stopped = false;
-    const poll = async () => {
+    // QR нүдэн дээр хугацаа дуусахад шууд зогсохгүй: утас сүүлийн секундэд
+    // баталсан байж болох тул нэг минут илүү асууна (сервер талд төлөв нь
+    // `approved` хэвээр байвал компьютер ХЭВЭЭР нээгдэх ёстой).
+    const deadline = (expiresAt || Date.now()) + 60_000;
+    const tick = async () => {
+      if (stopped || Date.now() > deadline) return;
       try {
-        const result = await status.mutateAsync({ token });
+        const result = await claimRef.current({ token });
         if (stopped) return;
         if (result.status === "approved") {
           setApproved(true);
-          onPassed();
+          passedRef.current();
         } else if (result.status === "denied") {
           setError("Утсан дээрээс татгалзсан байна.");
           setToken(null);
@@ -96,9 +121,10 @@ export default function FaceHandoffPanel({ onPassed, onBack }: { onPassed: () =>
         // Сүлжээний түр саатал — дараагийн давталт дахин оролдоно.
       }
     };
-    const timer = setInterval(() => { void poll(); }, 2000);
+    void tick();
+    const timer = setInterval(() => { void tick(); }, 2000);
     return () => { stopped = true; clearInterval(timer); };
-  }, [token, approved, secondsLeft, status, onPassed]);
+  }, [token, approved, expiresAt]);
 
   const expired = secondsLeft <= 0 && !approved;
 
@@ -107,14 +133,21 @@ export default function FaceHandoffPanel({ onPassed, onBack }: { onPassed: () =>
     // (grid + place-items: center + дэвсгэр). Эхэндээ байхгүй класс
     // ("face-gate") бичсэнээс карт зүүн дээд буланд наалдаж байв — 2026-09-16,
     // Tom: "буланд байх юм".
-    <div className="face-gate-shell" role="dialog" aria-modal="true" aria-label="Утсаар баталгаажуулах">
-      <div className="face-gate-card">
-        <p className="face-gate-eyebrow"><Smartphone size={14} aria-hidden="true" /> УТСААР БАТАЛГААЖУУЛАХ</p>
-        <h1 className="face-gate-title">Утсаараа QR-ыг уншуулна уу</h1>
-        <p className="face-gate-lead">
-          Энэ компьютерт камер алга. Утсаараа доорх QR-ыг уншуулж, өөрийн дансаараа нэвтэрсэн байдалдаа
-          царайгаа уншуулбал энэ компьютер дээрх admin хэсэг нээгдэнэ.
-        </p>
+    // Сканнерын дэлгэцтэй ижил харанхуй карт — сонголтын дэлгэцээс шилжихэд
+    // нэг л зохиомжийн дотор явж байгаа мэт байх ёстой (2026-09-16).
+    <div className="face-gate-shell face-gate-shell--dark" role="dialog" aria-modal="true" aria-label="Утсаар баталгаажуулах">
+      <div className="face-gate-card face-gate-card--wide face-gate-card--scan">
+        <button type="button" className="face-gate-back" onClick={onBack} aria-label="Буцах"><ArrowLeft size={18} aria-hidden="true" /></button>
+        <div className="face-gate-head face-gate-head--with-back">
+          <Smartphone size={20} aria-hidden="true" />
+          <div>
+            <h2>Утсаараа QR-ыг уншуулна уу</h2>
+            <p className="face-gate-muted">
+              Утсаараа доорх QR-ыг уншуулж, өөрийн дансаараа нэвтэрсэн байдалдаа царайгаа
+              уншуулбал энэ компьютер дээрх admin хэсэг нээгдэнэ.
+            </p>
+          </div>
+        </div>
 
         {error && <div className="face-gate-alert" role="alert">{error}</div>}
 
@@ -144,7 +177,7 @@ export default function FaceHandoffPanel({ onPassed, onBack }: { onPassed: () =>
           </>
         )}
 
-        <button type="button" className="face-gate-link" onClick={onBack}>← Камераар оролдох</button>
+        <button type="button" className="face-gate-link" onClick={onBack}>← Өөр аргаар баталгаажуулах</button>
       </div>
     </div>
   );

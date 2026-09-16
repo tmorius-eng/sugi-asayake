@@ -23,7 +23,20 @@ import { e2eDatabaseUrl } from "./e2e/helpers/environment";
  * ЗӨВХӨН production-д гардаг бүх зүйл (docs/PROJECT-GUIDE.md-ийн demo.ps1-ийн
  * тайлбар) энд баригдана. Тиймээс эхлээд `pnpm build`.
  */
-const PORT = Number(process.env.E2E_PORT ?? 3100);
+/**
+ * Царайны хаалгыг E2E-д асаах эсэх (2026-09-16).
+ *
+ * ⚠️ Хувьсагч нь зориуд `E2E_FACE_GATE` — `ADMIN_FACE_GATE_ENABLED` БИШ. Энэ
+ * config нь `.env`-ийг ачаалдаг (helpers/environment.ts) бөгөөд хөгжүүлэгчийн
+ * `.env`-д `ADMIN_FACE_GATE_ENABLED=1` бичигдсэн байдаг — түүнийг шууд уншвал
+ * БҮХ E2E run чимээгүйгээр хаалгатай горимд орж, admin тестүүд бүгд унана
+ * (2026-09-16-нд яг ингэж болсон). Зөвхөн тусгайлан өгсөн үед л асна.
+ *
+ * Хоёр горим ӨӨР порт дээр: Playwright нь `reuseExistingServer` тул хаалгатай
+ * сервер үлдсэн бол дараагийн ердийн run түүнийг дахин ашиглаж мөн л унана.
+ */
+const GATE_ON = process.env.E2E_FACE_GATE === "1";
+const PORT = Number(process.env.E2E_PORT ?? (GATE_ON ? 3101 : 3100));
 const baseURL = process.env.E2E_BASE_URL ?? `http://127.0.0.1:${PORT}`;
 // Гаднах хаяг өгсөн бол (жишээ нь staging тунель) сервер энд ачаалахгүй.
 const startsOwnServer = !process.env.E2E_BASE_URL;
@@ -86,7 +99,10 @@ export default defineConfig({
           // Царайны хаалга нь бодит камер шаарддаг тул admin E2E-д боломжгүй.
           // Энэ нь ЗӨВХӨН энэ түр серверийн орчин — production дээрх хаалга
           // хөндөгдөхгүй (server/_core/env.ts-ийн getter орчноос уншина).
-          ADMIN_FACE_GATE_ENABLED: "0",
+          // Анхдагчаар унтраалттай (камер шаарддаг тул E2E давж чадахгүй), гэхдээ
+          // гаднаас `ADMIN_FACE_GATE_ENABLED=1` өгвөл хаалгыг асаана — царайны
+          // дэлгэцүүдийг нүдээр/screenshot-оор шалгах цорын ганц зам.
+          ADMIN_FACE_GATE_ENABLED: GATE_ON ? "1" : "0",
           // Тест ХЭЗЭЭ Ч бодит утсанд push илгээхгүй, имэйл явуулахгүй.
           NOTIFICATIONS_SUPPRESS: "1",
           NOTIFICATIONS_DISPATCH: "0",

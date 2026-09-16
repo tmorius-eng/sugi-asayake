@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, CameraOff, CheckCircle2, KeyRound, LoaderCircle, ScanFace, ShieldCheck } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import FaceHandoffPanel from "./admin/FaceHandoffPanel";
+import FaceMethodChooser from "./admin/FaceMethodChooser";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
   FACE_HEARTBEAT_INTERVAL_MS,
@@ -76,7 +77,13 @@ import { faceBackendName, warmUpFaceModels } from "@/lib/faceEngine";
  *    enforced, exactly as before (ADMIN_FACE_LIVENESS_ENFORCED).
  */
 export default function AdminFaceGate({ children }: { children: React.ReactNode }) {
-  const [handoff, setHandoff] = useState(false);
+  /**
+   * Аль замаар баталгаажуулахаа сонгосон эсэх (2026-09-16). `null` бол
+   * сонголтын дэлгэц. Өмнө нь хаалга шууд камер асаадаг байсан тул утсаар
+   * баталгаажуулах гарц зөвхөн камер УНАСНЫ дараа л харагддаг байв — Tom
+   * камергүй компьютер дээр олж чадаагүй.
+   */
+  const [method, setMethod] = useState<"camera" | "phone" | null>(null);
   const statusQuery = trpc.faceAuth.status.useQuery(undefined, {
     // The gate decides whether the admin panel renders at all, so a stale
     // cached "verified" must never be what lets someone in.
@@ -118,20 +125,25 @@ export default function AdminFaceGate({ children }: { children: React.ReactNode 
     );
   }
 
-  // Камергүй компьютер (2026-09-16, Tom): QR -> утас -> буцаад энд. Царайн
-  // БҮРТГЭЛ хийхэд камер зайлшгүй тул handoff зөвхөн бүртгэлтэй хүнд
-  // санал болгоно — бүртгэлгүй хүн камертай төхөөрөмж дээр нэг удаа
-  // бүртгүүлэх ёстой (docs/FACE-HANDOFF-PLAN.md).
-  const canHandoff = status.enrolled && !status.modelStale;
-  if (handoff && canHandoff) {
-    return <FaceHandoffPanel onPassed={() => { setHandoff(false); void statusQuery.refetch(); }} onBack={() => setHandoff(false)} />;
+  // Царайн БҮРТГЭЛ хийхэд камер зайлшгүй (олон өнцгийн зураг) тул утсаар
+  // баталгаажуулах зам зөвхөн БҮРТГЭЛТЭЙ хүнд нээлттэй
+  // (docs/FACE-HANDOFF-PLAN.md).
+  const needsEnrollment = !status.enrolled || status.modelStale;
+  const canHandoff = !needsEnrollment;
+
+  if (canHandoff && method === null) {
+    return <FaceMethodChooser tips={FACE_TIPS} onUseCamera={() => setMethod("camera")} onUsePhone={() => setMethod("phone")} />;
+  }
+  if (method === "phone") {
+    return <FaceHandoffPanel onPassed={() => { setMethod(null); void statusQuery.refetch(); }} onBack={() => setMethod(null)} />;
   }
   return (
     <FaceGateFlow
-      needsEnrollment={!status.enrolled || status.modelStale}
+      needsEnrollment={needsEnrollment}
       modelStale={status.modelStale}
       onPassed={() => statusQuery.refetch()}
-      onUseHandoff={canHandoff ? () => setHandoff(true) : undefined}
+      onUseHandoff={canHandoff ? () => setMethod("phone") : undefined}
+      onBack={canHandoff ? () => setMethod(null) : undefined}
     />
   );
 }
@@ -296,7 +308,7 @@ export type FaceVerificationSubmit = (payload: {
  * дескриптор, алдааны мессеж бүгд ганц эх сурвалжтай хэвээр — утсанд
  * зориулж хоёр дахь камерын код бичих нь тэр даруй хоцрох байсан.
  */
-export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVerification, onUseHandoff }: { needsEnrollment: boolean; modelStale: boolean; onPassed: () => void; submitVerification?: FaceVerificationSubmit; onUseHandoff?: () => void }) {
+export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVerification, onUseHandoff, onBack }: { needsEnrollment: boolean; modelStale: boolean; onPassed: () => void; submitVerification?: FaceVerificationSubmit; onUseHandoff?: () => void; onBack?: () => void }) {
   const [phase, setPhase] = useState<Phase>(needsEnrollment ? "consent" : "camera");
   const [hint, setHint] = useState<string>("Бэлтгэж байна…");
   const [fatalError, setFatalError] = useState<string | null>(null);
@@ -798,6 +810,7 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
         {onUseHandoff && (fatalError
           ? <button type="button" className="face-gate-btn face-gate-btn-quiet" onClick={onUseHandoff}>Утсаараа баталгаажуулах</button>
           : <button type="button" className="face-gate-link" onClick={onUseHandoff}>Энэ компьютерт камер алга — утсаараа баталгаажуулах</button>)}
+        {onBack && <button type="button" className="face-gate-link" onClick={onBack}>← Буцах</button>}
 
         {/* Practical advice, always visible rather than hidden behind a
             "why did this fail?" link -- these are the real causes of failure
