@@ -51,7 +51,6 @@ export default function TrackOrder() {
       <CommerceHeader cartCount={0} backLabel="SUGI ASAYAKE" />
       <main className="auth-main">
         <div className="auth-head">
-          <p className="auth-kicker">TRACK ORDER</p>
           <h1>{trackLine1} <em>{trackLine2}</em></h1>
           <p className="auth-lede">{textFor("track-text-lede", "Захиалгын дугаар болон захиалахад ашигласан утасны дугаараа оруулна уу.")}</p>
         </div>
