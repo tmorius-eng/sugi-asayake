@@ -3477,8 +3477,15 @@ body:has(.sugi-site) { background: var(--ck-page); }
 /* "Аппаар суулгах" (2026-09-16). Сошиал товчнуудтай ижил хэлбэр боловч
    дүүргэсэн — энэ нь холбоос биш, үйлдэл. Суулгах боломжгүй хөтөч дээр
    компонент өөрөө юу ч зурдаггүй тул энд нуух дүрэм хэрэггүй. */
-.footer-install { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; padding: 9px 14px; border: 1px solid var(--ck-ink); border-radius: 999px; background: var(--ck-ink); color: var(--ck-cream); font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; transition: background .18s var(--ease-out), color .18s var(--ease-out); }
+.footer-install, .footer-notify { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; padding: 9px 14px; border: 1px solid var(--ck-ink); border-radius: 999px; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; transition: background .18s var(--ease-out), color .18s var(--ease-out), border-color .18s var(--ease-out); }
+.footer-install { background: var(--ck-ink); color: var(--ck-cream); }
 .footer-install:hover { background: transparent; color: var(--ck-ink); }
+/* "Мэдэгдэл авах" нь суулгахын хажууд зогсдог тул хоёр дүүрэн товч зэрэгцэхгүй:
+   хоёр дахь үйлдэл нь зөвхөн хүрээтэй. Тусдаа КЛАСС (`--ghost` хувилбар биш):
+   `.footer-install`-ийг заадаг сонгогч хоёуланг нь барьж эхэлбэл тест ч,
+   ирээдүйн засвар ч андуурна (2026-09-16, E2E барьсан). */
+.footer-notify { background: transparent; color: var(--ck-ink); border-color: var(--ck-line); margin-top: 10px; }
+.footer-notify:hover { background: var(--ck-chip); border-color: var(--ck-ink); }
 .footer-column > span { color: var(--ck-muted); font-size: 13px; font-weight: 700; letter-spacing: .14em; }
 .footer-column a, .footer-column-button { color: var(--ck-ink); font-size: 15px; font-weight: 700; }
 .footer-column a:hover, .footer-column-button:hover { color: var(--ck-muted); }

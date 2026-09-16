@@ -807,7 +807,7 @@ function PushToggleRow() {
     <div className="pref-toggle-row">
       <div>
         <strong>Push мэдэгдэл (энэ хөтөч)</strong>
-        <span>{support === "unsupported" ? "Энэ хөтөч/холболт push дэмждэггүй (HTTPS ба iPhone дээр \"Нүүр дэлгэцэд нэмэх\" шаардлагатай)." : support === "denied" ? "Хөтчийн тохиргоонд мэдэгдэл хаагдсан байна." : "Захиалгын явц (баталгаажсан, хүргэлтэд гарсан, хүргэгдсэн)"}</span>
+        <span>{support === "needs-install" ? "iPhone, iPad дээр эхлээд сайтыг нүүр дэлгэцэд нэмнэ (Safari таб дотроос мэдэгдэл ирдэггүй) — ☰ цэсний \"Аппаар суулгах\"." : support === "unsupported" ? "Энэ хөтөч/холболт push дэмждэггүй (HTTPS шаардлагатай)." : support === "denied" ? "Хөтчийн тохиргоонд мэдэгдэл хаагдсан байна." : "Захиалгын явц (баталгаажсан, хүргэлтэд гарсан, хүргэгдсэн)"}</span>
         {enabled && <button type="button" className="auth-quiet" style={{ display: "inline", marginTop: 6 }} disabled={test.isPending} onClick={() => test.mutate()}>Туршилтын мэдэгдэл илгээх</button>}
       </div>
       <label className="switch"><input type="checkbox" disabled={support !== "ready" || busy} checked={enabled} onChange={event => { void toggle(event.target.checked); }} /><span className="switch-track" /></label>

@@ -182,7 +182,7 @@ test.describe("утасны ☰ цэснээс суулгах", () => {
   test("цэс нээхэд суулгах мөр хамгийн дээр гарна", async ({ page }) => {
     await page.goto("/");
     await page.getByRole("button", { name: "Цэс нээх" }).click();
-    const row = page.locator(".commerce-mobile-menu .commerce-mobile-menu-row");
+    const row = page.locator(".commerce-mobile-menu .commerce-mobile-menu-row").filter({ hasText: "Аппаар суулгах" });
     await expect(row).toBeVisible();
     await expect(row).toContainText("Аппаар суулгах");
     await row.click();

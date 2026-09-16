@@ -1,6 +1,7 @@
 import { Facebook, Instagram, Phone, Youtube } from "lucide-react";
 import { Link } from "wouter";
 import InstallAppButton from "@/components/InstallAppButton";
+import NotificationOptIn from "@/components/NotificationOptIn";
 import { trpc } from "@/lib/trpc";
 import { useCategories } from "@/hooks/useCategories";
 import { useShopContact } from "@/hooks/useShopContact";
@@ -79,6 +80,7 @@ export default function SiteFooter({ ctaBanner }: { ctaBanner?: FooterCtaBanner 
               дээрх §9-ийн "app-store badge оруулахгүй" дүрмийн эсрэг биш —
               дэлгүүрийн лого биш, хөтчийн өөрийнх нь суулгах үйлдэл. */}
           <InstallAppButton />
+          <NotificationOptIn />
         </div>
         <div className="footer-column">
           <span>{textFor("footer-text-column-shop", "Дэлгүүр")}</span>

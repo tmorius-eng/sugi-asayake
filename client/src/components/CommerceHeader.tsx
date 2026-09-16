@@ -4,6 +4,7 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import HeaderSearch from "@/components/HeaderSearch";
 import InstallAppButton from "@/components/InstallAppButton";
+import NotificationOptIn from "@/components/NotificationOptIn";
 import LocaleSwitch from "@/components/LocaleSwitch";
 import { useCategories } from "@/hooks/useCategories";
 import { useSiteText } from "@/hooks/useSiteText";
@@ -194,6 +195,7 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
               суулгасны дараа компонент өөрөө юу ч зурдаггүй тул энд
               нөхцөлт шалгалт хэрэггүй. */}
           <InstallAppButton variant="row" onAction={closeMenu} />
+          <NotificationOptIn variant="row" onAction={closeMenu} />
           <p className="commerce-mobile-menu-heading">{t("Ангилал")}</p>
           {categories.map(category => (
             <Link href={`/shop?category=${encodeURIComponent(category.name)}`} key={category.slug} onClick={closeMenu}>

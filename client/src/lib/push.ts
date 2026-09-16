@@ -6,11 +6,32 @@
  * toggle унахын оронд шалтгааныг тайлбарлана).
  */
 
-export type PushSupport = "unsupported" | "denied" | "ready";
+export type PushSupport = "unsupported" | "needs-install" | "denied" | "ready";
+
+/**
+ * iOS 16.4-өөс хойш Safari Web Push-ийг дэмждэг БОЛОВЧ **зөвхөн нүүр
+ * дэлгэцэд суулгасан** апп дотор: энгийн Safari таб дээр `window.PushManager`
+ * огт байдаггүй. Тиймээс iPhone дээр "дэмждэггүй" гэж хэлэх нь буруу —
+ * зөв хариу нь "эхлээд суулгах хэрэгтэй" (2026-09-16).
+ */
+function isIosDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  return /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+}
+
+function isInstalledApp(): boolean {
+  if (typeof window === "undefined") return false;
+  if ((window.navigator as Navigator & { standalone?: boolean }).standalone === true) return true;
+  return typeof window.matchMedia === "function" && window.matchMedia("(display-mode: standalone)").matches;
+}
 
 export function pushSupport(): PushSupport {
-  if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return "unsupported";
-  if (!window.isSecureContext) return "unsupported";
+  if (typeof window === "undefined") return "unsupported";
+  const missing = !("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window);
+  if (missing || !window.isSecureContext) {
+    return isIosDevice() && !isInstalledApp() ? "needs-install" : "unsupported";
+  }
   if (Notification.permission === "denied") return "denied";
   return "ready";
 }
