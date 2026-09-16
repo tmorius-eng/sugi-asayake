@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { testSessionUser } from "./_test-helpers";
 import { eq, inArray } from "drizzle-orm";
-import { adminAuditLogs, cartItems, carts, discountCodes, orderItems, orders, productCategories, productVariants, products, users } from "../drizzle/schema";
+import { adminAuditLogs, cartItems, carts, discountCodeRedemptions, discountCodes, orderItems, orders, productCategories, productVariants, products, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
 import { getDb } from "./db";
 import { hashPassword } from "./_core/password";
@@ -232,5 +232,63 @@ describeWithDatabase("discount code integration", () => {
     const otherOrder = await otherPerson.caller.checkout.createOrder({ ...orderInput, customerName: "Other Person", customerPhone: "99009900" });
     createdOrderIds.push(otherOrder.id);
     expect(otherOrder.couponDiscountMnt).toBe(4_000);
+  });
+
+  // 2026-09-16 (docs/PROJECT-GUIDE.md-ийн нээлттэй асуудал №8): нэг хэрэглэгчийн
+  // хязгаарын шалгалт нь гүйлгээнээс ГАДНА `orders`-ийг тоолдог байсан тул хоёр
+  // зэрэгцээ checkout хоёулаа "хараахан ашиглаагүй" гэж уншиж чаддаг байв.
+  // Одоо гүйлгээний дотор (код, хэрэглэгч, дугаар) өвөрмөц мөр бичигддэг.
+  it("хоёр зэрэгцээ checkout нэг хэрэглэгчийн хязгаарыг давж чадахгүй", async () => {
+    const created = await admin().admin.createDiscountCode({ code: `${marker}-RACE`, type: "percent", percentValue: 10, minSubtotalMnt: 0, maxUses: 10, maxUsesPerCustomer: 1, isActive: true });
+    createdCodeIds.push(created.id);
+    const orderInput = { deliveryMethod: "store_pickup" as const, pickupBranch: "Орос элчингийн салбар", paymentMethod: "cash_on_delivery" as const, couponCode: created.code, customerName: "Race Person", customerPhone: "99887766" };
+
+    // Хоёр тусдаа зочны сагс, ижил утас = ижил хүн.
+    const first = guestCaller();
+    const second = guestCaller();
+    await first.caller.cart.addItem({ productId, quantity: 1 });
+    await second.caller.cart.addItem({ productId, quantity: 1 });
+    guestTokens.push(...first.tokens(), ...second.tokens());
+
+    const results = await Promise.allSettled([
+      first.caller.checkout.createOrder({ ...orderInput }),
+      second.caller.checkout.createOrder({ ...orderInput }),
+    ]);
+    const fulfilled = results.filter(result => result.status === "fulfilled") as PromiseFulfilledResult<{ id: number }>[];
+    for (const result of fulfilled) createdOrderIds.push(result.value.id);
+    expect(fulfilled).toHaveLength(1);
+
+    // Дэвтэрт яг нэг суудал бичигдсэн байх ёстой.
+    const db = await getDb();
+    const rows = await db!.select().from(discountCodeRedemptions).where(eq(discountCodeRedemptions.discountCodeId, created.id));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].customerKey).toBe("p:99887766");
+    expect(rows[0].seq).toBe(1);
+  });
+
+  it("захиалга цуцлагдвал купоны суудал чөлөөлөгдөнө", async () => {
+    const created = await admin().admin.createDiscountCode({ code: `${marker}-CANCEL`, type: "percent", percentValue: 10, minSubtotalMnt: 0, maxUses: 10, maxUsesPerCustomer: 1, isActive: true });
+    createdCodeIds.push(created.id);
+    const orderInput = { deliveryMethod: "store_pickup" as const, pickupBranch: "Орос элчингийн салбар", paymentMethod: "cash_on_delivery" as const, couponCode: created.code, customerName: "Cancel Person", customerPhone: "99553311" };
+
+    const buyer = guestCaller();
+    await buyer.caller.cart.addItem({ productId, quantity: 1 });
+    guestTokens.push(...buyer.tokens());
+    const order = await buyer.caller.checkout.createOrder({ ...orderInput });
+    createdOrderIds.push(order.id);
+
+    const db = await getDb();
+    expect(await db!.select().from(discountCodeRedemptions).where(eq(discountCodeRedemptions.orderId, order.id))).toHaveLength(1);
+
+    await admin().admin.updateOrder({ id: order.id, status: "cancelled" });
+    expect(await db!.select().from(discountCodeRedemptions).where(eq(discountCodeRedemptions.orderId, order.id))).toHaveLength(0);
+
+    // Суудал чөлөөлөгдсөн тул ижил хүн дахин ашиглаж чадна.
+    const again = guestCaller();
+    await again.caller.cart.addItem({ productId, quantity: 1 });
+    guestTokens.push(...again.tokens());
+    const second = await again.caller.checkout.createOrder({ ...orderInput });
+    createdOrderIds.push(second.id);
+    expect(second.couponDiscountMnt).toBe(4_000);
   });
 });

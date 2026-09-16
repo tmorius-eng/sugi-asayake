@@ -247,13 +247,20 @@
    on overlay-scrollbar platforms (real mobile), where these are ignored. */
 html { scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: #c4bfb5 var(--background); }
 body { margin: 0; background: var(--background); color: var(--foreground); font-family: var(--font-body); font-size: 16px; line-height: 1.55; }
-a { color: inherit; text-decoration: none; }
 img { display: block; max-width: 100%; }
 button, a { -webkit-tap-highlight-color: transparent; }
 button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5); outline-offset: 4px; }
 ::selection { color: #fffaf5; background: var(--primary); }
 
 @layer base {
+  /* 2026-09-16: энэ дүрэм өмнө нь ямар ч давхаргад ХАМААРАХГҮЙ бичигдсэн байв.
+     Давхаргагүй CSS нь давхаргатай бүх CSS-ээс (Tailwind-ийн utilities
+     давхарга ч мөн адил) давамгайлдаг тул <a> дээр тавьсан `text-[#df1f3d]`
+     зэрэг өнгөний класс чимээгүй үйлчилдэггүй байсан — улмаас кодын 5 газарт
+     `!` (important) залгаж тойрсон байв (docs/PROJECT-GUIDE.md-ийн №4 асуудал).
+     `@layer base` руу оруулснаар utility класс хэвийнээр ялна; `color: inherit`
+     нь класс өгөөгүй бүх холбоост хэвээр үйлчилнэ. */
+  a { color: inherit; text-decoration: none; }
   * { @apply border-border outline-ring/50; }
   button:not(:disabled), [role="button"]:not([aria-disabled="true"]), [type="button"]:not(:disabled), a[href] { @apply cursor-pointer; }
 }

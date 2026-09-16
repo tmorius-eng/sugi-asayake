@@ -4,7 +4,7 @@ import { sqlInt } from "./_core/sqlSafe";
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lt, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { describeTransport, planMysqlConnection } from "./_core/dbConnection";
-import { adminAuditLogs, branches, branchStock, cartItems, carts, discountCodes, faceAttempts, faceChallenges, faceEnrollments, featuredBrands, InsertProduct, InsertProductCategory, integrationConfigs, jobApplications, jobPostings, loginAttempts, notificationOutbox, stockMovements,loyaltyTiers, marketingSpend, mediaLibrary, orderItems, orders, paymentAttempts, phoneVerificationSessions, postCategories, postCategoryLinks, posts, postTagLinks, postTags, productCategories, productReviews, productReviewReplies, productReviewLikes, productQuestions, productQuestionAnswers, productVariants, giftCards, pushSubscriptions, products, routines, routineSteps, scheduledJobRuns, siteDocuments, siteMedia, siteText, sitePromotions, storeCreditLedger, storeSettings, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
+import { adminAuditLogs, branches, branchStock, cartItems, carts, discountCodeRedemptions, discountCodes, faceAttempts, faceChallenges, faceEnrollments, featuredBrands, InsertProduct, InsertProductCategory, integrationConfigs, jobApplications, jobPostings, loginAttempts, notificationOutbox, stockMovements,loyaltyTiers, marketingSpend, mediaLibrary, orderItems, orders, paymentAttempts, phoneVerificationSessions, postCategories, postCategoryLinks, posts, postTagLinks, postTags, productCategories, productReviews, productReviewReplies, productReviewLikes, productQuestions, productQuestionAnswers, productVariants, giftCards, pushSubscriptions, products, routines, routineSteps, scheduledJobRuns, siteDocuments, siteMedia, siteText, sitePromotions, storeCreditLedger, storeSettings, userAddresses, users, visitorSessions, wishlistItems } from "../drizzle/schema";
 import { slugify } from "../shared/slugify";
 import { looksLikeBarcode, normaliseBarcode } from "../shared/barcode";
 import { expandQueryGroups, normaliseSearchText } from "../shared/search-synonyms";
@@ -1953,6 +1953,31 @@ export async function createOrderFromActiveCart(input: {
       totalMnt: payableBeforeCreditMnt - storeCreditAppliedMnt,
     });
     orderId = Number(inserted[0].insertId);
+    // Нэг хэрэглэгчийн купон хязгаарын АТОМИК хамгаалалт (2026-09-16, migration
+    // 0084). Дээрх validateDiscountCode-ийн тоолол нь гүйлгээнээс ГАДНА явдаг
+    // тул хоёр зэрэгцээ checkout хоёулаа "хараахан ашиглаагүй" гэж уншиж
+    // чаддаг байв. Энд (код, хэрэглэгч, дугаар) гурвалыг өвөрмөц индекстэй
+    // мөр болгон бичнэ — хожигдсон тал давхардлын алдаанд унаж, захиалга
+    // бүхэлдээ (нөөц, купоны тоолуур хамт) буцна.
+    if (couponResult && couponResult.maxUsesPerCustomer !== null) {
+      const redemptionKey = discountRedemptionKey({ userId: input.owner.userId ?? null, phone: input.customerPhone });
+      if (redemptionKey) {
+        const [used] = await tx.select({ count: sql<number>`count(*)` }).from(discountCodeRedemptions)
+          .where(and(eq(discountCodeRedemptions.discountCodeId, couponResult.id), eq(discountCodeRedemptions.customerKey, redemptionKey)));
+        const usedCount = Number(used?.count ?? 0);
+        if (usedCount >= couponResult.maxUsesPerCustomer) {
+          throw new Error(couponResult.maxUsesPerCustomer === 1 ? "Та энэ кодыг аль хэдийн ашигласан байна." : `Энэ кодыг нэг хэрэглэгч хамгийн ихдээ ${couponResult.maxUsesPerCustomer} удаа ашиглана — та хязгаартаа хүрсэн байна.`);
+        }
+        try {
+          await tx.insert(discountCodeRedemptions).values({ discountCodeId: couponResult.id, customerKey: redemptionKey, seq: usedCount + 1, orderId });
+        } catch (error) {
+          if (isDuplicateKeyError(error, "discount_code_redemptions_slot")) {
+            throw new Error("Энэ кодыг яг энэ мөчид өөр захиалгаар ашиглаж байна. Дахин оролдоно уу.");
+          }
+          throw error;
+        }
+      }
+    }
     await tx.insert(orderItems).values(cart.items.map(item => ({
       orderId,
       productId: item.productId,
@@ -3275,6 +3300,11 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
       await restoreStockForOrder(tx, input.id, { type: "order_restock", actorUserId: input.actorUserId ?? null });
     }
     if (input.status === "cancelled") {
+      // Цуцлагдсан захиалга купоны тоололд ороогүй (validateDiscountCode-ийн
+      // `ne(status, "cancelled")`) тул дэвтрийн суудлыг ч мөн чөлөөлнө — эс
+      // бөгөөс хүн цуцалсан захиалгынхаа улмаас кодоо дахин ашиглаж чадахгүй
+      // болно (2026-09-16, migration 0084).
+      await tx.delete(discountCodeRedemptions).where(eq(discountCodeRedemptions.orderId, input.id));
       await reverseStoreCreditForOrder(tx, input.id, "цуцлагдсан");
       // Cards this order paid for that nobody has redeemed yet die with it
       // (a redeemed one already became store credit; refundOrder's
@@ -5562,6 +5592,18 @@ export async function getApplicableLoyaltyDiscount(userId: number | undefined, a
  */
 export type DiscountRedeemer = { userId: number | null; phone: string | null };
 
+/**
+ * Купон ашиглалтын дэвтрийн (`discount_code_redemptions`, migration 0084)
+ * хэрэглэгчийн түлхүүр. Нэвтэрсэн бол дансаар, зочин бол утасны сүүлийн 8
+ * цифрээр — доорх тооллын ижил дүрэм. Аль нь ч байхгүй бол (нэрээ ч, утсаа ч
+ * өгөөгүй) нэг хэрэглэгчийн хязгаарыг хэрэгжүүлэх боломжгүй тул null.
+ */
+export function discountRedemptionKey(customer: DiscountRedeemer): string | null {
+  if (customer.userId) return `u:${customer.userId}`;
+  const digits = customer.phone ? customer.phone.replace(/\D/g, "").slice(-8) : "";
+  return digits.length === 8 ? `p:${digits}` : null;
+}
+
 export async function validateDiscountCode(rawCode: string, amountMnt: number, customer: DiscountRedeemer = { userId: null, phone: null }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
@@ -5591,7 +5633,7 @@ export async function validateDiscountCode(rawCode: string, amountMnt: number, c
     ? Math.round(amountMnt * (record.percentValue ?? 0) / 100)
     : Math.min(record.fixedAmountMnt ?? 0, amountMnt);
   if (discountMnt <= 0) throw new Error("Энэ код одоогийн сагсанд хямдрал өгөхгүй байна.");
-  return { id: record.id, code: record.code, discountMnt };
+  return { id: record.id, code: record.code, discountMnt, maxUsesPerCustomer: record.maxUsesPerCustomer };
 }
 
 export async function discountCodeExists(code: string, excludeId?: number) {

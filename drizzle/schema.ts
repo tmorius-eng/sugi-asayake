@@ -1353,6 +1353,34 @@ export const discountCodes = mysqlTable("discount_codes", {
 ]);
 
 /**
+ * Нэг хэрэглэгчийн купон ашиглалтын "суудал" (2026-09-16, migration 0084).
+ *
+ * `discount_codes.maxUsesPerCustomer`-ийн шалгалт нь `orders`-ийг тоолдог
+ * бөгөөд тоолол ба бичилтийн хооронд зай бий: хоёр зэрэгцээ checkout хоёулаа
+ * "0 удаа ашигласан" гэж уншаад хоёулаа хямдралыг авч чаддаг байв (нийт
+ * `maxUses` нь атомик UPDATE-ээр хамгаалагдсан хэвээр). Энд (код, хэрэглэгч,
+ * дугаар) гурвал ӨВӨРМӨЦ тул хоёр дахь оролдлого давхардлын алдаанд унаж,
+ * захиалгын гүйлгээ бүхэлдээ буцна.
+ *
+ * `customerKey` — server/db.ts-ийн discountRedemptionKey(): нэвтэрсэн бол
+ * "u:<userId>", зочин бол "p:<утасны сүүлийн 8 цифр>".
+ *
+ * Захиалга цуцлагдвал мөр устана — "цуцлагдсан захиалга тоологдохгүй" гэсэн
+ * одоо мөрдөгдөж буй дүрэмтэй нийцүүлэх (updateAdminOrder).
+ */
+export const discountCodeRedemptions = mysqlTable("discount_code_redemptions", {
+  id: int("id").autoincrement().primaryKey(),
+  discountCodeId: int("discountCodeId").notNull().references(() => discountCodes.id, { onDelete: "cascade" }),
+  customerKey: varchar("customerKey", { length: 64 }).notNull(),
+  seq: int("seq").notNull(),
+  orderId: int("orderId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  uniqueIndex("discount_code_redemptions_slot").on(table.discountCodeId, table.customerKey, table.seq),
+  index("discount_code_redemptions_order_idx").on(table.orderId),
+]);
+
+/**
  * Admin-controlled promotional popup/banner (e.g. new-arrival announcement,
  * seasonal sale, store event). Deliberately a plain admin-editable record —
  * not a fake-urgency generator: whatever is shown is exactly what an admin
