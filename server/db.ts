@@ -1972,7 +1972,7 @@ export async function createOrderFromActiveCart(input: {
           await tx.insert(discountCodeRedemptions).values({ discountCodeId: couponResult.id, customerKey: redemptionKey, seq: usedCount + 1, orderId });
         } catch (error) {
           if (isDuplicateKeyError(error, "discount_code_redemptions_slot")) {
-            throw new Error("Энэ кодыг яг энэ мөчид өөр захиалгаар ашиглаж байна. Дахин оролдоно уу.");
+            throw new Error("Энэ кодыг яг энэ мөчид өөр захиалгаар ашиглаж байна. Дахин оролдоно уу.", { cause: error });
           }
           throw error;
         }
