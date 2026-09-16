@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import QRCode from "qrcode";
 import { LoaderCircle, RefreshCw, Smartphone } from "lucide-react";
 import { trpc } from "@/lib/trpc";
@@ -22,7 +22,7 @@ export default function FaceHandoffPanel({ onPassed, onBack }: { onPassed: () =>
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [approved, setApproved] = useState(false);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [qrImage, setQrImage] = useState<string | null>(null);
 
   const approveUrl = useMemo(() => (token ? `${window.location.origin}/face-approve?token=${encodeURIComponent(token)}` : null), [token]);
 
@@ -45,10 +45,26 @@ export default function FaceHandoffPanel({ onPassed, onBack }: { onPassed: () =>
 
   useEffect(() => { void request(); }, [request]);
 
-  // QR-ийг canvas дээр зурна (`qrcode` санг барааны QR-т аль хэдийн ашигладаг).
+  /**
+   * QR-ийг ЗУРАГ болгож (`toDataURL`) `<img>`-д өгнө — `toCanvas` БИШ.
+   *
+   * Эхний хувилбар `QRCode.toCanvas(ref.current, …)` байсан бөгөөд амьд сайт
+   * дээр хоосон цагаан дөрвөлжин гаргаж байв (2026-09-16, Tom: "QR код гарч
+   * ирэхгүй байна"): canvas нь нөхцөлтэйгээр render хийгддэг тул ref нь эффект
+   * ажиллах үед үргэлж бэлэн байдаггүй, дээрээс нь алдаа `void`-д залгигдаж
+   * ул мөргүй алга болдог байв. `toDataURL` нь DOM-оос хамааралгүй бөгөөд
+   * төслийн бусад QR (ProductQrModal, AdminNotificationsPanel) яг үүнийг
+   * ашигладаг — ажилладаг нь батлагдсан зам.
+   */
   useEffect(() => {
-    if (!approveUrl || !canvasRef.current) return;
-    void QRCode.toCanvas(canvasRef.current, approveUrl, { width: 232, margin: 1, color: { dark: "#17181b", light: "#ffffff" } });
+    if (!approveUrl) { setQrImage(null); return; }
+    let cancelled = false;
+    QRCode.toDataURL(approveUrl, { width: 640, margin: 1, errorCorrectionLevel: "M", color: { dark: "#17181b", light: "#ffffff" } })
+      .then(generated => { if (!cancelled) setQrImage(generated); })
+      // Хоосон дөрвөлжин биш, ойлгомжтой алдаа: QR гарахгүй бол handoff
+      // бүхэлдээ боломжгүй тул чимээгүй бүтэлгүйтэх ёсгүй.
+      .catch(() => { if (!cancelled) { setQrImage(null); setError("QR кодыг зурж чадсангүй. Хуудсаа шинэчилнэ үү."); } });
+    return () => { cancelled = true; };
   }, [approveUrl]);
 
   // Үлдсэн хугацаа. setInterval (requestAnimationFrame БИШ): арын таб дээр
@@ -87,7 +103,11 @@ export default function FaceHandoffPanel({ onPassed, onBack }: { onPassed: () =>
   const expired = secondsLeft <= 0 && !approved;
 
   return (
-    <div className="face-gate" role="dialog" aria-modal="true" aria-label="Утсаар баталгаажуулах">
+    // `.face-gate-shell` нь бүтэн дэлгэцийг эзэлж картыг ТӨВД байрлуулдаг
+    // (grid + place-items: center + дэвсгэр). Эхэндээ байхгүй класс
+    // ("face-gate") бичсэнээс карт зүүн дээд буланд наалдаж байв — 2026-09-16,
+    // Tom: "буланд байх юм".
+    <div className="face-gate-shell" role="dialog" aria-modal="true" aria-label="Утсаар баталгаажуулах">
       <div className="face-gate-card">
         <p className="face-gate-eyebrow"><Smartphone size={14} aria-hidden="true" /> УТСААР БАТАЛГААЖУУЛАХ</p>
         <h1 className="face-gate-title">Утсаараа QR-ыг уншуулна уу</h1>
@@ -107,7 +127,9 @@ export default function FaceHandoffPanel({ onPassed, onBack }: { onPassed: () =>
         ) : (
           <>
             <div className="face-handoff-qr">
-              <canvas ref={canvasRef} aria-label="Утсаар уншуулах QR код" />
+              {qrImage
+                ? <img src={qrImage} alt="Утсаар уншуулах QR код" width={232} height={232} />
+                : <span className="face-handoff-qr-loading"><LoaderCircle className="animate-spin" size={20} aria-hidden="true" /> QR бэлдэж байна…</span>}
             </div>
             {/*
               Тоо тааруулах: утсан дээр гурван сонголт гарах бөгөөд зөвхөн энэ
