@@ -78,7 +78,7 @@ test.describe("аппаар суулгах", () => {
 
   test("хөтөч зөвшөөрөхөд товч гарч, дарахад жинхэнэ суулгах цонх дуудагдана", async ({ page }) => {
     await page.goto("/");
-    const button = page.getByRole("button", { name: "Аппаар суулгах" });
+    const button = page.locator(".footer-install");
 
     // Эвент ирээгүй байхад товч байх ёсгүй — суулгаж чадахгүй хөтөч дээр
     // ажиллахгүй товч үзүүлэх нь худал амлалт.
@@ -110,7 +110,7 @@ test.describe("аппаар суулгах", () => {
       event.userChoice = Promise.resolve({ outcome: "dismissed", platform: "web" });
       window.dispatchEvent(event);
     });
-    await page.getByRole("button", { name: "Аппаар суулгах" }).click();
+    await page.locator(".footer-install").click();
     await expect(page.getByRole("dialog").getByText("Аппаар суулгах")).toBeVisible();
   });
 
@@ -122,7 +122,7 @@ test.describe("аппаар суулгах", () => {
       event.userChoice = Promise.resolve({ outcome: "accepted", platform: "web" });
       window.dispatchEvent(event);
     });
-    const button = page.getByRole("button", { name: "Аппаар суулгах" });
+    const button = page.locator(".footer-install");
     await expect(button).toBeVisible();
     await page.evaluate(() => window.dispatchEvent(new Event("appinstalled")));
     await expect(button).toHaveCount(0);
@@ -138,11 +138,54 @@ test.describe("аппаар суулгах", () => {
 test.describe("iPhone дээр гараар нэмэх заавар", () => {
   test.use({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1" });
 
-  test("эвентгүйгээр товч гарч, Хуваалцах зааврыг үзүүлнэ", async ({ page }) => {
+  test("эвентгүйгээр товч гарч, алхам алхмын заавар үзүүлнэ", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("button", { name: "Аппаар суулгах" }).click();
+    await page.locator(".footer-install").click();
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByText("Нүүр дэлгэцэд нэмэх", { exact: false })).toBeVisible();
-    await expect(dialog.getByText("Хуваалцах", { exact: false })).toBeVisible();
+
+    // 1-р алхам: Apple-ийн одоогийн зам — ХАЯГИЙН МӨРНИЙ ЗҮҮН талын хуудасны
+    // цэс. (Эхний хувилбар "доод талын Хуваалцах товч" гэж БУРУУ бичсэн:
+    // орчин үеийн Safari-д Хуваалцах нь мөрөн дээр шууд байдаггүй.)
+    await expect(dialog.getByText("1 / 4")).toBeVisible();
+    await expect(dialog.getByText("хуудасны цэсийн дүрсийг", { exact: false })).toBeVisible();
+
+    // 3-р алхам дээр л "Add to Home Screen" гарч ирнэ.
+    await dialog.getByRole("button", { name: "Дараагийн алхам" }).click();
+    await expect(dialog.getByText("Share", { exact: false }).first()).toBeVisible();
+    await dialog.getByRole("button", { name: "Дараагийн алхам" }).click();
+    await expect(dialog.getByText("3 / 4")).toBeVisible();
+    await expect(dialog.getByText("Add to Home Screen").first()).toBeVisible();
+  });
+
+  test("хуучин байрлалыг сонгоход Хуваалцах дүрсээс эхэлнэ", async ({ page }) => {
+    await page.goto("/");
+    await page.locator(".footer-install").click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("tab", { name: "Хуваалцах дүрстэй" }).click();
+    // Хуучин зам нэг алхам богино — Хуваалцах нь мөрөн дээрээ байдаг.
+    await expect(dialog.getByText("1 / 3")).toBeVisible();
+    await expect(dialog.getByText("Хуваалцах дүрсийг дарна", { exact: false })).toBeVisible();
+  });
+});
+
+/**
+ * ⚠️ 2026-09-16, Tom: *"Суулгах сонголт алга? No install"* — товч footer-т
+ * БАЙСАН, гэвч утсан дээр нүүр хуудасны хөл нь хэдэн дэлгэц доор байдаг тул
+ * практикт олдохгүй байв. Утсан дээр хүн юмыг ☰ цэснээс хайдаг.
+ */
+test.describe("утасны ☰ цэснээс суулгах", () => {
+  test.use({
+    viewport: { width: 390, height: 844 },
+    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+  });
+
+  test("цэс нээхэд суулгах мөр хамгийн дээр гарна", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Цэс нээх" }).click();
+    const row = page.locator(".commerce-mobile-menu .commerce-mobile-menu-row");
+    await expect(row).toBeVisible();
+    await expect(row).toContainText("Аппаар суулгах");
+    await row.click();
+    await expect(page.getByRole("dialog").getByText("хуудасны цэсийн дүрсийг", { exact: false })).toBeVisible();
   });
 });

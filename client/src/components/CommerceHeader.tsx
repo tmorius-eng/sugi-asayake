@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import HeaderSearch from "@/components/HeaderSearch";
+import InstallAppButton from "@/components/InstallAppButton";
 import LocaleSwitch from "@/components/LocaleSwitch";
 import { useCategories } from "@/hooks/useCategories";
 import { useSiteText } from "@/hooks/useSiteText";
@@ -187,6 +188,12 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
               real category list (categories-data.ts, the same single
               source of truth Home.tsx/Shop.tsx already use) and real
               legal/support pages, never bsb.mn's own categories. */}
+          {/* Суулгах мөрийг ХАМГИЙН ДЭЭР (2026-09-16): товч зөвхөн footer-т
+              байхад Tom утсан дээрээ олж чадаагүй — нүүр хуудасны хөл нь
+              хэдэн дэлгэц доор байдаг. Суулгах боломжгүй хөтөч дээр болон
+              суулгасны дараа компонент өөрөө юу ч зурдаггүй тул энд
+              нөхцөлт шалгалт хэрэггүй. */}
+          <InstallAppButton variant="row" onAction={closeMenu} />
           <p className="commerce-mobile-menu-heading">{t("Ангилал")}</p>
           {categories.map(category => (
             <Link href={`/shop?category=${encodeURIComponent(category.name)}`} key={category.slug} onClick={closeMenu}>

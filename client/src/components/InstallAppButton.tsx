@@ -1,6 +1,7 @@
 import { useCallback, useState, useSyncExternalStore } from "react";
-import { MonitorDown, Share, SquarePlus } from "lucide-react";
+import { ArrowUpRight, MonitorDown } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import InstallGuide, { type GuidePlatform } from "@/components/InstallGuide";
 import { useT } from "@/hooks/useLocale";
 import { getInstallAvailability, promptInstall, subscribeInstallState } from "@/lib/pwaInstall";
 
@@ -11,26 +12,44 @@ import { getInstallAvailability, promptInstall, subscribeInstallState } from "@/
  *
  * Сайт 2026-09-13-аас хойш техникийн хувьд бүрэн суулгагдахуйц байсан ч
  * суулгах гарц хаана ч байгаагүй. Дэлгэрэнгүй шалтгаан (хөтөч бүр өөр
- * биеэ авч явдаг) `lib/pwaInstall.ts`-ийн толгойд.
+ * биеэ авч явдаг) `lib/pwaInstall.ts`-ийн толгойд, алхмын заавар
+ * `InstallGuide.tsx`-д.
  *
  * ⚠️ Энэ нь SiteFooter-ийн "app-store download badges оруулахгүй" гэсэн
  * NEWVISION §9-ийн дүрмийг зөрчихгүй: App Store/Play Store-ийн лого биш,
  * байхгүй апп руу заасан холбоос ч биш — хөтчийн өөрийнх нь суулгах
  * үйлдлийг дуудаж, яг энэ сайтыг цонх болгон суулгана.
  */
-export default function InstallAppButton() {
+
+function detectPlatform(): GuidePlatform {
+  if (typeof navigator === "undefined") return "desktop";
+  const ua = navigator.userAgent;
+  if (/iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return "ios";
+  return /android/i.test(ua) ? "android" : "desktop";
+}
+
+/**
+ * `variant`:
+ *  - `"footer"` — хөлийн брэндийн баганад гарах дүүргэсэн товч.
+ *  - `"row"` — утасны ☰ цэсний мөр. 2026-09-16, Tom: *"Суулгах сонголт
+ *    алга?"* — товч зөвхөн footer-т байсан бөгөөд утсан дээр нүүр хуудасны
+ *    хөл нь маш доор байдаг тул практикт олдохгүй байв. Утсан дээр хүн
+ *    юмыг ☰ цэснээс хайдаг, тиймээс цэсний ХАМГИЙН ЭХНИЙ мөр болгов.
+ */
+export default function InstallAppButton({ variant = "footer", onAction }: { variant?: "footer" | "row"; onAction?: () => void } = {}) {
   const t = useT();
-  const [help, setHelp] = useState<null | "ios" | "manual">(null);
+  const [guide, setGuide] = useState<GuidePlatform | null>(null);
   const availability = useSyncExternalStore(subscribeInstallState, getInstallAvailability, () => "unavailable" as const);
 
   const install = useCallback(async () => {
+    onAction?.();
     // iOS дээр дуудах цонх байхгүй тул шууд заавар руу.
-    if (availability === "ios") { setHelp("ios"); return; }
+    if (availability === "ios") { setGuide("ios"); return; }
     const outcome = await promptInstall();
     // Татгалзсан үед товч алга болохоос илүү, хэрхэн буцаж суулгахыг зааж
     // өгөх нь зөв: эвент зарцуулагдсан тул дахин дуудаж болохгүй.
-    if (outcome !== "accepted") setHelp("manual");
-  }, [availability]);
+    if (outcome !== "accepted") setGuide(detectPlatform());
+  }, [availability, onAction]);
 
   if (availability === "installed") return null;
   const canOffer = availability === "prompt" || availability === "ios";
@@ -38,57 +57,33 @@ export default function InstallAppButton() {
   // `promptInstall()` нь эвентээ зарцуулмагц төлөв "unavailable" болдог тул
   // хэрэглэгч татгалзсан яг тэр агшинд энэ компонент бүхэлдээ салж, заавар
   // хэзээ ч гарахгүй байв. Цонх нээлттэй бол үлдэнэ.
-  if (!canOffer && !help) return null;
+  if (!canOffer && !guide) return null;
 
   return (
     <>
-      {canOffer && (
+      {canOffer && (variant === "row" ? (
+        <button type="button" className="commerce-mobile-menu-row" onClick={() => void install()}>
+          <span className="flex items-center gap-2"><MonitorDown size={15} aria-hidden="true" />{t("Аппаар суулгах")}</span>
+          <ArrowUpRight size={16} aria-hidden="true" />
+        </button>
+      ) : (
         <button type="button" className="footer-install" onClick={() => void install()}>
           <MonitorDown size={17} strokeWidth={1.8} aria-hidden="true" />
           <span>{t("Аппаар суулгах")}</span>
         </button>
-      )}
-      <InstallHelpDialog open={help !== null} onClose={() => setHelp(null)} ios={help === "ios"} />
+      ))}
+
+      <Dialog open={guide !== null} onOpenChange={value => { if (!value) setGuide(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogTitle>{t("Аппаар суулгах")}</DialogTitle>
+          <DialogDescription>
+            {guide === "ios"
+              ? t("iPhone, iPad дээр Safari өөрөө суулгах цонх гаргадаггүй тул гараар нэмнэ.")
+              : t("Хөтчөөс дамжуулан хэдийд ч суулгаж болно.")}
+          </DialogDescription>
+          {guide && <InstallGuide platform={guide} />}
+        </DialogContent>
+      </Dialog>
     </>
-  );
-}
-
-/**
- * Гараар суулгах заавар. Гурван тохиолдол: iOS Safari (цонх огт байхгүй),
- * Android (цэсний "Апп суулгах"), компьютер (хаягийн мөрний дүрс).
- */
-function InstallHelpDialog({ open, onClose, ios }: { open: boolean; onClose: () => void; ios: boolean }) {
-  const t = useT();
-  const android = typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
-
-  const steps = ios
-    ? [t("Доод талын Хуваалцах товчийг дарна"), t("\"Нүүр дэлгэцэд нэмэх\" гэснийг сонгоно"), t("\"Нэмэх\" дарвал дүрс нүүр дэлгэцэд суулаа")]
-    : android
-      ? [t("Баруун дээд буланд байрлах ⋮ цэсийг дарна"), t("\"Апп суулгах\" эсвэл \"Нүүр дэлгэцэд нэмэх\" гэснийг сонгоно"), t("Баталгаажуулбал дүрс утсандаа суулаа")]
-      : [t("Хаягийн мөрний баруун талд байх суулгах дүрсийг дарна"), t("Эсвэл ⋮ цэс → \"Хадгалах ба хуваалцах\" → \"Хуудсыг апп болгон суулгах\""), t("Баталгаажуулбал ширээний компьютерт тусдаа цонх болж нээгдэнэ")];
-
-  return (
-    <Dialog open={open} onOpenChange={value => { if (!value) onClose(); }}>
-      <DialogContent className="max-w-md">
-        <DialogTitle>{t("Аппаар суулгах")}</DialogTitle>
-        <DialogDescription>
-          {ios
-            ? t("iPhone, iPad дээр Safari өөрөө суулгах цонх гаргадаггүй тул гараар нэмнэ. Ердөө гурван алхам:")
-            : t("Хөтчөөс дамжуулан хэдийд ч суулгаж болно. Ердөө гурван алхам:")}
-        </DialogDescription>
-        <ol className="mt-1 grid gap-3">
-          {steps.map((step, index) => (
-            <li className="flex items-start gap-3 text-[14px] leading-relaxed" key={step}>
-              <span className="mt-[1px] grid size-6 shrink-0 place-items-center rounded-full bg-[#17181b] text-[12px] font-bold text-white">{index + 1}</span>
-              <span>{step}</span>
-            </li>
-          ))}
-        </ol>
-        <p className="mt-1 flex items-center gap-2 text-[13px] text-[#6b7078]">
-          {ios ? <Share size={15} aria-hidden="true" /> : <SquarePlus size={15} aria-hidden="true" />}
-          <span>{t("Суулгасны дараа сайт тусдаа цонхоор нээгдэж, офлайн үед ч эхэлнэ.")}</span>
-        </p>
-      </DialogContent>
-    </Dialog>
   );
 }
