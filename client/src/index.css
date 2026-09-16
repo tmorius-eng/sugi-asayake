@@ -1371,7 +1371,14 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .pref-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0; border-bottom: 1px solid rgba(23,24,27,.08); }
 .pref-toggle-row:last-child { border-bottom: 0; }
 .pref-toggle-row strong { display: block; font-size: 13px; }
-.pref-toggle-row span { display: block; margin-top: 3px; color: #6a706b; font-size: 11px; line-height: 1.5; }
+/* ⚠️ `> div` нь заавал (2026-09-16, Tom: "унтраалга далий, доошоо унжсан").
+   Энэ дүрэм нь тайлбарын span-д зориулагдсан боловч мөрөн доторх ГАНЦ span
+   нь тэр биш: `.switch-track` бас span. Хүрээгүй үед түүнд `margin-top: 3px`
+   тавигдаж, `position: absolute; top: 0; bottom: 0` дээр дээд margin нь
+   замыг 3px доош түлхээд өндрийг нь 24 → 21px болгодог байв — бөмбөлөг
+   (18px + 3px) яг доод ирмэг дээр тулж, унжсан мэт харагдана. Хөтөч дээр
+   хэмжиж тогтоосон. */
+.pref-toggle-row > div span { display: block; margin-top: 3px; color: #6a706b; font-size: 11px; line-height: 1.5; }
 .switch { position: relative; display: inline-flex; width: 42px; height: 24px; flex: 0 0 auto; }
 .switch input { position: absolute; inset: 0; z-index: 1; margin: 0; opacity: 0; cursor: pointer; }
 .switch-track { position: absolute; inset: 0; border-radius: 99px; background: rgba(23,24,27,.18); transition: background .18s var(--ease-out); }

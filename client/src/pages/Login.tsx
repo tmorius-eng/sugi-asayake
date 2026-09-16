@@ -98,7 +98,6 @@ export default function Login() {
         <CommerceHeader cartCount={0} backLabel="SUGI ASAYAKE" />
         <main className="auth-main">
           <div className="auth-head">
-            <p className="auth-kicker">01 / VERIFY PHONE</p>
             <h1>{verifyLine1} <em>{verifyLine2}</em></h1>
             <p className="auth-lede">{textFor("login-text-verify-lede", "Бүртгэл үүсгэхийн тулд эхлээд утасны дугаараа SMS-ээр баталгаажуулна уу.")}</p>
           </div>
@@ -115,7 +114,6 @@ export default function Login() {
       <CommerceHeader cartCount={0} backLabel="SUGI ASAYAKE" />
       <main className="auth-main">
         <div className="auth-head">
-          <p className="auth-kicker">{mode === "login" ? "01 / SIGN IN" : "02 / CREATE ACCOUNT"}</p>
           <h1>{mode === "login" ? <>{loginLine1} <em>{loginLine2}</em></> : <>{registerLine1} <em>{registerLine2}</em></>}</h1>
         </div>
 
