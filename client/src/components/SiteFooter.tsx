@@ -7,7 +7,7 @@ import { useCategories } from "@/hooks/useCategories";
 import { useShopContact } from "@/hooks/useShopContact";
 import { useSiteText } from "@/hooks/useSiteText";
 import { useT } from "@/hooks/useLocale";
-import { footerLogoUrl } from "@/components/site-footer-data";
+import { useBrandMedia } from "@/hooks/useBrandMedia";
 
 // NEWVISION.md §9: replaces Home.tsx's old single-row footer (logo + one
 // "Шуурхай холбоос" column mixing an about-anchor, a category-anchor, and a
@@ -28,8 +28,9 @@ import { footerLogoUrl } from "@/components/site-footer-data";
 // 2026-09-12: the two social links and the contact phone/email used to
 // arrive as props from a hardcoded module constant (site-footer-data.ts);
 // they are now admin-editable store settings, so the footer reads them
-// itself and no page has to pass them in. The logo stays a static asset --
-// it is a brand file in the repo, not a setting.
+// itself and no page has to pass them in. 2026-09-17: the logo followed the
+// same path -- it is the `brand-logo` media slot now (useBrandMedia), and
+// that module is gone.
 
 /**
  * `ctaBanner` (2026-09-06 homepage consolidation): optional, off by default
@@ -46,6 +47,7 @@ export default function SiteFooter({ ctaBanner }: { ctaBanner?: FooterCtaBanner 
   const t = useT();
   const contact = useShopContact();
   const categories = useCategories();
+  const { logo: brandLogo } = useBrandMedia();
   const socials = [
     contact.facebookUrl ? { label: "Facebook", href: contact.facebookUrl, Icon: Facebook } : null,
     contact.instagramUrl ? { label: "Instagram", href: contact.instagramUrl, Icon: Instagram } : null,
@@ -70,7 +72,7 @@ export default function SiteFooter({ ctaBanner }: { ctaBanner?: FooterCtaBanner 
       )}
       <div className="footer-grid">
         <div>
-          <img src={footerLogoUrl} alt="SUGI ASAYAKE Mongolia" className="footer-logo" />
+          <img src={brandLogo ?? undefined} alt="SUGI ASAYAKE Mongolia" className="footer-logo" />
           <p>{textFor("footer-text-tagline", "Япон чанарыг гэр бүл бүрт.")}</p>
           <div className="footer-socials" aria-label="SUGI ASAYAKE сошиал хуудаснууд">
             {socials.map(({ label, href, Icon }) => <a className="footer-social-link" href={href} target="_blank" rel="noreferrer" aria-label={`${label} хуудас нээх`} key={label}><Icon size={17} strokeWidth={1.8} /><span>{label}</span></a>)}

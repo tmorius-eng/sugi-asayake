@@ -94,6 +94,16 @@ async function resolveValues(): Promise<Map<string, string>> {
   // slot's default), or the preload is wasted.
   const heroUrl = media.find(row => row.slotKey === "home-hero")?.imageUrl || getSiteMediaSlot("home-hero").fallbackUrl;
 
+  // Brand logo (2026-09-17): the header wordmark is above the fold on every
+  // page, so it cannot wait for a tRPC round trip -- resolving it here means
+  // the first paint already carries the admin's uploaded logo instead of
+  // painting the previous one and swapping. Same "uploaded row, else the
+  // slot's registered default" precedence the client uses.
+  const brandMedia = JSON.stringify({
+    logo: media.find(row => row.slotKey === "brand-logo")?.imageUrl || getSiteMediaSlot("brand-logo").fallbackUrl,
+    symbol: media.find(row => row.slotKey === "brand-symbol")?.imageUrl || getSiteMediaSlot("brand-symbol").fallbackUrl,
+  }).replace(/</g, "\\u003c");
+
   const saved = new Map(rows.map(row => [row.slotKey, row.textValue]));
   const branchCount = String(branches.length);
   const textFor = (key: SiteTextSlotKey) =>
@@ -151,6 +161,7 @@ async function resolveValues(): Promise<Map<string, string>> {
     ["COOKIE_MARKETING_LABEL", escapeJsString(textFor("cookie-text-marketing-label"))],
     ["COOKIE_MARKETING_DESCRIPTION", escapeJsString(textFor("cookie-text-marketing-description"))],
     ["ANALYTICS_CONFIG_JSON", analyticsConfig],
+    ["BRAND_MEDIA_JSON", brandMedia],
   ]);
 
   cache = { renderedAt: now, values };
@@ -175,7 +186,7 @@ export async function renderIndexHtml(template: string, pathname = "/"): Promise
   // the site-wide values.
   const siteName = values.get("SEO_SITE_NAME") ?? getSiteTextSlot("seo-text-site-name").fallbackValue;
   const routeMeta = await resolveRouteMeta(pathname, siteName.replace(/&quot;/g, '"').replace(/&amp;/g, "&"));
-  return template.replace(/%((?:SEO|COOKIE|ANALYTICS)_[A-Z_]+)%/g, (match, key: string) => routeMeta?.get(key) ?? values.get(key) ?? fallbackFor(key) ?? match);
+  return template.replace(/%((?:SEO|COOKIE|ANALYTICS|BRAND)_[A-Z_]+)%/g, (match, key: string) => routeMeta?.get(key) ?? values.get(key) ?? fallbackFor(key) ?? match);
 }
 
 /**
@@ -219,6 +230,12 @@ function fallbackFor(key: string): string | undefined {
     case "SEO_TWITTER_DESCRIPTION": return escapeAttribute(getSiteTextSlot("seo-text-twitter-description").fallbackValue);
     case "SEO_CANONICAL": return escapeAttribute(ENV.publicBaseUrl || "https://sugiasayake.mn");
     case "SEO_STRUCTURED_DATA": return "{}";
+    // DB унтарсан ч лого нь блокт зөв JSON-оор очих ёстой: түүхий
+    // "%BRAND_MEDIA_JSON%" нь JSON.parse-д унаж, толгой хэсэг логогүй үлдэнэ.
+    case "BRAND_MEDIA_JSON": return JSON.stringify({
+      logo: getSiteMediaSlot("brand-logo").fallbackUrl,
+      symbol: getSiteMediaSlot("brand-symbol").fallbackUrl,
+    });
     case "SEO_OG_TYPE": return "website";
     case "SEO_OG_IMAGE_META": return "";
     case "SEO_VERIFICATION": return "";

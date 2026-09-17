@@ -4,7 +4,7 @@ import { Link } from "wouter";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import SiteFooter from "@/components/SiteFooter";
 import JobApplicationModal, { type ApplyTarget } from "@/components/JobApplicationModal";
-import { footerLogoUrl } from "@/components/site-footer-data";
+import { useBrandMedia } from "@/hooks/useBrandMedia";
 import { trpc } from "@/lib/trpc";
 import { useLocale, useT } from "@/hooks/useLocale";
 import { useShopContact } from "@/hooks/useShopContact";
@@ -30,6 +30,7 @@ export default function Careers() {
   const t = useT();
   const locale = useLocale();
   const contact = useShopContact();
+  const { logo: brandLogo } = useBrandMedia();
   const [openId, setOpenId] = useState<number | null>(null);
   const [applyFor, setApplyFor] = useState<ApplyTarget | null>(null);
 
@@ -48,7 +49,7 @@ export default function Careers() {
     <div className="careers-page">
       <div className="careers-card">
         <header className="careers-nav">
-          <Link href="/" className="careers-nav-logo" aria-label="SUGI ASAYAKE"><img src={footerLogoUrl} alt="SUGI ASAYAKE" /></Link>
+          <Link href="/" className="careers-nav-logo" aria-label="SUGI ASAYAKE"><img src={brandLogo ?? undefined} alt="SUGI ASAYAKE" /></Link>
           <nav className="careers-nav-links" aria-label={t("Цэс")}>
             <Link href="/">{t("Нүүр хуудас")}</Link>
             <Link href="/shop">{t("Дэлгүүр")}</Link>

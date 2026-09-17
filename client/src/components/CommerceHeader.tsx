@@ -7,6 +7,7 @@ import InstallAppButton from "@/components/InstallAppButton";
 import NotificationOptIn from "@/components/NotificationOptIn";
 import LocaleSwitch from "@/components/LocaleSwitch";
 import { useCategories } from "@/hooks/useCategories";
+import { useBrandMedia } from "@/hooks/useBrandMedia";
 import { useSiteText } from "@/hooks/useSiteText";
 import { toggleStorefrontTheme, useStorefrontTheme } from "@/hooks/useStorefrontTheme";
 import { useT } from "@/hooks/useLocale";
@@ -56,6 +57,7 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
   const [location] = useLocation();
   const textFor = useSiteText();
   const categories = useCategories();
+  const { logo: brandLogo } = useBrandMedia();
   const theme = useStorefrontTheme();
   const t = useT();
   // Resolved once so the desktop nav and the mobile drawer can never show
@@ -99,7 +101,7 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
           <div className="commerce-header-left">
             <Link href="/" className="commerce-brand">
               {!isHome && <span className="commerce-back"><ArrowLeft size={17} aria-hidden="true" /></span>}
-              <img src="/cdn/sugi-logo-transparent-clean_fee66cad.png" alt="SUGI ASAYAKE" />
+              <img src={brandLogo ?? undefined} alt="SUGI ASAYAKE" />
               {!marketingNav && backLabel ? <span>{backLabel}</span> : null}
             </Link>
           </div>

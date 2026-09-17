@@ -2,13 +2,11 @@ import { LayoutDashboard, LineChart, PackagePlus, CheckCircle2, CreditCard, File
 import { useState } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import type { AdminSection } from "../AdminWorkspace";
-import { footerLogoUrl } from "../site-footer-data";
+import { useBrandMedia } from "@/hooks/useBrandMedia";
 
-// One logo asset for the entire site -- reusing the storefront's own constant
-// rather than a second hardcoded path that could drift when the file changes.
-const ADMIN_LOGO_URL = footerLogoUrl;
-// Square lockup for the collapsed rail (Home.tsx serves this same file).
-const ADMIN_SYMBOL_URL = "/cdn/sugi-symbol_0a534a76.png";
+// One logo for the entire site: the `brand-logo` / `brand-symbol` media slots
+// (/admin -> Content & Media, 2026-09-17), which the storefront header and
+// footer read through this same hook. Previously two hardcoded /cdn/ paths.
 
 export type NavItem = { key: AdminSection; label: string; Icon: LucideIcon };
 
@@ -163,6 +161,7 @@ function SidebarNavContent({ section, role, badges, collapsed = false, onSelect,
    *  reference (top-right of the rail, beside the wordmark) either way. */
   onToggleCollapse: () => void;
 }) {
+  const { logo: brandLogo, symbol: brandSymbol } = useBrandMedia();
   const visibleNested = nestedGroup.filter(item => SECTION_ROLES[item.key].has(role));
   const visibleFlat = flatGroup.filter(item => SECTION_ROLES[item.key].has(role));
   const visibleAdminOnly = adminOnlyFlatGroup.filter(item => SECTION_ROLES[item.key].has(role));
@@ -183,7 +182,7 @@ function SidebarNavContent({ section, role, badges, collapsed = false, onSelect,
             is the only form that stays legible at 40px. */}
         <span className={`grid shrink-0 place-items-center rounded-xl bg-white ${collapsed ? "size-10 p-1" : "h-10 px-2.5"}`}>
           <img
-            src={collapsed ? ADMIN_SYMBOL_URL : ADMIN_LOGO_URL}
+            src={(collapsed ? brandSymbol : brandLogo) ?? undefined}
             alt="SUGI ASAYAKE"
             className={collapsed ? "size-full object-contain" : "h-6 w-auto max-w-[124px] object-contain"}
           />

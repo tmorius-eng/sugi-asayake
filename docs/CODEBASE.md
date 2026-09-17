@@ -175,7 +175,7 @@ browser → /api/trpc/<router>.<procedure>
 | `stock-movements.ts` / `scan-session.ts` / `transfer-reconcile.ts` | хөдөлгөөний Монгол нэр, сканы reducer, шилжүүлгийн тулгалт |
 | `barcode.ts` | `normaliseBarcode` (сканнерын tab/CR, зай, зураас), `createScanBuffer` (50мс түлхүүрийн зайгаар сканнерыг хүнээс ялгана) |
 | `catalog-filter.ts`, `search-synonyms.ts`, `product-tagging.ts` | хайлт/шүүлт/таг |
-| `site-text.ts`, `site-media.ts`, `store-settings.ts`, `legal-documents.ts`, `admin-tips.ts` | админаар засварлагддаг бүх текст/зураг/тохиргоо |
+| `site-text.ts`, `site-media.ts`, `store-settings.ts`, `legal-documents.ts`, `admin-tips.ts` | админаар засварлагддаг бүх текст/зураг/тохиргоо. `site-media.ts`-д slot нэмэхэд /admin → Content & Media дээр байршуулах карт **автоматаар** гарна (`ContentMediaPanel` бүртгэлийг тойрдог). Сайтын лого нь `brand-logo`/`brand-symbol` slot (2026-09-17) — компонентууд `useBrandMedia()`-аар уншина, эхний зурагдалт нь `indexHtml.ts`-ийн `#brand-media` JSON блокоос ирдэг тул анивчихгүй. ⚠️ Хөтчийн таб/утасны дүрс (`client/public/icons/*.png`) нь энэ slot-оос ХАМААРАХГҮЙ, гараар солино |
 | `delivery.ts`, `districts.ts`, `orders.ts`, `loyalty.ts`, `format.ts`, `slugify.ts` | нэг мөр бизнес дүрэм тус бүр |
 | `mobile.ts` | `normaliseMongolianMobile` — checkout StorePay-ийн хариуг бичсэн дугаартай тулгадаг тул хоёр тал ижил дүрэмтэй байх ёстой |
 | `face-auth.ts` | descriptor-ийн зай тооцоолол (браузер+сервер ижил) |

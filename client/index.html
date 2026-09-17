@@ -100,6 +100,10 @@
     <!-- Measurement (2026-09-14): ids from /admin → Дэлгүүрийн тохиргоо; the
          tags load in /vendor/analytics-init.js only after consent. -->
     <script type="application/json" id="analytics-config">%ANALYTICS_CONFIG_JSON%</script>
+    <!-- Brand logo (2026-09-17): resolved server-side from the brand-logo /
+         brand-symbol media slots so the header paints the right wordmark on
+         first render instead of swapping it after the tRPC call returns. -->
+    <script type="application/json" id="brand-media">%BRAND_MEDIA_JSON%</script>
     <script src="/vendor/analytics-init.js" defer></script>
   </head>
 
