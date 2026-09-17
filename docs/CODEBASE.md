@@ -280,7 +280,7 @@ pnpm build ; pnpm e2e        # 54 тест, компьютер + утас, produ
 
 ## 10. Скриптүүд (`scripts/`)
 
-`db-apply-migration.ts` (migration, нэг файл, prod), `db-apply-all-migrations.ts` (хоосон DB-д бүх migration — CI/шинэ орчин), `ci-seed.ts` (4 салбар), `enrich-products-from-open-facts.ts` (Open Facts TSV → барааны факт), `seed-gift-cards.ts`, `db-backup.ps1` / `db-restore.ps1`, `stock-ledger-rebaseline.ts` (drift засах), `test-residue-report.ts` / `test-residue-purge.ts` (амьд DB-ийн тестийн үлдэгдэл), `schema-drift-check.ts` (`drizzle/schema.ts` vs бодит `information_schema` + FK индекс — нөгөө лаптопын migration-ыг илрүүлнэ), `tmp-*.ts` (gitignore, нэг удаагийн), зураг/брэндийн seed скриптүүд.
+`db-apply-migration.ts` (migration, нэг файл, prod), `db-apply-all-migrations.ts` (хоосон DB-д бүх migration — CI/шинэ орчин), `ci-seed.ts` (4 салбар), `enrich-products-from-open-facts.ts` (Open Facts TSV → барааны факт), `seed-gift-cards.ts`, `db-backup.ps1` / `db-restore.ps1`, `stock-ledger-rebaseline.ts` (drift засах), `test-residue-report.ts` / `test-residue-purge.ts` (амьд DB-ийн тестийн үлдэгдэл), `schema-drift-check.ts` (`drizzle/schema.ts` vs бодит `information_schema` + FK индекс — нөгөө лаптопын migration-ыг илрүүлнэ), `check-updates.ps1` (долоо хоног тутмын `pnpm audit` + `pnpm outdated` + override эрүүл мэндийн тайлан, Windows toast; `-Install`-аар Task Scheduler-т бүртгэнэ, зөвхөн мэдээлнэ — юу ч суулгахгүй), `tmp-*.ts` (gitignore, нэг удаагийн), зураг/брэндийн seed скриптүүд.
 
 ---
 

@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import { cartItems, carts, productCategories, products, productVariants, pushSubscriptions, users } from "../drizzle/schema";
 import { getAbandonedCartsNeedingReminder, getDb } from "./db";
@@ -22,7 +22,7 @@ describeWithDatabase("automation jobs integration", () => {
   let optedInUserId = 0;
   let optedOutUserId = 0;
   const createdCartIds: number[] = [];
-  let logSpy: ReturnType<typeof vi.spyOn>;
+  let logSpy: MockInstance<typeof console.log>;
 
   beforeAll(async () => {
     const db = await getDb();

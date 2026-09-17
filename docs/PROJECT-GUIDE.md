@@ -61,7 +61,7 @@ pnpm dev
 ### Shared database and catalog navigation (Aiven)
 Aiven MySQL is the shared source of truth for both laptops; Cloudflare R2 stores image bytes. Keep the Aiven `DATABASE_URL` only in the ignored `.env`. Shop search/category/pagination state is kept in the URL, product breadcrumbs return to the shop, and the admin sidebar has a direct homepage link.
 
-Aiven service-ийн built-in daily backup-ийг идэвхжүүлж, нэмэлт локал backup нь өдөр бүр **19:00** цагт ажиллана (`SUGI ASAYAKE Daily DB Backup` Windows Task Scheduler task, 14 backup хадгална). Aiven URI-д `?ssl-mode=REQUIRED` байвал backup/restore script-үүд TLS flag-ийг автоматаар дамжуулна.
+Aiven service-ийн built-in daily backup-ийг идэвхжүүлж, нэмэлт локал backup нь өдөр бүр **19:00** цагт ажиллана (`SUGI ASAYAKE Daily DB Backup` Windows Task Scheduler task, 14 backup хадгална). Мөн долоо хоног бүрийн **Даваа 10:00**-д `SUGI ASAYAKE Weekly Dependency Check` ажиллаж (`scripts/check-updates.ps1`) advisory/хуучирсан пакет/override эрүүл мэндийг шалгаад `logs/dependency-checks/`-д бичиж, олдвол Windows toast өгнө — юу ч суулгахгүй, зөвхөн мэдээлнэ. Aiven URI-д `?ssl-mode=REQUIRED` байвал backup/restore script-үүд TLS flag-ийг автоматаар дамжуулна.
 
 **Aiven trial дуусахаас өмнө хийх ажил:** trial-ийн сүүлийн долоо хоногт Aiven-ээс хамгийн сүүлийн бүрэн `.zip` backup-ийг татаж аваад, өөр төхөөрөмж/cloud drive дээр хадгална. Дараа нь хүсвэл backup-ийг managed MySQL эсвэл локал MySQL рүү `scripts/db-restore.ps1 -DatabaseUrl "<target>" -BackupFile "<zip>" -Force`-оор сэргээнэ. Backup файл, password, CA certificate-ийг GitHub-д commit хийхгүй. Trial дуусах яг өдрийг Aiven Console-ийн Billing/Service мэдээллээс шалгана.
 
@@ -87,7 +87,7 @@ pnpm exec tsx scripts/db-apply-migration.ts drizzle/0056_discount_code_per_custo
 $env:RUN_AUTH_INTEGRATION_TESTS="1"; $env:COMMERCE_INTEGRATION_TESTS="1"; $env:RUN_MEDIA_INTEGRATION_TESTS="1"
 pnpm exec vitest run --no-file-parallelism
 ```
-Сүүлд БОДИТООР хэмжсэн бүрэн тоо: **783/783 ✅ (84/84 файл, регресс 0)**, `52e9e65` дээр (2026-09-12, SQL injection probe-той). ⚠️ Бүрэн suite ажиллаж байхад **зэрэгцүүлэн өөр тест/скрипт ижил Aiven дээр ажиллуулахгүй** — 2026-09-12-нд ингэснээс `loyalty.integration` hook 10 с timeout-оор нэг удаа унасан (485 с), цэвэр дараалсан run-д ногоон. Мөн **`pnpm check`** одоо 2 tsc (апп + `tsconfig.tests.json`-оор тест/скрипт) ба **`pnpm lint`** (ESLint, CI-д ч ажиллана) — commit хийхээсээ өмнө хоёуланг ажиллуул. Шинэ integration тест fake session user бичихгүй, `server/_test-helpers.ts`-ийн `testSessionUser({id,...})`-ийг ашиглана (CI горимд gate-үүд идэвхгүй тул ихэнх integration файл skip болно — хэвийн). ⚠️ Strict rate-limit tier-үүд одоо DB дээр тоолдог (`rate_limit_buckets`) тул тестэд **тогтмол IP** ашиглавал 15 минутын дотор дахин ажиллуулахад блоклогдоно — `callerFor`-ийн санамсаргүй/per-run IP загварыг дага.
+Сүүлд БОДИТООР хэмжсэн бүрэн тоо: **1028 passed / 2 skipped ✅ (104 файл ногоон, регресс 0, 1040 с)**, 2026-09-17-нд vitest **4.1.11** дээр (2 → 4 мажор үсрэлтийн дараа; дэлгэрэнгүй HISTORY.md). ⚠️ Бүрэн suite ажиллаж байхад **зэрэгцүүлэн өөр тест/скрипт ижил Aiven дээр ажиллуулахгүй** — 2026-09-12-нд ингэснээс `loyalty.integration` hook 10 с timeout-оор нэг удаа унасан (485 с), цэвэр дараалсан run-д ногоон. Мөн **`pnpm check`** одоо 2 tsc (апп + `tsconfig.tests.json`-оор тест/скрипт) ба **`pnpm lint`** (ESLint, CI-д ч ажиллана) — commit хийхээсээ өмнө хоёуланг ажиллуул. Шинэ integration тест fake session user бичихгүй, `server/_test-helpers.ts`-ийн `testSessionUser({id,...})`-ийг ашиглана (CI горимд gate-үүд идэвхгүй тул ихэнх integration файл skip болно — хэвийн). ⚠️ Strict rate-limit tier-үүд одоо DB дээр тоолдог (`rate_limit_buckets`) тул тестэд **тогтмол IP** ашиглавал 15 минутын дотор дахин ажиллуулахад блоклогдоно — `callerFor`-ийн санамсаргүй/per-run IP загварыг дага.
 
 ### E2E тест (Playwright, 2026-09-16-аас)
 
@@ -133,6 +133,7 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
 Өдөр бүрийн бүрэн тэмдэглэл HISTORY.md-д байна — тодорхой bug/шийдвэрийн
 шалтгааныг мэдэх хэрэгтэй үед л тэнд гарчгаар хайна.
 
+- (09-17) **Dependabot 40 → 0** — production талд эмзэг нь ердөө 2 байсан (`sharp@0.34.5`, `adm-zip@0.5.18`, хоёулаа `@huggingface/transformers`-ээр ирсэн), үлдсэн нь dev хэрэгсэл. `vite` 7.3.6 + `vitest` 4.1.11 + 9 шинэ override. Давтахгүйн тулд **`SUGI ASAYAKE Weekly Dependency Check`** (Даваа 10:00, `scripts/check-updates.ps1`, Windows toast-оор сэрэмжлүүлнэ, юу ч суулгахгүй)
 - (09-16) **Автомат мэдэгдэл /admin-аас засварлагдана** — захиалгын 7 төлөвийн гарчиг/текст кодоос тохиргоо руу гарав ("Автомат мэдэгдэл (push)" бүлэг); бие нь хоосон = тэр төлөв унтарна, `push-order-notifications=0` = бүгд
 - (09-16) **Админд дутуу байсан 3 устгалт** — барааны ангилал, нийтлэлийн ангилал, захиалга. Захиалга устгах нь `adminProcedure` + 4 хаалт (цуцлагдсан, төлөгдөөгүй, мөнгө/эрхийн мөргүй, нөөцийн нийлбэр 0) + аудитад хуулбар
 - (09-16) **Мэдэгдлийг /admin-аас илгээх** — кампанит ажлын гурав дахь суваг (имэйл/SMS-ийн хажууд), дотоод холбоостой, илгээхийн өмнө бодит хүрэх тоо; `users.pushOptIn` (0086) нь зарыг захиалгын мэдэгдлээс салгана
@@ -320,7 +321,7 @@ session-ий тэмдэглэл HISTORY.md-д, дүрэм л энд. Ажилл�
 9. **Барааны бодит зураг — үлдсэн 415** (`docs/products-needing-photos.csv`): автомат эх сурвалж шавхагдсан, дэлгүүрт өөрөө авах л үлдсэн.
 10. **Брэндийн лого — 9-өөс ганц нь** (Cocochi, тэр нь ч бодит лого биш кампанит зураг). /admin → Брэнд дээр 8 лого оруулбал зурвас жигдэрнэ.
 11. **Бизнесийн алхам шаардах**: QPay merchant (sandbox эрх ч болно), eBarimt ([EBARIMT.md](EBARIMT.md)-ийн 6 асуулт), StorePay-ийн 7 утга, Smart Software нэвтрэх нэр/нууц үг, Brevo SMS кредит, Honeybadger API key, GA4/Pixel ID, staging DNS, production host дээр `NOTIFICATIONS_DISPATCH=1`, ntfy token rotate.
-12. **GitHub → Settings → Code security → Dependabot alerts** асаах (шинэчлэлтийн PR-ууд `.github/dependabot.yml`-аар аль хэдийн тохируулагдсан, харин сэрэмжлүүлэг нь repo-ийн тохиргоо).
+12. ✅ **Dependabot alerts асаагдсан** (2026-09-17: 40 нээлттэй сэрэмжлүүлэг ирсэн, бүгдийг хаасан). Үлдсэн ажил нь **ажлын лаптоп дээр `.\scripts\check-updates.ps1 -Install`** ажиллуулж, долоо хоног тутмын шалгалтыг тэндээ ч бүртгэх (гэрийн лаптоп дээр бүртгэгдсэн).
 13. **2 junk захиалга цуцлах/устгах**: `#6802 SAMU21BHE3OSC20F` (бэлгийн карт 200,000₮, 2026-09-15) ба `#6655 SAMU0NHNJY458K8X` ("ТУРШИЛТ — Claude", 26,980₮, 2026-09-14). Хоёул `pending/unpaid` тул борлуулалтад тоологдохгүй ч /admin-д хүлээгдэж буй мэт харагдана. ⚠️ Бэлгийн картынх нь код үүсгэсэн эсэхийг устгахын өмнө шалгах.
 14. **HeatWave дээрх `sugi_migtest` схем** — migration chain туршилтын үлдэгдэл. ⚠️ Гарын авлагад "хоосон" гэж бичигдсэн байсан нь БУРУУ: 61 хүснэгттэй (2026-09-16-нд шалгасан). Аппын хэрэглэгчид харагддаггүй тул зөвхөн admin эрхээр л устгана.
 

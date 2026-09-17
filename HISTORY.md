@@ -4,6 +4,63 @@
 
 ---
 
+## Dependabot 40 сэрэмжлүүлэг → 0, ба долоо хоног тутмын автомат шалгалт (2026-09-17)
+
+Tom GitHub дээр **40 нээлттэй сэрэмжлүүлэг** (2 critical, 20 гаруй high) харуулав. Бүгдийг хаалаа — `pnpm audit` 38 advisory-оос **0** болов.
+
+### Бодитоор юу эмзэг байсан бэ
+
+Жагсаалт урт харагдсан ч 40 мөр нь **11 пакет** дээр давхардсан байв. Гол ялгаа: аль нь production-д очдог вэ.
+
+- **Production талд ЗӨВХӨН 2**: `sharp@0.34.5` (libvips/libheif CVE-үүд) ба `adm-zip@0.5.18` — хоёулаа `@huggingface/transformers` → `onnxruntime-node` гинжээр ирсэн. Манай өөрийн шууд `sharp` нь аль хэдийн 0.35.4 буюу засагдсан хувилбар байсан; эмзэг нь transformers-ийн татсан хуучин хуулбар байв. (transformers нь `server/_core/moderationModel.ts`-д динамик `import()`-оор л ачаалагддаг.)
+- **Үлдсэн бүгд хөгжүүлэлтийн хэрэгсэл**: vite, vitest, rollup, tar, browserslist, picomatch, esbuild, @babel/core, launch-editor. Эдгээрийн дийлэнх нь "dev server-ийн порт руу хортой вэбсайт хандах" төрлийн халдлага — production build-д огт очдоггүй. Гэхдээ Dependabot суусан хувилбараар тоолдог тул бүгдийг засав.
+
+### Хэрхэн зассан
+
+**Шууд хамаарал (2):** `vite` 7.1.9 → **7.3.6**, `vitest` 2.1.9 → **4.1.11**.
+
+**Дамжин ирдэг (9 шинэ override)** `package.json`-ы `pnpm.overrides`-д: `tar >=7.5.22`, `picomatch@4 >=4.0.7`, `browserslist >=4.29.0`, `baseline-browser-mapping >=2.11.24`, `rollup >=4.63.3`, `sharp >=0.35.4 <0.36`, `adm-zip >=0.6.1 <0.7`, `esbuild >=0.25.10 <0.29`, `@babel/core >=7.29.6 <8`.
+
+⚠️ `adm-zip`-ийн нэг advisory-д **засварласан хувилбар огт байхгүй** (`fix:<0.0.0`, эмзэг муж `>=0.5.9 <=0.6.0`). Тиймээс 0.6.**1** рүү гаргасан — мужаас гарах цорын ганц зам. onnxruntime-node нь `^0.5.x` гэж тунхагладаг тул override-гүйгээр хэзээ ч шинэчлэгдэхгүй байв.
+
+### vitest 2 → 4 (хоёр мажор үсрэлт) — цорын ганц эвдрэл
+
+`ReturnType<typeof vi.spyOn>` нь vitest 4-т ажиллахаа больсон: `MockInstance<T extends Procedure | Constructable>` болж өргөссөн тул `logSpy.mock.calls.map(call => ...)`-ийн `call` нь implicit `any` болж, `tsconfig.tests.json` 9 алдаа өглөө. Засвар нь 2 файлд нэг мөр: `let logSpy: MockInstance<typeof console.log>`. Өөр юу ч хөндөгдөөгүй — `vi.mock` 8 файлд, `mockRestore` 5 газар, fake timers 4 файлд бүгд хэвээр ажиллав.
+
+### Баталгаажуулалт (бодитоор ажиллуулсан)
+
+- `pnpm audit`: **38 → 0 advisory**
+- `pnpm check` (2 tsc) ✅, `pnpm lint` ✅
+- `pnpm build` ✅ — үндсэн chunk 497 KB / **gzip 157.22 KB** (өмнөх хэмжилт 484/152; vite 7.3.6-ийн ялгаа)
+- Бүрэн suite бүх gate-тэй, `--no-file-parallelism`: **1028 passed / 2 skipped (104 файл ногоон, 1 skip)**, регресс 0, 1040 секунд
+
+### Юуг зориудаар ХИЙГЭЭГҮЙ
+
+`pnpm outdated` дээр 10 мажор шинэчлэлт хүлээж байна: **vite 8, vitest 5, express 5, typescript 7, recharts 3, superjson 2, cookie 2, lucide-react 1.x, @vitejs/plugin-react 6, @types/express 5**. Аль нь ч аюулгүй байдлын шалтгаангүй (7.3.6/4.1.11 дээр advisory 0) бөгөөд express 4→5, typescript 5→7 нь өөрсдөө бүтэн session-ий ажил. Эдгээр нь шийдвэр шаардана — сэрэмжлүүлэг биш.
+
+### `pnpm.overrides` хаана байх ёстой вэ (дахин шалгав)
+
+Глобал pnpm нь **11.22.0** боловч `packageManager: pnpm@10.4.1`-ийг хүндэтгэн түүн рүү шилждэг. 11-ийн wrapper нь "pnpm field in package.json is no longer read" гэж stderr-т бичдэг ч override-ууд **бодитоор хэрэгжиж байгаа** нь lockfile-ийн `overrides:` блокоор баталгаажив (16/16). 2026-09-06-нд шалгасанчлан `pnpm-workspace.yaml`-д бичсэн override-ыг энэ pnpm хувилбар чимээгүй үл тоодог тул **package.json-д үлдээв**.
+
+Гэхдээ энэ бол чимээгүй эвдрэх ангилал: `packageManager`-ыг 11 рүү өргөвөл override бүр үхэж, тогтоосон 16 хувилбар бүгд буцаж ухарна — алдаа заахгүй. Тиймээс долоо хоног тутмын шалгалтад **override эрүүл мэндийн** хэсэг нэмэв: package.json-д тунхагласан нэр бүр lockfile-ийн `overrides:` блокт байгаа эсэхийг харьцуулж, дутвал toast өгнө.
+
+### `scripts/check-updates.ps1` + Windows Task Scheduler
+
+40 сэрэмжлүүлэг хуримтлагдсан жинхэнэ шалтгаан нь session хоорондын хугацаанд **хоёр лаптопын аль нь ч хамааралд хэзээ ч хардаггүй** байсан. Тиймээс автоматжуулав:
+
+- **`SUGI ASAYAKE Weekly Dependency Check`** — Даваа гараг 10:00, `-StartWhenAvailable` (лаптоп унтраалттай байсан ч хожим гүйцээж ажиллана), 30 минутын хязгаар.
+- Тайлан: `logs/dependency-checks/YYYY-MM-DD-HHmm.txt` (сүүлийн 12-ыг хадгална, `logs/` нь gitignore-д).
+- Гурван хэсэг: advisory-ууд, хуучирсан шууд хамаарал (мажорыг "needs a decision" гэж тэмдэглэнэ), override эрүүл мэнд.
+- Ямар нэг зүйл олдвол **Windows toast** — зөвхөн лог файл бичвэл хэн ч хэзээ ч уншихгүй (2026-09-16-ны "олдох эсэхийг олох ёстой хүний байрнаас шалга" дүрэм).
+- **Юу ч суулгахгүй, зөвхөн мэдээлнэ.** Хараа хяналтгүй `pnpm update` нь амьд сайтыг унагааж болно; засвар нь гараар — bump эсвэл override, дараа нь check + lint + build + бүрэн suite.
+- Суулгах: `.\scripts\check-updates.ps1 -Install` (лаптоп тус бүр нэг удаа; **ажлын лаптоп дээр хараахан хийгээгүй**). Устгах: `-Uninstall`.
+
+PowerShell-ийн нэг урхи: `$ErrorActionPreference = "Stop"` үед `pnpm audit`-ийн stderr дэх WARN мөр болон тэгээс ялгаатай exit code (advisory олдвол хэвийн) хоёулаа script-ийг шатаадаг. Тиймээс pnpm дуудлагуудыг `cmd /c "... 2>nul"`-оор дамжуулж, exit code-ыг тэглэдэг `Invoke-PnpmJson` helper-ээр боов.
+
+Scheduler-ээс бодитоор ажиллуулж шалгав: `LastTaskResult 0`, тайлан дахин бичигдсэн, дараагийн ажиллалт 2026-09-21 10:00.
+
+---
+
 ## CI НОГООН — сүүлийн 3 уналт нь цаг хугацаанд мэдрэг аппын алдаа байв (2026-09-16, шөнө)
 
 **42 → 13 → 3 → 0.** Сүүлийн гурав нь хамгийн сургамжтай нь: **тестийн биш, аппын алдаа**, зөвхөн орчны хурднаас болж нуугддаг байв. HeatWave руу ssh тунелээр холбогдсон хөгжүүлэгчийн машин дээр үйлдэл бүрийн хооронд хэдэн миллисекунд өнгөрдөг тул санамсаргүй ногоон; CI-д (контейнер дэх локал MySQL, латенц бараг тэг) бүх зүйл нэг секундэд багтдаг тул тогтмол улаан.

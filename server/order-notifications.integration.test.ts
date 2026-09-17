@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { testSessionUser } from "./_test-helpers";
 import { eq } from "drizzle-orm";
 import { adminAuditLogs, orderItems, orders, productCategories, productVariants, products, users } from "../drizzle/schema";
@@ -33,7 +33,7 @@ describeWithDatabase("order notification integration", () => {
   let orderId = 0;
   let adminCaller: ReturnType<typeof appRouter.createCaller>;
   let shopperCaller: ReturnType<typeof appRouter.createCaller>;
-  let logSpy: ReturnType<typeof vi.spyOn>;
+  let logSpy: MockInstance<typeof console.log>;
 
   beforeAll(async () => {
     const db = await getDb();
