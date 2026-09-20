@@ -13,7 +13,7 @@ import { paymentBadgeFor } from "@shared/orders";
 import { ubDistricts, ubDistrictLabels, type UbDistrict } from "@shared/districts";
 import {
   skinTypeOptions, skinConcernOptions, interiorStyleOptions,
-  hairConcernOptions, wellnessInterestOptions,
+  hairConcernOptions, wellnessInterestOptions, bodyConcernOptions, bodySkinTypeLabels,
   genderLabels, hairTypeLabels, fragrancePreferenceLabels, skinRoutineComplexityLabels,
 } from "@shared/catalog-filter";
 import { toast } from "sonner";
@@ -433,7 +433,8 @@ function PreferencesTab() {
   const hasAnyPreference = Boolean(
     user?.skinType || user?.skinConcerns || user?.interiorStyle || user?.hairType || user?.hairConcerns ||
     user?.fragrancePreference || user?.wellnessInterests || user?.gender || user?.primaryDistrict ||
-    user?.birthYear || user?.occupation || user?.skinRoutineComplexity || user?.hasYoungChildren != null,
+    user?.birthYear || user?.occupation || user?.skinRoutineComplexity || user?.hasYoungChildren != null ||
+    user?.bodySkinType || user?.bodyConcerns,
   );
   const age = user?.birthYear ? new Date().getFullYear() - user.birthYear : null;
   const summaryGroups: Array<{ title: string; chips: string[] }> = [
@@ -459,6 +460,13 @@ function PreferencesTab() {
       chips: [
         user?.hairType ? hairTypeLabels[user.hairType as keyof typeof hairTypeLabels] : null,
         ...(user?.hairConcerns ? user.hairConcerns.split(",").map(value => hairConcernOptions.find(option => option.value === value)?.label).filter(Boolean) as string[] : []),
+      ].filter((chip): chip is string => Boolean(chip)),
+    },
+    {
+      title: "Биеийн арчилгаа",
+      chips: [
+        user?.bodySkinType ? bodySkinTypeLabels[user.bodySkinType as keyof typeof bodySkinTypeLabels] : null,
+        ...(user?.bodyConcerns ? user.bodyConcerns.split(",").map(value => bodyConcernOptions.find(option => option.value === value)?.label).filter(Boolean) as string[] : []),
       ].filter((chip): chip is string => Boolean(chip)),
     },
     {

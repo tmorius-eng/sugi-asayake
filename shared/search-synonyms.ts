@@ -40,7 +40,7 @@
  * required query zeroed the entire search -- "шүдний оо" returned 0 results
  * while 12 products were literally described with that exact phrase.
  */
-export const SYNONYM_GROUPS: readonly (readonly string[])[] = [
+export const DEFAULT_SYNONYM_GROUPS: readonly (readonly string[])[] = [
   // ---- Үсний бүтээгдэхүүн ----------------------------------------------
   ["шампунь", "шампун", "шампуунь", "шампуни", "шампү", "shampoo", "shampun"],
   ["кондиционер", "нөхөн сэргээгч", "conditioner", "rinse"],
@@ -238,6 +238,10 @@ export const SYNONYM_GROUPS: readonly (readonly string[])[] = [
   ["бор", "хүрэн", "brown"],
 ];
 
+
+/** Хуучин нэр — тест, скриптүүд үүгээр ханддаг. Seed-ийн жагсаалттай ижил. */
+export const SYNONYM_GROUPS = DEFAULT_SYNONYM_GROUPS;
+
 /**
  * Informal Mongolian romanisation (2026-09-12, Tom: "заавал кириллээр
  * хүмүүс бичихгүй, утсаар зүгээр латинаар бичих ч хүн байгаа").
@@ -279,57 +283,16 @@ export function latinVariants(cyrillic: string): string[] {
 }
 
 /**
- * Collapses doubled letters: "morinii" -> "morini", "shampuunь" -> ...
+ * Collapses doubled letters: "morinii" -> "morini".
  *
  * Romanised Mongolian has no agreed spelling for long vowels, so the same
  * word arrives as "morini", "morinii" or "moriniy" depending on the typist.
  * Rather than enumerate those in the dictionary, an unknown word is looked
  * up a second time with its doubles collapsed, and the dictionary's own
- * keys are indexed the same way.
+ * keys are indexed the same way. Хайлтын индекс (server/search) мөн үг бүрийг
+ * энэ хэлбэрээр давхар индекслэдэг тул экспортлов (2026-09-20).
  */
-const collapseDoubles = (word: string) => word.replace(/(.)\1+/g, "$1");
-
-/**
- * word -> every word in the same concept (including itself).
- *
- * Groups that share a word are MERGED rather than left to overwrite each
- * other. Some overlaps are deliberate bridges -- "cream" belongs to both
- * "тос" (Mongolian uses one word for oil and cream) and "крем" -- and
- * without merging, the result depended on which group happened to be
- * declared last: "cream" found both concepts while "крем" found only one.
- * Building the union makes the dictionary order-independent, so a group can
- * be added anywhere in the list without silently changing another.
- */
-const EXPANSION = new Map<string, Set<string>>();
-for (const group of SYNONYM_GROUPS) {
-  // Each group also gains the Latin spellings of its Mongolian words, so a
-  // shopper typing "shampun" or "morinii tos" lands in the same concept as
-  // one typing "шампунь" or "морины тос".
-  const merged = new Set<string>(group);
-  for (const word of group) for (const variant of latinVariants(word)) merged.add(variant);
-  // Pull in everything already reachable from any of these words.
-  new Set(merged).forEach(word => EXPANSION.get(word)?.forEach(other => merged.add(other)));
-  // Point every member -- old and new -- at the one merged set.
-  merged.forEach(word => EXPANSION.set(word, merged));
-}
-
-/**
- * The same map keyed by collapsed spelling, consulted only when an exact
- * lookup misses -- see collapseDoubles. Built after EXPANSION so it covers
- * the generated Latin variants too.
- */
-const COLLAPSED = new Map<string, Set<string>>();
-EXPANSION.forEach((bucket, word) => {
-  const key = collapseDoubles(word);
-  if (!COLLAPSED.has(key)) COLLAPSED.set(key, bucket);
-});
-
-/** Exact match first, then the doubled-letter-tolerant one. */
-const lookup = (word: string): Set<string> | undefined =>
-  EXPANSION.get(word) ?? COLLAPSED.get(collapseDoubles(word));
-
-/** Multi-word entries, longest first, so "шүдний оо" wins over "шүд". */
-const PHRASES = Array.from(EXPANSION.keys()).filter(word => word.includes(" ")).sort((a, b) => b.length - a.length);
+export const collapseDoubles = (word: string) => word.replace(/(.)\1+/g, "$1");
 
 /**
  * Folds the spelling differences a shopper cannot be expected to get right.
@@ -350,55 +313,175 @@ export function normaliseSearchText(value: string): string {
     .trim();
 }
 
+/** Нэг ойлголт: худалдан авагчийн бичсэн үг + түүний бүх хувилбар. */
+export type QueryConcept = {
+  /** Худалдан авагчийн өөрийнх нь бичсэн үг эсвэл таарсан хэллэг. */
+  own: string;
+  /** Ойлголтын бүх үг (own орсон). Толинд байхгүй үг → [own]. */
+  alternatives: string[];
+  /** Тогтвортой ойлголтын түлхүүр; толинд байхгүй бол null. */
+  conceptId: string | null;
+};
+
+export type SynonymDictionary = {
+  groups: readonly (readonly string[])[];
+  /** Exact match first, then the doubled-letter-tolerant one. */
+  lookup(word: string): Set<string> | undefined;
+  conceptIdOf(word: string): string | null;
+  expandQueryGroups(rawQuery: string): string[][];
+  expandQueryConcepts(rawQuery: string): QueryConcept[];
+  expandQuery(rawQuery: string): string[];
+  /** Текстэд (барааны нэр, тайлбар) ямар ойлголтууд байгааг -- индекс барихад. */
+  conceptIdsForText(text: string): string[];
+  hasKnownSynonym(rawQuery: string): boolean;
+};
 
 /**
- * Turns a shopper's query into one GROUP OF ALTERNATIVES per concept they
- * typed.
+ * Толийг бүлгүүдээс барина (2026-09-20). Өмнө нь энэ бүх төлөв модулийн
+ * дээд түвшинд, кодын жагсаалтаас нэг удаа баригддаг байв -- одоо бүлгүүд DB-ийн
+ * `search_synonyms`-оос ирдэг (admin-аас засварлагдана) тул сервер өөрийн
+ * толио энэ функцээр барьж кэшлэнэ (server/search/dictionaries.ts). Кодын
+ * `DEFAULT_SYNONYM_GROUPS` нь seed ба DB-гүй орчны (тест, клиент) анхдагч.
  *
- * "гарын тос" produces two groups -- [гар, гарын, hand] and
- * [тос, тосон, тослог, oil, cream] -- rather than one flat list of five
- * words. That distinction is what makes the results usable: searched as a
- * flat OR, the top hit for "гарын тос" was an oil-blotting PAPER, because
- * it matched one word strongly. Requiring one word from EACH group instead
- * returns hand creams, which is what was asked for.
+ * word -> every word in the same concept (including itself).
  *
- * Words the dictionary does not know (a brand, a full product name) become
- * a group of one, so they are still required and still matched.
+ * Groups that share a word are MERGED rather than left to overwrite each
+ * other. Some overlaps are deliberate bridges -- "cream" belongs to both
+ * "тос" (Mongolian uses one word for oil and cream) and "крем" -- and
+ * without merging, the result depended on which group happened to be
+ * declared last: "cream" found both concepts while "крем" found only one.
+ * Building the union makes the dictionary order-independent, so a group can
+ * be added anywhere in the list without silently changing another.
  */
-export function expandQueryGroups(rawQuery: string): string[][] {
-  const normalised = normaliseSearchText(rawQuery);
-  if (!normalised) return [];
-
-  const groups: string[][] = [];
-  let remainder = normalised;
-
-  // Phrases first: "шүдний оо" must resolve to toothpaste rather than being
-  // split into "шүдний" plus an unindexable "оо".
-  for (const phrase of PHRASES) {
-    if (!remainder.includes(phrase)) continue;
-    groups.push(Array.from(EXPANSION.get(phrase)!));
-    remainder = remainder.replaceAll(phrase, " ");
+export function buildSynonymDictionary(groups: readonly (readonly string[])[]): SynonymDictionary {
+  const expansion = new Map<string, Set<string>>();
+  for (const rawGroup of groups) {
+    const group = rawGroup.map(word => normaliseSearchText(word)).filter(Boolean);
+    if (group.length < 2) continue;
+    // Each group also gains the Latin spellings of its Mongolian words, so a
+    // shopper typing "shampun" or "morinii tos" lands in the same concept as
+    // one typing "шампунь" or "морины тос".
+    const merged = new Set<string>(group);
+    for (const word of group) for (const variant of latinVariants(word)) merged.add(variant);
+    // Pull in everything already reachable from any of these words.
+    new Set(merged).forEach(word => expansion.get(word)?.forEach(other => merged.add(other)));
+    // Point every member -- old and new -- at the one merged set.
+    merged.forEach(word => expansion.set(word, merged));
   }
 
-  for (const word of remainder.split(" ").filter(Boolean)) {
-    const synonyms = lookup(word);
-    groups.push(synonyms ? Array.from(synonyms) : [word]);
-  }
+  // Ойлголтын тогтвортой түлхүүр: нэгдсэн олонлогийн эрэмбэлсэн эхний үг.
+  // Бүлгүүд нэгдэх тул "бүлгийн эхний үг" гэдэг нь тодорхойгүй; эрэмбэлсэн
+  // эхнийх нь бүлгийн дараалал, DB-ийн мөрийн дарааллаас үл хамаарна.
+  const conceptIdByBucket = new Map<Set<string>, string>();
+  expansion.forEach(bucket => {
+    if (!conceptIdByBucket.has(bucket)) conceptIdByBucket.set(bucket, Array.from(bucket).sort()[0]);
+  });
 
-  return groups;
+  // The same map keyed by collapsed spelling, consulted only when an exact
+  // lookup misses -- see collapseDoubles. Built after expansion so it covers
+  // the generated Latin variants too.
+  const collapsed = new Map<string, Set<string>>();
+  expansion.forEach((bucket, word) => {
+    const key = collapseDoubles(word);
+    if (!collapsed.has(key)) collapsed.set(key, bucket);
+  });
+
+  const lookup = (word: string): Set<string> | undefined =>
+    expansion.get(word) ?? collapsed.get(collapseDoubles(word));
+
+  const conceptIdOf = (word: string): string | null => {
+    const bucket = lookup(word);
+    return bucket ? conceptIdByBucket.get(bucket) ?? null : null;
+  };
+
+  /** Multi-word entries, longest first, so "шүдний оо" wins over "шүд". */
+  const phrases = Array.from(expansion.keys()).filter(word => word.includes(" ")).sort((a, b) => b.length - a.length);
+
+  /**
+   * Turns a shopper's query into one GROUP OF ALTERNATIVES per concept they
+   * typed.
+   *
+   * "гарын тос" produces two groups -- [гар, гарын, hand] and
+   * [тос, тосон, тослог, oil, cream] -- rather than one flat list of five
+   * words. That distinction is what makes the results usable: searched as a
+   * flat OR, the top hit for "гарын тос" was an oil-blotting PAPER, because
+   * it matched one word strongly. Requiring one word from EACH group instead
+   * returns hand creams, which is what was asked for.
+   *
+   * Words the dictionary does not know (a brand, a full product name) become
+   * a group of one, so they are still required and still matched.
+   */
+  const expandQueryConcepts = (rawQuery: string): QueryConcept[] => {
+    const normalised = normaliseSearchText(rawQuery);
+    if (!normalised) return [];
+    const concepts: QueryConcept[] = [];
+    let remainder = normalised;
+    // Phrases first: "шүдний оо" must resolve to toothpaste rather than being
+    // split into "шүдний" plus an unindexable "оо".
+    for (const phrase of phrases) {
+      if (!remainder.includes(phrase)) continue;
+      const bucket = expansion.get(phrase)!;
+      concepts.push({ own: phrase, alternatives: Array.from(bucket), conceptId: conceptIdByBucket.get(bucket) ?? null });
+      remainder = remainder.replaceAll(phrase, " ");
+    }
+    for (const word of remainder.split(" ").filter(Boolean)) {
+      const bucket = lookup(word);
+      concepts.push({
+        own: word,
+        alternatives: bucket ? Array.from(new Set([word, ...bucket])) : [word],
+        conceptId: bucket ? conceptIdByBucket.get(bucket) ?? null : null,
+      });
+    }
+    return concepts;
+  };
+
+  // Хуучин хэлбэр: толины бүлгийг ЯГ тэр чигээр нь (өөрийн буруу бичсэн үггүй)
+  // -- FULLTEXT замын тестүүд үүнд тулгуурладаг.
+  const expandQueryGroups = (rawQuery: string): string[][] =>
+    expandQueryConcepts(rawQuery).map(concept => {
+      const bucket = lookup(concept.own);
+      return bucket ? Array.from(bucket) : concept.alternatives;
+    });
+
+  /**
+   * Every word from every group, flattened -- the widened fallback used when
+   * requiring one word per group finds nothing at all.
+   */
+  const expandQuery = (rawQuery: string): string[] => {
+    const seen = new Set<string>();
+    for (const group of expandQueryGroups(rawQuery)) for (const word of group) seen.add(word);
+    return Array.from(seen);
+  };
+
+  const conceptIdsForText = (text: string): string[] => {
+    const normalised = normaliseSearchText(text);
+    if (!normalised) return [];
+    const ids = new Set<string>();
+    for (const phrase of phrases) {
+      if (normalised.includes(phrase)) { const id = conceptIdOf(phrase); if (id) ids.add(id); }
+    }
+    for (const word of normalised.split(" ")) {
+      // Зөвхөн яг таарсан үг (collapse-гүй): барааны текст дэх "oil" нь тос
+      // ойлголт мөн, харин "price" "rice"-ийн ойлголт БИШ.
+      const bucket = expansion.get(word);
+      if (bucket) { const id = conceptIdByBucket.get(bucket); if (id) ids.add(id); }
+    }
+    return Array.from(ids);
+  };
+
+  const hasKnownSynonym = (rawQuery: string): boolean =>
+    normaliseSearchText(rawQuery).split(" ").some(word => Boolean(lookup(word))) ||
+    phrases.some(phrase => normaliseSearchText(rawQuery).includes(phrase));
+
+  return { groups, lookup, conceptIdOf, expandQueryGroups, expandQueryConcepts, expandQuery, conceptIdsForText, hasKnownSynonym };
 }
 
-/**
- * Every word from every group, flattened -- the widened fallback used when
- * requiring one word per group finds nothing at all.
- */
-export function expandQuery(rawQuery: string): string[] {
-  const seen = new Set<string>();
-  for (const group of expandQueryGroups(rawQuery)) for (const word of group) seen.add(word);
-  return Array.from(seen);
-}
+/** Кодын seed бүлгүүдээр барьсан анхдагч толь -- DB-гүй орчинд (тест, клиент). */
+export const defaultSynonymDictionary = buildSynonymDictionary(DEFAULT_SYNONYM_GROUPS);
 
-/** Does this query mean something to the dictionary at all? Used to decide whether widening is worth a second query. */
-export const hasKnownSynonym = (rawQuery: string): boolean =>
-  normaliseSearchText(rawQuery).split(" ").some(word => Boolean(lookup(word))) ||
-  PHRASES.some(phrase => normaliseSearchText(rawQuery).includes(phrase));
+export const expandQueryGroups = (rawQuery: string): string[][] => defaultSynonymDictionary.expandQueryGroups(rawQuery);
+export const expandQueryConcepts = (rawQuery: string): QueryConcept[] => defaultSynonymDictionary.expandQueryConcepts(rawQuery);
+export const expandQuery = (rawQuery: string): string[] => defaultSynonymDictionary.expandQuery(rawQuery);
+export const conceptIdsForText = (text: string): string[] => defaultSynonymDictionary.conceptIdsForText(text);
+/** Does this query mean something to the dictionary at all? */
+export const hasKnownSynonym = (rawQuery: string): boolean => defaultSynonymDictionary.hasKnownSynonym(rawQuery);

@@ -1,4 +1,4 @@
-import { LayoutDashboard, LineChart, PackagePlus, CheckCircle2, CreditCard, FilePenLine, FileText, Star, ListChecks, Megaphone, Tag, Tags, ImageUp, UsersRound, ChartColumnIncreasing, ShieldAlert, Plug, CalendarDays, Send, Settings, MapPin, ShoppingBag, Smartphone, ScanBarcode, LogOut, Menu, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, LineChart, PackagePlus, CheckCircle2, CreditCard, FilePenLine, FileText, Star, ListChecks, Megaphone, Tag, Tags, ImageUp, UsersRound, ChartColumnIncreasing, ShieldAlert, Plug, CalendarDays, Send, Settings, MapPin, ShoppingBag, Smartphone, ScanBarcode, Search, LogOut, Menu, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import type { AdminSection } from "../AdminWorkspace";
@@ -35,6 +35,8 @@ const flatGroup: NavItem[] = [
   { key: "calendar", label: "Хуанли", Icon: CalendarDays },
   { key: "discountCodes", label: "Хямдралын код", Icon: Tag },
   { key: "brands", label: "Брэндүүд", Icon: Tags },
+  // Хайлт v3 (2026-09-20): статистик, синонимын толь, брэндийн alias.
+  { key: "search", label: "Хайлт", Icon: Search },
   { key: "media", label: "Content & Media", Icon: ImageUp },
   { key: "documents", label: "Баримт бичиг", Icon: FileText },
   { key: "campaigns", label: "Кампанит ажил", Icon: Send },
@@ -79,6 +81,8 @@ const SECTION_ROLES: Record<AdminSection, ReadonlySet<string>> = {
   calendar: new Set(["staff", "marketing", "admin"]),
   discountCodes: new Set(["marketing", "admin"]),
   brands: new Set(["marketing", "admin"]),
+  // Хайлт v3: толь/alias бичигчид marketingProcedure — brands-тай ижил жин.
+  search: new Set(["marketing", "admin"]),
   media: new Set(["marketing", "admin"]),
   // Published page copy, same weight as Content & Media.
   documents: new Set(["marketing", "admin"]),

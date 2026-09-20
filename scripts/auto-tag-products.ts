@@ -1,29 +1,25 @@
-// Preference Profile v2 (2026-09-01) bulk auto-tag. Амьд каталогийг бодитоор
-// уншихад 937-оос ердөө 4 бараа personalization tag-тай байсан тул санал болгох
-// хөдөлгүүрт (server/db.ts getRecommendedProducts) оноо өгөх зүйл бараг байсангүй.
-// Бараа бүрт дарааллаар ажиллах 2 шат:
+// Preference Profile v2 (2026-09-01) bulk auto-tag → v3 (2026-09-20).
 //
-//   1-р шат — admin панелийн бараа бүрийн санал chip-ийн ашигладаг ижил дүрэмд
-//   суурилсан keyword matcher (shared/product-tagging.ts suggestTagsForProduct):
-//   барааны өөрийн нэр/тайлбарт олдсон бодит дохио, ангиллаар хаалттай тул
-//   холилдохгүй (арьсны үг үсний барааг tag хийхгүй).
+// Амьд каталогийг бодитоор уншихад 937-оос ердөө 4 бараа personalization tag-тай
+// байсан тул санал болгох хөдөлгүүрт оноо өгөх зүйл бараг байсангүй. Дүрэмд
+// суурилсан keyword matcher (shared/product-tagging.ts suggestTagsForProduct):
+// барааны өөрийн нэр/тайлбарт олдсон бодит дохио, ангиллаар хаалттай тул
+// холилдохгүй (арьсны үг үсний барааг tag хийхгүй).
 //
-//   2-р шат — 1-р шатны дараа tag-гүй үлдсэн бараанд бүдүүвч АНГИЛЛЫН анхдагч утга
-//   (tag-гүй арьс арчилгааны бараанд skinType: "normal", үсний бараанд hairType:
-//   "normal"). 2026-09-01-ний амьд QA-ийн дараа нэмэгдсэн: зөвхөн 1-р шатаар
-//   "Үс ба бие" мэт ангилалд бодит хамрах хүрээ 0%-тай ойр тул "Хуурай үс" сонгосон
-//   худалдан авагчид таарах бараа огт байсангүй — доогуур эрэмбэлэгдсэн биш, ОГТ
-//   БАЙХГҮЙ. 2-р шат нь нийтлэгдсэн бараа бүр дор хаяж нэг таарах дохиотой байлгахын
-//   тулд. Санаатайгаар suggestTagsForProduct-ийн хэсэг БИШ тул admin-ийн санал chip
-//   болж хэзээ ч гарахгүй — chip нь "текстэд бодит дохио олдсон" гэсэн утгатай,
-//   ангиллын анхдагч утга тийм биш; 2-р шат зөвхөн энд, bulk pass-д л ажиллана.
+// v3 (Tom: шинж чанарыг ЗӨВХӨН дүрмээр, AI-гүй) — шинэ баганууд:
+//   productType  — барааны төрөл (цэвэрлэгч/серум/шампунь/бие угаагч …)
+//   skinTypes    — ОЛОН утга ("dry,normal,combination") эсвэл "all"
+//   bodySkinType / bodyConcerns — биеийн арчилгаа
+// ⛔ Хуучин 2-р шат ("ангиллын анхдагч": арьсны бараанд skinType="normal",
+// үснийд hairType="normal") УСТГАГДСАН — 561 placeholder "normal" нь яг
+// "санал болголт буруу" гэсэн Tom-ийн гомдлын шалтгаан байв (хэвийн арьстай
+// хүн санамсаргүй 561 бараа, тослог арьстай хүн 5 бараа авдаг). Одоо
+// дохиогүй арьсны бараа `skinTypes="all"` (бага жин) авна, ганц `skinType`
+// хоосон үлдэнэ.
 //
-// Хоёр шат хоёулаа admin аль хэдийн тавьсан талбарыг ХЭЗЭЭ Ч дарж бичихгүй
-// (бичилт бүр тухайн баганад isNull-аар хамгаалагдсан).
-//
-// Хэзээ ч дахин ажиллуулахад аюулгүй. Анхдагчаар DRY RUN (ангилал бүрийн хамрах
-// хүрээний тайлан хэвлэнэ, юу ч бичихгүй) — Tom-ийн шууд шийдвэрээр (2026-09-01)
-// бодитоор ажиллуулахаас өмнө заавал хянана.
+// Хоёулаа admin аль хэдийн тавьсан талбарыг ХЭЗЭЭ Ч дарж бичихгүй (бичилт бүр
+// тухайн баганад isNull-аар хамгаалагдсан). Хэзээ ч дахин ажиллуулахад аюулгүй.
+// Анхдагчаар DRY RUN (төрөл, төрлийн тархалтын тайлан хэвлэнэ, юу ч бичихгүй).
 //
 // Хэрэглээ:
 //   pnpm exec tsx scripts/auto-tag-products.ts             # dry run (анхдагч)
@@ -33,15 +29,21 @@
 import "dotenv/config";
 import { and, eq, isNull, or } from "drizzle-orm";
 import { getDb } from "../server/db";
-import { products, productCategories } from "../drizzle/schema";
+import { products, productCategories, type InsertProduct } from "../drizzle/schema";
 import { suggestTagsForProduct, type SuggestedTags } from "../shared/product-tagging";
 
 const APPLY = process.argv.includes("--apply");
+// --retype: одоо байгаа productType-ийг ДАХИН тооцоолж зөрүүтэйг нь засна
+// (2026-09-20). Дүрэм сайжрахад хуучин буруу ангилал (жишээ нь "30-Pack" →
+// маск) өөрөө засагдахгүй байсан. Зөвхөн энэ нэг баганад үйлчилнэ.
+const RETYPE = process.argv.includes("--retype");
 
-type Tally = { total: number; taggedBefore: number; taggedAfter: number };
+const COLUMNS = ["skinType", "skinTypes", "skinConcerns", "hairType", "hairConcerns", "fragrancePreference", "wellnessInterests", "productType", "bodySkinType", "bodyConcerns"] as const;
+type Column = (typeof COLUMNS)[number];
 
-function isTagged(row: { skinType: string | null; skinConcerns: string | null; hairType: string | null; hairConcerns: string | null; fragrancePreference: string | null; wellnessInterests: string | null }): boolean {
-  return Boolean(row.skinType || row.skinConcerns || row.hairType || row.hairConcerns || row.fragrancePreference || row.wellnessInterests);
+function tally(map: Map<string, number>, key: string | null | undefined) {
+  const label = key ?? "(хоосон)";
+  map.set(label, (map.get(label) ?? 0) + 1);
 }
 
 async function main() {
@@ -58,83 +60,82 @@ async function main() {
       categorySlug: productCategories.slug,
       categoryName: productCategories.name,
       skinType: products.skinType,
+      skinTypes: products.skinTypes,
       skinConcerns: products.skinConcerns,
       hairType: products.hairType,
       hairConcerns: products.hairConcerns,
       fragrancePreference: products.fragrancePreference,
       wellnessInterests: products.wellnessInterests,
+      productType: products.productType,
+      bodySkinType: products.bodySkinType,
+      bodyConcerns: products.bodyConcerns,
     })
     .from(products)
     .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
-    .where(or(
-      isNull(products.skinType), isNull(products.skinConcerns), isNull(products.hairType),
-      isNull(products.hairConcerns), isNull(products.fragrancePreference), isNull(products.wellnessInterests),
-    ));
+    .where(RETYPE ? eq(products.isPublished, true) : or(...COLUMNS.map(column => isNull(products[column])))!);
 
-  const byCategory = new Map<string, Tally>();
+  const typeDistribution = new Map<string, number>();
+  const retypes: Array<{ id: number; from: string | null; to: string; name: string }> = [];
+  const skinTypesDistribution = new Map<string, number>();
+  const bodyDistribution = new Map<string, number>();
   let writes = 0;
+  let untyped = 0;
+  const untypedSamples: string[] = [];
 
   for (const row of rows) {
-    const categoryKey = row.categoryName ?? "(ангилалгүй)";
-    const tally = byCategory.get(categoryKey) ?? { total: 0, taggedBefore: 0, taggedAfter: 0 };
-    tally.total++;
-    if (isTagged(row)) tally.taggedBefore++;
-
     const suggestion: SuggestedTags = suggestTagsForProduct({
       name: row.name, brand: row.brand, categorySlug: row.categorySlug,
       shortDescription: row.shortDescription, description: row.description,
     });
 
-    const patch: Record<string, string> = {};
+    const patch: Partial<Record<Column, string>> = {};
     if (row.skinType == null && suggestion.skinType) patch.skinType = suggestion.skinType;
+    if (row.skinTypes == null && suggestion.skinTypes?.length) patch.skinTypes = suggestion.skinTypes.join(",");
     if (row.skinConcerns == null && suggestion.skinConcerns?.length) patch.skinConcerns = suggestion.skinConcerns.join(",");
     if (row.hairType == null && suggestion.hairType) patch.hairType = suggestion.hairType;
     if (row.hairConcerns == null && suggestion.hairConcerns?.length) patch.hairConcerns = suggestion.hairConcerns.join(",");
     if (row.fragrancePreference == null && suggestion.fragrancePreference) patch.fragrancePreference = suggestion.fragrancePreference;
     if (row.wellnessInterests == null && suggestion.wellnessInterests?.length) patch.wellnessInterests = suggestion.wellnessInterests.join(",");
+    if (row.productType == null && suggestion.productType) patch.productType = suggestion.productType;
+    else if (RETYPE && suggestion.productType && suggestion.productType !== row.productType) retypes.push({ id: row.id, from: row.productType, to: suggestion.productType, name: row.name });
+    if (row.bodySkinType == null && suggestion.bodySkinType) patch.bodySkinType = suggestion.bodySkinType;
+    if (row.bodyConcerns == null && suggestion.bodyConcerns?.length) patch.bodyConcerns = suggestion.bodyConcerns.join(",");
 
-    // Tier 2 (2026-09-01, Tom's explicit request after a live QA run showed
-    // 0 tagged hair-care products meant "Хуурай үс / Үс унах" preferences
-    // had NOTHING to match against at all): a coarse CATEGORY-LEVEL default
-    // for whatever tier 1's precise keyword matcher still left untagged, so
-    // every published product carries at least one matchable signal instead
-    // of some categories being permanently invisible to the recommender.
-    // Deliberately NOT applied to suggestTagsForProduct itself (and so NOT
-    // shown as an admin suggestion chip) -- a chip implies "we found a real
-    // signal in this product's text", which a category default is not.
-    // "normal"/"normal" are genuinely the most common real values for
-    // skinType/hairType (see SKIN_TYPES ordering in Profile.tsx), not an
-    // arbitrary pick.
-    if (row.skinType == null && patch.skinType == null && (row.categorySlug === "arhis-archilgaa" || row.categorySlug === "goo-saikhan" || row.categorySlug === "eej-ba-khuukhed")) patch.skinType = "normal";
-    if (row.hairType == null && patch.hairType == null && row.categorySlug === "us-ba-bie") patch.hairType = "normal";
-    if (row.fragrancePreference == null && patch.fragrancePreference == null && row.categorySlug === "eruul-akhui") patch.fragrancePreference = "light";
-    if (row.wellnessInterests == null && patch.wellnessInterests == null && row.categorySlug === "eruul-mend") patch.wellnessInterests = "energy";
-
-    const willBeTagged = isTagged(row) || Object.keys(patch).length > 0;
-    if (willBeTagged) tally.taggedAfter++;
-    byCategory.set(categoryKey, tally);
+    tally(typeDistribution, row.productType ?? patch.productType ?? null);
+    tally(skinTypesDistribution, row.skinTypes ?? patch.skinTypes ?? null);
+    if (row.bodySkinType ?? patch.bodySkinType) tally(bodyDistribution, row.bodySkinType ?? patch.bodySkinType);
+    if (!(row.productType ?? patch.productType)) { untyped++; if (untypedSamples.length < 25) untypedSamples.push(`${row.categoryName ?? "?"} · ${row.name}`); }
 
     if (Object.keys(patch).length > 0) {
       writes++;
       if (APPLY) {
         // Column-by-column isNull guard (not just the WHERE above, which is
-        // OR'd across all 6 columns) -- a product missing only e.g.
+        // OR'd across all columns) -- a product missing only e.g.
         // wellnessInterests must not get its untouched skinType clobbered.
-        const guards = Object.keys(patch).map(column => isNull((products as unknown as Record<string, typeof products.id>)[column]));
-        await db.update(products).set(patch).where(and(eq(products.id, row.id), ...guards));
+        const guards = (Object.keys(patch) as Column[]).map(column => isNull(products[column]));
+        // Enum баганууд (skinType, hairType …) зөвхөн suggestTagsForProduct-ийн
+        // өөрийн union утгаас ирдэг тул энэ cast нь төрлийн хэлбэр л, утга биш.
+        await db.update(products).set(patch as Partial<InsertProduct>).where(and(eq(products.id, row.id), ...guards));
       }
     }
   }
 
-  console.log(APPLY ? "APPLIED (real writes made):" : "DRY RUN (no writes made -- pass --apply to write for real):");
-  console.log("");
-  let totalBefore = 0, totalAfter = 0, totalAll = 0;
-  for (const [category, tally] of Array.from(byCategory.entries()).sort((a, b) => b[1].total - a[1].total)) {
-    console.log(`  ${category.padEnd(20)} ${tally.taggedBefore}/${tally.total} -> ${tally.taggedAfter}/${tally.total} tagged`);
-    totalBefore += tally.taggedBefore; totalAfter += tally.taggedAfter; totalAll += tally.total;
+  if (RETYPE) {
+    console.log(`\n--- дахин ангилах: ${retypes.length} бараа ---`);
+    for (const item of retypes.slice(0, 40)) console.log(`  ${item.from} -> ${item.to}   ${item.name}`);
+    if (APPLY) for (const item of retypes) await db.update(products).set({ productType: item.to }).where(eq(products.id, item.id));
   }
-  console.log("");
-  console.log(`TOTAL: ${totalBefore}/${totalAll} tagged before -> ${totalAfter}/${totalAll} tagged after (${writes} product(s) ${APPLY ? "updated" : "would be updated"}).`);
+  const print = (title: string, map: Map<string, number>) => {
+    console.log(`\n${title}`);
+    for (const [key, count] of Array.from(map.entries()).sort((a, b) => b[1] - a[1])) console.log(`  ${String(count).padStart(5)}  ${key}`);
+  };
+  console.log(APPLY ? "APPLIED (real writes made):" : "DRY RUN (no writes made -- pass --apply to write for real):");
+  print("productType тархалт (одоо байгаа + санал):", typeDistribution);
+  print("skinTypes тархалт:", skinTypesDistribution);
+  print("bodySkinType тархалт:", bodyDistribution);
+  console.log(`\nТөрөлгүй үлдэх: ${untyped}`);
+  for (const sample of untypedSamples) console.log(`    - ${sample}`);
+  console.log(`\n${rows.length} бараанаас ${writes} ${APPLY ? "шинэчлэгдлээ" : "шинэчлэгдэнэ"}.`);
   if (!APPLY) console.log("\nThis was a dry run -- nothing was written. Re-run with --apply to write for real (take a fresh backup first: powershell scripts/db-backup.ps1).");
 }
 

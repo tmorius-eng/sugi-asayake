@@ -5,6 +5,10 @@ import { ubDistricts } from "@shared/districts";
 import { parseDeviceType, isLikelyBot } from "@shared/deviceType";
 import { slugify } from "@shared/slugify";
 import { looksLikeBarcode, MAX_BARCODE_LENGTH, normaliseBarcode } from "@shared/barcode";
+import { PRODUCT_TYPE_VALUES } from "@shared/product-types";
+import { searchCatalog, suggestPublishedCatalog } from "./search/catalogSearch";
+import { getSearchInsights, recordSearchQuery } from "./search/searchAnalytics";
+import { canonicaliseBrandName, createBrandAlias, deleteBrandAlias, deleteSearchSynonym, listBrandAliases, listSearchSynonyms, upsertSearchSynonym } from "./search/dictionaries";
 import { invalidateIndexHtmlCache } from "./_core/indexHtml";
 import { siteDocumentKeys } from "@shared/site-documents";
 import { LOCALES } from "@shared/i18n";
@@ -136,7 +140,6 @@ import {
   getPublishedCatalogPage,
   getPublishedProductCount,
   getPublishedProductsByIds,
-  searchPublishedCatalog,
   getPublishedRoutineBySlug,
   getRecommendedProducts,
   getFrequentlyBoughtTogether,
@@ -297,6 +300,7 @@ const interiorStyleSchema = z.string().trim().max(60).nullable().optional();
 const genderSchema = z.enum(["male", "female", "other"]).nullable().optional();
 const skinRoutineComplexitySchema = z.enum(["minimal", "moderate", "extensive"]).nullable().optional();
 const hairTypeSchema = z.enum(["dry", "oily", "normal", "damaged", "color_treated"]).nullable().optional();
+const bodySkinTypeSchema = z.enum(["dry", "normal", "sensitive"]).nullable().optional();
 const hairConcernsSchema = z.string().trim().max(300).nullable().optional();
 const fragrancePreferenceSchema = z.enum(["unscented", "light", "floral", "citrus"]).nullable().optional();
 const wellnessInterestsSchema = z.string().trim().max(300).nullable().optional();
@@ -349,6 +353,14 @@ const productWriteSchema = z.object({
   hairConcerns: hairConcernsSchema,
   fragrancePreference: fragrancePreferenceSchema,
   wellnessInterests: wellnessInterestsSchema,
+  // Хайлт v3 + монгол нэр (2026-09-20, migration 0090).
+  nameMn: nullableText(200),
+  searchKeywords: nullableText(500),
+  productType: z.enum(PRODUCT_TYPE_VALUES).nullable().optional(),
+  // Санал болголт v3 (2026-09-20, migration 0091): олон утгат арьсны төрөл, бие.
+  skinTypes: z.string().trim().max(80).regex(/^(all|dry|oily|combination|sensitive|normal)(,(all|dry|oily|combination|sensitive|normal))*$/, "skinTypes: all,dry,oily,combination,sensitive,normal утгуудыг таслалаар").nullable().optional(),
+  bodySkinType: bodySkinTypeSchema,
+  bodyConcerns: z.string().trim().max(300).nullable().optional(),
 });
 
 // Product variants -- PHASE 1, additive only (see drizzle/schema.ts).
@@ -742,7 +754,11 @@ async function processUploadedImageVariantsOrThrow(buffer: Buffer, maxDimension:
   }
 }
 
-async function validateProductWrite(input: { categoryId?: number; slug?: string; sku?: string; id?: number }) {
+async function validateProductWrite(input: { categoryId?: number; slug?: string; sku?: string; id?: number; brand?: string | null }) {
+  // Хайлт v3 (2026-09-20): брэндийг бичихээс өмнө canonical бичлэг рүү
+  // ("SSELECT" → "S-Select", "кокочи" → "Cocochi") — маягт, CSV импорт хоёулаа
+  // энд дайрдаг тул нэг брэнд дахин хэд хэдэн бичлэгтэй болохгүй.
+  if (typeof input.brand === "string" && input.brand.trim()) input.brand = await canonicaliseBrandName(input.brand);
   const categoryFound = input.categoryId === undefined ? null : await categoryExists(input.categoryId);
   const conflicts = input.slug !== undefined || input.sku !== undefined ? await getProductWriteConflicts({ slug: input.slug, sku: input.sku, excludeId: input.id }) : [];
   const violation = getProductWriteViolation(input, categoryFound, conflicts);
@@ -1170,7 +1186,23 @@ export const appRouter = router({
     // matches from the FULLTEXT index instead of the client filtering the
     // full catalog.list payload. See searchPublishedCatalog for the exact
     // matching behavior.
-    search: publicProcedure.input(z.object({ query: z.string().trim().min(2).max(120) })).query(({ input }) => searchPublishedCatalog(input.query)),
+    // Хайлт v3 (2026-09-20): процесс доторх typo/галиг/синоним тэсвэртэй индекс
+    // (server/search/catalogSearch.ts); мөрийн хэлбэр хэвээр. Query бүр логлогдоно
+    // (PII-гүй, server/search/searchAnalytics.ts) — Admin → Хайлт → Статистик.
+    search: publicProcedure.input(z.object({ query: z.string().trim().min(2).max(120) })).query(async ({ ctx, input }) => {
+      const { products: rows, outcome } = await searchCatalog(input.query, { limit: 200 });
+      // Ажилтны хайлт статистикт ОРОХГҮЙ (2026-09-20): admin-ий "Туршиж үзэх"
+      // талбар ба дэлгүүрийн ажилтны шалгалт нь худалдан авагчийн дохио БИШ —
+      // эс бөгөөс "юу хайгаад олдоогүй" самбар өөрсдийн туршилтаар дүүрнэ.
+      if (!isAdminPanelRole(ctx.user?.role)) recordSearchQuery({ raw: input.query, normalised: outcome.normalised, resultCount: rows.length, mode: outcome.mode, source: "shop", userId: ctx.user?.id ?? null, visitorToken: parseCookieHeader(ctx.req.headers.cookie ?? "")[VISITOR_SESSION_COOKIE_NAME] ?? null });
+      return rows;
+    }),
+    // Толгойн хайлтын санал: цөөн бараа + брэнд/ангиллын мөр + "та … гэж хайсан уу".
+    suggest: publicProcedure.input(z.object({ query: z.string().trim().min(2).max(120) })).query(async ({ ctx, input }) => {
+      const suggestion = await suggestPublishedCatalog(input.query, 6);
+      if (!isAdminPanelRole(ctx.user?.role)) recordSearchQuery({ raw: input.query, normalised: suggestion.normalised, resultCount: suggestion.resultCount, mode: suggestion.mode, source: "header", userId: ctx.user?.id ?? null, visitorToken: parseCookieHeader(ctx.req.headers.cookie ?? "")[VISITOR_SESSION_COOKIE_NAME] ?? null });
+      return suggestion;
+    }),
     bySlug: publicProcedure.input(z.object({ slug: z.string().min(1).max(200) })).query(({ input }) => getProductBySlug(input.slug)),
     // Barcode scanning (2026-09-11). publicProcedure because the whole
     // point is a shopper standing in the shop scanning the box in their
@@ -1870,6 +1902,9 @@ export const appRouter = router({
         fragrancePreference: fragrancePreferenceSchema,
         wellnessInterests: wellnessInterestsSchema,
         hasYoungChildren: z.boolean().nullable().optional(),
+        // Биеийн арчилгаа (2026-09-20, migration 0091).
+        bodySkinType: bodySkinTypeSchema,
+        bodyConcerns: z.string().trim().max(300).nullable().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const updated = await updateUserPreferences(ctx.user.id, input);
@@ -2331,6 +2366,48 @@ export const appRouter = router({
       const result = await adminGlobalSearch(input.query);
       if (ctx.user.role === "admin") return result;
       return { ...result, users: [] };
+    }),
+    // ---- Хайлт v3 (2026-09-20): Admin → Хайлт — статистик, синонимын толь,
+    // брэндийн alias. Бүгд marketingProcedure (featuredBrands-тай ижил жин:
+    // storefront-ийн мерчандайзинг, мөнгө/нөөцийн шийдвэр биш). Толь/alias
+    // бичигч бүр хайлтын индексийг унагадаг тул хадгалмагц хайлтад тусна.
+    searchInsights: marketingProcedure.input(z.object({ days: z.union([z.literal(7), z.literal(30), z.literal(90)]).default(30) }).optional()).query(({ input }) => getSearchInsights(input?.days ?? 30)),
+    searchSynonyms: marketingProcedure.query(() => listSearchSynonyms()),
+    upsertSearchSynonym: marketingProcedure.input(z.object({
+      id: z.number().int().positive().optional(),
+      concept: z.string().trim().max(80),
+      terms: z.string().trim().min(3).max(2_000),
+      isActive: z.boolean().optional(),
+    })).mutation(async ({ ctx, input }) => {
+      let row;
+      try {
+        row = await upsertSearchSynonym(input);
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Синоним хадгалж чадсангүй." });
+      }
+      await logAdminAction({ actorUserId: ctx.user.id, action: input.id ? "searchSynonym.updated" : "searchSynonym.created", entityType: "searchSynonym", entityId: row.id, metadata: { concept: row.concept } });
+      return row;
+    }),
+    deleteSearchSynonym: marketingProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const result = await deleteSearchSynonym(input.id);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "searchSynonym.deleted", entityType: "searchSynonym", entityId: input.id });
+      return result;
+    }),
+    brandAliases: marketingProcedure.query(() => listBrandAliases()),
+    createBrandAlias: marketingProcedure.input(z.object({ canonicalBrand: z.string().trim().min(1).max(120), alias: z.string().trim().min(1).max(120) })).mutation(async ({ ctx, input }) => {
+      let row;
+      try {
+        row = await createBrandAlias(input);
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Alias хадгалж чадсангүй." });
+      }
+      await logAdminAction({ actorUserId: ctx.user.id, action: "brandAlias.created", entityType: "brandAlias", entityId: row.id, metadata: { canonicalBrand: row.canonicalBrand, alias: row.alias } });
+      return row;
+    }),
+    deleteBrandAlias: marketingProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const result = await deleteBrandAlias(input.id);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "brandAlias.deleted", entityType: "brandAlias", entityId: input.id });
+      return result;
     }),
     // Project "SUGI Desk" Phase 2 (2026-09-07): the first real field-level
     // permission in this codebase, not just a UI label -- costMnt's own

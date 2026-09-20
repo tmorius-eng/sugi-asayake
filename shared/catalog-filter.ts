@@ -104,13 +104,21 @@ export function sortCatalogProducts<T extends CatalogDiscoveryItem>(products: T[
 // category pills — mirrors the admin panel's skinTypeLabels.
 export type SkinType = "dry" | "oily" | "combination" | "sensitive" | "normal";
 
+// 2026-09-20: skinTypeOptions (профайл) ба энэ (admin, /shop pill) хоёр
+// зөрүүтэй байсан ("Энгийн"/"Хэвийн", "Эмзэг"/"Мэдрэмтгий") — одоо нэг л эх.
 export const skinTypeLabels: Record<SkinType, string> = {
   dry: "Хуурай",
   oily: "Тослог",
-  combination: "Холимог",
+  combination: "Хосолмол",
   sensitive: "Мэдрэмтгий",
   normal: "Хэвийн",
 };
+
+/** Барааны олон утгат `skinTypes` ("dry,normal" | "all") → массив. */
+export function parseSkinTypes(value: string | null | undefined): Array<SkinType | "all"> {
+  if (!value) return [];
+  return value.split(",").map(item => item.trim()).filter((item): item is SkinType | "all" => item === "all" || item in skinTypeLabels);
+}
 
 export type CatalogSkinTypeItem = {
   skinType?: SkinType | null;
@@ -203,11 +211,29 @@ export const NEW_SKIN_CONCERN = { value: "sun_damage", label: "Наранаас 
 // with AdminWorkspace's own separate copy (a known, pre-existing, small
 // drift left as-is — see PREMIUM-FEATURES.md history).
 export const skinTypeOptions: Array<{ value: SkinType; label: string }> = [
-  { value: "normal", label: "Энгийн" },
-  { value: "dry", label: "Хуурай" },
-  { value: "oily", label: "Тослог" },
-  { value: "combination", label: "Хосолмол" },
-  { value: "sensitive", label: "Эмзэг" },
+  { value: "normal", label: skinTypeLabels.normal },
+  { value: "dry", label: skinTypeLabels.dry },
+  { value: "oily", label: skinTypeLabels.oily },
+  { value: "combination", label: skinTypeLabels.combination },
+  { value: "sensitive", label: skinTypeLabels.sensitive },
+];
+
+// Биеийн арчилгаа (2026-09-20, санал болголт v3): асуулгын шинэ алхам ба
+// барааны ижил нэртэй толь (users/products.bodySkinType, bodyConcerns).
+export type BodySkinType = "dry" | "normal" | "sensitive";
+export const bodySkinTypeLabels: Record<BodySkinType, string> = { dry: "Хуурай", normal: "Хэвийн", sensitive: "Мэдрэмтгий" };
+export const bodySkinTypeOptions: Array<{ value: BodySkinType; label: string }> = [
+  { value: "normal", label: bodySkinTypeLabels.normal },
+  { value: "dry", label: bodySkinTypeLabels.dry },
+  { value: "sensitive", label: bodySkinTypeLabels.sensitive },
+];
+export const bodyConcernOptions: Array<{ value: string; label: string }> = [
+  { value: "dryness", label: "Хуурайшилт, хагарал" },
+  { value: "roughness", label: "Барзгар, өсгий" },
+  { value: "odor_sweat", label: "Хөлрөлт, үнэр" },
+  { value: "sun_damage", label: "Наранаас хамгаалах" },
+  { value: "relaxation", label: "Амралт, ванн" },
+  { value: "kids_safe", label: "Хүүхдэд ч зориулсан" },
 ];
 
 export const skinConcernOptions: Array<{ value: string; label: string }> = [
@@ -282,6 +308,9 @@ export type PreferenceProfile = {
   wellnessInterests?: string | null;
   interiorStyle?: string | null;
   hasYoungChildren?: boolean | null;
+  /** Биеийн арчилгаа (2026-09-20). */
+  bodySkinType?: string | null;
+  bodyConcerns?: string | null;
 };
 
 /** Product row shape the scorer needs — a subset of the catalog select. */
@@ -290,57 +319,139 @@ export type ScorableProduct = {
   brand?: string | null;
   categorySlug?: string | null;
   skinType?: string | null;
+  /** Олон утга ("dry,normal" | "all"), 2026-09-20; байхгүй бол skinType-ийг уншина. */
+  skinTypes?: string | null;
   skinConcerns?: string | null;
   hairType?: string | null;
   hairConcerns?: string | null;
   fragrancePreference?: string | null;
   wellnessInterests?: string | null;
   interiorStyle?: string | null;
+  bodySkinType?: string | null;
+  bodyConcerns?: string | null;
+  productType?: string | null;
+  kind?: string | null;
 };
+
+/**
+ * Санал болголтын жин (2026-09-20) — store settings "Санал болголт" бүлгийн
+ * анхдагч утгууд (shared/store-settings.ts reco-*). Сервер бодит утгыг DB-ээс
+ * уншиж дамжуулна; энд байгаа нь 2026-09-01-ээс хойшхи бодит зан төлөв.
+ */
+export type RecoWeights = {
+  skinType: number;
+  hairType: number;
+  bodyType: number;
+  concern: number;
+  allMatch: number;
+  maxPerBrand: number;
+  maxPerCategory: number;
+  maxPerProductType: number;
+};
+export const DEFAULT_RECO_WEIGHTS: RecoWeights = { skinType: 3, hairType: 3, bodyType: 3, concern: 1.5, allMatch: 1, maxPerBrand: 3, maxPerCategory: 3, maxPerProductType: 2 };
 
 // Priority-decayed token-overlap score: the 1st concern a shopper picked
 // (list position, not a separate rank field — no schema change needed)
 // counts more than the 2nd, which counts more than the rest.
-function scoreTokenListMatch(productList: string | null | undefined, userListInPriorityOrder: string | null | undefined): number {
-  if (!productList || !userListInPriorityOrder) return 0;
+function scoreTokenListMatch(productList: string | null | undefined, userListInPriorityOrder: string | null | undefined, firstWeight = 1.5): { score: number; matched: string[] } {
+  if (!productList || !userListInPriorityOrder) return { score: 0, matched: [] };
   const productTokens = new Set(productList.split(",").map(value => value.trim()).filter(Boolean));
   const userTokens = userListInPriorityOrder.split(",").map(value => value.trim()).filter(Boolean);
-  const weightByPosition = [1.5, 1.2, 1.0];
+  // 1-р сонголт бүрэн, 2 дахь 80%, бусад 67% (хуучин 1.5 / 1.2 / 1.0 харьцаа).
+  // toFixed: 1.5 × 0.8 нь IEEE-д 1.2000000000000002 — оноо харьцуулах тестэд цэвэр байг.
+  const weightByPosition = [firstWeight, Number((firstWeight * 0.8).toFixed(3)), Number((firstWeight / 1.5).toFixed(3))];
   let score = 0;
+  const matched: string[] = [];
   userTokens.forEach((token, index) => {
-    if (productTokens.has(token)) score += weightByPosition[Math.min(index, weightByPosition.length - 1)];
+    if (productTokens.has(token)) { score += weightByPosition[Math.min(index, weightByPosition.length - 1)]; matched.push(token); }
   });
-  return score;
+  return { score, matched };
+}
+
+const labelOf = (options: Array<{ value: string; label: string }>, value: string) => options.find(option => option.value === value)?.label ?? value;
+
+/**
+ * Хуучин ганц `skinType` баганыг ашиглах эсэх (2026-09-20).
+ *
+ * 2026-09-01-ний bulk auto-tag нь tag-гүй үлдсэн БҮХ арьс арчилгааны бараанд
+ * ангиллын анхдагчаар `skinType="normal"` бичсэн — 561 мөр. Тэр скрипт өөрөө
+ * "ангиллын анхдагч нь бодит дохио БИШ" гэж бичсэн боловч оноолт үүнийг бодит
+ * тааралт мэт бүрэн жингээр уншсаар байв: "хэвийн арьс" сонгосон худалдан авагч
+ * санамсаргүй 561 бараатай таарч, "тослог" сонгосон нь ердөө 5-тай таарна —
+ * яг Tom-ийн мэдээлсэн "санал болгож байгаа бараа буруу" гэдэг нь энэ.
+ *
+ * Тиймээс тэр ялгуургүй хэлбэрийг (normal + зорилгогүй + шинэ олон утгагүй)
+ * нотолгоо гэж үзэхгүй. Өгөгдлийг УСТГАХГҮЙ — /shop-ийн шүүлтүүр, admin-ий
+ * багана хэвээр; зөвхөн оноолт үүнийг алгасна. Бодит дохиотой `normal`
+ * (жишээ нь зорилго нь тэмдэглэгдсэн) хэвээр тоологдоно.
+ */
+function legacySkinType(product: ScorableProduct): string | null {
+  const value = product.skinType ?? null;
+  if (value === "normal" && !product.skinConcerns) return null;
+  return value;
 }
 
 /**
- * Recommendation engine v2's pure preference-match score (server/db.ts's
- * getRecommendedProducts adds behavioral signals — category affinity,
- * price-band affinity, wishlist-adjacency — on top of this, since those
- * need DB-fetched context this function deliberately doesn't take).
+ * Санал болголт v3 (2026-09-20): оноо + ЯАГААД (reasons) + жин тохиргооноос.
+ * server/db.ts's getRecommendedProducts adds behavioral signals — category
+ * affinity, price-band affinity, wishlist-adjacency — on top of this, since
+ * those need DB-fetched context this function deliberately doesn't take.
+ *
+ * Арьсны төрөл: барааны `skinTypes` (олон) → хэрэглэгчийнх багтвал бүрэн жин;
+ * `all` бол бага жин (allMatch); `skinTypes` байхгүй хуучин мөрөнд ганц
+ * `skinType`-ийг уншина. Үс/биеийн бараа зөвхөн тухайн профайл байгаа үед л
+ * оноо авна (өөрөөр хэлбэл 0 — хуучин ч ийм байсан, "all" нэмэгдсэн тул явцуу).
  */
-export function scorePreferenceMatch(product: ScorableProduct, preferences: PreferenceProfile): number {
+export function explainPreferenceMatch(product: ScorableProduct, preferences: PreferenceProfile, weights: RecoWeights = DEFAULT_RECO_WEIGHTS): { score: number; reasons: string[] } {
   let score = 0;
-  if (preferences.skinType && product.skinType === preferences.skinType) score += 3;
-  score += scoreTokenListMatch(product.skinConcerns, preferences.skinConcerns);
-  if (preferences.hairType && product.hairType === preferences.hairType) score += 3;
-  score += scoreTokenListMatch(product.hairConcerns, preferences.hairConcerns);
-  if (preferences.fragrancePreference && product.fragrancePreference === preferences.fragrancePreference) score += 1;
+  const reasons: string[] = [];
+  if (preferences.skinType) {
+    const types = parseSkinTypes(product.skinTypes ?? legacySkinType(product));
+    if (types.includes(preferences.skinType as SkinType)) { score += weights.skinType; reasons.push(`${skinTypeLabels[preferences.skinType as SkinType] ?? preferences.skinType} арьсанд`); }
+    else if (types.includes("all")) { score += weights.allMatch; }
+  }
+  const skin = scoreTokenListMatch(product.skinConcerns, preferences.skinConcerns, weights.concern);
+  score += skin.score; for (const token of skin.matched) reasons.push(labelOf(skinConcernOptions, token));
+  if (preferences.hairType && product.hairType === preferences.hairType) { score += weights.hairType; reasons.push(`${hairTypeLabels[preferences.hairType as HairType] ?? preferences.hairType} үсэнд`); }
+  const hair = scoreTokenListMatch(product.hairConcerns, preferences.hairConcerns, weights.concern);
+  score += hair.score; for (const token of hair.matched) reasons.push(labelOf(hairConcernOptions, token));
+  if (preferences.bodySkinType && product.bodySkinType === preferences.bodySkinType) { score += weights.bodyType; reasons.push(`${bodySkinTypeLabels[preferences.bodySkinType as BodySkinType] ?? preferences.bodySkinType} биеийн арьсанд`); }
+  const body = scoreTokenListMatch(product.bodyConcerns, preferences.bodyConcerns, weights.concern);
+  score += body.score; for (const token of body.matched) reasons.push(labelOf(bodyConcernOptions, token));
+  if (preferences.fragrancePreference && product.fragrancePreference === preferences.fragrancePreference) { score += 1; reasons.push(`${fragrancePreferenceLabels[preferences.fragrancePreference as FragrancePreference] ?? preferences.fragrancePreference} үнэр`); }
   // The quiz's step 5 ("Эрүүл мэнд & амьдрал") collects this and the admin
   // product form mirrors it onto products, but until 2026-09-01 nothing
   // ever scored it -- a shopper's wellness answers moved their
   // recommendations by exactly zero. Same priority-decayed list match as
   // skinConcerns/hairConcerns, since it is the same comma-separated shape.
-  score += scoreTokenListMatch(product.wellnessInterests, preferences.wellnessInterests);
-  if (preferences.interiorStyle && product.interiorStyle && product.interiorStyle === preferences.interiorStyle) score += 2;
+  const wellness = scoreTokenListMatch(product.wellnessInterests, preferences.wellnessInterests, weights.concern);
+  score += wellness.score; for (const token of wellness.matched) reasons.push(labelOf(wellnessInterestOptions, token));
+  if (preferences.interiorStyle && product.interiorStyle && product.interiorStyle === preferences.interiorStyle) { score += 2; reasons.push(labelOf(interiorStyleOptions, preferences.interiorStyle)); }
   // Deliberately a SOFT signal (same weight as fragrancePreference), not a
   // strong one -- a real QA run found +3 here let this one coarse
   // category-level checkbox dominate a shopper's entire recommendation
   // list (5/5 baby products for a shopper who also picked skinType/
   // hairType/concerns) whenever tag coverage elsewhere was thin, which it
   // still mostly is. This should nudge, not override, everything else.
-  if (preferences.hasYoungChildren && product.categorySlug === "eej-ba-khuukhed") score += 1;
-  return score;
+  if (preferences.hasYoungChildren && product.categorySlug === "eej-ba-khuukhed") { score += 1; reasons.push("Хүүхэдтэй гэр бүлд"); }
+  return { score, reasons: Array.from(new Set(reasons)) };
+}
+
+/** Хуучин гэрээ — оноо л. Тест, related rail үүгээр. */
+export function scorePreferenceMatch(product: ScorableProduct, preferences: PreferenceProfile, weights: RecoWeights = DEFAULT_RECO_WEIGHTS): number {
+  return explainPreferenceMatch(product, preferences, weights).score;
+}
+
+/**
+ * Профайл-суурьт саналд орох ёсгүй бараа (2026-09-20): бэлгийн карт, хүнс,
+ * гэр ахуй, эрүүл ахуйн хэрэгсэл, ам шүдний бүтээгдэхүүн — "арьсны төрөл"-өөр
+ * санал болгох утгагүй. Хоол тэжээлийн нэмэлт/цай зөвхөн эрүүл мэндийн
+ * сонирхол сонгосон бол (тэднийг wellness л оноодог тул байгалиараа).
+ */
+export function isEligibleForPreferenceRecommendation(product: ScorableProduct): boolean {
+  if (product.kind === "gift_card") return false;
+  if (product.categorySlug === "gift-card" || product.categorySlug === "khuns") return false;
+  return !["food", "household", "hygiene", "oral_care", "gift_card", "device"].includes(product.productType ?? "");
 }
 
 // A candidate within +/-30% of the shopper's average historical unit price
@@ -356,23 +467,30 @@ export function scorePriceBandAffinity(candidatePriceMnt: number, avgHistoricalU
 // rather than re-ranking it) — avoids a top-8 that's 8 near-duplicate SKUs
 // from one generic-description brand (see PRODUCT-IMPORT.md's "S-Select"
 // naming pattern).
-export function applyDiversityCap<T extends { product: { brand?: string | null; categorySlug?: string | null } }>(
+export function applyDiversityCap<T extends { product: { brand?: string | null; categorySlug?: string | null; productType?: string | null } }>(
   scoredEntries: T[],
-  options: { maxPerBrand?: number; maxPerCategory?: number } = {},
+  options: { maxPerBrand?: number; maxPerCategory?: number; maxPerProductType?: number } = {},
 ): T[] {
   const maxPerBrand = options.maxPerBrand ?? 3;
   const maxPerCategory = options.maxPerCategory ?? 4;
+  // 2026-09-20: төрлийн хязгаар — 8 санал = routine (цэвэрлэгч, тонер, серум,
+  // крем, нарны…) байг, 8 маск биш. Төрөлгүй бараа энэ хязгаарт орохгүй.
+  const maxPerProductType = options.maxPerProductType ?? Infinity;
   const brandCounts = new Map<string, number>();
   const categoryCounts = new Map<string, number>();
+  const typeCounts = new Map<string, number>();
   const kept: T[] = [];
   for (const entry of scoredEntries) {
     const brandKey = entry.product.brand ?? "__no-brand__";
     const categoryKey = entry.product.categorySlug ?? "__no-category__";
+    const typeKey = entry.product.productType ?? null;
     const brandCount = brandCounts.get(brandKey) ?? 0;
     const categoryCount = categoryCounts.get(categoryKey) ?? 0;
-    if (brandCount >= maxPerBrand || categoryCount >= maxPerCategory) continue;
+    const typeCount = typeKey ? typeCounts.get(typeKey) ?? 0 : 0;
+    if (brandCount >= maxPerBrand || categoryCount >= maxPerCategory || (typeKey && typeCount >= maxPerProductType)) continue;
     brandCounts.set(brandKey, brandCount + 1);
     categoryCounts.set(categoryKey, categoryCount + 1);
+    if (typeKey) typeCounts.set(typeKey, typeCount + 1);
     kept.push(entry);
   }
   return kept;

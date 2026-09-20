@@ -33,8 +33,9 @@ export default function RecommendedForYou({ products, onRemember, onQuickView }:
         <p className="shop-kicker"><span /> {textFor("shop-text-recommended-kicker", "ТАНД ЗОРИУЛАН")}</p>
         <h2>{recommendedLine1} <em>{recommendedLine2}</em></h2>
       </div>
-      <p>{textFor("shop-text-recommended-description", "Таны профайл дээр хадгалсан арьсны төрөл, арчилгааны сонирхол, интерьер загварт тохирсон бүтээгдэхүүнүүд.")}</p>
+      <p>{textFor("shop-text-recommended-description", "Таны профайл дээр хадгалсан арьс, үс, биеийн төрөл, арчилгааны зорилгод тохирсон бүтээгдэхүүнүүд.")}</p>
     </div>
-    <div className="recently-viewed-grid">{products.map(product => <RailProductCard product={product} onRemember={onRemember} onQuickView={onQuickView} key={product.id} />)}</div>
+    {/* v3 (2026-09-20): карт бүр яагаад санал болгосноо хэлнэ — эхний 2 шалтгаан. */}
+    <div className="recently-viewed-grid">{products.map(product => <RailProductCard product={product} onRemember={onRemember} onQuickView={onQuickView} reason={product.reasons?.slice(0, 2).join(" · ") || null} key={product.id} />)}</div>
   </section>;
 }

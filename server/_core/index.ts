@@ -19,6 +19,7 @@ import { registerQPayCallbackRoute } from "../qpay";
 import { registerStorepayCallbackRoute } from "../storepay";
 import { registerVerifyMnCallbackRoute } from "../verifyMn";
 import { warmUpModerationModel } from "./moderationModel";
+import { warmCatalogSearchIndex } from "../search/catalogSearch";
 import { warmUpImageSafety } from "./imageSafety";
 import { dbPing } from "../db";
 import { serveRobots, serveSitemap } from "./sitemap";
@@ -184,6 +185,9 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
+  // Хайлт v3 (2026-09-20): индексийг урьдчилан барина — worker бүр өөрийнхөө.
+  // Production-д 5 с хойшлуулна: boot дээрх HeatWave холболтын багцтай зэрэгцэхгүй.
+  warmCatalogSearchIndex(process.env.NODE_ENV === "production" ? 5_000 : 0);
 
   // Admin шинэчлэл (2026-09-08, Phase D-F): энэ аппын цорын ганц процесс доторх
   // scheduler — server/_core/scheduler.ts, дээр нь бүртгэгдсэн бодит job-уудыг

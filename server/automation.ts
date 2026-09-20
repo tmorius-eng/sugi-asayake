@@ -8,6 +8,7 @@ import { sendPushToUser } from "./_core/webPush";
 import { registerJob } from "./_core/scheduler";
 import { ENV } from "./_core/env";
 import { purgeExpiredFaceHandoffs } from "./faceHandoff";
+import { purgeSearchQueries } from "./search/searchAnalytics";
 
 /**
  * "Controls everything" admin overhaul (2026-09-08, Phases E/F): the two
@@ -163,7 +164,9 @@ export async function runDataRetentionJob(): Promise<void> {
   // зөвхөн аудитын хог (жинхэнэ түүх нь admin_audit_logs-д үлддэг).
   // Шинэ job гаргалгүй энд хавсаргав (2026-09-16).
   const handoffs = await purgeExpiredFaceHandoffs(24);
-  if (visitorSessions || loginAttempts || handoffs) console.log(`[retention] removed ${visitorSessions} visitor session(s) older than 24 months, ${loginAttempts} login attempt(s) older than 12 months, ${handoffs} face handoff request(s) older than 24 hours`);
+  // Хайлтын лог 90 хоног (2026-09-20): статистикт 30/90 хоногийн цонх л хэрэгтэй.
+  const searches = await purgeSearchQueries(90);
+  if (visitorSessions || loginAttempts || handoffs || searches) console.log(`[retention] removed ${visitorSessions} visitor session(s) older than 24 months, ${loginAttempts} login attempt(s) older than 12 months, ${handoffs} face handoff request(s) older than 24 hours, ${searches} search log row(s) older than 90 days`);
 }
 
 export function registerDataRetentionJob() {

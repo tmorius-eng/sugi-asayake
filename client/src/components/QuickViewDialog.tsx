@@ -7,6 +7,7 @@ import VariantPicker from "@/components/VariantPicker";
 import { notifyAddedToCart } from "@/lib/addedToCartToast";
 import { trpc } from "@/lib/trpc";
 import { useLocale } from "@/hooks/useLocale";
+import { useProductName } from "@/hooks/useProductName";
 import { translateProductText } from "@shared/product-i18n";
 import { getCategoryPlaceholderImage, getSalePercent } from "@shared/catalog-filter";
 import { formatMnt } from "@shared/format";
@@ -15,6 +16,10 @@ export type QuickViewProduct = {
   id: number;
   slug: string;
   name: string;
+  /** Монгол нэр (2026-09-20) — харагдах дараалал shared/product-name.ts. */
+  nameMn?: string | null;
+  /** Санал болголт v3: яагаад санал болгосон ("Хуурай арьсанд", "Нөхжилт"). */
+  reasons?: string[];
   brand?: string | null;
   categoryName?: string | null;
   categorySlug?: string | null;
@@ -49,6 +54,8 @@ export default function QuickViewDialog({ open, product, onOpenChange, onAdded }
     onError: error => toast.error(messageFrom(error)),
   });
   const display = detail.data ?? product;
+  const displayName = useProductName();
+  const names = display ? displayName(display) : { primary: "", secondary: null };
   // PHASE 2 of product variants: same "only when there's an actual choice"
   // rule as ProductDetail -- a single-variant product shows no picker here
   // either.
@@ -86,7 +93,8 @@ export default function QuickViewDialog({ open, product, onOpenChange, onAdded }
     <div className="quick-view-layout">
       <div className="quick-view-image"><img src={display.imageUrl ?? getCategoryPlaceholderImage(display.categorySlug)} alt={display.name} /><span>{available > 0 ? `${available} ширхэг үлдсэн` : "Нөөц дууссан"}</span></div>
       <div className="quick-view-copy">
-        <DialogTitle className="font-[var(--font-display)] text-4xl font-semibold tracking-[-.075em] text-[#17181b] sm:text-5xl">{display.name}</DialogTitle>
+        <DialogTitle className="font-[var(--font-display)] text-4xl font-semibold tracking-[-.075em] text-[#17181b] sm:text-5xl">{names.primary}</DialogTitle>
+        {names.secondary ? <p className="product-name-secondary">{names.secondary}</p> : null}
         <DialogDescription className="mt-2 text-[10px] font-extrabold tracking-[.15em] text-[#df1f3d]">{display.brand ?? display.categoryName ?? "SUGI ASAYAKE"}</DialogDescription>
         <p className="quick-view-description">{detail.isLoading ? "Дэлгэрэнгүй мэдээллийг ачаалж байна…" : description}</p>
         <div className="quick-view-price"><strong>{formatMnt(activePriceMnt)}</strong>{salePercent ? <><s>{formatMnt(activeCompareAtPriceMnt!)}</s><em className="quick-view-sale-badge">-{salePercent}%</em></> : <span>НӨАТ багтсан</span>}</div>

@@ -4,6 +4,7 @@ import type { QuickViewProduct } from "@/components/QuickViewDialog";
 import { getCategoryPlaceholderImage, getSalePercent } from "@shared/catalog-filter";
 import { imageSrcSet } from "@shared/image-variants";
 import { formatMnt } from "@shared/format";
+import { useProductName } from "@/hooks/useProductName";
 
 // 2026-09-04 cohesion audit: this exact "small thumbnail + quick-view
 // button" card (CSS class .recently-viewed-card, index.css) was independently
@@ -13,11 +14,15 @@ import { formatMnt } from "@shared/format";
 // markup, two copies. One component now; the two callers keep their own
 // section-level chrome (heading, empty state, "N unavailable" notice --
 // concerns of the SECTION, not the card).
-export default function RailProductCard({ product, onRemember, onQuickView }: {
+export default function RailProductCard({ product, onRemember, onQuickView, reason }: {
   product: QuickViewProduct;
   onRemember?: (id: number) => void;
   onQuickView: (product: QuickViewProduct) => void;
+  /** Санал болголт v3 (2026-09-20): "Хуурай арьсанд · Нөхжилт" — яагаад энэ бараа. */
+  reason?: string | null;
 }) {
+  const displayName = useProductName();
+  const names = displayName(product);
   // 2026-09-07 (Tom, bsb.mn reference): every other product card on the site
   // already renders getSalePercent() as a top-corner ".shop-sale-badge" over
   // the image plus a struck-through "was" price (Shop.tsx's grid, Home.tsx's
@@ -36,10 +41,16 @@ export default function RailProductCard({ product, onRemember, onQuickView }: {
           single-source <img> for pre-derivative uploads. */}
       <span className="recently-viewed-image">
         {salePercent ? <span className="shop-sale-badge">-{salePercent}%</span> : null}
-        <img src={product.imageUrl ?? getCategoryPlaceholderImage(product.categorySlug)} alt={product.name} loading="lazy" {...(imageSrcSet(product.imageUrl, 1600) ? { srcSet: imageSrcSet(product.imageUrl, 1600)!, sizes: "112px" } : {})} />
+        <img src={product.imageUrl ?? getCategoryPlaceholderImage(product.categorySlug)} alt={names.primary} loading="lazy" {...(imageSrcSet(product.imageUrl, 1600) ? { srcSet: imageSrcSet(product.imageUrl, 1600)!, sizes: "112px" } : {})} />
       </span>
-      <div><p>{product.brand ?? product.categoryName ?? "SUGI ASAYAKE"}</p><h3>{product.name}</h3><strong>{formatMnt(product.priceMnt)}</strong>{salePercent ? <s>{formatMnt(product.compareAtPriceMnt!)}</s> : null}</div>
+      <div>
+        <p>{product.brand ?? product.categoryName ?? "SUGI ASAYAKE"}</p>
+        <h3>{names.primary}</h3>
+        {names.secondary ? <span className="product-name-secondary">{names.secondary}</span> : null}
+        {reason ? <span className="rail-reason-chip">{reason}</span> : null}
+        <strong>{formatMnt(product.priceMnt)}</strong>{salePercent ? <s>{formatMnt(product.compareAtPriceMnt!)}</s> : null}
+      </div>
     </Link>
-    <button type="button" onClick={() => onQuickView(product)} aria-label={`${product.name} шуурхай харах`}>Шуурхай харах <Eye size={14} /></button>
+    <button type="button" onClick={() => onQuickView(product)} aria-label={`${names.primary} шуурхай харах`}>Шуурхай харах <Eye size={14} /></button>
   </article>;
 }

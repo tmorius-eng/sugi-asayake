@@ -15,6 +15,7 @@ import { GIFT_CARD_VALIDITY_MONTHS, discountableSubtotalMnt, isDigitalOnlyBasket
 import { getStoreSettingSlot, type StoreSettingKey } from "../shared/store-settings";
 import { decryptJson, encryptJson } from "./_core/crypto";
 import { getOrSetCached, invalidateCached, invalidateCachedByPrefix } from "./_core/ttlCache";
+import { CATALOG_INDEX_CACHE_KEY } from "./search/cacheKeys";
 import { enqueueNotification, TEST_SUPPRESSED_MARKER } from "./notificationOutbox";
 import { applyBranchStockDelta, getStockLedgerDrift, recomputeVariantStockTotal, recomputeVariantTotalsForBranch, recordStockMovement, setBranchStockAbsolute } from "./stockLedger";
 import { INTEGRATION_META, INTEGRATION_PROVIDERS, mergeIntegrationSettings, validateIntegrationSettings, type IntegrationProvider } from "../shared/integrations";
@@ -24,7 +25,7 @@ import { sanitizePostContent } from "./_core/sanitizeHtml";
 import { getInventoryReservationFailure, shouldRestoreStock } from "./commerce-lifecycle";
 import { getLoyaltyTier, getNextLoyaltyTier, LOYALTY_TIERS, type LoyaltyTier } from "../shared/loyalty";
 import { LOW_STOCK_THRESHOLD as SHARED_LOW_STOCK_THRESHOLD } from "../shared/catalog-filter";
-import { applyDiversityCap, computeCategoryAffinity, filterCatalogBrand, filterCatalogPriceRange, filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCatalogCategories, getCatalogSkinTypes, scorePreferenceMatch, scorePriceBandAffinity, sortCatalogProducts, type CatalogSortOption, type PreferenceProfile, type SkinType } from "../shared/catalog-filter";
+import { applyDiversityCap, computeCategoryAffinity, DEFAULT_RECO_WEIGHTS, explainPreferenceMatch, filterCatalogBrand, filterCatalogPriceRange, filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCatalogCategories, getCatalogSkinTypes, isEligibleForPreferenceRecommendation, scorePreferenceMatch, scorePriceBandAffinity, sortCatalogProducts, type CatalogSortOption, type PreferenceProfile, type RecoWeights, type SkinType } from "../shared/catalog-filter";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -280,6 +281,7 @@ export async function updateUserProfile(userId: number, input: { name?: string |
     ...(input.phone !== undefined ? { phone: input.phone } : {}),
     updatedAt: new Date(),
   }).where(eq(users.id, userId));
+  forgetSessionUser(userId);
   return getUserById(userId);
 }
 
@@ -287,6 +289,7 @@ export async function updateUserAvatar(userId: number, avatarUrl: string | null)
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.update(users).set({ avatarUrl, updatedAt: new Date() }).where(eq(users.id, userId));
+  forgetSessionUser(userId);
   return getUserById(userId);
 }
 
@@ -367,10 +370,19 @@ export async function updateUserPreferences(userId: number, input: {
   fragrancePreference?: "unscented" | "light" | "floral" | "citrus" | null;
   wellnessInterests?: string | null;
   hasYoungChildren?: boolean | null;
+  // Биеийн арчилгаа (2026-09-20, migration 0091).
+  bodySkinType?: "dry" | "normal" | "sensitive" | null;
+  bodyConcerns?: string | null;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.update(users).set({ ...input, updatedAt: new Date() }).where(eq(users.id, userId));
+  // 2026-09-20: сешн хэрэглэгч 5 секунд кэшлэгддэг (SESSION_USER_TTL_MS) тул
+  // үүнгүйгээр хадгалсан өөрчлөлт `auth.me`-д тэр хугацаанд ХАРАГДАХГҮЙ —
+  // асуулгаа дуусгасан худалдан авагч хоосон профайл хараад үлддэг байв
+  // (шинэ E2E тест барьж авав). Аюулгүй байдлын бичигчид (нууц үг, эрх) энэ
+  // дуудлагыг аль хэдийн хийдэг; профайлын бичигчид л орхигдсон байжээ.
+  forgetSessionUser(userId);
   return getUserById(userId);
 }
 
@@ -378,6 +390,7 @@ export async function updateNotificationPreferences(userId: number, input: { ema
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.update(users).set({ ...input, updatedAt: new Date() }).where(eq(users.id, userId));
+  forgetSessionUser(userId);
   return getUserById(userId);
 }
 
@@ -429,6 +442,7 @@ export async function getWishlistForUser(userId: number) {
     notifyOnRestock: wishlistItems.notifyOnRestock,
     createdAt: wishlistItems.createdAt,
     name: products.name,
+    nameMn: products.nameMn,
     slug: products.slug,
     priceMnt: products.priceMnt,
     imageUrl: products.imageUrl,
@@ -756,6 +770,12 @@ const catalogRowColumns = {
   skinType: products.skinType,
   skinConcerns: products.skinConcerns,
   interiorStyle: products.interiorStyle,
+  // Хайлт v3 + монгол нэр (2026-09-20): индекс sku/searchKeywords-ийг, карт
+  // nameMn-ийг, санал болголт productType-ийг уншина — нэг мөрийн хэлбэр.
+  sku: products.sku,
+  nameMn: products.nameMn,
+  productType: products.productType,
+  searchKeywords: products.searchKeywords,
   avgRating: avgRatingExpr,
   reviewCount: reviewCountExpr,
 };
@@ -852,8 +872,18 @@ const CATALOG_PAGE_CACHE_TTL_MS = 10_000;
  */
 const CATALOG_SOURCE_CACHE_KEY = "storefront:catalogSource";
 
-async function getPublishedCatalogCached() {
+export async function getPublishedCatalogCached() {
   return getOrSetCached(CATALOG_SOURCE_CACHE_KEY, CATALOG_PAGE_CACHE_TTL_MS, () => getPublishedCatalog());
+}
+
+/**
+ * Хайлт v3 (2026-09-20): хайлтын индекс (server/search/catalogSearch.ts)
+ * энэ каталогийн кэшээс баригддаг тул каталог өөрчлөгдөх бүрт индекс ч
+ * унах ЁСТОЙ — хоёуланг нэг дуудлагаар. Бараа, ангилал бичигч бүр үүнийг дуудна.
+ */
+export function invalidateCatalogSource(): void {
+  invalidateCached(CATALOG_SOURCE_CACHE_KEY);
+  invalidateCached(CATALOG_INDEX_CACHE_KEY);
 }
 
 /**
@@ -1012,6 +1042,7 @@ export async function getBestsellingProducts(limit = 8) {
     const catalogColumns = {
       id: products.id,
       name: products.name,
+      nameMn: products.nameMn,
       slug: products.slug,
       brand: products.brand,
       priceMnt: products.priceMnt,
@@ -1129,7 +1160,8 @@ export async function getBestsellingProducts(limit = 8) {
  * for genuinely tiny fragments — real product/brand names are essentially
  * always long enough for this not to matter in practice.
  */
-export async function searchPublishedCatalog(query: string) {
+/** Хуучин MySQL FULLTEXT зам — зөвхөн SEARCH_ENGINE=fulltext буцаалтад (server/search/catalogSearch.ts). */
+export async function searchPublishedCatalogFulltext(query: string) {
   const db = await getDb();
   if (!db) return [];
 
@@ -1273,6 +1305,10 @@ export async function searchPublishedCatalog(query: string) {
       skinType: products.skinType,
       skinConcerns: products.skinConcerns,
       interiorStyle: products.interiorStyle,
+      sku: products.sku,
+      nameMn: products.nameMn,
+      productType: products.productType,
+      searchKeywords: products.searchKeywords,
       avgRating: avgRatingExpr,
       reviewCount: reviewCountExpr,
     })
@@ -1321,6 +1357,29 @@ export async function searchPublishedCatalog(query: string) {
  * addressed to that person. /shop's own rail keeps the fallback: there the
  * rail is a discovery aid, and empty would be worse than generic.
  */
+/**
+ * Санал болголтын жин (2026-09-20) — store settings "Санал болголт" бүлэг.
+ * Кэшлэсэн getStoreSettings()-оос нэг удаад; буруу/хоосон утга анхдагч руу.
+ */
+export async function getRecoWeights(): Promise<RecoWeights> {
+  const rows = await getStoreSettings();
+  const byKey = new Map(rows.map(row => [row.settingKey, row.settingValue]));
+  const read = (key: StoreSettingKey, fallback: number) => {
+    const value = Number(byKey.get(key) ?? getStoreSettingSlot(key).fallbackValue);
+    return Number.isFinite(value) && value >= 0 ? value : fallback;
+  };
+  return {
+    skinType: read("reco-weight-skin-type", DEFAULT_RECO_WEIGHTS.skinType),
+    hairType: read("reco-weight-hair-type", DEFAULT_RECO_WEIGHTS.hairType),
+    bodyType: read("reco-weight-body-type", DEFAULT_RECO_WEIGHTS.bodyType),
+    concern: read("reco-weight-concern", DEFAULT_RECO_WEIGHTS.concern),
+    allMatch: read("reco-weight-all-match", DEFAULT_RECO_WEIGHTS.allMatch),
+    maxPerBrand: Math.max(1, read("reco-max-per-brand", DEFAULT_RECO_WEIGHTS.maxPerBrand)),
+    maxPerCategory: Math.max(1, read("reco-max-per-category", DEFAULT_RECO_WEIGHTS.maxPerCategory)),
+    maxPerProductType: Math.max(1, read("reco-max-per-product-type", DEFAULT_RECO_WEIGHTS.maxPerProductType)),
+  };
+}
+
 export async function getRecommendedProducts(userId: number | null, limit = 8, personalOnly = false) {
   const db = await getDb();
   if (!db) return [];
@@ -1342,6 +1401,8 @@ export async function getRecommendedProducts(userId: number | null, limit = 8, p
       wellnessInterests: users.wellnessInterests,
       interiorStyle: users.interiorStyle,
       hasYoungChildren: users.hasYoungChildren,
+      bodySkinType: users.bodySkinType,
+      bodyConcerns: users.bodyConcerns,
     }).from(users).where(eq(users.id, userId)).limit(1);
     preferences = userRows[0] ?? {};
 
@@ -1362,7 +1423,7 @@ export async function getRecommendedProducts(userId: number | null, limit = 8, p
     wishlistCategoryIds = new Set(wishlistRows.map(row => row.categoryId).filter((id): id is number => id != null));
   }
 
-  const hasAnyPreference = Boolean(preferences.skinType || preferences.skinConcerns || preferences.hairType || preferences.hairConcerns || preferences.fragrancePreference || preferences.wellnessInterests || preferences.interiorStyle || preferences.hasYoungChildren);
+  const hasAnyPreference = Boolean(preferences.skinType || preferences.skinConcerns || preferences.hairType || preferences.hairConcerns || preferences.fragrancePreference || preferences.wellnessInterests || preferences.interiorStyle || preferences.hasYoungChildren || preferences.bodySkinType || preferences.bodyConcerns);
   const hasAnyHistory = categoryAffinity.size > 0 || wishlistCategoryIds.size > 0;
   if (!hasAnyPreference && !hasAnyHistory) {
     if (personalOnly) return [];
@@ -1393,6 +1454,7 @@ export async function getRecommendedProducts(userId: number | null, limit = 8, p
     id: products.id,
     categoryId: products.categoryId,
     name: products.name,
+    nameMn: products.nameMn,
     slug: products.slug,
     brand: products.brand,
     shortDescription: products.shortDescription,
@@ -1409,27 +1471,40 @@ export async function getRecommendedProducts(userId: number | null, limit = 8, p
     fragrancePreference: products.fragrancePreference,
     wellnessInterests: products.wellnessInterests,
     interiorStyle: products.interiorStyle,
+    // Санал болголт v3 (2026-09-20).
+    skinTypes: products.skinTypes,
+    productType: products.productType,
+    bodySkinType: products.bodySkinType,
+    bodyConcerns: products.bodyConcerns,
+    kind: products.kind,
   }).from(products)
     .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
     .where(and(eq(products.isPublished, true), gte(products.stockQuantity, 1)));
 
+  // v3 (2026-09-20): жин /admin → Дэлгүүрийн тохиргоо → "Санал болголт"-оос;
+  // оноо + ЯАГААД (reasons) нэг функцээс; бэлгийн карт/хүнс/гэр ахуй профайлаар
+  // санал болгогдохгүй (isEligibleForPreferenceRecommendation).
+  const weights = await getRecoWeights();
   const scored = candidates
+    .filter(isEligibleForPreferenceRecommendation)
     .map(product => {
-      let score = scorePreferenceMatch(product, preferences);
+      const explained = explainPreferenceMatch(product, preferences, weights);
+      let score = explained.score;
       const affinity = categoryAffinity.get(product.categoryId);
       if (affinity) score += affinity * 2;
       score += scorePriceBandAffinity(product.priceMnt, avgHistoricalUnitPriceMnt);
       if (wishlistCategoryIds.has(product.categoryId)) score += 0.5;
-      return { product, score };
+      return { product: { ...product, reasons: explained.reasons }, score };
     })
     .filter(entry => entry.score > 0)
-    .sort((a, b) => b.score - a.score);
+    .sort((a, b) => b.score - a.score || a.product.id - b.product.id);
 
   // maxPerCategory tightened 4->3 after a real QA run: with tag coverage
   // still thin catalog-wide, a single coarse signal (e.g. hasYoungChildren)
   // could otherwise fill most of the list from one category (see the
-  // hasYoungChildren weight comment in scorePreferenceMatch).
-  const diversified = applyDiversityCap(scored, { maxPerBrand: 3, maxPerCategory: 3 }).slice(0, limit);
+  // hasYoungChildren weight comment in scorePreferenceMatch). v3: төрлийн
+  // хязгаар нэмэгдэв — 8 санал routine хэлбэртэй (8 маск биш).
+  const diversified = applyDiversityCap(scored, { maxPerBrand: weights.maxPerBrand, maxPerCategory: weights.maxPerCategory, maxPerProductType: weights.maxPerProductType }).slice(0, limit);
   if (diversified.length >= Math.min(4, limit)) return diversified.map(entry => entry.product);
 
   // Thin result — backfill remaining slots with bestsellers rather than
@@ -1483,6 +1558,7 @@ export async function getRelatedProducts(productId: number, limit = 6) {
       id: products.id,
       categoryId: products.categoryId,
       name: products.name,
+      nameMn: products.nameMn,
       slug: products.slug,
       brand: products.brand,
       priceMnt: products.priceMnt,
@@ -1579,6 +1655,9 @@ export async function getProductBySlug(slug: string) {
       skinType: products.skinType,
       skinConcerns: products.skinConcerns,
       interiorStyle: products.interiorStyle,
+      nameMn: products.nameMn,
+      productType: products.productType,
+      searchKeywords: products.searchKeywords,
       avgRating: avgRatingExpr,
       reviewCount: reviewCountExpr,
     })
@@ -1615,6 +1694,7 @@ export async function getPublishedProductBySku(sku: string) {
     .select({
       id: products.id,
       name: products.name,
+      nameMn: products.nameMn,
       slug: products.slug,
       brand: products.brand,
       sku: products.sku,
@@ -1671,6 +1751,7 @@ export async function getActiveCartForOwner(owner: CartOwner) {
       productId: productVariants.productId,
       quantity: cartItems.quantity,
       name: products.name,
+      nameMn: products.nameMn,
       slug: products.slug,
       sku: productVariants.sku,
       priceMnt: productVariants.priceMnt,
@@ -2320,6 +2401,7 @@ async function loadRoutineWithSteps(routine: typeof routines.$inferSelect) {
     stepLabel: routineSteps.stepLabel,
     productId: products.id,
     name: products.name,
+    nameMn: products.nameMn,
     slug: products.slug,
     priceMnt: products.priceMnt,
     imageUrl: products.imageUrl,
@@ -2369,6 +2451,7 @@ export async function getAdminRoutineDetail(id: number) {
     stepLabel: routineSteps.stepLabel,
     productId: products.id,
     name: products.name,
+    nameMn: products.nameMn,
     priceMnt: products.priceMnt,
     imageUrl: products.imageUrl,
   }).from(routineSteps).innerJoin(products, eq(products.id, routineSteps.productId)).where(eq(routineSteps.routineId, id)).orderBy(asc(routineSteps.stepNumber));
@@ -2962,6 +3045,7 @@ export async function getAdminProducts() {
       id: products.id,
       categoryId: products.categoryId,
       name: products.name,
+      nameMn: products.nameMn,
       slug: products.slug,
       brand: products.brand,
       shortDescription: products.shortDescription,
@@ -2987,6 +3071,11 @@ export async function getAdminProducts() {
       hairConcerns: products.hairConcerns,
       fragrancePreference: products.fragrancePreference,
       wellnessInterests: products.wellnessInterests,
+      searchKeywords: products.searchKeywords,
+      productType: products.productType,
+      skinTypes: products.skinTypes,
+      bodySkinType: products.bodySkinType,
+      bodyConcerns: products.bodyConcerns,
     })
     .from(products)
     .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
@@ -3033,6 +3122,7 @@ export async function getLowStockProducts() {
   return db.select({
     id: products.id,
     name: products.name,
+    nameMn: products.nameMn,
     sku: products.sku,
     stockQuantity: products.stockQuantity,
   }).from(products).where(and(eq(products.isPublished, true), sql`${products.stockQuantity} <= ${LOW_STOCK_THRESHOLD}`)).orderBy(asc(products.stockQuantity)).limit(10);
@@ -5348,6 +5438,14 @@ export type ProductWriteInput = {
   hairConcerns?: string | null;
   fragrancePreference?: "unscented" | "light" | "floral" | "citrus" | null;
   wellnessInterests?: string | null;
+  // Хайлт v3 + монгол нэр (2026-09-20, migration 0090).
+  nameMn?: string | null;
+  searchKeywords?: string | null;
+  productType?: string | null;
+  // Санал болголт v3 (2026-09-20, migration 0091).
+  skinTypes?: string | null;
+  bodySkinType?: "dry" | "normal" | "sensitive" | null;
+  bodyConcerns?: string | null;
 };
 
 // Admin overhaul (2026-09-08, Phase H): bulk CSV import's create-vs-update
@@ -5362,7 +5460,7 @@ export async function findProductBySku(sku: string) {
 }
 
 export async function createAdminProduct(input: ProductWriteInput) {
-  invalidateCachedByPrefix("storefront:bestsellers:"); invalidateCached("storefront:publishedCount"); invalidateCached("storefront:brandDirectory"); invalidateCachedByPrefix("storefront:related:"); invalidateCached(CATALOG_SOURCE_CACHE_KEY);
+  invalidateCachedByPrefix("storefront:bestsellers:"); invalidateCached("storefront:publishedCount"); invalidateCached("storefront:brandDirectory"); invalidateCachedByPrefix("storefront:related:"); invalidateCatalogSource();
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
 
@@ -5398,6 +5496,12 @@ export async function createAdminProduct(input: ProductWriteInput) {
       interiorStyle: input.interiorStyle ?? null,
       hairType: input.hairType ?? null,
       hairConcerns: input.hairConcerns ?? null,
+      nameMn: input.nameMn ?? null,
+      searchKeywords: input.searchKeywords ?? null,
+      productType: input.productType ?? null,
+      skinTypes: input.skinTypes ?? null,
+      bodySkinType: input.bodySkinType ?? null,
+      bodyConcerns: input.bodyConcerns ?? null,
       fragrancePreference: input.fragrancePreference ?? null,
       wellnessInterests: input.wellnessInterests ?? null,
     });
@@ -5488,7 +5592,7 @@ async function syncSoleVariantFromProduct(productId: number, changes: { priceMnt
 }
 
 export async function updateAdminProduct(input: { id: number } & Partial<ProductWriteInput>) {
-  invalidateCachedByPrefix("storefront:bestsellers:"); invalidateCached("storefront:publishedCount"); invalidateCached("storefront:brandDirectory"); invalidateCachedByPrefix("storefront:related:"); invalidateCached(CATALOG_SOURCE_CACHE_KEY);
+  invalidateCachedByPrefix("storefront:bestsellers:"); invalidateCached("storefront:publishedCount"); invalidateCached("storefront:brandDirectory"); invalidateCachedByPrefix("storefront:related:"); invalidateCatalogSource();
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
 
@@ -5524,6 +5628,12 @@ export async function updateAdminProduct(input: { id: number } & Partial<Product
   if (input.hairConcerns !== undefined) changes.hairConcerns = input.hairConcerns;
   if (input.fragrancePreference !== undefined) changes.fragrancePreference = input.fragrancePreference;
   if (input.wellnessInterests !== undefined) changes.wellnessInterests = input.wellnessInterests;
+  if (input.nameMn !== undefined) changes.nameMn = input.nameMn;
+  if (input.searchKeywords !== undefined) changes.searchKeywords = input.searchKeywords;
+  if (input.productType !== undefined) changes.productType = input.productType;
+  if (input.skinTypes !== undefined) changes.skinTypes = input.skinTypes;
+  if (input.bodySkinType !== undefined) changes.bodySkinType = input.bodySkinType;
+  if (input.bodyConcerns !== undefined) changes.bodyConcerns = input.bodyConcerns;
 
   await db.update(products).set(changes).where(eq(products.id, input.id));
   await syncSoleVariantFromProduct(input.id, input);
@@ -5532,7 +5642,7 @@ export async function updateAdminProduct(input: { id: number } & Partial<Product
 }
 
 export async function deleteAdminProduct(id: number) {
-  invalidateCachedByPrefix("storefront:bestsellers:"); invalidateCached("storefront:publishedCount"); invalidateCached("storefront:brandDirectory"); invalidateCachedByPrefix("storefront:related:"); invalidateCached(CATALOG_SOURCE_CACHE_KEY);
+  invalidateCachedByPrefix("storefront:bestsellers:"); invalidateCached("storefront:publishedCount"); invalidateCached("storefront:brandDirectory"); invalidateCachedByPrefix("storefront:related:"); invalidateCatalogSource();
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
 
@@ -5569,6 +5679,7 @@ export async function createAdminCategory(input: CategoryWriteInput) {
 
 export async function updateAdminCategory(input: { id: number } & Partial<CategoryWriteInput>) {
   invalidateStorefront("categories");
+  invalidateCatalogSource(); // ангиллын нэр хайлтын индекст байдаг
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
 

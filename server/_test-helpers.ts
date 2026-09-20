@@ -28,6 +28,8 @@ export function testSessionUser(overrides: Partial<SessionUser> & { id: number }
     fragrancePreference: null,
     wellnessInterests: null,
     hasYoungChildren: null,
+    bodySkinType: null,
+    bodyConcerns: null,
     birthYear: null,
     occupation: null,
     emailOptIn: false,

@@ -68,6 +68,12 @@ export const users = mysqlTable("users", {
   wellnessInterests: varchar("wellnessInterests", { length: 300 }),
   hasYoungChildren: boolean("hasYoungChildren"),
   /**
+   * Биеийн арчилгаа (2026-09-20, migration 0091): асуулгын шинэ алхам. Products-
+   * ийн ижил нэртэй баганатай толь нь shared/catalog-filter.ts-д нэг.
+   */
+  bodySkinType: mysqlEnum("bodySkinType", ["dry", "normal", "sensitive"]),
+  bodyConcerns: varchar("bodyConcerns", { length: 300 }),
+  /**
    * Admin customer-analytics profile (optional, never asked at signup —
    * conversion cost of a mandatory field isn't worth it). Offered as an
    * optional "help us personalize your experience" prompt on the profile
@@ -289,6 +295,25 @@ export type FeaturedBrand = typeof featuredBrands.$inferSelect;
 export type InsertFeaturedBrand = typeof featuredBrands.$inferInsert;
 
 /**
+ * Брэндийн бичлэгийн хувилбарууд (2026-09-20, migration 0088). `products.brand`
+ * нь POS-оос ирсэн чөлөөт текст тул нэг брэнд хэд хэдэн бичлэгтэй ирдэг
+ * (`S-Select` 241 + `SSELECT` 2, `BA-YU` 7 + `BAYU` 1), мөн худалдан авагч
+ * кириллээр ("кокочи", "приеклат") хайдаг. Мөр бүр: `alias` → `canonicalBrand`.
+ * Хайлтын индекс alias бүрийг брэндийн талбарт индекслэнэ; бараа бичигч бүр
+ * брэндийг canonical руу нормчилно (server/search/dictionaries.ts). Admin →
+ * Хайлт → Брэндийн alias-аас засварлагдана — кодонд хатуу бичихгүй.
+ */
+export const brandAliases = mysqlTable("brand_aliases", {
+  id: int("id").autoincrement().primaryKey(),
+  canonicalBrand: varchar("canonicalBrand", { length: 120 }).notNull(),
+  alias: varchar("alias", { length: 120 }).notNull().unique(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  index("brand_aliases_canonical_idx").on(table.canonicalBrand),
+]);
+export type BrandAlias = typeof brandAliases.$inferSelect;
+
+/**
  * "Controls everything" admin overhaul (2026-09-08, Phase J): replaces
  * client/src/components/home/locations-data.ts's pure hardcoded array (no
  * backing table at all until now) -- fixes a real, previously-undiscovered
@@ -415,6 +440,31 @@ export const products = mysqlTable("products", {
   countryOfOrigin: varchar("countryOfOrigin", { length: 80 }),
   shelfLifeMonths: int("shelfLifeMonths"),
   factsSource: varchar("factsSource", { length: 40 }),
+  /**
+   * Хайлт v3 + монгол нэр (2026-09-20, migration 0090).
+   *  - `nameMn`: барааны монгол нэр ("Cocochi эссенс крем & маск 110г"). Tom:
+   *    "бүх барааг монгол нэр рүү шилжүүл" — storefront дээр `catalog-name-display`
+   *    store setting-ээр үндсэн гарчиг болно (shared/product-name.ts). Эхний
+   *    утгыг scripts/generate-product-names-mn.ts нэг удаа үүсгэж, admin засна.
+   *    Захиалга/POS/eBarimt-ийн мөр латин `name`-ийг хэвээр ашиглана.
+   *  - `searchKeywords`: admin-ий нэмэлт хайлтын үгс (таслалаар) — толинд байхгүй
+   *    ч энэ бараанд л хамаатай үгс ("морины тос", "хөхөө шампунь").
+   *  - `productType`: барааны төрөл (cleanser/serum/shampoo/body_wash…,
+   *    shared/catalog-filter.ts productTypeOptions) — санал болголтын
+   *    төрлийн диверс, хайлтын concept, admin шүүлтэд.
+   */
+  nameMn: varchar("nameMn", { length: 200 }),
+  searchKeywords: varchar("searchKeywords", { length: 500 }),
+  productType: varchar("productType", { length: 40 }),
+  /**
+   * Санал болголт v3 (2026-09-20, migration 0091). `skinTypes` — таслалаар ОЛОН
+   * утга ("dry,normal,combination") эсвэл "all"; чийгшүүлэгч нэг л төрөлд биш.
+   * Хуучин ганц `skinType` хэвээр (хамгийн хүчтэй утга, admin шүүлт, CSV).
+   * `bodySkinType`/`bodyConcerns` — биеийн арчилгааны толь, users-тэй ижил.
+   */
+  skinTypes: varchar("skinTypes", { length: 80 }),
+  bodySkinType: mysqlEnum("bodySkinType", ["dry", "normal", "sensitive"]),
+  bodyConcerns: varchar("bodyConcerns", { length: 300 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => [
@@ -453,6 +503,48 @@ export const products = mysqlTable("products", {
  * which is an approximation for genuinely multi-variant products (a known,
  * documented scope limit, not an oversight).
  */
+/**
+ * Хайлтын синонимын толь (2026-09-20, migration 0087). Мөр = нэг ОЙЛГОЛТ:
+ * `concept` тогтвортой түлхүүр, `terms` тэр ойлголтыг илэрхийлэх бүх үг таслалаар
+ * (монгол бичлэгүүд, галиг, барааны нэрэнд байдаг англи үг). Өмнө нь
+ * shared/search-synonyms.ts-д хатуу бичигдсэн 149 бүлэг — одоо тэр жагсаалт seed л,
+ * ажиллаж буй сервер энэ хүснэгтийг уншина (server/search/dictionaries.ts).
+ * Admin → Хайлт → Синонимын толь.
+ */
+export const searchSynonyms = mysqlTable("search_synonyms", {
+  id: int("id").autoincrement().primaryKey(),
+  concept: varchar("concept", { length: 80 }).notNull().unique(),
+  terms: text("terms").notNull(),
+  isActive: boolean("isActive").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type SearchSynonym = typeof searchSynonyms.$inferSelect;
+
+/**
+ * Хайлтын лог (2026-09-20, migration 0089). catalog.search/suggest бүр нэг мөр
+ * (нэг зочны ижил query 60 с-д нэг л удаа). Admin → Хайлт → Статистик: топ
+ * query, 0 үр дүнтэй query → шууд синоним болгох гогцоо.
+ * ⚠️ PII байхгүй: `visitorHash` нь зочны session cookie-ийн keyed sha256 — IP,
+ * түүхий token хэзээ ч биш. 90 хоногийн дараа data-retention job устгана.
+ */
+export const searchQueries = mysqlTable("search_queries", {
+  id: int("id").autoincrement().primaryKey(),
+  query: varchar("query", { length: 120 }).notNull(),
+  normalised: varchar("normalised", { length: 120 }).notNull(),
+  resultCount: int("resultCount").notNull(),
+  mode: mysqlEnum("mode", ["strict", "broad", "barcode", "none"]).notNull(),
+  source: mysqlEnum("source", ["shop", "header"]).notNull(),
+  userId: int("userId").references(() => users.id, { onDelete: "set null" }),
+  visitorHash: varchar("visitorHash", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  index("search_queries_created_idx").on(table.createdAt),
+  index("search_queries_results_idx").on(table.resultCount, table.createdAt),
+  index("search_queries_normalised_idx").on(table.normalised),
+]);
+export type SearchQuery = typeof searchQueries.$inferSelect;
+
 export const productVariants = mysqlTable("product_variants", {
   id: int("id").autoincrement().primaryKey(),
   productId: int("productId").notNull().references(() => products.id, { onDelete: "cascade" }),

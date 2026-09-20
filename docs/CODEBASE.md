@@ -160,7 +160,16 @@ browser → /api/trpc/<router>.<procedure>
 - **`vendorCatalog.ts`** (2026-09-15) — вендорын **үнэ, хөнгөлөлт, найрлага/заавар/анхааруулга**-г зөрүүний жагсаалт болгож, зөвхөн сонгосон баркодыг бичнэ. Клиент утга илгээхгүй (сервер дахин татна); үнэ хоёр хүснэгтэд, факт нь `factsSource="admin"` барааг хөндөхгүй.
 - **`smartSoftware.ts`** — бодит adapter. OAuth2 password grant; `fetch` БИШ `node:http(s)` (баримтын token дуудлага GET дээр body явуулдаг); token cache; `listLocations`, `pullStockSnapshot`. Вендорын POS API-д **борлуулалтын жагсаалт байхгүй** тул `pullSales` хэрэгждэггүй — шударгаар тэмдэглэсэн.
 
-### 3.7 Бусад
+### 3.7 Хайлт (`server/search/`, 2026-09-20)
+Процесс доторх MiniSearch индекс — MySQL FULLTEXT-ийг орлоно (typo, латин↔кирилл галиг, синоним, шинэ бараа шууд).
+- **`catalogSearchIndex.ts`** — ЦЭВЭР: мөр + толь + alias → индекс (`buildCatalogIndex`), индекс + query → id-ууд (`runCatalogSearch`: strict AND-of-OR → broad OR → баркод; брэнд/ангиллын илрүүлэлт; did-you-mean). Индекс-үеийн баяжуулалт: латин нэр/брэндийн кирилл галиг, кирилл тайлбарын латин галиг, `xc<concept>` ойлголтын токен, admin `searchKeywords`.
+- **`catalogSearch.ts`** — ttlCache glue (`storefront:catalogIndex`, 60 с, single-flight), каталогийн кэшээс hydrate, boot-ийн warm-up, `SEARCH_ENGINE=fulltext` буцаах env.
+- **`dictionaries.ts`** — `search_synonyms` / `brand_aliases` хүснэгтээс толь (хоосон бол кодын seed), admin CRUD, `seedSearchDictionaries`, `canonicaliseBrandName` (бараа бичих бүрт брэндийг canonical руу).
+- **`searchAnalytics.ts`** — `search_queries` лог (fire-and-forget, 60 с dedupe, visitorHash = keyed sha256, PII-гүй), `getSearchInsights`, `purgeSearchQueries` (90 хоног, data-retention job).
+- **`cacheKeys.ts`** — импортгүй түлхүүрүүд (db.ts ↔ search/ тойрог үүсгэхгүй). `db.ts`-ийн `invalidateCatalogSource()` каталог + индекс хоёуланг унагаана — бараа/ангилал бичигч бүр дуудна.
+Шаардлагатай `shared/`: `search-synonyms.ts` (`buildSynonymDictionary`), `transliterate.ts` (латин→кирилл), `brand-aliases.ts`, `product-name.ts` (монгол/латин нэрийн харагдац, `catalog-name-display` setting), `product-types.ts`.
+
+### 3.8 Бусад
 `analytics.ts` (29 экспорт: борлуулалт, дүүрэг, ашиг, CAC, хөрвүүлэлт, буцаалтын хувь, Excel/PDF export), `faceAuth.ts` (админы царайны хаалга — proof cookie 2 deadline-тай: sliding idle 25 мин `exp` + absolute 8 ц `abs`; `refreshFaceProof` зөвхөн бодит оролтын heartbeat-аар, `lockFaceSession` → `face_attempts.idle_locked`; descriptor л сервер рүү ирнэ, гадны API байхгүй), `verifyMn.ts` (SMS баталгаажуулалт), `storage.ts` (S3/R2), `automation.ts` (доорх §7), `notificationOutbox.ts`, `notificationsRouter.ts`, `catalog-validation.ts`, `commerce-lifecycle.ts`.
 
 ---
@@ -200,7 +209,7 @@ browser → /api/trpc/<router>.<procedure>
 
 ---
 
-## 6. Өгөгдлийн сан — 65 хүснэгт
+## 6. Өгөгдлийн сан — 68 хүснэгт (2026-09-20: + `searchSynonyms`, `brandAliases`, `searchQueries`; `products` + `nameMn`/`searchKeywords`/`productType`/`skinTypes`/`bodySkinType`/`bodyConcerns`; `users` + `bodySkinType`/`bodyConcerns`)
 
 | Бүлэг | Хүснэгтүүд |
 |---|---|

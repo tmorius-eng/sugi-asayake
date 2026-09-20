@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterCatalogPriceRange, filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCatalogCategories, getCatalogSkinTypes, sortCatalogProducts, scorePreferenceMatch, scorePriceBandAffinity, applyDiversityCap, computeCategoryAffinity } from "../shared/catalog-filter";
+import { filterCatalogPriceRange, filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCatalogCategories, getCatalogSkinTypes, sortCatalogProducts, scorePreferenceMatch, explainPreferenceMatch, isEligibleForPreferenceRecommendation, scorePriceBandAffinity, applyDiversityCap, computeCategoryAffinity } from "../shared/catalog-filter";
 
 const catalog = [
   { name: "Gokujyun Lotion", brand: "Hada Labo", categoryName: "Арьс арчилгаа", shortDescription: "Hyaluronic moisture", priceMnt: 29000, stockQuantity: 4, skinType: "dry" as const },
@@ -67,6 +67,50 @@ describe("scorePreferenceMatch", () => {
   it("scores an exact skinType match", () => {
     expect(scorePreferenceMatch({ id: 1, skinType: "dry" }, { skinType: "dry" })).toBe(3);
     expect(scorePreferenceMatch({ id: 1, skinType: "oily" }, { skinType: "dry" })).toBe(0);
+  });
+
+  // 2026-09-20: the measured cause of "the recommendations are wrong". The
+  // 2026-09-01 bulk auto-tag wrote skinType="normal" onto every untagged
+  // skincare product (561 rows) as a blunt category default -- that script
+  // said in its own comment that a category default is not a real signal,
+  // yet the scorer read it as a full match, so "normal skin" matched 561
+  // random products while "oily" matched 5.
+  it("ignores the legacy 'normal' placeholder (no concerns, no multi-value) as evidence", () => {
+    expect(scorePreferenceMatch({ id: 1, skinType: "normal" }, { skinType: "normal" })).toBe(0);
+    // A 'normal' that carries a real corroborating signal still counts.
+    expect(scorePreferenceMatch({ id: 1, skinType: "normal", skinConcerns: "dryness" }, { skinType: "normal" })).toBe(3);
+    // And the new multi-value column always wins over the legacy one.
+    expect(scorePreferenceMatch({ id: 1, skinType: "normal", skinTypes: "normal,dry" }, { skinType: "normal" })).toBe(3);
+  });
+
+  it("scores the multi-value skinTypes column, with 'all' worth less than an exact match", () => {
+    const exact = scorePreferenceMatch({ id: 1, skinTypes: "dry,normal,combination" }, { skinType: "dry" });
+    const anyType = scorePreferenceMatch({ id: 2, skinTypes: "all" }, { skinType: "dry" });
+    expect(exact).toBe(3);
+    expect(anyType).toBe(1);
+    expect(scorePreferenceMatch({ id: 3, skinTypes: "oily" }, { skinType: "dry" })).toBe(0);
+  });
+
+  it("scores the body-care profile the quiz now collects", () => {
+    expect(scorePreferenceMatch({ id: 1, bodySkinType: "dry" }, { bodySkinType: "dry" })).toBe(3);
+    expect(scorePreferenceMatch({ id: 1, bodyConcerns: "dryness,roughness" }, { bodyConcerns: "dryness" })).toBe(1.5);
+    expect(scorePreferenceMatch({ id: 1, bodySkinType: "sensitive" }, { bodySkinType: "dry" })).toBe(0);
+  });
+
+  it("explains why a product was recommended, in the shopper's own words", () => {
+    const { score, reasons } = explainPreferenceMatch(
+      { id: 1, skinTypes: "dry,normal", skinConcerns: "dryness,aging" },
+      { skinType: "dry", skinConcerns: "dryness" },
+    );
+    expect(score).toBeGreaterThan(3);
+    expect(reasons).toEqual(["Хуурай арьсанд", "Хуурайшилт"]);
+  });
+
+  it("keeps gift cards, food and household goods out of preference-based recommendations", () => {
+    expect(isEligibleForPreferenceRecommendation({ id: 1, kind: "gift_card" })).toBe(false);
+    expect(isEligibleForPreferenceRecommendation({ id: 2, categorySlug: "khuns" })).toBe(false);
+    expect(isEligibleForPreferenceRecommendation({ id: 3, productType: "oral_care" })).toBe(false);
+    expect(isEligibleForPreferenceRecommendation({ id: 4, productType: "cream" })).toBe(true);
   });
 
   it("weights skinConcerns by the shopper's click order (priority), not just set membership", () => {

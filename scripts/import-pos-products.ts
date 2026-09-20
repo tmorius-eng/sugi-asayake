@@ -20,6 +20,7 @@
 import "dotenv/config";
 import { readFileSync } from "node:fs";
 import { createAdminCategory, createAdminProduct, findProductBySku, getDb } from "../server/db";
+import { canonicaliseBrandName } from "../server/search/dictionaries";
 import { productCategories } from "../drizzle/schema";
 import { slugify } from "../shared/slugify";
 import { eq } from "drizzle-orm";
@@ -94,7 +95,10 @@ for (const row of fresh) {
     categoryId,
     name,
     slug,
-    brand: brandOf(name),
+    // 2026-09-20: брэндийг canonical бичлэг рүү (brand_aliases). Энэ скрипт нь
+    // `SSELECT`/`BAYU` мэтийн хуваагдлын АНХНЫ эх үүсвэр байсан — admin-ийн маягт,
+    // CSV импорт хоёр аль хэдийн нормчилдог тул энэ ч мөн адил.
+    brand: await canonicaliseBrandName(brandOf(name)),
     priceMnt: row.price,
     sku: row.barcode,
     stockQuantity: 20,

@@ -8,6 +8,7 @@ import { ubDistricts, ubDistrictLabels, type UbDistrict } from "@shared/district
 import {
   skinTypeOptions, skinConcernOptions, interiorStyleOptions, genderOptions, hairTypeOptions,
   hairConcernOptions, fragrancePreferenceOptions, skinRoutineComplexityOptions, wellnessInterestOptions,
+  bodySkinTypeOptions, bodyConcernOptions,
 } from "@shared/catalog-filter";
 
 /**
@@ -37,18 +38,23 @@ type Draft = {
   wellnessInterests: string[];
   hasYoungChildren: boolean | null;
   interiorStyle: string;
+  // Биеийн арчилгаа (2026-09-20, Tom: "бие type хийсэн ч санал буруу" — алхам
+  // нь огт байгаагүй).
+  bodySkinType: string;
+  bodyConcerns: string[];
 };
 
 const emptyDraft: Draft = {
   gender: "", primaryDistrict: "", birthYear: "", occupation: "",
   skinType: "", skinConcerns: [], skinRoutineComplexity: "",
   hairType: "", hairConcerns: [],
+  bodySkinType: "", bodyConcerns: [],
   fragrancePreference: "",
   wellnessInterests: [], hasYoungChildren: null,
   interiorStyle: "",
 };
 
-const STEP_TITLES = ["Хувийн мэдээлэл", "Арьсны профайл", "Үсний профайл", "Үнэр & хэрэглээ", "Эрүүл мэнд & амьдрал", "Интерьер", "Тойм"];
+const STEP_TITLES = ["Хувийн мэдээлэл", "Арьсны профайл", "Үсний профайл", "Биеийн арчилгаа", "Үнэр & хэрэглээ", "Эрүүл мэнд & амьдрал", "Интерьер", "Тойм"];
 
 function pillStyle(active: boolean): React.CSSProperties {
   return {
@@ -64,8 +70,12 @@ function PillGroup({ options, selected, onToggle, ranked }: { options: Array<{ v
       {options.map(option => {
         const rank = selected.indexOf(option.value);
         const active = rank !== -1;
+        // aria-pressed (2026-09-20): эдгээр нь toggle товч — идэвхтэй эсэх нь
+        // зөвхөн дэвсгэр өнгөөр илэрхийлэгдэж байсан тул дэлгэц уншигч
+        // хэрэглэгч юу сонгогдсоныг мэдэх аргагүй байв (мөн E2E тест
+        // өмнөх ажиллалтын төлвөөс хамааралгүй болно).
         return (
-          <button type="button" key={option.value} onClick={() => onToggle(option.value)} style={pillStyle(active)}>
+          <button type="button" key={option.value} aria-pressed={active} onClick={() => onToggle(option.value)} style={pillStyle(active)}>
             {ranked && active ? `${rank + 1}. ` : ""}{option.label}
           </button>
         );
@@ -97,6 +107,8 @@ export default function ProfileQuizWizard({ open, onOpenChange }: { open: boolea
       wellnessInterests: user?.wellnessInterests ? user.wellnessInterests.split(",").filter(Boolean) : [],
       hasYoungChildren: user?.hasYoungChildren ?? null,
       interiorStyle: user?.interiorStyle ?? "",
+      bodySkinType: user?.bodySkinType ?? "",
+      bodyConcerns: user?.bodyConcerns ? user.bodyConcerns.split(",").filter(Boolean) : [],
     });
     // Only re-seed when the dialog actually opens -- not on every user
     // refetch while it's already open (would stomp in-progress answers).
@@ -121,9 +133,11 @@ export default function ProfileQuizWizard({ open, onOpenChange }: { open: boolea
     wellnessInterests: source.wellnessInterests.length ? source.wellnessInterests.join(",") : null,
     hasYoungChildren: source.hasYoungChildren,
     interiorStyle: source.interiorStyle || null,
+    bodySkinType: (source.bodySkinType || null) as "dry" | "normal" | "sensitive" | null,
+    bodyConcerns: source.bodyConcerns.length ? source.bodyConcerns.join(",") : null,
   });
 
-  const toggleList = (key: "skinConcerns" | "hairConcerns" | "wellnessInterests", value: string) =>
+  const toggleList = (key: "skinConcerns" | "hairConcerns" | "wellnessInterests" | "bodyConcerns", value: string) =>
     setDraft(current => ({ ...current, [key]: current[key].includes(value) ? current[key].filter(item => item !== value) : [...current[key], value] }));
 
   const handleClose = (nextOpen: boolean) => {
@@ -219,13 +233,26 @@ export default function ProfileQuizWizard({ open, onOpenChange }: { open: boolea
           )}
 
           {step === 3 && (
+            <>
+              <div>
+                <p style={{ margin: "0 0 8px", fontSize: "11px", fontWeight: 800 }}>Биеийн арьсны төрөл</p>
+                <PillGroup options={bodySkinTypeOptions} selected={draft.bodySkinType ? [draft.bodySkinType] : []} onToggle={value => setDraft(current => ({ ...current, bodySkinType: current.bodySkinType === value ? "" : value }))} />
+              </div>
+              <div>
+                <p style={{ margin: "0 0 8px", fontSize: "11px", fontWeight: 800 }}>Биеийн арчилгааны зорилго (хамгийн чухлаа эхэлж сонгоно уу)</p>
+                <PillGroup options={bodyConcernOptions} selected={draft.bodyConcerns} onToggle={value => toggleList("bodyConcerns", value)} ranked />
+              </div>
+            </>
+          )}
+
+          {step === 4 && (
             <div>
               <p style={{ margin: "0 0 8px", fontSize: "11px", fontWeight: 800 }}>Үнэрийн сонголт</p>
               <PillGroup options={fragrancePreferenceOptions} selected={draft.fragrancePreference ? [draft.fragrancePreference] : []} onToggle={value => setDraft(current => ({ ...current, fragrancePreference: current.fragrancePreference === value ? "" : value }))} />
             </div>
           )}
 
-          {step === 4 && (
+          {step === 5 && (
             <>
               <div>
                 <p style={{ margin: "0 0 8px", fontSize: "11px", fontWeight: 800 }}>Сонирхдог зүйлс (олноор сонгож болно)</p>
@@ -241,7 +268,7 @@ export default function ProfileQuizWizard({ open, onOpenChange }: { open: boolea
             </>
           )}
 
-          {step === 5 && (
+          {step === 6 && (
             <div>
               <p style={{ margin: "0 0 8px", fontSize: "11px", fontWeight: 800 }}>Интерьерийн хэв маяг</p>
               <PillGroup options={interiorStyleOptions} selected={draft.interiorStyle ? [draft.interiorStyle] : []} onToggle={value => setDraft(current => ({ ...current, interiorStyle: current.interiorStyle === value ? "" : value }))} />
@@ -262,6 +289,8 @@ export default function ProfileQuizWizard({ open, onOpenChange }: { open: boolea
                   draft.skinRoutineComplexity && skinRoutineComplexityOptions.find(o => o.value === draft.skinRoutineComplexity)?.label,
                   draft.hairType && hairTypeOptions.find(o => o.value === draft.hairType)?.label,
                   ...draft.hairConcerns.map(value => hairConcernOptions.find(o => o.value === value)?.label),
+                  draft.bodySkinType && `Бие: ${bodySkinTypeOptions.find(o => o.value === draft.bodySkinType)?.label ?? ""}`,
+                  ...draft.bodyConcerns.map(value => bodyConcernOptions.find(o => o.value === value)?.label),
                   draft.fragrancePreference && fragrancePreferenceOptions.find(o => o.value === draft.fragrancePreference)?.label,
                   ...draft.wellnessInterests.map(value => wellnessInterestOptions.find(o => o.value === value)?.label),
                   draft.hasYoungChildren === true && "Бага насны хүүхэдтэй",

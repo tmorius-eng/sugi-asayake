@@ -26,6 +26,7 @@ import { UB_DELIVERY_FEE_MNT } from "@shared/const";
 import { useSiteText } from "@/hooks/useSiteText";
 import { useT } from "@/hooks/useLocale";
 import { useStoreSetting } from "@/hooks/useStoreSetting";
+import { useProductName } from "@/hooks/useProductName";
 import { formatMnt } from "@shared/format";
 // 2026-09-04 cohesion audit: this used to be a locally hardcoded 4-of-6-category
 // list with its own copy/ordering, independent of (and already drifted from)
@@ -70,6 +71,8 @@ export default function Shop() {
   const initialParams = new URLSearchParams(window.location.search);
   const textFor = useSiteText();
   const t = useT();
+  // Монгол нэр (2026-09-20): карт бүр нэг дүрмээр (shared/product-name.ts).
+  const displayName = useProductName();
   useDocumentMeta(
     textFor("seo-text-shop-title", "Дэлгүүр — SUGI ASAYAKE"),
     textFor("seo-text-shop-description", "Японоос албан ёсоор нийлүүлсэн арьс арчилгаа, эрүүл мэнд, гэр бүлийн хэрэгцээний 900+ бүтээгдэхүүн."),
@@ -404,7 +407,7 @@ export default function Shop() {
           <button type="button" className="shop-quick-view" onClick={() => openQuickView(product)}><Eye size={13} /> Шуурхай</button>
         </div>
         <div className="shop-product-copy">
-          <Link href={`/product/${product.slug}`} onClick={() => rememberProduct(product.id)} className="shop-product-link"><h2>{product.name}</h2></Link>
+          <Link href={`/product/${product.slug}`} onClick={() => rememberProduct(product.id)} className="shop-product-link"><h2>{displayName(product).primary}</h2>{displayName(product).secondary ? <span className="product-name-secondary">{displayName(product).secondary}</span> : null}</Link>
           <span className="shop-product-rating">{product.reviewCount > 0 ? <><Star size={12} fill="#f0b52d" stroke="#f0b52d" /> {product.avgRating?.toFixed(1)} <em>({product.reviewCount})</em></> : null}</span>
           <div className="shop-product-foot">
             <div className="shop-product-prices">

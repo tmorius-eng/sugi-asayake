@@ -30,7 +30,17 @@ import { getDb } from "../server/db";
  */
 async function main() {
   if (process.env.DATABASE_ADMIN_URL) process.env.DATABASE_URL = process.env.DATABASE_ADMIN_URL;
-  const files = process.argv.slice(2);
+  // 2026-09-20: `--staging` нь ижил HeatWave дээрх `sugi_staging` схемд ажиллуулна
+  // (deploy.ps1 -Staging migration зөөдөггүй — PROJECT-GUIDE-ийн дүрэм). URL-ийн
+  // схемийн нэрийг л солино; өөр хост руу хэзээ ч заахгүй.
+  const staging = process.argv.includes("--staging");
+  if (staging && process.env.DATABASE_URL) {
+    const swapped = process.env.DATABASE_URL.replace(/\/defaultdb(\?|$)/, "/sugi_staging$1");
+    if (swapped === process.env.DATABASE_URL) { console.error("--staging: DATABASE_URL нь /defaultdb руу заагаагүй тул сольж чадсангүй."); process.exit(2); }
+    process.env.DATABASE_URL = swapped;
+    console.log("[staging] sugi_staging схем рүү ажиллуулна.");
+  }
+  const files = process.argv.slice(2).filter(argument => !argument.startsWith("--"));
   if (!files.length) {
     console.error("Usage: pnpm exec tsx scripts/db-apply-migration.ts <drizzle/NNNN_name.sql> [...more]");
     process.exit(2);

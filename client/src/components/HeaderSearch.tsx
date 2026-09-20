@@ -1,21 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import { Search, X } from "lucide-react";
+import { Search, Tag, X } from "lucide-react";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
+import { useProductName } from "@/hooks/useProductName";
 
 // Site-wide search-with-suggestions, reachable from every page (previously
 // the only search box lived inside /shop's hero panel -- a shopper on Home,
 // ProductDetail, or Profile had no way to search without first navigating
-// there). Calls the same catalog.search FULLTEXT procedure /shop itself
-// uses (ROADMAP.md TIER 2), so results here can never disagree with what
-// /shop shows for the same term — this used to run its own client-side
-// filterCatalogProducts substring match over the whole always-fetched
-// catalog.list, which quietly drifted out of sync the moment /shop moved
-// to server-side search: a term this box could substring-match mid-word
-// (e.g. "рем" inside "крем") wouldn't necessarily FULLTEXT-match on /shop,
-// so "view all results" could land a shopper on an empty/different page
-// from what they just saw suggested.
+// there).
+//
+// Хайлт v3 (2026-09-20): `catalog.suggest` — /shop-ийн `catalog.search`-тэй
+// ЯГ ИЖИЛ индекс (server/search/catalogSearch.ts), дээр нь брэнд/ангиллын
+// мөр ("Брэнд: PRIECLAT · 21") ба "Та … гэж хайсан уу?" санал. Ингэснээр энд
+// харагдсан зүйл /shop дээр ч олдоно — 2026-08-25-ны "хоёр өөр хайлт" зөрүү
+// дахин үүсэхгүй.
 const fallbackImage = "/product-placeholder.svg";
 const MIN_QUERY_LENGTH = 2;
 
@@ -33,6 +32,7 @@ export default function HeaderSearch({ variant = "icon" }: { variant?: "icon" | 
   const [debouncedTerm, setDebouncedTerm] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const displayName = useProductName();
   const trimmed = term.trim();
 
   useEffect(() => {
@@ -41,8 +41,12 @@ export default function HeaderSearch({ variant = "icon" }: { variant?: "icon" | 
   }, [trimmed]);
 
   const isSearchable = open && debouncedTerm.length >= MIN_QUERY_LENGTH;
-  const search = trpc.catalog.search.useQuery({ query: debouncedTerm }, { enabled: isSearchable });
-  const matches = (search.data ?? []).slice(0, 6);
+  const search = trpc.catalog.suggest.useQuery({ query: debouncedTerm }, { enabled: isSearchable });
+  const matches = search.data?.products ?? [];
+  const brandMatches = search.data?.brandMatches ?? [];
+  const categoryMatches = search.data?.categoryMatches ?? [];
+  const didYouMean = search.data?.didYouMean ?? null;
+  const hasAnything = matches.length > 0 || brandMatches.length > 0 || categoryMatches.length > 0;
 
   useEffect(() => { if (open && variant === "icon") inputRef.current?.focus(); }, [open, variant]);
 
@@ -55,21 +59,47 @@ export default function HeaderSearch({ variant = "icon" }: { variant?: "icon" | 
     return () => { document.removeEventListener("mousedown", onClick); document.removeEventListener("keydown", onKey); };
   }, [open]);
 
-  const goToShop = () => {
+  const goToShop = (query = trimmed) => {
     setOpen(false);
-    window.location.assign(`/shop?q=${encodeURIComponent(trimmed)}`);
+    window.location.assign(`/shop?q=${encodeURIComponent(query)}`);
+  };
+  const goToBrand = (brand: string) => {
+    setOpen(false);
+    window.location.assign(`/shop?brand=${encodeURIComponent(brand)}`);
+  };
+  const goToCategory = (name: string) => {
+    setOpen(false);
+    window.location.assign(`/shop?category=${encodeURIComponent(name)}`);
   };
 
   const results = (
     <>
       {trimmed ? <div className="header-search-results">
-        {trimmed.length < MIN_QUERY_LENGTH ? <p className="header-search-empty">{`Дор хаяж ${MIN_QUERY_LENGTH} тэмдэгт оруулна уу.`}</p> : search.isLoading || debouncedTerm !== trimmed ? <p className="header-search-empty">Хайж байна…</p> : matches.length ? <>
-          {matches.map(product => <Link key={product.id} href={`/product/${product.slug}`} onClick={() => setOpen(false)} className="header-search-result">
-            <img src={product.imageUrl ?? fallbackImage} alt="" />
-            <span><strong>{product.name}</strong><small>{formatMnt(product.priceMnt)}</small></span>
-          </Link>)}
-          <button type="button" onClick={goToShop} className="header-search-viewall">{`“${trimmed}” -г бүх дэлгүүрээс харах →`}</button>
-        </> : <p className="header-search-empty">Тохирох бүтээгдэхүүн олдсонгүй.</p>}
+        {trimmed.length < MIN_QUERY_LENGTH ? <p className="header-search-empty">{`Дор хаяж ${MIN_QUERY_LENGTH} тэмдэгт оруулна уу.`}</p> : search.isLoading || debouncedTerm !== trimmed ? <p className="header-search-empty">Хайж байна…</p> : hasAnything ? <>
+          {/* <a>, БИШ <button>: утасны толгойд (.commerce-header-actions) "button span" бүгд
+              display:none (3100-р мөрийн дүрс-товчны дүрэм) — товчоор бичихэд брэндийн мөр
+              утсан дээр хоосон харагдаж байсныг 2026-09-20-нд screenshot-оор олов. */}
+          {brandMatches.map(match => <a key={`b-${match.brand}`} href={`/shop?brand=${encodeURIComponent(match.brand)}`} onClick={event => { event.preventDefault(); goToBrand(match.brand); }} className="header-search-result header-search-facet">
+            <span className="header-search-facet-icon"><Tag size={15} /></span>
+            <span><strong>{`Брэнд: ${match.brand}`}</strong><small>{`${match.count} бараа`}</small></span>
+          </a>)}
+          {categoryMatches.map(match => <a key={`c-${match.name}`} href={`/shop?category=${encodeURIComponent(match.name)}`} onClick={event => { event.preventDefault(); goToCategory(match.name); }} className="header-search-result header-search-facet">
+            <span className="header-search-facet-icon"><Search size={15} /></span>
+            <span><strong>{`Ангилал: ${match.name}`}</strong><small>Бүх барааг харах</small></span>
+          </a>)}
+          {matches.map(product => {
+            const name = displayName(product);
+            return <Link key={product.id} href={`/product/${product.slug}`} onClick={() => setOpen(false)} className="header-search-result">
+              <img src={product.imageUrl ?? fallbackImage} alt="" />
+              <span><strong>{name.primary}</strong>{name.secondary ? <em className="header-search-secondary">{name.secondary}</em> : null}<small>{formatMnt(product.priceMnt)}</small></span>
+            </Link>;
+          })}
+          {didYouMean ? <button type="button" onClick={() => { setTerm(didYouMean); setDebouncedTerm(didYouMean); }} className="header-search-didyoumean">{`Та “${didYouMean}” гэж хайсан уу?`}</button> : null}
+          <button type="button" onClick={() => goToShop()} className="header-search-viewall">{`“${trimmed}” -г бүх дэлгүүрээс харах →`}</button>
+        </> : <>
+          <p className="header-search-empty">Тохирох бүтээгдэхүүн олдсонгүй.</p>
+          {didYouMean ? <button type="button" onClick={() => { setTerm(didYouMean); setDebouncedTerm(didYouMean); }} className="header-search-didyoumean">{`Та “${didYouMean}” гэж хайсан уу?`}</button> : null}
+        </>}
       </div> : null}
     </>
   );

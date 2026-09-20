@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { getSalePercent } from "@shared/catalog-filter";
 import { imageSrcSet } from "@shared/image-variants";
 import { formatMnt } from "@shared/format";
+import { useProductName } from "@/hooks/useProductName";
 
 const fallbackImage = "/product-placeholder.svg";
 
@@ -10,6 +11,7 @@ export type ShelfProduct = {
   id: number;
   slug: string;
   name: string;
+  nameMn?: string | null;
   brand?: string | null;
   imageUrl?: string | null;
   priceMnt: number;
@@ -28,6 +30,7 @@ export type ShelfProduct = {
  */
 export default function ShelfProductCard({ product, rank }: { product: ShelfProduct; rank?: number }) {
   const salePercent = getSalePercent(product.priceMnt, product.compareAtPriceMnt);
+  const names = useProductName()(product);
   return (
     <Link href={`/product/${product.slug}`} className="shelf-card">
       {/* Нэг text node ("No.1") — тусдаа "No." node нь орчуулгын толь бичгийн "No"-тэй таарч япон хэлэнд "いいえ.1" болж байсан. */}
@@ -35,11 +38,12 @@ export default function ShelfProductCard({ product, rank }: { product: ShelfProd
       <span className="shelf-card-frame">
         <span className="shelf-card-image">
           {salePercent ? <span className="shop-sale-badge">-{salePercent}%</span> : null}
-          <img src={product.imageUrl ?? fallbackImage} alt={product.name} loading="lazy" {...(imageSrcSet(product.imageUrl, 1600) ? { srcSet: imageSrcSet(product.imageUrl, 1600)!, sizes: "220px" } : {})} />
+          <img src={product.imageUrl ?? fallbackImage} alt={names.primary} loading="lazy" {...(imageSrcSet(product.imageUrl, 1600) ? { srcSet: imageSrcSet(product.imageUrl, 1600)!, sizes: "220px" } : {})} />
         </span>
         <span className="shelf-card-body">
           <p>{product.brand ?? "SUGI ASAYAKE"}</p>
-          <h3>{product.name}</h3>
+          <h3>{names.primary}</h3>
+          {names.secondary ? <span className="product-name-secondary">{names.secondary}</span> : null}
           <span className="shelf-card-price">
             <strong>{formatMnt(product.priceMnt)}</strong>
             {salePercent ? <s>{formatMnt(product.compareAtPriceMnt!)}</s> : null}

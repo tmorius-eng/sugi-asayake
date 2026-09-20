@@ -4,6 +4,113 @@
 
 ---
 
+## Хайлт v3 + монгол нэр + санал болголт v3 — бүгд data-driven (2026-09-20, орой)
+
+Tom: *"хайлтын систем хангалтгүй — хэдхэн үг (батга, нөхжилт, хуурайшилт, нарны цагаан)
+л ажилладаг; латин/кириллээр буруу бичсэн ч бүх бараа гарч ирдэг, prieclat asmy cocochi
+sokamocka хайхад амар байг; профайлд арьс/үс/бие сонгосон ч санал буруу; бүгдийг
+advanced, professional; бүх барааг монгол нэр рүү; бүгд data driven, admin-аас editable."*
+Асуулгаар баталгаажсан шийдвэр: шинж чанар **зөвхөн дүрмээр** (AI-гүй), **биеийн
+арчилгааны алхам** нэмэх, монгол нэр **AI-аар нэг удаа**, монгол нэр **үндсэн гарчиг**.
+
+### Юу байсан (хэмжсэн)
+- Хайлт = FULLTEXT(name, brand, shortDescription) + кодонд бичсэн 149 синоним. Typo-гүй,
+  латин→кирилл галиг огт байхгүй (зөвхөн эсрэг), ≤3 тэмдэгт индекслэгддэггүй, шинэ бараа FT
+  cache flush хүртэл олддоггүй, лог байхгүй. Нэр 979/984 латин, тайлбар 941/941 кирилл (70%
+  загвар өгүүлбэр). Брэнд free-text: `S-Select`+`SSELECT`, `BA-YU`+`BAYU`, `Love Liner`×3.
+- Санал болголт: алгоритм зөв, өгөгдөл хоосон — `skinType` normal=561 (auto-tag placeholder),
+  sensitive 27, oily 5, dry 2, combination 0. Тослог арьстай хүнд 5 бараа л оноо авч, үлдсэн
+  нь санамсаргүй filler. Ганц утгат `skinType` (чийгшүүлэгч бүх төрөлд тохирдог ч нэгийг л
+  авдаг). "Бие" алхам огт байгаагүй. Жин/толь бүгд кодонд.
+
+### Хайлт v3 (`server/search/`, migration 0087–0090)
+- **MiniSearch** процесс дотор (context7-оор API баталгаажуулсан: nested AND-of-OR, per-term
+  fuzzy/prefix, index-time processTerm массив, autoSuggest). Бодит хэмжилт: build **~90 мс**,
+  heap +18–33 MB (GC-ийн өмнөх), 8 хайлт **~5 мс**; DB fetch тунелиар ~0.9 с (boot warm-up
+  нуудаг). VM RAM-д боломжийн.
+- Индекс-үеийн баяжуулалт: латин нэр/брэнд → кирилл 1–2 хувилбар (`shared/transliterate.ts`),
+  кирилл тайлбар → латин, `xc<concept>` ойлголтын токен ("Acne" нэртэй бараа "батга"-аар олдоно),
+  admin `searchKeywords`, брэндийн alias. Query: толиор өргөтгөх + галиглах + fuzzy (≤3 үсэг
+  үгүй, 4–5 нэг засвар, урт 20%) + prefix (латин ба толинд байхгүй өөрийн үг л — "маск"≠"маскара"
+  сургамж хэвээр). STRICT→BROAD→баркод; брэнд/ангиллын мөр; did-you-mean.
+- Толь **DB-д**: `search_synonyms` (148 seed), `brand_aliases` (55 seed) — Admin → Хайлт (3 таб:
+  статистик/0 үр дүнтэй → "+ синоним", толь CRUD + "туршиж үзэх", alias CRUD). Хоосон хүснэгт
+  бол кодын seed-ээр ажиллана (CI). `scripts/normalise-product-brands.ts --apply`: 8 бичлэг,
+  11 бараа (`SSELECT`→`S-Select`, `Prieclair`→`PRIECLAT`, `Club`→`Club Suppin` …). Бараа бичих
+  бүрт `canonicaliseBrandName` (маягт + CSV).
+- Лог `search_queries` (PII-гүй: visitorHash = sha256(cookie+secret), 60 с dedupe, ≥3 тэмдэгт,
+  90 хоногийн retention data-retention job-д). `catalog.search` гэрээ хэвээр; шинэ
+  `catalog.suggest` (HeaderSearch). Буцаах зам `SEARCH_ENGINE=fulltext` (хуучин функц
+  `searchPublishedCatalogFulltext` үлдсэн; `0027` индекс тогтворжсоны дараа устгана).
+- Тест: `transliterate`, `brand-aliases`, `catalog-search-index` (16, DB-гүй), `search-synonyms`
+  (buildSynonymDictionary), integration: `catalog-search` (11, OPTIMIZE TABLE хэрэггүй болсон),
+  `search-analytics` (4), sqli-probe хоёр замд. E2E `search.spec.ts` (6).
+
+### Монгол нэр (migration 0090 `nameMn`)
+- `shared/product-name.ts` + `useProductName()`: `catalog-name-display` store setting (mn|latin,
+  анхдагч **mn**), en/ja хэлэнд латин үндсэн, нэргүй бол латин. Карт (/shop), RailProductCard,
+  ShelfProductCard, QuickView, ProductDetail (h1, title, share), CartDrawer, HeaderSearch.
+  Захиалга/POS/eBarimt латин `name` хэвээр. Admin маягтад "Монгол нэр".
+- **979/984 нэр бодитоор бичигдсэн** (Tom: *"chi yaaj iij bgd bugdiin hiigeed ugduuu"*,
+  *"huwaagad huwaaj hiiged neg dor bish"*). Гадны API түлхүүр ХЭРЭГЛЭЭГҮЙ — `.env`-д байхгүй,
+  `ant` CLI ч суугаагүй; Claude Code өөрөө 10 багцаар (ойролцоогоор 100 бараа/багц) орчуулав.
+  Хэрэгсэл: `scripts/export-products-for-naming.ts` (нэргүй барааг багцаар хэвлэнэ) →
+  `docs/product-names-mn.tsv` (id + нэр, таслал/хашилтын асуудалгүй) →
+  `scripts/apply-product-names-mn.ts` (зөвхөн NULL мөрөнд; `--force` нь дахин нэрлэнэ).
+  Үлдсэн 5 нь аль хэдийн монгол (4 бэлгийн карт + импортод эвдэрсэн "Бараа (…)").
+  Дүрэм: брэнд ЛАТИНААР хэвээр ("BA-YU морины тосны шампунь силиконгүй 600мл"), хэмжээ хэвээр,
+  монгол жижиглэнгийн нэршил (шампунь, нөхөн сэргээгч, бие угаагч, нүүр угаагч, маск…).
+- `scripts/generate-product-names-mn.ts` (Claude API, structured output) кодонд үлдсэн ч
+  хэрэгцээгүй болсон — түлхүүр гарч ирвэл дахин нэрлэхэд ашиглаж болно.
+
+### Санал болголт v3 (migration 0091)
+- `products.skinTypes` (олон/"all"; backfill placeholder "normal"+concerns-гүйг ХУУЛААГҮЙ),
+  `productType` (29 төрөл, `shared/product-types.ts`), `bodySkinType`/`bodyConcerns` хоёр талд.
+  Асуулгад 4-р алхам "Биеийн арчилгаа"; Profile тоймд бүлэг; admin маягтад олон сонголттой
+  арьсны төрөл + бие + төрөл + хайлтын үгс; санал чипс v2.
+- `explainPreferenceMatch` (оноо + reasons, жин параметр), `isEligibleForPreferenceRecommendation`
+  (бэлгийн карт/хүнс/гэр ахуй/эрүүл ахуй/ам шүд саналд орохгүй), `applyDiversityCap` +
+  `maxPerProductType`. Жин store settings "Санал болголт" (8 түлхүүр, `getRecoWeights` кэшлэсэн).
+  Карт бүр "яагаад" чип (эхний 2 шалтгаан). `scorePreferenceMatch` хуучин гэрээ хэвээр (float
+  1.2000000000000002 → toFixed).
+- Tagger v2 (дүрмээр): productType 892/984 (untyped 169→92 fallback дүрмээр), skinTypes: all 243,
+  sensitive 31, dry-ийн бүлэг 9, oily 7 — **дүрмийн хязгаар**, Tom AI-г татгалзсан тул
+  admin-аас засна. `auto-tag-products.ts --apply`: 894 мөр (зөвхөн NULL багана).
+- `getRecommendedProducts`-д анх удаа integration тест (6): эрэмбэ + reasons, төрлийн хязгаар,
+  "all" < яг таарах, биеийн профайл, personalOnly, tRPC reasons. Бодит каталогтой зэрэгцэн
+  ажилладаг тул throwaway мөрүүд өндөр оноотой байхаар зохиосон.
+- `skinTypeOptions` ↔ `skinTypeLabels` зөрүү ("Энгийн"/"Хэвийн") арилав.
+
+### Замдаа олдсон, зассан бодит алдаанууд
+- **Профайлын өөрчлөлт 5 секунд харагдахгүй байсан.** Шинэ E2E (биеийн алхам) барьж
+  авав: асуулгаа дуусгасан худалдан авагч профайл дээрээ ХООСОН төлөв хараад үлдэнэ.
+  Шалтгаан: сешн хэрэглэгч `SESSION_USER_TTL_MS` (5 с) кэштэй атлаа `updateUserProfile`,
+  `updateUserAvatar`, `updateUserPreferences`, `updateNotificationPreferences` дөрвүүлээ
+  `forgetSessionUser`-ийг дууддаггүй байв (нууц үг/эрхийн бичигчид дууддаг). Нэр, утас,
+  зураг, мэдэгдлийн тохиргоо — бүгд ижил алдаатай байсныг нэг мөрөөр зассан.
+- **Хуучин `skinType="normal"` placeholder оноо авсаар байв.** 2026-09-01-ний bulk
+  auto-tag tag-гүй арьсны бараа бүрт ангиллын анхдагчаар `normal` бичсэн (561 мөр) —
+  тэр скрипт өөрөө "ангиллын анхдагч нь бодит дохио БИШ" гэж бичсэн ч оноолт түүнийг
+  бүрэн жингээр уншдаг байв: "хэвийн арьс" сонгосон хүн санамсаргүй 561 бараатай,
+  "тослог" нь 5-тай таарна. Одоо `legacySkinType()` тэр ялгуургүй хэлбэрийг (normal +
+  зорилгогүй + олон утгагүй) нотолгоо гэж үзэхгүй. **Өгөгдөл устгаагүй** — /shop-ийн
+  шүүлтүүр, admin-ий багана хэвээр; зөвхөн оноолт алгасна. Регрессийн тесттэй.
+- **POS импортын скрипт брэндийг нормчилдоггүй байв** — `SSELECT`/`BAYU` хуваагдлын
+  анхны эх үүсвэр. Одоо `canonicaliseBrandName` дайрна (маягт, CSV импорт аль хэдийн).
+- **Асуулгын pill-үүдэд `aria-pressed` байхгүй** — идэвхтэй эсэх нь зөвхөн дэвсгэр
+  өнгөөр илэрхийлэгддэг тул дэлгэц уншигч хэрэглэгч юу сонгогдсоноо мэдэхгүй байв.
+- ⚠️ **Аргачлалын сургамж**: `pnpm build 2>&1 | tail -1 && pnpm e2e` нь build унасан ч
+  үргэлжилдэг (pipeline-ийн exit code нь `tail`-ийнх) — E2E хуучин bundle дээр ажиллаж,
+  "өөрчлөлт ороогүй" мэт харагдана. Build-ийн exit code-ийг ШУУД шалгах.
+
+### Migration, орчин
+0087 search_synonyms, 0088 brand_aliases, 0089 search_queries, 0090 products nameMn/
+searchKeywords/productType, 0091 body care + skinTypes — **prod (`defaultdb`) ба
+`sugi_staging` хоёуланд** (`db-apply-migration.ts --staging` шинэ туг). Seed зөвхөн prod-д
+(staging кодын seed-ээр ажиллана). `minisearch@7.2.0` нэмэгдэв.
+
+---
+
 ## Бүтэн стекийн гүнзгий аудит, 9 захиалга нэг session-д (2026-09-20)
 
 Tom нэг session-д 9 аудитын playbook өгөв: full-stack takeover → production failure

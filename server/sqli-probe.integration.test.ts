@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { appRouter } from "./routers";
-import { getDb, searchPublishedCatalog } from "./db";
+import { getDb, searchPublishedCatalogFulltext } from "./db";
+import { searchPublishedCatalog } from "./search/catalogSearch";
 import { products } from "../drizzle/schema";
 import { sqlInt } from "./_core/sqlSafe";
 import type { TrpcContext } from "./_core/context";
@@ -42,6 +43,9 @@ gated("SQL injection resistance (sqlmap's six techniques)", () => {
     const started = Date.now();
     for (const payload of PAYLOADS) {
       const result = await searchPublishedCatalog(payload);
+      expect(Array.isArray(result)).toBe(true);
+      const fulltext = await searchPublishedCatalogFulltext(payload);
+      expect(Array.isArray(fulltext)).toBe(true);
       // A search always returns an array. If injection worked, a UNION would
       // change the shape, a boolean bypass would return the whole catalogue,
       // and DROP TABLE would make the NEXT call throw.
@@ -55,6 +59,7 @@ gated("SQL injection resistance (sqlmap's six techniques)", () => {
 
   it("still has the products table after the DROP TABLE payload -- stacked queries do not execute", async () => {
     await searchPublishedCatalog("'; DROP TABLE products;-- -");
+    await searchPublishedCatalogFulltext("'; DROP TABLE products;-- -");
     expect(await productCount()).toBeGreaterThanOrEqual(0);
   });
 

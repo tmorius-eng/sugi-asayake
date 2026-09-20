@@ -862,6 +862,16 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .header-search-viewall { margin-top: 6px; padding: 10px; width: 100%; text-align: center; border-radius: 12px; background: #dae0da; color: #17181b; font-size: 11px; font-weight: 800; transition: background .15s var(--ease-out); }
 .header-search-viewall:hover { background: #ced5cf; color: var(--primary); }
 .header-search-empty { padding: 14px 4px; color: #6a706b; font-size: 12px; text-align: center; }
+/* Монгол нэр (2026-09-20): үндсэн нэрийн доорх латин/монгол дэд мөр — карт, quick view, дэлгэрэнгүй */
+.product-name-secondary { display: block; margin-top: 2px; overflow: hidden; color: #6a706b; font-size: 11px; font-weight: 600; letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap; }
+/* Санал болголт v3 (2026-09-20): "яагаад энэ бараа" чип */
+.rail-reason-chip { display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 999px; background: #e7ece7; color: #2c7650; font-size: 10px; font-weight: 800; letter-spacing: .02em; }
+/* Хайлт v3 (2026-09-20): брэнд/ангиллын мөр, монгол/латин дэд нэр, "та … хайсан уу" */
+.header-search-facet { width: 100%; text-align: left; background: transparent; color: inherit; text-decoration: none; cursor: pointer; }
+.header-search-facet-icon { display: grid; width: 42px; height: 42px; flex: 0 0 auto; place-items: center; border-radius: 10px; background: #dae0da; color: #17181b; }
+.header-search-result .header-search-secondary { display: block; overflow: hidden; color: #6a706b; font-size: 11px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+.header-search-didyoumean { margin-top: 4px; padding: 8px 10px; width: 100%; text-align: left; border-radius: 12px; background: transparent; color: var(--primary); font-size: 12px; font-weight: 700; }
+.header-search-didyoumean:hover { background: #dae0da; }
 @media (max-width: 760px) { .header-search-panel { position: fixed; top: 64px; right: 12px; left: 12px; width: auto; } }
 
 /* Tom, 2026-09-05: "white gap between the black promo banner and the

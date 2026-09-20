@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 import { suggestTagsForProduct } from "../shared/product-tagging";
 
 describe("suggestTagsForProduct", () => {
-  it("never guesses on truly generic boilerplate copy (the common case in this catalog)", () => {
+  it("never guesses PERSONALIZATION tags on truly generic boilerplate copy (the common case in this catalog)", () => {
     // A real read of the live catalog found 767/937 products carry exactly
     // this kind of templated shortDescription -- this must stay untagged
     // rather than falsely matching on category alone.
+    //
+    // 2026-09-20: `productType` нь энэ тестээс хойш нэмэгдсэн ба өөр төрлийн
+    // талбар — хувь хүнд тохируулсан ТААМАГ биш, барааны бодит ангилал
+    // ("whipping net" = эрүүл ахуйн хэрэгсэл). Тестийн санаа хэвээр: арьс/үс/
+    // зорилгын НЭГ Ч tag боловсруулагдаагүй загвар тексээс гарч ирэхгүй.
     const suggestion = suggestTagsForProduct({
       name: "S SELECT whipping net 1P",
       brand: "S-Select",
@@ -13,7 +18,9 @@ describe("suggestTagsForProduct", () => {
       shortDescription: "S-Select брэндийн Японы жинхэнэ бүтээгдэхүүн.",
       description: null,
     });
-    expect(suggestion).toEqual({});
+    const { productType, ...personalization } = suggestion;
+    expect(personalization).toEqual({});
+    expect(productType).toBe("hygiene");
   });
 
   it("does NOT tag generic 'moisturizing' boilerplate as a dryness concern (regression: this over-fired against ~99% of the real skincare catalog before the fix)", () => {
