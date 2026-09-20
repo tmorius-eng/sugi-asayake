@@ -4,6 +4,235 @@
 
 ---
 
+## Бүтэн стекийн гүнзгий аудит, 9 захиалга нэг session-д (2026-09-20)
+
+Tom нэг session-д 9 аудитын playbook өгөв: full-stack takeover → production failure
+→ technical waste (*"do not perform deletions"*) → DB at millions of rows →
+real-world performance → dev/staging/prod → tests themselves → domain state
+machines → AI/legacy drift, төгсгөлд нь *"DO NOT start randomly fixing — PHASE 0–6
+plan, implement ONLY the highest-priority safe changes, validate after each group,
+CHANGELOG"*. Бүх дүн, төлөвлөгөө, ангилал: **[docs/AUDIT-2026-09-20-full-stack.md](docs/AUDIT-2026-09-20-full-stack.md)**.
+
+### Аудитын арга
+Репог бүхэлд нь уншсан (65k мөр): entry/middleware, tRPC builder бүр (281 procedure
+→ builder хүснэгт), checkout-ийн зүрх (`createOrderFromActiveCart`), төлбөрийн
+callback, scheduler/outbox, схемийн 98 индекс/87 FK, env хувьсагч бүр (57), catch
+блок бүр (server-д 150+), `Promise.all` 30, timeout-гүй fetch, unbounded query,
+тестийн gate/mock/skip, клиентийн бүх хуудас. Dependency 60-г импортоор тулгасан.
+
+### Юу олдов (гол нь)
+- **P0** сагсны `active→converted` UPDATE guard-гүй → хоёр tab (tab бүр өөрийн
+  `clientRequestId`) = хоёр захиалга, хоёр удаа нөөц хасалт. Replay хамгаалалт зөвхөн
+  ИЖИЛ ID-г барьдаг. Бусад бүх decrement атомик байсан, энэ нэг нь биш.
+- **P0** tRPC `errorFormatter` байхгүй → production-д `ER_LOCK_WAIT_TIMEOUT … UPDATE
+  product_variants` төрлийн мессеж хэрэглэгчийн toast-д гардаг байв.
+- **P0** `login_attempts` бичигддэг ч хэн ч уншдаггүй → данс тус бүрийн lockout алга.
+- **P1** strict 8/15мин/IP нь АМЖИЛТТАЙ нэвтрэлт/захиалгыг ч тоолдог → CGNAT/оффисын
+  9 дэх хэрэглэгч 429.
+- **P1** орхигдсон сагсны сануулга: `sendAccountEmail` буцах утгыг үл хардаг →
+  Brevo унасан ч "илгээсэн". Төлбөрийн polling paid-ийн дараа ч 5с тутам. SW
+  `/icons /images /fonts`-ыг мөнхөд cache-first (лого сольход буцаж ирсэн зочин
+  хуучныг харна).
+- **P2** 7 outbound fetch timeout-гүй (QPay ×2, verify.mn, Brevo ×2, Honeybadger,
+  OG); campaign `Promise.all` нэг алдаанд audit мөргүй таслаад дахин илгээхэд
+  давхардана; production-д зөвхөн `JWT_SECRET` шалгагддаг байв.
+- Устгах нэр дэвшигч (ХИЙГЭЭГҮЙ): `server/index.ts` (Manus-ийн хуучин entry),
+  `client/public/sitemap.xml` (Manus host, динамик route-д дарагдсан),
+  `careers-small.png`, wouter patch (`__WOUTER_ROUTES__` хэн ч уншдаггүй),
+  `AdminDeltaPill`/`SectionEyebrow`/`useComposition`/`useMobile`, `autoprefixer`/
+  `postcss`/`@types/google.maps`/`next-themes`, `AXIOS_TIMEOUT_MS`, `@assets` alias.
+- Хуучирсан баримт: README 43 хүснэгт/61 migration/578 тест → бодит 65/87/1030+;
+  CODEBASE.md-ийн мөрийн тоо; `.env.example` README-д холбогдсон ч БАЙХГҮЙ (23 env
+  хувьсагч баримтгүй) → README-д бүгдийг жагсаав; файлыг Tom үүсгэнэ (туслах
+  `.env*` бичих эрхгүй).
+
+### Зассан (CHANGELOG, аудитын баримтын §12)
+`db.ts` cart guard + `countRecentFailedLoginAttempts`; `trpc.ts` `maskErrorShape` +
+`login`/`checkout` tier; `routers.ts` lockout, tier, avatar strict, campaign
+allSettled; `context.ts` env fail-fast; timeout ×7; `automation.ts`; `Checkout.tsx`
+polling; `sw.js` v3 SWR; тест: `trpc-errors.test.ts` (шинэ), `auth.lockout.integration.test.ts`
+(шинэ), `auth.rate-limit.test.ts` босго 8→20. Бүлэг бүрийн дараа check/lint/тест;
+төгсгөлд build + E2E.
+
+### PHASE 6 — цэвэрлэгээ (Tom: *"phase 6 gaas ehleed uregjluul!"*)
+
+Аудитын үед санаатай устгаагүй байсан жагсаалтыг Tom зөвшөөрснөөр гүйцэтгэв.
+Дүрэм: **текст хайлтад л найдаж устгахгүй**. Тиймээс нэр дэвшигч бүрийг дөрвөн
+давхаргаар шалгав — (1) статик импорт, (2) **хувьсагч/template-тэй динамик
+`import()`** (репо даяар 0 олдсон тул импортын мод бүрэн эрх мэдэлтэй), (3) config
+/ script / e2e / `components.json` / HTML-ийн мөр лавлагаа, (4) баримтын лавлагаа.
+
+**Устгасан** (9 файл, 4 dependency, 1 patch):
+
+- `server/index.ts` — Manus-ийн үеийн API-гүй статик сервер. `pnpm dev`/`pnpm build`
+  хоёул `server/_core/index.ts`-ийг л ашигладаг. Хоёр "сервер эхлэх цэг" байгаа нь
+  дараагийн уншигчийн хувьд бодит төөрөгдөл байв.
+- `client/public/sitemap.xml` — үхсэн `sugi-mongo-detasex2.manus.space` хаягуудтай.
+  `app.get("/sitemap.xml", serveSitemap)` статик serve-ээс ӨМНӨ бүртгэгддэг тул энэ
+  файл хэзээ ч хүргэгдэж байгаагүй. **Устгасны дараа ажиллаж буй production сервер
+  дээр батлав**: `/sitemap.xml` → 200, `application/xml`, **1020 `<loc>`**, бүгд
+  `sugi.karkaron.com`. `/robots.txt`, `/`, `/shop`, `/product/*`, `/admin`, `/journal`,
+  404 зам бүгд хэвийн.
+- `client/src/components/home/SectionEyebrow.tsx` + `.section-heading` /
+  `.section-heading-light` CSS (9 мөр). 2026-09-11-нд нүүрнээс "eyebrow" хэв маягийг
+  буулгахад (NEWVISION.md §2) компонент нь үлдсэн байв. CSS-ийн тайлбар
+  *"CategoryMasonry/StoreLocatorSection ашигладаг"* гэсэн нь **худал** — тэд хоёул
+  `SectionHeading` → `.editorial-heading`-ийг ашигладаг. Админы бичсэн HTML `class`
+  атрибут авч явдаггүй (`sanitizeHtml`-д зөвшөөрөгдөөгүй) тул аль ч замаар хүрэхгүй.
+- `AdminDeltaPill.tsx`, `hooks/useComposition.ts`, `hooks/useMobile.tsx` — импорт 0.
+- `careers-small.png` (root), `AXIOS_TIMEOUT_MS`, `@assets` alias (`attached_assets`
+  хавтас огт байхгүй).
+- `patches/wouter@3.7.1.patch` + `patchedDependencies` — patch нь route замуудыг
+  `window.__WOUTER_ROUTES__`-д цуглуулдаг байсан; тэр глобалыг **уншдаг газар репо
+  даяар нэг ч байхгүй**. Устгасны дараа `node_modules/wouter` унпатчлагдсаныг
+  шалгаж, routing-ийг E2E-ээр баталсан.
+- `next-themes` — зөвхөн `ui/sonner.tsx` ашигладаг байсан ч next-themes-ийн
+  ThemeProvider энэ апп-д **огт mount хийгддэггүй** (аппын өөрийн `ThemeContext`
+  тусдаа), тиймээс `useTheme()` үргэлж `undefined` буцааж `theme="system"` болдог
+  байв. Тогтмолоор сольсон — зан төлөв байт-ижил.
+- `@types/google.maps` (хэрэглээ 0), `autoprefixer` + `postcss` devDeps (Tailwind v4
+  `@tailwindcss/vite`; `postcss.config.*`, `tailwind.config.*` хоёулаа байхгүй).
+  ⚠️ `pnpm.overrides`-ийн `postcss: >=8.5.28` floor-ыг ҮЛДЭЭСЭН — transitive хувилбар
+  8.5.28 хэвээр (аюулгүй байдлын шалтгаан).
+
+**Үлдээсэн**: `shared/job-application-form.ts` (толгойдоо "залгаагүй, 3 алхам үлдсэн"
+гэж баримтжуулсан ирээдүйн ажил), `archive/*.md`, root-ийн `.md`-ууд,
+`login_attempts.email` баганын нэр (rename = migration).
+
+**Хэмжсэн үр дүн**: үндсэн JS chunk 498.46 → 497.46 kB (gzip 157.69 → 157.28), файл
+−9, шууд dependency −4, patch −1. Байтын хэмнэлт бага — гол ашиг нь хуурамч
+лавлагаа, хоёр дахь entry, худал тайлбар арилсанд.
+
+**Шалгалт**: `pnpm check` ✅ · `pnpm lint` ✅ · `pnpm build` ✅ · ажиллаж буй сервер
+дээр 10 route ✅.
+
+### Бүтэн E2E анх удаа нэг удаад ажиллахад илэрсэн хоёр нуугдмал алдаа
+
+PHASE 6-ийн дараа E2E-г **бүтнээр** (desktop + mobile, 80 тест) ажиллуулахад 4 тест
+унав. Хоёулаа энэ session-ий өөрчлөлтөөс БИШ болохыг тус тусад нь баталсан:
+
+1. **Аппын өөрийн blanket rate limit өөрийнх нь suite-ийг блоклож байв.** 3 mobile
+   тест `429` авсан: mobile project нь desktop-ийн дараа ИЖИЛ IP-ээс ажилладаг тул
+   `limitApiTraffic`-ийн 300 хүсэлт/15 мин budget дундуураа дуусдаг. Клиент талд
+   энэ нь `"Unable to transform response from server"` гэж харагддаг (429-ийн JSON
+   нь tRPC envelope биш) — өөрөөр хэлбэл **бодит хэрэглэгч ч нүүр хуудсаа эвдэрсэн
+   байдлаар харна**. Баталгаа: серверийг унтрааж дахин асаагаад (санах ойн bucket
+   цэвэрлэгдэнэ) тэр 3 тестийг ажиллуулахад бүгд давсан.
+   → `MAX_REQUESTS` **300 → 1200**/15мин/IP. Гурван үндэслэл: (a) нэг IP-ийн ард
+   олон хэрэглэгч байх нь тест биш бодит нөхцөл (Монголын CGNAT, оффисын NAT) —
+   өөрийн suite нь түүний бяцхан хувилбар, (b) telemetry tier 600/15мин
+   зөвшөөрдөг атлаа нийт таг нь 300 байсан нь дотоод зөрчил, (c) Cloudflare ирмэг
+   дээр 150/10с блоклодог. Нэвтрэх/бүртгэл/checkout/OTP-ийн чанга, DB дээр
+   тоологддог tier-үүд хөндөгдөөгүй.
+2. **`e2e/admin-delete-order.spec.ts`-ийн сонгогч буруу** (зөвхөн mobile).
+   `getByPlaceholder(/хайх/i).first()` нь хэсгийн хайлт биш **глобал командын
+   цонхны** талбарыг олдог; түүнд бичихэд панель дахин mount хийгдэж view mode
+   "жагсаалт"-аас "самбар" руу буцдаг, харин устгах товч зөвхөн жагсаалт горимд
+   байдаг. Хуудасны snapshot дээр Kanban багануудыг (ХҮЛЭЭГДЭЖ БАЙНА 4 … ЦУЦАЛСАН 1)
+   харж батлав. Сонгогчийг `getByPlaceholder("Дугаар, хэрэглэгч, утас хайх")`
+   болгов; `if visible` зөөлрүүлэлтийг хасав.
+
+3. **ESLint нь Playwright-ийн тайлангийн вендор bundle-ууд дээр 3,977 худал алдаа
+   өгдөг болов.** Уналттай run нь trace viewer-ийн 32 minified JS-ийг
+   `playwright-report/trace/`-д хуулдаг; ESLint нь `.gitignore`-ийг УНШДАГГҮЙ тул
+   дараагийн `pnpm lint` тэдгээрийг шалгаж эхэлсэн (`'define' is not defined` …).
+   Өмнө нь илрээгүй шалтгаан: энэ session хүртэл E2E бүх run ногоон дуусч, trace
+   огт үүсээгүй байв. → `eslint.config.js`-ийн `ignores`-д `playwright-report/**`,
+   `test-results/**`, `blob-report/**` нэмэв (гурвуулаа gitignore-д бий). Дүрэм
+   сулруулаагүй.
+
+**Сургамж**: E2E-г дэд багцаар (`--project=desktop <файл>`) ажиллуулахад эдгээрийн
+аль нь ч илрэхгүй байв — **бүтнээр нэг удаад ажиллуулж байж л "ногоон" гэж хэлнэ**.
+Мөн уналттай E2E-ийн ДАРАА `pnpm lint`-ийг дахин ажиллуулж үзэх нь гуравдахийг нь
+илрүүлэв. Гурвыг зассаны дараа бүтэн E2E **82 passed / 2 skipped / 0 failed**.
+
+### PHASE 4 — батлагдсан давхардлыг нэгтгэв (зан төлөв хөндөөгүй)
+
+Зөвхөн үсэг үсгээрээ ижил болохыг нь тулгаж баталсныг л нэгтгэв:
+
+- `slugify` — `AdminWorkspace`, `AdminBranchesPanel`, `AdminRoutinesPanel` дээрх
+  гурван ижил inline хуулбар → `@shared/slugify` (серверт аль хэдийн ашиглагддаг).
+- `skinTypeLabels` — `AdminWorkspace`-ийн хуулбар → `@shared/catalog-filter`.
+  Нэг дуудлага `string`-ээр индекслэдэг байсныг `as SkinType` болгов (`any` БИШ).
+- `absoluteUrl` — `indexHtml.ts` / `routeMeta.ts` / `ogImage.ts` дээрх гурван
+  хуулбар → шинэ `server/_core/publicUrl.ts` (`absoluteUrl`, `publicOrigin`).
+  Хоёр файлын хэрэгцээгүй болсон `ENV` импорт мөн арилав.
+
+### Хэмжилт: ML загварууд энэ VM-д багтахгүй (Tom: *"za hiih ystoi zuil baiwal hii"*)
+
+Аудитад "NEEDS VERIFICATION" гэж үлдсэн цорын ганц том зүйлийг бодитоор хэмжив
+(production build, `node dist/index.js`):
+
+| Төлөв | RSS |
+|---|---|
+| Сервер сул зогсож байхад (хоёр warm-up ажилласны дараа) | **535 MB** |
+| Текстийн toxicity загвар (probe: 102 → 470) | **+368 MB** |
+| Дээр нь зургийн NSFW загвар (probe: 470 → 683) | **+213 MB** |
+| Хоёулаа хэрэглэгдсэн процесс | **680–800 MB** |
+| Хост | **954 MB VM**, pm2 `--max-memory-restart 700M`, дээр нь staging ч бий |
+
+Өөрөөр хэлбэл boot-ийн дараах **эхний сэтгэгдэл** серверийг хязгаараас хальгаж,
+pm2 түүнийг **хүсэлтийн дундуур** restart хийнэ.
+
+**Хамгийн чухал нь**: кодын тайлбарт "idle-ийн дараа сулруулдаг тул процесс суурь
+RAM руугаа буцна" гэж бичсэн нь ҮНЭН БИШ байв. `dispose()` нь tensor чөлөөлдөг ч
+RSS үйлдлийн систем рүү буцдаггүй — "сулруулсны" дараа ч 535 MB хэвээр. Тиймээс
+эхлээд idle-ийг 10 → 3 минут болгосноо **буцаалаа**: богиносгох нь хэмнэлт биш,
+зөвхөн дахин ачаалалтын түр оргил (683 → 799 MB ажиглагдсан) нэмдэг. Хэмжилт
+өөрийн төлөвлөгөөг минь няцаасан тохиолдол.
+
+Хийсэн нь: (1) `warmUpImageSafety` boot дээр загвараа 10 минут үлдээдэг байсныг
+(текстийнхтэй зөрчилдсөн асимметр) арилгаж, шалгаад шууд сулруулдаг болгов;
+(2) хост 1.5 GB-аас бага бол `pm2 logs`-д хэмжсэн тоо + 3 сонголттой тод
+сэрэмжлүүлэг бичдэг болов — цэвэр `lowMemoryWarning` функцийг gate-гүй unit
+тестээр бэхэлсэн (954 MB дээр ЗААВАЛ ажиллана); (3) `express.json` 50mb → 20mb
+(хамгийн том зөвшөөрөгдсөн бие 14 MB base64).
+
+⚠️ **Шийдвэр Tom-ийнх**: (1) VM-ийн RAM нэмэх, (2) `MODERATION_MODEL=0` (монгол
+хэлний lexical шүүлт хэвээр, `ANTHROPIC_API_KEY` байвал олон хэл ч хэвээр),
+(3) pm2-ийн хязгаарыг ухамсартайгаар өсгөх.
+
+### Production DB-ийн тестийн үлдэгдэл цэвэрлэгдлээ
+
+`scripts/test-residue-report.ts` нь бодит дэлгүүрийн схемд **4 тестийн хэрэглэгч**
+олов, гурав нь `admin` эрхтэй. Эрсдэлийг нэг бүрчлэн шалгасан: гурван admin мөр нь
+**нэвтрэх боломжгүй** (утас нь `handoff-…` гэсэн үсэгтэй мөр эсвэл NULL; нэвтрэлт 8
+оронтой утас шаарддаг тул zod түвшинд татгалздаг) — өөрөөр хэлбэл P0 биш. Харин
+`#7540` нь бодит утастай (`88110077`) бөгөөд түүний нууц үг тестийн файлд ил
+бичээстэй: репо уншсан хүн production-д хэрэглэгчээр нэвтрэх боломжтой байв.
+Репогийн өөрийн `test-residue-purge.ts`-ээр (эхлээд dry run, дараа нь `--apply`) 4
+мөр болон 322 дарагдсан мэдэгдлийн мөр цэвэрлэгдэж, тайлан бүрэн хоосон болов.
+
+**Үндсэн шалтгаан** (тэмдэглэв, засаагүй): vitest-ийн integration suite нь `.env`-ийн
+`DATABASE_URL`-ээр бодит `defaultdb` схемд бичдэг тул тасарсан run бүр үлдэгдэл
+үлдээдэг. E2E-г 2026-09-16-нд яг үүний улмаас `sugi_staging` руу зөөсөн; vitest-ийг
+мөн зөөхөд staging-ийн схемийн синк (migration гараар очдог) эхлээд шийдэгдэх ёстой.
+
+Мөн гарын авлагын асуултад хариулав: junk захиалга **`#6802`-д бэлгийн картын код
+үүсээгүй** (төлөгдөөгүй тул), `#6655` нь аль хэдийн устсан байв.
+
+**Эцсийн гэрчилгээ**: `pnpm check` ✅ · `pnpm lint` ✅ · `pnpm build` ✅ ·
+**бүтэн vitest 1038 passed / 2 skipped / 0 failed** (107 файл, 1066 с) · **бүтэн E2E
+82 passed / 2 skipped / 0 failed** · ажиллаж буй сервер дээр 10 route ·
+`sw.js`-ийн `waitUntil` засварын дараа PWA+storefront E2E 26/26.
+
+⛔ **Утасны нормчлолыг НЭГТГЭЭГҮЙ.** Тулгаж үзэхэд дөрвүүлээ өөр, зориудын
+гэрээтэй болох нь батлагдав: `normaliseMongolianMobile` зөвхөн жинхэнэ гар утас
+(`[5-9]` угтвар), 976-г яг 11 оронтой үед хасдаг; `normalizePhoneForVerifyMn` нь
+ДУРЫН 8 орон (суурин ч) хүлээн авдаг бөгөөд **нэвтрэлтийн identity түүнээс
+хамаардаг**; `normalizePhoneForSms` нь эсрэгээрээ E.164 гаргадаг. Нэгтгэвэл зарим
+хэрэглэгч нэвтэрч чадахгүй болох эрсдэлтэй тул зөвхөн баримтжуулав. "Давхардал
+олдвол шууд нэгтгэ" гэдэг нь энд алдаа болох байсан.
+
+### Сургамж
+Өмнөх 5 аудит (09-02, 09-06, 09-09, 09-12, 09-16) бүгд "atomic guard" идиомыг
+нөөц/купон/зээлд тавьсан ч сагсны шилжилтийг алгассан — **дүрэм**: төлөв
+шилжүүлдэг UPDATE бүр guard + affectedRows. Мөн "хэрэглэгчид зориулсан мессеж" гэж
+таамагласан 71 `catch → BAD_REQUEST(error.message)` ороолт нь driver-ийн алдааг ч
+дамжуулдаг — маск нь формат түвшинд байх ёстой байв.
+
+---
+
 ## Лого /admin-аас солигддог болов — өмнө нь кодод хатуу бичигдсэн байжээ (2026-09-17)
 
 Tom: *"bi neg chuhal ym anzaarlaa!!! end logo solidog ym algadaa bur ./admin deer! herwee bi logogoo shinjilwel yah we?"* — зөв анзаарсан байв. Сайтын лого бол **цорын ганц брэндийн зураг байсан бөгөөд админд засагдахгүй** байсан.

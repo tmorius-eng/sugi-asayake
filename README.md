@@ -6,9 +6,9 @@
 
 | | |
 |---|---|
-| **Каталог** | 937 бараа (522 нь бодит фототой), 43 хүснэгт, 61 migration |
-| **Код** | 16 хуудас, 130 компонент, 171 API procedure |
-| **Тест** | 578 тест / 63 файл (unit + бодит DB-тэй integration) |
+| **Каталог** | 984 бараа, 65 хүснэгт, 87 migration |
+| **Код** | 19 хуудас, 125 компонент, 281 API procedure |
+| **Тест** | 1030+ vitest тест / 107 файл (unit + бодит DB-тэй integration) + 40 Playwright E2E |
 | **Хэл** | Бүх интерфейс монгол хэл дээр, үнэ ₮ (MNT) |
 
 ---
@@ -57,7 +57,7 @@
 
 | Үйлчилгээ | Юунд | Төлөв |
 |---|---|---|
-| **Aiven MySQL** | Үндсэн бааз | ✅ Ажиллаж байгаа (TLS + CA шалгалттай) |
+| **Oracle HeatWave MySQL** (2026-09-13 хүртэл Aiven) | Үндсэн бааз | ✅ Ажиллаж байгаа (ssh тунель + TLS + CA шалгалттай) |
 | **Cloudflare R2** | Зургийн сан (S3-совместимый) | ✅ Ажиллаж байгаа |
 | **Brevo** | Захиалгын имэйл, SMS | ✅ Имэйл ажиллаж байгаа / SMS кредит дутуу |
 | **verify.mn** | Бүртгэлийн SMS OTP | ✅ Ажиллаж байгаа |
@@ -74,7 +74,7 @@
 
 **Backend** — Node.js (ESM) · Express 4 · tRPC 11 · Drizzle ORM · MySQL 8 · Zod 4 (бүх input validation)
 
-**Дэд бүтэц** — Aiven MySQL (TLS) · Cloudflare R2 (`@aws-sdk/client-s3`) · Vitest (тест) · Playwright (визуал шалгалт)
+**Дэд бүтэц** — Oracle HeatWave MySQL (TLS) · Cloudflare R2 (`@aws-sdk/client-s3`) · Vitest (тест) · Playwright (визуал шалгалт)
 
 Гадны UI framework/template ашиглаагүй — бүх компонент энэ репозитор дотор.
 
@@ -85,20 +85,20 @@
 ```
 client/src/        React SPA
   pages/           16 route (Home, Shop, ProductDetail, Checkout, Profile, Admin …)
-  components/      130 компонент (home/, admin/, ui/)
+  components/      125 компонент (home/, admin/, ui/)
   lib/             tRPC client, форматлагч, траффикийн эх сурвалж
 
 server/
   _core/           bootstrap, env, tRPC context, auth, rate limit, crypto, DB холболт
   db.ts            өгөгдлийн бүх хандалт (Drizzle query)
-  routers.ts       171 API procedure, эрхийн түвшингээр таслагдсан
+  routers.ts       281 API procedure, эрхийн түвшингээр таслагдсан
   analytics.ts     аналитикийн aggregate query
   integrations/    Brevo, QPay, verify.mn, R2
 
 shared/            Клиент+сервер хоёулаа импортлодог цорын ганц эх сурвалж
                    (үнийн формат, хүргэлтийн дүрэм, захиалгын төлөв, CMS slot)
 
-drizzle/           schema.ts + 61 гар бичмэл .sql migration
+drizzle/           schema.ts + 87 гар бичмэл .sql migration
 scripts/           backup/restore, migration ажиллуулагч, өгөгдөл зөв эсэх шалгагч
 ```
 
@@ -150,9 +150,9 @@ Server running on http://localhost:3000/
 
 ## Орчны хувьсагчид
 
-Бүрэн жагсаалт, тайлбар бүхий загвар нь **[`.env.example`](.env.example)**-д байна. Товчхондоо:
+Бүрэн жагсаалт доор; орчны хувьсагч бүрийн тайлбар нь `server/_core/env.ts`-д кодтойгоо хамт байна. Товчхондоо:
 
-**Заавал** (эдгээргүйгээр сервер асахгүй):
+**Заавал** (2026-09-20-оос production-д `JWT_SECRET`, `DATABASE_URL` байхгүй бол сервер порт нээхээс ӨМНӨ шатна; `INTEGRATIONS_ENCRYPTION_KEY`, `S3_*`, `PUBLIC_BASE_URL`, `OWNER_EMAIL` дутуу бол startup-д тод warning):
 
 | Хувьсагч | Юу вэ |
 |---|---|
@@ -162,7 +162,7 @@ Server running on http://localhost:3000/
 | `S3_*` (5 мөр) | Cloudflare R2 — зургийн сан |
 | `INTEGRATIONS_ENCRYPTION_KEY` | Яг 64 тэмдэгт hex; интеграцийн түлхүүрүүдийг баазад шифрлэнэ |
 
-**Сонголттой** — байхгүй бол тухайн функц л унтарна: `VERIFY_MN_API_KEY` (⚠️ байхгүй бол **бүртгэл шууд алдаа өгнө**), `BREVO_*`, `QPAY_*`, `HONEYBADGER_API_KEY`, `PUBLIC_BASE_URL`, `DATABASE_CA_CERT`, `ADMIN_FACE_GATE_ENABLED`.
+**Сонголттой** — байхгүй бол тухайн функц л унтарна: `VERIFY_MN_API_KEY` (⚠️ байхгүй бол **бүртгэл шууд алдаа өгнө**), `BREVO_*`, `QPAY_*`, `VAPID_*` (web push), `FACEBOOK_APP_*`, `HONEYBADGER_API_KEY` / `HONEYBADGER_PERSONAL_AUTH_TOKEN`, `PUBLIC_BASE_URL`, `DATABASE_CA_CERT`, `ADMIN_FACE_GATE_ENABLED`, `MODERATION_MODEL`, `NOTIFICATIONS_DISPATCH`, `SMS_CAMPAIGNS_ENABLED`, `ANTHROPIC_API_KEY` (moderation), `DB_POOL_SIZE`, `RUN_BACKGROUND_JOBS`, `LOG_REQUESTS` / `LOG_SQL`, `DEV_ALLOWED_HOSTS`. ⚠️ `GUEST_CHECKOUT_OTP=0` нь ЗӨВХӨН тестийн хувьсагч — production `.env`-д тавибал зочны OTP чимээгүй унтарна.
 
 > ⚠️ **Production-д `DATABASE_CA_CERT`-ыг заавал тохируулна.** Байхгүй бол холболт шифрлэгдэх ч серверийн сертификат шалгагдахгүй (сервер асахад анхааруулга бичнэ).
 
@@ -170,7 +170,7 @@ Server running on http://localhost:3000/
 
 ## Өгөгдлийн бааз ба migration
 
-Schema нь `drizzle/schema.ts`-д (43 хүснэгт), өөрчлөлт бүр `drizzle/NNNN_*.sql` гар бичмэл файлаар.
+Schema нь `drizzle/schema.ts`-д (65 хүснэгт), өөрчлөлт бүр `drizzle/NNNN_*.sql` гар бичмэл файлаар.
 
 ```bash
 pnpm exec tsx scripts/db-apply-migration.ts drizzle/0060_products_brand_index.sql
@@ -191,7 +191,7 @@ pwsh scripts/db-restore.ps1 -DatabaseUrl "<uri>" -BackupFile "<zip>" -Force
 
 ## Тест
 
-578 тест / 63 файл. Ихэнх integration тест **бодит MySQL болон S3 хандалт шаарддаг** тул орчны gate-ээр хамгаалагдсан — gate-гүй үед автоматаар skip болно (CI дээр ингэж ажилладаг).
+1030+ тест / 107 файл (`pnpm exec vitest run --no-file-parallelism`), дээр нь 40 Playwright E2E (`pnpm build ; pnpm e2e`, staging схем дээр). Ихэнх integration тест **бодит MySQL болон S3 хандалт шаарддаг** тул орчны gate-ээр хамгаалагдсан — gate-гүй үед автоматаар skip болно (CI дээр ингэж ажилладаг).
 
 ```powershell
 # Зөвхөн unit тест (гадны хамааралгүй)

@@ -31,7 +31,7 @@ SUGI ASAYAKE бол **нэг Node процесс** дээр ажилладаг �
 1. `dotenv/config` → `.env` уншина; `NODE_ENV` тохируулаагүй бол `development`.
 2. **`assertProductionSecrets()`** (`_core/context.ts`) — production-д `JWT_SECRET` байхгүй бол порт нээхээс ӨМНӨ шатна.
 3. Middleware (дараалал чухал):
-   - `setSecurityHeaders` → `compression()` → Honeybadger (хамгийн эхэнд байх ёстой гэрээтэй) → `limitApiTraffic` → `protectStateChangingApiRequests` (CSRF) → `express.json({ limit: "50mb" })`.
+   - `setSecurityHeaders` → `compression()` → Honeybadger (хамгийн эхэнд байх ёстой гэрээтэй) → `limitApiTraffic` → `protectStateChangingApiRequests` (CSRF) → `express.json({ limit: "20mb" })` (2026-09-20-нд 50mb-аас; хамгийн том зөвшөөрөгдсөн бие нь 14 MB base64 зураг).
 4. Тусгай route-ууд: `registerStorageProxy` (`/cdn/*`), `registerQPayCallbackRoute`, `registerStorepayCallbackRoute`, `registerVerifyMnCallbackRoute`, `/health` (DB-г бодитоор ping хийнэ), `/favicon.ico` → 302.
 5. `/api/trpc` → `createExpressMiddleware({ router: appRouter, createContext })`. `onError` нь **хүлээгдэж буй** алдааг (BAD_REQUEST, UNAUTHORIZED …) Honeybadger руу илгээхгүй — үнэгүй tier-ийг validation-ий үр дүнгээр дүүргэхгүйн тулд.
 6. dev бол `setupVite`, production бол `serveStatic`.
@@ -57,11 +57,11 @@ browser → /api/trpc/<router>.<procedure>
 | Файл | Юу хийдэг | Мэдэх ёстой нарийн зүйл |
 |---|---|---|
 | `index.ts` | процессын эхлэл (§1) | ажлын бүртгэл, dispatcher энд эхэлдэг |
-| `context.ts` | tRPC контекст: cookie → user | `assertProductionSecrets()` энд; session token JWT. User мөр **5 с cache** (`getSessionUserById`, түлхүүр = user id, token БИШ) — session-ийн эрхийг өөрчилдөг бичигч бүр `forgetSessionUser` дуудна (§8 дүрэм 10) |
-| `trpc.ts` | procedure-ийн төрлүүд (**panel builder бүр face proof шаардана**) | `publicProcedure`, `protectedProcedure`, `adminProcedure`, `financeProcedure`, `staffProcedure`, **`inventoryProcedure`** (admin+warehouse+staff), `strictRateLimitedProcedure`. Эрхийн шалгалт бүхэлдээ ЭНД, дэд router-үүд өөрсдөө эрх шалгадаггүй |
+| `context.ts` | tRPC контекст: cookie → user | `assertProductionSecrets()` энд (2026-09-20: `JWT_SECRET` + `DATABASE_URL` шатна, `INTEGRATIONS_ENCRYPTION_KEY`/`S3_*`/`PUBLIC_BASE_URL`/`OWNER_EMAIL` warning); session token JWT. User мөр **5 с cache** (`getSessionUserById`, түлхүүр = user id, token БИШ) — session-ийн эрхийг өөрчилдөг бичигч бүр `forgetSessionUser` дуудна (§8 дүрэм 10) |
+| `trpc.ts` | procedure-ийн төрлүүд (**panel builder бүр face proof шаардана**) + **`errorFormatter`** (2026-09-20: production-д INTERNAL / driver-хэлбэртэй мессежийг `INTERNAL_ERR_MSG`-ээр маскална — `maskErrorShape`) | `publicProcedure`, `protectedProcedure`, `adminProcedure`, `financeProcedure`, `staffProcedure`, **`inventoryProcedure`** (admin+warehouse+staff), rate-limit tier: `strict` 8 (бүртгэл/сэргээх/царай), **`login` 20 + данс тус бүрийн lockout 10/15мин** (`countRecentFailedLoginAttempts`), **`checkout` 20**, `phoneVerify` 3, `moderate` 30, `lenient` 600. Эрхийн шалгалт бүхэлдээ ЭНД, дэд router-үүд өөрсдөө эрх шалгадаггүй |
 | `faceProof.ts` | admin царайны proof cookie | таб тус бүр (`x-admin-tab`), 8 цагийн дээд хугацаа, идэвхгүй цонх нь **токен дотроо** явдаг (`idle` claim) тул handoff-ийн 10 минут heartbeat-аар уртсахгүй |
 | `clusterRole.ts` | олон процессын үед хэн ард ажиллах ажлуудыг эзэмшихийг шийднэ | pm2 cluster горимд ЗӨВХӨН instance 0; `RUN_BACKGROUND_JOBS=0/1` дардаг. Үгүй бол орхигдсон сагсны сануулга, вендорын таталт N дахин явна |
-| `security.ts` | header, rate limit tier, CSRF | `limitApiTraffic` (IP тутам 300/15мин), `protectStateChangingApiRequests`, `limitQPayCallbackTraffic` |
+| `security.ts` | header, rate limit tier, CSRF | `limitApiTraffic` (IP тутам **1200**/15мин — 2026-09-20-нд 300-аас өсгөв: CGNAT/оффисын нэг IP-ийн ард олон хэрэглэгч, мөн telemetry tier дангаараа 600 зөвшөөрдөг байсан зөрчил), `protectStateChangingApiRequests`, `limitQPayCallbackTraffic` |
 | `scannerProbes.ts` | `.env`/`.git`/`*.php`/CMS-ийн сканнер probe → шууд 404; IP тутам 1 ц/5 probe → 403 ban | loopback/private хаяг хэзээ ч ban болохгүй (proxy-ийн ард бүгд нэг IP болох эрсдэл); `isScannerProbe` цэвэр, 2 жагсаалтаар тестлэгдсэн |
 | `requestLog.ts` | `LOG_REQUESTS=1` үед access-log мөр | dependency-гүй; dev-д Vite-ийн модулиуд алгасагдана. `LOG_SQL=1` нь `sqlQueryLog.ts`-д |
 | `persistentRateLimit.ts` | strict tier-ийн тоолуур **DB дээр** (`rate_limit_buckets`) | олон instance-д ч хүчинтэй, **fail-open** (DB унавал блоклохгүй). Cart/telemetry tier нь санаатайгаар санах ойд |
@@ -87,7 +87,7 @@ browser → /api/trpc/<router>.<procedure>
 
 ## 3. `server/` — домэйн модулиуд
 
-### 3.1 `db.ts` (5,528 мөр) — өгөгдлийн үндсэн давхарга
+### 3.1 `db.ts` (~6,900 мөр) — өгөгдлийн үндсэн давхарга
 Бүх бизнес query энд. Гол бүлгүүд:
 
 - **Хэрэглэгч/auth**: `createUserWithPassword` (⚠️ хамгийн эхний хэрэглэгч эсвэл `OWNER_EMAIL`-тэй таарвал л admin болно), `findUserByPhone`, session, нууц үг сэргээх, `recordLoginAttempt`.
@@ -101,7 +101,7 @@ browser → /api/trpc/<router>.<procedure>
 - **Мэдэгдэл**: `recordNotification`, `getNotificationFeed`, `markNotificationsSeen`, `purgeNotificationOutbox`.
 - **Ledger унших**: `getStockMovementsForVariant`, `getStockLedgerHealth` (drift).
 
-### 3.2 `routers.ts` (2,970 мөр) — API-ийн гадаргуу
+### 3.2 `routers.ts` (~3,800 мөр) — API-ийн гадаргуу
 `appRouter` = 16 нэрийн зай: `auth`, `catalog`, `loyalty`, `routines`, `promotions`, `reviews`, `content`, `cart`, `checkout`, `telemetry`, `orders`, `profile`, `payments`, `faceAuth`, `admin`, + дэд router `notifications` (`notificationsRouter.ts`), `inventory` (`inventoryRouter.ts`).
 
 🔴 **zod 4 урхи**: `.partial()` дотор `.default()` ХЭРЭГЖДЭГ. Update schema бүр `partialForUpdate()`-ийг ашиглах ёстой — эс бөгөөс илгээгээгүй талбар create-ийн анхдагчаар дарагдана (2026-09-11-нд бодит үндсэн салбарыг хэдэн минут алга болгосон).
@@ -193,14 +193,14 @@ browser → /api/trpc/<router>.<procedure>
   - Админ: `AdminWorkspace.tsx` (816 мөр — хэсгүүдийн router), `admin/AdminSidebar.tsx`, `admin/AdminTopBar.tsx`, `admin/AdminNotificationBell.tsx`, `admin/AdminCommandPalette.tsx`, `admin/GenericListView.tsx`, панель бүр (`AdminProductsPanel`, `AdminOrdersPanel`, `AdminIntegrationsPanel`, `AdminReceivingPanel`, `AdminAnalyticsPanel`, `AdminSecurityCenter`, `AdminPosPanel` …).
   - Нөөц: `inventory/ScanSession.tsx` (сканы дэлгэц), `inventory/TransfersView.tsx`.
   - `ui/*` — shadcn маягийн суурь элементүүд.
-- **`hooks/`** — `useScrollToTopOnNavigate` (Router-т: forward navigation 0-ээс, back/forward-д хүрэхгүй), `useBarcodeScanner` (⚠️ input дээр focus байхад зогсдог), `useScanDraft` (localStorage + 700мс сервер рүү хадгалалт), `useSiteText`, `useStoreSetting`, `useScrollReveal`, `useCategories`, `useMobile`, `useComposition`, `usePersistFn`, `useShopContact`.
+- **`hooks/`** — `useScrollToTopOnNavigate` (Router-т: forward navigation 0-ээс, back/forward-д хүрэхгүй), `useBarcodeScanner` (⚠️ input дээр focus байхад зогсдог), `useScanDraft` (localStorage + 700мс сервер рүү хадгалалт), `useSiteText`, `useStoreSetting`, `useScrollReveal`, `useCategories`, `usePersistFn`, `useShopContact`. (2026-09-20-нд `useMobile`, `useComposition` хоёрыг устгав — хэн ч импортлодоггүй байсан.)
 - **`lib/`** — `scroll.ts` (`scrollToNow` — global smooth rule-ийг override хийсэн instant scroll; яг тодорхой газар буух бүх scroll үүгээр), `trpc.ts` (client), `faceEngine.ts`, `pageviewTracking.ts`, `trafficSource.ts`, `cookieConsent.ts`, `csv.ts`, `adminTheme.ts`, `scanSounds.ts` …
 
 **Шинэ админ хэсэг нэмэх** = 6 газар: `AdminSection` union, `adminSectionKeys`, `SECTION_ROLES`, 3 гарчгийн ternary, `shared/admin-tips.ts`, `server/admin-tips.test.ts`.
 
 ---
 
-## 6. Өгөгдлийн сан — 55 хүснэгт
+## 6. Өгөгдлийн сан — 65 хүснэгт
 
 | Бүлэг | Хүснэгтүүд |
 |---|---|
@@ -247,10 +247,12 @@ browser → /api/trpc/<router>.<procedure>
 14. **Зочны захиалга = утас баталгаажсан session** (`requireCheckoutPhoneVerification`) — шинэ захиалгын зам (ж. өөр checkout) энэ шалгалтыг алгасахгүй.
 12. **Шинэ admin procedure = role builder** (`adminProcedure`, `staffProcedure`…), `protectedProcedure` БИШ — эс бөгөөс царайны proof шалгагдахгүй (2026-09-12-ны incident: gate зөвхөн дэлгэц байсан).
 11. **Cloud вендорын URL https + public host** (`validateIntegrationSettings`, `isPrivateHost`) — ntfy л LAN-д зөвшөөрөгдөнө.
+15. **Гадагш чиглэсэн `fetch` бүр `AbortSignal.timeout(...)`-той** (2026-09-20: QPay, verify.mn, Brevo, Honeybadger, OG зураг бүгд 10–15с) — гацсан провайдер checkout-ийн хүсэлтийг хязгааргүй барьж болохгүй.
+16. **Төлөв шилжүүлдэг UPDATE бүр `WHERE <хуучин төлөв>` + `affectedRows` шалгалттай** — сагсны `active→converted` (2026-09-20-нд олдсон: хоёр tab → хоёр захиалга), нөөц, купон, зээл, төлбөрийн attempt бүгд энэ идиомоор.
 
 ---
 
-## 9. Тест (83 файл, 774 тест — 2026-09-12, `3d3b05a`, 17.1 минут)
+## 9. Тест (107 vitest файл, 1030+ тест — 2026-09-20; E2E 40)
 
 ```powershell
 $env:RUN_AUTH_INTEGRATION_TESTS="1"; $env:COMMERCE_INTEGRATION_TESTS="1"; $env:RUN_MEDIA_INTEGRATION_TESTS="1"
