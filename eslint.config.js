@@ -13,7 +13,13 @@ export default tseslint.config(
   // scripts/load/** нь k6-ийн өөрийн (Node биш) runtime дээр ажилладаг: "k6/http"
   // модулиуд болон `__ENV` глобал нь энэ repo-д хэзээ ч суулгагдахгүй тул
   // ESLint-д зөвхөн худал "no-undef" өгнө.
-  { ignores: ["dist/**", "node_modules/**", "client/public/**", ".playwright-mcp/**", "scratchpad/**", "scripts/*.mjs", "scripts/load/**"] },
+  // playwright-report / test-results / blob-report (2026-09-20): Playwright нь
+  // уналттай run-ий trace-ийг хадгалахдаа trace viewer-ийн minified JS-ээ
+  // `playwright-report/trace/`-д хуулдаг. ESLint нь `.gitignore`-ийг уншдаггүй
+  // тул `pnpm e2e` уналттай дуусмагц дараагийн `pnpm lint` тэр вендорын
+  // bundle-уудаас 3,977 худал алдаа өгдөг байв (аудитын бүтэн E2E run дээр
+  // илэрсэн). Гурвуулаа gitignore-д аль хэдийн бий.
+  { ignores: ["dist/**", "node_modules/**", "client/public/**", ".playwright-mcp/**", "scratchpad/**", "scripts/*.mjs", "scripts/load/**", "playwright-report/**", "test-results/**", "blob-report/**"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

@@ -3,8 +3,11 @@ packages:
 onlyBuiltDependencies:
   - '@tailwindcss/oxide'
   - esbuild
-patchedDependencies:
-  wouter@3.7.1: patches/wouter@3.7.1.patch
+# 2026-09-20 (PHASE 6): `patchedDependencies: wouter@3.7.1` энд байсан. Тэр patch
+# нь `<Switch>`-ийн route замуудыг `window.__WOUTER_ROUTES__`-д цуглуулдаг байсан
+# бөгөөд Manus preview-ийн үлдэгдэл — repo даяар (код, тест, e2e, script, HTML)
+# тэр глобалыг УНШДАГ газар нэг ч байхгүй байв. Устгаснаар wouter нь upstream-ийн
+# өөрийн хувилбараар суудаг болно.
 # 2026-09-09 deep audit: transitive-dependency overrides live in package.json's
 # "pnpm.overrides" key. pnpm 10.4.1 prints "no longer read" for that key but
 # demonstrably applies it (the overrides land in pnpm-lock.yaml's

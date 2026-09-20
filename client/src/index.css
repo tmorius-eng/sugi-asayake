@@ -324,12 +324,13 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .hero-image-caption { position: absolute; right: 28px; bottom: 26px; color: #fff; font-size: 11px; font-weight: 700; }
 
 .page-section { width: min(1380px, calc(100% - 68px)); margin: 0 auto; }
-/* .section-heading -- backs the shared <SectionEyebrow> primitive
-   (client/src/components/home/SectionEyebrow.tsx), used by CategoryMasonry
-   and StoreLocatorSection's numbered "02"/"03" badges. */
-.section-heading { position: relative; display: flex; justify-content: space-between; gap: 28px; padding-top: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--border); color: #545958; font-size: 10px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
-.section-heading::before { content: ""; position: absolute; top: 0; left: 0; width: 54px; height: 3px; background: var(--primary); }
-.section-heading span:first-child { color: var(--primary-text); font-family: var(--font-display); font-size: 22px; letter-spacing: -.08em; line-height: 1; }
+/* 2026-09-20 (PHASE 6 цэвэрлэгээ): `.section-heading` / `.section-heading-light`
+   энд байсан. Тэдгээрийг ЗӨВХӨН `home/SectionEyebrow.tsx` бичдэг байсан бөгөөд
+   тэр компонентыг хэн ч импортлодоггүй байв (тайлбар нь "CategoryMasonry,
+   StoreLocatorSection ашигладаг" гэж байсан ч тэд хоёул `SectionHeading` →
+   `.editorial-heading`-ийг ашигладаг — хуучирсан тайлбар). Админы бичсэн HTML
+   ч `class` атрибут авч явдаггүй (`_core/sanitizeHtml.ts`-д зөвшөөрөгдөөгүй)
+   тул аль ч давхаргаас хүрэхгүй байв. */
 
 /* .editorial-heading -- dedicated class for the <SectionHeading> primitive
    (client/src/components/home/SectionHeading.tsx), used by every current
@@ -1722,13 +1723,6 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
   .fbrand-arrow svg { width: 44px; height: 44px; }
 }
 
-/* .section-heading-light -- the tone="onDark" variant of the shared
-   <SectionEyebrow> primitive (CategoryMasonry/StoreLocatorSection use the
-   default tone; nothing currently uses onDark, kept for the next dark
-   section that adds a numbered eyebrow). */
-.section-heading-light { border-bottom-color: rgba(255,255,255,.18); color: rgba(255,255,255,.5); }
-.section-heading-light span:first-child { color: #f0b52d; }
-.section-heading-light span:last-child { display: inline-flex; align-items: center; gap: 6px; }
 @media (prefers-reduced-motion: reduce) { .skeleton::after { animation: none; opacity: .5; } }
 
 /* =========================================================================
