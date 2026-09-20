@@ -6,6 +6,7 @@ import { ubDateKey } from "../shared/notification-events";
 import { sendAccountEmail, notifyOwner } from "./_core/notification";
 import { sendPushToUser } from "./_core/webPush";
 import { registerJob } from "./_core/scheduler";
+import { ENV } from "./_core/env";
 import { purgeExpiredFaceHandoffs } from "./faceHandoff";
 
 /**
@@ -31,8 +32,13 @@ export async function runAbandonedCartReminderJob(): Promise<void> {
     const name = cart.name ?? "хүндэт харилцагч";
     let delivered = false;
     if (cart.email && cart.emailOptIn) {
-      await sendAccountEmail({ to: cart.email, subject, content: fillTemplate(emailBody, { "{нэр}": name }) });
-      delivered = true;
+      // 2026-09-20 (P1-2): the return value used to be ignored, so a Brevo
+      // 4xx/5xx still marked the reminder as sent and the customer never got
+      // one. A false from an UNCONFIGURED Brevo (log fallback) still counts --
+      // nothing will ever send in that environment, and retrying hourly would
+      // only spam the log.
+      const sent = await sendAccountEmail({ to: cart.email, subject, content: fillTemplate(emailBody, { "{нэр}": name }) });
+      if (sent || !ENV.brevoApiKey) delivered = true;
     }
     // 2026-09-14: the phone-only customer's channel. Counted as delivered
     // only when a subscription actually accepted it, so a cart whose only

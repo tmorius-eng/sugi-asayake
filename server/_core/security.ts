@@ -4,7 +4,31 @@ import type { NextFunction, Request, Response } from "express";
 type Bucket = { count: number; resetAt: number };
 const buckets = new Map<string, Bucket>();
 const WINDOW_MS = 15 * 60 * 1000;
-const MAX_REQUESTS = 300;
+/**
+ * Бүх `/api/trpc` дуудлагад нэгэн зэрэг үйлчлэх IP тутмын дээд хэмжээ.
+ *
+ * 2026-09-20 (аудит, PHASE 3 #1): 300 байсныг 1200 болгов. 300 нь дараах гурван
+ * бодит нотолгоогоор хэт бага байсан:
+ *
+ *  1. **Өөрийн E2E suite нь түүнд мөргөсөн.** Бүтэн run (desktop + mobile, 80
+ *     тест, нэг 127.0.0.1) дундуураа 429 авч, 3 тест "JS алдаагүй" шалгуураар
+ *     унасан. Нэг IP-ийн ард хэдэн арван "хэрэглэгч" байх нь тест биш, бодит
+ *     нөхцөл: Монголын үүрэн операторууд CGNAT ашигладаг, оффис/сургууль нэг
+ *     гадаад IP-тай.
+ *  2. **Дотоод зөрчил**: telemetry tier дангаараа 600/15мин зөвшөөрдөг атлаа
+ *     БҮХ tRPC-д ногдох нийт таг нь 300 байсан — өөрөөр хэлбэл lenient tier
+ *     өөрийн хязгаартаа хэзээ ч хүрч чадахгүй, зөвхөн энэ таг л ажиллана.
+ *  3. Ирмэг дээр Cloudflare-ийн дүрэм аль хэдийн 150 хүсэлт/10 секунд/IP-г
+ *     блоклодог (`scripts/cloudflare-harden.mjs`) тул хурдан үерийг энэ давхарга
+ *     ганцаараа зогсоох шаардлагагүй.
+ *
+ * 1200/15мин = дунджаар 80 хүсэлт/минут. httpBatchLink нэг навигацийг 2–5
+ * хүсэлт болгон багцалдаг тул энэ нь нэг IP-ээс ~15–40 идэвхтэй зочинд
+ * хүрэлцэнэ, харин скрипттэй үерийг (секундэд олон зуун) тагласан хэвээр.
+ * Аюулгүй байдлын гол хамгаалалт нь энэ БИШ: нэвтрэх/бүртгэл/checkout/OTP бүр
+ * өөрийн, DB дээр тоологддог, хамаагүй чанга tier-тэй (`_core/trpc.ts`).
+ */
+const MAX_REQUESTS = 1200;
 
 function clientKey(request: Request) {
   return request.ip || request.socket.remoteAddress || "unknown";
@@ -102,7 +126,7 @@ export function limitApiTraffic(request: Request, response: Response, next: Next
 // Stricter, per-procedure limit for endpoints that are attractive
 // brute-force/enumeration/abuse targets (login, register, password reset,
 // checkout — anything that writes a row or costs real money to process). The
-// general `/api/trpc` limit above (300/15min) is far too loose to stop that
+// general `/api/trpc` limit above (1200/15min) is far too loose to stop that
 // on its own. Each call site gets its own bucket map (keyed by name) so a
 // generous cart-browsing limit and a strict checkout limit don't share state.
 const namedRateLimitBuckets = new Map<string, Map<string, Bucket>>();

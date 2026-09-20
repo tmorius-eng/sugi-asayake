@@ -2077,7 +2077,16 @@ export async function createOrderFromActiveCart(input: {
         reason: `Захиалга ${orderNumber}-д зарцуулсан`, actorUserId: null, orderId,
       });
     }
-    await tx.update(carts).set({ status: "converted", updatedAt: new Date() }).where(eq(carts.id, cart.id));
+    // Аудит 2026-09-20 (P0-1): сагсны шилжилт ч бусад decrement-тэй ижил
+    // guarded-UPDATE идиомоор. Хоёр tab тус тусын clientRequestId-тай зэрэг
+    // "Захиалга батлах" дарвал хоёулаа идэвхтэй сагсыг уншиж, нөөцийг хоёр удаа
+    // хасаж, ХОЁР захиалга үүсгэж чадаж байв — replay хамгаалалт зөвхөн ИЖИЛ
+    // ID-тэй давталтыг л барьдаг. Хожигдсон гүйлгээ энд унаж, нөөц/купон/зээл
+    // бүгд буцна.
+    const converted = await tx.update(carts).set({ status: "converted", updatedAt: new Date() }).where(and(eq(carts.id, cart.id), eq(carts.status, "active")));
+    if (Number(converted[0].affectedRows ?? 0) !== 1) {
+      throw new Error("Энэ сагс өөр захиалгаар аль хэдийн баталгаажсан байна. Захиалгын түүхээ шалгана уу.");
+    }
   });
   const nextOrderNumber = options?.generateOrderNumber ?? generateOrderNumber;
   for (let attempt = 1; ; attempt++) {
@@ -5203,6 +5212,24 @@ export async function recordLoginAttempt(input: { email: string; userId: number 
   } catch (error) {
     console.error("[Login attempt] Failed to record:", error);
   }
+}
+
+/**
+ * Аудит 2026-09-20 (P0-3): данс тус бүрийн lockout-ийн тоолуур. Өмнө нь login
+ * зөвхөн IP-д хязгаарлагдаж, `login_attempts` бичигддэг ч хэн ч уншдаггүй байв
+ * — олон IP-ээс (proxy, CGNAT-ийн өөр гарц) нэг дансыг хязгааргүй таах боломжтой.
+ * `login_attempts_user_idx` индекс аль хэдийн бий; 12 сарын retention-той тул
+ * хүснэгт хязгаартай.
+ *
+ * DB-гүй (unit тест, tooling) үед 0 — lockout нь нэмэлт хамгаалалт, гол зам биш.
+ */
+export async function countRecentFailedLoginAttempts(userId: number, windowMs: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const since = new Date(Date.now() - windowMs);
+  const [row] = await db.select({ count: sql<number>`count(*)` }).from(loginAttempts)
+    .where(and(eq(loginAttempts.userId, userId), eq(loginAttempts.success, false), gte(loginAttempts.createdAt, since)));
+  return Number(row?.count ?? 0);
 }
 
 // TIER 4: admin-only Login History viewer.

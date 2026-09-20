@@ -80,6 +80,9 @@ async function verifyMnFetch(path: string, init: RequestInit = {}): Promise<Reco
   const response = await fetch(`${VERIFY_MN_BASE_URL}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}`, ...(init.headers ?? {}) },
+    // 2026-09-20 (P2-2): the status poll runs every 3s from the browser; a
+    // hung verify.mn must not pin a server connection indefinitely.
+    signal: AbortSignal.timeout(15_000),
   });
   const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
   if (!response.ok) {

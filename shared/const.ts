@@ -22,12 +22,18 @@ export const VISITOR_SESSION_COOKIE_NAME = "sugi_visitor_session";
 export const ADMIN_FACE_COOKIE_NAME = "sugi_admin_face";
 export const ONE_YEAR_MS = 1000 * 60 * 60 * 24 * 365;
 export const NINETY_DAYS_MS = 1000 * 60 * 60 * 24 * 90;
-export const AXIOS_TIMEOUT_MS = 30_000;
 export const UNAUTHED_ERR_MSG = 'Please login (10001)';
 export const NOT_ADMIN_ERR_MSG = 'You do not have required permission (10002)';
 /** Admin-panel call made without a live face proof (gate on, idle lock lapsed,
  *  or a proof from before the idle lock existed). The client shows the camera. */
 export const FACE_REQUIRED_ERR_MSG = 'Face verification required (10003)';
+/**
+ * Аудит 2026-09-20 (P0-2): production-д гэнэтийн (INTERNAL_SERVER_ERROR) эсвэл
+ * driver/SQL хэлбэртэй алдааны мессежийн оронд клиент рүү очих цорын ганц текст —
+ * server/_core/trpc.ts-ийн errorFormatter. Бодит шалтгаан серверийн лог болон
+ * Honeybadger-т үлдэнэ.
+ */
+export const INTERNAL_ERR_MSG = 'Серверт түр алдаа гарлаа. Түр хүлээгээд дахин оролдоно уу.';
 /**
  * Flat Ulaanbaatar delivery fee (store pickup is free). A single shared
  * constant so Shop/CartDrawer/Checkout all quote the exact same number —

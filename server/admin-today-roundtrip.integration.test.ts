@@ -29,13 +29,18 @@ describeWithDatabase("today's admin and customer procedures, save then reload", 
   const orderIds: number[] = [];
   const base = () => ({ emailVerifiedAt: new Date(), sessionVersion: 0, suspendedAt: null, suspendedReason: null, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() });
   const admin = () => callerFor(testSessionUser({ ...base(), id: adminId, email: `${marker}-admin@example.invalid`, name: "RT Admin", role: "admin" }));
-  const customer = () => callerFor(testSessionUser({ ...base(), id: customerId, email: `${marker}-c@example.invalid`, name: "RT Customer", role: "user", phone: "88110077" }));
+  const customer = () => callerFor(testSessionUser({ ...base(), id: customerId, email: `${marker}-c@example.invalid`, name: "RT Customer", role: "user", phone: customerPhone }));
+
+  // 2026-09-20: per-run phone, not a hard-coded one -- users.phone is UNIQUE,
+  // so a run interrupted before afterAll left a row that made every later run
+  // fail on insert (found by the full-suite run of the 2026-09-20 audit).
+  const customerPhone = `8${String(Date.now()).slice(-7)}`;
 
   beforeAll(async () => {
     const db = await getDb();
     if (!db) throw new Error("DATABASE_URL is required.");
     adminId = Number((await db.insert(users).values({ email: `${marker}-admin@example.invalid`, passwordHash: await hashPassword("RtPassw0rd!"), name: "RT Admin", role: "admin", emailVerifiedAt: new Date() }))[0].insertId);
-    customerId = Number((await db.insert(users).values({ email: `${marker}-c@example.invalid`, phone: "88110077", passwordHash: await hashPassword("RtPassw0rd!"), name: "RT Customer", role: "user", emailVerifiedAt: new Date() }))[0].insertId);
+    customerId = Number((await db.insert(users).values({ email: `${marker}-c@example.invalid`, phone: customerPhone, passwordHash: await hashPassword("RtPassw0rd!"), name: "RT Customer", role: "user", emailVerifiedAt: new Date() }))[0].insertId);
     categoryId = Number((await db.insert(productCategories).values({ name: "RT category", slug: `${marker}-category`, sortOrder: 99999, isActive: true }))[0].insertId);
     productId = Number((await db.insert(products).values({ categoryId, name: "RT product", slug: `${marker}-product`, sku: `${marker}-SKU`, priceMnt: 12_500, stockQuantity: 20, isPublished: true }))[0].insertId);
     variantId = Number((await db.insert(productVariants).values({ productId, sku: `${marker}-SKU`, priceMnt: 12_500, stockQuantity: 20, isDefault: true }))[0].insertId);
@@ -72,13 +77,13 @@ describeWithDatabase("today's admin and customer procedures, save then reload", 
 
   it("manual order, edit, packing slip and receipt all go through the panel's procedures", async () => {
     const a = admin();
-    const created = await a.admin.createManualOrder({ clientRequestId: `${marker}-req-1`, customerName: "Phone Buyer", customerPhone: "88110077", deliveryMethod: "store_pickup", pickupBranch: "Орос элчингийн салбар", paymentMethod: "cash_on_delivery", salesChannel: "phone", items: [{ variantId, quantity: 2 }] });
+    const created = await a.admin.createManualOrder({ clientRequestId: `${marker}-req-1`, customerName: "Phone Buyer", customerPhone: customerPhone, deliveryMethod: "store_pickup", pickupBranch: "Орос элчингийн салбар", paymentMethod: "cash_on_delivery", salesChannel: "phone", items: [{ variantId, quantity: 2 }] });
     orderIds.push(created.id);
     const listed = (await a.admin.orders()).find(row => row.id === created.id);
     expect(listed?.items[0]).toMatchObject({ variantId, quantity: 2 });
     expect(listed?.salesChannel).toBe("phone");
     // The same request id returns the same order, not a second one.
-    const replay = await a.admin.createManualOrder({ clientRequestId: `${marker}-req-1`, customerName: "Phone Buyer", customerPhone: "88110077", deliveryMethod: "store_pickup", pickupBranch: "Орос элчингийн салбар", paymentMethod: "cash_on_delivery", salesChannel: "phone", items: [{ variantId, quantity: 2 }] });
+    const replay = await a.admin.createManualOrder({ clientRequestId: `${marker}-req-1`, customerName: "Phone Buyer", customerPhone: customerPhone, deliveryMethod: "store_pickup", pickupBranch: "Орос элчингийн салбар", paymentMethod: "cash_on_delivery", salesChannel: "phone", items: [{ variantId, quantity: 2 }] });
     expect(replay.id).toBe(created.id);
     const edited = await a.admin.editOrder({ id: created.id, customerName: "Phone Buyer Edited", deliveryMethod: "ub_delivery", deliveryAddress: "Some street 9", district: "bayangol", items: [{ variantId, quantity: 1 }] });
     expect(edited).toMatchObject({ customerName: "Phone Buyer Edited", deliveryMethod: "ub_delivery", deliveryDistrict: "bayangol", subtotalMnt: 12_500 });
@@ -96,7 +101,7 @@ describeWithDatabase("today's admin and customer procedures, save then reload", 
     const a = admin();
     const c = customer();
     // A completed order of the customer's, placed by staff on their behalf.
-    const order = await a.admin.createManualOrder({ customerName: "RT Customer", customerPhone: "88110077", deliveryMethod: "store_pickup", pickupBranch: "Орос элчингийн салбар", paymentMethod: "cash_on_delivery", salesChannel: "messenger", items: [{ variantId, quantity: 1 }] });
+    const order = await a.admin.createManualOrder({ customerName: "RT Customer", customerPhone: customerPhone, deliveryMethod: "store_pickup", pickupBranch: "Орос элчингийн салбар", paymentMethod: "cash_on_delivery", salesChannel: "messenger", items: [{ variantId, quantity: 1 }] });
     orderIds.push(order.id);
     await db!.update(orders).set({ userId: customerId }).where(eq(orders.id, order.id));
     for (const status of ["confirmed", "packed", "out_for_delivery", "completed"] as const) await a.admin.updateOrder({ id: order.id, status });

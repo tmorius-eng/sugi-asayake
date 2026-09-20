@@ -4,6 +4,9 @@ import { checkStoreSettingFormat } from "../../shared/store-settings";
 import { getSiteMediaSlot } from "../../shared/site-media";
 import { ENV } from "./env";
 import { resolveRouteMeta } from "./routeMeta";
+// Open Graph needs absolute URLs; storage URLs may already be absolute (R2
+// public host) or site-relative (/cdn/...). Нэг хэрэгжилт: ./publicUrl.
+import { absoluteUrl } from "./publicUrl";
 
 /**
  * Substitutes the admin-editable site-wide SEO values into
@@ -209,15 +212,6 @@ const COOKIE_FALLBACK_SLOTS: Record<string, SiteTextSlotKey> = {
   COOKIE_MARKETING_LABEL: "cookie-text-marketing-label",
   COOKIE_MARKETING_DESCRIPTION: "cookie-text-marketing-description",
 };
-
-/** Open Graph needs absolute URLs; storage URLs may already be absolute
- *  (R2 public host) or site-relative (/cdn/...). */
-function absoluteUrl(url: string | null | undefined): string {
-  if (!url) return "";
-  if (/^https?:\/\//i.test(url)) return url;
-  const base = (ENV.publicBaseUrl || "https://sugiasayake.mn").replace(/\/$/, "");
-  return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
-}
 
 function fallbackFor(key: string): string | undefined {
   const cookieSlot = COOKIE_FALLBACK_SLOTS[key];

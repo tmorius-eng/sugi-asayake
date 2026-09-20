@@ -20,8 +20,8 @@
  */
 import { getProductBySlug, getPublishedPostBySlug } from "../db";
 import { getOrSetCached } from "./ttlCache";
-import { ENV } from "./env";
 import { escapeAttribute } from "./indexHtml";
+import { absoluteUrl } from "./publicUrl";
 import { OG_HEIGHT, OG_WIDTH } from "./ogImage";
 
 const CACHE_TTL_MS = 60_000;
@@ -30,13 +30,6 @@ export type RouteMeta = Map<string, string>;
 
 const stripHtml = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 const clip = (text: string, max = 200) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
-
-function absoluteUrl(url: string | null | undefined): string {
-  if (!url) return "";
-  if (/^https?:\/\//i.test(url)) return url;
-  const base = (ENV.publicBaseUrl || "https://sugiasayake.mn").replace(/\/$/, "");
-  return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
-}
 
 const jsonLd = (data: unknown) => JSON.stringify(data).replace(/</g, "\\u003c");
 

@@ -1,5 +1,9 @@
 import { ENV } from "./env";
 
+// 2026-09-20 (P2-2): checkout awaits the confirmation email before answering
+// the shopper; a hung Brevo used to hold that request open with no bound.
+const BREVO_TIMEOUT_MS = 15_000;
+
 /**
  * Deliver a transactional email if a Brevo API key is configured, otherwise
  * fall back to a structured server-log line (matches the original "admin can
@@ -16,6 +20,7 @@ async function deliverEmail(input: { to: string; subject: string; content: strin
   try {
     const response = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
+      signal: AbortSignal.timeout(BREVO_TIMEOUT_MS),
       headers: {
         "api-key": ENV.brevoApiKey,
         "Content-Type": "application/json",
@@ -79,6 +84,7 @@ async function deliverSms(input: { to: string; content: string }): Promise<boole
   try {
     const response = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
       method: "POST",
+      signal: AbortSignal.timeout(BREVO_TIMEOUT_MS),
       headers: {
         "api-key": ENV.brevoApiKey,
         "Content-Type": "application/json",

@@ -166,6 +166,7 @@ import {
   postSlugExists,
   postCategoryNameExists,
   recordLoginAttempt,
+  countRecentFailedLoginAttempts,
   // verify.mn phone verification (2026-09-05) -- see server/verifyMn.ts
   findUserByPhone,
   getPhoneVerificationSessionByVerifyMnId,
@@ -232,7 +233,7 @@ import { sendOrderStatusPush, sendPushToUser, webPushEnabled } from "./_core/web
 import { clearFaceProofCookie, completeFaceVerification, faceProofIdleTimeoutMs, isFaceGateEnabled, lockFaceSession, refreshFaceProof, startFaceVerification } from "./faceAuth";
 import { approveFaceHandoff, assertHandoffApprovable, claimFaceHandoff, denyFaceHandoff, getFaceHandoffContext, startFaceHandoff } from "./faceHandoff";
 import { FACE_DESCRIPTOR_LENGTH, FACE_DIAGNOSTIC_MAX, FACE_IDLE_TIMEOUT_MS, FACE_MODEL_VERSION, isAdminPanelRole, isValidFaceDescriptor } from "../shared/face-auth";
-import { adminProcedure, anyStaffProcedure, catalogReadProcedure, contentReadProcedure, financeProcedure, lenientRateLimitedProcedure, marketingProcedure, moderateRateLimitedProcedure, ordersReadProcedure, phoneVerifyRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure, usersReadProcedure, warehouseProcedure } from "./_core/trpc";
+import { adminProcedure, anyStaffProcedure, catalogReadProcedure, checkoutRateLimitedProcedure, contentReadProcedure, financeProcedure, lenientRateLimitedProcedure, loginRateLimitedProcedure, marketingProcedure, moderateRateLimitedProcedure, ordersReadProcedure, phoneVerifyRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure, usersReadProcedure, warehouseProcedure } from "./_core/trpc";
 import { storageGetSignedUrl, storagePing, storagePut, storagePutImageVariants } from "./storage";
 import { IMAGE_MAX_DIMENSION, processUploadedImageVariants } from "./_core/imageProcessing";
 import { createQPayInvoice, parseQPayInvoicePayload, getQPayAvailability } from "./qpay";
@@ -556,6 +557,10 @@ const siteDocumentLocaleSchema = z.enum(LOCALES).default("mn");
 // an attacker can use that timing gap alone to enumerate registered phone
 // numbers without ever guessing a password.
 const DUMMY_PASSWORD_HASH = `${"0".repeat(32)}:${"0".repeat(128)}`;
+// Аудит 2026-09-20 (P0-3): нэг дансанд 15 минутад зөвшөөрөх буруу оролдлогын
+// дээд тоо (countRecentFailedLoginAttempts, server/db.ts). IP-ийн tier-ээс тусдаа.
+const LOGIN_LOCKOUT_MAX_FAILURES = 10;
+const LOGIN_LOCKOUT_WINDOW_MS = 15 * 60 * 1000;
 
 // Called right after auth.login/auth.register issue a session: if the
 // browser was shopping as a guest, fold that cart into the now-known
@@ -910,7 +915,7 @@ export const appRouter = router({
     // Which social sign-ins are configured (2026-09-13) -- the login page
     // shows a provider button only when its keys are present.
     socialProviders: publicProcedure.query(() => ({ facebook: Boolean(ENV.facebookAppId && ENV.facebookAppSecret) })),
-    login: strictRateLimitedProcedure
+    login: loginRateLimitedProcedure
       .input(z.object({
         phone: phoneSchema,
         password: z.string().min(1).max(200),
@@ -923,6 +928,15 @@ export const appRouter = router({
         const valid = await verifyPassword(input.password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
         const ipAddress = ctx.req.ip || ctx.req.socket.remoteAddress || null;
         const logAttempt = (success: boolean, reason?: string) => recordLoginAttempt({ email: input.phone, userId: user?.id ?? null, success, reason, ipAddress });
+
+        // Аудит 2026-09-20 (P0-3): ДАНС тус бүрийн lockout — IP-ийн лимитээс
+        // үл хамааран сүүлийн 15 минутад энэ дансанд 10 буруу оролдлого байвал
+        // зөв нууц үг ч нэвтрүүлэхгүй. Нууц үгийн шалгалтыг дээр аль хэдийн
+        // ажиллуулсан тул хариу өгөх хугацаа "түгжигдсэн" ба "буруу"-д ижил.
+        if (user && (await countRecentFailedLoginAttempts(user.id, LOGIN_LOCKOUT_WINDOW_MS)) >= LOGIN_LOCKOUT_MAX_FAILURES) {
+          await logAttempt(false, "locked");
+          throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Хэт олон буруу оролдлого хийгдсэн тул энэ данс түр түгжигдлээ. 15 минутын дараа дахин оролдоно уу." });
+        }
 
         if (!user || !valid) {
           await logAttempt(false, "invalid_credentials");
@@ -1579,7 +1593,9 @@ export const appRouter = router({
     // permanent order row and decrements real stock (see
     // createOrderFromActiveCart), so it needs the same tight cap as
     // login/register rather than the browsing-friendly cart limit.
-    createOrder: strictRateLimitedProcedure.input(z.object({
+    // 2026-09-20: strict (8) биш өөрийн 20/15мин/IP tier — хуваалцсан IP-ийн
+    // ард 9 дэх бодит худалдан авагч 429 авахгүй (server/_core/trpc.ts).
+    createOrder: checkoutRateLimitedProcedure.input(z.object({
       // Idempotency key, one per checkout attempt (see orders.clientRequestId).
       // Optional so an older client keeps working; the browser always sends it.
       clientRequestId: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
@@ -1764,7 +1780,9 @@ export const appRouter = router({
         const { passwordHash: _omit, ...safeUser } = updated;
         return safeUser;
       }),
-    uploadAvatar: protectedProcedure
+    // 2026-09-20: strict tier — upload бүр sharp + nsfw загварын CPU/RAM
+    // зарцуулдаг тул нэвтэрсэн нэг хэрэглэгч сервер ачааллах хэрэгсэл болохгүй.
+    uploadAvatar: strictRateLimitedProtectedProcedure
       .input(z.object({
         fileName: z.string().trim().min(1).max(120),
         contentType: z.enum(imageContentTypes),
@@ -2727,13 +2745,19 @@ export const appRouter = router({
       const BATCH_SIZE = 20;
       for (let i = 0; i < eligible.length; i += BATCH_SIZE) {
         const batch = eligible.slice(i, i + BATCH_SIZE);
-        const outcomes = await Promise.all(batch.map(async user => {
+        // 2026-09-20 (P2-3): allSettled, not all -- one recipient's thrown
+        // error (a DB blip inside sendPushToUser) used to abort the whole
+        // loop BEFORE the audit row below was written, so the 10-minute
+        // fingerprint guard had nothing to match and a retry re-sent to
+        // everyone already reached. A rejected send now simply counts as failed.
+        const settled = await Promise.allSettled(batch.map(async user => {
           if (input.channel === "email") return sendAccountEmail({ to: user.email!, subject: input.subject, content: input.body });
           if (input.channel === "sms") return sendAccountSms({ to: user.phone!, content: input.body });
           // Нэг хүн олон төхөөрөмжтэй байж болно; ядаж нэгд нь хүрсэн бол
           // илгээгдсэнд тооцно (`sendPushToUser` үхсэн бүртгэлийг өөрөө цэвэрлэнэ).
           return (await sendPushToUser(user.id, { title: input.subject, body: input.body, url: input.url, tag: `campaign-${fingerprint.slice(0, 8)}` })) > 0;
         }));
+        const outcomes = settled.map(result => result.status === "fulfilled" && result.value);
         sentCount += outcomes.filter(Boolean).length;
         failedCount += outcomes.filter(ok => !ok).length;
       }

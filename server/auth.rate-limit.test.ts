@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 
+// 2026-09-20: login now has its own 20/15min/IP tier (server/_core/trpc.ts
+// loginRateLimitedProcedure) instead of the strict 8 -- a shared IP (office
+// NAT, carrier CGNAT) must not lock out the ninth real customer; the
+// per-ACCOUNT lockout (server/auth.lockout.integration.test.ts) is what
+// bounds password guessing. These tests use phones that match no account,
+// so only the IP tier is exercised here.
 // Verifies the TIER 0 "login/register-specific rate limit" end to end through
 // the router (as opposed to server/_core/security.rate-limit.test.ts, which
 // tests the bucket logic in isolation). No database is required: every
@@ -35,7 +41,7 @@ describe("auth.login rate limiting", () => {
     const ip = uniqueTestIp();
     const phone = `9${String(Date.now()).slice(-7)}`;
 
-    for (let attempt = 0; attempt < 8; attempt++) {
+    for (let attempt = 0; attempt < 20; attempt++) {
       await expect(makeCaller(ip).auth.login({ phone, password: "wrong-password" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     }
 
@@ -47,7 +53,7 @@ describe("auth.login rate limiting", () => {
     const quietIp = uniqueTestIp();
     const phone = `9${String(Date.now()).slice(-7)}`;
 
-    for (let attempt = 0; attempt < 9; attempt++) {
+    for (let attempt = 0; attempt < 21; attempt++) {
       await makeCaller(busyIp).auth.login({ phone, password: "wrong-password" }).catch(() => undefined);
     }
     await expect(makeCaller(busyIp).auth.login({ phone, password: "wrong-password" })).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS" });

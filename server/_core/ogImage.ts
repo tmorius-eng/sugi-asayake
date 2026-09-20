@@ -20,21 +20,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
 import { getProductBySlug } from "../db";
-import { ENV } from "./env";
+import { absoluteUrl } from "./publicUrl";
 
 export const OG_WIDTH = 1200;
 export const OG_HEIGHT = 630;
 const PADDING = 40;
 const CACHE_DIR = join(tmpdir(), "sugi-og-cache");
 
-function absoluteUrl(url: string): string {
-  if (/^https?:\/\//i.test(url)) return url;
-  const base = (ENV.publicBaseUrl || "https://sugiasayake.mn").replace(/\/$/, "");
-  return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
-}
-
 export async function composeProductCard(sourceUrl: string): Promise<Buffer> {
-  const response = await fetch(absoluteUrl(sourceUrl), { redirect: "follow" });
+  const response = await fetch(absoluteUrl(sourceUrl), { redirect: "follow", signal: AbortSignal.timeout(10_000) });
   if (!response.ok) throw new Error(`source image ${response.status}`);
   const source = Buffer.from(await response.arrayBuffer());
   const packshot = await sharp(source)

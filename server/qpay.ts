@@ -40,6 +40,8 @@ export type QPayPaymentCheck = {
 };
 
 let cachedToken: { value: string; expiresAt: number } | null = null;
+/** Every QPay call is on the checkout path; 15s bounds a hung provider without cutting off a slow-but-alive one. */
+const OUTBOUND_TIMEOUT_MS = 15_000;
 
 function getConfig(): QPayConfig | null {
   const username = process.env.QPAY_USERNAME?.trim();
@@ -64,6 +66,9 @@ async function requestToken(config: QPayConfig) {
   const response = await fetch(`${config.baseUrl}/v2/auth/token`, {
     method: "POST",
     headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/json" },
+    // 2026-09-20 (P2-2): timeout-гүй байсан — QPay гацвал checkout-ийн
+    // нэхэмжлэлийн алхам хязгааргүй хүлээдэг байв.
+    signal: AbortSignal.timeout(OUTBOUND_TIMEOUT_MS),
   });
   const payload = await response.json().catch(() => null) as { access_token?: string; expires_in?: number; message?: string } | null;
   if (!response.ok || !payload?.access_token) {
@@ -79,6 +84,7 @@ async function qpayFetch(path: string, init: RequestInit) {
   const response = await fetch(`${config.baseUrl}${path}`, {
     ...init,
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(init.headers ?? {}) },
+    signal: AbortSignal.timeout(OUTBOUND_TIMEOUT_MS),
   });
   const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
   if (!response.ok) {

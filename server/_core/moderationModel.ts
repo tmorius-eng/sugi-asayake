@@ -30,6 +30,7 @@
  */
 
 import path from "node:path";
+import { totalmem } from "node:os";
 
 const MODEL_ID = "onnx-community/bert-multilingual-toxicity-classifier-ONNX";
 /** Probability of the toxic class above which a text is refused. 0.6 rather
@@ -40,7 +41,18 @@ const TIMEOUT_MS = 6_000;
 
 type Classifier = ((text: string, options?: { top_k?: number }) => Promise<{ label: string; score: number }[]>) & { dispose?: () => Promise<void> | void };
 
-/** How long a loaded model stays in memory after its last use. */
+/**
+ * How long a loaded model stays in memory after its last use.
+ *
+ * ⚠️ 2026-09-20 (хэмжсэн, таамаг биш): энэ хугацааг богиносгох нь санах ой
+ * ХЭМНЭХГҮЙ. `dispose()` нь tensor-уудыг чөлөөлдөг ч процессын RSS үйлдлийн
+ * систем рүү буцдаггүй (transformers.js/onnxruntime-ийн arena үлддэг) —
+ * бодитоор хэмжсэн: текстийн загвар ачаалахад 102 → 470 MB, "сулруулсны"
+ * дараа ч ~535 MB хэвээр. Харин дахин ачаалах бүр ТҮР ОРГИЛ үүсгэдэг
+ * (683 → 799 MB ажиглагдсан). Тиймээс 10 минут нь зориудын сонголт:
+ * цөөн дахин ачаалалт = цөөн оргил. Санах ойн цорын ганц бодит хөшүүрэг нь
+ * "энэ процесст загвар ОГТ ачаалагдах уу" (`MODERATION_MODEL=0`), хугацаа биш.
+ */
 export const MODEL_IDLE_MS = 10 * 60 * 1000;
 
 let loading: Promise<Classifier> | null = null;
@@ -89,10 +101,43 @@ async function load(): Promise<Classifier> {
   return loading;
 }
 
+/**
+ * Хост нь хоёр загварыг даах уу (2026-09-20-ны аудитын хэмжилтээс).
+ *
+ * Бодит production build дээр хэмжсэн тоо: сервер сул зогсоход **535 MB**,
+ * текстийн загвар ачаалахад **+368 MB**, зургийнх дээрээс нь **+213 MB** —
+ * хоёулаа хэрэглэгдсэн процесс **680–800 MB** орчимд тогтдог. Одоогийн
+ * production хост нь 954 MB VM бөгөөд pm2 `--max-memory-restart 700M`-тэй, мөн
+ * түүн дээр staging ч ажилладаг. Өөрөөр хэлбэл boot-ийн дараах эхний сэтгэгдэл
+ * процессыг хязгаараас хальгаж, pm2 түүнийг ХҮСЭЛТИЙН ДУНДУУР restart хийнэ.
+ *
+ * Энэ нь чимээгүй байж болохгүй: `pm2 logs`-д тод мөр үлдээнэ. Аппыг өөрөө
+ * зогсоохгүй — хостын шийдвэр (VM томсгох / `MODERATION_MODEL=0` / хязгаар
+ * өсгөх) нь эзэмшигчийнх.
+ */
+export const LOW_MEMORY_HOST_BYTES = 1536 * 1024 * 1024;
+
+/** Цэвэр: хостын нийт RAM-аас сэрэмжлүүлэх мөр (эсвэл null). Тестлэгдэнэ. */
+export function lowMemoryWarning(totalBytes: number): string | null {
+  if (!Number.isFinite(totalBytes) || totalBytes <= 0) return null;
+  if (totalBytes >= LOW_MEMORY_HOST_BYTES) return null;
+  const totalMb = Math.round(totalBytes / 1024 / 1024);
+  return `[moderation-model] ⚠️ Энэ хост ${totalMb} MB RAM-тай. Текст + зургийн хоёр загвар хэрэглэгдмэгц процесс 680–800 MB хүрдэг нь хэмжигдсэн (pm2-ийн анхдагч --max-memory-restart 700M-ээс их). Сэтгэгдэл/аватар ирэхэд сервер хүсэлтийн дундуур restart болж магадгүй. Сонголтууд: (1) VM-ийн RAM нэмэх, (2) MODERATION_MODEL=0 болгож локал текстийн загварыг унтраах (монгол хэлний lexical шүүлт хэвээр ажиллана, ANTHROPIC_API_KEY байвал олон хэлний давхарга ч хэвээр), (3) pm2-ийн хязгаарыг ухамсартайгаар өсгөх.`;
+}
+
+let lowMemoryWarned = false;
+function warnIfHostTooSmall(): void {
+  if (lowMemoryWarned) return;
+  lowMemoryWarned = true;
+  const warning = lowMemoryWarning(totalmem());
+  if (warning) console.warn(warning);
+}
+
 /** Boot-time PREFETCH: makes sure the weights are on disk, then releases
  *  the model again so it costs no memory until a review actually arrives. */
 export function warmUpModerationModel(): void {
   if (!isModerationModelEnabled()) return;
+  warnIfHostTooSmall();
   void load().then(
     async () => { console.log("[moderation-model] weights ready on disk:", MODEL_ID); await unload(); },
     error => console.error("[moderation-model] unavailable, lexical layer only:", error instanceof Error ? error.message : error),

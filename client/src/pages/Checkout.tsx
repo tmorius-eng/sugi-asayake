@@ -106,7 +106,13 @@ export default function Checkout() {
     }
   }, [savedAddresses.data]);
   const statusInput = useMemo(() => ({ orderId: qpayInvoice?.orderId ?? storepayLoan?.orderId ?? 0 }), [qpayInvoice?.orderId, storepayLoan?.orderId]);
-  const qpayStatus = trpc.payments.qpayStatus.useQuery(statusInput, { enabled: Boolean(statusInput.orderId), refetchInterval: qpayInvoice || storepayLoan ? 5_000 : false });
+  // 2026-09-20 (P1-3): stops once paid -- the hook stays mounted under the
+  // confirmation screen, so the old constant interval polled every 5s for as
+  // long as the tab was open, eating the per-IP API budget for nothing.
+  const qpayStatus = trpc.payments.qpayStatus.useQuery(statusInput, {
+    enabled: Boolean(statusInput.orderId),
+    refetchInterval: query => (qpayInvoice || storepayLoan) && query.state.data?.paymentStatus !== "paid" ? 5_000 : false,
+  });
   const isOrderConfirmed = Boolean(placedOrder) && ((placedOrder!.paymentMethod !== "qpay" && placedOrder!.paymentMethod !== "storepay") || qpayStatus.data?.paymentStatus === "paid");
   // PREMIUM-FEATURES.md TIER 4: preview-only — this is the exact same
   // getApplicableRoutineDiscount call checkout.createOrder makes for real,

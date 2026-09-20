@@ -45,12 +45,15 @@ test.describe("админ захиалга устгах", () => {
       await openAdminSection(page, "Захиалга");
 
       // Жагсаалтын горимд картууд бүрэн харагдана (board горимд багана бүр
-      // товчлолтой).
-      const listToggle = page.getByRole("button", { name: "Жагсаалт харагдац" });
-      if (await listToggle.isVisible().catch(() => false)) await listToggle.click();
+      // товчлолтой). Устгах товч ЗӨВХӨН жагсаалт горимд байдаг.
+      await page.getByRole("button", { name: "Жагсаалт харагдац" }).click();
 
-      const search = page.getByPlaceholder(/хайх/i).first();
-      if (await search.isVisible().catch(() => false)) await search.fill(orderNumber);
+      // ⚠️ ЗААВАЛ энэ хэсгийн ӨӨРИЙН хайлт. Өмнө нь `getByPlaceholder(/хайх/i)
+      // .first()` байсан нь утасны өргөнд ГЛОБАЛ командын цонхны талбарыг олж,
+      // түүнд бичихэд панель дахин mount хийгдэж жагсаалт горим "самбар" руу
+      // буцдаг байв — карт олдохгүй, тест зөвхөн mobile project дээр унана
+      // (2026-09-20-ны аудитын бүтэн E2E run дээр илэрсэн).
+      await page.getByPlaceholder("Дугаар, хэрэглэгч, утас хайх").fill(orderNumber);
 
       const card = page.locator("article").filter({ hasText: orderNumber });
       await expect(card).toBeVisible({ timeout: 20_000 });

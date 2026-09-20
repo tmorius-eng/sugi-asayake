@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { GenericListView } from "./admin/GenericListView";
+import { slugify } from "@shared/slugify";
 
 // "Controls everything" admin overhaul (2026-09-08, Phase J): replaces
 // client/src/components/home/locations-data.ts's pure hardcoded array with
@@ -15,7 +16,6 @@ import { GenericListView } from "./admin/GenericListView";
 // selectable for pickup -- adding/editing a branch here now reaches
 // checkout, the storefront locator, and the footer with no deploy.
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Үйлдэл амжилтгүй боллоо.";
-const slugify = (value: string) => value.toLocaleLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
 type BranchRow = {
   id: number;

@@ -41,7 +41,7 @@ function authHeader(): string {
 }
 
 async function honeybadgerGet<T>(path: string): Promise<T> {
-  const response = await fetch(`${BASE_URL}${path}`, { headers: { Authorization: authHeader() } });
+  const response = await fetch(`${BASE_URL}${path}`, { headers: { Authorization: authHeader() }, signal: AbortSignal.timeout(10_000) });
   if (!response.ok) {
     throw new Error(`Honeybadger API request failed (${response.status}): ${response.statusText}`);
   }

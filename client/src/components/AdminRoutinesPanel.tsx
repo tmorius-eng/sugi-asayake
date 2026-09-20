@@ -4,12 +4,12 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { GenericListView, type GenericListColumn } from "./admin/GenericListView";
 import { formatMnt } from "@shared/format";
+import { slugify } from "@shared/slugify";
 
 // PREMIUM-FEATURES.md TIER 4: admin management for "Routine" bundles — an
 // ordered list of products (Алхам 1: Цэвэрлэгч -> Алхам 2: Тонер -> ...)
 // with an optional bundle discount that's actually enforced at checkout
 // (see server/db.ts getApplicableRoutineDiscount), not just a label here.
-const slugify = (value: string) => value.toLocaleLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Үйлдэл амжилтгүй боллоо.";
 
 type StepDraft = { productId: number; productName: string; priceMnt: number; stepLabel: string };

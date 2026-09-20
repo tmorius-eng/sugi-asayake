@@ -83,9 +83,16 @@ async function startServer() {
   registerHoneybadgerMiddleware(app);
   app.use(limitApiTraffic);
   app.use(protectStateChangingApiRequests);
-  // Файл upload-д зориулж body parser-ийн хэмжээний хязгаарыг томсгоно
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  // Файл upload-д зориулж body parser-ийн хэмжээний хязгаарыг томсгоно.
+  //
+  // 2026-09-20 (аудит): 50mb байсныг 20mb болгов. Хамгийн том ЗӨВШӨӨРӨГДСӨН бие
+  // нь барааны зураг (`dataBase64` max 14,000,000 тэмдэгт ≈ 14 MB) бөгөөд CV нь
+  // 7.2 MB — 20mb нь тэр бүхэнд тав тухтай багтана. 50mb нь зөвхөн эрсдэл нэмж
+  // байв: биеийг санах ойд бүтнээр нь цуглуулдаг тул нэвтэрсэн хэдэн хүсэлт
+  // хостын RAM-ыг (production VM 954 MB, доорх moderationModel.ts-ийн хэмжилт)
+  // хоосолж чадна. Хэтэрсэн бие 413-аар цэвэр татгалзана.
+  app.use(express.json({ limit: "20mb" }));
+  app.use(express.urlencoded({ limit: "20mb", extended: true }));
   registerStorageProxy(app);
   registerQPayCallbackRoute(app);
   registerStorepayCallbackRoute(app);

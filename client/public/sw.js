@@ -13,7 +13,7 @@
  * Bump CACHE_VERSION when changing this file; old caches are dropped on
  * activate.
  */
-const CACHE_VERSION = "sugi-v2";
+const CACHE_VERSION = "sugi-v3";
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [OFFLINE_URL, "/icons/icon-192.png"];
 
@@ -27,9 +27,16 @@ self.addEventListener("activate", event => {
   );
 });
 
-const isImmutableAsset = url =>
+// Only Vite's /assets/ output is content-hashed and therefore safe to keep
+// forever. /icons, /images and /fonts are copied verbatim from client/public
+// (the server sends them with no-cache for exactly that reason), so a new
+// logo or app icon would never reach a returning visitor if they were
+// cached first -- 2026-09-20: those now serve the cached copy and refresh it
+// in the background (stale-while-revalidate).
+const isImmutableAsset = url => url.origin === self.location.origin && url.pathname.startsWith("/assets/");
+const isRevalidatedAsset = url =>
   url.origin === self.location.origin
-  && (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/fonts/") || url.pathname.startsWith("/icons/") || url.pathname.startsWith("/images/"));
+  && (url.pathname.startsWith("/fonts/") || url.pathname.startsWith("/icons/") || url.pathname.startsWith("/images/"));
 
 // Customer Web Push (2026-09-13): payload is JSON {title, body, url, icon, badge, tag}.
 self.addEventListener("push", event => {
@@ -68,5 +75,26 @@ self.addEventListener("fetch", event => {
         return response;
       })),
     );
+    return;
+  }
+
+  if (isRevalidatedAsset(url)) {
+    event.respondWith((async () => {
+      const cached = await caches.match(request);
+      const refresh = fetch(request).then(async response => {
+        if (response.ok) {
+          const cache = await caches.open(CACHE_VERSION);
+          await cache.put(request, response.clone());
+        }
+        return response;
+      });
+      if (!cached) return refresh; // Офлайн бөгөөд кэшгүй: сүлжээний алдаа ердийнхөөрөө гарна.
+      // `waitUntil` ЗААВАЛ: үүнгүйгээр хөтөч кэшлэгдсэн хариуг өгмөгц service
+      // worker-ээ зогсоож болох ба шинэчлэлт дуусалгүй тасарна — тэгвэл энэ нь
+      // "шинэчлэгддэг" биш, мөнхийн cache-first хэвээр үлдэнэ (яг засах гэсэн
+      // алдаа). Хариуг нь хүлээхгүй, зөвхөн процессыг амьд байлгана.
+      event.waitUntil(refresh.catch(() => undefined));
+      return cached;
+    })());
   }
 });

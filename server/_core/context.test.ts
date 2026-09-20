@@ -14,11 +14,26 @@ describe("assertProductionSecrets", () => {
     vi.doUnmock("./env");
   });
 
-  it("does not throw when NODE_ENV=production and JWT_SECRET is set", async () => {
+  // 2026-09-20 (audit P2-1): DATABASE_URL is the second hard requirement --
+  // without it getDb() returns null and every procedure fails with "Database
+  // is not available" after the port is already open.
+  it("throws when NODE_ENV=production and DATABASE_URL is unset", async () => {
     vi.resetModules();
-    vi.doMock("./env", () => ({ ENV: { isProduction: true, cookieSecret: "a-real-secret" } }));
+    vi.doMock("./env", () => ({ ENV: { isProduction: true, cookieSecret: "a-real-secret", databaseUrl: "" } }));
+    const { assertProductionSecrets } = await import("./context");
+    expect(() => assertProductionSecrets()).toThrow(/DATABASE_URL must be set in production/);
+    vi.doUnmock("./env");
+  });
+
+  it("does not throw when NODE_ENV=production and both JWT_SECRET and DATABASE_URL are set (missing optional keys only warn)", async () => {
+    vi.resetModules();
+    vi.doMock("./env", () => ({ ENV: { isProduction: true, cookieSecret: "a-real-secret", databaseUrl: "mysql://u:p@db.internal:3306/shop", integrationsEncryptionKey: "", s3Bucket: "", publicBaseUrl: "", ownerEmail: "" } }));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const { assertProductionSecrets } = await import("./context");
     expect(() => assertProductionSecrets()).not.toThrow();
+    // One line per missing optional setting, so an operator sees exactly what is off.
+    expect(warn.mock.calls.map(call => String(call[0])).filter(line => line.startsWith("[env] production is missing"))).toHaveLength(4);
+    warn.mockRestore();
     vi.doUnmock("./env");
   });
 

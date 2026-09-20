@@ -46,17 +46,35 @@ type Nsfw = { classify(img: unknown, topk?: number): Promise<{ className: string
 type Tf = { tensor3d(values: Uint8Array, shape: [number, number, number], dtype: "int32"): { dispose(): void } };
 
 let loading: Promise<{ model: Nsfw; tf: Tf }> | null = null;
-/** Same memory policy as the text model: on demand, released after idle
- *  (avatar uploads are rarer still). */
+/**
+ * Same memory policy as the text model: on demand, released after idle
+ * (avatar uploads are rarer still).
+ *
+ * ⚠️ 2026-09-20: `moderationModel.ts`-ийн `MODEL_IDLE_MS`-ийн тайлбарыг үзнэ үү —
+ * сулруулалт RSS-ийг буцаадаггүй нь хэмжигдсэн тул хугацааг богиносгох нь
+ * хэмнэлт биш, зөвхөн дахин ачаалалтын түр оргил нэмнэ. 10 минут хэвээр.
+ */
 export const IMAGE_MODEL_IDLE_MS = 10 * 60 * 1000;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Сулруулах цорын ганц зам (idle timer ч, boot warm-up ч үүгээр). */
+async function releaseImageModel(reason: string): Promise<void> {
+  const current = loading;
+  loading = null;
+  if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+  if (!current) return;
+  try {
+    const { model } = await current;
+    (model as unknown as { model?: { dispose?: () => void } }).model?.dispose?.();
+    console.log(`[image-safety] released (${reason})`);
+  } catch {
+    // Ачаалагдаж чадаагүй байсан — сулруулах зүйлгүй.
+  }
+}
+
 function touch(): void {
   if (idleTimer) clearTimeout(idleTimer);
-  idleTimer = setTimeout(() => {
-    const current = loading;
-    loading = null;
-    void current?.then(({ model }) => { (model as unknown as { model?: { dispose?: () => void } }).model?.dispose?.(); console.log("[image-safety] released after idle"); }).catch(() => undefined);
-  }, IMAGE_MODEL_IDLE_MS);
+  idleTimer = setTimeout(() => { void releaseImageModel("idle"); }, IMAGE_MODEL_IDLE_MS);
   idleTimer.unref?.();
 }
 
@@ -84,9 +102,22 @@ function load(): Promise<{ model: Nsfw; tf: Tf }> {
   return loading;
 }
 
-/** Boot-time check that the bundled weights load, then release. */
+/**
+ * Boot-time check that the bundled weights load, then release.
+ *
+ * 2026-09-20 (аудитын хэмжилт): энд `touch()` дуудагддаг байсан нь загварыг
+ * boot-оос хойш 10 МИНУТ санах ойд үлдээдэг байв — текстийн загварын warm-up
+ * шууд `unload()` хийдэгтэй зөрчилдсөн, санамсаргүй асимметр. Бодит үр дагавар
+ * (production build, хэмжсэн): сервер ЮУ Ч ХИЙХГҮЙ байхад RSS 551 MB, харин
+ * pm2 `--max-memory-restart` нь 700M, VM нийтдээ 954 MB. Тэр байдалд эхний
+ * сэтгэгдэл текстийн загварыг (+359 MB хэмжсэн) ачаалж процессыг хязгаараас
+ * хальгана. Warm-up-ийн зорилго нь "жин нь диск дээр байгаа эсэхийг шалгах"
+ * болохоос "халуун байлгах" биш — тиймээс шалгаад ШУУД сулруулна.
+ */
 export function warmUpImageSafety(): void {
-  void load().then(() => { touch(); }).catch(error => console.error("[image-safety] model failed to load:", error instanceof Error ? error.message : error));
+  void load().then(async () => {
+    await releaseImageModel("weights verified at boot");
+  }).catch(error => console.error("[image-safety] model failed to load:", error instanceof Error ? error.message : error));
 }
 
 /**

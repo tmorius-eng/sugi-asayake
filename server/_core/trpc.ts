@@ -1,13 +1,39 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
-import { UNAUTHED_ERR_MSG, NOT_ADMIN_ERR_MSG } from "@shared/const";
+import { UNAUTHED_ERR_MSG, NOT_ADMIN_ERR_MSG, INTERNAL_ERR_MSG } from "@shared/const";
 import type { TrpcContext } from "./context";
+import { ENV } from "./env";
 import { checkRateLimit } from "./security";
 import { checkPersistentRateLimit } from "./persistentRateLimit";
 import { assertFaceProofForPanelRole } from "./faceProof";
 
+/**
+ * Аудит 2026-09-20 (P0-2): tRPC нь procedure-ийн шидсэн АЛЬ Ч алдааны
+ * `message`-ийг клиент рүү илгээдэг, клиент бүр `messageFrom(error)`-оор toast
+ * болгодог. Тиймээс `connect ETIMEDOUT`, `ER_LOCK_WAIT_TIMEOUT … UPDATE
+ * product_variants …` зэрэг driver/SQL мессеж production-д хэрэглэгчид харагдаж,
+ * хүснэгтийн нэр, дотоод бүтэц алдагдаж байв. Мөн `catch → BAD_REQUEST
+ * (error.message)` ороолт олон газар байгаа тул зөвхөн INTERNAL кодыг маскдах нь
+ * хангалтгүй — мессежийн ХЭЛБЭРИЙГ ч шалгана.
+ *
+ * Цэвэр функц: production эсэхийг параметрээр авдаг тул unit-тестлэгдэнэ
+ * (server/_core/trpc-errors.test.ts). Dev-д хөндөхгүй — stack хэрэгтэй.
+ */
+const INTERNAL_DETAIL_PATTERN = /\b(ER_[A-Z_]+|ECONN(REFUSED|RESET)|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|EPIPE|sqlMessage|sqlState|Duplicate entry|Unknown column|Table '[^']*' doesn't exist|SELECT |INSERT INTO|UPDATE [a-z_]+ SET|DELETE FROM|TypeError:|ReferenceError:|Cannot read propert|is not a function|undefined is not|null is not)|\bat .+:\d+:\d+\b/;
+
+export function maskErrorShape<T extends { message: string }>(shape: T, code: string, isProduction: boolean): T {
+  if (!isProduction) return shape;
+  if (code === "INTERNAL_SERVER_ERROR" || INTERNAL_DETAIL_PATTERN.test(shape.message)) {
+    return { ...shape, message: INTERNAL_ERR_MSG };
+  }
+  return shape;
+}
+
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
+  errorFormatter({ shape, error }) {
+    return maskErrorShape(shape, error.code, ENV.isProduction);
+  },
 });
 
 export const router = t.router;
@@ -201,11 +227,23 @@ function persistentRateLimitMiddleware(bucketName: string, maxAttempts: number, 
 // Strict tier (8 attempts/15min/IP): brute-force/enumeration/abuse targets
 // where each request is either security-sensitive (login, register,
 // password reset) or writes a real business record (checkout — it also
-// decrements stock, so leaving it under only the general 300/15min cap would
+// decrements stock, so leaving it under only the general 1200/15min cap would
 // let one IP place enough garbage orders to exhaust inventory).
 const strictRateLimit = persistentRateLimitMiddleware("strict", 8, 15 * 60 * 1000);
 export const strictRateLimitedProcedure = publicProcedure.use(strictRateLimit);
 export const strictRateLimitedProtectedProcedure = protectedProcedure.use(strictRateLimit);
+
+// Аудит 2026-09-20 (P1-1): login ба checkout нь strict tier-ээс салсан. Тэр tier
+// АМЖИЛТТАЙ оролдлогыг ч тоолдог тул нэг IP-ийн ард 9 дэх хэрэглэгч (оффисын
+// NAT, үүрэн операторын CGNAT — Монголд түгээмэл) нэвтэрч/захиалж чадахгүй байв.
+// 20/15мин/IP хэвээр DB дээр тоологдоно (олон instance-д хүчинтэй); login дээр
+// нэмэлтээр ДАНС тус бүрийн lockout (server/routers.ts, LOGIN_LOCKOUT_*) байдаг
+// тул IP-ийн босгыг сулруулсан нь brute-force-ийн орон зайг нээхгүй. Бүртгэл,
+// нууц үг сэргээх, царай бүртгэх нь ховор үйлдэл тул strict хэвээр.
+const loginRateLimit = persistentRateLimitMiddleware("login", 20, 15 * 60 * 1000);
+export const loginRateLimitedProcedure = publicProcedure.use(loginRateLimit);
+const checkoutRateLimit = persistentRateLimitMiddleware("checkout", 20, 15 * 60 * 1000);
+export const checkoutRateLimitedProcedure = publicProcedure.use(checkoutRateLimit);
 
 // Moderate tier (30 attempts/15min/IP): cart mutations. Guest checkout means
 // these no longer require an account first, so an anonymous visitor could
@@ -217,7 +255,7 @@ export const moderateRateLimitedProcedure = publicProcedure.use(moderateRateLimi
 
 // Lenient tier (600 attempts/15min/IP): best-effort pageview telemetry
 // (Tier E analytics), fired on every route change. Deliberately its own
-// generous bucket, separate from the blanket 300/15min limitApiTraffic
+// generous bucket, separate from the blanket 1200/15min limitApiTraffic
 // budget every tRPC call already shares — this must never be the thing
 // that throttles a real shopper's cart/checkout calls from the same IP.
 const lenientRateLimit = rateLimitMiddleware("lenient", 600, 15 * 60 * 1000);

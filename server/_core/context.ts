@@ -18,9 +18,24 @@ import type { User } from "../../drizzle/schema";
 // so local dev / CI / vitest (none of which set NODE_ENV=production) keep
 // working with no secret configured, same as today.
 export function assertProductionSecrets() {
-  if (ENV.isProduction && !ENV.cookieSecret) {
+  if (!ENV.isProduction) return;
+  if (!ENV.cookieSecret) {
     throw new Error("JWT_SECRET must be set in production -- refusing to start with an insecure fallback signing key. Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"");
   }
+  // Аудит 2026-09-20 (P2-1): DATABASE_URL байхгүй бол getDb() null буцааж
+  // procedure БҮР "Database is not available" гэж унадаг байв — порт нээхээс
+  // өмнө шатах нь илүү ойлгомжтой. Бусад нь дутуу байвал сайт ажиллах ч тодорхой
+  // хэсэг нь чимээгүй унадаг тул startup-д НЭГ тод warning (шатахгүй — staging /
+  // demo орчныг хаахгүйн тулд).
+  if (!ENV.databaseUrl) {
+    throw new Error("DATABASE_URL must be set in production -- every request needs the database.");
+  }
+  const warnings: string[] = [];
+  if (!ENV.integrationsEncryptionKey || ENV.integrationsEncryptionKey.length !== 64) warnings.push("INTEGRATIONS_ENCRYPTION_KEY (64 hex) -- admin cannot save/read integration credentials (ntfy, StorePay, Smart Software)");
+  if (!ENV.s3Bucket || !ENV.s3AccessKeyId || !ENV.s3SecretAccessKey || !ENV.s3PublicBaseUrl) warnings.push("S3_BUCKET / S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY / S3_PUBLIC_BASE_URL -- image uploads and /cdn/* will fail");
+  if (!ENV.publicBaseUrl) warnings.push("PUBLIC_BASE_URL -- payment callback URLs, sitemap and OG images fall back to the request Host header");
+  if (!ENV.ownerEmail) warnings.push("OWNER_EMAIL -- no account is auto-promoted to admin on registration");
+  for (const warning of warnings) console.warn(`[env] production is missing ${warning}`);
 }
 
 export type SessionUser = Omit<User, "passwordHash">;
