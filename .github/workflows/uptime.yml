@@ -29,18 +29,34 @@ jobs:
         id: probe
         run: |
           set +e
+          # 2026-09-20: Cloudflare-ийн Bot Fight Mode нь GitHub-ийн дата төвийн
+          # IP-ээс ирсэн энэ хүсэлтэд "Just a moment..." managed challenge (HTTP
+          # 403) буцааж эхэлсэн — 2026-09-18-аас хойш run бүр унаж, сайт эрүүл
+          # байхад "DOWN" гэж дуугарч байв. Тайлбарласан User-Agent нь curl-ийн
+          # анхдагчаас илүү тул зарим тохиолдолд challenge-д өртөхгүй өнгөрдөг;
+          # өртсөн тохиолдолд доор challenge-ийг ТАНИЖ, "сайт унасан" гэхийн
+          # оронд "мониторыг хаасан" гэж үнэн зөвөөр мэдээлнэ.
+          UA="SUGI-ASAYAKE-uptime/1.0 (+https://github.com/tmorius-eng/sugi-asayake)"
+          blocked=0
           for attempt in 1 2 3; do
-            body=$(curl -sS --max-time 20 -w '\n%{http_code}' https://sugi.karkaron.com/health)
+            body=$(curl -sS --max-time 20 -A "$UA" -w '\n%{http_code}' https://sugi.karkaron.com/health)
             code=$(echo "$body" | tail -1)
             json=$(echo "$body" | head -n -1)
-            echo "attempt $attempt: HTTP $code $json"
+            echo "attempt $attempt: HTTP $code ${json:0:200}"
             if [ "$code" = "200" ] && echo "$json" | grep -q '"database":"up"'; then
               echo "ok=true" >> "$GITHUB_OUTPUT"; exit 0
             fi
+            case "$json" in *"__cf_chl"*|*"Just a moment"*|*"cf-browser-verification"*) blocked=1 ;; esac
             sleep 20
           done
           echo "ok=false" >> "$GITHUB_OUTPUT"
-          echo "detail=HTTP ${code:-none} ${json:-no body}" >> "$GITHUB_OUTPUT"
+          echo "blocked=$blocked" >> "$GITHUB_OUTPUT"
+          if [ "$blocked" = "1" ]; then
+            # Сайт унасан гэсэн ҮГ БИШ: ирмэг дээр хаагдсан тул төлөв нь ҮЛ МЭДЭГДЭХ.
+            echo "detail=Cloudflare challenge (HTTP $code) — мониторыг ирмэг дээр хаасан тул сайтын төлөв ҮЛ МЭДЭГДЭХ. Bot Fight Mode / WAF-ийн тохиргоо хэрэгтэй." >> "$GITHUB_OUTPUT"
+          else
+            echo "detail=HTTP ${code:-none} ${json:-no body}" >> "$GITHUB_OUTPUT"
+          fi
       - name: Push alert to the phone
         if: steps.probe.outputs.ok == 'false' && env.NTFY_URL != ''
         env:
@@ -49,9 +65,9 @@ jobs:
         run: |
           curl -sS --max-time 20 \
             -H "Authorization: Bearer $NTFY_TOKEN" \
-            -H "Title: sugi.karkaron.com is DOWN" \
+            -H "Title: ${{ steps.probe.outputs.blocked == '1' && 'sugi.karkaron.com: monitor blocked (status unknown)' || 'sugi.karkaron.com is DOWN' }}" \
             -H "Priority: 5" -H "Tags: rotating_light" \
-            -d "Health check failed 3 times in a row: ${{ steps.probe.outputs.detail }}. Check: ssh sugi-oci 'pm2 logs sugi --lines 40'" \
+            -d "3 удаа дараалан амжилтгүй: ${{ steps.probe.outputs.detail }} Шалгах: ssh sugi-oci 'pm2 logs sugi --lines 40'" \
             "$NTFY_URL"
       - name: Fail the run when down
         if: steps.probe.outputs.ok == 'false'
