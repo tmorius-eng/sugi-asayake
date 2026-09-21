@@ -90,7 +90,40 @@ browser → /api/trpc/<router>.<procedure>
 
 ## 3. `server/` — домэйн модулиуд
 
-### 3.1 `db.ts` (~6,900 мөр) — өгөгдлийн үндсэн давхарга
+### 3.1 `db.ts` → `db/*.ts` (2026-09-21) — өгөгдлийн үндсэн давхарга
+
+> **2026-09-21: нэг 7 066 мөрийн файл 21 домэйн модуль болов.** `server/db.ts` нь одоо зөвхөн
+> barrel (`export * from "./db/…"`) тул 91 файлын `import { … } from "./db"` хэвээр; функц
+> хайхдаа доорх хүснэгтээр файлаа ол, шинэ функцийг тохирох файлд нь нэм. Модулиуд бие
+> биенээсээ шууд import хийдэг (`./connection`, `./site` …); тойрог import байгаа ч бүгд
+> функцийн дуудлага тул аюулгүй — **модулийн түвшинд** (top-level const) хажуугийн модулийн
+> утга ашиглахгүй. Хуваалтыг `scratchpad/split-db.mjs` (TypeScript AST) хийсэн, зан төлөв
+> өөрчлөгдөөгүй (vitest бүтэн + E2E бүтэн).
+
+| Файл | Юу байдаг |
+|---|---|
+| `connection.ts` | `getDb`/`dbPing`, pool, **`settledSaleSql`/`refundOwedSql`**, захиалгын дугаар, duplicate-key шалгалт |
+| `users.ts` | хэрэглэгч, session (`getSessionUserById`/`forgetSessionUser`), хаяг, хүслийн жагсаалт, утасны баталгаажуулалт/бүртгэл, Facebook |
+| `catalog.ts` | storefront каталог: хуудас, кэш, FULLTEXT fallback, `getRecommendedProducts`, `getRelatedProducts`, `getBestsellingProducts`, slug/sku |
+| `cart-orders.ts` | сагс, **`createOrderFromActiveCart`** (системийн зүрх), `recordInStoreSale` (POS), `searchVariantsForBranch` |
+| `routines-promotions.ts` | routine + зарын урамшуулал |
+| `customer-orders.ts` | харилцагчийн захиалга: жагсаалт, `cancelOwnOrder` |
+| `reviews.ts` | сэтгэгдэл/хариулт/like, moderation, `getReviewEligibility` |
+| `payments.ts` | QPay/StorePay оролдлого (`markQPayPaymentAttemptPaid` provider-аас хамааралгүй) |
+| `admin-orders.ts` | admin бараа/захиалгын жагсаалт, самбар, global search, `decrementBranchStock`/`restoreStockForOrder`, `updateAdminOrder`, гар захиалга, `refundOrder`, `deleteAdminOrder`, хянах |
+| `posts.ts` | нийтлэл, ангилал/tag, медиа сан |
+| `site.ts` | онцлох брэнд, салбар, **storefront кэш (`STOREFRONT_CACHE_KEYS`, `invalidateStorefront`)**, site media/text/documents, ажлын байр/анкет, гишүүнчлэлийн зэрэглэл |
+| `ops.ts` | public ангилал, дэлгүүрийн тохиргоо, хуваарьт ажил, орхигдсон сагс, дэлгүүрийн зээл, маркетингийн зардал, зочны session, аудит, нэвтрэлтийн оролдлого |
+| `admin-catalog.ts` | admin ангилал/бараа бичих, зөрчил шалгах, `syncSoleVariantFromProduct` |
+| `customers.ts` | admin хэрэглэгч, кампанит илгээлтийн хүлээн авагч, гишүүнчлэлийн төлөв/хямдрал, түр хаах, эрх, утас |
+| `discounts.ts` | хямдралын код |
+| `integrations.ts` | интеграцийн тохиргоо (шифрлэгдсэн, merge семантик) |
+| `notifications.ts` | мэдэгдлийн outbox/feed, push subscription |
+| `variants.ts` | variant, салбарын нөөц (`setBranchStock`), ledger унших |
+| `face.ts` | admin царай: enrollment/challenge/attempt |
+| `questions.ts` | асуулт/хариулт |
+| `gift-cards.ts` | бэлгийн карт (үүсгэх, хүчингүй, redeem) |
+
 
 > 2026-09-20: `getSiteTextValue(slot)` / `getSiteName()` — баримт PDF, имэйл, тайлан, төлбөрийн тайлбар зэрэг **серверээс гардаг бүх брэндийн нэр** эндээс уншина (өмнө нь кодод хатуу бичигдсэн байв).
 Бүх бизнес query энд. Гол бүлгүүд:

@@ -216,6 +216,7 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
 - PDF гарын авлагыг **гараар засахгүй** — `python docs/manual/extract.py && python docs/manual/build_pdf.py`.
 
 **Өгөгдлийн сан, мөнгө**
+- **`server/db.ts` нь barrel** (2026-09-21) — бодит код `server/db/<домэйн>.ts`-д (CODEBASE §3.1 хүснэгт). Шинэ функцийг тохирох файлд, шинэ файл үүсгэвэл barrel-д мөр нэм. Модулийн түвшинд (top-level const) хажуугийн модулийн утга ашиглахгүй (тойрог import).
 - Шинэ `sql.raw` БИЧИХГҮЙ — `server/_core/sqlSafe.ts`-ийн `sqlInt()` ашиглана.
 - **Төлөв шилжүүлдэг UPDATE бүр `WHERE <хуучин төлөв>` + `affectedRows === 1`** — сагсны `active→converted` үүнгүй байснаас хоёр tab хоёр захиалга үүсгэж чадаж байв (2026-09-20).
 - **Гадагш `fetch` бүр `AbortSignal.timeout`-той** (2026-09-20) — timeout-гүй провайдер checkout-ийг хязгааргүй барина.
