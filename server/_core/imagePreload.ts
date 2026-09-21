@@ -1,6 +1,7 @@
 import { avifSrcSet, avifVariantKey, imageSrcSet } from "../../shared/image-variants";
 import { storageObjectExists } from "../storage";
 import { escapeAttribute } from "./indexHtml";
+import { storageKeyOf } from "./publicUrl";
 
 /**
  * `<link rel="preload" as="image">` нь хөтчийн `<img>`/`<picture>`-ийн ЯГ
@@ -37,7 +38,9 @@ export function responsiveImagePreloadTag(url: string, fullWidth: number, sizes:
  *  heroShell.ts ч ашиглана: серверийн зурсан <picture> нь байхгүй AVIF-г заавал
  *  бол хөтөч эвдэрсэн зураг үзүүлнэ (ResponsivePicture шиг onError fallback-гүй). */
 export async function hasAvif(url: string): Promise<boolean> {
-  if (!url.startsWith("/cdn/") || !url.endsWith(".webp") || url.endsWith("-600w.webp")) return false;
+  // `/cdn/<key>` ба R2-ийн шууд хаяг хоёулаа (publicUrl.ts-ийн directStorageUrl).
+  const key = storageKeyOf(url);
+  if (!key || !url.endsWith(".webp") || url.endsWith("-600w.webp")) return false;
   // Хоёр AVIF хувилбар хамт үүсдэг (imageProcessing.ts, backfill) — нэгийг шалгахад хангалттай.
-  return storageObjectExists(avifVariantKey(url).slice("/cdn/".length));
+  return storageObjectExists(avifVariantKey(key));
 }

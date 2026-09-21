@@ -22,6 +22,7 @@ import { getRecentSqlQueries } from "./_core/sqlQueryLog";
 import { getOrSetCached } from "./_core/ttlCache";
 import { sendAccountEmail, sendAccountSms } from "./_core/notification";
 import { ENV } from "./_core/env";
+import { directStorageUrl } from "./_core/publicUrl";
 import { systemRouter } from "./_core/systemRouter";
 import { signSessionToken, type TrpcContext } from "./_core/context";
 import { hashPassword, verifyPassword } from "./_core/password";
@@ -1488,7 +1489,10 @@ export const appRouter = router({
       const bypassGate = ctx.user?.role === "staff" || ctx.user?.role === "admin";
       return getPublishedPostBySlug(input.slug, { bypassGate });
     }),
-    siteMedia: publicProcedure.query(() => getSiteMedia()),
+    // 2026-09-21: storefront-д R2-ийн шууд хаяг (publicUrl.ts-ийн directStorageUrl) —
+    // indexHtml.ts-ийн bootstrap/shell/preload-той ИЖИЛ URL, эс бөгөөс арын refetch
+    // hero-ийн src-ийг сольж дахин татуулна. Admin-ий siteMedia `/cdn/` хэвээр.
+    siteMedia: publicProcedure.query(async () => (await getSiteMedia()).map(row => ({ ...row, imageUrl: directStorageUrl(row.imageUrl) }))),
     siteText: publicProcedure.query(() => getSiteText()),
     // "Controls everything" admin overhaul (2026-09-08, Phase A): public so
     // the checkout page (delivery fee/free-shipping threshold) can read it

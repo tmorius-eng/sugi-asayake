@@ -33,3 +33,24 @@ export function absoluteUrl(url: string | null | undefined): string {
   if (/^https?:\/\//i.test(url)) return url;
   return `${publicOrigin()}${url.startsWith("/") ? "" : "/"}${url}`;
 }
+
+/**
+ * `/cdn/<key>` → R2-ийн нийтийн хаяг шууд (2026-09-21). `/cdn/*` нь storageProxy.ts-д
+ * 302 redirect: DB-д хадгалагдсан зам R2-оос хамааралгүй (нүүлгэхэд DB хөндөхгүй)
+ * гэсэн зөв шалтгаантай, гэхдээ hero зургийн ЭХНИЙ хүсэлтэд нэг RTT нэмж, зургийн
+ * татаж эхлэхийг хойшлуулдаг (Lighthouse "load delay" ~1 с). Storefront-ийн эхний
+ * render-д очих URL-уудыг (preload, shell, bootstrap, content.siteMedia) сервер
+ * render хийх мөчид шууд хаяг болгоно — DB хэвээр `/cdn/`, тиймээс хөрвүүлэх чадвар
+ * алдагдахгүй. Тохируулаагүй (S3_PUBLIC_BASE_URL хоосон) бол хэвээр буцаана.
+ */
+export function directStorageUrl(url: string): string {
+  const key = storageKeyOf(url);
+  return key && ENV.s3PublicBaseUrl ? `${ENV.s3PublicBaseUrl}/${key}` : url;
+}
+
+/** `/cdn/<key>` эсвэл `${S3_PUBLIC_BASE_URL}/<key>` → `<key>`; бусад URL → null. */
+export function storageKeyOf(url: string): string | null {
+  if (url.startsWith("/cdn/")) return url.slice("/cdn/".length);
+  if (ENV.s3PublicBaseUrl && url.startsWith(`${ENV.s3PublicBaseUrl}/`)) return url.slice(ENV.s3PublicBaseUrl.length + 1);
+  return null;
+}

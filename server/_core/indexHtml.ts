@@ -8,7 +8,7 @@ import { responsiveImagePreload, responsiveImagePreloadTag } from "./imagePreloa
 import { resolveRouteMeta } from "./routeMeta";
 // Open Graph needs absolute URLs; storage URLs may already be absolute (R2
 // public host) or site-relative (/cdn/...). Нэг хэрэгжилт: ./publicUrl.
-import { absoluteUrl, publicOrigin } from "./publicUrl";
+import { absoluteUrl, directStorageUrl, publicOrigin } from "./publicUrl";
 import { ENV } from "./env";
 
 /**
@@ -76,7 +76,7 @@ async function resolveValues(): Promise<Map<string, string>> {
   const now = Date.now();
   if (cache && now - cache.renderedAt < CACHE_TTL_MS) return cache.values;
 
-  const [rows, branches, phoneDigits, facebookUrl, instagramUrl, media, googleVerification, facebookVerification, promo] = await Promise.all([
+  const [rows, branches, phoneDigits, facebookUrl, instagramUrl, mediaRows, googleVerification, facebookVerification, promo] = await Promise.all([
     getSiteText(),
     getStorefrontBranches(),
     getStoreSettingValue("contact-phone-tel"),
@@ -87,6 +87,10 @@ async function resolveValues(): Promise<Map<string, string>> {
     getStoreSettingValue("seo-facebook-domain-verification"),
     getActiveSitePromotion(),
   ]);
+  // 2026-09-21: R2-ийн шууд хаяг (publicUrl.ts-ийн directStorageUrl) — preload, shell,
+  // bootstrap, OG бүгд нэг URL: `/cdn/` 302-ын нэг RTT hero-ийн замаас хасагдана.
+  // content.siteMedia (routers.ts) ижил хөрвүүлэлт хийдэг тул React дахин татахгүй.
+  const media = mediaRows.map(row => ({ ...row, imageUrl: directStorageUrl(row.imageUrl) }));
   // Measurement ids (2026-09-14): handed to /vendor/analytics-init.js as a
   // JSON data block; the tags themselves load only after cookie consent.
   const [ga4Id, pixelId] = await Promise.all([getStoreSettingValue("analytics-ga4-measurement-id"), getStoreSettingValue("analytics-meta-pixel-id")]);
