@@ -241,6 +241,10 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
 - Мэдэгдэлд харилцагчийн нэр/утас/хаяг ХЭЗЭЭ Ч оруулахгүй (ntfy сэдэв нээлттэй).
 
 **Frontend**
+- **Шинэ зургийг `ResponsivePicture`-оор зур** (AVIF → WebP, srcset). AVIF нь ЗААВАЛ БИШ — тиймээс `<source type="image/avif">`-г ГАРААР бичихгүй: `<picture>` нь 404 болоход дараагийн source руу шилждэггүй, зураг эвдэрдэг; `ResponsivePicture` нь `onError`-оор WebP руу буцдаг. Лого дээр `avif={false}`.
+- **srcset нэр дэвшигч бүр бодит файл байх ёстой.** `gridVariantUrl()` зөвхөн өргөтгөлийг хардаг; `client/public` дахь локал `.webp`-д `-600w`/`.avif` хувилбар өөрөө үүсдэггүй. SPA fallback нь байхгүй зам руу **200 + index.html** буцаадаг тул статус 200 нь "байна" гэсэн үг БИШ — content-type-аар шалга (2026-09-21-нд ингэж 2 тасархай зураг олсон).
+- **Hero-ийн preload ба `<img>` хоёр ИЖИЛ файл сонгох ёстой** — `HERO_IMAGE_SIZES` (shared) ба `heroHasAvif()`. Зөрвөл hero хоёр удаа татагдана.
+- **Далд (`display:none`) хэсэг дэх `<img>`-д `loading="lazy"`** — хөтөч далд зургийг ч татдаг (нүүрэнд 3.7 MB PNG ингэж татагдаж байв).
 - **Каруселийн "эхлээд ачаал" тэмдгийг ХАРАГДАХ хуулбарт тавь.** `HeroImageSlideshow` 3 хуулбар зурдаг ба нүдэнд харагддаг нь ДУНД нь (`copy === 1`) — тэмдгийг `copy === 0`-д тавьсан нь далд хуулбарыг хурдасгаж, жинхэнэ hero-г `lazy` болгож LCP-г 9.8 с болгосон байв (2026-09-21).
 - `index.html`-д inline `<script>` бичихгүй (CSP `script-src 'self'`) — JSON блок эсвэл `client/public/vendor/*.js`.
 - Secure-context-only API (`randomUUID`, `clipboard`, `share`, `getUserMedia`) ашиглавал fallback тавина.

@@ -199,6 +199,8 @@ browser → /api/trpc/<router>.<procedure>
 
 ## 5. `client/src/`
 
+> 2026-09-21: зургийг `components/ResponsivePicture.tsx`-ээр (AVIF → WebP + srcset, AVIF байхгүй бол onError-оор WebP); admin-ий upload бүр `lib/prepareImageUpload.ts`-ээр (хөтөч дээр шахалт, хэлбэрийн сануулга) ба хажууд нь `components/admin/UploadTips.tsx` (агуулга `shared/upload-tips.ts`).
+
 - **`App.tsx`** — wouter route + нэг MutationObserver/IntersectionObserver (scroll reveal) бүх route-д.
 - **`pages/`** — Home, Shop, ProductDetail, Checkout, Profile (914 мөр: хаягийн дэвтэр, тохиргоо, аюулгүй байдал), Login, ForgotPassword, MyOrders, TrackOrder, Journal/PostDetail, RoutineDetail, Brands, Legal, NotFound, **AdminDashboard** (→ `AdminWorkspace`).
 - **`components/`**
@@ -296,7 +298,7 @@ pnpm build ; pnpm e2e        # 54 тест, компьютер + утас, produ
 
 ## 10. Скриптүүд (`scripts/`)
 
-`db-apply-migration.ts` (migration, нэг файл, prod; **2026-09-20-оос `schema_migrations`-д бүртгэнэ, `--mark-applied`-аар хуучныг бүртгэх**), `db-migration-status.ts` (**prod/staging-ийн дутуу migration-ийг нэрлэнэ**), `oci/media-backup.mjs` (**R2 зургийн нэмэгдүүлсэн нөөц, ETag-аар; `--dry-run`**), `db-apply-all-migrations.ts` (хоосон DB-д бүх migration — CI/шинэ орчин), `ci-seed.ts` (4 салбар), `enrich-products-from-open-facts.ts` (Open Facts TSV → барааны факт), `seed-gift-cards.ts`, `db-backup.ps1` / `db-restore.ps1`, `stock-ledger-rebaseline.ts` (drift засах), `test-residue-report.ts` / `test-residue-purge.ts` (амьд DB-ийн тестийн үлдэгдэл), `schema-drift-check.ts` (`drizzle/schema.ts` vs бодит `information_schema` + FK индекс — нөгөө лаптопын migration-ыг илрүүлнэ), `check-updates.ps1` (долоо хоног тутмын `pnpm audit` + `pnpm outdated` + override эрүүл мэндийн тайлан, Windows toast; `-Install`-аар Task Scheduler-т бүртгэнэ, зөвхөн мэдээлнэ — юу ч суулгахгүй), `tmp-*.ts` (gitignore, нэг удаагийн), зураг/брэндийн seed скриптүүд.
+`db-apply-migration.ts` (migration, нэг файл, prod; **2026-09-20-оос `schema_migrations`-д бүртгэнэ, `--mark-applied`-аар хуучныг бүртгэх**), `db-migration-status.ts` (**prod/staging-ийн дутуу migration-ийг нэрлэнэ**), `oci/media-backup.mjs` (**R2 зургийн нэмэгдүүлсэн нөөц, ETag-аар; `--dry-run`**), `image-avif-backfill.ts` (**хуучин зурагт AVIF, давтан ажиллуулахад аюулгүй**), `db-apply-all-migrations.ts` (хоосон DB-д бүх migration — CI/шинэ орчин), `ci-seed.ts` (4 салбар), `enrich-products-from-open-facts.ts` (Open Facts TSV → барааны факт), `seed-gift-cards.ts`, `db-backup.ps1` / `db-restore.ps1`, `stock-ledger-rebaseline.ts` (drift засах), `test-residue-report.ts` / `test-residue-purge.ts` (амьд DB-ийн тестийн үлдэгдэл), `schema-drift-check.ts` (`drizzle/schema.ts` vs бодит `information_schema` + FK индекс — нөгөө лаптопын migration-ыг илрүүлнэ), `check-updates.ps1` (долоо хоног тутмын `pnpm audit` + `pnpm outdated` + override эрүүл мэндийн тайлан, Windows toast; `-Install`-аар Task Scheduler-т бүртгэнэ, зөвхөн мэдээлнэ — юу ч суулгахгүй), `tmp-*.ts` (gitignore, нэг удаагийн), зураг/брэндийн seed скриптүүд.
 
 ---
 

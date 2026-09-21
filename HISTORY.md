@@ -140,6 +140,70 @@ DOM-ыг татаж, `loading`/`fetchpriority` шинжийг хассаны д�
 зургийн формат (AVIF) ба consent manager-ийн render-blocking (~770 мс) —
 хоёулаа тусдаа ажил.
 
+### 6b. Хурд: зураг 6.3 MB -> 1.1 MB, зургийн формат framework, upload-ийн зөвлөмж (2026-09-21)
+
+Tom: *"Commit it! Then make it more faster!!"*, дараа нь зургийн формат
+framework (AVIF/WebP/SVG/PNG, `<picture>`, admin-д client-side шахалт, Sharp
+pipeline, хэлбэрийн удирдамж), мөн *"zurag oruulah upload hiihed tips zaawar iig
+bas martalgui nemeerei"*.
+
+**Хэмжилт хаанаас эхэлсэн**: LCP-ийн задаргаа (TTFB / load delay / load time /
+render delay) ба нүүр хуудасны зураг бүрийн бодит байт (redirect-ээр дамжуулж
+тооцсон). Нүүр хуудас утсан дээр **6.3 MB зураг** татдаг байв:
+
+| Файл | KB | Харагдах хэмжээ |
+|---|---|---|
+| бэлгэ тэмдэг PNG 1920×1920 | 3,700 | **далд** (`display:none`) |
+| hero хавтан ×5 (1920px) | 981 | 320×320 |
+| khuns.webp 3840×2560 | 412 | 66×66 |
+| брэндийн wordmark ×5 (1920px) | 267 | ~52×15 |
+| лого PNG | 100 | 128×19 |
+
+**Засвар (дизайн хөндөөгүй)**: далд `<img>`-д lazy + 256px WebP; лого lossless
+WebP (пиксел бүр ижил, шалгасан); hero, ангилал, wordmark-д upload-ын -600w
+хувилбар srcset-ээр; preload нь `<img>`-тэй ИЖИЛ imagesrcset/imagesizes;
+cookie-ийн 2 script `defer`. **Алдаа олж зассан**: локал 2 ангиллын зурагт
+-600w хувилбар байгаагүй — SPA fallback 200+HTML буцаадаг тул статус шалгалтаар
+биш, "зураг decode болсон уу"-аар л олдсон.
+
+**Зургийн формат (Tom-ийн framework, бодит зураг дээр хэмжиж сонгосон)**:
+AVIF нь WebP q82-оос q50-д ~50%, q60-д ~30% жижиг; 2x томруулж харахад q50
+жижиг текстийг ("CAUTION: CUTE ANIMALS") бүдгэрүүлсэн тул **q60**. Pipeline
+агуулгаар ангилна: photo -> WebP + AVIF; бодит тунгалагтай график -> lossless/q90
+WebP, AVIF-гүй; хөдөлгөөнт GIF -> animated WebP, AVIF-гүй (4 тест). alpha
+СУВАГТАЙ боловч тунгалаг пикселгүй PNG-г photo гэж ангилна (`stats().isOpaque`).
+**SVG-г хүлээж аваагүй** — XSS. `ResponsivePicture` нь `<picture>` AVIF source
++ onError -> WebP fallback (404 үед `<picture>` өөрөө шилждэггүй). Hero preload нь
+R2-д AVIF байгаа эсэхийг шалгаж (10 мин кэш) зөв форматыг preload хийнэ.
+`scripts/image-avif-backfill.ts --apply`: **470 зураг AVIF болсон, 71 лого/график
+алгассан, алдаа 0** (дахин ажиллуулахад 0 нэмнэ). Локал `.avif`-г express
+`application/octet-stream`-ээр явуулдаг байсныг `image/avif` болгов
+(`nosniff`-тэй тул Safari татгалзаж болзошгүй байв).
+
+**Admin**: 7 газар хуулбарлагдсан upload кодыг нэг `prepareImageUpload()`-оор:
+2 MB эсвэл 2560px-ээс том зургийг хөтөч дээр жижгэрүүлнэ (Safari canvas WebP
+кодлож чаддаггүй тул буцсан төрлийг шалгаж JPEG руу унана), хэлбэр таарахгүй
+бол "тайрагдана" гэж сануулна (бараа 4:5–1:1, hero 1:1, нийтлэл 16:9,
+попап 4:5 — CSS-ийн бодит aspect-ratio-оос), GIF хүлээн авна. **Upload-ийн
+зөвлөмж** (`shared/upload-tips.ts` + `UploadTips`) upload товч бүрийн хажууд —
+хэлбэр, хэмжээ, формат, "систем юуг өөрөө хийдэг"; Content & Media-д хураалттай.
+E2E (`admin-image-upload.spec.ts`, upload хүсэлтийг барьж R2-д юу ч бичихгүй):
+зөвлөмж харагдана, 4000px -> <=2560px WebP, 2:1 бараанд сануулга.
+
+**Үр дүн (Lighthouse утас, ижил машин, медиан)**:
+
+| Үе | Оноо | LCP | Хуудасны жин |
+|---|---|---|---|
+| Өглөө | 54 | 9.8 с | 6,307 KB |
+| Hero lazy засвар | 65 | 5.3 с | 6,306 KB |
+| Зургийн хэмжээ | 74 | 4.2 с | 1,676 KB |
+| + AVIF | **77** | **4.2 с** | **1,540 KB** |
+
+⚠️ AVIF LCP-г хөдөлгөөгүй: үлдсэн 4.2 с нь зургийн байт биш — React ачаалж
+дуусч hero-г зурах хүртэлх render delay (~1.3 с) ба CSS/JS/font-той өрсөлдөх
+load delay (~1.3 с). Дараагийн алхам нь архитектурын (hero-г серверээс HTML-ээр
+зурах, critical CSS) — дизайнд нөлөөлж болзошгүй тул Tom-оос асууна.
+
 ### 7. Тест
 Шинэ: `e2e/checkout.spec.ts` — **зочин анх удаа бүтэн захиалга өгнө** (сагс → маягтын
 алдаа → салбараас авах → бэлэн мөнгө → баталгаажуулах дэлгэц → DB-д мөр бодитоор
