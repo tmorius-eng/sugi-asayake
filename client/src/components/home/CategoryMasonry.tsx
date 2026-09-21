@@ -2,6 +2,7 @@ import type { CSSProperties, ComponentType } from "react";
 import { Link } from "wouter";
 import { ArrowUpRight } from "lucide-react";
 import { getCategoryPlaceholderImage } from "@shared/catalog-filter";
+import { imageSrcSet } from "@shared/image-variants";
 import { useSiteText } from "@/hooks/useSiteText";
 import SectionHeading from "./SectionHeading";
 import CategoryRail from "./CategoryRail";
@@ -135,7 +136,9 @@ export default function CategoryMasonry({
                   means a real alt text instead of a decorative
                   background-image with no accessible name. */}
               <span className="cat-mosaic-item-photo">
-                <img src={imageSrc} alt={category.name} loading="lazy" draggable={false} />
+                {/* 66px-ийн дүрсэнд 3840px хүртэлх эх файл (412 KB) татдаг байв —
+                    webp бол upload-ын -600w хувилбарыг санал болгоно. */}
+                <img src={imageSrc} alt={category.name} loading="lazy" draggable={false} {...(imageSrcSet(imageSrc, 1920) ? { srcSet: imageSrcSet(imageSrc, 1920)!, sizes: "80px" } : {})} />
               </span>
               <span className="cat-mosaic-item-body">
                 {/* 2026-09-11 audit: the "01".."06" index was removed. The six
@@ -154,7 +157,11 @@ export default function CategoryMasonry({
       />
 
       <div className="cat-mosaic-note">
-        <img src={symbolImage} alt="" />
+        {/* 2026-09-21: энэ мөр одоогийн загварт `display: none` (.sugi-site
+            .cat-mosaic-note) боловч `<img>` нь далд байсан ч татагддаг тул нүүр
+            хуудас бүрт 3.7 MB PNG татдаг байв. `loading="lazy"` зураг нь
+            харагдах болтлоо татагдахгүй. */}
+        <img src={symbolImage} alt="" loading="lazy" width={34} height={34} />
         <span>{textFor("home-text-cat-note", "Бидний тавиур дээрх бүтээгдэхүүн бүр өдөр тутмын хэрэгцээнээс эхэлнэ.")}</span>
       </div>
     </section>

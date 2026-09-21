@@ -52,7 +52,7 @@ import { trpc } from "@/lib/trpc";
 // home-family.
 const assortmentImage = "/product-placeholder.svg";
 const familyImage = null;
-const symbolImage = "/cdn/sugi-symbol_0a534a76.png";
+const symbolImage = "/images/brand/sugi-symbol-256.webp";
 
 export default function Home() {
   const { user } = useAuth();

@@ -393,7 +393,8 @@ export default function FeaturedBrandsCarousel({ brands, heading }: { brands: Fe
                       simply runs longer. */}
                   {brand.logoUrl ? (
                     <span className="fbrand-logo">
-                      <img src={brand.logoUrl} alt={brand.brandName} loading="lazy" draggable={false} />
+                      {/* 2026-09-21: 1920px өргөн wordmark (38–72 KB) ~52px-ээр зурагддаг. */}
+                      <img src={brand.logoUrl} alt={brand.brandName} loading="lazy" draggable={false} {...(imageSrcSet(brand.logoUrl, 1920) ? { srcSet: imageSrcSet(brand.logoUrl, 1920)!, sizes: "120px" } : {})} />
                     </span>
                   ) : null}
                 </Link>

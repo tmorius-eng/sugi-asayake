@@ -14,13 +14,17 @@ export const siteMediaSlots = [
     key: "brand-logo",
     label: "Сайтын лого (нэрийн бичиглэл)",
     description: "Толгой хэсэг, footer, /careers болон админ хажуу самбарт харагдах үндсэн лого. Ил тод дэвсгэртэй PNG хамгийн сайн. ⚠️ Хөтчийн таб болон утасны дүрсийг энэ СОЛИХГҮЙ.",
-    fallbackUrl: "/cdn/sugi-logo-transparent-clean_fee66cad.png",
+    // 2026-09-21: ижил 864x130 зураг, PNG -> lossless WebP (100 KB -> 41 KB,
+    // пиксел бүр ижил). Хуудас бүрийн толгойд ачаалагддаг.
+    fallbackUrl: "/images/brand/sugi-logo.webp",
   },
   {
     key: "brand-symbol",
     label: "Лого — жижиг бэлгэ тэмдэг",
     description: "Админ хажуу самбар хумигдсан үед харагдах дөрвөлжин бэлгэ тэмдэг. Хоосон бол үндсэн лого ашиглагдана.",
-    fallbackUrl: "/cdn/sugi-symbol_0a534a76.png",
+    // 2026-09-21: 1920x1920 PNG (3.7 MB) хамгийн ихдээ ~40px-ээр харагддаг байв ->
+    // 256px WebP (35 KB).
+    fallbackUrl: "/images/brand/sugi-symbol-256.webp",
   },
   {
 // 2026-09-09 deep audit: the four original brand-default objects

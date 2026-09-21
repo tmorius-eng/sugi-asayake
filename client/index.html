@@ -75,7 +75,13 @@
          script-injection integration (no 3rd-party script exists anywhere in
          this codebase to gate). -->
     <link rel="stylesheet" href="/vendor/silktide-consent-manager.css">
-    <script src="/vendor/silktide-consent-manager.js"></script>
+    <!-- 2026-09-21: defer. Энэ хоёр script нь HTML parse-ийг зогсоож эхний
+         зурагдалтыг ~1 секунд хойшлуулдаг байв (Lighthouse render-blocking).
+         `defer` script-үүд parse дууссаны дараа ЯГ БИЧИГДСЭН ДАРААЛЛААР
+         ажилладаг тул manager -> init -> analytics-init -> app дараалал хэвээр.
+         Аналитик нь зөвшөөрлийг queue-ээр хүлээдэг (analytics-init.js) тул
+         зөвшөөрөлгүйгээр юу ч эхлэхгүй хэвээр. -->
+    <script src="/vendor/silktide-consent-manager.js" defer></script>
     <!-- Cookie-consent wording, rendered by the server from admin-editable
          site text. A JSON data block is not executed, so the production CSP
          (script-src 'self') allows it; the init itself lives in
@@ -96,7 +102,7 @@
       "preferencesDescription": "%COOKIE_PREFERENCES_DESCRIPTION%",
       "save": "%COOKIE_SAVE%"
     }</script>
-    <script src="/vendor/silktide-consent-init.js"></script>
+    <script src="/vendor/silktide-consent-init.js" defer></script>
     <!-- Measurement (2026-09-14): ids from /admin → Дэлгүүрийн тохиргоо; the
          tags load in /vendor/analytics-init.js only after consent. -->
     <script type="application/json" id="analytics-config">%ANALYTICS_CONFIG_JSON%</script>

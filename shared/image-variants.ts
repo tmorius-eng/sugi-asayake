@@ -52,3 +52,16 @@ export function imageSrcSet(url: string | null | undefined, fullWidth: number): 
   if (!grid || !url || grid === url) return null;
   return `${grid} ${GRID_VARIANT_WIDTH}w, ${url} ${fullWidth}w`;
 }
+
+/**
+ * Нүүрний hero хавтангийн `sizes` (2026-09-21). CSS: `.hero-rail-slide` нь
+ * ≤760px-д min(450px, 82vw), бусад үед min(450px, 74vw).
+ *
+ * ХОЁР газар хэрэглэгдэнэ, заавал ИЖИЛ байх ёстой: `<img>` (HeroImageSlideshow)
+ * ба серверийн `<link rel="preload" imagesrcset imagesizes>` (indexHtml.ts).
+ * Зөрвөл хөтөч preload-оор нэг файл, `<img>`-ээр өөр файл татаж, hero-г хоёр
+ * удаа татна — хурдасгах гэсэн засвар удаашруулна.
+ */
+export const HERO_IMAGE_SIZES = "(max-width: 760px) 82vw, 450px";
+/** Hero-ийн эх файлын өргөний дээд хязгаар (admin upload-ууд 1920px хүртэл). */
+export const HERO_FULL_WIDTH = 1920;
