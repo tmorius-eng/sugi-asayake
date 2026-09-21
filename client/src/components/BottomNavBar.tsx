@@ -47,7 +47,7 @@ export default function BottomNavBar() {
         <Link href="/" className={`bottom-nav-item${location === "/" ? " is-current" : ""}`}>
           <Home size={20} aria-hidden="true" /><span>Нүүр</span>
         </Link>
-        <Link href="/shop" className={`bottom-nav-item${location.startsWith("/shop") ? " is-current" : ""}`}>
+        <Link href="/shop" className={`bottom-nav-item${location === "/shop" || location.startsWith("/shop/") ? " is-current" : ""}`}>
           <LayoutGrid size={20} aria-hidden="true" /><span>Ангилал</span>
         </Link>
         <button type="button" onClick={() => setCartOpen(true)} className="bottom-nav-item" aria-label={cartCount > 0 ? `Сагс нээх, ${cartCount} бараатай` : "Сагс нээх"}>
@@ -57,7 +57,7 @@ export default function BottomNavBar() {
           </span>
           <span>Сагс</span>
         </button>
-        <Link href="/profile?tab=wishlist" className={`bottom-nav-item${location.startsWith("/profile") && location.includes("wishlist") ? " is-current" : ""}`}>
+        <Link href="/profile?tab=wishlist" className={`bottom-nav-item${(location === "/profile" || location.startsWith("/profile/")) && location.includes("wishlist") ? " is-current" : ""}`}>
           <span className="bottom-nav-item-icon">
             <Heart size={20} aria-hidden="true" />
             {wishlistCount > 0 && <span className="bottom-nav-item-badge">{wishlistCount}</span>}
@@ -71,7 +71,7 @@ export default function BottomNavBar() {
             desktop-era "always says Профайл, gate lives inside the page"
             pattern, not an inconsistency with it. */}
         {user ? (
-          <Link href="/profile" className={`bottom-nav-item${location.startsWith("/profile") && !location.includes("wishlist") ? " is-current" : ""}`}>
+          <Link href="/profile" className={`bottom-nav-item${(location === "/profile" || location.startsWith("/profile/")) && !location.includes("wishlist") ? " is-current" : ""}`}>
             <User size={20} aria-hidden="true" /><span>Профайл</span>
           </Link>
         ) : (

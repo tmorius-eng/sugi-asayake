@@ -1,7 +1,8 @@
-import { ArrowLeft, Clock, Facebook, Instagram, Mail, MapPin, MessageCircle, Phone, Search } from "lucide-react";
+import { Clock, Facebook, Instagram, Mail, MapPin, MessageCircle, Phone, Search } from "lucide-react";
 import { Link } from "wouter";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import SiteFooter from "@/components/SiteFooter";
+import CommerceHeader from "@/components/CommerceHeader";
 import { trpc } from "@/lib/trpc";
 import { useShopContact } from "@/hooks/useShopContact";
 import { useT } from "@/hooks/useLocale";
@@ -37,8 +38,9 @@ export default function Help() {
 
   return (
     <div className="doc-shell">
+      {/* 2026-09-21: site header like every storefront page (was footer-only). */}
+      <CommerceHeader backLabel="SUGI ASAYAKE" />
       <main className="doc-main help-main">
-        <Link href="/" className="doc-back"><ArrowLeft size={15} />Нүүр хуудас руу буцах</Link>
         <div className="doc-head">
           <p className="doc-kicker">SUGI ASAYAKE MONGOLIA</p>
           <h1>Тусламж, холбоо барих</h1>

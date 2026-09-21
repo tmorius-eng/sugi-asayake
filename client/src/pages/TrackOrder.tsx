@@ -50,7 +50,7 @@ export default function TrackOrder() {
 
   return (
     <div className="auth-shell">
-      <CommerceHeader cartCount={0} backLabel="SUGI ASAYAKE" />
+      <CommerceHeader backLabel="SUGI ASAYAKE" />
       <main className="auth-main">
         <div className="auth-head">
           <h1>{trackLine1} <em>{trackLine2}</em></h1>

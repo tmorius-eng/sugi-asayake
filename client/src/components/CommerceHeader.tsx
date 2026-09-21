@@ -12,6 +12,7 @@ import { useSiteText } from "@/hooks/useSiteText";
 import { toggleStorefrontTheme, useStorefrontTheme } from "@/hooks/useStorefrontTheme";
 import { useT } from "@/hooks/useLocale";
 import { trpc } from "@/lib/trpc";
+import CartDrawer from "@/components/CartDrawer";
 
 type CommerceHeaderProps = {
   cartCount?: number;
@@ -52,7 +53,21 @@ const marketingNavItems = [
   { slot: "nav-text-journal", fallback: "Зөвлөгөө", href: "/journal", anchor: false },
 ];
 
-export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = "SUGI ASAYAKE", marketingNav = false }: CommerceHeaderProps) {
+export default function CommerceHeader({ cartCount: cartCountProp, onCartOpen: onCartOpenProp, backLabel = "SUGI ASAYAKE", marketingNav = false }: CommerceHeaderProps) {
+  // 2026-09-21: a page that does not wire its own cart (journal, brands, posts,
+  // track-order, login, legal, help, checkout...) used to get a DEAD bag icon --
+  // always "empty", and clicking it did nothing, because onCartOpen was
+  // undefined. The header now owns the cart itself in that case: live count
+  // from the same cart query every other surface uses, and its own drawer.
+  // Pages that already manage a drawer (home, shop, product, routine, profile)
+  // pass onCartOpen and are unchanged.
+  const selfManagedCart = onCartOpenProp === undefined;
+  const ownCartQuery = trpc.cart.current.useQuery(undefined, { enabled: selfManagedCart });
+  const [ownCartOpen, setOwnCartOpen] = useState(false);
+  const cartCount = selfManagedCart
+    ? ownCartQuery.data?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0
+    : cartCountProp ?? 0;
+  const onCartOpen = onCartOpenProp ?? (() => setOwnCartOpen(true));
   const { user } = useAuth();
   const [location] = useLocation();
   const textFor = useSiteText();
@@ -221,6 +236,7 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
           <Link href="/returns" onClick={closeMenu}><span>{t("Буцаалт, солилцоо")}</span><ArrowUpRight size={16} /></Link>
         </div>
       </header>
+      {selfManagedCart ? <CartDrawer open={ownCartOpen} onOpenChange={setOwnCartOpen} /> : null}
     </>
   );
 }

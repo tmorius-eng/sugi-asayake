@@ -45,7 +45,7 @@ export default function ForgotPassword() {
 
   return (
     <div className="auth-shell">
-      <CommerceHeader cartCount={0} backLabel="SUGI ASAYAKE" />
+      <CommerceHeader backLabel="SUGI ASAYAKE" />
       <main className="auth-main">
         <div className="auth-head">
           <p className="auth-kicker">ACCOUNT RECOVERY</p>

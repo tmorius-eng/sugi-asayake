@@ -2,6 +2,7 @@ import { LoaderCircle } from "lucide-react";
 import { Link, useRoute } from "wouter";
 import CommerceHeader from "@/components/CommerceHeader";
 import SiteFooter from "@/components/SiteFooter";
+import NotFound from "@/pages/NotFound";
 import { trpc } from "@/lib/trpc";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
 
@@ -32,26 +33,10 @@ export default function PostDetail() {
     );
   }
 
-  if (postQuery.isError || !post) {
-    return (
-      <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]">
-        <CommerceHeader backLabel="SUGI ASAYAKE" />
-        <main className="mx-auto grid min-h-[62vh] max-w-3xl place-items-center px-4 py-12 sm:px-8">
-          <section className="w-full rounded-[2rem] border border-black/8 bg-white p-8 text-center shadow-[0_18px_55px_rgba(44,39,32,.08)] sm:p-12">
-            <p className="text-[10px] font-extrabold tracking-[.18em] text-[#c81b34]">CONTENT NOTICE</p>
-            <h1 className="mt-4 font-[var(--font-display)] text-4xl font-semibold tracking-[-.07em] sm:text-5xl">Мэдээ олдсонгүй.</h1>
-            <p className="mx-auto mt-5 max-w-md text-sm leading-6 text-[#67686c]">
-              Энэ мэдээ нийтлэгдээгүй, устгагдсан, эсвэл холбоос буруу байж болно.
-            </p>
-            <Link href="/" className="mt-8 inline-flex min-h-12 items-center justify-center rounded-full bg-[#df1f3d] px-6 text-sm font-bold text-white! transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97]">
-              Нүүр хуудас руу буцах
-            </Link>
-          </section>
-        </main>
-        <SiteFooter />
-      </div>
-    );
-  }
+  // 2026-09-21: an unknown single-word path (a typo like /shopp) lands here via
+  // the /:slug catch-all -- show the site's real 404 page, not a post-specific
+  // "Мэдээ олдсонгүй". The server answers these with HTTP 404 (routeStatus.ts).
+  if (postQuery.isError || !post) return <NotFound />;
 
   return (
     <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]">

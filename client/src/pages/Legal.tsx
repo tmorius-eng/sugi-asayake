@@ -1,7 +1,7 @@
-import { ArrowLeft } from "lucide-react";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import SiteFooter from "@/components/SiteFooter";
+import CommerceHeader from "@/components/CommerceHeader";
 import { trpc } from "@/lib/trpc";
 import { useLocale } from "@/hooks/useLocale";
 import {
@@ -69,8 +69,11 @@ export default function Legal() {
 
   return (
     <div className="doc-shell">
+      {/* 2026-09-21 (Tom): the legal pages get the site header like every other
+          storefront page -- search, language, cart, menu. Its back arrow
+          replaces the old in-page "Нүүр хуудас руу буцах" link. */}
+      <CommerceHeader backLabel="SUGI ASAYAKE" />
       <main className="doc-main">
-        <Link href="/" className="doc-back"><ArrowLeft size={15} />Нүүр хуудас руу буцах</Link>
         <div className="doc-head">
           <p className="doc-kicker">SUGI ASAYAKE MONGOLIA</p>
           <h1>{title}</h1>

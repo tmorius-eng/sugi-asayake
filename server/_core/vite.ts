@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Server } from "node:http";
 import { renderIndexHtml } from "./indexHtml";
+import { resolveRouteStatus } from "./routeStatus";
 
 export async function setupVite(app: Express, server: Server) {
   const { createServer: createViteServer } = await import("vite");
@@ -24,7 +25,7 @@ export async function setupVite(app: Express, server: Server) {
       // actually be checked locally instead of only after a deploy.
       // originalUrl, not req.path: inside app.use("*") req.path is always "/".
       template = await renderIndexHtml(template, req.originalUrl.split("?")[0]);
-      res.status(200).set({ "Content-Type": "text/html" }).end(template);
+      res.status(await resolveRouteStatus(req.originalUrl)).set({ "Content-Type": "text/html" }).end(template);
     } catch (error) {
       vite.ssrFixStacktrace(error as Error);
       next(error);
@@ -85,7 +86,11 @@ export function serveStatic(app: Express) {
   app.use("*", async (req, res, next) => {
     try {
       const template = await fs.promises.readFile(templatePath, "utf-8");
-      res.status(200).set({ "Content-Type": "text/html", "Cache-Control": "no-cache" }).end(await renderIndexHtml(template, req.originalUrl.split("?")[0]));
+      // Status (2026-09-21, routeStatus.ts): 404 for paths that are not a page
+      // -- the same HTML (React renders the 404 screen), but crawlers no longer
+      // index typos and deleted posts/products as real pages ("soft 404").
+      const [status, html] = await Promise.all([resolveRouteStatus(req.originalUrl), renderIndexHtml(template, req.originalUrl.split("?")[0])]);
+      res.status(status).set({ "Content-Type": "text/html", "Cache-Control": "no-cache" }).end(html);
     } catch (error) {
       next(error);
     }

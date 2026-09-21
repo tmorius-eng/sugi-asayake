@@ -95,7 +95,7 @@ export default function Login() {
   if (mode === "register" && !verifiedSessionId) {
     return (
       <div className="auth-shell">
-        <CommerceHeader cartCount={0} backLabel="SUGI ASAYAKE" />
+        <CommerceHeader backLabel="SUGI ASAYAKE" />
         <main className="auth-main">
           <div className="auth-head">
             <h1>{verifyLine1} <em>{verifyLine2}</em></h1>
@@ -111,7 +111,7 @@ export default function Login() {
 
   return (
     <div className="auth-shell">
-      <CommerceHeader cartCount={0} backLabel="SUGI ASAYAKE" />
+      <CommerceHeader backLabel="SUGI ASAYAKE" />
       <main className="auth-main">
         <div className="auth-head">
           <h1>{mode === "login" ? <>{loginLine1} <em>{loginLine2}</em></> : <>{registerLine1} <em>{registerLine2}</em></>}</h1>
