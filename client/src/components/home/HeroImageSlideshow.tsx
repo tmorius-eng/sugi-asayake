@@ -210,7 +210,18 @@ export default function HeroImageSlideshow({ slides, imageAlt }: { slides: HeroS
                   src={slide.imageUrl}
                   alt=""
                   draggable={false}
-                  {...(copy === 0 && index === 0 ? { fetchPriority: "high" as const } : { loading: "lazy" as const })}
+                  // 2026-09-21: энэ хамгийн түрүүнд ачаалах ёстой зургийг
+                  // `copy === 0`-д өгдөг байсан нь АЛДАА байв — гурван
+                  // хуулбараас нүдэнд харагддаг нь `copy === 1` (дээрх
+                  // `clone`-ийн тодорхойлолтыг үз), 0 ба 2 нь хажуу талын
+                  // далд хуулбар. Үүний улмаас ХАРАГДАХ hero зураг
+                  // `loading="lazy"` авч, хөтөч түүнийг JS ачаалж, rail
+                  // байрлалаа тогтоох хүртэл татдаггүй байв: LCP 9.8 секунд
+                  // (Lighthouse "lcp-lazy-loaded" унасан, 2026-09-21).
+                  // Зөвхөн ДАРААЛАЛ өөрчлөгдөнө — харагдах байдал яг хэвээр.
+                  {...(!clone && index === 0
+                    ? { fetchPriority: "high" as const, loading: "eager" as const }
+                    : { loading: "lazy" as const })}
                 />
               </Link>
             </figure>

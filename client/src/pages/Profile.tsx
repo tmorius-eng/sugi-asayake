@@ -1,5 +1,6 @@
 import { HELP_FAQ } from "@shared/help-faq";
 import { useEffect, useState } from "react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { Link, useLocation, useSearch } from "wouter";
 import {
@@ -280,6 +281,11 @@ function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
   const utils = trpc.useUtils();
   const addItem = trpc.cart.addItem.useMutation();
   const [buyingAgainId, setBuyingAgainId] = useState<number | null>(null);
+  // Буцаалтын шалтгаан (2026-09-20): өмнө нь `window.prompt` байв — утсан дээр
+  // хөтчийн жижиг мөр, урт өгүүлбэр бичих боломжгүй, ямар ч загваргүй, зарим
+  // хөтөч бүр хаадаг. Сайтын өөрийн харилцах цонхоор солив.
+  const [returnFor, setReturnFor] = useState<number | null>(null);
+  const [returnReason, setReturnReason] = useState("");
   // Admin overhaul (2026-09-08, Phase G): a customer's first way to cancel
   // their own order without contacting support -- window.confirm matches
   // the weight this codebase already gives a reversible-in-spirit
@@ -287,7 +293,7 @@ function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
   // just below in this same file), not the heavier password-reentry flow
   // full account deletion uses.
   const requestReturn = trpc.orders.requestReturn.useMutation({
-    onSuccess: () => { toast.success("Буцаалтын хүсэлт илгээгдлээ. Ажилтан тантай холбогдоно."); utils.orders.mine.invalidate(); },
+    onSuccess: () => { toast.success("Буцаалтын хүсэлт илгээгдлээ. Ажилтан тантай холбогдоно."); setReturnFor(null); setReturnReason(""); utils.orders.mine.invalidate(); },
     onError: error => toast.error(error instanceof Error ? error.message : "Буцаалтын хүсэлт илгээж чадсангүй."),
   });
   const cancelOrder = trpc.orders.cancel.useMutation({
@@ -378,7 +384,7 @@ function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
                   {invoice.isPending && invoice.variables?.orderId === order.id ? <Loader2 className="animate-spin" size={14} /> : <FileDown size={14} />} Баримт (PDF)
                 </button>
                 {order.status === "completed" && !order.returnRequestedAt && (
-                  <button type="button" className="order-buy-again" disabled={requestReturn.isPending} onClick={() => { const reason = window.prompt("Буцаах шалтгаанаа бичнэ үү (гэмтэлтэй, буруу бараа гэх мэт):"); if (reason && reason.trim().length >= 5) requestReturn.mutate({ id: order.id, reason: reason.trim() }); else if (reason !== null) toast.error("Шалтгаанаа дор хаяж 5 тэмдэгтээр бичнэ үү."); }}>
+                  <button type="button" className="order-buy-again" disabled={requestReturn.isPending} onClick={() => { setReturnFor(order.id); setReturnReason(""); }}>
                     {requestReturn.isPending ? <Loader2 className="animate-spin" size={14} /> : <RotateCcw size={14} />} Буцаах хүсэлт
                   </button>
                 )}
@@ -399,6 +405,38 @@ function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
       ) : (
         <div className="address-empty">Захиалга байхгүй байна. <Link href="/shop" style={{ color: "var(--primary)", fontWeight: 800 }}>Дэлгүүр үзэх</Link></div>
       )}
+      <Dialog open={returnFor !== null} onOpenChange={open => { if (!open) setReturnFor(null); }}>
+        <DialogContent className="return-dialog">
+          <DialogHeader>
+            <DialogTitle>Буцаах хүсэлт</DialogTitle>
+            <DialogDescription>Юу болсныг товч бичнэ үү — гэмтэлтэй ирсэн, буруу бараа, дутуу гэх мэт. Ажилтан хүсэлтийг үзээд тантай холбогдоно.</DialogDescription>
+          </DialogHeader>
+          <label className="return-dialog-label" htmlFor="return-reason">Буцаах шалтгаан</label>
+          <textarea
+            id="return-reason"
+            className="return-dialog-input"
+            value={returnReason}
+            onChange={event => setReturnReason(event.target.value)}
+            placeholder="Жишээ: савлагаа нь гэмтэж ирсэн, тагнаас нь алдагдсан байна."
+            rows={4}
+            maxLength={500}
+            autoFocus
+            aria-describedby="return-reason-hint"
+          />
+          <p id="return-reason-hint" className="return-dialog-hint">{returnReason.trim().length < 5 ? "Дор хаяж 5 тэмдэгт бичнэ үү." : `${returnReason.trim().length} / 500 тэмдэгт`}</p>
+          <DialogFooter>
+            <button type="button" className="order-buy-again" onClick={() => setReturnFor(null)}>Болих</button>
+            <button
+              type="button"
+              className="return-dialog-submit"
+              disabled={requestReturn.isPending || returnReason.trim().length < 5}
+              onClick={() => { if (returnFor !== null) requestReturn.mutate({ id: returnFor, reason: returnReason.trim() }); }}
+            >
+              {requestReturn.isPending ? <Loader2 className="animate-spin" size={14} /> : <RotateCcw size={14} />} Хүсэлт илгээх
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

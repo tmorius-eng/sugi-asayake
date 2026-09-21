@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Search, Tag, X } from "lucide-react";
+import { Clock, Search, Tag, X } from "lucide-react";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
@@ -26,6 +26,38 @@ const MIN_QUERY_LENGTH = 2;
  * results" jump are identical in both variants -- only the trigger differs,
  * so there is one search implementation on the site rather than two.
  */
+/**
+ * Сүүлд хайсан үгс (2026-09-20). Хайлтын талбарыг ХООСОН байхад л гарна —
+ * нэг л үг дахин бичих шаардлагагүй болно (Baymard-ийн хайлтын зөвлөмж).
+ *
+ * Зөвхөн ЭНЭ хөтөч дээр, localStorage-д: сервер рүү илгээхгүй, өөр төхөөрөмж
+ * рүү очихгүй. Нэг хүний машины хэрэглээний тохь тух болохоос хуваалцсан
+ * төлөв биш — Shop.tsx-ийн "сүүлд үзсэн" жагсаалттай яг ижил ангилал. Хувийн
+ * цонх, цэвэрлэсэн санах ойд алдаа шидэж болзошгүй тул бүх уншилт/бичилт
+ * try/catch дотор.
+ */
+const RECENT_SEARCHES_KEY = "sugi-asayake-recent-searches-v1";
+const RECENT_SEARCHES_MAX = 5;
+
+const readRecentSearches = (): string[] => {
+  try {
+    const saved: unknown = JSON.parse(window.localStorage.getItem(RECENT_SEARCHES_KEY) ?? "[]");
+    return Array.isArray(saved) ? saved.filter((value): value is string => typeof value === "string" && value.trim().length > 0).slice(0, RECENT_SEARCHES_MAX) : [];
+  } catch {
+    return [];
+  }
+};
+
+const rememberSearch = (query: string): string[] => {
+  const next = [query, ...readRecentSearches().filter(item => item.toLowerCase() !== query.toLowerCase())].slice(0, RECENT_SEARCHES_MAX);
+  try {
+    window.localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(next));
+  } catch {
+    // Хувийн цонх / санах ой хаалттай — жагсаалт санагдахгүй, хайлт хэвийн.
+  }
+  return next;
+};
+
 export default function HeaderSearch({ variant = "icon" }: { variant?: "icon" | "inline" } = {}) {
   const [open, setOpen] = useState(false);
   const [term, setTerm] = useState("");
@@ -34,6 +66,8 @@ export default function HeaderSearch({ variant = "icon" }: { variant?: "icon" | 
   const inputRef = useRef<HTMLInputElement>(null);
   const displayName = useProductName();
   const trimmed = term.trim();
+  const [recent, setRecent] = useState<string[]>([]);
+  useEffect(() => { if (open) setRecent(readRecentSearches()); }, [open]);
 
   useEffect(() => {
     const handle = setTimeout(() => setDebouncedTerm(trimmed), 300);
@@ -61,6 +95,7 @@ export default function HeaderSearch({ variant = "icon" }: { variant?: "icon" | 
 
   const goToShop = (query = trimmed) => {
     setOpen(false);
+    if (query) setRecent(rememberSearch(query));
     window.location.assign(`/shop?q=${encodeURIComponent(query)}`);
   };
   const goToBrand = (brand: string) => {
@@ -72,8 +107,18 @@ export default function HeaderSearch({ variant = "icon" }: { variant?: "icon" | 
     window.location.assign(`/shop?category=${encodeURIComponent(name)}`);
   };
 
+  const recentPanel = !trimmed && recent.length > 0 ? <div className="header-search-results">
+    <p className="header-search-recent-head">Сүүлд хайсан</p>
+    {recent.map(query => <button key={query} type="button" onClick={() => goToShop(query)} className="header-search-result header-search-facet">
+      <span className="header-search-facet-icon"><Clock size={15} /></span>
+      <span><strong>{query}</strong></span>
+    </button>)}
+    <button type="button" onClick={() => { try { window.localStorage.removeItem(RECENT_SEARCHES_KEY); } catch { /* хувийн цонх */ } setRecent([]); }} className="header-search-clear-recent">Түүхийг цэвэрлэх</button>
+  </div> : null;
+
   const results = (
     <>
+      {recentPanel}
       {trimmed ? <div className="header-search-results">
         {trimmed.length < MIN_QUERY_LENGTH ? <p className="header-search-empty">{`Дор хаяж ${MIN_QUERY_LENGTH} тэмдэгт оруулна уу.`}</p> : search.isLoading || debouncedTerm !== trimmed ? <p className="header-search-empty">Хайж байна…</p> : hasAnything ? <>
           {/* <a>, БИШ <button>: утасны толгойд (.commerce-header-actions) "button span" бүгд
@@ -119,7 +164,7 @@ export default function HeaderSearch({ variant = "icon" }: { variant?: "icon" | 
         />
         <button type="button" onClick={() => { if (trimmed) goToShop(); else inputRef.current?.focus(); }} aria-label="Хайх" className="header-search-submit"><Search size={18} /></button>
       </div>
-      {open && trimmed ? <div className="header-search-panel">{results}</div> : null}
+      {open && (trimmed || recentPanel) ? <div className="header-search-panel">{results}</div> : null}
     </div>;
   }
 

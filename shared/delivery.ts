@@ -25,3 +25,26 @@ export function computeDeliveryFeeMnt(input: {
   const qualifiesForFreeShipping = input.freeShippingThresholdMnt > 0 && input.subtotalMnt >= input.freeShippingThresholdMnt;
   return qualifiesForFreeShipping ? 0 : Math.max(0, input.deliveryFeeUbMnt);
 }
+
+/**
+ * "Үнэгүй хүргэлтэд X төгрөг дутуу" мөрөнд хэрэгтэй тоо (2026-09-20).
+ *
+ * Босгыг `computeDeliveryFeeMnt`-тэй ЯГ ижил уншина: хямдралаас ӨМНӨХ
+ * барааны дүнгээр, учир нь худалдан авагчийн харж буй banner болон бодитоор
+ * авах хөнгөлөлт хоёр зөрвөл тэр нь алдаа. Хоёр дахь томьёо бичихгүйн тулд
+ * энд байна (файлын толгойн тайлбарыг үз).
+ *
+ * `null` = мөрийг ОГТ харуулахгүй: босго тохируулаагүй, сагс хоосон, зөвхөн
+ * бэлгийн карт (хүргэлтгүй), эсвэл аль хэдийн үнэгүй болсон.
+ */
+export function freeShippingProgress(input: {
+  subtotalMnt: number;
+  freeShippingThresholdMnt: number;
+  digitalOnly?: boolean;
+}): { remainingMnt: number; ratio: number } | null {
+  const threshold = input.freeShippingThresholdMnt;
+  if (input.digitalOnly || threshold <= 0 || input.subtotalMnt <= 0) return null;
+  const remainingMnt = threshold - input.subtotalMnt;
+  if (remainingMnt <= 0) return null;
+  return { remainingMnt, ratio: Math.min(1, Math.max(0, input.subtotalMnt / threshold)) };
+}

@@ -70,6 +70,24 @@ async function productMeta(slug: string, siteName: string): Promise<RouteMeta | 
       ? { aggregateRating: { "@type": "AggregateRating", ratingValue: Number(product.avgRating).toFixed(1), reviewCount: product.reviewCount } }
       : {}),
   };
+  // BreadcrumbList (2026-09-20): Google хайлтын үр дүнд URL-ийн оронд
+  // "Нүүр › Ангилал › Бараа" гэсэн замыг харуулдаг. Хуудсан дээр breadcrumb
+  // АЛЬ ХЭДИЙН байгаа (ProductDetail.tsx) ч зөвхөн нүдэнд харагддаг байв —
+  // crawler аппын JavaScript ажиллуулдаггүй тул серверээс өгөхгүй бол мэдэхгүй.
+  const crumbs = [
+    { name: "Нүүр", item: absoluteUrl("/") },
+    { name: "Дэлгүүр", item: absoluteUrl("/shop") },
+    ...(product.categoryName && product.categorySlug
+      ? [{ name: product.categoryName, item: absoluteUrl(`/shop?category=${encodeURIComponent(product.categorySlug)}`) }]
+      : []),
+    { name: product.name, item: url },
+  ];
+  const breadcrumbs = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: crumbs.map((crumb, index) => ({ "@type": "ListItem", position: index + 1, name: crumb.name, item: crumb.item })),
+  };
+
   return new Map<string, string>([
     ["SEO_TITLE", escapeAttribute(title)],
     ["SEO_DESCRIPTION", escapeAttribute(description)],
@@ -84,7 +102,8 @@ async function productMeta(slug: string, siteName: string): Promise<RouteMeta | 
     <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:alt" content="${escapeAttribute(product.name)}" />`] as [string, string],
     ] : []),
-    ["SEO_STRUCTURED_DATA", jsonLd(structuredData)],
+    // Хоёр граф, нэг script блок: schema.org дээд түвшинд массив зөвшөөрнө.
+    ["SEO_STRUCTURED_DATA", jsonLd([structuredData, breadcrumbs])],
     // The product photo is the PDP's largest paint; start fetching it with the document.
     ["SEO_HERO_PRELOAD", product.imageUrl ? `<link rel="preload" as="image" href="${escapeAttribute(product.imageUrl)}" fetchpriority="high" />` : ""],
   ]);

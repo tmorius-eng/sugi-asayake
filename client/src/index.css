@@ -3712,6 +3712,12 @@ body:has(.auth-shell) { background: var(--ck-page); }
    1.77:1, so it takes the panel's own ink (and the link the brand red). */
 .sugi-site [class*="bg-[#17181b]"]:not(button) [class*="text-[#f0b52d]"] { color: var(--ck-muted); }
 .sugi-site [class*="bg-[#17181b]"]:not(button) a[class*="text-[#f0b52d]"] { color: var(--primary-text); }
+/* 2026-09-20: дээрх remap нь `text-white`-ийг л барьдаг, `placeholder:text-white/40`
+   (::placeholder) биш. Захиалгын хураангуйн "Хямдралын код" талбарт энэ
+   placeholder нь ЦОРЫН ГАНЦ шошго байсан ч цайвар дэвсгэр дээр цагаан — огт
+   харагдахгүй байв (screenshot-оор олсон). Хүрээ нь ч мөн адил. */
+.sugi-site [class*="bg-[#17181b]"]:not(button) input::placeholder { color: var(--ck-muted); opacity: 1; }
+.sugi-site [class*="bg-[#17181b]"]:not(button) input[class*="border-white"] { border-color: var(--ck-line); background: var(--card); }
 
 /* --- /shop filter bar, rebuilt 2026-09-12 -------------------------------- */
 /* Tom: "denduu zambaraagui baina ... neg goy shiidel oldoo, brainstorm hiij
@@ -4067,6 +4073,12 @@ html[data-storefront-theme="dark"] .sugi-site .recently-viewed-card strong { col
 html[data-storefront-theme="dark"] .sugi-site .recently-viewed-card p,
 html[data-storefront-theme="dark"] .sugi-site .recently-viewed-notice { color: var(--ck-muted); }
 html[data-storefront-theme="dark"] .sugi-site .shop-stock-flag { background: var(--ck-chip); color: var(--ck-muted); }
+/* 2026-09-20: хуудаслалтын товчнууд харанхуй загварт орсон ч дундах "1 / 42
+   хуудас" мөр гэрэл загварын #4a4f4b-оо авч үлдсэн байв — харанхуй дэвсгэр
+   дээр 2.22:1 (AA-д 4.5 хэрэгтэй). storefront-contrast.spec.ts анхны
+   ажиллалтдаа л олсон. */
+html[data-storefront-theme="dark"] .sugi-site .shop-pagination span,
+html[data-storefront-theme="dark"] .sugi-site .shop-pagination span em { color: var(--ck-muted); }
 html[data-storefront-theme="dark"] .sugi-site .shop-search-panel input { background: var(--ck-surface); color: var(--ck-ink); }
 html[data-storefront-theme="dark"] .sugi-site .shop-search-panel input::placeholder,
 html[data-storefront-theme="dark"] .header-search-input::placeholder { color: #8a8a8a; }
@@ -4426,3 +4438,44 @@ html[data-storefront-theme="dark"] .careers-card { box-shadow: 0 30px 80px rgba(
 html[data-storefront-theme="dark"] .careers-nav-links a { color: #d7dbe0; }
 html[data-storefront-theme="dark"] .careers-role-toggle { background: #1f2227; border-color: #3a3f46; }
 html[data-storefront-theme="dark"] .careers-note-chip { color: #d7dbe0; }
+
+/* ---- Үнэгүй хүргэлтийн явц (2026-09-20) ----------------------------------
+   Сагс болон захиалгын хуудсанд "хэдэн төгрөг дутуу"-г харуулна. Босго нь
+   тохиргоонд аль хэдийн байсан ч худалдан авагчид хэзээ ч харагддаггүй байв.
+   Дүрэм: @layer components дотор (файлын 2708-р мөрийн тайлбарыг үз). */
+.cart-free-shipping { display: grid; gap: 6px; }
+.cart-free-shipping-text { font-size: 11px; font-weight: 700; color: #2c7650; text-align: center; }
+.cart-free-shipping-track { height: 6px; border-radius: 999px; background: var(--border); overflow: hidden; }
+.cart-free-shipping-fill { display: block; height: 100%; border-radius: 999px; background: #2c7650; transition: width .25s ease; }
+/* Захиалгын хураангуй (`bg-[#17181b]` aside) нь нэрээрээ харанхуй боловч
+   3705-р мөрийн дүрмээр ХОЁР загварт ч --ck-cream/--ck-ink руу буулгагддаг.
+   Тиймээс энд харанхуй дэвсгэрт зориулсан өнгө ТАВИХГҮЙ — сагсны мөртэй ижил,
+   загвараа дагадаг өнгийг өвлөнө (2026-09-20-нд цайвар дэвсгэр дээр цайвар
+   ногоон бичиг бараг харагдахгүй байсныг screenshot-оор олов). */
+.summary-free-shipping { margin-top: 14px; display: grid; gap: 6px; }
+html[data-storefront-theme="dark"] .cart-free-shipping-text { color: #8fd6a8; }
+
+/* ---- Буцаалтын хүсэлтийн цонх (2026-09-20) -------------------------------
+   Өмнө нь `window.prompt` байсан: утсан дээр загваргүй нэг мөр, зарим хөтөч
+   бүр хаадаг. Одоо сайтын өөрийн харилцах цонх, тайлбар ба тэмдэгтийн
+   тоолууртай. */
+.return-dialog { display: grid; gap: 12px; }
+.return-dialog-label { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--muted-foreground); }
+.return-dialog-input { min-width: 0; width: 100%; min-height: 96px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--foreground); font: inherit; font-size: 14px; resize: vertical; }
+.return-dialog-input:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; border-color: var(--primary); }
+.return-dialog-hint { font-size: 11px; color: var(--muted-foreground); }
+.return-dialog-submit { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--primary); color: #fff; font-size: 13px; font-weight: 800; cursor: pointer; }
+.return-dialog-submit:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ---- Сүүлд хайсан үгс (2026-09-20) --------------------------------------- */
+.header-search-recent-head { padding: 10px 14px 4px; font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--muted-foreground); }
+.header-search-clear-recent { display: block; width: 100%; padding: 10px 14px; border: 0; border-top: 1px solid var(--border); background: transparent; color: var(--muted-foreground); font: inherit; font-size: 12px; font-weight: 700; text-align: center; cursor: pointer; }
+.header-search-clear-recent:hover { color: var(--foreground); }
+
+/* ---- Захиалгын маягтын алдаа (2026-09-20, WCAG 3.3.1) --------------------
+   Өмнө нь дутуу талбарыг зөвхөн toast хэлдэг байсан: хэдхэн секундэд алга
+   болдог, аль талбар болохыг заадаггүй, дэлгэц уншигчид хүрдэггүй. */
+.checkout-field-error { font-size: 11px; font-weight: 700; color: #b3261e; }
+.checkout-input[aria-invalid="true"] { border-color: #b3261e; }
+.checkout-input[aria-invalid="true"]:focus-visible { outline: 2px solid #b3261e; outline-offset: 1px; }
+html[data-storefront-theme="dark"] .checkout-field-error { color: #ff8a80; }

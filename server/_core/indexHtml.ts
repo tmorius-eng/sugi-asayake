@@ -2,11 +2,10 @@ import { getSiteMedia, getSiteText, getStoreSettingValue, getStorefrontBranches 
 import { getSiteTextSlot, type SiteTextSlotKey } from "../../shared/site-text";
 import { checkStoreSettingFormat } from "../../shared/store-settings";
 import { getSiteMediaSlot } from "../../shared/site-media";
-import { ENV } from "./env";
 import { resolveRouteMeta } from "./routeMeta";
 // Open Graph needs absolute URLs; storage URLs may already be absolute (R2
 // public host) or site-relative (/cdn/...). Нэг хэрэгжилт: ./publicUrl.
-import { absoluteUrl } from "./publicUrl";
+import { absoluteUrl, publicOrigin } from "./publicUrl";
 
 /**
  * Substitutes the admin-editable site-wide SEO values into
@@ -136,7 +135,7 @@ async function resolveValues(): Promise<Map<string, string>> {
     ["SEO_SITE_NAME", escapeAttribute(siteName)],
     ["SEO_OG_DESCRIPTION", escapeAttribute(textFor("seo-text-og-description"))],
     ["SEO_TWITTER_DESCRIPTION", escapeAttribute(textFor("seo-text-twitter-description"))],
-    ["SEO_CANONICAL", escapeAttribute(ENV.publicBaseUrl || "https://sugiasayake.mn")],
+    ["SEO_CANONICAL", escapeAttribute(publicOrigin())],
     // JSON.stringify already escapes quotes/controls; the one thing it does
     // not guard is a literal "</script>" inside an admin-typed string, which
     // would end the tag early. Escaping the slash keeps it inert and is still
@@ -189,6 +188,20 @@ export async function renderIndexHtml(template: string, pathname = "/"): Promise
   // the site-wide values.
   const siteName = values.get("SEO_SITE_NAME") ?? getSiteTextSlot("seo-text-site-name").fallbackValue;
   const routeMeta = await resolveRouteMeta(pathname, siteName.replace(/&quot;/g, '"').replace(/&amp;/g, "&"));
+  // Хуудас бүрийн canonical нь ӨӨРИЙНХӨӨ хаяг (2026-09-20).
+  //
+  // Өмнө нь бараа/нийтлэлээс бусад БҮХ хуудас canonical-аа нүүр хуудас гэж
+  // зарладаг байв — өөрөөр хэлбэл /shop, /brands, /journal, /help, /returns,
+  // /about, /careers бүгд Google-д "энэ бол нүүр хуудасны хуулбар" гэж
+  // хэлдэг байсан тул индексээс хасагдах эрсдэлтэй байв (Lighthouse
+  // "Document does not have a valid rel=canonical", 2026-09-21-нд хэмжсэн).
+  //
+  // Query string-ийг ЗОРИУД хасна: /shop?q=…&page=3 бүгд /shop руу нэгтгэгдэх
+  // нь шүүлтүүрийн хязгааргүй хослолыг индекслүүлэхгүйн тулд зөв зан төлөв.
+  if (!routeMeta?.has("SEO_CANONICAL")) {
+    const path = pathname.split("?")[0].replace(/\/+$/, "");
+    values.set("SEO_CANONICAL", escapeAttribute(`${publicOrigin()}${path}`));
+  }
   return template.replace(/%((?:SEO|COOKIE|ANALYTICS|BRAND)_[A-Z_]+)%/g, (match, key: string) => routeMeta?.get(key) ?? values.get(key) ?? fallbackFor(key) ?? match);
 }
 
@@ -222,7 +235,7 @@ function fallbackFor(key: string): string | undefined {
     case "SEO_SITE_NAME": return escapeAttribute(getSiteTextSlot("seo-text-site-name").fallbackValue);
     case "SEO_OG_DESCRIPTION": return escapeAttribute(getSiteTextSlot("seo-text-og-description").fallbackValue.replaceAll("{N}", "4"));
     case "SEO_TWITTER_DESCRIPTION": return escapeAttribute(getSiteTextSlot("seo-text-twitter-description").fallbackValue);
-    case "SEO_CANONICAL": return escapeAttribute(ENV.publicBaseUrl || "https://sugiasayake.mn");
+    case "SEO_CANONICAL": return escapeAttribute(publicOrigin());
     case "SEO_STRUCTURED_DATA": return "{}";
     // DB унтарсан ч лого нь блокт зөв JSON-оор очих ёстой: түүхий
     // "%BRAND_MEDIA_JSON%" нь JSON.parse-д унаж, толгой хэсэг логогүй үлдэнэ.
