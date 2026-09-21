@@ -21,6 +21,11 @@ import { getDb } from "../server/db";
  *   pnpm exec tsx scripts/db-apply-migration.ts drizzle/0056_discount_code_per_customer_cap.sql
  *   pnpm exec tsx scripts/db-apply-migration.ts drizzle/0056_*.sql drizzle/0057_*.sql
  *
+ * Амжилттай ажилласан файл бүрийг `schema_migrations` хүснэгтэд бүртгэнэ
+ * (2026-09-20). Өмнө нь "аль migration ажилласан" гэдгийг ЗӨВХӨН HISTORY.md-ийн
+ * текстээс мэдэх боломжтой байсан тул production ба staging хоёрын схем
+ * чимээгүй зөрдөг байв. Бүртгэлийг харах: scripts/db-migration-status.ts.
+ *
  * Each statement runs on its own (DDL is auto-committed by MySQL anyway, so
  * a file is NOT one transaction -- re-running a half-applied file fails on
  * the already-applied statement, which is the honest outcome). The
@@ -34,6 +39,8 @@ async function main() {
   // (deploy.ps1 -Staging migration зөөдөггүй — PROJECT-GUIDE-ийн дүрэм). URL-ийн
   // схемийн нэрийг л солино; өөр хост руу хэзээ ч заахгүй.
   const staging = process.argv.includes("--staging");
+  // Энэ бүртгэл үүсэхээс ӨМНӨ ажилласан 92 migration-ийг нэг удаа бүртгэхэд.
+  const markOnly = process.argv.includes("--mark-applied");
   if (staging && process.env.DATABASE_URL) {
     const swapped = process.env.DATABASE_URL.replace(/\/defaultdb(\?|$)/, "/sugi_staging$1");
     if (swapped === process.env.DATABASE_URL) { console.error("--staging: DATABASE_URL нь /defaultdb руу заагаагүй тул сольж чадсангүй."); process.exit(2); }
@@ -50,7 +57,28 @@ async function main() {
     console.error("DATABASE_URL is not set (or the connection failed) -- nothing applied.");
     process.exit(1);
   }
+  // Бүртгэлийн хүснэгт өөрөө (migration-гүйгээр, энэ скрипт үүсгэнэ).
+  await db.execute(sql.raw(
+    "CREATE TABLE IF NOT EXISTS schema_migrations (" +
+    "  name VARCHAR(255) NOT NULL PRIMARY KEY," +
+    "  applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP" +
+    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+  ));
+
   for (const file of files) {
+    const name = basename(file);
+    const already = await db.execute(sql`SELECT name FROM schema_migrations WHERE name = ${name} LIMIT 1`);
+    if ((already[0] as unknown as unknown[]).length) {
+      console.log(`\n== ${name}: аль хэдийн ажилласан — алгаслаа ==`);
+      continue;
+    }
+    // Схемд аль хэдийн байгаа (энэ бүртгэл үүсэхээс өмнөх) migration-ийг
+    // ажиллуулалгүй бүртгэх: `--mark-applied`.
+    if (markOnly) {
+      await db.execute(sql`INSERT INTO schema_migrations (name) VALUES (${name})`);
+      console.log(`== ${name}: ажиллуулалгүй бүртгэв (--mark-applied) ==`);
+      continue;
+    }
     const raw = readFileSync(file, "utf8").replace(/--> statement-breakpoint/g, "");
     // Drop full-line comments, then split on statement-terminating
     // semicolons. Migrations in this repo never embed ";" inside strings.
@@ -68,6 +96,8 @@ async function main() {
         process.exit(1);
       }
     }
+    await db.execute(sql`INSERT INTO schema_migrations (name) VALUES (${name})`);
+    console.log(`  ✓ schema_migrations-д бүртгэв`);
   }
   console.log("\nDone.");
   process.exit(0);

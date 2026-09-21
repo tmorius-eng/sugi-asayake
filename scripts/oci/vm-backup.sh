@@ -10,12 +10,16 @@
 #   mysqldump (admin user, TLS) -> gzip -> openssl AES-256 (BACKUP_PASSPHRASE)
 #   -> vm-backup-upload.mjs (PUT to R2 bucket "sugi-asayake-backups", prune > 30 days)
 #
+# Weekly (Sundays) it also runs media-backup.mjs, which copies the public image
+# bucket into the same private bucket under "media/". Until 2026-09-20 the
+# photos were the one asset with no second copy anywhere.
+#
 # The bucket is separate from the storefront's public one on purpose: that
 # bucket is served publicly at pub-*.r2.dev, so a dump there would be one
 # guessed URL away from the internet. Encryption is the second lock.
 #
 # Install (once, as ubuntu on the VM):
-#   cp scripts/oci/vm-backup.sh scripts/oci/vm-backup-upload.mjs ~/sugi-asayake/
+#   cp scripts/oci/vm-backup.sh scripts/oci/vm-backup-upload.mjs scripts/oci/media-backup.mjs ~/sugi-asayake/
 #   echo "BACKUP_PASSPHRASE=<long random>" >> ~/sugi-asayake/.env   # keep a copy elsewhere!
 #   (crontab -l 2>/dev/null; echo "0 19 * * * /home/ubuntu/sugi-asayake/vm-backup.sh >> /home/ubuntu/backup.log 2>&1") | crontab -
 #   (19:00 UTC = 03:00 Ulaanbaatar)
@@ -62,4 +66,14 @@ SIZE=$(stat -c %s "$OUT")
 echo "[$(date -u +%FT%TZ)] encrypted dump: $SIZE bytes"
 
 node vm-backup-upload.mjs "$OUT"
+
+# Зураг (2026-09-20): өгөгдлийн сан бүртгэлийг хадгална, харин зургууд өөрсдөө
+# нэг л хуулбартай байсан. Долоо хоногт нэг удаа (ням гараг) нэмэгдүүлсэн
+# хуулбар хийнэ — ETag ижил объектыг алгасдаг тул өдөр бүр ажиллуулж ч болно,
+# гэхдээ жирийн өдөр шинэ зураг цөөн тул долоо хоног хангалттай.
+if [ "$(date -u +%u)" = "7" ]; then
+  echo "[$(date -u +%FT%TZ)] media backup (weekly)"
+  node media-backup.mjs || echo "[$(date -u +%FT%TZ)] media backup FAILED (dump is still uploaded)"
+fi
+
 echo "[$(date -u +%FT%TZ)] done"
