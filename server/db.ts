@@ -1508,6 +1508,16 @@ export async function getRecommendedProducts(userId: number | null, limit = 8, p
   const diversified = applyDiversityCap(scored, { maxPerBrand: weights.maxPerBrand, maxPerCategory: weights.maxPerCategory, maxPerProductType: weights.maxPerProductType }).slice(0, limit);
   if (diversified.length >= Math.min(4, limit)) return diversified.map(entry => entry.product);
 
+  // personalOnly (2026-09-21): "Танд зориулсан" rail-д ХЭЗЭЭ Ч дүүргэгч
+  // (bestseller / дурын бараа) нэмэхгүй — зөвхөн профайлтай бодитоор таарсан,
+  // "яагаад" чиптэй бараа. Өмнө нь зөвхөн "профайл огт хоосон" үед л ингэдэг
+  // байсан (дээрх early return); профайл нь 4-өөс цөөн бараатай таарвал доорх
+  // дүүргэгч хуурай арьстай хүнд тослог арьсны угаагч, төрлийн хязгаараас
+  // илүү гурав дахь тос, "мэдрэмтгий" биеийн угаагчийг "танд зориулсан" гарчиг
+  // дор харуулдаг байв. Бодит каталогт (984) энэ бараг тохиолддоггүй тул
+  // локал тест ногоон, харин цэвэр схемтэй CI-д 3 тест унаж илэрсэн.
+  if (personalOnly) return diversified.map(entry => entry.product);
+
   // Thin result — backfill remaining slots with bestsellers rather than
   // showing a near-empty rail.
   const alreadyIncluded = new Set(diversified.map(entry => entry.product.id));
