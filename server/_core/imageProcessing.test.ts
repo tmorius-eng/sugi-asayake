@@ -90,3 +90,56 @@ describe("processUploadedImageVariants", () => {
     expect(gridMeta.width).toBe(400);
   });
 });
+
+/**
+ * Агуулгаас хамаарсан формат (2026-09-21). Гурван төрөл өөр кодчилолтой бөгөөд
+ * буруу ангилбал: лого AVIF болж үсгийн ирмэг будлина, эсвэл хөдөлгөөнт зураг
+ * AVIF хувилбартай болж <picture> хөдөлгөөнийг зогсооно.
+ */
+describe("processUploadedImageVariants — format per content", () => {
+  // A logo-like graphic: sharp-edged shape on real transparency.
+  async function makeTransparentLogo(): Promise<Buffer> {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="200"><rect x="40" y="40" width="520" height="120" fill="#b01729"/><text x="60" y="130" font-size="80" fill="#fff">SUGI</text></svg>`;
+    return sharp(Buffer.from(svg)).png().toBuffer();
+  }
+
+  it("photo: WebP plus AVIF at both sizes, same dimensions as the WebP", async () => {
+    const v = await processUploadedImageVariants(await makeOversizedJpeg(2400, 1600), 1600);
+    expect(v.kind).toBe("photo");
+    expect(v.fullAvif && v.gridAvif).toBeTruthy();
+    const [fw, fa, gw, ga] = await Promise.all([v.full, v.fullAvif!, v.grid, v.gridAvif!].map(b => sharp(b).metadata()));
+    expect(fa.format).toBe("heif"); // sharp reports AVIF container as heif
+    expect(fa.width).toBe(fw.width);
+    expect(ga.width).toBe(gw.width);
+  });
+
+  it("graphic (real transparency): WebP only, alpha kept, NO lossy AVIF", async () => {
+    const v = await processUploadedImageVariants(await makeTransparentLogo(), 1920);
+    expect(v.kind).toBe("graphic");
+    expect(v.fullAvif).toBeUndefined();
+    expect(v.gridAvif).toBeUndefined();
+    const meta = await sharp(v.full).metadata();
+    expect(meta.format).toBe("webp");
+    expect(meta.hasAlpha).toBe(true);
+  });
+
+  it("a PNG with an alpha CHANNEL but no transparent pixel is still a photo", async () => {
+    const opaque = await sharp(await makeOversizedJpeg(900, 600)).ensureAlpha(1).png().toBuffer();
+    expect((await sharp(opaque).metadata()).hasAlpha).toBe(true);
+    const v = await processUploadedImageVariants(opaque, 1600);
+    expect(v.kind).toBe("photo");
+    expect(v.fullAvif).toBeTruthy();
+  });
+
+  it("animated GIF: stays animated as WebP, and gets NO AVIF (it would freeze the animation)", async () => {
+    const frame = (fill: string) => sharp({ create: { width: 120, height: 80, channels: 3, background: fill } }).raw().toBuffer();
+    const frames = await Promise.all(["#b01729", "#2c7650", "#3970a7"].map(frame));
+    const gif = await sharp(Buffer.concat(frames), { raw: { width: 120, height: 80 * 3, channels: 3, pageHeight: 80 } }).gif({ delay: [100, 100, 100] }).toBuffer();
+    const v = await processUploadedImageVariants(gif, 1920);
+    expect(v.kind).toBe("animated");
+    expect(v.fullAvif).toBeUndefined();
+    const meta = await sharp(v.full, { animated: true }).metadata();
+    expect(meta.format).toBe("webp");
+    expect(meta.pages).toBe(3);
+  });
+});

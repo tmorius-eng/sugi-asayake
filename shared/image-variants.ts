@@ -65,3 +65,22 @@ export function imageSrcSet(url: string | null | undefined, fullWidth: number): 
 export const HERO_IMAGE_SIZES = "(max-width: 760px) 82vw, 450px";
 /** Hero-ийн эх файлын өргөний дээд хязгаар (admin upload-ууд 1920px хүртэл). */
 export const HERO_FULL_WIDTH = 1920;
+
+/**
+ * AVIF хувилбарын нэр (2026-09-21): WebP-тэй ижил, зөвхөн өргөтгөл нь `.avif`.
+ * `x.webp` -> `x.avif`, `x-600w.webp` -> `x-600w.avif`.
+ *
+ * ⚠️ WebP-ийн -600w-ээс ЯЛГААТАЙ нь AVIF нь ЗААВАЛ БИШ: зөвхөн "photo" төрлийн
+ * upload-д үүсдэг (лого/тунгалаг/хөдөлгөөнт зурагт байхгүй), хуучин зурагт
+ * backfill хийгдтэл байхгүй. Тиймээс энэ URL-ийг ЗӨВХӨН ResponsivePicture-ийн
+ * <source> дотор ашиглана — тэр нь ачаалагдахгүй бол WebP руу буцдаг.
+ */
+export function avifVariantKey(webpKey: string): string {
+  return webpKey.endsWith(DERIVATIVE_EXTENSION) ? `${webpKey.slice(0, -DERIVATIVE_EXTENSION.length)}.avif` : webpKey;
+}
+
+export function avifSrcSet(url: string | null | undefined, fullWidth: number): string | null {
+  const grid = gridVariantUrl(url);
+  if (!grid || !url || grid === url) return null;
+  return `${avifVariantKey(grid)} ${GRID_VARIANT_WIDTH}w, ${avifVariantKey(url)} ${fullWidth}w`;
+}

@@ -247,7 +247,7 @@ import { applyVendorCatalog, buildVendorCatalogDiff } from "./integrations/vendo
 import { createStorepayLoan, getStorepayAvailability, normaliseMobileNumber, storepayPossibleAmount } from "./storepay";
 // Registers the Smart Software adapter on import (side effect).
 import { clearSmartSoftwareTokenCache } from "./integrations/smartSoftware";
-import { assertImageSignature, imageContentTypes, processUploadedImageOrThrow } from "./_core/imageUpload";
+import { assertImageSignature, imageContentTypes, mediaContentTypes, processUploadedImageOrThrow } from "./_core/imageUpload";
 import { INTEGRATION_PROVIDERS } from "../shared/integrations";
 import { buildNotificationMessage, NOTIFICATION_GROUP_LABELS, NOTIFICATION_GROUPS, NTFY_TOPIC_FIELD } from "../shared/notification-events";
 import { createNoOpVerificationSession, createVerificationSession, getSessionStatus, isNoOpSessionExpired, normalizePhoneForVerifyMn } from "./verifyMn";
@@ -3763,7 +3763,7 @@ export const appRouter = router({
     uploadProductImage: warehouseProcedure
       .input(z.object({
         fileName: z.string().trim().min(1).max(120),
-        contentType: z.enum(imageContentTypes),
+        contentType: z.enum(mediaContentTypes),
         dataBase64: z.string().min(16).max(14_000_000),
       }))
       .mutation(async ({ input, ctx }) => {
@@ -3786,7 +3786,7 @@ export const appRouter = router({
     uploadSiteMediaImage: marketingProcedure
       .input(z.object({
         fileName: z.string().trim().min(1).max(120),
-        contentType: z.enum(imageContentTypes),
+        contentType: z.enum(mediaContentTypes),
         dataBase64: z.string().min(16).max(14_000_000),
       }))
       .mutation(async ({ input, ctx }) => {
@@ -3809,7 +3809,7 @@ export const appRouter = router({
     uploadPostCoverImage: staffProcedure
       .input(z.object({
         fileName: z.string().trim().min(1).max(120),
-        contentType: z.enum(imageContentTypes),
+        contentType: z.enum(mediaContentTypes),
         dataBase64: z.string().min(16).max(14_000_000),
       }))
       .mutation(async ({ input, ctx }) => {
@@ -3834,7 +3834,7 @@ export const appRouter = router({
     uploadMedia: staffProcedure
       .input(z.object({
         fileName: z.string().trim().min(1).max(120),
-        contentType: z.enum(imageContentTypes),
+        contentType: z.enum(mediaContentTypes),
         dataBase64: z.string().min(16).max(14_000_000),
       }))
       .mutation(async ({ input, ctx }) => {

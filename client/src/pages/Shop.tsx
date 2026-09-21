@@ -19,7 +19,6 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { notifyAddedToCart } from "@/lib/addedToCartToast";
 import { filterCatalogBrand, filterCatalogPriceRange, filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCategoryPlaceholderImage, getSalePercent, LOW_STOCK_THRESHOLD, skinTypeLabels, sortCatalogProducts, type CatalogSortOption, type SkinType } from "@shared/catalog-filter";
-import { imageSrcSet } from "@shared/image-variants";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { rememberRecentlyViewed, resolveRecentlyViewed } from "@shared/recently-viewed";
 import { UB_DELIVERY_FEE_MNT } from "@shared/const";
@@ -28,6 +27,7 @@ import { useT } from "@/hooks/useLocale";
 import { useStoreSetting } from "@/hooks/useStoreSetting";
 import { useProductName } from "@/hooks/useProductName";
 import { formatMnt } from "@shared/format";
+import ResponsivePicture from "@/components/ResponsivePicture";
 // 2026-09-04 cohesion audit: this used to be a locally hardcoded 4-of-6-category
 // list with its own copy/ordering, independent of (and already drifted from)
 // Home.tsx's real 6-category array -- now the same shared source of truth
@@ -35,6 +35,8 @@ import { formatMnt } from "@shared/format";
 // never silently disagree with what the rest of the site calls these
 // categories again.
 
+/** Grid card width in CSS: 2 / 3 / 4 columns (see .shop-product-grid). */
+const SHOP_CARD_SIZES = "(max-width: 760px) 46vw, (max-width: 900px) 31vw, 23vw";
 const RECENTLY_VIEWED_KEY = "sugi-asayake-recently-viewed-v1";
 // NEWVISION.md §14 (Phase 2): Isetan's small/large grid density toggle --
 // a per-device view preference, not catalog state, so localStorage (not
@@ -387,8 +389,7 @@ export default function Shop() {
         // 24-card /shop page sends. null for images uploaded before the
         // derivative pipeline, so those keep a plain single-source <img>
         // (see shared/image-variants.ts).
-        const srcSet = imageSrcSet(product.imageUrl, 1600);
-        const responsive = srcSet ? { srcSet, sizes: "(max-width: 760px) 46vw, (max-width: 900px) 31vw, 23vw" } : {};
+        // (2026-09-21: srcset/AVIF-ийг ResponsivePicture өөрөө угсарна.)
         const brandLabel = product.brand?.trim() || product.categoryName || "SUGI ASAYAKE";
         const outOfStock = product.stockQuantity <= 0;
         const addingThis = addToCart.isPending && addToCart.variables?.productId === product.id;
@@ -401,7 +402,7 @@ export default function Shop() {
               state is stockQuantity. No copy is hardcoded here. */}
           <span className="shop-brand-chip">{brandLabel}</span>
           {salePercent ? <span className="shop-sale-badge">-{salePercent}<i>%</i></span> : null}
-          <Link href={`/product/${product.slug}`} onClick={() => rememberProduct(product.id)} className="shop-product-link" tabIndex={-1} aria-hidden="true"><img src={product.imageUrl ?? getCategoryPlaceholderImage(product.categorySlug)} alt="" loading="lazy" {...responsive} /></Link>
+          <Link href={`/product/${product.slug}`} onClick={() => rememberProduct(product.id)} className="shop-product-link" tabIndex={-1} aria-hidden="true"><ResponsivePicture src={product.imageUrl ?? getCategoryPlaceholderImage(product.categorySlug)} fullWidth={1600} sizes={SHOP_CARD_SIZES} alt="" loading="lazy" /></Link>
           <button type="button" className={`shop-wishlist-toggle${wishlistIds.has(product.id) ? " active" : ""}`} onClick={() => onToggleWishlist(product.id)} aria-label={wishlistIds.has(product.id) ? `${product.name}-г хүслийн жагсаалтаас хасах` : `${product.name}-г хүслийн жагсаалтад нэмэх`}><Heart size={15} /></button>
           {outOfStock ? <span className="shop-stock-flag is-out">{t("Нөөц дууссан")}</span> : lowStock ? <span className="shop-stock-flag">{product.stockQuantity} ширхэг үлдсэн</span> : null}
           <button type="button" className="shop-quick-view" onClick={() => openQuickView(product)}><Eye size={13} /> Шуурхай</button>

@@ -58,6 +58,11 @@ export function serveStatic(app: Express) {
     // fallback below, which fills them in.
     index: false,
     setHeaders: (res, filePath) => {
+      // 2026-09-21: express.static-ийн MIME хүснэгтэд `.avif` байхгүй тул
+      // `application/octet-stream` явуулдаг байв. Chrome тэвчдэг ч
+      // `X-Content-Type-Options: nosniff`-тэй үед Safari зураг гэж таньж
+      // зурахаас татгалзаж болно — AVIF-г зөв төрлөөр нь зарлана.
+      if (filePath.endsWith(".avif")) res.setHeader("Content-Type", "image/avif");
       if (filePath.includes(`${path.sep}assets${path.sep}`)) {
         res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
       } else if (filePath.includes(`${path.sep}face-models${path.sep}`) || filePath.includes(`${path.sep}fonts${path.sep}`)) {

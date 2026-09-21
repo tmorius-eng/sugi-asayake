@@ -47,3 +47,18 @@ describe("imageSrcSet", () => {
     expect(imageSrcSet(undefined, 1600)).toBeNull();
   });
 });
+
+describe("avifSrcSet / avifVariantKey (2026-09-21)", () => {
+  it("names AVIF siblings after the WebP ones, extension only", async () => {
+    const { avifVariantKey, avifSrcSet } = await import("../shared/image-variants");
+    expect(avifVariantKey("site-media/1/x_ab12.webp")).toBe("site-media/1/x_ab12.avif");
+    expect(avifVariantKey("site-media/1/x_ab12-600w.webp")).toBe("site-media/1/x_ab12-600w.avif");
+    expect(avifSrcSet("/cdn/a/x.webp", 1920)).toBe("/cdn/a/x-600w.avif 600w, /cdn/a/x.avif 1920w");
+  });
+
+  it("offers no AVIF for images that predate the WebP pipeline (plain JPG)", async () => {
+    const { avifSrcSet } = await import("../shared/image-variants");
+    expect(avifSrcSet("/cdn/catalog/products/1/a.jpg", 1600)).toBeNull();
+    expect(avifSrcSet(null, 1600)).toBeNull();
+  });
+});

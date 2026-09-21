@@ -2,10 +2,10 @@ import type { CSSProperties, ComponentType } from "react";
 import { Link } from "wouter";
 import { ArrowUpRight } from "lucide-react";
 import { getCategoryPlaceholderImage } from "@shared/catalog-filter";
-import { imageSrcSet } from "@shared/image-variants";
 import { useSiteText } from "@/hooks/useSiteText";
 import SectionHeading from "./SectionHeading";
 import CategoryRail from "./CategoryRail";
+import ResponsivePicture from "@/components/ResponsivePicture";
 
 // 2026-09-12: this shape is now produced by useCategories() from the real
 // product_categories table plus the admin's image slots, instead of a
@@ -138,7 +138,7 @@ export default function CategoryMasonry({
               <span className="cat-mosaic-item-photo">
                 {/* 66px-ийн дүрсэнд 3840px хүртэлх эх файл (412 KB) татдаг байв —
                     webp бол upload-ын -600w хувилбарыг санал болгоно. */}
-                <img src={imageSrc} alt={category.name} loading="lazy" draggable={false} {...(imageSrcSet(imageSrc, 1920) ? { srcSet: imageSrcSet(imageSrc, 1920)!, sizes: "80px" } : {})} />
+                <ResponsivePicture src={imageSrc} fullWidth={1920} sizes="80px" alt={category.name} loading="lazy" draggable={false} />
               </span>
               <span className="cat-mosaic-item-body">
                 {/* 2026-09-11 audit: the "01".."06" index was removed. The six

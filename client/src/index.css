@@ -4479,3 +4479,10 @@ html[data-storefront-theme="dark"] .cart-free-shipping-text { color: #8fd6a8; }
 .checkout-input[aria-invalid="true"] { border-color: #b3261e; }
 .checkout-input[aria-invalid="true"]:focus-visible { outline: 2px solid #b3261e; outline-offset: 1px; }
 html[data-storefront-theme="dark"] .checkout-field-error { color: #ff8a80; }
+
+/* ---- <picture> AVIF-д (2026-09-21) ---------------------------------------
+   ResponsivePicture нь <img>-ийг <picture>-д ороодог. `display: contents`
+   нь <picture>-г хайрцаггүй болгож, <img> нь урьдын адил эцгийнхээ шууд
+   хүүхэд мэт байрлана — өөрөөр хэлбэл байршил, хэмжээ, `.x img` дүрэм бүгд
+   яг хэвээр. (index.css-д `> img` child combinator байхгүйг шалгасан.) */
+.responsive-picture { display: contents; }

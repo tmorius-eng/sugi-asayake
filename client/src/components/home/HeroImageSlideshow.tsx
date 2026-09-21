@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { createTimer } from "animejs";
-import { HERO_FULL_WIDTH, HERO_IMAGE_SIZES, imageSrcSet } from "@shared/image-variants";
+import { HERO_FULL_WIDTH, HERO_IMAGE_SIZES } from "@shared/image-variants";
+import ResponsivePicture from "@/components/ResponsivePicture";
 
 export type HeroSlide = {
   key: string;
@@ -57,7 +58,6 @@ export type HeroSlide = {
 const MS_PER_SLIDE = 15000;
 /** shared/image-variants.ts-ийн HERO_IMAGE_SIZES-ийг үз (preload-тай ижил байх ёстой). */
 const HERO_SIZES = HERO_IMAGE_SIZES;
-const HERO_SRCSET = (url: string) => imageSrcSet(url, HERO_FULL_WIDTH);
 const COPIES = 3;
 
 export default function HeroImageSlideshow({ slides, imageAlt }: { slides: HeroSlide[]; imageAlt: string }) {
@@ -210,14 +210,15 @@ export default function HeroImageSlideshow({ slides, imageAlt }: { slides: HeroS
               aria-hidden={clone || undefined}
             >
               <Link href={slide.href} className="hero-rail-link" draggable={false} aria-label={slide.label} tabIndex={clone ? -1 : undefined}>
-                <img
+                <ResponsivePicture
                   src={slide.imageUrl}
+                  fullWidth={HERO_FULL_WIDTH}
+                  sizes={HERO_SIZES}
                   // 2026-09-21: хавтан нь утсан дээр 320px, компьютер дээр 450px
                   // атал 1920px-ийн эх файлыг (нэг бүр 66–360 KB) татдаг байв.
                   // Upload бүрт аль хэдийн үүсдэг -600w хувилбарыг санал болгоно;
                   // хөтөч дэлгэцийн нягтралаараа өөрөө сонгоно. Харагдах байдал
                   // ижил — зөвхөн файлын хэмжээ.
-                  {...(HERO_SRCSET(slide.imageUrl) ? { srcSet: HERO_SRCSET(slide.imageUrl)!, sizes: HERO_SIZES } : {})}
                   alt=""
                   draggable={false}
                   // 2026-09-21: энэ хамгийн түрүүнд ачаалах ёстой зургийг

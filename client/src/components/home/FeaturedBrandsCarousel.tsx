@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { imageSrcSet } from "@shared/image-variants";
+import ResponsivePicture from "@/components/ResponsivePicture";
 
 /**
  * Featured Brands carousel, built against matsuyaginza.com/en's section of
@@ -338,7 +339,6 @@ export default function FeaturedBrandsCarousel({ brands, heading }: { brands: Fe
           const visible = metrics.viewport === 0
             ? isActive
             : x < metrics.viewport && x + slideWidth > 0;
-          const srcSet = imageSrcSet(brand.photoUrl, 1600);
           return (
             <div
               key={brand.id}
@@ -375,12 +375,13 @@ export default function FeaturedBrandsCarousel({ brands, heading }: { brands: Fe
                 >
                   <span className="fbrand-photo">
                     {brand.photoUrl ? (
-                      <img
+                      <ResponsivePicture
                         src={brand.photoUrl}
+                        fullWidth={1600}
+                        sizes={`${Math.round(metrics.base * metrics.scale) || 512}px`}
                         alt=""
                         loading="lazy"
                         draggable={false}
-                        {...(srcSet ? { srcSet, sizes: `${Math.round(metrics.base * metrics.scale) || 512}px` } : {})}
                       />
                     ) : null}
                   </span>

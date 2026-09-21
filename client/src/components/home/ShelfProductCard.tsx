@@ -1,9 +1,9 @@
 import { Star } from "lucide-react";
 import { Link } from "wouter";
 import { getSalePercent } from "@shared/catalog-filter";
-import { imageSrcSet } from "@shared/image-variants";
 import { formatMnt } from "@shared/format";
 import { useProductName } from "@/hooks/useProductName";
+import ResponsivePicture from "@/components/ResponsivePicture";
 
 const fallbackImage = "/product-placeholder.svg";
 
@@ -38,7 +38,7 @@ export default function ShelfProductCard({ product, rank }: { product: ShelfProd
       <span className="shelf-card-frame">
         <span className="shelf-card-image">
           {salePercent ? <span className="shop-sale-badge">-{salePercent}%</span> : null}
-          <img src={product.imageUrl ?? fallbackImage} alt={names.primary} loading="lazy" {...(imageSrcSet(product.imageUrl, 1600) ? { srcSet: imageSrcSet(product.imageUrl, 1600)!, sizes: "220px" } : {})} />
+          <ResponsivePicture src={product.imageUrl ?? fallbackImage} fullWidth={1600} sizes="220px" alt={names.primary} loading="lazy" />
         </span>
         <span className="shelf-card-body">
           <p>{product.brand ?? "SUGI ASAYAKE"}</p>

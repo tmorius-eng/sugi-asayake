@@ -7,11 +7,11 @@
 // провайдерт).
 
 import { randomUUID } from "node:crypto";
-import { S3Client, PutObjectCommand, HeadBucketCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, HeadBucketCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { ENV } from "./_core/env";
-import { gridVariantKey } from "../shared/image-variants";
+import { avifVariantKey, gridVariantKey } from "../shared/image-variants";
 
 let _client: S3Client | null = null;
 
@@ -89,11 +89,17 @@ export async function storagePut(
  */
 export async function storagePutImageVariants(
   relKey: string,
-  variants: { full: Buffer; grid: Buffer },
+  variants: { full: Buffer; grid: Buffer; fullAvif?: Buffer; gridAvif?: Buffer },
 ): Promise<{ key: string; url: string }> {
   const key = appendHashSuffix(normalizeKey(relKey));
   await putObject(key, variants.full, "image/webp");
   await putObject(gridVariantKey(key), variants.grid, "image/webp");
+  // 2026-09-21: зураг (photo) бол AVIF хоёр хувилбар нь WebP-тэй ИЖИЛ нэрээр,
+  // зөвхөн өргөтгөл нь өөр (shared/image-variants.ts-ийн avifVariantUrl).
+  // WebP-ийг ЭХЭЛЖ бичнэ: AVIF бичих үед алдаа гарвал WebP аль хэдийн бэлэн
+  // тул зураг эвдрэхгүй, AVIF-гүй л үлдэнэ (ResponsivePicture WebP руу буцна).
+  if (variants.fullAvif) await putObject(avifVariantKey(key), variants.fullAvif, "image/avif");
+  if (variants.gridAvif) await putObject(avifVariantKey(gridVariantKey(key)), variants.gridAvif, "image/avif");
   return { key, url: `/cdn/${key}` };
 }
 
@@ -138,4 +144,29 @@ export async function storagePing(): Promise<{ ok: boolean; error?: string }> {
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Unknown storage error" };
   }
+}
+
+/**
+ * Объект R2-д байгаа эсэх, 10 минут кэштэй (2026-09-21).
+ *
+ * Зөвхөн нэг газар хэрэгтэй: нүүрний hero-ийн `<link rel="preload">` нь
+ * хөтчийн ЯГ ашиглах файлыг заах ёстой. AVIF хувилбар нь заавал биш
+ * (shared/image-variants.ts) тул байхгүй үед AVIF preload хийвэл 404 +
+ * WebP-г дахин татна — өөрөөр хэлбэл хурдасгах засвар удаашруулна.
+ * Алдаа гарвал (R2 унтарсан, тохиргоогүй) "байхгүй" гэж үзнэ — WebP-ийн
+ * аюулгүй замыг сонгоно.
+ */
+const existsCache = new Map<string, { value: boolean; at: number }>();
+const EXISTS_TTL_MS = 10 * 60 * 1000;
+
+export async function storageObjectExists(relKey: string): Promise<boolean> {
+  const key = normalizeKey(relKey);
+  const cached = existsCache.get(key);
+  if (cached && Date.now() - cached.at < EXISTS_TTL_MS) return cached.value;
+  const value = await getClient()
+    .send(new HeadObjectCommand({ Bucket: ENV.s3Bucket, Key: key }), { abortSignal: AbortSignal.timeout(3000) })
+    .then(() => true, () => false);
+  if (existsCache.size > 500) existsCache.clear();
+  existsCache.set(key, { value, at: Date.now() });
+  return value;
 }
