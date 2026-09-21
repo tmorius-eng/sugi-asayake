@@ -10,7 +10,7 @@ import { getDb } from "./connection";
 import { findVerifyingOrderId } from "./customer-orders";
 import { STOREFRONT_CACHE_TTL_MS } from "./site";
 
-export async function createProductReview(input: { userId: number; productId: number; rating: number; comment: string | null }) {
+export async function createProductReview(input: { userId: number; productId: number; rating: number; comment: string | null; imageUrl?: string | null }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
 
@@ -26,6 +26,7 @@ export async function createProductReview(input: { userId: number; productId: nu
     orderId: verifyingOrderId,
     rating: input.rating,
     comment: input.comment,
+    imageUrl: input.imageUrl ?? null,
   });
   const created = await db.select().from(productReviews).where(eq(productReviews.id, Number(inserted[0].insertId))).limit(1);
   invalidateCachedByPrefix("storefront:featuredReviews:");
@@ -53,6 +54,7 @@ export async function getProductReviews(productId: number, viewerUserId: number 
       id: productReviews.id,
       rating: productReviews.rating,
       comment: productReviews.comment,
+      imageUrl: productReviews.imageUrl,
       createdAt: productReviews.createdAt,
       reviewerName: users.name,
       reviewerAvatarUrl: users.avatarUrl,
@@ -142,12 +144,14 @@ export async function toggleReviewLike(reviewId: number, userId: number) {
 
 /** Admin edit of a review's own text/rating (Tom, 2026-09-13: manage
  *  comments from /admin -- edit and delete). */
-export async function updateAdminReview(input: { id: number; rating?: number; comment?: string | null }) {
+export async function updateAdminReview(input: { id: number; rating?: number; comment?: string | null; imageUrl?: null }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const patch: Partial<typeof productReviews.$inferInsert> = { updatedAt: new Date() };
   if (input.rating !== undefined) patch.rating = input.rating;
   if (input.comment !== undefined) patch.comment = input.comment;
+  // Moderation (2026-09-21): only removal -- an admin never sets someone else's photo.
+  if (input.imageUrl === null) patch.imageUrl = null;
   await db.update(productReviews).set(patch).where(eq(productReviews.id, input.id));
   invalidateCachedByPrefix("storefront:featuredReviews:");
   const [row] = await db.select().from(productReviews).where(eq(productReviews.id, input.id)).limit(1);
@@ -250,6 +254,7 @@ export async function getAdminReviews() {
       id: productReviews.id,
       rating: productReviews.rating,
       comment: productReviews.comment,
+      imageUrl: productReviews.imageUrl,
       isApproved: productReviews.isApproved,
       createdAt: productReviews.createdAt,
       productId: productReviews.productId,

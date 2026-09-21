@@ -3955,3 +3955,17 @@ html[data-storefront-theme="dark"] .sugi-site .danger-button:hover { background:
    (.editorial-banner-tag) DOM-д дараа нь ирдэг тул дээр нь давхарлана. */
 .editorial-banner-image > img,
 .editorial-banner-image > .responsive-picture > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; }
+
+/* Сэтгэгдлийн зураг (2026-09-21, migration 0093): бичих маягтад "Зураг нэмэх", урсгалд
+   жижиг thumbnail (600w хувилбар) → дарахад ImageLightbox. */
+.review-photo-picker { display: grid; gap: 6px; margin-top: 10px; }
+.review-photo-add { display: inline-flex; align-items: center; gap: 8px; width: fit-content; min-height: 40px; padding: 0 14px; border: 1px dashed var(--border); border-radius: 999px; background: transparent; color: var(--foreground); font-size: 12px; font-weight: 700; cursor: pointer; }
+.review-photo-add:hover { border-color: var(--foreground); }
+.review-photo-add:disabled { opacity: .6; cursor: progress; }
+.review-photo-preview { position: relative; width: 96px; height: 96px; }
+.review-photo-preview img { width: 100%; height: 100%; border-radius: 10px; object-fit: cover; }
+.review-photo-preview button { position: absolute; top: -8px; right: -8px; display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 999px; background: var(--foreground); color: var(--background); cursor: pointer; }
+.review-photo-note { font-size: 11px; color: var(--muted-foreground); }
+.review-photo { display: block; margin-top: 10px; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.review-photo img { width: 112px; height: 112px; border-radius: 10px; object-fit: cover; }
+.review-photo:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 12px; }

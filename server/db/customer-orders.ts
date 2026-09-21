@@ -79,7 +79,7 @@ export async function cancelOwnOrder(orderId: number, userId: number) {
   return result;
 }
 
-export /**
+/**
  * PREMIUM-FEATURES.md TIER 2 verified-purchase gate: the shopper must have
  * at least one non-cancelled order that actually contains this product. Not
  * restricted to `completed` orders — the spec calls this "ordered" (захиалсан),
@@ -88,7 +88,7 @@ export /**
  * order id so the caller can stamp the review with it (the "verified
  * purchase" badge points at *an* order, not a live re-check).
  */
-async function findVerifyingOrderId(userId: number, productId: number) {
+export async function findVerifyingOrderId(userId: number, productId: number) {
   const db = await getDb();
   if (!db) return null;
   const rows = await db

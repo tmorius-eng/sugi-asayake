@@ -45,9 +45,9 @@ export function generateOrderNumber(): string {
   return `SA${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 }
 
-export /** MySQL's duplicate-key error, for one named unique key. mysql2 wraps the
+/** MySQL's duplicate-key error, for one named unique key. mysql2 wraps the
  *  driver error, so the cause is checked as well as the error itself. */
-function isDuplicateKeyError(error: unknown, keyName: string): boolean {
+export function isDuplicateKeyError(error: unknown, keyName: string): boolean {
   const candidates = [error, (error as { cause?: unknown } | null)?.cause];
   return candidates.some(candidate => {
     if (!candidate || typeof candidate !== "object") return false;

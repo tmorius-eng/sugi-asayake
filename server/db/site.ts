@@ -166,7 +166,7 @@ export async function getActiveBranches() {
   return db.select().from(branches).where(eq(branches.isActive, true)).orderBy(asc(branches.sortOrder));
 }
 
-export /** The branches a shopper sees: active STORES only (2026-09-11). A
+/** The branches a shopper sees: active STORES only (2026-09-11). A
  *  warehouse is a stock location -- never listed, never a pickup point. */
 /**
  * Storefront reads that every page load performs and almost nobody changes
@@ -184,7 +184,7 @@ export /** The branches a shopper sees: active STORES only (2026-09-11). A
  * there is no Redis. With one process that IS the cache; with several, each
  * keeps its own copy for 30 seconds.
  */
-const STOREFRONT_CACHE_TTL_MS = 30_000;
+export const STOREFRONT_CACHE_TTL_MS = 30_000;
 export const STOREFRONT_CACHE_KEYS = {
   branches: "storefront:branches",
   siteMedia: "storefront:siteMedia",
@@ -199,8 +199,8 @@ export const STOREFRONT_CACHE_KEYS = {
 
 type StorefrontCacheKey = keyof typeof STOREFRONT_CACHE_KEYS;
 
-export /** Called by every writer that can change what a storefront page shows. */
-function invalidateStorefront(...keys: StorefrontCacheKey[]) {
+/** Called by every writer that can change what a storefront page shows. */
+export function invalidateStorefront(...keys: StorefrontCacheKey[]) {
   for (const key of keys) invalidateCached(STOREFRONT_CACHE_KEYS[key]);
 }
 

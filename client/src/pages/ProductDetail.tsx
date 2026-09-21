@@ -20,6 +20,7 @@ import { notifyAddedToCart } from "@/lib/addedToCartToast";
 import { trackEvent } from "@/lib/analytics";
 import { trpc } from "@/lib/trpc";
 import ReviewThread from "@/components/ReviewThread";
+import ReviewPhotoPicker from "@/components/ReviewPhotoPicker";
 import ProductQuestions from "@/components/ProductQuestions";
 import { useLocale } from "@/hooks/useLocale";
 import { useProductName } from "@/hooks/useProductName";
@@ -152,10 +153,12 @@ function ReviewsSection({ productId }: { productId: number }) {
   const eligibilityQuery = trpc.reviews.eligibility.useQuery({ productId }, { enabled: isAuthenticated });
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const createReview = trpc.reviews.create.useMutation({
     onSuccess: result => {
       toast.success(result.rewardMnt > 0 ? `Сэтгэгдэл нийтлэгдлээ. Танд ${formatMnt(result.rewardMnt)} дэлгүүрийн зээл нэмэгдлээ!` : "Сэтгэгдэл нийтлэгдлээ. Баярлалаа!");
       setComment("");
+      setPhotoUrl(null);
       setRating(5);
       utils.reviews.list.invalidate({ productId });
       utils.reviews.eligibility.invalidate({ productId });
@@ -180,10 +183,11 @@ function ReviewsSection({ productId }: { productId: number }) {
     )}
 
     {!isAuthenticated ? <p className="mt-7 text-sm text-muted-foreground"><Link href="/login" className="font-bold text-[#df1f3d]">Нэвтэрч</Link> сэтгэгдэл үлдээгээрэй.</p>
-      : eligibility?.canReview ? <form onSubmit={event => { event.preventDefault(); createReview.mutate({ productId, rating, comment: comment.trim() || null }); }} className="mt-8 max-w-lg rounded-2xl border border-border bg-muted p-6">
+      : eligibility?.canReview ? <form onSubmit={event => { event.preventDefault(); createReview.mutate({ productId, rating, comment: comment.trim() || null, imageUrl: photoUrl }); }} className="mt-8 max-w-lg rounded-2xl border border-border bg-muted p-6">
         <p className="text-sm font-bold text-foreground">Сэтгэгдэл үлдээх</p>{reviewRewardMnt > 0 ? <p className="mt-1 text-xs font-bold text-[#2c7650]">{`Сэтгэгдэл бичвэл ${formatMnt(reviewRewardMnt)} дэлгүүрийн зээл бэлэглэнэ.`}</p> : null}
         <div className="mt-3 flex items-center gap-1">{[1, 2, 3, 4, 5].map(n => <button type="button" key={n} onClick={() => setRating(n)} aria-label={`${n} од өгөх`} aria-pressed={rating === n}><Star size={24} fill={n <= rating ? "#f0b52d" : "none"} stroke={n <= rating ? "#f0b52d" : "#c7c8cc"} /></button>)}</div>
         <textarea value={comment} onChange={event => setComment(event.target.value)} maxLength={2000} rows={3} placeholder="Бүтээгдэхүүний талаарх сэтгэгдлээ бичнэ үү (заавал биш)" className="mt-3 w-full rounded-xl border border-border bg-white p-3 text-sm outline-none focus:border-[#df1f3d]" />
+        <ReviewPhotoPicker productId={productId} value={photoUrl} onChange={setPhotoUrl} />
         <button type="submit" disabled={createReview.isPending} className="mt-3 min-h-11 rounded-full bg-[#df1f3d] px-6 text-xs font-bold text-white transition hover:bg-[#bc1732] disabled:cursor-not-allowed disabled:opacity-55">{createReview.isPending ? <LoaderCircle className="mx-auto animate-spin" size={15} /> : "Нийтлэх"}</button>
       </form>
       : eligibility?.alreadyReviewed ? <p className="mt-7 text-sm text-muted-foreground">Та энэ бүтээгдэхүүнд сэтгэгдэл бичсэн байна. Баярлалаа!</p>

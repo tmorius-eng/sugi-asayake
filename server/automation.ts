@@ -1,4 +1,4 @@
-import { getAbandonedCartsNeedingReminder, getLowStockProducts, getOrdersNeedingReviewRequest, getStockLedgerHealth, getStoreSettingNumber, markCartReminderSent, markReviewRequested, getStoreSettingValue, purgeNotificationOutbox, purgeStaleTelemetry, recordNotification } from "./db";
+import { getAbandonedCartsNeedingReminder, getLowStockProducts, getOrdersNeedingReviewRequest, getStockLedgerHealth, getStoreSettingNumber, markCartReminderSent, markReviewRequested, getStoreSettingValue, purgeNotificationOutbox, purgeStaleTelemetry, recordNotification, claimRestockAlert, getPendingRestockAlerts, rearmRestockAlerts } from "./db";
 import { getStaleTransfers } from "./transfers";
 import { runInventorySync } from "./integrations/inventorySync";
 import { fillTemplate } from "../shared/store-settings";
@@ -85,6 +85,43 @@ export async function runReviewRequestJob(): Promise<void> {
     }
     await markReviewRequested(order.orderId);
   }
+}
+
+// Back-in-stock (2026-09-21, migration 0092): the wishlist's "Ирэхээр мэдэгдэх"
+// finally does what it says for every way stock can come back -- receiving,
+// counts, transfers, vendor sync, cancellations, admin edits -- not only the
+// admin product form it used to hang off. Each row is claimed BEFORE sending
+// (claimRestockAlert: guarded UPDATE), so a double run never double-sends; a
+// sold-out product re-arms its rows so the next arrival notifies again.
+// Push goes to anyone who asked (an explicit per-item request, like an order
+// update -- not marketing, so users.pushOptIn does not gate it); email only
+// with emailOptIn. No customer name/phone in the text (only the product).
+export async function runBackInStockJob(scope: { productIds?: number[] } = {}): Promise<{ notified: number; rearmed: number }> {
+  // `scope` зөвхөн тестэд (бодит хүснэгт дээр өөрийн мөрөөр хязгаарлана); job нь бүгдийг.
+  const rearmed = await rearmRestockAlerts(scope.productIds);
+  const alerts = await getPendingRestockAlerts(200, scope.productIds);
+  if (alerts.length === 0) return { notified: 0, rearmed };
+  const [subject, emailBody, pushBody] = await Promise.all([
+    getStoreSettingValue("email-subject-back-in-stock"), getStoreSettingValue("email-body-back-in-stock"), getStoreSettingValue("push-body-back-in-stock"),
+  ]);
+  let notified = 0;
+  for (const alert of alerts) {
+    if (!(await claimRestockAlert(alert.id))) continue;
+    notified += 1;
+    const values = { "{бараа}": alert.productNameMn?.trim() || alert.productName };
+    if (pushBody.trim()) {
+      await sendPushToUser(alert.userId, { title: fillTemplate(subject, values), body: fillTemplate(pushBody, values), url: `/product/${alert.productSlug}`, tag: `restock-${alert.id}` })
+        .catch(error => console.warn("[back-in-stock] push failed", error instanceof Error ? error.message : error));
+    }
+    if (alert.email && alert.emailOptIn) {
+      await sendAccountEmail({ to: alert.email, subject: fillTemplate(subject, values), content: fillTemplate(emailBody, values) }).catch(() => undefined);
+    }
+  }
+  return { notified, rearmed };
+}
+
+export function registerBackInStockJob() {
+  registerJob({ name: "back-in-stock", intervalMs: 15 * 60 * 1000, run: async () => { await runBackInStockJob(); } });
 }
 
 export function registerReviewRequestJob() {

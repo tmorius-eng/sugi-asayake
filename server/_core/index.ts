@@ -27,7 +27,7 @@ import { serveMerchantFeed } from "./merchantFeed";
 import { serveProductOgImage } from "./ogImage";
 import { finishFacebookLogin, startFacebookLogin } from "./facebookAuth";
 import { startScheduler } from "./scheduler";
-import { registerAbandonedCartReminderJob, registerDataRetentionJob, registerLowStockDigestJob, registerInventorySyncJob, registerNotificationOutboxPurgeJob, registerStaleTransferJob, registerStockLedgerDriftJob, registerReviewRequestJob } from "../automation";
+import { registerAbandonedCartReminderJob, registerDataRetentionJob, registerLowStockDigestJob, registerInventorySyncJob, registerNotificationOutboxPurgeJob, registerStaleTransferJob, registerStockLedgerDriftJob, registerReviewRequestJob, registerBackInStockJob } from "../automation";
 import { startNotificationDispatcher } from "../notifications";
 import { notifyError, registerHoneybadgerErrorMiddleware, registerHoneybadgerMiddleware } from "./honeybadger";
 import { limitApiTraffic, protectStateChangingApiRequests, setSecurityHeaders } from "./security";
@@ -199,6 +199,7 @@ async function startServer() {
   if (!isBackgroundJobRunner()) return;
   registerAbandonedCartReminderJob();
   registerReviewRequestJob();
+  registerBackInStockJob();
   registerLowStockDigestJob();
   registerNotificationOutboxPurgeJob();
   registerDataRetentionJob();

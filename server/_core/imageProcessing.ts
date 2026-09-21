@@ -133,4 +133,6 @@ export const IMAGE_MAX_DIMENSION = {
   siteMedia: 1920,
   /** Profile avatar — always rendered small and circular. */
   avatar: 512,
+  /** Customer review photo (2026-09-21) — a thumbnail in the thread, opened in the lightbox. */
+  review: 1280,
 } as const;

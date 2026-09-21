@@ -97,13 +97,13 @@ export async function voidGiftCardsForOrder(tx: GiftCardWriter, orderId: number)
   return Number(result[0].affectedRows ?? 0);
 }
 
-export /**
+/**
  * Hands freshly minted cards to the buyer (push + email) after the paying
  * transaction has committed. Loaded lazily: giftCardFulfilment imports this
  * module, and a static import back would be a cycle. Never throws -- the
  * codes are in the database and on the profile regardless.
  */
-function announceIssuedGiftCards(orderId: number, cards: IssuedGiftCard[]): void {
+export function announceIssuedGiftCards(orderId: number, cards: IssuedGiftCard[]): void {
   if (!cards.length) return;
   import("../giftCardFulfilment")
     .then(module => module.deliverIssuedGiftCards(orderId, cards))

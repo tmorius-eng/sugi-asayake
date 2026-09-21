@@ -59,7 +59,15 @@ export default function AdminReviewsPanel() {
     { id: "date", header: "ОГНОО", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs text-[var(--a-muted)] whitespace-nowrap`, render: review => formatDateTime(review.createdAt) },
     { id: "product", header: "БҮТЭЭГДЭХҮҮН", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs`, render: review => <a href={`/product/${review.productSlug}`} target="_blank" rel="noreferrer" className="font-bold text-[var(--a-text)] hover:text-[#df1f3d]">{review.productName}</a> },
     { id: "rating", header: "ҮНЭЛГЭЭ", headerClassName: headerCell, cellClassName: bodyCell, render: review => <Stars value={review.rating} /> },
-    { id: "comment", header: "СЭТГЭГДЭЛ", headerClassName: headerCell, cellClassName: `${bodyCell} max-w-xs text-xs text-[var(--a-text-soft)]`, render: review => review.comment ?? <span className="text-[var(--a-faint)]">Сэтгэгдэл бичээгүй</span> },
+    { id: "comment", header: "СЭТГЭГДЭЛ", headerClassName: headerCell, cellClassName: `${bodyCell} max-w-xs text-xs text-[var(--a-text-soft)]`, render: review => <>
+      {review.comment ?? <span className="text-[var(--a-faint)]">Сэтгэгдэл бичээгүй</span>}
+      {review.imageUrl ? (
+        <span className="mt-2 flex items-center gap-2">
+          <a href={review.imageUrl} target="_blank" rel="noreferrer"><img src={review.imageUrl} alt="Худалдан авагчийн зураг" className="h-14 w-14 rounded-lg object-cover" loading="lazy" /></a>
+          <button type="button" className="rounded-full border border-[var(--a-neg)] px-2.5 py-1 text-[11px] font-bold text-[var(--a-neg)]" onClick={async () => { if (await confirm({ title: "Энэ сэтгэгдлийн зургийг хасах уу?", body: "Сэтгэгдэл, үнэлгээ нь хэвээр үлдэнэ.", confirmLabel: "Зургийг хасах", danger: true })) updateReview.mutate({ id: review.id, imageUrl: null }); }}>Зураг хасах</button>
+        </span>
+      ) : null}
+    </> },
     { id: "author", header: "ЗОХИОГЧ", headerClassName: headerCell, cellClassName: `${bodyCell} text-xs`, render: review => <><span className="block font-bold">{review.reviewerName ?? "Нэргүй"}</span><span className="text-[var(--a-faint)]">{review.reviewerEmail}</span></> },
     {
       id: "status", header: "ТӨЛӨВ", headerClassName: headerCell, cellClassName: bodyCell,

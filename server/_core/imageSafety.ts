@@ -33,6 +33,8 @@ export type ImageSafetyVerdict =
   | { allowed: false; scores: ImageSafetyScores; reason: "porn" | "hentai" | "sexy" };
 
 export const IMAGE_SAFETY_REJECT_MESSAGE = "Энэ зураг профайлд тохирохгүй байна (нүцгэн эсвэл насанд хүрэгчдийн агуулга). Өөр зураг сонгоно уу.";
+/** Сэтгэгдлийн зураг (2026-09-21): ижил шалгуур, "профайл" биш "сэтгэгдэл". */
+export const REVIEW_IMAGE_SAFETY_REJECT_MESSAGE = "Энэ зургийг сэтгэгдэлд хавсаргах боломжгүй (нүцгэн эсвэл насанд хүрэгчдийн агуулга). Өөр зураг сонгоно уу.";
 
 /** Probability above which Porn / Hentai blocks outright. */
 export const PORN_THRESHOLD = 0.45;

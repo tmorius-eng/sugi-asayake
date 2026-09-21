@@ -1,0 +1,12 @@
+-- 2026-09-21: "Ирэхээр мэдэгдэх" (хүслийн жагсаалт) — жинхэнэ мэдэгдэл.
+--
+-- Өмнө нь зөвхөн admin бүтээгдэхүүний маягтаар нөөцийг 0 → >0 болгоход л имэйл
+-- явдаг, дараа нь notifyOnRestock-ийг унтраадаг байв. Бараа хүлээн авах, тооллого,
+-- шилжүүлэг, вендорын автомат үлдэгдэл, цуцлалтаар нөөц нэмэгдэхэд юу ч явдаггүй,
+-- push огт байгаагүй. Одоо server/automation.ts-ийн "back-in-stock" job 15 минут
+-- тутам шалгана:
+--   notifyOnRestock=1, restockNotifiedAt IS NULL, бараа нийтлэгдсэн, нөөц > 0
+--     → restockNotifiedAt = NOW() (эхлээд "эзэмшинэ"), дараа нь push + имэйл;
+--   restockNotifiedAt IS NOT NULL, нөөц <= 0 → NULL (дараагийн ирэлтэд дахин мэдэгдэнэ).
+-- NULL = "дараагийн ирэлтийг хүлээж байна".
+ALTER TABLE `wishlist_items` ADD COLUMN `restockNotifiedAt` timestamp NULL DEFAULT NULL;

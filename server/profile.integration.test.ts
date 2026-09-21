@@ -329,7 +329,12 @@ describeWithDatabase("customer wishlist + back-in-stock alerts", () => {
     expect(await caller.profile.wishlist.list()).toHaveLength(0);
   });
 
-  it("clears the notify flag once admin.updateProduct restocks 0 -> >0 (the back-in-stock alert firing)", async () => {
+  // 2026-09-21: the alert moved from this admin form to the "back-in-stock" job
+  // (server/automation.ts, tested in back-in-stock.integration.test.ts), which
+  // sees every way stock comes back. An admin restock therefore must NOT consume
+  // the customer's request any more -- it used to clear the flag (and send a
+  // real email through Brevo to this test's fake address on every run).
+  it("keeps the notify flag on when admin.updateProduct restocks 0 -> >0 (the job sends the alert)", async () => {
     const caller = makeCaller(sessionUser);
     await caller.profile.wishlist.toggle({ productId, saved: true, notifyOnRestock: true });
 
@@ -337,6 +342,6 @@ describeWithDatabase("customer wishlist + back-in-stock alerts", () => {
 
     const list = await caller.profile.wishlist.list();
     expect(list[0].stockQuantity).toBe(5);
-    expect(list[0].notifyOnRestock).toBe(false); // cleared after the (logged, Brevo-unconfigured) notification fired
+    expect(list[0].notifyOnRestock).toBe(true);
   });
 });

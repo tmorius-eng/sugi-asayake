@@ -3,7 +3,7 @@
 // (export *) тул import зам өөрчлөгдөөгүй. Функц зөөхдөө энэ файлын import-ыг мөн шинэчил.
 
 import { randomBytes } from "node:crypto";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import { phoneVerificationSessions, products, userAddresses, users, wishlistItems } from "../../drizzle/schema";
 import { type UbDistrict } from "../../shared/districts";
 import { getOrSetCached, invalidateCached } from "../_core/ttlCache";
@@ -49,8 +49,8 @@ export async function getSessionUserById(id: number) {
   return getOrSetCached(sessionUserKey(id), SESSION_USER_TTL_MS, () => getUserById(id));
 }
 
-export /** Every write that changes what a session is allowed to do calls this. */
-function forgetSessionUser(id: number) {
+/** Every write that changes what a session is allowed to do calls this. */
+export function forgetSessionUser(id: number) {
   invalidateCached(sessionUserKey(id));
 }
 
@@ -283,7 +283,8 @@ export async function addWishlistItem(userId: number, productId: number, notifyO
   if (!db) throw new Error("Database is not available");
   const productExists = await db.select({ id: products.id }).from(products).where(eq(products.id, productId)).limit(1);
   if (!productExists.length) throw new Error("Бүтээгдэхүүн олдсонгүй.");
-  await db.insert(wishlistItems).values({ userId, productId, notifyOnRestock }).onDuplicateKeyUpdate({ set: { notifyOnRestock } });
+  // Дахин асаахад (эсвэл унтраахад) өмнөх мөчлөгийн "мэдэгдсэн" тэмдэг арилна.
+  await db.insert(wishlistItems).values({ userId, productId, notifyOnRestock }).onDuplicateKeyUpdate({ set: { notifyOnRestock, restockNotifiedAt: null } });
   return { success: true } as const;
 }
 
@@ -298,19 +299,61 @@ export async function removeWishlistItem(userId: number, productId: number) {
  *  stock crosses 0 -> >0. One-shot: watchers are cleared after notifying,
  *  so re-subscribing (toggling "Ирэхээр мэдэгдэх" again) is an explicit
  *  choice rather than a standing subscription that fires every restock. */
-export async function getWishlistWatchersForProduct(productId: number) {
+/**
+ * "Ирэхээр мэдэгдэх" (2026-09-21, 0092) — server/automation.ts-ийн back-in-stock job.
+ * Мэдэгдэх ёстой мөрүүд: асаалттай, энэ мөчлөгт хараахан мэдэгдээгүй, бараа нийтлэгдсэн
+ * ба нөөцтэй, хэрэглэгч түр хаагдаагүй. Бараа тус бүрийн нэр/slug хамт (мэдэгдлийн текст).
+ */
+/** `productIds`: зөвхөн эдгээр бараа (integration тест өөрийн throwaway мөрөөс хальж,
+ *  бодит харилцагчийн хүлээгдэж буй мэдэгдлийг "эзэмшиж" алга болгохгүйн тулд). */
+export async function getPendingRestockAlerts(limit = 200, productIds?: number[]) {
   const db = await getDb();
   if (!db) return [];
-  return db.select({ userId: wishlistItems.userId, email: users.email, emailOptIn: users.emailOptIn })
-    .from(wishlistItems)
+  return db.select({
+    id: wishlistItems.id,
+    userId: wishlistItems.userId,
+    email: users.email,
+    emailOptIn: users.emailOptIn,
+    productName: products.name,
+    productNameMn: products.nameMn,
+    productSlug: products.slug,
+  }).from(wishlistItems)
     .innerJoin(users, eq(users.id, wishlistItems.userId))
-    .where(and(eq(wishlistItems.productId, productId), eq(wishlistItems.notifyOnRestock, true)));
+    .innerJoin(products, eq(products.id, wishlistItems.productId))
+    .where(and(
+      eq(wishlistItems.notifyOnRestock, true),
+      isNull(wishlistItems.restockNotifiedAt),
+      eq(products.isPublished, true),
+      gt(products.stockQuantity, 0),
+      isNull(users.suspendedAt),
+      productIds ? inArray(wishlistItems.productId, productIds) : undefined,
+    ))
+    .orderBy(wishlistItems.id)
+    .limit(limit);
 }
 
-export async function clearWishlistNotifyFlagsForProduct(productId: number) {
+/**
+ * Мөрийг "мэдэгдсэн" болгож эзэмшинэ — илгээхээс ӨМНӨ. `WHERE restockNotifiedAt IS NULL`
+ * + affectedRows === 1 (төлөв шилжүүлэх UPDATE-ийн дүрэм): хоёр процесс нэг мөрийг
+ * зэрэг авбал зөвхөн нэг нь илгээнэ. Илгээлт унавал дахин оролдохгүй (at-most-once) —
+ * review-request job-той ижил сонголт.
+ */
+export async function claimRestockAlert(id: number): Promise<boolean> {
   const db = await getDb();
-  if (!db) return;
-  await db.update(wishlistItems).set({ notifyOnRestock: false }).where(eq(wishlistItems.productId, productId));
+  if (!db) return false;
+  const [result] = await db.update(wishlistItems).set({ restockNotifiedAt: new Date() })
+    .where(and(eq(wishlistItems.id, id), isNull(wishlistItems.restockNotifiedAt)));
+  return (result as { affectedRows?: number }).affectedRows === 1;
+}
+
+/** Нөөц дахин дууссан барааны мөрийг дараагийн ирэлтэд бэлдэнэ (NULL болгоно). */
+export async function rearmRestockAlerts(productIds?: number[]): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const soldOut = db.select({ id: products.id }).from(products).where(and(lte(products.stockQuantity, 0), productIds ? inArray(products.id, productIds) : undefined));
+  const [result] = await db.update(wishlistItems).set({ restockNotifiedAt: null })
+    .where(and(isNotNull(wishlistItems.restockNotifiedAt), inArray(wishlistItems.productId, soldOut)));
+  return (result as { affectedRows?: number }).affectedRows ?? 0;
 }
 
 /**

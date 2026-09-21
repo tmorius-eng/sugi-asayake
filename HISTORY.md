@@ -478,7 +478,48 @@ route руу орж "Мэдээ олдсонгүй" гэж харуулдаг �
 
 **Coverage**: `@vitest/coverage-v8` 4.1.11, `pnpm test:coverage` (server + shared, html +
 json-summary → `coverage/`), CI-ийн unit job artifact болгон хадгална. Gate-гүй (CI-тэй
-ижил) run: **мөр 31.7%, функц 30.1%, салаа 26.1%**; бүх integration gate-тэй тоо доор.
+ижил) run: **мөр 31.7%, функц 30.1%, салаа 26.1%**; бүх integration gate-тэй (локал, бодит DB): **мөр 71.2%, функц 67.9%, салаа 56.2%** (1108 тест / 114 файл).
+
+### 6l. Шинэ хоёр боломж: "Ирэхээр мэдэгдэх" жинхэнэ болов, сэтгэгдэлд зураг (2026-09-21, 7-р хэсэг)
+
+**7a. Back-in-stock (migration 0092 `wishlist_items.restockNotifiedAt`).** Төлөвлөгөөнд
+"checkbox юу ч илгээдэггүй" гэж бичсэн нь хагас үнэн байв: admin бүтээгдэхүүний маягтаар нөөцийг
+0 → >0 болгоход л имэйл явж, дараа нь тэмдгийг унтраадаг байсан. Бараа хүлээн авах, тооллого,
+шилжүүлэг, вендорын автомат үлдэгдэл, цуцлалт — бодит нөөцийн бүх зам — юу ч илгээдэггүй, push
+огт байгаагүй. Одоо **нэг зам**: `server/automation.ts`-ийн `back-in-stock` job (15 мин):
+`rearmRestockAlerts` (нөөц 0 болсон мөрийг NULL) → `getPendingRestockAlerts` (асаалттай,
+мэдэгдээгүй, нийтлэгдсэн, нөөцтэй, хэрэглэгч түр хаагдаагүй) → мөр бүрийг **илгээхээс өмнө
+эзэмшинэ** (`claimRestockAlert`: `WHERE restockNotifiedAt IS NULL` + affectedRows === 1) → push
+(`/product/<slug>`, монгол нэрээр; хүсэлт гаргасан хүнд — маркетинг биш тул `pushOptIn`-оор
+хаагдахгүй) + имэйл (`emailOptIn`). Тэмдэг асаалттай үлдэж, дараагийн ирэлтэд дахин мэдэгдэнэ.
+Admin маягтын хуучин зам ба `getWishlistWatchersForProduct`/`clearWishlistNotifyFlagsForProduct`/
+`getProductStockQuantity` устав. Шинэ тохиргоо `push-body-back-in-stock` ("Мессежийн загвар").
+
+⚠️ Тестийн аюулгүй байдал: vitest-ийн integration тест **бодит `defaultdb`** дээр ажилладаг тул
+job-ийг шууд ажиллуулбал бодит харилцагчдын хүлээгдэж буй мэдэгдлийг "эзэмшиж", тэд хэзээ ч авахгүй
+болох байв → `runBackInStockJob({ productIds })`. Мөн хуучин `profile.integration`-ийн restock тест
+**ажиллах бүртээ Brevo-оор `@example.invalid` руу жинхэнэ имэйл илгээдэг** байсныг арилгав.
+`back-in-stock.integration.test.ts` (push/имэйл mock): дууссан үед юу ч үгүй → ирэхэд push+имэйл
+нэг удаа, монгол нэр, холбоос → давтан ажиллахад дахин илгээхгүй → дуусаад дахин ирэхэд дахин.
+
+**7b. Сэтгэгдэлд зураг (migration 0093 `product_reviews.imageUrl`).** `reviews.uploadImage`:
+тухайн бараанд сэтгэгдэл бичих эрхтэй хүн л (хадгалах сан руу дурын хүн зураг цутгахгүй), strict
+rate limit, файлын гарын үсэг, nudity screen (загвар ажиллахгүй бол алгасахгүй — татгалзана;
+сэтгэгдэлд тохирсон шинэ мессеж `REVIEW_IMAGE_SAFETY_REJECT_MESSAGE`), WebP + 600w + AVIF
+`reviews/<userId>/`. `reviews.create` зөвхөн өөрийн `reviews/<userId>/` URL-ийг хүлээнэ (өөр хүний
+эсвэл гадны зураг → BAD_REQUEST). Клиент: `ReviewPhotoPicker` (утсан дээр багасгана), урсгалд
+600w thumbnail → `ImageLightbox`; admin → Сэтгэгдэл дээр зураг + "Зураг хасах" (сэтгэгдэл хэвээр).
+Тест: `review-photos.integration.test.ts` (эрхгүй → FORBIDDEN, nudity → review мессеж, бусдын
+URL → BAD_REQUEST, бодит upload → нийтэд харагдана → moderation зөвхөн зургийг хасна),
+`e2e/review-photo.spec.ts` (баталгаат худалдан авалттай E2E хэрэглэгч: сонгох → урьдчилан харах
+→ нийтлэх → thumbnail бодитоор ачаалагдсан (`naturalWidth`) → lightbox). Screenshot-оор нүдээр
+баталсан (утас: урсгалд thumbnail; компьютер: lightbox бүтэн зурагтай). Анхны screenshot дээр
+тест зураг цайвар цэвэр өнгөтэй байсан тул бөмбөлгийн дэвсгэртэй нийлж "зураг алга" мэт
+харагдав — өнгөлөг градиент болгож, ачаалалтыг `naturalWidth`-оор шалгадаг болгов.
+
+Migration 0092, 0093 prod + staging хоёуланд, бүртгэл 94/94. **vitest 1108 passed / 114 файл ✅.** Замдаа: db хуваалтын скрипт 10
+газар `export`-ийг doc comment-ийн ӨМНӨ тавьсан байв (`export /** … */ function`) — ажилладаг ч
+editor doc-оо алддаг → declaration-ийн өмнө рүү зөөв.
 
 ### 7. Тест
 Шинэ: `e2e/checkout.spec.ts` — **зочин анх удаа бүтэн захиалга өгнө** (сагс → маягтын

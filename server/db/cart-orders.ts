@@ -181,14 +181,14 @@ export async function mergeGuestCartIntoUserCart(guestToken: string, userId: num
   await db.update(carts).set({ status: "converted", updatedAt: new Date() }).where(eq(carts.id, guestCart.id));
 }
 
-export /**
+/**
  * The order an earlier submission of this checkout attempt produced, or null.
  * The key is a random UUID the browser made, so it cannot be guessed; the
  * owner check is for the signed-in case regardless, so a shopper can never
  * be handed somebody else's order. Items come from order_items because the
  * cart that produced them has already been converted.
  */
-async function findOrderForClientRequest(db: DbOrTx, clientRequestId: string, expectedUserId: number | null | undefined) {
+export async function findOrderForClientRequest(db: DbOrTx, clientRequestId: string, expectedUserId: number | null | undefined) {
   const [existing] = await db.select().from(orders).where(eq(orders.clientRequestId, clientRequestId)).limit(1);
   if (!existing) return null;
   // `undefined` = no account to compare against (a guest, or a cashier).

@@ -134,7 +134,7 @@ export type ProductVariantWriteInput = {
   isDefault?: boolean;
 };
 
-export /**
+/**
  * "Controls everything" admin overhaul (2026-09-08, Phase K/L): the one
  * place a BRAND-NEW variant gets enrolled into per-branch stock -- called
  * by every path that can create one (createAdminProduct's default variant,
@@ -145,7 +145,7 @@ export /**
  * back to writing the aggregate directly only if no active branches exist
  * at all (broken config) -- there's nowhere real to seed rows into.
  */
-async function seedBranchStockForNewVariant(tx: OrderTx, variantId: number, initialStockQuantity: number) {
+export async function seedBranchStockForNewVariant(tx: OrderTx, variantId: number, initialStockQuantity: number) {
   const activeBranches = await tx.select().from(branches).where(eq(branches.isActive, true));
   if (!activeBranches.length) {
     await tx.update(productVariants).set({ stockQuantity: initialStockQuantity }).where(eq(productVariants.id, variantId));

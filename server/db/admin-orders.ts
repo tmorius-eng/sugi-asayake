@@ -276,7 +276,7 @@ export type OrderTx = Parameters<Parameters<NonNullable<Awaited<ReturnType<typeo
 // server/notificationOutbox.ts.
 export type DbOrTx = OrderTx | NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
-export // recomputeVariantStockTotal (the cached per-variant / per-product totals
+// recomputeVariantStockTotal (the cached per-variant / per-product totals
 // kept in step with branch_stock) moved to server/stockLedger.ts on
 // 2026-09-11, next to the ledger helpers that call it.
 
@@ -304,7 +304,7 @@ export // recomputeVariantStockTotal (the cached per-variant / per-product total
  */
 // Returns whether the variant is on per-branch tracking -- the caller then
 // records the ledger movement once it knows the order id (2026-09-11).
-async function decrementBranchStock(tx: OrderTx, branchId: number, variantId: number, quantity: number, options: { requirePublished: boolean; itemLabel: string }): Promise<boolean> {
+export async function decrementBranchStock(tx: OrderTx, branchId: number, variantId: number, quantity: number, options: { requirePublished: boolean; itemLabel: string }): Promise<boolean> {
   const hasPerBranchTracking = (await tx.select({ id: branchStock.id }).from(branchStock).where(eq(branchStock.variantId, variantId)).limit(1)).length > 0;
   const update = hasPerBranchTracking
     ? await tx.update(branchStock).set({

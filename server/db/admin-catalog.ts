@@ -185,17 +185,7 @@ export async function createAdminProduct(input: ProductWriteInput) {
   return created[0];
 }
 
-/** Cheap "what was the stock before this write" lookup — used by
- *  admin.updateProduct (server/routers.ts) to detect a 0 -> >0 restock and
- *  fire wishlist back-in-stock notifications. */
-export async function getProductStockQuantity(id: number): Promise<number | null> {
-  const db = await getDb();
-  if (!db) return null;
-  const found = await db.select({ stockQuantity: products.stockQuantity }).from(products).where(eq(products.id, id)).limit(1);
-  return found[0]?.stockQuantity ?? null;
-}
-
-export /**
+/**
  * PHASE 2 of product variants: keeps the common single-variant case in sync
  * so admin.updateProduct's existing price/stock/sku fields stay the one
  * place to edit a simple product — the moment a product actually has more
@@ -216,7 +206,7 @@ export /**
  * nowhere real to attribute the number to), matching pre-Phase-K behavior
  * for that edge case.
  */
-async function setFulfillmentBranchStock(db: DbOrTx, variantId: number, quantity: number, actorUserId: number | null = null) {
+export async function setFulfillmentBranchStock(db: DbOrTx, variantId: number, quantity: number, actorUserId: number | null = null) {
   const [fulfillmentBranch] = await db.select({ id: branches.id }).from(branches).where(eq(branches.isFulfillmentDefault, true)).limit(1);
   if (!fulfillmentBranch) {
     await db.update(productVariants).set({ stockQuantity: quantity, updatedAt: new Date() }).where(eq(productVariants.id, variantId));

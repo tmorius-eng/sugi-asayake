@@ -245,6 +245,8 @@ export const wishlistItems = mysqlTable("wishlist_items", {
   userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
   productId: int("productId").notNull().references(() => products.id, { onDelete: "cascade" }),
   notifyOnRestock: boolean("notifyOnRestock").notNull().default(false),
+  // 0092 (2026-09-21): back-in-stock job-ийн төлөв — NULL = дараагийн ирэлтийг хүлээж байна.
+  restockNotifiedAt: timestamp("restockNotifiedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, table => [
   uniqueIndex("wishlist_items_user_product_idx").on(table.userId, table.productId),
@@ -1023,6 +1025,8 @@ export const productReviews = mysqlTable("product_reviews", {
   orderId: int("orderId").references(() => orders.id, { onDelete: "set null" }),
   rating: int("rating").notNull(),
   comment: text("comment"),
+  // 0093 (2026-09-21): худалдан авагчийн нэг зураг — `/cdn/reviews/<userId>/…` (WebP + 600w + AVIF).
+  imageUrl: text("imageUrl"),
   isApproved: boolean("isApproved").notNull().default(true),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

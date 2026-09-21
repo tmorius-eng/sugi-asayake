@@ -22,7 +22,7 @@ import { getRecentSqlQueries } from "./_core/sqlQueryLog";
 import { getOrSetCached } from "./_core/ttlCache";
 import { sendAccountEmail, sendAccountSms } from "./_core/notification";
 import { ENV } from "./_core/env";
-import { directStorageUrl } from "./_core/publicUrl";
+import { directStorageUrl, storageKeyOf } from "./_core/publicUrl";
 import { systemRouter } from "./_core/systemRouter";
 import { signSessionToken, type TrpcContext } from "./_core/context";
 import { hashPassword, verifyPassword } from "./_core/password";
@@ -34,7 +34,6 @@ import {
   type CartOwner,
   categoryExists,
   changeUserPassword,
-  clearWishlistNotifyFlagsForProduct,
   createAdminCategory,
   deleteAdminCategory,
   deleteAdminOrder,
@@ -134,7 +133,6 @@ import {
   upsertLoyaltyTier,
   deleteLoyaltyTier,
   getProductReviews,
-  getProductStockQuantity,
   getProductWriteConflicts,
   getBestsellingProducts,
   getPublicProductVariants,
@@ -163,7 +161,6 @@ import {
   getVisitorSessionIdByToken,
   getWishlistForUser,
   resolvePageviewSession,
-  getWishlistWatchersForProduct,
   logAdminAction,
   findRecentCampaignSend,
   mergeGuestCartIntoUserCart,
@@ -225,7 +222,7 @@ import {
   upsertFaceEnrollment, getSiteName } from "./db";
 // Customer-content safety (2026-09-13): NSFW screen on avatar uploads and
 // a multilingual abuse screen on review text -- both server-side.
-import { classifyImageSafety, formatScores, IMAGE_SAFETY_REJECT_MESSAGE } from "./_core/imageSafety";
+import { classifyImageSafety, formatScores, IMAGE_SAFETY_REJECT_MESSAGE, REVIEW_IMAGE_SAFETY_REJECT_MESSAGE } from "./_core/imageSafety";
 import { MODERATION_REJECT_MESSAGE, screenText } from "./_core/moderation";
 import { canReplyToReview, createReviewReply, deleteAdminReviewReply, getAdminReviewReplies, toggleReviewLike, updateAdminReview, updateAdminReviewReply } from "./db";
 import { canAnswerQuestion, createProductQuestion, createQuestionAnswer, deleteQuestion, deleteQuestionAnswer, getAdminQuestions, getProductQuestions, countProductQuestions, setQuestionApproved } from "./db";
@@ -1374,9 +1371,49 @@ export const appRouter = router({
     // there's nothing meaningful to check — the ProductDetail page only asks
     // this for a logged-in shopper.
     eligibility: protectedProcedure.input(z.object({ productId: z.number().int().positive() })).query(({ ctx, input }) => getReviewEligibility(ctx.user.id, input.productId)),
-    create: protectedProcedure
-      .input(z.object({ productId: z.number().int().positive(), rating: z.number().int().min(1).max(5), comment: nullableText(2_000) }))
+    // Сэтгэгдлийн зураг (2026-09-21, 0093). Зөвхөн тухайн бараанд сэтгэгдэл бичих эрхтэй
+    // хүн (хадгалах сан руу дурын хүн зураг цутгахгүй), strict rate limit, avatar-тай
+    // ижил хамгаалалт: файлын гарын үсэг → nudity screen (загвар ажиллахгүй бол
+    // алгасахгүй, татгалзана) → WebP + 600w + AVIF хувилбар.
+    uploadImage: strictRateLimitedProtectedProcedure
+      .input(z.object({
+        productId: z.number().int().positive(),
+        fileName: z.string().trim().min(1).max(120),
+        contentType: z.enum(imageContentTypes),
+        dataBase64: z.string().min(16).max(11_500_000),
+      }))
       .mutation(async ({ ctx, input }) => {
+        const eligibility = await getReviewEligibility(ctx.user.id, input.productId);
+        if (!eligibility.canReview) throw new TRPCError({ code: "FORBIDDEN", message: "Энэ бараанд сэтгэгдэл бичих эрх танд алга." });
+        const rawBase64 = input.dataBase64.includes(",") ? input.dataBase64.slice(input.dataBase64.indexOf(",") + 1) : input.dataBase64;
+        const buffer = Buffer.from(rawBase64, "base64");
+        if (buffer.length === 0 || buffer.length > 8 * 1024 * 1024) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Зураг 8 МБ-аас бага байх ёстой." });
+        }
+        assertImageSignature(buffer, input.contentType);
+        const variants = await processUploadedImageVariantsOrThrow(buffer, IMAGE_MAX_DIMENSION.review);
+        let safety;
+        try {
+          safety = await classifyImageSafety(variants.full);
+        } catch (error) {
+          console.error("[image-safety] review photo screen unavailable", error instanceof Error ? error.message : error);
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Зургийг одоогоор шалгаж чадсангүй. Түр хүлээгээд дахин оролдоно уу." });
+        }
+        if (!safety.allowed) {
+          console.warn(`[image-safety] review photo rejected user=${ctx.user.id} reason=${safety.reason} ${formatScores(safety.scores)}`);
+          throw new TRPCError({ code: "BAD_REQUEST", message: REVIEW_IMAGE_SAFETY_REJECT_MESSAGE });
+        }
+        const stored = await storagePutImageVariants(`reviews/${ctx.user.id}/review-${input.productId}-${Date.now()}.webp`, variants);
+        return { url: stored.url };
+      }),
+    create: protectedProcedure
+      .input(z.object({ productId: z.number().int().positive(), rating: z.number().int().min(1).max(5), comment: nullableText(2_000), imageUrl: z.string().max(500).nullish() }))
+      .mutation(async ({ ctx, input }) => {
+        // Сэтгэгдлийн зураг (2026-09-21, 0093): зөвхөн ӨӨРИЙН upload (reviews.uploadImage-ийн
+        // `reviews/<userId>/` зам) — өөр хүний зураг эсвэл гадны URL хавсаргуулахгүй.
+        if (input.imageUrl && !storageKeyOf(input.imageUrl)?.startsWith(`reviews/${ctx.user.id}/`)) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Зургийг дахин оруулна уу." });
+        }
         // Abuse screen (Tom, 2026-09-13): buyers may review, but not insult.
         // Lexical layer always; the Anthropic API layer when ANTHROPIC_API_KEY is set.
         if (input.comment?.trim()) {
@@ -1388,7 +1425,7 @@ export const appRouter = router({
         }
         let review;
         try {
-          review = await createProductReview({ userId: ctx.user.id, productId: input.productId, rating: input.rating, comment: input.comment ?? null });
+          review = await createProductReview({ userId: ctx.user.id, productId: input.productId, rating: input.rating, comment: input.comment ?? null, imageUrl: input.imageUrl ?? null });
         } catch (error) {
           throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Сэтгэгдэл бичиж чадсангүй." });
         }
@@ -3262,31 +3299,12 @@ export const appRouter = router({
       // edit by staff would silently erase whatever admin had set.
       if (ctx.user.role !== "admin") delete input.costMnt;
       await validateProductWrite(input);
-      // Snapshot stock before the write so a 0 -> >0 restock can be
-      // detected below and fire wishlist "Ирэхээр мэдэгдэх" alerts.
-      const stockBefore = input.stockQuantity !== undefined ? await getProductStockQuantity(input.id) : null;
+      // Back-in-stock alerts moved to a job (2026-09-21, server/automation.ts
+      // "back-in-stock"): this admin form was the ONLY path that ever sent them,
+      // while receiving, counts, transfers, vendor sync and cancellations also
+      // raise stock. The job sees every path and adds push.
       const product = await updateAdminProduct(input);
       await logAdminAction({ actorUserId: ctx.user.id, action: "product.updated", entityType: "product", entityId: product.id, metadata: { slug: product.slug, published: product.isPublished } });
-      if (stockBefore === 0 && product.stockQuantity > 0) {
-        const watchers = await getWishlistWatchersForProduct(product.id);
-        for (const watcher of watchers) {
-          // 2026-09-05: users.email is nullable now (phone-only accounts) --
-          // a watcher with no email on file simply can't get this alert by
-          // email; there's no SMS equivalent for this notification yet.
-          if (!watcher.emailOptIn || !watcher.email) continue;
-          // No absolute site URL is configured anywhere in this app yet (see
-          // ENV in server/_core/env.ts) — every other transactional email is
-          // plain text with no link for the same reason, so this follows
-          // suit rather than hard-coding a guessed production domain.
-          const backInStockTokens = { "{бараа}": product.name };
-          await sendAccountEmail({
-            to: watcher.email,
-            subject: fillTemplate(await getStoreSettingValue("email-subject-back-in-stock"), backInStockTokens),
-            content: fillTemplate(await getStoreSettingValue("email-body-back-in-stock"), backInStockTokens),
-          });
-        }
-        if (watchers.length) await clearWishlistNotifyFlagsForProduct(product.id);
-      }
       return product;
     }),
     deleteProduct: warehouseProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
@@ -3374,9 +3392,9 @@ export const appRouter = router({
     }),
     // 2026-09-13: edit a review's text/rating, and manage its replies.
     updateReview: marketingProcedure
-      .input(z.object({ id: z.number().int().positive(), rating: z.number().int().min(1).max(5).optional(), comment: z.string().trim().max(2_000).nullable().optional() }))
+      .input(z.object({ id: z.number().int().positive(), rating: z.number().int().min(1).max(5).optional(), comment: z.string().trim().max(2_000).nullable().optional(), imageUrl: z.null().optional() }))
       .mutation(async ({ ctx, input }) => {
-        const result = await updateAdminReview({ id: input.id, rating: input.rating, comment: input.comment === undefined ? undefined : (input.comment || null) });
+        const result = await updateAdminReview({ id: input.id, rating: input.rating, comment: input.comment === undefined ? undefined : (input.comment || null), imageUrl: input.imageUrl });
         if (!result) throw new TRPCError({ code: "NOT_FOUND", message: "Сэтгэгдэл олдсонгүй." });
         await logAdminAction({ actorUserId: ctx.user.id, action: "review.edited", entityType: "review", entityId: input.id });
         return result;

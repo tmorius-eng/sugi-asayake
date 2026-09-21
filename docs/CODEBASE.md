@@ -245,6 +245,7 @@ browser → /api/trpc/<router>.<procedure>
   - Нөөц: `inventory/ScanSession.tsx` (сканы дэлгэц), `inventory/TransfersView.tsx`.
   - `ui/*` — shadcn маягийн суурь элементүүд.
 - **`components/ConfirmDialog.tsx`** (2026-09-21) — `ConfirmProvider` (App.tsx) + `useConfirm()` → `{ confirm, prompt }` (async), window.confirm-ийн оронд; `data-testid="confirm-dialog"`. **`hooks/useFieldErrors.tsx`** — маягтын алдааг талбар дээр нь (`fieldProps`/`FieldError`/`showErrors`), Checkout/Login/ForgotPassword/TrackOrder/анкет.
+- **`components/ReviewPhotoPicker.tsx`** (2026-09-21, 0093) — сэтгэгдлийн маягтад нэг зураг: `prepareImageUpload`-аар багасгаад `reviews.uploadImage` (эрх → гарын үсэг → nudity screen → WebP/600w/AVIF `reviews/<userId>/`), `reviews.create` зөвхөн өөрийн `reviews/<userId>/` URL-ийг хүлээнэ; `ReviewThread` thumbnail → `ImageLightbox`; admin "Зураг хасах" = `admin.updateReview({ imageUrl: null })`.
 - **`lib/bootstrap.ts`** (2026-09-21) — `#storefront-bootstrap` JSON блокоос нэг удаа уншиж `bootstrapSlice(key)` өгнө (`…At` талбар Date болно); `hooks/useSiteMedia.ts`, `hooks/useSiteText.ts`, `SitePromo.tsx` үүгээр `initialData` авдаг. `lib/lazyRetry.ts` — props-той компонентод ч (`lazyRetry<P>`).
 - **`hooks/`** — `useScrollToTopOnNavigate` (Router-т: forward navigation 0-ээс, back/forward-д хүрэхгүй), `useBarcodeScanner` (⚠️ input дээр focus байхад зогсдог), `useScanDraft` (localStorage + 700мс сервер рүү хадгалалт), `useSiteText`, `useStoreSetting`, `useScrollReveal`, `useCategories`, `usePersistFn`, `useShopContact`. (2026-09-20-нд `useMobile`, `useComposition` хоёрыг устгав — хэн ч импортлодоггүй байсан.)
 - **`lib/`** — `scroll.ts` (`scrollToNow` — global smooth rule-ийг override хийсэн instant scroll; яг тодорхой газар буух бүх scroll үүгээр), `trpc.ts` (client), `faceEngine.ts`, `pageviewTracking.ts`, `trafficSource.ts`, `cookieConsent.ts`, `csv.ts`, `adminTheme.ts`, `scanSounds.ts` …
@@ -275,6 +276,7 @@ browser → /api/trpc/<router>.<procedure>
 | Ажил | Давтамж | Юу хийдэг |
 |---|---|---|
 | `abandoned-cart-reminder` | 1 цаг | 24ц+ хөдөлгөөнгүй сагсанд имэйл |
+| `back-in-stock` | 15 мин | (2026-09-21, 0092) хүслийн жагсаалтын "Ирэхээр мэдэгдэх": нөөц > 0 болсон мөрийг эхлээд **эзэмшиж** (`claimRestockAlert`, guarded UPDATE) дараа нь push + имэйл; нөөц дахин 0 болбол `rearmRestockAlerts`. `runBackInStockJob({ productIds })` — тест өөрийн бараагаар хязгаарлана (бодит харилцагчийн мөрийг эзэмшүүлэхгүй) |
 | `low-stock-owner-digest` | 20 цаг | бага нөөцийн имэйл + `stock.low_digest` push (UB өдрөөр dedupe) |
 | `stock-ledger-drift` | 1 цаг | ledger ≠ тавиур бол admin-д мэдэгдэнэ |
 | `stale-transfer-reminder` | 6 цаг | 48ц хүлээн аваагүй шилжүүлэг |

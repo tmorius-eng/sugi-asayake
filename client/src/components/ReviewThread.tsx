@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Heart, LoaderCircle, MessageCircle, Star } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import ImageLightbox from "@/components/ImageLightbox";
+import { gridVariantUrl } from "@shared/image-variants";
 import { useAuth } from "@/_core/hooks/useAuth";
 
 /**
@@ -35,6 +37,8 @@ export type ThreadReview = {
   id: number;
   rating: number;
   comment: string | null;
+  /** 0093: худалдан авагчийн нэг зураг (эсвэл null). */
+  imageUrl?: string | null;
   createdAt: Date | string;
   reviewerName: string | null;
   reviewerAvatarUrl: string | null;
@@ -89,6 +93,7 @@ export default function ReviewThread({ productId, reviews, canReply }: { product
   const utils = trpc.useUtils();
   const [replyingTo, setReplyingTo] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
+  const [photo, setPhoto] = useState<string | null>(null);
 
   const like = trpc.reviews.like.useMutation({
     onSuccess: () => utils.reviews.list.invalidate({ productId }),
@@ -107,6 +112,7 @@ export default function ReviewThread({ productId, reviews, canReply }: { product
   const requireLogin = () => toast.error("Нэвтэрсний дараа боломжтой.");
 
   return (
+    <>
     <ol className="review-thread" aria-label="Сэтгэгдлүүд">
       {reviews.map(review => {
         const hasReplies = review.replies.length > 0;
@@ -123,6 +129,11 @@ export default function ReviewThread({ productId, reviews, canReply }: { product
                     <Stars value={review.rating} />
                   </div>
                   {review.comment ? <p className="review-text">{review.comment}</p> : <p className="review-text review-text--muted">Үнэлгээ өгсөн, сэтгэгдэл бичээгүй.</p>}
+                  {review.imageUrl ? (
+                    <button type="button" className="review-photo" onClick={() => setPhoto(review.imageUrl ?? null)} aria-label={`${review.reviewerName || "Худалдан авагч"}-ийн зургийг томоор харах`}>
+                      <img src={gridVariantUrl(review.imageUrl) ?? review.imageUrl} alt="" loading="lazy" />
+                    </button>
+                  ) : null}
                 </div>
                 <div className="review-actions">
                   <button
@@ -206,5 +217,7 @@ export default function ReviewThread({ productId, reviews, canReply }: { product
         );
       })}
     </ol>
+    <ImageLightbox images={photo ? [photo] : []} index={0} onIndexChange={() => undefined} open={photo !== null} onOpenChange={open => { if (!open) setPhoto(null); }} alt="Худалдан авагчийн зураг" />
+    </>
   );
 }
