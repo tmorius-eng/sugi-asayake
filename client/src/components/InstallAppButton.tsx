@@ -1,7 +1,13 @@
 import { useCallback, useState, useSyncExternalStore } from "react";
 import { ArrowUpRight, MonitorDown } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import InstallGuide, { type GuidePlatform } from "@/components/InstallGuide";
+import { Suspense } from "react";
+import type { GuidePlatform } from "@/components/InstallGuide";
+import { lazyRetry } from "@/lib/lazyRetry";
+
+// 2026-09-21: the guide (7 KB, iOS screenshots markup) is only ever shown
+// after a click, so it leaves the main bundle and loads on demand.
+const InstallGuide = lazyRetry(() => import("@/components/InstallGuide"));
 import { useT } from "@/hooks/useLocale";
 import { getInstallAvailability, promptInstall, subscribeInstallState } from "@/lib/pwaInstall";
 
@@ -81,7 +87,7 @@ export default function InstallAppButton({ variant = "footer", onAction }: { var
               ? t("iPhone, iPad дээр Safari өөрөө суулгах цонх гаргадаггүй тул гараар нэмнэ.")
               : t("Хөтчөөс дамжуулан хэдийд ч суулгаж болно.")}
           </DialogDescription>
-          {guide && <InstallGuide platform={guide} />}
+          {guide && <Suspense fallback={null}><InstallGuide platform={guide} /></Suspense>}
         </DialogContent>
       </Dialog>
     </>

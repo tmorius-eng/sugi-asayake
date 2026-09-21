@@ -33,8 +33,10 @@ export function responsiveImagePreloadTag(url: string, fullWidth: number, sizes:
   return `<link rel="preload" as="image"${type} href="${escapeAttribute(href)}"${responsive} fetchpriority="high" />`;
 }
 
-/** /cdn/<key>.webp зургийн AVIF хувилбар R2-д бий эсэх (10 минут кэштэй). */
-async function hasAvif(url: string): Promise<boolean> {
+/** /cdn/<key>.webp зургийн AVIF хувилбар R2-д бий эсэх (10 минут кэштэй).
+ *  heroShell.ts ч ашиглана: серверийн зурсан <picture> нь байхгүй AVIF-г заавал
+ *  бол хөтөч эвдэрсэн зураг үзүүлнэ (ResponsivePicture шиг onError fallback-гүй). */
+export async function hasAvif(url: string): Promise<boolean> {
   if (!url.startsWith("/cdn/") || !url.endsWith(".webp") || url.endsWith("-600w.webp")) return false;
   // Хоёр AVIF хувилбар хамт үүсдэг (imageProcessing.ts, backfill) — нэгийг шалгахад хангалттай.
   return storageObjectExists(avifVariantKey(url).slice("/cdn/".length));

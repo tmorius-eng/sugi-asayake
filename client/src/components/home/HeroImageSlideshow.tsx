@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
-import { createTimer } from "animejs";
 import { HERO_FULL_WIDTH, HERO_IMAGE_SIZES } from "@shared/image-variants";
 import ResponsivePicture from "@/components/ResponsivePicture";
 
@@ -145,7 +144,14 @@ export default function HeroImageSlideshow({ slides, imageAlt }: { slides: HeroS
   useEffect(() => {
     if (!loop || held || hidden) return;
     let last = 0;
-    const timer = createTimer({
+    // 2026-09-21: anime.js (16 KB) арrives with its own chunk after the hero
+    // has painted -- it was the only thing keeping it in the main bundle,
+    // and the marquee starting a few ms later is invisible.
+    let timer: { pause(): void; revert(): void } | null = null;
+    let cancelled = false;
+    void import("animejs").then(({ createTimer }) => {
+      if (cancelled) return;
+      timer = createTimer({
       duration: Infinity,
       onUpdate: self => {
         const rail = railRef.current;
@@ -164,8 +170,9 @@ export default function HeroImageSlideshow({ slides, imageAlt }: { slides: HeroS
         rail.scrollLeft = position.current;
         wrap();
       },
+      });
     });
-    return () => { timer.pause(); timer.revert(); };
+    return () => { cancelled = true; timer?.pause(); timer?.revert(); };
   }, [loop, held, hidden, measure, wrap]);
 
   // A finger, a swipe or the keyboard can move the row; adopt where it

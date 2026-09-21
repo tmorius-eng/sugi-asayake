@@ -1,7 +1,13 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { useLocation } from "wouter";
-import { trpc } from "@/lib/trpc";
+import { trpc, type RouterOutputs } from "@/lib/trpc";
+import { bootstrapSlice } from "@/lib/bootstrap";
+
+// 2026-09-21: the active promo rides in the document (client/src/lib/bootstrap.ts)
+// so the banner is in the very first React render -- before, it arrived a
+// round trip later and pushed the whole page down by its own height.
+const promoBootstrap = bootstrapSlice<RouterOutputs["promotions"]["active"]>("promo");
 
 // Admin-controlled marketing popup/banner (new-arrival, sale, store event).
 // See sitePromotions in drizzle/schema.ts and AdminPromotionsPanel.tsx for
@@ -15,10 +21,23 @@ export default function SitePromo() {
   // A popup has nothing useful to say inside the admin panel, and mid-checkout
   // it would only be a distraction from finishing an order -- keep it off both.
   const eligiblePage = !location.startsWith("/admin") && location !== "/checkout";
-  const promoQuery = trpc.promotions.active.useQuery(undefined, { enabled: eligiblePage });
+  const promoQuery = trpc.promotions.active.useQuery(undefined, {
+    enabled: eligiblePage,
+    ...(promoBootstrap ? { initialData: promoBootstrap.data, initialDataUpdatedAt: promoBootstrap.at } : {}),
+  });
   const promo = promoQuery.data;
-  const [dismissed, setDismissed] = useState(false);
-  const [visible, setVisible] = useState(false);
+  // 2026-09-21: the banner's initial state is decided synchronously from the
+  // bootstrap promo, so it is in React's very FIRST commit. Before, both flags
+  // started false and the effect below flipped them a tick later -- the bar
+  // then appeared and pushed the whole page down by its own height (40px CLS
+  // on every load), and the server-rendered hero shell (heroShell.ts), which
+  // includes the bar, would have visibly jumped at mount. The popup mode keeps
+  // its 900ms delay through the effect.
+  const initiallyDismissed = (() => {
+    try { return Boolean(promoBootstrap?.data && sessionStorage.getItem(dismissedKey(promoBootstrap.data.id)) === "1"); } catch { return false; }
+  })();
+  const [dismissed, setDismissed] = useState(initiallyDismissed);
+  const [visible, setVisible] = useState(Boolean(promoBootstrap?.data && promoBootstrap.data.displayMode === "banner" && !initiallyDismissed));
   const bannerRef = useRef<HTMLDivElement>(null);
   const tickerRef = useRef<HTMLDivElement>(null);
   // Real promo copy varies wildly in length (a short "50% хямдрал!" vs. a

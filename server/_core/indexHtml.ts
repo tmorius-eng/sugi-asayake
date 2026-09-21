@@ -1,4 +1,5 @@
-import { getSiteMedia, getSiteText, getStoreSettingValue, getStorefrontBranches } from "../db";
+import { getActiveSitePromotion, getSiteMedia, getSiteText, getStoreSettingValue, getStorefrontBranches } from "../db";
+import { renderHeroShell } from "./heroShell";
 import { getSiteTextSlot, type SiteTextSlotKey } from "../../shared/site-text";
 import { checkStoreSettingFormat } from "../../shared/store-settings";
 import { getSiteMediaSlot } from "../../shared/site-media";
@@ -58,7 +59,7 @@ async function resolveValues(): Promise<Map<string, string>> {
   const now = Date.now();
   if (cache && now - cache.renderedAt < CACHE_TTL_MS) return cache.values;
 
-  const [rows, branches, phoneDigits, facebookUrl, instagramUrl, media, googleVerification, facebookVerification] = await Promise.all([
+  const [rows, branches, phoneDigits, facebookUrl, instagramUrl, media, googleVerification, facebookVerification, promo] = await Promise.all([
     getSiteText(),
     getStorefrontBranches(),
     getStoreSettingValue("contact-phone-tel"),
@@ -67,6 +68,7 @@ async function resolveValues(): Promise<Map<string, string>> {
     getSiteMedia(),
     getStoreSettingValue("seo-google-site-verification"),
     getStoreSettingValue("seo-facebook-domain-verification"),
+    getActiveSitePromotion(),
   ]);
   // Measurement ids (2026-09-14): handed to /vendor/analytics-init.js as a
   // JSON data block; the tags themselves load only after cookie consent.
@@ -103,9 +105,17 @@ async function resolveValues(): Promise<Map<string, string>> {
   // the first paint already carries the admin's uploaded logo instead of
   // painting the previous one and swapping. Same "uploaded row, else the
   // slot's registered default" precedence the client uses.
-  const brandMedia = JSON.stringify({
-    logo: media.find(row => row.slotKey === "brand-logo")?.imageUrl || getSiteMediaSlot("brand-logo").fallbackUrl,
-    symbol: media.find(row => row.slotKey === "brand-symbol")?.imageUrl || getSiteMediaSlot("brand-symbol").fallbackUrl,
+  // 2026-09-21: everything the storefront's FIRST render needs, in the
+  // document itself (client/src/lib/bootstrap.ts hydrates react-query from
+  // it): all site media rows (the hero rail waited on that tRPC call and
+  // painted a reserved blank until it returned -- most of a phone's LCP),
+  // the saved site text (no fallback-then-admin-wording swap) and the
+  // active promo (its banner used to arrive a round trip later and push the
+  // whole page down). A few KB; Date columns travel as ISO strings.
+  const bootstrapJson = JSON.stringify({
+    siteMedia: media,
+    siteText: rows,
+    promo,
   }).replace(/</g, "\\u003c");
 
   const saved = new Map(rows.map(row => [row.slotKey, row.textValue]));
@@ -165,7 +175,15 @@ async function resolveValues(): Promise<Map<string, string>> {
     ["COOKIE_MARKETING_LABEL", escapeJsString(textFor("cookie-text-marketing-label"))],
     ["COOKIE_MARKETING_DESCRIPTION", escapeJsString(textFor("cookie-text-marketing-description"))],
     ["ANALYTICS_CONFIG_JSON", analyticsConfig],
-    ["BRAND_MEDIA_JSON", brandMedia],
+    ["STOREFRONT_BOOTSTRAP_JSON", bootstrapJson],
+    // Нүүрний дээд хэсэг серверээс (heroShell.ts). `HERO_SHELL=0` = унтраах
+    // (kill switch); renderIndexHtml нь зөвхөн "/" дээр л оруулна.
+    ["SITE_HERO_SHELL", process.env.HERO_SHELL === "0" ? "" : await renderHeroShell({
+      media,
+      textFor,
+      brandLogo: media.find(row => row.slotKey === "brand-logo")?.imageUrl || getSiteMediaSlot("brand-logo").fallbackUrl || "",
+      promo,
+    })],
   ]);
 
   cache = { renderedAt: now, values };
@@ -204,7 +222,13 @@ export async function renderIndexHtml(template: string, pathname = "/"): Promise
     const path = pathname.split("?")[0].replace(/\/+$/, "");
     values.set("SEO_CANONICAL", escapeAttribute(`${publicOrigin()}${path}`));
   }
-  return template.replace(/%((?:SEO|COOKIE|ANALYTICS|BRAND)_[A-Z_]+)%/g, (match, key: string) => routeMeta?.get(key) ?? values.get(key) ?? fallbackFor(key) ?? match);
+  // Серверийн зурсан hero зөвхөн нүүр хуудсанд — бусад зам дээр React өөр
+  // хуудас зурах тул shell нэг агшин "буруу" дэлгэц үзүүлнэ.
+  const isHome = (pathname.split("?")[0].replace(/\/+$/, "") || "/") === "/";
+  return template.replace(/%((?:SEO|COOKIE|ANALYTICS|STOREFRONT|SITE)_[A-Z_]+)%/g, (match, key: string) => {
+    if (key === "SITE_HERO_SHELL" && !isHome) return "";
+    return routeMeta?.get(key) ?? values.get(key) ?? fallbackFor(key) ?? match;
+  });
 }
 
 /**
@@ -239,12 +263,11 @@ function fallbackFor(key: string): string | undefined {
     case "SEO_TWITTER_DESCRIPTION": return escapeAttribute(getSiteTextSlot("seo-text-twitter-description").fallbackValue);
     case "SEO_CANONICAL": return escapeAttribute(publicOrigin());
     case "SEO_STRUCTURED_DATA": return "{}";
-    // DB унтарсан ч лого нь блокт зөв JSON-оор очих ёстой: түүхий
-    // "%BRAND_MEDIA_JSON%" нь JSON.parse-д унаж, толгой хэсэг логогүй үлдэнэ.
-    case "BRAND_MEDIA_JSON": return JSON.stringify({
-      logo: getSiteMediaSlot("brand-logo").fallbackUrl,
-      symbol: getSiteMediaSlot("brand-symbol").fallbackUrl,
-    });
+    // DB унтарсан ч блок зөв JSON байх ёстой: түүхий "%STOREFRONT_BOOTSTRAP_JSON%"
+    // нь JSON.parse-д унана. Хоосон объект = хэсэг бүр байхгүй = ердийн query
+    // (лого, hero нь slot-ын brand default руу буцна — яг DB-гүй үеийн зөв дүр).
+    case "STOREFRONT_BOOTSTRAP_JSON": return "{}";
+    case "SITE_HERO_SHELL": return "";
     case "SEO_OG_TYPE": return "website";
     case "SEO_OG_IMAGE_META": return "";
     case "SEO_VERIFICATION": return "";

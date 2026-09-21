@@ -106,15 +106,23 @@
     <!-- Measurement (2026-09-14): ids from /admin → Дэлгүүрийн тохиргоо; the
          tags load in /vendor/analytics-init.js only after consent. -->
     <script type="application/json" id="analytics-config">%ANALYTICS_CONFIG_JSON%</script>
-    <!-- Brand logo (2026-09-17): resolved server-side from the brand-logo /
-         brand-symbol media slots so the header paints the right wordmark on
-         first render instead of swapping it after the tRPC call returns. -->
-    <script type="application/json" id="brand-media">%BRAND_MEDIA_JSON%</script>
+    <!-- Storefront bootstrap (2026-09-17 brand logo only; 2026-09-21 every
+         site-media row, the saved site text and the active promo): resolved
+         server-side so the first React render already has them instead of
+         waiting on tRPC (the hero rail waited on it: mobile LCP). See
+         client/src/lib/bootstrap.ts. -->
+    <script type="application/json" id="storefront-bootstrap">%STOREFRONT_BOOTSTRAP_JSON%</script>
     <script src="/vendor/analytics-init.js" defer></script>
   </head>
 
   <body>
-    <div id="root"></div>
+    <!-- Homepage only (2026-09-21): the promo bar, header and hero rendered
+         server-side (server/_core/heroShell.ts) so the hero photograph is on
+         screen as soon as the CSS is, not after 500 KB of JS has run. React's
+         first commit replaces it with the identical DOM in the same frame.
+         Empty on every other route. -->
+    <div id="root">%SITE_HERO_SHELL%</div>
+    <script src="/vendor/hero-shell.js" defer></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 

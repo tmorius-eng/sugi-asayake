@@ -255,6 +255,66 @@ push-лэхээс өмнө `scripts/ci-local.ts <файл>`-аар цэвэр с
 Дүүргэгч/fallback логик бодит (том) өгөгдөл дээр ХЭЗЭЭ Ч ажилладаггүй тул
 зөвхөн жижиг өгөгдөл дээр л шалгагдана.
 
+### 6e. Утасны хурд — "render delay"-г арилгах: серверийн зурсан hero, bootstrap блок, admin CSS салгав (2026-09-21, үдээс хойш)
+
+Төлөвлөгөөний (`~/.claude/plans/…declarative-kite.md`, Tom батлав) 1-р хэсэг. Хэмжилтээс:
+утасны LCP 5.3 с-ийн 3.0–4.3 с нь **render delay** — hero зураг аль хэдийн татагдчихсан
+байхад React (507 KB) ажиллаж, дараа нь `content.siteMedia` tRPC хариуг хүлээж
+(`mediaReady`) байж сая зурдаг байв.
+
+**Юу хийв (бүгд хэмжилттэй, локал production build, Lighthouse утас):**
+
+1. **`#storefront-bootstrap` JSON блок** (`indexHtml.ts` → `client/src/lib/bootstrap.ts`):
+   site media бүх мөр, хадгалсан site text, идэвхтэй promo — react-query `initialData`.
+   Hero, лого, гарчиг, зарын зурвас бүгд React-ийн ЭХНИЙ render-д бодит утгатай; өмнөх
+   `#brand-media` (зөвхөн лого) блок үүнд шингэв. Promo-г мөн оруулсан шалтгаан: зурвас
+   нэг round trip хожуу ирж хуудсыг 40px доош түлхдэг байв (байнгын CLS). ⚠️ `initialData`
+   дангаараа хангалтгүй байсныг **E2E олов**: `SitePromo`-ийн `visible`/`dismissed` төлөв
+   `useEffect`-ээр л асдаг байсан тул React-ийн эхний commit зурвасгүй (толгой top 0), нэг tick-ийн
+   дараа 40 болж үсэрч байв — одоо эхний төлөвийг bootstrap-аас синхрон тооцно.
+2. **Серверийн зурсан hero shell** (`server/_core/heroShell.ts`, зөвхөн `/`): promo зурвас +
+   толгой + hero rail + hero copy-г **React-ийн ЯГ class-уудаар** `<div id="root">` ДОТОР
+   статик HTML-ээр. `createRoot().render()` эхний commit-доо #root-ыг арчаад өөрийн DOM-оо
+   тавьдаг — нэг frame, ижил pixel. Lucide дүрсүүд яг path-аараа (дүрс "гэнэт гарахгүй").
+   Kill switch: `HERO_SHELL=0`. `/vendor/hero-shell.js` (defer): session-д хаасан promo-г
+   React ирэхээс өмнө устгана. ⚠️ Lighthouse-ийн **simulated** горим (PSI) localhost дээр
+   үүнийг "харахгүй": хурдан машинд shell зурагдахаас өмнө React ирдэг тул загвар нь
+   LCP-г JS-ээс хамааруулсаар байна (тэр байтугай +0.9 с муу харуулав). Гэтэл **devtools
+   (бодит) throttling: 3.82 → 3.02 с**, мөн production-тэй адил RTT (+200 мс proxy)
+   өгөхөд simulated ч **4.22 → 2.36 с, оноо 76 → 94**. Өөрөөр хэлбэл бодит хэрэглэгч ба
+   бодит сайт дээрх PSI хоёулаа ашиг хүртэнэ, localhost-ын simulated тоо л худал.
+3. **Аппын JS `fetchpriority="low"`** (`vite.config.ts`-ийн `lowPriorityAppScripts` plugin):
+   утасны сүлжээнд CSS, hero зураг, шрифт, 190 KB JS нэг зурвасын өргөнийг хуваадаг; shell
+   зурагдахад JS хэрэггүй болсон тул JS-ийг ард нь тавив → devtools throttling **3.02 → 2.24 с**.
+4. **Лого 864px/42 KB → 480px/12 KB** (`client/public/images/brand/sugi-logo.webp`, 160px-д
+   зурагддаг, 3x DPR-д ч хангалттай) — толгойн зураг CSS-тэй өрсөлдөж байв.
+5. **Admin CSS салгав**: `client/src/index.css` 4552 → 3919 мөр (290 → 267 KB, gzip 51.5 → 46.2),
+   `client/src/admin.css` 658 мөр (24.6 KB, gzip 5.7) — face gate, admin design system
+   (`@layer components` wrapper-тайгаа), sectors — `AdminDashboard.tsx` import хийдэг тул
+   /admin chunk-тэй хамт л ирнэ. Storefront-д CSS = зурагдалтын хаалга тул шууд LCP-д тусна.
+6. **JS-ийг хөнгөлөв**: `animejs` (16 KB) hero-ийн timer effect дотор dynamic import;
+   `InstallGuide` (8 KB) хоёр газартаа lazy (`lazyRetry<P>` одоо props-той компонент авна);
+   `App.tsx`-ийн Shop/ProductDetail/Checkout warm-up `load`-ын дараа +3 с (өмнө нь
+   requestIdleCallback ~630 мс-т галлаж hero-тэй өрсөлддөг байв). Main chunk 507.8 → 484.3 KB.
+7. **`home-family` зурвас**: background-image (fold-оос доор атлаа 162 KB-аа шууд татдаг) →
+   `EditorialBanner` `imageUrl` prop + `ResponsivePicture` lazy `<img>` (AVIF/WebP, 600w утсанд),
+   `BANNER_IMAGE_SIZES`; CSS `object-fit: cover` — харагдах байдал ижил.
+
+**Хэмжилт (локал production build, утас, 3 удаагийн медиан):**
+
+| Горим | Өмнө (6d-ийн дараах) | Одоо |
+|---|---|---|
+| devtools throttling LCP | 3820 мс (оноо 61) | **2144 мс (оноо 77)** |
+| simulated + production RTT (+200 мс) LCP | 4218 мс (оноо 76) | **2358 мс (оноо 94)** |
+| simulated, localhost (RTT 0) LCP | 3950 мс | 4839 мс (загварын хиймэл регресс — дээр тайлбарлав) |
+| `index.js` CPU (simulated) | 2151 мс | 775 мс |
+
+**Баталгаа:** `e2e/hero-shell.spec.ts` — JS-гүй shell (chunk-ийг route abort) ба React-ийн
+mount-ийн ЯГ commit дээрх (MutationObserver) hero зураг/толгойн rect утас+компьютерт тэнцүү,
+бусад зам дээр shell байхгүй, mount-ийн дараа `h1` нэг л. Playwright screenshot: shell ба React
+хоёр pixel-ээрээ ижил (3 өргөнд, гэрэл + харанхуй). `e2e/brand-logo.spec.ts` шинэ блокт.
+**Үр дүн: vitest 1100 passed / 112 файл ✅, E2E 198 passed / 0 failed ✅** (бүтнээр, компьютер+утас).
+
 ### 7. Тест
 Шинэ: `e2e/checkout.spec.ts` — **зочин анх удаа бүтэн захиалга өгнө** (сагс → маягтын
 алдаа → салбараас авах → бэлэн мөнгө → баталгаажуулах дэлгэц → DB-д мөр бодитоор

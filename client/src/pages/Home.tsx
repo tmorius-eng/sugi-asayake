@@ -38,6 +38,7 @@ import CarouselShelf from "@/components/home/CarouselShelf";
 import ShelfProductCard from "@/components/home/ShelfProductCard";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useCategories } from "@/hooks/useCategories";
+import { useSiteMedia } from "@/hooks/useSiteMedia";
 import { useShopContact } from "@/hooks/useShopContact";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { useSiteText } from "@/hooks/useSiteText";
@@ -63,7 +64,7 @@ export default function Home() {
   // pattern every other page already uses.
   const cart = trpc.cart.current.useQuery();
   const cartCount = cart.data?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
-  const siteMediaQuery = trpc.content.siteMedia.useQuery();
+  const siteMediaQuery = useSiteMedia();
   // matsukiyococokara-online.com's 売れ筋ランキング (bestseller ranking) —
   // adapted as a real-data section, not a curated list. See
   // getBestsellingProducts in server/db.ts.
@@ -243,7 +244,7 @@ export default function Home() {
             textFor("home-text-care-point2", "Гэр бүл бүрт зориулсан сонголт"),
             textFor("home-text-care-point3", "24–48 цагийн дотор Улаанбаатарт хүргэнэ"),
           ]}
-          imageStyle={bgStyle("home-family", familyImage)}
+          imageUrl={imageFor("home-family", familyImage)}
           imageAlt="SUGI ASAYAKE-ийн гэр бүлийн арчилгааны бүтээгдэхүүнүүд"
         />
 

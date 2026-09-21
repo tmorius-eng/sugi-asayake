@@ -1,7 +1,10 @@
 import { useEffect, useMemo } from "react";
-import { trpc } from "@/lib/trpc";
+import { trpc, type RouterOutputs } from "@/lib/trpc";
 import { useLocale } from "@/hooks/useLocale";
+import { bootstrapSlice } from "@/lib/bootstrap";
 import { translate } from "@shared/i18n";
+
+const siteTextBootstrap = bootstrapSlice<RouterOutputs["content"]["siteText"]>("siteText");
 
 const CACHE_KEY = "sugi-site-text-cache-v1";
 
@@ -57,7 +60,13 @@ function writeCachedSlotMap(rows: { slotKey: string; textValue: string | null }[
 export function useSiteText() {
   const cached = useMemo(readCachedSlotMap, []);
   const locale = useLocale();
-  const query = trpc.content.siteText.useQuery();
+  // 2026-09-21: the server hands the saved rows over in the document itself
+  // (client/src/lib/bootstrap.ts), so a first-time visitor's very first
+  // render already shows the admin's wording instead of the code fallback
+  // and the localStorage copy only matters when the block is missing.
+  const query = trpc.content.siteText.useQuery(undefined, siteTextBootstrap
+    ? { initialData: siteTextBootstrap.data, initialDataUpdatedAt: siteTextBootstrap.at }
+    : undefined);
 
   useEffect(() => {
     if (query.data) writeCachedSlotMap(query.data);

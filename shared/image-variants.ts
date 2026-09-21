@@ -90,3 +90,9 @@ export function avifSrcSet(url: string | null | undefined, fullWidth: number): s
 export const PRODUCT_MAIN_IMAGE_SIZES = "(min-width: 1024px) 55vw, 100vw";
 /** Барааны зургийн хадгалах дээд өргөн (IMAGE_MAX_DIMENSION.product). */
 export const PRODUCT_FULL_WIDTH = 1600;
+
+/** Нүүрний "FAMILY CARE" зурвас (EditorialBanner, 2026-09-21): ≤760px-д бүтэн
+ *  өргөн, түүнээс дээш хагас (`flex: 1 1 50%`). Fold-оос доор тул lazy. */
+export const BANNER_IMAGE_SIZES = "(max-width: 760px) 100vw, 50vw";
+/** Site-media upload-ын дээд өргөн (IMAGE_MAX_DIMENSION.siteMedia-тай ижил). */
+export const BANNER_FULL_WIDTH = 1920;

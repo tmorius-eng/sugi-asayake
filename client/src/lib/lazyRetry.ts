@@ -34,7 +34,7 @@ export function markChunksHealthy(): void {
  * a silent reload instead of an error screen. Any other import failure (a
  * genuine network outage, a real bug) is rethrown unchanged.
  */
-export function lazyRetry<T extends ComponentType<unknown>>(importer: () => Promise<{ default: T }>) {
+export function lazyRetry<P>(importer: () => Promise<{ default: ComponentType<P> }>) {
   return lazy(async () => {
     try {
       return await importer();
@@ -42,7 +42,7 @@ export function lazyRetry<T extends ComponentType<unknown>>(importer: () => Prom
       if (isChunkLoadError(error) && reloadOnceForStaleChunk()) {
         // The reload is in flight; keep React suspended rather than showing
         // an error frame for the few hundred milliseconds before it lands.
-        return new Promise<{ default: T }>(() => undefined);
+        return new Promise<{ default: ComponentType<P> }>(() => undefined);
       }
       throw error;
     }

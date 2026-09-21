@@ -79,7 +79,9 @@ browser → /api/trpc/<router>.<procedure>
 | `sanitizeHtml.ts` | админы HTML контентыг цэвэрлэх | |
 | `honeybadger.ts` / `honeybadgerReadApi.ts` | алдааны хяналт | түлхүүргүй бол чимээгүй no-op |
 | `sqlQueryLog.ts` | Drizzle Logger → ring buffer | админы SQL лог самбар үүнээс уншина |
-| `indexHtml.ts` | SSR-гүй HTML бэлтгэх (SEO мета, салбарууд) | `getStorefrontBranches`-ийг ашиглана (агуулах харагдахгүй) |
+| `indexHtml.ts` | SSR-гүй HTML бэлтгэх (SEO мета, салбарууд, `#storefront-bootstrap` JSON: site media + site text + promo, 60 с кэш) | `getStorefrontBranches`-ийг ашиглана (агуулах харагдахгүй) |
+| `heroShell.ts` | Нүүрний promo/толгой/hero-г React-ээс ӨМНӨ статик HTML-ээр `#root` дотор (2026-09-21, зөвхөн `/`) | ⚠️ Markup React-ийн `CommerceHeader`/`HeroSection`/`HeroImageSlideshow`/`SitePromo`-той ИЖИЛ class байх ёстой — `e2e/hero-shell.spec.ts`; `HERO_SHELL=0` унтраана |
+| `imagePreload.ts` | `<link rel=preload as=image>` — `<img>`-тэй ижил srcset/sizes, AVIF R2-д байгаа үед л (`hasAvif`, 10 мин кэш) | hero ба барааны хуудас хоёулаа |
 | `vite.ts` | dev middleware / production static | |
 | `env.ts` | бүх орчны хувьсагчийн нэг цэг | `notificationsDispatchEnabled`, `notificationsSuppressed`, `publicBaseUrl`, `adminFaceGateEnabled` … |
 
@@ -188,7 +190,7 @@ browser → /api/trpc/<router>.<procedure>
 | `stock-movements.ts` / `scan-session.ts` / `transfer-reconcile.ts` | хөдөлгөөний Монгол нэр, сканы reducer, шилжүүлгийн тулгалт |
 | `barcode.ts` | `normaliseBarcode` (сканнерын tab/CR, зай, зураас), `createScanBuffer` (50мс түлхүүрийн зайгаар сканнерыг хүнээс ялгана) |
 | `catalog-filter.ts`, `search-synonyms.ts`, `product-tagging.ts` | хайлт/шүүлт/таг |
-| `site-text.ts`, `site-media.ts`, `store-settings.ts`, `legal-documents.ts`, `admin-tips.ts` | админаар засварлагддаг бүх текст/зураг/тохиргоо. `site-media.ts`-д slot нэмэхэд /admin → Content & Media дээр байршуулах карт **автоматаар** гарна (`ContentMediaPanel` бүртгэлийг тойрдог). Сайтын лого нь `brand-logo`/`brand-symbol` slot (2026-09-17) — компонентууд `useBrandMedia()`-аар уншина, эхний зурагдалт нь `indexHtml.ts`-ийн `#brand-media` JSON блокоос ирдэг тул анивчихгүй. ⚠️ Хөтчийн таб/утасны дүрс (`client/public/icons/*.png`) нь энэ slot-оос ХАМААРАХГҮЙ, гараар солино |
+| `site-text.ts`, `site-media.ts`, `store-settings.ts`, `legal-documents.ts`, `admin-tips.ts` | админаар засварлагддаг бүх текст/зураг/тохиргоо. `site-media.ts`-д slot нэмэхэд /admin → Content & Media дээр байршуулах карт **автоматаар** гарна (`ContentMediaPanel` бүртгэлийг тойрдог). Сайтын лого нь `brand-logo`/`brand-symbol` slot (2026-09-17) — компонентууд `useBrandMedia()`-аар уншина; site media бүхэлдээ (`useSiteMedia()`), site text, promo нь `indexHtml.ts`-ийн `#storefront-bootstrap` JSON блокоос (`client/src/lib/bootstrap.ts`, 2026-09-21) react-query `initialData` болж ирдэг тул эхний render бодит утгатай, анивчихгүй. ⚠️ Хөтчийн таб/утасны дүрс (`client/public/icons/*.png`) нь энэ slot-оос ХАМААРАХГҮЙ, гараар солино |
 | `delivery.ts`, `districts.ts`, `orders.ts`, `loyalty.ts`, `format.ts`, `slugify.ts` | нэг мөр бизнес дүрэм тус бүр |
 | `mobile.ts` | `normaliseMongolianMobile` — checkout StorePay-ийн хариуг бичсэн дугаартай тулгадаг тул хоёр тал ижил дүрэмтэй байх ёстой |
 | `face-auth.ts` | descriptor-ийн зай тооцоолол (браузер+сервер ижил) |
@@ -204,10 +206,11 @@ browser → /api/trpc/<router>.<procedure>
 - **`App.tsx`** — wouter route + нэг MutationObserver/IntersectionObserver (scroll reveal) бүх route-д.
 - **`pages/`** — Home, Shop, ProductDetail, Checkout, Profile (914 мөр: хаягийн дэвтэр, тохиргоо, аюулгүй байдал), Login, ForgotPassword, MyOrders, TrackOrder, Journal/PostDetail, RoutineDetail, Brands, Legal, NotFound, **AdminDashboard** (→ `AdminWorkspace`).
 - **`components/`**
-  - Дэлгүүрийн нүүр: `home/*` (HeroImageSlideshow, KeywordChips, CarouselShelf + ShelfProductCard, CategoryMasonry + CategoryRail, FeaturedBrandsCarousel, BrandStorySection, QuickStatsSection, EditorialBanner, StoreLocatorSection). 2026-09-12-нээс нүүрний харагдах байдал нь `client/src/index.css`-ийн ТӨГСГӨЛД байрлах "COSME KITCHEN RESTYLE" давхаргаар тодорхойлогдоно — хэсгийн CSS засахдаа тэр давхаргад мөн шалгах (эс бөгөөс засвар дарагдана). `ShelfProductCard`-ыг ProductDetail мөн ашигладаг.
+  - Дэлгүүрийн нүүр: `home/*` (HeroImageSlideshow, KeywordChips, CarouselShelf + ShelfProductCard, CategoryMasonry + CategoryRail, FeaturedBrandsCarousel, BrandStorySection, QuickStatsSection, EditorialBanner, StoreLocatorSection). 2026-09-12-нээс нүүрний харагдах байдал нь `client/src/index.css`-ийн ТӨГСГӨЛД байрлах "COSME KITCHEN RESTYLE" давхаргаар тодорхойлогдоно — хэсгийн CSS засахдаа тэр давхаргад мөн шалгах (эс бөгөөс засвар дарагдана). Admin-ий CSS (design system, face gate) 2026-09-21-ээс `client/src/admin.css`-д — `AdminDashboard.tsx` import хийдэг, storefront татдаггүй. `ShelfProductCard`-ыг ProductDetail мөн ашигладаг.
   - Админ: `AdminWorkspace.tsx` (816 мөр — хэсгүүдийн router), `admin/AdminSidebar.tsx`, `admin/AdminTopBar.tsx`, `admin/AdminNotificationBell.tsx`, `admin/AdminCommandPalette.tsx`, `admin/GenericListView.tsx`, панель бүр (`AdminProductsPanel`, `AdminOrdersPanel`, `AdminIntegrationsPanel`, `AdminReceivingPanel`, `AdminAnalyticsPanel`, `AdminSecurityCenter`, `AdminPosPanel` …).
   - Нөөц: `inventory/ScanSession.tsx` (сканы дэлгэц), `inventory/TransfersView.tsx`.
   - `ui/*` — shadcn маягийн суурь элементүүд.
+- **`lib/bootstrap.ts`** (2026-09-21) — `#storefront-bootstrap` JSON блокоос нэг удаа уншиж `bootstrapSlice(key)` өгнө (`…At` талбар Date болно); `hooks/useSiteMedia.ts`, `hooks/useSiteText.ts`, `SitePromo.tsx` үүгээр `initialData` авдаг. `lib/lazyRetry.ts` — props-той компонентод ч (`lazyRetry<P>`).
 - **`hooks/`** — `useScrollToTopOnNavigate` (Router-т: forward navigation 0-ээс, back/forward-д хүрэхгүй), `useBarcodeScanner` (⚠️ input дээр focus байхад зогсдог), `useScanDraft` (localStorage + 700мс сервер рүү хадгалалт), `useSiteText`, `useStoreSetting`, `useScrollReveal`, `useCategories`, `usePersistFn`, `useShopContact`. (2026-09-20-нд `useMobile`, `useComposition` хоёрыг устгав — хэн ч импортлодоггүй байсан.)
 - **`lib/`** — `scroll.ts` (`scrollToNow` — global smooth rule-ийг override хийсэн instant scroll; яг тодорхой газар буух бүх scroll үүгээр), `trpc.ts` (client), `faceEngine.ts`, `pageviewTracking.ts`, `trafficSource.ts`, `cookieConsent.ts`, `csv.ts`, `adminTheme.ts`, `scanSounds.ts` …
 

@@ -38,17 +38,20 @@ test.describe("брэндийн лого", () => {
     expect(footer.src, "толгой ба хөл өөр лого харуулж байна").toBe(header.src);
   });
 
-  test("сервер #brand-media блокийг бөглөж өгдөг ба эхний зурагдалт түүнтэй таарна", async ({ page }) => {
+  test("сервер #storefront-bootstrap блокийг бөглөж өгдөг ба эхний зурагдалт түүнтэй таарна", async ({ page }) => {
     await page.goto("/");
 
     const bootstrap = await page.evaluate(() => {
-      const block = document.getElementById("brand-media");
+      const block = document.getElementById("storefront-bootstrap");
       return block?.textContent ?? null;
     });
-    expect(bootstrap, "#brand-media блок алга — index.html эсвэл indexHtml.ts тасарсан").toBeTruthy();
-    // Орлуулаагүй placeholder ("%BRAND_MEDIA_JSON%") нь JSON биш тул энд унана.
-    const parsed = JSON.parse(bootstrap!) as { logo: string | null; symbol: string | null };
-    expect(parsed.logo, "лого хоосон ирлээ").toBeTruthy();
+    expect(bootstrap, "#storefront-bootstrap блок алга — index.html эсвэл indexHtml.ts тасарсан").toBeTruthy();
+    // Орлуулаагүй placeholder ("%STOREFRONT_BOOTSTRAP_JSON%") нь JSON биш тул энд унана.
+    const data = JSON.parse(bootstrap!) as { siteMedia?: Array<{ slotKey: string; imageUrl: string }> };
+    expect(Array.isArray(data.siteMedia), "блокт siteMedia жагсаалт алга").toBe(true);
+    // 2026-09-21: блок бүх slot-ыг агуулдаг болсон (hero-г tRPC-гүй зурахын тулд).
+    // Лого мөргүй бол толгой хэсэг бүртгэгдсэн default-оо зурна — тэр ч таарах ёстой.
+    const parsed = { logo: data.siteMedia!.find(row => row.slotKey === "brand-logo")?.imageUrl ?? "/images/brand/sugi-logo.webp" };
 
     const headerSrc = await page.locator(".commerce-brand img").first().getAttribute("src");
     expect(headerSrc, "эхний зурагдалтын лого сервэрийнхээс зөрж байна (солих үед анивчна)").toBe(parsed.logo);

@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { trpc } from "@/lib/trpc";
+import { useSiteMedia } from "@/hooks/useSiteMedia";
 import { useLocale } from "@/hooks/useLocale";
 import { translate } from "@shared/i18n";
 import { categoryPresentation } from "@/components/home/categories-data";
@@ -40,7 +41,7 @@ export type StorefrontCategory = {
  */
 export function useCategories(): StorefrontCategory[] {
   const categoriesQuery = trpc.content.categories.useQuery();
-  const mediaQuery = trpc.content.siteMedia.useQuery();
+  const mediaQuery = useSiteMedia();
   // The six catalogue categories are shop vocabulary rather than product
   // data, so they are in the dictionary and follow the chosen language; the
   // slug (and therefore every /shop?category= link) is untouched.

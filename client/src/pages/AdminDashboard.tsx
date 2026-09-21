@@ -4,6 +4,9 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import AdminWorkspace from "@/components/AdminWorkspace";
 import AdminFaceGate from "@/components/AdminFaceGate";
+// Admin-only styles (design system, face gate) ride with this lazy chunk
+// instead of the storefront's render-blocking index.css (2026-09-21).
+import "@/admin.css";
 
 /**
  * Tom, 2026-09-05 (explicit): this page used to wrap AdminWorkspace (the

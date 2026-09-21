@@ -22,7 +22,7 @@ const AdminDashboard = lazyRetry(() => import("./pages/AdminDashboard"));
 // Зөвхөн dev: admin workspace `preview` горимд (нэвтрэлтгүй, царайны хаалгагүй,
 // fallback өгөгдөлтэй) — панелийн render-ийг бодит admin session-гүйгээр
 // Playwright-аар шалгахын тулд. Production build-аас tree-shake хийгдэнэ.
-const AdminPreview = import.meta.env.DEV ? lazyRetry(() => import("./components/AdminWorkspace").then(m => ({ default: () => <m.default preview /> }))) : null;
+const AdminPreview = import.meta.env.DEV ? lazyRetry<object>(() => import("./components/AdminWorkspace").then(m => ({ default: () => <m.default preview /> }))) : null;
 const Checkout = lazyRetry(() => import("./pages/Checkout"));
 const ForgotPassword = lazyRetry(() => import("./pages/ForgotPassword"));
 // Камергүй компьютерийн admin хандалтыг утсаар баталгаажуулах хуудас
@@ -127,14 +127,28 @@ function App() {
       void import("./pages/ProductDetail");
       void import("./pages/Checkout");
     };
-    // Safari-д requestIdleCallback байхгүй; богино timer нь fallback.
+    // 2026-09-21: зөвхөн `load`-ын ДАРАА, дээр нь 3 с. Өмнө нь requestIdleCallback
+    // утасны 4x CPU дээр ~630 мс-т галлаж — hero зурагдахаас өмнө гурван
+    // chunk (~200 KB) татаж, парс хийж байв; Lighthouse-ийн LCP breakdown-д
+    // тэр нь "render delay"-н нэг хэсэг байсан. Дараагийн хуудас руу
+    // шилжихээс өмнө хэдхэн секунд л хэрэгтэй тул хойшлуулснаар алдах юмгүй.
     const w = window as Window & { requestIdleCallback?: typeof requestIdleCallback; cancelIdleCallback?: typeof cancelIdleCallback };
-    if (w.requestIdleCallback) {
-      const id = w.requestIdleCallback(warm, { timeout: 4000 });
-      return () => w.cancelIdleCallback?.(id);
-    }
-    const id = setTimeout(warm, 2500);
-    return () => clearTimeout(id);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let idle: number | undefined;
+    const schedule = () => {
+      timer = setTimeout(() => {
+        // Safari-д requestIdleCallback байхгүй; тэнд шууд ажиллана.
+        if (w.requestIdleCallback) idle = w.requestIdleCallback(warm, { timeout: 4000 });
+        else warm();
+      }, 3000);
+    };
+    if (document.readyState === "complete") schedule();
+    else window.addEventListener("load", schedule, { once: true });
+    return () => {
+      window.removeEventListener("load", schedule);
+      if (timer !== undefined) clearTimeout(timer);
+      if (idle !== undefined) w.cancelIdleCallback?.(idle);
+    };
   }, []);
   return <ErrorBoundary>
     <ThemeProvider defaultTheme="light">

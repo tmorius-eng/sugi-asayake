@@ -1,6 +1,8 @@
 import type { CSSProperties, ReactNode } from "react";
 import { ArrowUpRight } from "lucide-react";
 import { Link } from "wouter";
+import ResponsivePicture from "@/components/ResponsivePicture";
+import { BANNER_FULL_WIDTH, BANNER_IMAGE_SIZES } from "@shared/image-variants";
 
 // NEWVISION.md Tier 2: a brand-story-takeover primitive SUGI didn't have --
 // the closest existing thing, .story-section, is text-only (no image at
@@ -23,6 +25,7 @@ export default function EditorialBanner({
   ctaLabel,
   ctaHref,
   imageStyle,
+  imageUrl,
   imageAlt,
 }: {
   variant: "image-right" | "image-left" | "full-bleed-dark";
@@ -38,6 +41,15 @@ export default function EditorialBanner({
   ctaLabel?: string;
   ctaHref?: string;
   imageStyle?: CSSProperties;
+  /**
+   * 2026-09-21: the split variants take the photo as a URL and render a real
+   * lazy `<img>` (AVIF/WebP, 600w on phones) instead of a background-image.
+   * A background-image is fetched the moment the element exists -- on a phone
+   * this band is several screens down, yet its 162 KB full-size WebP was the
+   * first thing competing with the hero for bandwidth. `imageStyle` is still
+   * honoured (full-bleed variant, or a caller with no variants for its file).
+   */
+  imageUrl?: string | null;
   imageAlt: string;
 }): ReactNode {
   const heading = <h2>{headingLine1}{headingLine2 ? <>{" "}{headingLine2}</> : null}</h2>;
@@ -60,7 +72,10 @@ export default function EditorialBanner({
 
   return (
     <section className={`editorial-banner editorial-banner--${variant}`} data-reveal>
-      <div className="editorial-banner-image" style={imageStyle} role="img" aria-label={imageAlt}>
+      <div className="editorial-banner-image" style={imageStyle} {...(imageUrl ? {} : { role: "img", "aria-label": imageAlt })}>
+        {imageUrl
+          ? <ResponsivePicture src={imageUrl} fullWidth={BANNER_FULL_WIDTH} sizes={BANNER_IMAGE_SIZES} alt={imageAlt} loading="lazy" decoding="async" />
+          : null}
         {tag ? <span className="editorial-banner-tag">{tag}</span> : null}
       </div>
       <div className="editorial-banner-copy">

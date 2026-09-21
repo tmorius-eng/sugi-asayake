@@ -1,0 +1,658 @@
+/*
+ * ADMIN-ONLY CSS (split out of index.css on 2026-09-21).
+ *
+ * Everything in here styles /admin (the design system, the face gate and its
+ * head-direction sectors, the QR handoff) and nothing a shopper ever sees.
+ * It used to live inside index.css, which every storefront visitor downloads
+ * before the browser can paint anything: on a throttled phone the stylesheet
+ * was THE gate for the first paint (LCP ~= CSS arrival). Moving ~600 lines
+ * here shrinks that render-blocking file; Vite emits this as its own
+ * stylesheet, fetched together with the lazy AdminDashboard chunk that
+ * imports it (client/src/pages/AdminDashboard.tsx).
+ *
+ * Cascade layers: the design-system block keeps its `@layer components`
+ * wrapper -- native CSS appends these rules to the same named layer index.css
+ * declared (Tailwind v4), so a utility class on an admin element still wins,
+ * exactly as before. The face-gate rules were unlayered before and stay so.
+ * No `@import "tailwindcss"` here: this is plain CSS, no @apply.
+ *
+ * Rule (docs/PROJECT-GUIDE.md): storefront-only or shared rules stay in
+ * index.css; only selectors that cannot occur outside /admin belong here.
+ */
+/* ---------------------------------------------------------------------------
+   Admin face gate (2026-09-08) — the camera check in front of /admin.
+   Scoped entirely to that gate; nothing here renders on a storefront page.
+   Uses the app's own tokens rather than new colours so the gate looks like
+   part of the admin panel it guards.
+--------------------------------------------------------------------------- */
+.face-gate-shell { display: grid; place-items: center; min-height: 100vh; padding: 24px; background: #dae0da; }
+.face-gate-card { animation: face-gate-card-in .42s cubic-bezier(.22,.61,.36,1) both; width: 100%; max-width: 420px; padding: 28px; border-radius: var(--radius-lg, 18px); background: #fff; box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.08)); text-align: center; }
+.face-gate-card--wide { max-width: 520px; text-align: left; }
+.face-gate-card h2 { margin: 0; font-family: var(--font-display); font-size: 22px; font-weight: 620; letter-spacing: -.04em; color: var(--foreground); }
+.face-gate-muted { margin: 6px 0 0; font-size: 13px; line-height: 1.6; color: #545958; }
+.face-gate-ok { color: #1a7f4b; }
+.face-gate-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 18px; color: var(--primary-text, #c11a35); }
+.face-gate-head h2 { margin: 0; }
+
+/* Circular scanner on a dark ground (Tom's chosen concept). Square box so
+   the circle stays a circle at any width; the ring lives just outside the
+   video's edge. */
+.face-gate-stage { position: relative; width: min(300px, 78vw); aspect-ratio: 1; margin: 0 auto; }
+/* Mirrored so turning left on screen matches turning left in reality -- the
+   instructions say "left" and must mean the user's left. The mesh canvas
+   mirrors itself in its own draw call, not here. */
+.face-gate-video { position: absolute; inset: 7%; width: 86%; height: 86%; object-fit: cover; border-radius: 50%; transform: scaleX(-1); background: #0b1220;
+  /* iOS Safari paints its own play/pause button over an inline <video> and
+     shows it on any tap (Tom, 2026-09-13: "ugly"). The preview is not a
+     player -- nothing about it is tappable -- so the native controls are
+     hidden and taps fall through to the page. */
+  pointer-events: none; -webkit-touch-callout: none;
+  /* Invisible but still decoding (see the previewRef note in the gate):
+     iOS paints its play/pause overlay INSIDE the video element, so the
+     element itself has to be invisible; the preview canvas shows the feed. */
+  opacity: 0; }
+.face-gate-preview { position: absolute; inset: 7%; width: 86%; height: 86%; object-fit: cover; border-radius: 50%; transform: scaleX(-1); background: #0b1220; pointer-events: none; }
+.face-gate-video::-webkit-media-controls,
+.face-gate-video::-webkit-media-controls-overlay-play-button,
+.face-gate-video::-webkit-media-controls-start-playback-button,
+.face-gate-video::-webkit-media-controls-panel,
+.face-gate-video::-webkit-media-controls-play-button { display: none !important; -webkit-appearance: none; opacity: 0; pointer-events: none; }
+.face-gate-mesh { position: absolute; inset: 7%; width: 86%; height: 86%; border-radius: 50%; pointer-events: none; }
+
+/* Progress ring around the rim. */
+.face-gate-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); pointer-events: none; }
+.face-gate-ring-track { fill: none; stroke: rgba(255,255,255,.10); stroke-width: 3; }
+.face-gate-ring-value { fill: none; stroke: #6fd0ff; stroke-width: 3; stroke-linecap: round; filter: drop-shadow(0 0 5px rgba(111,208,255,.55));
+  /* Long, gently-decelerating transition: progress arrives in discrete jumps
+     as each frame lands, and a fast linear tween makes those jumps visible.
+     This eases them into a continuous sweep. */
+  transition: stroke-dashoffset .55s cubic-bezier(.22,.61,.36,1), stroke .4s ease, filter .4s ease; }
+
+/* Gold rim + soft pulse once a face is actually being tracked -- immediate
+   feedback that the system has locked on. */
+.face-gate-stage.is-locked .face-gate-ring-value { stroke: #ffd65c; filter: drop-shadow(0 0 6px rgba(255,214,92,.6)); }
+.face-gate-stage.is-locked { animation: face-gate-lock 2.4s cubic-bezier(.37,0,.63,1) infinite; will-change: transform; }
+@keyframes face-gate-lock { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.008); } }
+
+/* Sweeping scan line, clipped to the circle. */
+.face-gate-scanline { position: absolute; left: 7%; right: 7%; height: 2px; pointer-events: none; background: linear-gradient(90deg, transparent, rgba(111,208,255,.9), transparent); will-change: transform, opacity; animation: face-gate-scan 3.2s cubic-bezier(.45,0,.55,1) infinite; }
+/* Animating transform rather than `top` keeps this on the compositor -- an
+   animated `top` relayouts every frame and visibly stutters next to a live
+   video. */
+@keyframes face-gate-scan {
+  0%   { transform: translateY(60px); opacity: 0; }
+  12%  { opacity: .9; }
+  50%  { transform: translateY(230px); opacity: 1; }
+  88%  { opacity: .9; }
+  100% { transform: translateY(60px); opacity: 0; }
+}
+
+/* The colour-flash liveness challenge covers the whole viewport (see the
+   component), so nothing is scoped to the stage here. */
+.face-gate-fullflash { position: fixed; inset: 0; z-index: 9999; pointer-events: none; will-change: opacity; animation: face-gate-flash-in .14s cubic-bezier(.22,.61,.36,1); }
+/* Eased fade rather than an instant swap: a hard cut between saturated
+   full-screen colours is unpleasant to sit through, and the settle delay
+   before sampling means the ramp costs the measurement nothing. */
+@keyframes face-gate-flash-in { from { opacity: .35; } to { opacity: 1; } }
+
+.face-gate-video-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(13,27,51,.72); color: #fff; z-index: 2; }
+
+/* Instruction pill, matching the reference eKYC layout. */
+.face-gate-instruction { margin-top: 14px; will-change: transform; padding: 13px 20px; border-radius: 999px; background: linear-gradient(93deg, #4338ca, #2563eb); color: #fff; font-size: 14px; font-weight: 700; letter-spacing: -.01em; text-align: center; box-shadow: 0 6px 18px rgba(37,99,235,.28); animation: face-gate-pill 3.4s cubic-bezier(.37,0,.63,1) infinite; transition: background .3s ease; }
+@keyframes face-gate-pill { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+.face-gate-instruction--flash { background: linear-gradient(93deg, #0f172a, #334155); animation: none; }
+
+.face-gate-progress { margin-top: 12px; height: 4px; border-radius: 999px; background: #ece7de; overflow: hidden; }
+.face-gate-progress span { display: block; height: 100%; background: var(--primary, #df1f3d); transition: width .2s ease; }
+
+.face-gate-hint { margin: 14px 0 0; font-size: 13px; line-height: 1.6; color: #545958; text-align: center; }
+.face-gate-alert { display: flex; align-items: flex-start; gap: 9px; margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: #fdf3f4; color: #93132b; font-size: 13px; line-height: 1.6; }
+
+.face-gate-facts { margin: 0 0 16px; padding: 0; list-style: none; display: grid; gap: 10px; }
+.face-gate-facts li { padding-left: 14px; position: relative; font-size: 13px; line-height: 1.6; color: #545958; }
+.face-gate-facts li::before { content: ""; position: absolute; left: 0; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--primary, #df1f3d); }
+.face-gate-facts strong { color: var(--foreground); }
+.face-gate-limit { margin: 0 0 18px; padding: 12px 14px; border-radius: 12px; background: #eef1ee; font-size: 12px; line-height: 1.65; color: #545958; }
+
+.face-gate-consent { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px; font-size: 13px; line-height: 1.6; color: #545958; cursor: pointer; }
+.face-gate-consent input { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--primary, #df1f3d); flex: none; }
+
+.face-gate-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 46px; margin-top: 16px; padding: 0 20px; border: 0; border-radius: 999px; background: var(--primary, #df1f3d); color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; transition: background .18s ease, transform .18s ease; }
+.face-gate-btn:hover:not(:disabled) { background: #b01729; transform: translateY(-1px); }
+.face-gate-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.face-gate-footnote { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 14px; font-size: 12px; }
+
+@media (max-width: 520px) {
+  .face-gate-card { padding: 22px; }
+}
+
+/* Камергүй компьютерийн QR handoff (2026-09-16, docs/FACE-HANDOFF-PLAN.md).
+   Хоёр дэлгэц: компьютер дээрх QR + тоо, утсан дээрх баталгаажуулалт. */
+.face-gate-btn-quiet { margin-top: 10px; background: var(--foreground, #17181b); }
+.face-gate-btn-quiet:hover:not(:disabled) { background: #000; }
+.face-gate-link { margin-top: 14px; border: 0; background: none; color: var(--a-info, #2f6fb5); font-size: 13px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+
+.face-handoff-qr { display: grid; place-items: center; margin-top: 18px; padding: 14px; border-radius: 16px; background: #fff; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+.face-handoff-qr img { display: block; width: 232px; height: 232px; max-width: 100%; image-rendering: pixelated; }
+.face-handoff-qr-loading { display: inline-flex; align-items: center; gap: 8px; min-height: 232px; font-size: 13px; color: var(--muted-foreground, #66676b); }
+.face-handoff-number-label { margin: 16px 0 0; font-size: 12px; font-weight: 700; letter-spacing: .04em; color: var(--muted-foreground, #66676b); }
+/* Хэмжээ нь зориудаар том: утасны дэлгэц дээрх сонголттой алдаагүй
+   харьцуулах ёстой (тоо тааруулах бол BLE ойролцооны шалгалтыг орлож байна). */
+.face-handoff-number { margin: 2px 0 0; font-family: var(--font-display); font-size: 56px; font-weight: 700; letter-spacing: .04em; line-height: 1; color: var(--foreground); }
+
+.face-approve { display: grid; place-items: center; min-height: 100svh; padding: 24px 16px; background: var(--muted, #f2f5f2); }
+.face-approve-card { width: 100%; max-width: 420px; padding: 26px; border-radius: 18px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.08); text-align: center; }
+.face-approve-card h1 { margin: 6px 0 12px; font-family: var(--font-display); font-size: 26px; font-weight: 620; letter-spacing: -.03em; }
+.face-approve-eyebrow { margin: 0; font-size: 10px; font-weight: 800; letter-spacing: .16em; color: var(--primary-text, #c81b34); }
+.face-approve-context { margin: 14px 0 18px; padding: 14px; border-radius: 14px; background: var(--muted, #f2f5f2); text-align: left; }
+.face-approve-device { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 14px; font-weight: 700; }
+.face-approve-context dl { display: grid; gap: 4px; margin: 10px 0 0; }
+.face-approve-context dl > div { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
+.face-approve-context dt { color: var(--muted-foreground, #66676b); }
+.face-approve-context dd { margin: 0; font-weight: 700; }
+.face-approve-warning { display: flex; align-items: flex-start; gap: 7px; margin: 12px 0 0; font-size: 12px; line-height: 1.5; color: #96610a; text-align: left; }
+.face-approve-question { margin: 0 0 12px; font-size: 14px; font-weight: 700; }
+.face-approve-numbers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+/* 56px доод өндөр: хуруугаар алдаагүй дарах хэмжээ (тоо буруу дарвал хүсэлт
+   бүхэлдээ хаагддаг тул санамсаргүй даралт үнэтэй). */
+.face-approve-number { min-height: 56px; border: 2px solid var(--border, #ced5cf); border-radius: 14px; background: #fff; font-family: var(--font-display); font-size: 26px; font-weight: 700; cursor: pointer; transition: border-color .15s ease, background .15s ease; }
+.face-approve-number:hover, .face-approve-number:focus-visible { border-color: var(--primary, #df1f3d); background: #fff5f6; }
+.face-approve-deny { margin-top: 18px; border: 0; background: none; font-size: 13px; font-weight: 700; color: var(--muted-foreground, #66676b); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.face-approve-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 46px; margin-top: 16px; padding: 0 22px; border-radius: 999px; background: var(--primary, #df1f3d); color: #fff !important; font-size: 14px; font-weight: 700; }
+.face-approve-ok { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px; font-weight: 700; color: #1a7347; }
+.face-approve-note { margin-top: 8px; font-size: 12px; color: var(--muted-foreground, #66676b); }
+
+/* Admin face gate: the decorative motion (scan sweep, pill bob, lock pulse)
+   respects a reduced-motion preference like everything else on the site. The
+   colour FLASH is deliberately exempt -- it is not decoration, it is the
+   liveness measurement itself, and disabling it would silently break the
+   security check. Its cadence (~420ms per colour, ~2.4Hz) sits below the 3Hz
+   threshold associated with photosensitive seizures. */
+@media (prefers-reduced-motion: reduce) {
+  .face-gate-scanline { animation: none; top: 50%; opacity: .5; }
+  .face-gate-instruction { animation: none; }
+  .face-gate-stage.is-locked { animation: none; }
+}
+
+/* Consent screen, adapted from the enterprise "enable secure verification"
+   sign-in pattern Tom referenced — branded strip, identity, security-model
+   diagram, action — rendered in SUGI's own palette rather than copied. */
+.face-gate-card--consent { position: relative; overflow: hidden; padding-top: 34px; }
+/* Brand strip: SUGI's sunrise gradient, standing in for the reference's
+   decorative banner without borrowing its artwork. */
+.face-gate-brandstrip { position: absolute; inset: 0 0 auto 0; height: 6px; background: linear-gradient(90deg, var(--primary, #df1f3d), #f0842f 55%, #f5c451); }
+.face-gate-brand { margin: 0; font-size: 10px; font-weight: 800; letter-spacing: .18em; color: var(--primary-text, #c11a35); }
+.face-gate-identity { margin: 6px 0 0; font-size: 13px; font-weight: 600; color: #545958; }
+.face-gate-title { margin: 16px 0 0; font-family: var(--font-display); font-size: 24px; font-weight: 620; letter-spacing: -.045em; color: var(--foreground); }
+.face-gate-lede { margin: 8px 0 20px; font-size: 13px; line-height: 1.7; color: #545958; }
+
+/* "password + face = access" — the security model at a glance. */
+.face-gate-diagram { display: flex; align-items: flex-start; justify-content: center; gap: 10px; margin: 0 0 20px; padding: 18px 12px; border-radius: 14px; background: #eef1ee; }
+.face-gate-diagram-item { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1; text-align: center; font-size: 11px; font-weight: 700; color: #545958; line-height: 1.35; }
+.face-gate-diagram-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; background: #fff; box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.08)); color: #545958; }
+.face-gate-diagram-icon--accent { color: var(--primary-text, #c11a35); box-shadow: 0 0 0 2px rgba(223,31,61,.16), var(--shadow-sm, 0 1px 3px rgba(0,0,0,.08)); }
+.face-gate-diagram-icon--ok { color: #1a7f4b; }
+.face-gate-diagram-op { align-self: center; margin-top: -14px; font-size: 17px; font-weight: 700; color: #939a94; }
+
+@media (max-width: 520px) {
+  .face-gate-diagram { gap: 6px; padding: 14px 8px; }
+  .face-gate-diagram-icon { width: 40px; height: 40px; }
+  .face-gate-diagram-item { font-size: 10px; }
+}
+
+/* Step indicator + tips. Added after live testing showed the gate gave no
+   sense of progress: a slow step looked identical to a frozen one, and a
+   failure gave no advice on what to change before retrying. */
+.face-gate-steps { display: flex; gap: 6px; margin: 14px 0 0; padding: 0; list-style: none; }
+.face-gate-step { display: flex; align-items: center; gap: 7px; flex: 1; padding: 8px 10px; border-radius: 10px; background: #eef1ee; font-size: 11px; font-weight: 700; line-height: 1.3; color: #939a94; transition: background .2s ease, color .2s ease; }
+.face-gate-step-num { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: #ece7de; color: #6a706b; font-size: 10px; flex: none; }
+.face-gate-step--active { background: #fdf3f4; color: var(--primary-text, #c11a35); }
+.face-gate-step--active .face-gate-step-num { background: var(--primary, #df1f3d); color: #fff; }
+.face-gate-step--done { color: #2c7650; }
+.face-gate-step--done .face-gate-step-num { background: #e7f2ec; color: #2c7650; }
+
+.face-gate-tips { margin-top: 16px; padding: 12px 14px; border-radius: 12px; background: #eef1ee; }
+.face-gate-tips summary { font-size: 12px; font-weight: 700; color: #545958; cursor: pointer; }
+.face-gate-tips ul { margin: 10px 0 0; padding-left: 18px; display: grid; gap: 7px; }
+.face-gate-tips li { font-size: 12px; line-height: 1.6; color: #545958; }
+.face-gate-tips-note { margin: 10px 0 0; font-size: 11px; line-height: 1.6; color: #6a706b; }
+
+@media (max-width: 520px) {
+  .face-gate-steps { flex-direction: column; }
+}
+
+
+/* Dark scanning card. The consent screen deliberately stays light -- it is a
+   document to read, not a camera view -- while the scanner itself is dark so
+   the face is the brightest thing on screen and the colour flash reads
+   cleanly against it. */
+.face-gate-card--scan { background: #0d1526; color: #e8eef7; box-shadow: 0 18px 50px rgba(0,0,0,.4); }
+.face-gate-card--scan h2 { color: #f4f8ff; }
+.face-gate-card--scan .face-gate-muted { color: #93a3bb; }
+.face-gate-card--scan .face-gate-head { color: #6fd0ff; }
+.face-gate-card--scan .face-gate-hint { color: #cdd9ea; font-size: 14px; font-weight: 600; }
+.face-gate-card--scan .face-gate-progress { background: rgba(255,255,255,.10); }
+.face-gate-card--scan .face-gate-step { background: rgba(255,255,255,.05); color: #7f8ea6; }
+.face-gate-card--scan .face-gate-step-num { background: rgba(255,255,255,.10); color: #93a3bb; }
+.face-gate-card--scan .face-gate-step--active { background: rgba(111,208,255,.12); color: #6fd0ff; }
+.face-gate-card--scan .face-gate-step--active .face-gate-step-num { background: #6fd0ff; color: #0d1526; }
+.face-gate-card--scan .face-gate-step--done { color: #64d99a; }
+.face-gate-card--scan .face-gate-step--done .face-gate-step-num { background: rgba(100,217,154,.18); color: #64d99a; }
+.face-gate-card--scan .face-gate-tips { background: rgba(255,255,255,.05); }
+.face-gate-card--scan .face-gate-tips summary { color: #cdd9ea; }
+.face-gate-card--scan .face-gate-tips li,
+.face-gate-card--scan .face-gate-tips-note { color: #93a3bb; }
+.face-gate-card--scan .face-gate-alert { background: rgba(255,90,110,.12); color: #ff9fae; }
+.face-gate-card--scan .face-gate-instruction { box-shadow: none; }
+.face-gate-shell--dark { background: #070c16; }
+
+/* Аргаа сонгох дэлгэц (2026-09-16, Tom-ийн лавлагааны дагуу: хоёр мөр —
+   энэ төхөөрөмж / утас). Сканнерын харанхуй картын дотор амьдардаг тул
+   өнгө нь тэндээсээ. */
+.face-gate-back { position: absolute; top: 18px; left: 18px; display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 10px; background: rgba(255,255,255,.07); color: #cdd9ea; cursor: pointer; transition: background .16s ease; }
+.face-gate-back:hover { background: rgba(255,255,255,.14); }
+.face-gate-card--scan { position: relative; }
+
+.face-choice-list { display: grid; gap: 12px; margin-top: 22px; }
+/* 64px доод өндөр: хулгана болон хуруунд ижил тав тухтай, мөн хоёр сонголт
+   ижил жинтэй харагдах ёстой — аль нэгийг нь "гол зам" мэт харуулахгүй. */
+.face-choice { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; min-height: 64px; padding: 14px 16px; border: 1px solid rgba(255,255,255,.14); border-radius: 14px; background: rgba(255,255,255,.04); color: #e8eef7; text-align: left; cursor: pointer; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
+.face-choice:hover, .face-choice:focus-visible { border-color: rgba(111,208,255,.55); background: rgba(111,208,255,.10); transform: translateY(-1px); }
+.face-choice svg:first-child { color: #6fd0ff; }
+.face-choice svg:last-child { color: #7f8ea6; }
+.face-choice strong { display: block; font-size: 14px; font-weight: 700; }
+.face-choice small { display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: #93a3bb; }
+
+.face-choice-tips { list-style: disc; margin: 20px 0 0; padding: 14px 16px 14px 32px; border-radius: 14px; background: rgba(255,255,255,.04); color: #93a3bb; font-size: 12px; line-height: 1.7; }
+.face-choice-tips li { margin: 0; }
+
+/* Харанхуй картан дээрх handoff-ийн бичвэрүүд (2026-09-16 screenshot-оор
+   баригдсан: тоо нь бараан дэвсгэр дээр бараан бичигдэж уншигдахгүй байв —
+   тэр тоо бол баталгаажуулалтын ГОЛ элемент, хамгийн тод байх ёстой). */
+.face-gate-card--scan .face-handoff-number { color: #f4f8ff; }
+.face-gate-card--scan .face-handoff-number-label { color: #93a3bb; }
+.face-gate-card--scan .face-handoff-qr { background: #fff; box-shadow: none; }
+.face-gate-card--scan .face-handoff-qr-loading { color: #93a3bb; }
+.face-gate-card--scan .face-gate-link { color: #6fd0ff; }
+/* Буцах сум гарчигтай давхцахгүй байх зай. */
+.face-gate-head--with-back { padding-left: 44px; }
+
+@media (max-width: 520px) {
+  .face-choice { grid-template-columns: auto 1fr; }
+  .face-choice svg:last-child { display: none; }
+}
+
+
+/* Entrance + state transitions. Everything below animates transform/opacity
+   only, which the compositor can handle without relayout -- important next to
+   a live video, where a layout-animating property stutters visibly. */
+@keyframes face-gate-card-in {
+  from { opacity: 0; transform: translateY(12px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+.face-gate-hint { transition: color .3s ease; }
+.face-gate-step { transition: background .35s cubic-bezier(.22,.61,.36,1), color .35s ease; }
+.face-gate-step-num { transition: background .35s cubic-bezier(.22,.61,.36,1), color .35s ease; }
+.face-gate-video { transition: opacity .4s ease; }
+.face-gate-ok { animation: face-gate-pop .5s cubic-bezier(.34,1.56,.64,1) both; }
+@keyframes face-gate-pop {
+  from { opacity: 0; transform: scale(.6); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .face-gate-card, .face-gate-ok { animation: none; }
+  .face-gate-ring-value { transition: none; }
+}
+
+/* ===========================================================================
+ * ADMIN DESIGN SYSTEM (2026-09-08) — reference-driven rebuild
+ *
+ * Tom supplied a dashboard reference (84abf4184403667.6551a930b3b2b.jpg, a
+ * "subcom" e-commerce admin by wily.agency) and asked for the admin panel to
+ * match it: neutral light canvas, near-black rail, pastel-tinted KPI row,
+ * outlined white content cards, pill controls, and motion throughout.
+ *
+ * Every color the admin renders now comes from one of these tokens, so the
+ * whole panel flips to dark by swapping the token block — no per-component
+ * dark: variants, and no risk of one panel staying light while the shell
+ * goes dark. Scoped to .admin-shell so the storefront (which has its own
+ * warm cream/vermilion identity) is untouched by any of it.
+ * ======================================================================== */
+.admin-shell,
+html[data-admin-theme] {
+  /* Surfaces */
+  --a-canvas: #ffffff;
+  --a-card: #ffffff;
+  --a-card-raised: #fafbfc;
+  --a-soft: #f5f6f8;
+  --a-soft-hover: #eceef1;
+  --a-border: #ebecef;
+  --a-border-strong: #d9dbe0;
+  /* Rail (the near-black sidebar) */
+  --a-rail: #111114;
+  --a-rail-active: #26262b;
+  --a-rail-text: #9d9ea4;
+  --a-rail-text-strong: #ffffff;
+  --a-rail-border: rgba(255, 255, 255, .08);
+  /* Type */
+  /* 2026-09-16 (WCAG AA): --a-faint нь #9a9ca2 байхдаа цагаан дэвсгэр дээр
+     ЗӨВХӨН 2.74:1 байсан — энэ нь жижиг үсгийн шаардлага (4.5:1) төдийгүй том
+     үсгийнхийг (3:1) ч хангадаггүй. Гэтэл энэ токен нь admin даяарх жижиг
+     UPPERCASE шошгуудад ("ROLE MANAGEMENT", "USER DETAIL", KPI-ийн тайлбар)
+     хэрэглэгддэг. --a-faint 4.94:1 (зөөлөн дэвсгэр дээр 4.65:1) болов.
+     --a-muted мөн бага зэрэг гүнзгийрч (өмнө 4.54:1, одоо 6.18:1) "faint-ээс
+     тод" гэсэн шатлал хэвээр үлдэв. Хэмжилт: WCAG 2.x харьцааны томьёо. */
+  --a-text: #16181c;
+  --a-text-soft: #4c4e54;
+  --a-muted: #5f6169;
+  --a-faint: #6e7078;
+  /* Inverse (the reference's black pill button) */
+  --a-invert-bg: #16181c;
+  --a-invert-bg-hover: #2b2d33;
+  --a-invert-text: #ffffff;
+  /* Semantics */
+  /* 2026-09-16 (WCAG AA): статусын өнгөнүүд жижиг үсэгт (10–12px "Ноорог",
+     "Нийтлэгдсэн" шошго) хэрэглэгддэг атлаа --a-pos 4.36:1 / --a-warn 4.00:1
+     (зөөлөн дэвсгэр дээр 3.84 / 3.63) байв. Өнгөний ая хэвээр, зөвхөн гүн нь
+     нэмэгдэв: pos 5.85:1, warn 5.24:1 (зөөлөн дэвсгэр дээр 5.16 / 4.76). */
+  --a-pos: #1a7347;
+  --a-pos-soft: #e6f4ec;
+  --a-neg: #cf2440;
+  /* --a-neg дээр бичих үсгийн өнгө: гэрэл горимд --a-neg гүн улаан тул цагаан
+     болно; харанхуй горимд --a-neg нь цайвар ягаан (#ff6b81) бөгөөд түүн дээр
+     цагаан бичвэл 2.74:1 болдог (2026-09-16-нд мэдэгдлийн тоолуур дээр
+     хэмжсэн) тул гүн өнгө болно. */
+  --a-neg-on: #ffffff;
+  --a-neg-soft: #fdecef;
+  --a-warn: #96610a;
+  --a-warn-soft: #fdf3e0;
+  --a-info: #2f6fb5;
+  --a-info-soft: #e9f1fb;
+  /* Vendor brand accents (measurement cards, integration icon tiles) */
+  --a-brand-ga: #c2551a;
+  --a-brand-ga-soft: #fbeee5;
+  --a-brand-meta: #1b66d8;
+  --a-brand-meta-soft: #e7effc;
+  --a-accent-violet: #6d4ab5;
+  --a-accent-violet-soft: #efeafb;
+  /* Chart */
+  --a-chart-1: #1c7a4c;
+  --a-chart-2: #4fc262;
+  --a-chart-grid: #eceef1;
+  --a-chart-band: #e9f1fb;
+  /* KPI tints (the reference's five pastel cards, left to right) */
+  --a-kpi-1: #fdf2e8;
+  --a-kpi-2: #edf7f1;
+  --a-kpi-3: #e9f1fb;
+  --a-kpi-4: #f0f8ea;
+  --a-kpi-5: #fdeef1;
+  --a-btn-dark: #16181c;
+  --a-btn-dark-hover: #2b2d33;
+  --a-surface-dark: #1f2126;
+  --a-shadow-card: 0 1px 2px rgba(16, 18, 22, .04);
+  --a-shadow-pop: 0 18px 44px rgba(16, 18, 22, .14);
+  color-scheme: light;
+}
+
+html[data-admin-theme="dark"],
+html[data-admin-theme="dark"] .admin-shell {
+  --a-canvas: #0d0e11;
+  --a-card: #16181d;
+  --a-card-raised: #1b1e24;
+  --a-soft: #1e2128;
+  --a-soft-hover: #262a32;
+  --a-border: #262930;
+  --a-border-strong: #333740;
+  --a-rail: #08090b;
+  --a-rail-active: #23262d;
+  --a-rail-text: #8e9198;
+  --a-rail-text-strong: #ffffff;
+  --a-rail-border: rgba(255, 255, 255, .07);
+  --a-text: #eef0f3;
+  --a-text-soft: #c3c6cc;
+  --a-muted: #9296a0;
+  /* Харанхуй горимд ч 4.00:1 (жижиг үсэгт хүрэхгүй) байсныг 5.48:1 болгов. */
+  --a-faint: #8b8f98;
+  --a-invert-bg: #eef0f3;
+  --a-invert-bg-hover: #ffffff;
+  --a-invert-text: #16181c;
+  --a-pos: #43c07f;
+  --a-pos-soft: rgba(67, 192, 127, .14);
+  --a-neg: #ff6b81;
+  --a-neg-on: #3a0b14;
+  --a-neg-soft: rgba(255, 107, 129, .14);
+  --a-warn: #e0a63c;
+  --a-warn-soft: rgba(224, 166, 60, .14);
+  --a-info: #6aa8e8;
+  --a-info-soft: rgba(106, 168, 232, .14);
+  /* Vendor brand accents (measurement cards, integration icon tiles) */
+  --a-brand-ga: #f0914f;
+  --a-brand-ga-soft: rgba(240, 145, 79, .14);
+  --a-brand-meta: #6fa6f5;
+  --a-brand-meta-soft: rgba(111, 166, 245, .14);
+  --a-accent-violet: #a88ce8;
+  --a-accent-violet-soft: rgba(168, 140, 232, .14);
+  --a-chart-1: #2fa96a;
+  --a-chart-2: #6fdc85;
+  --a-chart-grid: #23262c;
+  --a-chart-band: rgba(106, 168, 232, .12);
+  --a-kpi-1: #241d16;
+  --a-kpi-2: #14241b;
+  --a-kpi-3: #151f2c;
+  --a-kpi-4: #1a2417;
+  --a-kpi-5: #271820;
+  --a-btn-dark: #2c3038;
+  --a-btn-dark-hover: #383d47;
+  --a-surface-dark: #22262e;
+  --a-shadow-card: 0 1px 2px rgba(0, 0, 0, .5);
+  --a-shadow-pop: 0 18px 44px rgba(0, 0, 0, .6);
+  color-scheme: dark;
+
+  /* The shadcn/Tailwind theme tokens every ui/* primitive reads. Dropdowns,
+     dialogs, sheets, popovers, selects, tooltips and the command palette all
+     render into <body> through a Radix portal, so scoping these to
+     .admin-shell would miss every one of them -- they'd stay cream on a dark
+     panel. Only remapped while an admin page has stamped this attribute on
+     <html>; the storefront never sees it. */
+  --background: #0d0e11;
+  --foreground: #eef0f3;
+  --card: #16181d;
+  --card-foreground: #eef0f3;
+  --popover: #16181d;
+  --popover-foreground: #eef0f3;
+  --secondary: #1e2128;
+  --secondary-foreground: #eef0f3;
+  --muted: #1e2128;
+  --muted-foreground: #9296a0;
+  --accent: #262a32;
+  --accent-foreground: #eef0f3;
+  --border: #262930;
+  --input: #333740;
+  --ring: #6aa8e8;
+}
+
+/* The admin panel owns the whole viewport, so the theme has to reach the
+   document background too — otherwise overscroll and the area under a short
+   page flash the storefront's cream. */
+html[data-admin-theme="dark"], html[data-admin-theme="dark"] body { background: #0d0e11; }
+
+.admin-shell { background: var(--a-canvas); color: var(--a-text); }
+
+/* Everything below is wrapped in @layer components on purpose. Unlayered
+   rules beat ALL Tailwind v4 utilities (utilities live in their own layer),
+   which silently broke `lg:hidden` on .admin-icon-btn -- the mobile menu
+   button stayed visible on desktop because this file's `display: grid` won.
+   Same cascade-layer trap as the `a { color: inherit }` bug noted in
+   docs/PROJECT-GUIDE.md. Inside @layer components, a utility on the element always wins,
+   which is the behaviour every one of these classes actually wants. */
+@layer components {
+
+/* --- Motion ---------------------------------------------------------------
+   Tom asked for animation throughout ("animation edr bugd"). Everything here
+   is short (<= 520ms), transform/opacity-only (compositor-friendly), and
+   fully disabled under prefers-reduced-motion at the bottom of this block. */
+@keyframes admin-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes admin-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes admin-pop { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: none; } }
+@keyframes admin-slide-right { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+@keyframes admin-sheen { from { transform: translateX(-120%); } to { transform: translateX(220%); } }
+@keyframes admin-ping-soft { 0% { transform: scale(1); opacity: .85; } 70%, 100% { transform: scale(2.6); opacity: 0; } }
+
+.admin-rise { animation: admin-rise .52s var(--ease-out) both; }
+.admin-fade { animation: admin-fade .4s var(--ease-out) both; }
+.admin-pop { animation: admin-pop .38s var(--ease-out) both; }
+.admin-slide-right { animation: admin-slide-right .34s var(--ease-out) both; }
+/* Stagger: children animate in sequence rather than all at once. Capped at
+   10 so a long list never leaves the last rows visibly late. */
+.admin-stagger > * { animation: admin-rise .5s var(--ease-out) both; }
+.admin-stagger > *:nth-child(1) { animation-delay: .02s; }
+.admin-stagger > *:nth-child(2) { animation-delay: .07s; }
+.admin-stagger > *:nth-child(3) { animation-delay: .12s; }
+.admin-stagger > *:nth-child(4) { animation-delay: .17s; }
+.admin-stagger > *:nth-child(5) { animation-delay: .22s; }
+.admin-stagger > *:nth-child(6) { animation-delay: .27s; }
+.admin-stagger > *:nth-child(7) { animation-delay: .32s; }
+.admin-stagger > *:nth-child(8) { animation-delay: .37s; }
+.admin-stagger > *:nth-child(9) { animation-delay: .42s; }
+.admin-stagger > *:nth-child(n + 10) { animation-delay: .47s; }
+
+/* Утсан дээр admin-ий маягт бүхэл хуудсыг "жижигрүүлж" байсныг зассан
+   (2026-09-16, E2E-ийн явцад хэмжсэн). Бүтээгдэхүүний маягтыг нээхэд layout
+   viewport 412px-ээс 856px болж, хөтөч бүх хуудсыг хоёр дахин жижигрүүлж
+   харуулдаг байв — үсэг уншигдахгүй, "Бүтээгдэхүүн үүсгэх" товч хуруунд
+   таарахгүй. Шалтгаан: grid/flex-ийн доторх элементийн анхдагч
+   `min-width: auto` нь агуулгынхаа доод өргөнөөс жижгэрэхийг хориглодог ба
+   <select>-ийн доод өргөн нь хамгийн урт сонголтынхоо (жишээ нь урт ангиллын
+   нэр) бүтэн өргөн, <textarea>-д мөн адил. Нэг нь ч багтахгүй бол бүх хуудас
+   өргөсдөг. min-width: 0 нь зөвхөн ЖИЖГЭРЭХ эрх өгнө — харагдацыг өөрчлөхгүй. */
+.admin-shell label,
+.admin-shell input,
+.admin-shell select,
+.admin-shell textarea { min-width: 0; max-width: 100%; }
+
+/* Card lift on hover — the reference's cards are static, but Tom explicitly
+   asked for motion; this is the restrained version (2px, no scale). */
+.admin-card {
+  background: var(--a-card);
+  border: 1px solid var(--a-border);
+  border-radius: 16px;
+  box-shadow: var(--a-shadow-card);
+  transition: transform .28s var(--ease-out), box-shadow .28s var(--ease-out), border-color .28s var(--ease-out);
+}
+.admin-card-hover:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(16, 18, 22, .09); border-color: var(--a-border-strong); }
+html[data-admin-theme="dark"] .admin-card-hover:hover { box-shadow: 0 12px 26px rgba(0, 0, 0, .55); }
+
+/* KPI card: tinted, borderless, with a slow sheen sweep on hover. */
+.admin-kpi {
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+  transition: transform .3s var(--ease-out), box-shadow .3s var(--ease-out);
+}
+.admin-kpi:hover { transform: translateY(-3px); box-shadow: 0 14px 30px rgba(16, 18, 22, .1); }
+html[data-admin-theme="dark"] .admin-kpi:hover { box-shadow: 0 14px 30px rgba(0, 0, 0, .5); }
+.admin-kpi::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 42%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .55), transparent);
+  transform: translateX(-120%);
+  pointer-events: none;
+}
+html[data-admin-theme="dark"] .admin-kpi::after { background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .07), transparent); }
+.admin-kpi:hover::after { animation: admin-sheen .9s var(--ease-out); }
+
+/* Rail nav item: the active pill slides its icon, inactive items nudge. */
+.admin-nav-item { transition: background-color .22s var(--ease-out), color .22s var(--ease-out), transform .22s var(--ease-out); }
+.admin-nav-item:hover { transform: translateX(2px); }
+.admin-nav-item svg { transition: transform .3s var(--ease-out); }
+.admin-nav-item:hover svg { transform: scale(1.12); }
+
+/* Circular top-bar buttons (the reference's translate/moon/bell row). */
+.admin-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  background: var(--a-card);
+  border: 1px solid var(--a-border);
+  color: var(--a-text-soft);
+  transition: background-color .22s var(--ease-out), color .22s var(--ease-out), transform .22s var(--ease-out), border-color .22s var(--ease-out);
+}
+.admin-icon-btn:hover { background: var(--a-soft-hover); color: var(--a-text); transform: translateY(-1px); }
+.admin-icon-btn:active { transform: scale(.94); }
+
+/* Notification dot's outward pulse — a real signal (count > 0), never
+   decorative: it only renders when there is something to look at. */
+.admin-ping { position: absolute; inset: 0; border-radius: 999px; background: var(--a-neg); animation: admin-ping-soft 2.2s var(--ease-out) infinite; }
+
+/* Number roll-in used by the KPI values (see AdminCountUp.tsx — the digits
+   themselves are interpolated in JS; this only handles the entrance). */
+.admin-metric { animation: admin-rise .55s var(--ease-out) both; }
+
+.admin-scroll-none { scrollbar-width: none; }
+.admin-scroll-none::-webkit-scrollbar { display: none; }
+
+/* Recharts inherits page fonts but not our tokens — these selectors are the
+   only way to theme its DOM without forking the library. */
+.admin-shell .recharts-cartesian-axis-tick text { fill: var(--a-faint); }
+.admin-shell .recharts-tooltip-wrapper { outline: none; }
+
+/* TinyMCE paints its editable iframe white from an inline/skin rule that our
+   injected dark skin doesn't reach -- the last white slab the dark-mode audit
+   found (Шинэ мэдээ). The editor's own content_style handles the text inside;
+   this is the frame around it. */
+html[data-admin-theme="dark"] .tox-edit-area__iframe,
+html[data-admin-theme="dark"] .tox .tox-edit-area__iframe { background-color: #16181d !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-rise, .admin-fade, .admin-pop, .admin-slide-right, .admin-metric,
+  .admin-stagger > *, .admin-kpi:hover::after, .admin-ping { animation: none !important; }
+  .admin-card, .admin-kpi, .admin-nav-item, .admin-icon-btn, .admin-nav-item svg { transition: none !important; }
+  .admin-card-hover:hover, .admin-kpi:hover, .admin-nav-item:hover, .admin-icon-btn:hover { transform: none !important; }
+}
+
+}
+
+/* ---------------------------------------------------------------------------
+   Admin face gate — Face ID-style coverage ring (2026-09-13).
+
+   Eight arc segments around the scanner, one per head direction, plus the
+   centre dot. A segment is dim until the head has been held in that
+   direction, lights gold while it is the direction currently being held,
+   and settles to blue once covered. The progress ring underneath is kept for
+   the login flow, which has no directions to cover.
+--------------------------------------------------------------------------- */
+.face-gate-sectors { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.face-gate-sector { fill: none; stroke: rgba(255,255,255,.14); stroke-width: 4; stroke-linecap: round; transition: stroke .35s ease, filter .35s ease, stroke-width .25s ease; }
+.face-gate-sector--current { stroke: #ffd65c; stroke-width: 5; filter: drop-shadow(0 0 6px rgba(255,214,92,.65)); }
+.face-gate-sector--covered { stroke: #6fd0ff; filter: drop-shadow(0 0 5px rgba(111,208,255,.55)); }
+.face-gate-sector--target { stroke: rgba(255,214,92,.45); animation: face-gate-sector-pulse 1.1s ease-in-out infinite; }
+@keyframes face-gate-sector-pulse { 0%, 100% { stroke-opacity: .45; } 50% { stroke-opacity: 1; } }
+
+/* Centre marker: hollow until the frontal reference is captured. */
+.face-gate-center { position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); pointer-events: none; transition: background .3s ease, border-color .3s ease, transform .3s ease; }
+.face-gate-center--done { background: #6fd0ff; border-color: #6fd0ff; box-shadow: 0 0 10px rgba(111,208,255,.7); transform: scale(.7); }
+
+/* Direction arrow that points at the next uncovered sector -- the same cue
+   Face ID gives with its text, made visual so it reads on a phone held at
+   arm's length. */
+.face-gate-arrow { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; transition: transform .25s ease; }
+.face-gate-arrow::after { content: ""; position: absolute; left: -7px; top: calc(-50% - 7px); width: 14px; height: 14px; border-right: 3px solid #ffd65c; border-bottom: 3px solid #ffd65c; transform: rotate(-45deg); filter: drop-shadow(0 0 4px rgba(255,214,92,.7)); animation: face-gate-arrow-nudge .9s ease-in-out infinite; }
+@keyframes face-gate-arrow-nudge { 0%, 100% { translate: 0 0; } 50% { translate: 4px 0; } }
+
+/* Small live counter under the ring during enrolment ("5/9"). */
+.face-gate-count { margin: 10px 0 0; text-align: center; font-size: 12px; font-weight: 700; letter-spacing: .08em; color: rgba(255,255,255,.7); }
+
+/* Processing snapshots after the ring completes: the video dims and a
+   determinate bar shows descriptors being computed one by one. */
+.face-gate-processing { position: absolute; inset: 7%; border-radius: 50%; display: grid; place-items: center; background: rgba(13,27,51,.78); color: #fff; z-index: 2; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-align: center; padding: 20px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .face-gate-sector--target { animation: none; stroke-opacity: .8; }
+  .face-gate-arrow::after { animation: none; }
+}

@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { Suspense, useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { ArrowUpRight, Bell } from "lucide-react";
 import { Link } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import InstallGuide from "@/components/InstallGuide";
+import { lazyRetry } from "@/lib/lazyRetry";
+
+// 2026-09-21: on demand, same reason as in InstallAppButton.tsx.
+const InstallGuide = lazyRetry(() => import("@/components/InstallGuide"));
 import { useT } from "@/hooks/useLocale";
 import { currentPushSubscription, pushSupport, subscribeToPush, type PushSupport } from "@/lib/push";
 import { trpc } from "@/lib/trpc";
@@ -135,7 +138,7 @@ export default function NotificationOptIn({ variant = "footer", onAction }: { va
               <DialogDescription>
                 {t("iPhone, iPad дээр мэдэгдэл авахын тулд эхлээд сайтыг нүүр дэлгэцэд нэмэх шаардлагатай — Safari таб дотроос мэдэгдэл ирдэггүй. Нэмсэний дараа тэр дүрснээс нээгээд дахин оролдоно уу.")}
               </DialogDescription>
-              <InstallGuide platform="ios" />
+              <Suspense fallback={null}><InstallGuide platform="ios" /></Suspense>
             </>
           )}
           {dialog === "denied" && (
