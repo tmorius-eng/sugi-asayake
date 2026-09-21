@@ -43,12 +43,13 @@ export const ENV = {
   // notification fallback" behaviour.
   brevoApiKey: process.env.BREVO_API_KEY ?? "",
   brevoSenderEmail: process.env.BREVO_SENDER_EMAIL ?? "",
-  brevoSenderName: process.env.BREVO_SENDER_NAME ?? "SUGI ASAYAKE",
+  // Хоосон = /admin-ийн дэлгүүрийн нэрийг ашиглана (_core/notification.ts).
+  brevoSenderName: process.env.BREVO_SENDER_NAME ?? "",
   // Shown as the SMS "from" — an alphanumeric sender name (max 11 chars) on
   // most routes. Brevo may silently substitute a shared numeric sender for
   // countries that don't support alpha senders, so don't assume this string
   // reaches the recipient's phone unchanged.
-  brevoSmsSender: process.env.BREVO_SMS_SENDER ?? "SUGI",
+  brevoSmsSender: process.env.BREVO_SMS_SENDER ?? "",
 
   // Admin overhaul (2026-09-08, Phase J): sendAccountSms already technically
   // works the moment brevoApiKey above is set (same Brevo account covers
@@ -110,7 +111,9 @@ export const ENV = {
   // Empty = the profile toggle is hidden and nothing is sent.
   vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? "",
   vapidPrivateKey: process.env.VAPID_PRIVATE_KEY ?? "",
-  vapidSubject: process.env.VAPID_SUBJECT || "mailto:t.morius@gmail.com",
+  // Web Push-ийн стандарт шаарддаг холбоо барих хаяг. Эзэн солигдоход
+  // .env-ээс өгнө; өгөөгүй бол OWNER_EMAIL (энэ хоёр хоёулаа эзний хаяг).
+  vapidSubject: process.env.VAPID_SUBJECT || `mailto:${process.env.OWNER_EMAIL || "owner@example.com"}`,
   verifyMnApiKey: process.env.VERIFY_MN_API_KEY ?? "",
 
   // Audit 2026-09-09 (R7): the site's own public origin, e.g.

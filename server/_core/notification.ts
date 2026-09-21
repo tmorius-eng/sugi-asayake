@@ -11,6 +11,25 @@ const BREVO_TIMEOUT_MS = 15_000;
  * documented for this project). Shared by `notifyOwner` and `sendAccountEmail`
  * below. Returns true if an email was actually sent, false if it only logged.
  */
+/**
+ * Имэйлийн илгээгчийн нэр. `BREVO_SENDER_NAME` тавигдсан бол түүнийг, үгүй бол
+ * /admin-ийн дэлгүүрийн нэрийг (2026-09-20: шинэ эзэн нэрээ сольход имэйл ч
+ * дагаж өөрчлөгдөх ёстой — өмнө нь кодод хатуу бичигдсэн байв).
+ *
+ * `db.ts` ЭНЭ модулийг import хийдэг тул энд статик import бичвэл тойрог
+ * хамаарал үүснэ — динамик import нь түүнээс зайлсхийнэ (утга нь цаанаа
+ * кэштэй тул имэйл бүрт DB уншихгүй).
+ */
+async function senderName(): Promise<string> {
+  if (ENV.brevoSenderName) return ENV.brevoSenderName;
+  try {
+    const { getSiteName } = await import("../db");
+    return await getSiteName();
+  } catch {
+    return "";
+  }
+}
+
 async function deliverEmail(input: { to: string; subject: string; content: string }): Promise<boolean> {
   if (!ENV.brevoApiKey || !ENV.brevoSenderEmail) {
     console.log(`[Email] To: ${input.to}\n${input.subject}\n${input.content}`);
@@ -27,7 +46,7 @@ async function deliverEmail(input: { to: string; subject: string; content: strin
         Accept: "application/json",
       },
       body: JSON.stringify({
-        sender: { email: ENV.brevoSenderEmail, name: ENV.brevoSenderName },
+        sender: { email: ENV.brevoSenderEmail, name: await senderName() },
         to: [{ email: input.to }],
         subject: input.subject,
         textContent: input.content,

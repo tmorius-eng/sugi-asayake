@@ -694,9 +694,9 @@ export const UI_STRINGS: Record<string, { en: string; ja: string }> = {
   "Хүргэлт хэдэн хоног болох вэ?": { en: "How long does delivery take?", ja: "配送にはどのくらいかかりますか？" },
   "Улаанбаатар доторх хүргэлт ихэвчлэн 24–48 цагийн дотор хийгдэнэ. Салбараас өөрөө авах бол захиалга баталгаажмагц бэлэн болно.": { en: "Delivery within Ulaanbaatar usually takes 24–48 hours. Store pickup is ready as soon as the order is confirmed.", ja: "ウランバートル市内の配送は通常24〜48時間です。店舗受取は注文確定後すぐにご用意できます。" },
   "Захиалгаа хэрхэн буцаах вэ?": { en: "How do I return an order?", ja: "注文を返品するには？" },
-  "Хүлээн авсан бараанд гэмтэл, зөрүү илэрвэл савлагаа, баримтын хамт 9450-9911 дугаарт мэдэгдэнэ үү. Дэлгэрэнгүй нөхцөл Нүүр хуудасны \"Буцаалт\" хэсэгт бий.": { en: "If an item arrives damaged or differs from your order, keep the packaging and receipt and call 9450-9911. Full terms are under \"Returns\" on the homepage.", ja: "届いた商品に破損や相違があった場合は、包装と領収書を保管のうえ 9450-9911 までご連絡ください。詳しい条件はホームページの「返品」をご覧ください。" },
+  "Хүлээн авсан бараанд гэмтэл, зөрүү илэрвэл савлагаа, баримтын хамт дэлгүүрийн утсаар мэдэгдэнэ үү. Дэлгэрэнгүй нөхцөл \"Буцаалт, солилцоо\" хуудсанд бий.": { en: "If an item arrives damaged or differs from your order, keep the packaging and receipt and call the shop. Full terms are on the \"Returns and exchanges\" page.", ja: "届いた商品に破損や相違があった場合は、包装と領収書を保管のうえ店舗までお電話ください。詳しい条件は「返品・交換」ページをご覧ください。" },
   "Төлбөрийн ямар сонголт байдаг вэ?": { en: "Which payment options are there?", ja: "支払い方法は何がありますか？" },
-  "Бэлэн мөнгө (хүргэлт/салбарт хүлээн авахдаа), мөн QPay (merchant тохиргоо дуусмагц идэвхжинэ).": { en: "Cash on delivery or at the store, and QPay once the merchant setup is complete.", ja: "配達時または店舗での現金払い、および加盟店設定完了後のQPayです。" },
+  "Бэлэн мөнгө (хүргэлт/салбарт хүлээн авахдаа). Онлайн төлбөрийн боломжит сонголтуудыг захиалгын хуудсанд харуулна.": { en: "Cash on delivery or at the store. Any online payment options available are shown at checkout.", ja: "配達時または店舗での現金払い。利用可能なオンライン決済は購入手続きの画面に表示されます。" },
   "Миний мэдээллийг хэрхэн хамгаалдаг вэ?": { en: "How is my data protected?", ja: "個人情報はどのように保護されますか？" },
   "Төлбөрийн картын мэдээллийг сайт хадгалдаггүй. Дэлгэрэнгүй Нүүр хуудасны \"Хувийн нууцлал\" хэсэгт бий.": { en: "The site never stores card details. Full details are under \"Privacy\" on the homepage.", ja: "当サイトはカード情報を保存しません。詳しくはホームページの「プライバシー」をご覧ください。" },
 
@@ -926,7 +926,7 @@ export const UI_STRINGS: Record<string, { en: string; ja: string }> = {
   "Бүртгэлгүйгээр захиалж болох уу?": { en: "Can I order without an account?", ja: "アカウントなしで注文できますか？" },
   "Болно. Нэр, утасны дугаар л хангалттай. Бүртгүүлбэл захиалгын түүх, хүслийн жагсаалт, гишүүнчлэлийн хөнгөлөлт нэмэгдэнэ.": { en: "Yes — a name and phone number are enough. An account adds order history, a wishlist and membership discounts.", ja: "はい、お名前と電話番号だけでご注文いただけます。アカウントを作成すると、注文履歴・お気に入り・会員割引が利用できます。" },
   "Бараа жинхэнэ Японых мөн үү?": { en: "Are the products genuine Japanese goods?", ja: "商品は本物の日本製ですか？" },
-  "Тийм. SUGI ASAYAKE нь SUGI Drug Store Japan-ийн охин компани бөгөөд бүх бараа албан ёсны эрхтэйгээр Японоос ирдэг.": { en: "Yes. SUGI ASAYAKE is a subsidiary of SUGI Drug Store Japan, and every product is imported from Japan under official licence.", ja: "はい。SUGI ASAYAKEはSUGIドラッグストアジャパンの子会社で、すべての商品は正式なライセンスのもとで日本から輸入しています。" },
+  "Тийм. Бүх бараа албан ёсны эрхтэйгээр Японоос ирдэг.": { en: "Yes. Every product is imported from Japan under official licence.", ja: "はい。すべての商品は正式なライセンスのもとで日本から輸入しています。" },
   // -- product page jump links (2026-09-14) --------------------------------
   "Хуудасны хэсгүүд": { en: "Sections on this page", ja: "このページのセクション" },
   "{n} сэтгэгдэл": { en: "{n} review(s)", ja: "レビュー{n}件" },

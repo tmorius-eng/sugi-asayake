@@ -142,7 +142,7 @@ export function screenTextLexically(text: string): ModerationVerdict {
 // AI layer (optional, ANTHROPIC_API_KEY).
 // ---------------------------------------------------------------------------
 
-const MODERATION_SYSTEM = `You are the content moderator for SUGI ASAYAKE, a Japanese skincare and household-goods shop in Ulaanbaatar, Mongolia. Customers write product reviews in Mongolian (Cyrillic or Latin transliteration), Russian, English, Chinese, Japanese, Korean or a mix.
+const MODERATION_SYSTEM = `You are the content moderator for an online shop in Ulaanbaatar, Mongolia. Customers write product reviews in Mongolian (Cyrillic or Latin transliteration), Russian, English, Chinese, Japanese, Korean or a mix.
 
 Decide whether ONE review may be published. Reject when it contains, in any language or transliteration:
 - profanity or obscenity, including disguised spellings (h-u-y, f*ck, п и з д а)

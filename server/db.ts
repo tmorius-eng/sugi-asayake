@@ -22,6 +22,7 @@ import { INTEGRATION_META, INTEGRATION_PROVIDERS, mergeIntegrationSettings, vali
 import type { NotificationEventType, NotificationPayloads } from "../shared/notification-events";
 import { sqlQueryLogger } from "./_core/sqlQueryLog";
 import { sanitizePostContent } from "./_core/sanitizeHtml";
+import { getSiteTextSlot, type SiteTextSlotKey } from "../shared/site-text";
 import { getInventoryReservationFailure, shouldRestoreStock } from "./commerce-lifecycle";
 import { getLoyaltyTier, getNextLoyaltyTier, LOYALTY_TIERS, type LoyaltyTier } from "../shared/loyalty";
 import { LOW_STOCK_THRESHOLD as SHARED_LOW_STOCK_THRESHOLD } from "../shared/catalog-filter";
@@ -4611,6 +4612,29 @@ export async function getSiteText() {
       .from(siteText)
       .orderBy(asc(siteText.slotKey));
   });
+}
+
+/**
+ * Нэг site_text slot-ийн утга: admin хадгалсан бол түүнийг, үгүй бол кодын
+ * `fallbackValue` (`getStoreSettingValue`-тэй яг ижил гэрээ).
+ *
+ * 2026-09-20: сайтыг ӨӨР эзэнд зарах бэлтгэл. Өмнө нь "SUGI ASAYAKE" гэдэг нэр
+ * баримт PDF, бэлгийн картын имэйл, төлбөрийн нэхэмжлэхийн тайлбар, Excel/PDF
+ * тайлан, Google Merchant feed зэрэгт ХАТУУ бичигдсэн байсан тул шинэ эзэн
+ * /admin-аас нэрээ сольсон ч эдгээр нь хуучин нэрээр гардаг байв. Бүгд одоо
+ * үүгээр уншина.
+ */
+export async function getSiteTextValue(key: SiteTextSlotKey): Promise<string> {
+  const fallback = getSiteTextSlot(key).fallbackValue;
+  const db = await getDb();
+  if (!db) return fallback;
+  const row = await db.select({ textValue: siteText.textValue }).from(siteText).where(eq(siteText.slotKey, key)).limit(1);
+  return row[0]?.textValue?.trim() || fallback;
+}
+
+/** Баримт, имэйл, тайлан дээр гарах дэлгүүрийн нэр (`seo-text-site-name`). */
+export async function getSiteName(): Promise<string> {
+  return getSiteTextValue("seo-text-site-name");
 }
 
 export async function upsertSiteText(input: { slotKey: string; textValue: string; updatedByUserId: number }) {

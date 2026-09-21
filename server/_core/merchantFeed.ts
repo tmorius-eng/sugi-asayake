@@ -16,9 +16,8 @@
  */
 import type { Request, Response } from "express";
 import { and, asc, eq } from "drizzle-orm";
-import { getDb } from "../db";
+import { getDb, getSiteName } from "../db";
 import { productCategories, products } from "../../drizzle/schema";
-import { getSiteTextSlot } from "../../shared/site-text";
 import { getOrSetCached } from "./ttlCache";
 import { ENV } from "./env";
 
@@ -57,7 +56,10 @@ export async function buildMerchantFeed(origin: string): Promise<string> {
     // for them and they carry no GTIN, brand or photo of a real item.
     .where(and(eq(products.isPublished, true), eq(products.kind, "physical")))
     .orderBy(asc(products.id));
-  const siteName = getSiteTextSlot("seo-text-site-name").fallbackValue;
+  // 2026-09-20: энэ мөр `fallbackValue`-г уншдаг байсан нь алдаа байв — эзэн
+  // /admin-аас дэлгүүрийн нэрээ сольсон ч Google Merchant feed хуучин нэрээр
+  // гарсаар байв. Бусад бүх газартай ижил "DB override, код fallback".
+  const siteName = await getSiteName();
   const items = rows
     .filter(row => row.imageUrl) // Merchant Center rejects items without an image_link
     .map(row => {
@@ -87,9 +89,9 @@ export async function buildMerchantFeed(origin: string): Promise<string> {
     `<?xml version="1.0" encoding="UTF-8"?>`,
     `<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">`,
     `<channel>`,
-    `<title>${xmlEscape(siteName || "SUGI ASAYAKE")}</title>`,
+    `<title>${xmlEscape(siteName)}</title>`,
     `<link>${xmlEscape(origin)}</link>`,
-    `<description>${xmlEscape(`${siteName || "SUGI ASAYAKE"} — product feed`)}</description>`,
+    `<description>${xmlEscape(`${siteName} — product feed`)}</description>`,
     ...items,
     `</channel>`,
     `</rss>`,

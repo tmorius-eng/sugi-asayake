@@ -54,6 +54,19 @@ function ListArt({ rows, highlight }: { rows: string[]; highlight: number }) {
   );
 }
 
+/**
+ * 2026-09-20: эдгээр зураг дээрх домэйн, дэлгүүрийн нэр хатуу бичигдсэн байв —
+ * домэйн эсвэл эзэн солиход утас дээрх суулгах заавар БУРУУ хаяг үзүүлнэ.
+ * Одоо хөтчийн өөрийн хаягаас, толгойн `<title>`-ээс авна (энэ SVG-д hook
+ * дуудахгүйн тулд энгийн функц — зурагдалт бүрт дахин уншина).
+ */
+const host = () => (typeof window === "undefined" ? "" : window.location.host);
+const shopName = () => {
+  if (typeof document === "undefined") return "";
+  const title = document.title.split("—")[0]?.trim();
+  return title || host();
+};
+
 /** iOS Safari-ийн доод мөр. `target` нь тэмдэглэх дүрсийг заана. */
 function SafariBarArt({ target }: { target: "menu" | "share" }) {
   return (
@@ -66,7 +79,7 @@ function SafariBarArt({ target }: { target: "menu" | "share" }) {
         <path d="M76 53 h18" /><path d="M80 60 h14" /><path d="M76 67 h18" />
       </g>
       <rect x="72" y="50" width="6" height="6" rx="1.5" fill={target === "menu" ? "#ffffff" : MUTED} />
-      <text x="180" y="66" textAnchor="middle" fill="#e6e6e6" fontSize="15" fontWeight="600">sugi.karkaron.com</text>
+      <text x="180" y="66" textAnchor="middle" fill="#e6e6e6" fontSize="15" fontWeight="600">{host()}</text>
       {/* Хуучин байрлалд Хуваалцах дүрс мөрөн дээрээ байдаг. */}
       {target === "share" && (
         <g>
@@ -89,7 +102,7 @@ function ChromeBarArt({ target }: { target: "menu" | "install" }) {
   return (
     <>
       <rect x="24" y="38" width="240" height="44" rx="22" fill={PANEL} />
-      <text x="52" y="66" fill="#e6e6e6" fontSize="15" fontWeight="600">sugi.karkaron.com</text>
+      <text x="52" y="66" fill="#e6e6e6" fontSize="15" fontWeight="600">{host()}</text>
       {/* Компьютерийн Chrome-д хаягийн мөрний баруун талд суулгах дүрс гарна. */}
       <g stroke={target === "install" ? "#ffffff" : MUTED} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none">
         <rect x="228" y="50" width="22" height="18" rx="3" />
@@ -110,8 +123,8 @@ function ConfirmArt({ action }: { action: string }) {
       <rect x="34" y="26" width="272" height="118" rx="18" fill={PANEL} />
       <rect x="54" y="52" width="46" height="46" rx="12" fill="#b01729" />
       <text x="77" y="82" textAnchor="middle" fill="#ffffff" fontSize="16" fontWeight="700">S</text>
-      <text x="116" y="70" fill="#ffffff" fontSize="15" fontWeight="700">SUGI ASAYAKE</text>
-      <text x="116" y="92" fill={MUTED} fontSize="13">sugi.karkaron.com</text>
+      <text x="116" y="70" fill="#ffffff" fontSize="15" fontWeight="700">{shopName()}</text>
+      <text x="116" y="92" fill={MUTED} fontSize="13">{host()}</text>
       <rect x="216" y="112" width="74" height="26" rx="13" fill="#8b5cf6" />
       <text x="253" y="130" textAnchor="middle" fill="#ffffff" fontSize="13" fontWeight="700">{action}</text>
       <Ring x={210} y={106} width={86} height={38} />

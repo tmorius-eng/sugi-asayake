@@ -10,7 +10,7 @@ import { and, desc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import { carts, cartItems, orderItems, orders, productCategories, products, users, visitorSessions } from "../drizzle/schema";
-import { getDb, getLoyaltyTierTable, getMarketingSpendRows, settledSaleSql } from "./db";
+import { getDb, getLoyaltyTierTable, getMarketingSpendRows, settledSaleSql, getSiteName } from "./db";
 import { ubDistrictLabels, type UbDistrict } from "../shared/districts";
 import { getLoyaltyTier } from "../shared/loyalty";
 import { formatMnt } from "@shared/format";
@@ -963,7 +963,7 @@ const cacUnavailableLabel = (reason: CacOverview["unavailableReason"]) => {
  *  per sheet, not just a raw table. */
 export async function exportAnalyticsExcel(report: AnalyticsReport, input: DateRangeInput = {}): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = "SUGI ASAYAKE";
+  workbook.creator = await getSiteName();
   workbook.created = new Date();
 
   const overviewSheet = workbook.addWorksheet("Тойм");
@@ -1067,6 +1067,8 @@ export async function exportAnalyticsExcel(report: AnalyticsReport, input: DateR
  *  synchronously into a stream; wrapped in a Promise so the caller can just
  *  await a Buffer like the Excel export above. */
 export async function exportAnalyticsPdf(report: AnalyticsReport, input: DateRangeInput = {}): Promise<Buffer> {
+  // pdfkit-ийн callback дотор await хийх боломжгүй тул нэрийг урьдчилж уншина.
+  const siteName = await getSiteName();
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 42, size: "A4" });
     const chunks: Buffer[] = [];
@@ -1080,7 +1082,7 @@ export async function exportAnalyticsPdf(report: AnalyticsReport, input: DateRan
     doc.registerFont("Body", FONT_REGULAR);
     doc.registerFont("Heading", FONT_BOLD);
 
-    doc.font("Heading").fontSize(20).fillColor("#17181b").text("SUGI ASAYAKE — Борлуулалтын тайлан", { align: "left" });
+    doc.font("Heading").fontSize(20).fillColor("#17181b").text(`${siteName} — Борлуулалтын тайлан`, { align: "left" });
     doc.font("Body").fontSize(10).fillColor("#75767b").text(rangeLabel(input));
     doc.moveDown(1.2);
 

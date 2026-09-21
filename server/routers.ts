@@ -221,8 +221,7 @@ import {
   getFaceAttempts,
   getFaceEnrollment,
   recordFaceAttempt,
-  upsertFaceEnrollment,
-} from "./db";
+  upsertFaceEnrollment, getSiteName } from "./db";
 // Customer-content safety (2026-09-13): NSFW screen on avatar uploads and
 // a multilingual abuse screen on review text -- both server-side.
 import { classifyImageSafety, formatScores, IMAGE_SAFETY_REJECT_MESSAGE } from "./_core/imageSafety";
@@ -1306,7 +1305,7 @@ export const appRouter = router({
       return { ok: true };
     }),
     // Lets the customer confirm the channel works right after enabling it.
-    test: strictRateLimitedProtectedProcedure.mutation(async ({ ctx }) => ({ delivered: await sendPushToUser(ctx.user.id, { title: "SUGI ASAYAKE", body: "Мэдэгдэл ажиллаж байна. Захиалгын явцыг эндээс мэдэх болно.", url: "/profile?tab=notifications", tag: "test" }) })),
+    test: strictRateLimitedProtectedProcedure.mutation(async ({ ctx }) => ({ delivered: await sendPushToUser(ctx.user.id, { title: await getSiteName(), body: "Мэдэгдэл ажиллаж байна. Захиалгын явцыг эндээс мэдэх болно.", url: "/profile?tab=notifications", tag: "test" }) })),
   }),
   // Product Q&A (2026-09-13, growth tier). Same moderation + rate-limit
   // shape as reviews.reply; answering follows the review-reply permission
@@ -2006,7 +2005,7 @@ export const appRouter = router({
       const invoice = await createQPayInvoice({
         senderInvoiceNo: order.orderNumber,
         amountMnt: order.totalMnt,
-        description: `SUGI ASAYAKE order ${order.orderNumber}`,
+        description: `${await getSiteName()} order ${order.orderNumber}`,
         // Audit 2026-09-09 (R7): prefer the configured public origin; the
         // request's Host header is only the fallback for a bare deployment.
         callbackUrl: `${ENV.publicBaseUrl || `${ctx.req.protocol}://${ctx.req.get("host")}`}/api/payments/qpay/callback`,
@@ -2056,7 +2055,7 @@ export const appRouter = router({
       try {
         loan = await createStorepayLoan({
           mobileNumber,
-          description: `SUGI ASAYAKE ${order.orderNumber}`,
+          description: `${await getSiteName()} ${order.orderNumber}`,
           amountMnt: order.totalMnt,
           callbackUrl: `${ENV.publicBaseUrl || `${ctx.req.protocol}://${ctx.req.get("host")}`}/api/payments/storepay/callback`,
         });

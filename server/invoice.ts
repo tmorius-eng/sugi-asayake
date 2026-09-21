@@ -21,7 +21,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { eq } from "drizzle-orm";
 import { orderItems } from "../drizzle/schema";
-import { getDb, getOrderById, getOrderForUser, getStoreSettingValue } from "./db";
+import { publicOrigin } from "./_core/publicUrl";
+import { getDb, getOrderById, getOrderForUser, getSiteName, getStoreSettingValue } from "./db";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 /** dist/index.js sits next to dist/assets; in dev the source tree has server/assets. */
@@ -66,7 +67,8 @@ export async function renderPackingSlip(orderId: number): Promise<InvoiceResult 
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const items = await db.select({ productName: orderItems.productName, sku: orderItems.sku, unitPriceMnt: orderItems.unitPriceMnt, quantity: orderItems.quantity }).from(orderItems).where(eq(orderItems.orderId, orderId)).orderBy(orderItems.id);
-  const doc = new PDFDocument({ size: "A4", margin: 48, info: { Title: `Бэлтгэх хуудас ${order.orderNumber}`, Author: "SUGI ASAYAKE Mongolia" } });
+  const siteName = await getSiteName();
+  const doc = new PDFDocument({ size: "A4", margin: 48, info: { Title: `Бэлтгэх хуудас ${order.orderNumber}`, Author: siteName } });
   const font = FONT_CANDIDATES.find(existsSync);
   if (font) { doc.registerFont("body", font); doc.font("body"); }
   const chunks: Buffer[] = [];
@@ -75,7 +77,7 @@ export async function renderPackingSlip(orderId: number): Promise<InvoiceResult 
   const ink = "#17181b", muted = "#545958", line = "#c9d0ca";
   const left = doc.page.margins.left, right = doc.page.width - doc.page.margins.right;
 
-  doc.fillColor(muted).fontSize(9).text("SUGI ASAYAKE · БЭЛТГЭХ ХУУДАС", left, 48);
+  doc.fillColor(muted).fontSize(9).text(`${siteName} · БЭЛТГЭХ ХУУДАС`, left, 48);
   doc.fillColor(ink).fontSize(28).text(order.orderNumber, left, 62);
   doc.fontSize(10).fillColor(muted)
     .text(`Огноо: ${new Date(order.createdAt).toLocaleString("mn-MN", { timeZone: "Asia/Ulaanbaatar" })} · Төлөв: ${STATUS_LABEL[order.status] ?? order.status} · Төлбөр: ${PAYMENT_LABEL[order.paymentMethod] ?? order.paymentMethod} (${order.paymentStatus === "paid" ? "төлсөн" : "төлөөгүй"})`, left, 100);
@@ -113,7 +115,7 @@ export async function renderPackingSlip(orderId: number): Promise<InvoiceResult 
   doc.fontSize(8).text("Үнийн мэдээлэлгүй. Худалдан авагчийн баримт нь тусдаа (Баримт PDF).", left, footY + 40);
   doc.end();
   const pdf = await done;
-  return { fileName: `sugi-asayake-packing-${order.orderNumber}.pdf`, base64: pdf.toString("base64") };
+  return { fileName: `packing-${order.orderNumber}.pdf`, base64: pdf.toString("base64") };
 }
 
 async function renderInvoiceFor(order: OrderRow): Promise<InvoiceResult> {
@@ -123,7 +125,8 @@ async function renderInvoiceFor(order: OrderRow): Promise<InvoiceResult> {
   const items = await db.select({ productName: orderItems.productName, sku: orderItems.sku, unitPriceMnt: orderItems.unitPriceMnt, quantity: orderItems.quantity }).from(orderItems).where(eq(orderItems.orderId, orderId)).orderBy(orderItems.id);
   const [phone, email] = await Promise.all([getStoreSettingValue("contact-phone"), getStoreSettingValue("contact-email")]);
 
-  const doc = new PDFDocument({ size: "A4", margin: 48, info: { Title: `Захиалга ${order.orderNumber}`, Author: "SUGI ASAYAKE Mongolia" } });
+  const siteName = await getSiteName();
+  const doc = new PDFDocument({ size: "A4", margin: 48, info: { Title: `Захиалга ${order.orderNumber}`, Author: siteName } });
   const font = FONT_CANDIDATES.find(existsSync);
   if (font) { doc.registerFont("body", font); doc.font("body"); }
 
@@ -135,7 +138,7 @@ async function renderInvoiceFor(order: OrderRow): Promise<InvoiceResult> {
   const left = doc.page.margins.left, right = doc.page.width - doc.page.margins.right;
 
   // Header
-  doc.fillColor(red).fontSize(20).text("SUGI ASAYAKE", left, 48);
+  doc.fillColor(red).fontSize(20).text(siteName, left, 48);
   doc.fillColor(muted).fontSize(9).text("Японы гоо сайхан, эрүүл мэнд, гэр ахуйн бараа · Улаанбаатар", left, 72);
   doc.fillColor(ink).fontSize(16).text("Захиалгын баримт", left, 100);
   doc.fontSize(10).fillColor(muted)
@@ -190,10 +193,10 @@ async function renderInvoiceFor(order: OrderRow): Promise<InvoiceResult> {
   const footY = doc.page.height - 80;
   doc.moveTo(left, footY).lineTo(right, footY).strokeColor(line).lineWidth(0.5).stroke();
   doc.fillColor(muted).fontSize(8)
-    .text(`SUGI ASAYAKE Mongolia · ${phone || ""} · ${email || ""} · sugiasayake.mn`, left, footY + 8)
+    .text([siteName, phone, email, publicOrigin().replace(/^https?:\/\//, "")].filter(Boolean).join(" · "), left, footY + 8)
     .text("Энэ бол захиалгын баримт бөгөөд НӨАТ-ын и-баримт (eBarimt) биш. И-баримтыг төлбөрийн дараа тусад нь олгоно.", left, footY + 20, { width: right - left });
 
   doc.end();
   const pdf = await done;
-  return { fileName: `sugi-asayake-${order.orderNumber}.pdf`, base64: pdf.toString("base64") };
+  return { fileName: `${order.orderNumber}.pdf`, base64: pdf.toString("base64") };
 }

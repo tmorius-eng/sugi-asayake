@@ -2,7 +2,7 @@
   "name": "sugi-asayake-mongolia",
   "version": "1.0.0",
   "type": "module",
-  "license": "MIT",
+  "license": "UNLICENSED",
   "scripts": {
     "dev": "tsx watch server/_core/index.ts",
     "build": "vite build && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist && node -e \"require('fs').cpSync('server/assets', 'dist/assets', { recursive: true })\"",

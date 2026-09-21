@@ -11,7 +11,7 @@ import { ADMIN_TIPS, getAdminTip } from "@shared/admin-tips";
  */
 const ADMIN_SECTIONS = [
   "dashboard", "analytics", "products", "orders", "posts", "reviews", "routines",
-  "promotions", "calendar", "discountCodes", "brands", "branches", "pos",
+  "promotions", "calendar", "discountCodes", "brands", "search", "branches", "pos",
   "campaigns", "storeSettings", "measurement", "users", "media", "documents", "loyalty",
   "security", "integrations", "notifications", "receiving",
 ] as const;
