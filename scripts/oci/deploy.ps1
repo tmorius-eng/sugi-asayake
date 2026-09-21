@@ -58,13 +58,17 @@ Remove-Item $bundle
 
 Write-Host "==> install + restart on the VM" -ForegroundColor Cyan
 $remote = @'
-set -e
+set -eo pipefail
 cd ~/__DIR__
 old=$(md5sum pnpm-lock.yaml | cut -c1-32)
 rm -rf dist.new && mkdir dist.new && tar xzf ~/__BUNDLE__ -C dist.new && rm ~/__BUNDLE__
 rm -rf dist && mv dist.new/dist dist && mv -f dist.new/package.json dist.new/pnpm-lock.yaml dist.new/pnpm-workspace.yaml . && rm -rf dist.new
 new=$(md5sum pnpm-lock.yaml | cut -c1-32)
-if [ "$old" != "$new" ]; then echo "lockfile changed -> pnpm install --prod"; pnpm install --prod --frozen-lockfile 2>&1 | tail -2; fi
+# </dev/null (2026-09-21): this script arrives on bash's STDIN (`bash -s`). pnpm
+# read that stdin and swallowed the rest of the script, so bash hit EOF and exited 0
+# right after the install -- EVERY lockfile-changing deploy silently skipped
+# `pm2 restart` and left the previous build running. Never let a command here read stdin.
+if [ "$old" != "$new" ]; then echo "lockfile changed -> pnpm install --prod"; pnpm install --prod --frozen-lockfile </dev/null 2>&1 | tail -2; fi
 # `pm2 restart` only knows an app that has been started once; staging is
 # started here on first deploy (production was started by hand on 2026-09-13).
 # The running app's mode has to match the requested instance count; pm2 can
@@ -80,8 +84,17 @@ fi
 # today.
 if [ "$want" -gt 1 ]; then inst="-i $want"; else inst=""; fi
 if [ -n "$mode" ]; then pm2 restart __APP__ --update-env >/dev/null; else PORT=__PORT__ pm2 start dist/index.js --name __APP__ $inst --max-memory-restart 700M >/dev/null && pm2 save >/dev/null; fi
+# 2026-09-21: the restart is VERIFIED here. Before, a local health probe that
+# ran while the app was still booting (curl exit 7) aborted this script under
+# `set -e`, and the public check below then passed against the OLD process --
+# a "successful" deploy that left the previous build running (it happened on
+# 2026-09-21: /shopp kept answering 200 until a second deploy).
 sleep 8
-curl -s --max-time 20 http://localhost:__PORT__/health; echo
+curl -s --max-time 20 http://localhost:__PORT__/health || echo "(local /health not ready yet -- the public check below retries)"
+echo
+up=$(pm2 jlist 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const a=JSON.parse(d||'[]').find(x=>x.name==='__APP__');console.log(a&&a.pm2_env.status==='online'?Math.round((Date.now()-a.pm2_env.pm_uptime)/1000):-1)})")
+if [ "$up" -lt 0 ] || [ "$up" -gt 120 ]; then echo "DEPLOY-RESTART-FAILED: __APP__ uptime=${up}s -- the previous build is still running"; exit 3; fi
+echo "DEPLOY-RESTART-OK: __APP__ restarted ${up}s ago"
 pm2 status __APP__ | grep __APP__ | cut -c1-100
 '@
 $remote = $remote.Replace("__BUNDLE__", $bundle).Replace("__DIR__", $dir).Replace("__APP__", $app).Replace("__PORT__", "$port").Replace("__INSTANCES__", "$Instances").Replace("`r`n", "`n")  # CRLF checkout -> LF for the remote bash
@@ -89,7 +102,14 @@ $remote = $remote.Replace("__BUNDLE__", $bundle).Replace("__DIR__", $dir).Replac
 # re-split by the remote shell and its quotes are lost ("[: missing ]").
 # tr strips the CR that PowerShell appends to every line when it pipes a
 # string into a native process (that was the "cut: invalid ... '\r'" noise).
-$remote | ssh -o ClearAllForwardings=yes sugi-oci "tr -d '\r' | bash -s"
+$remoteOutput = $remote | ssh -o ClearAllForwardings=yes sugi-oci "tr -d '\r' | bash -s" 2>&1
+$remoteExit = $LASTEXITCODE
+$remoteOutput | ForEach-Object { Write-Host "   [vm] $_" }
+# The remote script prints DEPLOY-RESTART-OK only after verifying pm2 really
+# restarted the app; anything else means the old build may still be serving.
+if ($remoteExit -ne 0 -or -not ($remoteOutput -match "DEPLOY-RESTART-OK")) {
+  throw "Remote install/restart failed (exit $remoteExit) -- the site may still be running the PREVIOUS build. Output above; check: ssh sugi-oci 'pm2 logs $app --lines 40'"
+}
 
 Write-Host "==> public check" -ForegroundColor Cyan
 # pm2 has restarted the app by now, but it needs ~10 s to boot (TensorFlow,

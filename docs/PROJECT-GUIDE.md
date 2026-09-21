@@ -310,7 +310,7 @@ host=github.com
   бүх E2E-г санамсаргүй хаалгатай горимд оруулна.
 - E2E (`pnpm e2e`) production схем рүү ХЭЗЭЭ Ч заахгүй — `sugi_staging` (заавал
   татгалздаг хамгаалалттай, `e2e/helpers/environment.ts`).
-- `deploy.ps1` PowerShell-д exit code 7 өгдөг нь stderr noise — health 200 бол амжилттай.
+- **Deploy амжилттайн баталгаа = `[vm] DEPLOY-RESTART-OK`** (2026-09-21), health 200 биш — нийтийн health хуучин процессоос ч 200 авдаг. Өмнө нь lockfile өөрчлөгдсөн deploy бүр `pnpm install` stdin-ээр скриптийг "идэж" restart-гүй үлддэг байв. Remote скрипт дотор stdin уншдаг команд бичихгүй (`</dev/null`).
 - Commit хийхээс өмнө `pnpm check` + `pnpm lint`.
 - **AI attribution хэзээ ч бичихгүй** (commit trailer, docs, код) — Tom сайтыг өөрийнхөөрөө танилцуулдаг.
 

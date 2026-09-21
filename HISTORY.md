@@ -564,6 +564,19 @@ navigation-ийг шууд дамжуулдаг тул 404 хуудас офла
 
 **Баталгаа:** vitest **1111 passed / 115 файл**, E2E **236 passed / 0 failed** (бүтнээр), icon-ийн харагдацыг шинэчлэлийн өмнө/дараах screenshot-ын pixel diff-ээр (толгой, доод цэс, footer-ийн Facebook/Instagram — зөвхөн sub-pixel anti-aliasing, 0.05–0.6%) баталсан.
 
+**🔴 Deploy-ийн чимээгүй алдаа (энэ шөнө олсон).** c35e8cb-ийн эхний production deploy "амжилттай"
+(health 200) гэж дууссан ч `/shopp` 200 хэвээр — pm2 uptime 2 цаг, өөрөөр хэлбэл **хуучин build
+ажиллаж байв**; хоёр дахь deploy л restart хийсэн. Шалтгаан: `deploy.ps1`-ийн remote скрипт `ssh …
+"bash -s"`-ээр **stdin-ээр** очдог, `pnpm install` тэр stdin-ийг уншиж скриптийн үлдсэнийг "идсэн" →
+bash EOF хүрч **exit 0**-ээр install-ын дараа шууд гардаг. Тиймээс **lockfile өөрчлөгдсөн deploy БҮР**
+restart-гүй үлддэг байсан (кодын ганц өөрчлөлттэй deploy-д install алгасагддаг тул ажиллаж байсан).
+Нийтийн health шалгалт хуучин процессоос 200 авдаг тул хэн ч анзаардаггүй байв. Засвар:
+`pnpm install … </dev/null`; мөн remote скрипт restart-ийг **pm2 uptime-аар баталж** (≤120 с)
+`DEPLOY-RESTART-OK` хэвлэнэ, байхгүй бол PowerShell тал throw хийнэ; `set -eo pipefail`; локал
+health probe (апп ачаалж байхад curl exit 7) скриптийг таслахаа болив. Staging дээр батлав: засваргүй
+хувилбар шинэ шалгалтад "Remote install/restart failed (exit 0)" гэж баригдав, засвартай нь
+`DEPLOY-RESTART-OK: sugi-staging restarted 11s ago`.
+
 ### 7. Тест
 Шинэ: `e2e/checkout.spec.ts` — **зочин анх удаа бүтэн захиалга өгнө** (сагс → маягтын
 алдаа → салбараас авах → бэлэн мөнгө → баталгаажуулах дэлгэц → DB-д мөр бодитоор

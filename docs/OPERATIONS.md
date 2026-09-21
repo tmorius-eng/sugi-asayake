@@ -46,8 +46,10 @@ _2026-09-20. Уншигч: системийг ажиллуулж байгаа х
 ⚠️ VM дээрх `.env` болон `oci-ca.pem`-д deploy **хэзээ ч хүрэхгүй**. Тэдгээрийг
 ssh-ээр гараар засна.
 
-⚠️ `deploy.ps1` PowerShell дээр exit code 7 өгдөг нь stderr-ийн шуугиан.
-**Health шалгалт 200 буцаасан бол deploy амжилттай.**
+**Deploy амжилттай = гаралтад `[vm] DEPLOY-RESTART-OK: <app> restarted Ns ago`.**
+VM дээрх скрипт pm2-ийн uptime-аар restart бодитоор болсныг шалгадаг; болоогүй бол
+`deploy.ps1` алдаа шиднэ. Нийтийн health 200 дангаараа баталгаа БИШ — хуучин процесс ч 200
+буцаадаг (2026-09-21-нд lockfile өөрчлөгдсөн deploy ингэж restart-гүй үлдсэн, HISTORY 6m).
 
 ⚠️ **`pnpm build`-ийн exit code-ийг шууд шалга.** `pnpm build | tail && pnpm e2e`
 гэж холбовол build-ийн уналт залгигдаж, E2E хуучин `dist/` дээр ажиллана.
