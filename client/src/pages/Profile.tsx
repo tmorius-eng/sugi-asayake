@@ -247,7 +247,7 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: TabKey) => void }) {
             </div>
           </div>
         ) : (
-          <div className="address-empty">Захиалга байхгүй байна. <Link href="/shop" style={{ color: "var(--primary)", fontWeight: 800 }}>Дэлгүүр үзэх</Link></div>
+          <div className="address-empty">Захиалга байхгүй байна. <Link href="/shop" className="profile-empty-link">Дэлгүүр үзэх</Link></div>
         )}
       </section>
     </div>
@@ -403,7 +403,7 @@ function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
           )}
         </div>
       ) : (
-        <div className="address-empty">Захиалга байхгүй байна. <Link href="/shop" style={{ color: "var(--primary)", fontWeight: 800 }}>Дэлгүүр үзэх</Link></div>
+        <div className="address-empty">Захиалга байхгүй байна. <Link href="/shop" className="profile-empty-link">Дэлгүүр үзэх</Link></div>
       )}
       <Dialog open={returnFor !== null} onOpenChange={open => { if (!open) setReturnFor(null); }}>
         <DialogContent className="return-dialog">
@@ -555,7 +555,7 @@ function PreferencesTab() {
           <div style={{ display: "grid", gap: "16px" }}>
             {summaryGroups.map(group => (
               <div key={group.title}>
-                <p style={{ margin: "0 0 8px", fontSize: "11px", fontWeight: 800, color: "#77787d" }}>{group.title}</p>
+                <p style={{ margin: "0 0 8px", fontSize: "11px", fontWeight: 800, color: "var(--ck-muted)" }}>{group.title}</p>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                   {group.chips.map(chip => (
                     <span key={chip} style={{ padding: "9px 14px", border: "1px solid rgba(23,24,27,.14)", background: "#fff", color: "#55565b", fontSize: "11px", fontWeight: 800, borderRadius: "999px" }}>{chip}</span>

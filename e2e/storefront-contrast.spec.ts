@@ -1,4 +1,5 @@
 import { expect, test } from "./helpers/fixtures";
+import { signInAs } from "./helpers/session";
 
 /**
  * Storefront-ийн жижиг текстийн контраст (WCAG 2.2 AA) — гэрэл ба харанхуй
@@ -41,7 +42,8 @@ const CONTRAST_PROBE = `(() => {
     let node = element;
     while (node && node !== document.body) {
       const style = getComputedStyle(node);
-      if (style.backgroundImage && style.backgroundImage !== "none" && !style.backgroundImage.startsWith("linear-gradient")) return true;
+      // Зураг (url) дээрх текст — хэмжих боломжгүй. Градиент бол хэмжинэ (доор).
+      if (style.backgroundImage && style.backgroundImage.includes("url(")) return true;
       if ((style.position === "absolute" || style.position === "fixed") && node.parentElement && node.parentElement.querySelector(":scope > img, :scope > picture, :scope > video, :scope img")) return true;
       const colour = parse(style.backgroundColor);
       if (colour && colour.a > 0.95) return false;
@@ -49,14 +51,23 @@ const CONTRAST_PROBE = `(() => {
     }
     return false;
   };
-  const backgroundOf = (element) => {
+  // Бодит дэвсгэр: градиент бол түүний БҮХ тунгалаг бус өнгөний цэг (хамгийн
+  // муу нь тоологдоно), эс бөгөөс анхны тунгалаг бус өнгө. 2026-09-21 хүртэл
+  // градиентийг алгасдаг байсан тул профайлын баннер дээрх алтан шошго
+  // харанхуй болсныг (харанхуй дээр харанхуй) барьж чадаагүй.
+  const backgroundsOf = (element) => {
     let node = element;
     while (node) {
-      const colour = parse(getComputedStyle(node).backgroundColor);
-      if (colour && colour.a > 0.95) return colour;
+      const style = getComputedStyle(node);
+      if (style.backgroundImage && style.backgroundImage.includes("gradient")) {
+        const stops = (style.backgroundImage.match(/rgba?\\([^)]+\\)/g) || []).map(parse).filter(c => c && c.a > 0.5);
+        if (stops.length) return stops;
+      }
+      const colour = parse(style.backgroundColor);
+      if (colour && colour.a > 0.95) return [colour];
       node = node.parentElement;
     }
-    return parse(getComputedStyle(document.body).backgroundColor) || { r: 255, g: 255, b: 255, a: 1 };
+    return [parse(getComputedStyle(document.body).backgroundColor) || { r: 255, g: 255, b: 255, a: 1 }];
   };
   const failures = [];
   for (const element of document.querySelectorAll("#root *")) {
@@ -74,7 +85,7 @@ const CONTRAST_PROBE = `(() => {
     const size = parseFloat(style.fontSize);
     const bold = parseInt(style.fontWeight, 10) >= 700;
     const required = (size >= 24 || (size >= 18.66 && bold)) ? 3 : 4.5;
-    const value = ratio(colour, backgroundOf(element));
+    const value = Math.min(...backgroundsOf(element).map(bg => ratio(colour, bg)));
     if (value + 0.01 < required) failures.push({ text: text.slice(0, 40), colour: style.color, size, required, ratio: Number(value.toFixed(2)), where: element.tagName + "." + String(element.className).slice(0, 70) });
   }
   return failures;
@@ -100,6 +111,32 @@ for (const theme of ["light", "dark"] as const) {
         await expect(page.locator("#root")).not.toBeEmpty();
         const failures = await page.evaluate(CONTRAST_PROBE) as Array<Record<string, unknown>>;
         expect(failures, `${theme} ${path}: ${JSON.stringify(failures.slice(0, 8), null, 1)}`).toEqual([]);
+      });
+    }
+  });
+}
+
+/**
+ * Нэвтэрсэн хэрэглэгчийн профайл (2026-09-21, Tom-ийн screenshot): "Тусламж"
+ * таб харанхуй горимд асуултууд огт харагдахгүй байв. Дээрх тест нь нэвтрэлтгүй
+ * хуудсуудыг л хэмждэг байсан тул профайлын 9 таб хэзээ ч шалгагдаж байгаагүй.
+ */
+const PROFILE_TABS = ["overview", "orders", "preferences", "wishlist", "addresses", "notifications", "security", "support", "loyalty"];
+
+for (const theme of ["light", "dark"] as const) {
+  test.describe(`профайлын контраст (${theme})`, () => {
+    for (const tab of PROFILE_TABS) {
+      test(`/profile?tab=${tab}: жижиг текст бүр AA контрастыг хангана`, async ({ page, context, baseURL }) => {
+        await signInAs(context, "user", baseURL!);
+        await page.addInitScript(value => {
+          try { localStorage.setItem("sugi-storefront-theme", value); } catch { /* хувийн цонх */ }
+        }, theme);
+        await page.goto(`/profile?tab=${tab}`);
+        await page.waitForLoadState("networkidle");
+        if (theme === "dark") await page.evaluate(() => document.documentElement.setAttribute("data-storefront-theme", "dark"));
+        await expect(page.locator(".profile-main")).toBeVisible();
+        const failures = await page.evaluate(CONTRAST_PROBE) as Array<Record<string, unknown>>;
+        expect(failures, `${theme} profile/${tab}: ${JSON.stringify(failures.slice(0, 8), null, 1)}`).toEqual([]);
       });
     }
   });

@@ -4079,6 +4079,16 @@ html[data-storefront-theme="dark"] .sugi-site .shop-stock-flag { background: var
    ажиллалтдаа л олсон. */
 html[data-storefront-theme="dark"] .sugi-site .shop-pagination span,
 html[data-storefront-theme="dark"] .sugi-site .shop-pagination span em { color: var(--ck-muted); }
+/* 2026-09-21 (Tom, screenshot): профайлын "Тусламж" таб харанхуй горимд
+   асуултууд огт харагдахгүй байв. Ерөнхий харанхуй дүрэм p/h1–h3/strong-г
+   ink болгодог тул ХАРИУЛТ (p) харагддаг ч АСУУЛТ нь <button> бөгөөд
+   `.faq-question { color: #17181b }` хатуу өнгөтэй — хар дээр хар. Зааглах
+   зураас ба холбоо барих товчнууд мөн гэрэл загварын өнгөтэй үлдсэн байв.
+   e2e/storefront-contrast.spec.ts одоо нэвтэрсэн профайлын табуудыг ч хэмжинэ. */
+html[data-storefront-theme="dark"] .sugi-site .faq-question { color: var(--ck-ink); }
+html[data-storefront-theme="dark"] .sugi-site .faq-item { border-bottom-color: var(--ck-line); }
+html[data-storefront-theme="dark"] .sugi-site .support-contact a { background: var(--ck-surface); color: var(--ck-ink); border-color: var(--ck-line); }
+html[data-storefront-theme="dark"] .sugi-site .support-contact a:hover { background: var(--ck-ink); color: var(--ck-cream); }
 html[data-storefront-theme="dark"] .sugi-site .shop-search-panel input { background: var(--ck-surface); color: var(--ck-ink); }
 html[data-storefront-theme="dark"] .sugi-site .shop-search-panel input::placeholder,
 html[data-storefront-theme="dark"] .header-search-input::placeholder { color: #8a8a8a; }
@@ -4486,3 +4496,49 @@ html[data-storefront-theme="dark"] .checkout-field-error { color: #ff8a80; }
    хүүхэд мэт байрлана — өөрөөр хэлбэл байршил, хэмжээ, `.x img` дүрэм бүгд
    яг хэвээр. (index.css-д `> img` child combinator байхгүйг шалгасан.) */
 .responsive-picture { display: contents; }
+
+/* ---- Профайлын контраст (2026-09-21) -------------------------------------
+   Tom-ийн "Тусламж" табын screenshot-оос хойш нэвтэрсэн профайлын 9 табыг
+   хоёр загварт хэмжсэн (e2e/storefront-contrast.spec.ts). Олдсон:
+   - "Тойм" баннерын дээрх алтан шошго: `.sugi-site p` (3161) ижил жинтэй,
+     файлд хожуу байрласан тул `.overview-hero p`-ийн алтан өнгийг дарж
+     харанхуй баннер дээр харанхуй бичиг болгосон байв (Linen restyle-ийн үлдэгдэл).
+   - харанхуй загварт идэвхгүй цэсний мөр #5b5c61 = 2.79:1.
+   - "Дэлгүүр үзэх" холбоос брэндийн #df1f3d = 4.34:1 (4.5 шаардлагатай) —
+     сайтын текстэд зориулсан улаан (--primary-text / харанхуйд #ff6b81). */
+.sugi-site .overview-hero p { color: #f0b52d; }
+.profile-empty-link { color: var(--primary-text); font-weight: 800; }
+html[data-storefront-theme="dark"] .profile-empty-link { color: #ff6b81; }
+/* :not(.active) — идэвхтэй мөр цагаан дэвсгэр дээр харанхуй бичигтэй хэвээр
+   (`.account-nav-item.active`); эс бөгөөс энэ дүрэм түүнийг цагаан дээр саарал болгоно. */
+html[data-storefront-theme="dark"] .sugi-site .account-nav-item:not(.active) { color: var(--ck-muted); }
+html[data-storefront-theme="dark"] .sugi-site .account-nav-item:not(.active) svg { color: var(--ck-muted); }
+html[data-storefront-theme="dark"] .sugi-site .account-nav-item:not(.active):hover { color: var(--ck-ink); background: var(--ck-surface); }
+html[data-storefront-theme="dark"] .sugi-site .overview-hero p { color: #f0b52d; }
+/* Профайлын бусад табууд харанхуй загварт (2026-09-21) — Tom-ийн "Тусламж"
+   табтай ИЖИЛ алдаа, градиентийг хэмждэг болсон контрастын тест олов:
+   гэрэл загварын хатуу саарал (#545958 / #6a706b / #4c514d) харанхуй
+   дэвсгэр дээр 2.1–3.4:1, мөн хоёр гэрэл дэвсгэртэй хайрцагт (акаунт устгах,
+   идэвхтэй зэрэглэл) ерөнхий дүрэм бичгийг ГЭРЭЛ болгож, дэвсгэр нь гэрлээрээ
+   үлдсэн тул 1.1:1 — огт харагдахгүй. */
+html[data-storefront-theme="dark"] .sugi-site .overview-stat span,
+html[data-storefront-theme="dark"] .sugi-site .address-empty,
+html[data-storefront-theme="dark"] .sugi-site .pref-toggle-row > div span,
+html[data-storefront-theme="dark"] .sugi-site .loyalty-progress-row,
+html[data-storefront-theme="dark"] .sugi-site .loyalty-progress-note,
+html[data-storefront-theme="dark"] .sugi-site .loyalty-tier-row { color: var(--ck-muted); }
+html[data-storefront-theme="dark"] .sugi-site .overview-stat,
+html[data-storefront-theme="dark"] .sugi-site .loyalty-tier-row,
+html[data-storefront-theme="dark"] .sugi-site .pref-toggle-row { border-color: var(--ck-line); }
+html[data-storefront-theme="dark"] .sugi-site .address-empty { border-color: var(--ck-line); }
+html[data-storefront-theme="dark"] .sugi-site .loyalty-progress-row strong { color: var(--ck-ink); }
+html[data-storefront-theme="dark"] .sugi-site .loyalty-tier-row.active { background: var(--ck-surface); color: var(--ck-ink); border-color: var(--primary); }
+/* Хүрээтэй товч (Дахин захиалах, Баримт, Буцаах хүсэлт, Бэлгийн карт ашиглах). */
+html[data-storefront-theme="dark"] .sugi-site .order-buy-again { color: var(--ck-ink); border-color: var(--ck-ink); }
+html[data-storefront-theme="dark"] .sugi-site .order-buy-again:hover:not(:disabled) { background: var(--ck-ink); color: var(--ck-cream); }
+/* Акаунт устгах: ягаан хайрцаг харанхуйд -> бараан гадаргуу, улаан текст #ff6b81. */
+html[data-storefront-theme="dark"] .sugi-site .danger-zone { background: var(--ck-surface); border-color: rgba(255,107,129,.35); }
+html[data-storefront-theme="dark"] .sugi-site .danger-zone h3,
+html[data-storefront-theme="dark"] .sugi-site .danger-button { color: #ff6b81; border-color: #ff6b81; }
+html[data-storefront-theme="dark"] .sugi-site .danger-zone p { color: var(--ck-muted); }
+html[data-storefront-theme="dark"] .sugi-site .danger-button:hover { background: #ff6b81; color: #17181b; }
