@@ -2,8 +2,8 @@ import { getSiteMedia, getSiteText, getStoreSettingValue, getStorefrontBranches 
 import { getSiteTextSlot, type SiteTextSlotKey } from "../../shared/site-text";
 import { checkStoreSettingFormat } from "../../shared/store-settings";
 import { getSiteMediaSlot } from "../../shared/site-media";
-import { HERO_FULL_WIDTH, HERO_IMAGE_SIZES, avifSrcSet, avifVariantKey, gridVariantUrl, imageSrcSet } from "../../shared/image-variants";
-import { storageObjectExists } from "../storage";
+import { HERO_FULL_WIDTH, HERO_IMAGE_SIZES } from "../../shared/image-variants";
+import { responsiveImagePreload, responsiveImagePreloadTag } from "./imagePreload";
 import { resolveRouteMeta } from "./routeMeta";
 // Open Graph needs absolute URLs; storage URLs may already be absolute (R2
 // public host) or site-relative (/cdn/...). Нэг хэрэгжилт: ./publicUrl.
@@ -143,7 +143,7 @@ async function resolveValues(): Promise<Map<string, string>> {
     // would end the tag early. Escaping the slash keeps it inert and is still
     // valid JSON.
     ["SEO_STRUCTURED_DATA", JSON.stringify(structuredData).replace(/</g, "\\u003c")],
-    ["SEO_HERO_PRELOAD", heroUrl ? heroPreloadTag(heroUrl, await heroHasAvif(heroUrl)) : ""],
+    ["SEO_HERO_PRELOAD", heroUrl ? await responsiveImagePreload(heroUrl, HERO_FULL_WIDTH, HERO_IMAGE_SIZES) : ""],
     ["SEO_OG_IMAGE", escapeAttribute(absoluteUrl(heroUrl))],
     ["SEO_OG_TYPE", "website"],
     ["SEO_OG_IMAGE_META", ""],
@@ -177,29 +177,6 @@ async function resolveValues(): Promise<Map<string, string>> {
  * the document untouched-but-valid if the database is unreachable: an
  * outage should degrade the link preview, never take down the page itself.
  */
-/**
- * Hero-ийн preload таг (2026-09-21). `<img>` нь одоо srcset-тэй тул preload
- * нь ЯГ тэр сонголтыг хийхийн тулд imagesrcset/imagesizes-ийг ижил утгаар
- * авч явна — эс бөгөөс хөтөч preload-оор 1920px-ийг, <img>-ээр 600px-ийг
- * татаж, hero-г хоёр удаа татна.
- */
-function heroPreloadTag(url: string, avif: boolean): string {
-  // AVIF байгаа бол <picture> түүнийг сонгоно (HeroImageSlideshow) — preload
-  // ч мөн AVIF байх ёстой, эс бөгөөс хоёр өөр файл татагдана. `type` нь
-  // AVIF дэмждэггүй хөтөчид энэ preload-ыг алгасуулна.
-  const srcset = avif ? avifSrcSet(url, HERO_FULL_WIDTH) : imageSrcSet(url, HERO_FULL_WIDTH);
-  const responsive = srcset ? ` imagesrcset="${escapeAttribute(srcset)}" imagesizes="${escapeAttribute(HERO_IMAGE_SIZES)}"` : "";
-  const type = avif ? ` type="image/avif"` : "";
-  const href = avif ? avifVariantKey(url) : url;
-  return `<link rel="preload" as="image"${type} href="${escapeAttribute(href)}"${responsive} fetchpriority="high" />`;
-}
-
-/** /cdn/<key>.webp зургийн AVIF хувилбар R2-д бий эсэх (preload-д). */
-async function heroHasAvif(url: string): Promise<boolean> {
-  if (!url.startsWith("/cdn/") || !url.endsWith(".webp")) return false;
-  return storageObjectExists(avifVariantKey(gridVariantUrl(url)!.slice("/cdn/".length)));
-}
-
 export async function renderIndexHtml(template: string, pathname = "/"): Promise<string> {
   let values: Map<string, string>;
   try {
@@ -276,7 +253,7 @@ function fallbackFor(key: string): string | undefined {
     case "SEO_HERO_PRELOAD": {
       const fallback = getSiteMediaSlot("home-hero").fallbackUrl;
       // DB унтарсан үед R2 руу ч асуухгүй — WebP-ийн аюулгүй зам.
-      return fallback ? heroPreloadTag(fallback, false) : "";
+      return fallback ? responsiveImagePreloadTag(fallback, HERO_FULL_WIDTH, HERO_IMAGE_SIZES, false) : "";
     }
     default: return undefined;
   }

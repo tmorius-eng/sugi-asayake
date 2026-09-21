@@ -23,6 +23,8 @@ import { getOrSetCached } from "./ttlCache";
 import { escapeAttribute } from "./indexHtml";
 import { absoluteUrl } from "./publicUrl";
 import { OG_HEIGHT, OG_WIDTH } from "./ogImage";
+import { responsiveImagePreload } from "./imagePreload";
+import { PRODUCT_FULL_WIDTH, PRODUCT_MAIN_IMAGE_SIZES } from "../../shared/image-variants";
 
 const CACHE_TTL_MS = 60_000;
 
@@ -105,7 +107,10 @@ async function productMeta(slug: string, siteName: string): Promise<RouteMeta | 
     // Хоёр граф, нэг script блок: schema.org дээд түвшинд массив зөвшөөрнө.
     ["SEO_STRUCTURED_DATA", jsonLd([structuredData, breadcrumbs])],
     // The product photo is the PDP's largest paint; start fetching it with the document.
-    ["SEO_HERO_PRELOAD", product.imageUrl ? `<link rel="preload" as="image" href="${escapeAttribute(product.imageUrl)}" fetchpriority="high" />` : ""],
+    // 2026-09-21: <picture> (ResponsivePicture) AVIF-г сонгодог болсон тул preload
+    // ч ЯГ тэр файлыг заана — эс бөгөөс WebP + AVIF хоёуланг татаж LCP-г
+    // удаашруулна (production-д 4.8 -> 5.8 с болсныг хэмжилтээр олсон).
+    ["SEO_HERO_PRELOAD", product.imageUrl ? await responsiveImagePreload(product.imageUrl, PRODUCT_FULL_WIDTH, PRODUCT_MAIN_IMAGE_SIZES) : ""],
   ]);
 }
 

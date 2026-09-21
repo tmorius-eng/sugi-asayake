@@ -84,3 +84,9 @@ export function avifSrcSet(url: string | null | undefined, fullWidth: number): s
   if (!grid || !url || grid === url) return null;
   return `${avifVariantKey(grid)} ${GRID_VARIANT_WIDTH}w, ${avifVariantKey(url)} ${fullWidth}w`;
 }
+
+/** Барааны хуудасны гол зураг (ProductDetail): ≥1024px-д 55vw, түүнээс доош бүтэн өргөн.
+ *  `<picture>` ба серверийн preload (routeMeta.ts) хоёр ИЖИЛ утгыг ашиглана. */
+export const PRODUCT_MAIN_IMAGE_SIZES = "(min-width: 1024px) 55vw, 100vw";
+/** Барааны зургийн хадгалах дээд өргөн (IMAGE_MAX_DIMENSION.product). */
+export const PRODUCT_FULL_WIDTH = 1600;
