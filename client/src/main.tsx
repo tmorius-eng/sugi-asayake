@@ -124,9 +124,46 @@ const app = (
   </trpc.Provider>
 );
 
+// Нүүрний shell-ийн (server/_core/heroShell.ts) hero зураг ЗУРАГДСАНЫ дараа л
+// React-ийг mount хийнэ (2026-09-21). Home нь shell-ийг эхний frame-дээ нуудаг
+// тул JS зурагнаас түрүүлж ирвэл shell-ийн зураг хэзээ ч зурагдахгүй → LCP нь
+// React-ийн зураг болж, Lighthouse/PageSpeed түүнийг "бүх JS татаж ажиллуулсны
+// дараа" гэж загварчилдаг (production дээр 89 ↔ 81 гэж зөвхөн уралдаанаар
+// хэлбэлзэж байв). "load + нэг frame" хангалтгүй гэдгийг хөтөч дээр хэмжиж
+// баталсан (load-оос 58 мс-ийн дараа ч LCP бичигдээгүй) — тиймээс хөтчийн
+// өөрийнх нь дохиог хүлээнэ: яг тэр <img>-ийн LCP entry. Нөөц: LCP дэмждэггүй
+// хөтөч (зарим Safari) эсвэл зураг хамгийн том биш бол load + 150 мс; зураг
+// унавал шууд; ямар ч тохиолдолд 1.2 с-ээс илүү хүлээхгүй.
+function afterHeroShellImagePaint(mount: () => void) {
+  const img = document.querySelector<HTMLImageElement>('#hero-shell img[fetchpriority="high"]');
+  if (!img || img.complete) {
+    mount();
+    return;
+  }
+  let mounted = false;
+  let observer: PerformanceObserver | undefined;
+  const mountOnce = () => {
+    if (mounted) return;
+    mounted = true;
+    observer?.disconnect();
+    mount();
+  };
+  if (PerformanceObserver.supportedEntryTypes?.includes("largest-contentful-paint")) {
+    observer = new PerformanceObserver(list => {
+      if (list.getEntries().some(entry => (entry as PerformanceEntry & { element?: Element | null }).element === img)) {
+        setTimeout(mountOnce, 0);
+      }
+    });
+    observer.observe({ type: "largest-contentful-paint", buffered: true });
+  }
+  img.addEventListener("load", () => setTimeout(mountOnce, 150), { once: true });
+  img.addEventListener("error", mountOnce, { once: true });
+  setTimeout(mountOnce, 1200);
+}
+
 // Honeybadger-т мэдээлдэг React error boundary ижил багцад байдаг; түлхүүргүй
 // бол App доторх энгийн ErrorBoundary нь хил болно.
-createRoot(document.getElementById("root")!).render(app);
+afterHeroShellImagePaint(() => createRoot(document.getElementById("root")!).render(app));
 if (honeybadgerApiKey) {
   void import("@honeybadger-io/react").then(({ Honeybadger }) => {
     window.addEventListener("error", event => Honeybadger.notify(event.error ?? event.message));
