@@ -3,6 +3,8 @@ import { ArrowDown, ArrowUp, ImageUp, LoaderCircle, Pencil, Tags, Trash2 } from 
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { GenericListView } from "./admin/GenericListView";
+import { IMAGE_UPLOAD_ACCEPT, MAX_UPLOAD_BYTES, isUploadableImageType, prepareImageUpload, type UploadImageType } from "@/lib/prepareImageUpload";
+import UploadTips from "@/components/admin/UploadTips";
 
 // NEWVISION.md §5 "Топ брэндүүд" -- Tom's explicit correction to the
 // original plan, which had omitted a Brands admin section entirely. Same
@@ -85,19 +87,23 @@ export default function AdminBrandsPanel() {
     reorderBrand.mutate({ id: swapWith.id, sortOrder: brand.sortOrder });
   };
 
-  const onImageFileSelected = (field: "photoUrl" | "logoUrl") => (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 8 * 1024 * 1024) {
-      toast.error("JPG, PNG, WEBP форматтай, 8 MB-аас бага зураг сонгоно уу.");
+  const onImageFileSelected = (field: "photoUrl" | "logoUrl") => async (event: ChangeEvent<HTMLInputElement>) => {
+    const picked = event.target.files?.[0];
+    if (!picked) return;
+    const prepared = await prepareImageUpload(picked, undefined);
+    const file = prepared.file;
+    if (!isUploadableImageType(file.type) || file.size > MAX_UPLOAD_BYTES) {
+      toast.error("JPG, PNG, WEBP эсвэл GIF зураг сонгоно уу (8 MB хүртэл).");
       event.target.value = "";
       return;
     }
+    if (prepared.note) toast.message("Зургийг илгээхээс өмнө жижгэрүүлэв", { description: prepared.note });
+    if (prepared.warning) toast.warning(prepared.warning);
     setUploadingField(field);
     const reader = new FileReader();
     reader.onload = async () => {
       try {
-        const stored = await uploadImage.mutateAsync({ fileName: file.name, contentType: file.type as "image/jpeg" | "image/png" | "image/webp", dataBase64: String(reader.result) });
+        const stored = await uploadImage.mutateAsync({ fileName: file.name, contentType: file.type as UploadImageType, dataBase64: String(reader.result) });
         setForm(current => ({ ...current, [field]: stored.url }));
         toast.success(field === "logoUrl" ? "Лого байршуулагдлаа." : "Зураг байршуулагдлаа.");
       } catch (error) {
@@ -194,10 +200,11 @@ export default function AdminBrandsPanel() {
               <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-4 text-xs font-bold text-[var(--a-text-soft)] transition hover:border-[#df1f3d] hover:text-[#df1f3d]">
                 {uploadingField === "photoUrl" ? <LoaderCircle className="animate-spin" size={15} /> : <ImageUp size={15} />}
                 {uploadingField === "photoUrl" ? "Байршуулж байна…" : "Зураг байршуулах"}
-                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={onImageFileSelected("photoUrl")} disabled={uploadingField !== null} className="hidden" />
+                <input type="file" accept={IMAGE_UPLOAD_ACCEPT} onChange={onImageFileSelected("photoUrl")} disabled={uploadingField !== null} className="hidden" />
               </label>
               {form.photoUrl && <button type="button" onClick={() => setForm(current => ({ ...current, photoUrl: "" }))} className="text-xs font-bold text-[var(--a-faint)] transition hover:text-[#df1f3d]">Арилгах</button>}
             </div>
+            <UploadTips kind="brandPhoto" />
             <input value={form.photoUrl} onChange={event => setForm(current => ({ ...current, photoUrl: event.target.value }))} placeholder="эсвэл зургийн холбоос шууд бичих" className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" />
           </div>
 
@@ -214,10 +221,11 @@ export default function AdminBrandsPanel() {
               <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-4 text-xs font-bold text-[var(--a-text-soft)] transition hover:border-[#df1f3d] hover:text-[#df1f3d]">
                 {uploadingField === "logoUrl" ? <LoaderCircle className="animate-spin" size={15} /> : <ImageUp size={15} />}
                 {uploadingField === "logoUrl" ? "Байршуулж байна…" : "Лого байршуулах"}
-                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={onImageFileSelected("logoUrl")} disabled={uploadingField !== null} className="hidden" />
+                <input type="file" accept={IMAGE_UPLOAD_ACCEPT} onChange={onImageFileSelected("logoUrl")} disabled={uploadingField !== null} className="hidden" />
               </label>
               {form.logoUrl && <button type="button" onClick={() => setForm(current => ({ ...current, logoUrl: "" }))} className="text-xs font-bold text-[var(--a-faint)] transition hover:text-[#df1f3d]">Арилгах</button>}
             </div>
+            <UploadTips kind="logo" />
             <input value={form.logoUrl} onChange={event => setForm(current => ({ ...current, logoUrl: event.target.value }))} placeholder="эсвэл логоны холбоос шууд бичих" className="h-11 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm font-normal outline-none focus:border-[#df1f3d]" />
             {!form.logoUrl && <span className="text-[11px] font-normal text-[var(--a-faint)]">Лого байхгүй үед доод зурвас хоосон харагдана.</span>}
           </div>

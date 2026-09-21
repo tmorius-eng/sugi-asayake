@@ -5,6 +5,8 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { GenericListView } from "./admin/GenericListView";
 import { slugify } from "@shared/slugify";
+import { IMAGE_UPLOAD_ACCEPT, MAX_UPLOAD_BYTES, isUploadableImageType, prepareImageUpload, type UploadImageType } from "@/lib/prepareImageUpload";
+import UploadTips from "@/components/admin/UploadTips";
 
 // "Controls everything" admin overhaul (2026-09-08, Phase J): replaces
 // client/src/components/home/locations-data.ts's pure hardcoded array with
@@ -81,19 +83,23 @@ export default function AdminBranchesPanel() {
     reorderBranch.mutate({ id: swapWith.id, sortOrder: branch.sortOrder });
   };
 
-  const onPhotoFileSelected = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 8 * 1024 * 1024) {
-      toast.error("JPG, PNG, WEBP форматтай, 8 MB-аас бага зураг сонгоно уу.");
+  const onPhotoFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
+    const picked = event.target.files?.[0];
+    if (!picked) return;
+    const prepared = await prepareImageUpload(picked, undefined);
+    const file = prepared.file;
+    if (!isUploadableImageType(file.type) || file.size > MAX_UPLOAD_BYTES) {
+      toast.error("JPG, PNG, WEBP эсвэл GIF зураг сонгоно уу (8 MB хүртэл).");
       event.target.value = "";
       return;
     }
+    if (prepared.note) toast.message("Зургийг илгээхээс өмнө жижгэрүүлэв", { description: prepared.note });
+    if (prepared.warning) toast.warning(prepared.warning);
     setIsUploadingPhoto(true);
     const reader = new FileReader();
     reader.onload = async () => {
       try {
-        const stored = await uploadImage.mutateAsync({ fileName: file.name, contentType: file.type as "image/jpeg" | "image/png" | "image/webp", dataBase64: String(reader.result) });
+        const stored = await uploadImage.mutateAsync({ fileName: file.name, contentType: file.type as UploadImageType, dataBase64: String(reader.result) });
         setForm(current => ({ ...current, photoUrl: stored.url }));
         toast.success("Зураг байршуулагдлаа.");
       } catch (error) {
@@ -201,10 +207,11 @@ export default function AdminBranchesPanel() {
               <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-4 text-xs font-bold text-[var(--a-text-soft)] transition hover:border-[#df1f3d] hover:text-[#df1f3d]">
                 {isUploadingPhoto ? <LoaderCircle className="animate-spin" size={15} /> : <ImageUp size={15} />}
                 {isUploadingPhoto ? "Байршуулж байна…" : "Зураг байршуулах"}
-                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={onPhotoFileSelected} disabled={isUploadingPhoto} className="hidden" />
+                <input type="file" accept={IMAGE_UPLOAD_ACCEPT} onChange={onPhotoFileSelected} disabled={isUploadingPhoto} className="hidden" />
               </label>
               {form.photoUrl && <button type="button" onClick={() => setForm(current => ({ ...current, photoUrl: "" }))} className="text-xs font-bold text-[var(--a-faint)] transition hover:text-[#df1f3d]">Арилгах</button>}
             </div>
+            <UploadTips kind="general" />
           </div>
           <label className="flex items-center gap-3 rounded-xl bg-[var(--a-card)] px-3 py-3 text-sm font-bold"><input type="checkbox" checked={form.isActive} onChange={event => setForm(current => ({ ...current, isActive: event.target.checked }))} className="size-4 accent-[#df1f3d]" />Идэвхтэй (сайт дээр харагдана)</label>
           <fieldset disabled={!isAdmin} className="grid gap-3 rounded-2xl border border-[var(--a-border)] p-3 sm:col-span-2 sm:grid-cols-2 disabled:opacity-60">

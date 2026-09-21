@@ -3,6 +3,8 @@ import { ImageUp, LoaderCircle, RotateCcw, Save, ShieldCheck } from "lucide-reac
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { logoSlotKeys, siteMediaSlots, type SiteMediaSlotKey } from "@shared/site-media";
+import { HERO_SHAPE, IMAGE_UPLOAD_ACCEPT, MAX_UPLOAD_BYTES, isUploadableImageType, prepareImageUpload, type UploadImageType } from "@/lib/prepareImageUpload";
+import UploadTips from "@/components/admin/UploadTips";
 
 type MediaRow = { slotKey: string; imageUrl: string; altText: string | null; updatedAt: Date };
 
@@ -24,22 +26,26 @@ export default function ContentMediaPanel({ preview = false }: { preview?: boole
   const busy = uploadImage.isPending || updateMedia.isPending || clearMedia.isPending;
 
   const uploadForSlot = (slotKey: SiteMediaSlotKey) => async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const picked = event.target.files?.[0];
+    if (!picked) return;
     if (preview) {
       toast.message("Preview горим", { description: "Зураг байршуулахын тулд хамгаалагдсан /admin хэсэгт нэвтэрнэ үү." });
       return;
     }
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 8 * 1024 * 1024) {
-      toast.error("JPG, PNG, WEBP форматтай, 8 MB-аас бага зураг сонгоно уу.");
+    const prepared = await prepareImageUpload(picked, slotKey.startsWith("home-hero") ? HERO_SHAPE : undefined);
+    const file = prepared.file;
+    if (!isUploadableImageType(file.type) || file.size > MAX_UPLOAD_BYTES) {
+      toast.error("JPG, PNG, WEBP эсвэл GIF зураг сонгоно уу (8 MB хүртэл).");
       event.target.value = "";
       return;
     }
+    if (prepared.note) toast.message("Зургийг илгээхээс өмнө жижгэрүүлэв", { description: prepared.note });
+    if (prepared.warning) toast.warning(prepared.warning);
     setActiveSlot(slotKey);
     const reader = new FileReader();
     reader.onload = async () => {
       try {
-        const stored = await uploadImage.mutateAsync({ fileName: file.name, contentType: file.type as "image/jpeg" | "image/png" | "image/webp", dataBase64: String(reader.result) });
+        const stored = await uploadImage.mutateAsync({ fileName: file.name, contentType: file.type as UploadImageType, dataBase64: String(reader.result) });
         const existing = mediaBySlot.get(slotKey) as MediaRow | undefined;
         await updateMedia.mutateAsync({ slotKey, imageUrl: stored.url, altText: altDrafts[slotKey] ?? existing?.altText ?? null });
         await refresh();
@@ -110,7 +116,8 @@ export default function ContentMediaPanel({ preview = false }: { preview?: boole
           <div className={`h-44 bg-center ${isLogo ? "bg-white bg-contain bg-no-repeat p-7" : "bg-[var(--a-soft)] bg-cover"}`} style={imageUrl ? { backgroundImage: `url(${imageUrl})` } : undefined} aria-label={saved?.altText || slot.label} role="img"><div className={`flex h-full p-4 ${isLogo ? "items-start" : "items-end"}${imageUrl && !isLogo ? " bg-gradient-to-t from-black/55 via-transparent to-transparent" : ""}`}><span className="rounded-full bg-white/92 px-2.5 py-1 text-[9px] font-extrabold tracking-[.12em] text-[var(--a-text)]">{saved ? "CUSTOM IMAGE" : imageUrl ? "BRAND DEFAULT" : "ЗУРАГ ОРУУЛААГҮЙ"}</span></div></div>
           <div className="p-4"><p className="text-[10px] font-extrabold tracking-[.15em] text-[#df1f3d]">{slot.key.toUpperCase()}</p><h3 className="mt-1 font-[var(--font-display)] text-lg font-semibold tracking-[-.04em]">{slot.label}</h3><p className="mt-1 min-h-9 text-xs leading-5 text-[var(--a-muted)]">{slot.description}</p>
             <label className="mt-4 grid gap-1.5 text-[11px] font-bold text-[var(--a-text-soft)]">Зургийн тайлбар (accessibility)<input value={altDrafts[slot.key] ?? saved?.altText ?? ""} onChange={event => setAltDrafts(current => ({ ...current, [slot.key]: event.target.value }))} placeholder={slot.label} maxLength={240} className="h-10 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-xs font-normal outline-none focus:border-[#3970a7]" /></label>
-            <div className="mt-3 flex flex-wrap gap-2"><label className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-[#df1f3d] px-3.5 py-2.5 text-[11px] font-bold text-white transition hover:bg-[#bc1732] active:scale-[.97]"><ImageUp size={15} />{isActive && uploadImage.isPending ? "Байршуулж байна…" : "Зураг солих"}<input type="file" className="sr-only" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={uploadForSlot(slot.key)} /></label><button type="button" disabled={busy} onClick={() => saveAltText(slot.key, slot.fallbackUrl)} className="inline-flex items-center gap-1.5 rounded-full border border-[var(--a-border)] px-3 py-2.5 text-[11px] font-bold text-[var(--a-text-soft)] transition hover:border-[#3970a7] hover:text-[var(--a-info)] disabled:opacity-50"><Save size={14} />Тайлбар хадгалах</button>{saved && <button type="button" disabled={busy} onClick={() => resetSlot(slot.key)} className="inline-flex items-center gap-1.5 rounded-full px-2 py-2.5 text-[11px] font-bold text-[var(--a-muted)] transition hover:text-[#df1f3d] disabled:opacity-50"><RotateCcw size={14} />Буцаах</button>}</div>
+            <div className="mt-3 flex flex-wrap gap-2"><label className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-[#df1f3d] px-3.5 py-2.5 text-[11px] font-bold text-white transition hover:bg-[#bc1732] active:scale-[.97]"><ImageUp size={15} />{isActive && uploadImage.isPending ? "Байршуулж байна…" : "Зураг солих"}<input type="file" className="sr-only" accept={IMAGE_UPLOAD_ACCEPT} disabled={busy} onChange={uploadForSlot(slot.key)} /></label><button type="button" disabled={busy} onClick={() => saveAltText(slot.key, slot.fallbackUrl)} className="inline-flex items-center gap-1.5 rounded-full border border-[var(--a-border)] px-3 py-2.5 text-[11px] font-bold text-[var(--a-text-soft)] transition hover:border-[#3970a7] hover:text-[var(--a-info)] disabled:opacity-50"><Save size={14} />Тайлбар хадгалах</button>{saved && <button type="button" disabled={busy} onClick={() => resetSlot(slot.key)} className="inline-flex items-center gap-1.5 rounded-full px-2 py-2.5 text-[11px] font-bold text-[var(--a-muted)] transition hover:text-[#df1f3d] disabled:opacity-50"><RotateCcw size={14} />Буцаах</button>}</div>
+            <UploadTips kind={logoSlotKeys.has(slot.key) ? "logo" : slot.key.startsWith("home-hero") ? "hero" : "general"} defaultOpen={false} className="mt-3" />
           </div>
         </article>;
       })}

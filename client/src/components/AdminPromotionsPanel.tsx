@@ -3,6 +3,8 @@ import { LoaderCircle, Megaphone, Pencil, Trash2, UploadCloud } from "lucide-rea
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { GenericListView, type GenericListColumn } from "./admin/GenericListView";
+import { PROMO_SHAPE, IMAGE_UPLOAD_ACCEPT, MAX_UPLOAD_BYTES, isUploadableImageType, prepareImageUpload, type UploadImageType } from "@/lib/prepareImageUpload";
+import UploadTips from "@/components/admin/UploadTips";
 
 // Admin-controlled site-wide marketing popup/banner (new-arrival announcement,
 // seasonal sale, store event). Whatever is entered here is exactly what
@@ -80,18 +82,22 @@ export default function AdminPromotionsPanel() {
   };
   const closeComposer = () => { setComposerOpen(false); setForm(emptyForm()); };
 
-  const onImageSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 8 * 1024 * 1024) {
-      toast.error("JPG, PNG, WEBP форматтай, 8 MB-аас бага зураг сонгоно уу.");
+  const onImageSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = event.target.files?.[0];
+    if (!picked) return;
+    const prepared = await prepareImageUpload(picked, PROMO_SHAPE);
+    const file = prepared.file;
+    if (!isUploadableImageType(file.type) || file.size > MAX_UPLOAD_BYTES) {
+      toast.error("JPG, PNG, WEBP эсвэл GIF зураг сонгоно уу (8 MB хүртэл).");
       event.target.value = "";
       return;
     }
+    if (prepared.note) toast.message("Зургийг илгээхээс өмнө жижгэрүүлэв", { description: prepared.note });
+    if (prepared.warning) toast.warning(prepared.warning);
     const reader = new FileReader();
     reader.onload = async () => {
       try {
-        const stored = await uploadImage.mutateAsync({ fileName: file.name, contentType: file.type as "image/jpeg" | "image/png" | "image/webp", dataBase64: String(reader.result) });
+        const stored = await uploadImage.mutateAsync({ fileName: file.name, contentType: file.type as UploadImageType, dataBase64: String(reader.result) });
         setForm(current => ({ ...current, imageUrl: stored.url }));
         toast.success("Зураг хадгалагдлаа.");
       } catch (error) {
@@ -202,10 +208,11 @@ export default function AdminPromotionsPanel() {
             {form.imageUrl && <img src={form.imageUrl} alt="" className="h-16 w-28 rounded-lg object-cover" />}
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--a-border)] px-4 py-2.5 text-xs font-bold text-[var(--a-text)] transition hover:bg-black/5">
               <UploadCloud size={14} />{uploadImage.isPending ? "Байршуулж байна…" : "Зураг сонгох"}
-              <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={onImageSelected} disabled={uploadImage.isPending} />
+              <input type="file" accept={IMAGE_UPLOAD_ACCEPT} className="hidden" onChange={onImageSelected} disabled={uploadImage.isPending} />
             </label>
             {form.imageUrl && <button type="button" onClick={() => setForm(current => ({ ...current, imageUrl: "" }))} className="text-xs font-bold text-[#df1f3d]">Зураг хасах</button>}
           </div>
+          <UploadTips kind="promo" className="mt-3" />
         </div>}
 
         <button type="submit" disabled={isSaving} className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#df1f3d] px-5 py-3 text-xs font-bold text-white disabled:opacity-60">{isSaving && <LoaderCircle className="animate-spin" size={15} />}{form.id ? "Өөрчлөлт хадгалах" : "Урамшуулал үүсгэх"}</button>

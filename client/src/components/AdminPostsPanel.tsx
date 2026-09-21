@@ -7,6 +7,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { trpc } from "@/lib/trpc";
 import { slugify } from "@shared/slugify";
 import MediaLibraryModal from "./admin/MediaLibraryModal";
+import { COVER_SHAPE, IMAGE_UPLOAD_ACCEPT, MAX_UPLOAD_BYTES, isUploadableImageType, prepareImageUpload, type UploadImageType } from "@/lib/prepareImageUpload";
+import UploadTips from "@/components/admin/UploadTips";
 
 // Lazy, not a static import: TinyMCE is a genuinely large library (it alone
 // pushed the whole /admin chunk over 2MB in a real `pnpm build` check) --
@@ -181,19 +183,23 @@ export default function AdminPostsPanel({ preview = false }: { preview?: boolean
     }
   };
 
-  const handleCoverFile = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const handleCoverFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const picked = event.target.files?.[0];
+    if (!picked) return;
     if (preview) { toast.message("Preview горим", { description: "Зураг байршуулахын тулд хамгаалагдсан /admin хэсэгт нэвтэрнэ үү." }); return; }
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 8 * 1024 * 1024) {
-      toast.error("JPG, PNG, WEBP форматтай, 8 MB-аас бага зураг сонгоно уу.");
+    const prepared = await prepareImageUpload(picked, COVER_SHAPE);
+    const file = prepared.file;
+    if (!isUploadableImageType(file.type) || file.size > MAX_UPLOAD_BYTES) {
+      toast.error("JPG, PNG, WEBP эсвэл GIF зураг сонгоно уу (8 MB хүртэл).");
       event.target.value = "";
       return;
     }
+    if (prepared.note) toast.message("Зургийг илгээхээс өмнө жижгэрүүлэв", { description: prepared.note });
+    if (prepared.warning) toast.warning(prepared.warning);
     const reader = new FileReader();
     reader.onload = async () => {
       try {
-        const stored = await uploadCoverImage.mutateAsync({ fileName: file.name, contentType: file.type as "image/jpeg" | "image/png" | "image/webp", dataBase64: String(reader.result) });
+        const stored = await uploadCoverImage.mutateAsync({ fileName: file.name, contentType: file.type as UploadImageType, dataBase64: String(reader.result) });
         setForm(current => ({ ...current, coverImageUrl: stored.url }));
         toast.success("Зураг байршууллаа.");
       } catch (error) { toast.error(messageFrom(error)); }
@@ -347,10 +353,11 @@ export default function AdminPostsPanel({ preview = false }: { preview?: boolean
             <label className="mt-3 flex h-36 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-black/15 bg-[var(--a-soft)] text-xs font-normal text-[var(--a-faint)] transition hover:border-[#df1f3d] hover:text-[#df1f3d]">
               {uploadCoverImage.isPending ? <LoaderCircle className="animate-spin" size={20} /> : <ImageUp size={20} />}
               {uploadCoverImage.isPending ? "Байршуулж байна…" : "Зураг сонгох"}
-              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleCoverFile} disabled={uploadCoverImage.isPending} className="hidden" />
+              <input type="file" accept={IMAGE_UPLOAD_ACCEPT} onChange={handleCoverFile} disabled={uploadCoverImage.isPending} className="hidden" />
             </label>
           )}
           <button type="button" onClick={() => setMediaModalOpen(true)} className="mt-2 text-[11px] font-bold text-[var(--a-info)] hover:text-[#df1f3d]">Медиа сангаас сонгох</button>
+          <UploadTips kind="cover" className="mt-3" />
         </section>
 
         <section className="rounded-2xl border border-[var(--a-border)] bg-[var(--a-card)] p-4">
