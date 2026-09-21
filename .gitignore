@@ -141,3 +141,6 @@ docs/~$*.pptx
 /playwright-report/
 /test-results/
 /blob-report/
+
+# Хүлээлцэх PDF-ийн завсрын өгөгдөл (docs/manual/extract.py үүсгэдэг)
+/docs/manual/api.json

@@ -88,6 +88,8 @@ browser → /api/trpc/<router>.<procedure>
 ## 3. `server/` — домэйн модулиуд
 
 ### 3.1 `db.ts` (~6,900 мөр) — өгөгдлийн үндсэн давхарга
+
+> 2026-09-20: `getSiteTextValue(slot)` / `getSiteName()` — баримт PDF, имэйл, тайлан, төлбөрийн тайлбар зэрэг **серверээс гардаг бүх брэндийн нэр** эндээс уншина (өмнө нь кодод хатуу бичигдсэн байв).
 Бүх бизнес query энд. Гол бүлгүүд:
 
 - **Хэрэглэгч/auth**: `createUserWithPassword` (⚠️ хамгийн эхний хэрэглэгч эсвэл `OWNER_EMAIL`-тэй таарвал л admin болно), `findUserByPhone`, session, нууц үг сэргээх, `recordLoginAttempt`.
@@ -176,6 +178,8 @@ browser → /api/trpc/<router>.<procedure>
 
 ## 4. `shared/` — хоёр талын нэг эх сурвалж
 
+> 2026-09-20: `delivery.ts`-д `freeShippingProgress()` нэмэгдэв — сагс/захиалгын хураангуйн "үнэгүй хүргэлтэд X дутуу" мөр `computeDeliveryFeeMnt`-тэй ИЖИЛ босго, ижил дүнг уншина (хоёр дахь томьёо бичихгүй). `help-faq.ts` нь эзэнд хамаарах утга (утас, брэнд) агуулахаа больсон.
+
 | Файл | Юу |
 |---|---|
 | `notification-events.ts` | үйл явдал → бүлэг/priority/tag, Монгол мессеж, **PII-гүй payload төрлүүд**, `ubDateKey` |
@@ -261,12 +265,13 @@ browser → /api/trpc/<router>.<procedure>
 
 ---
 
-## 9. Тест (107 vitest файл, 1030+ тест — 2026-09-20; E2E 40)
+## 9. Тест (107 vitest файл, 1030+ тест — 2026-09-20; **E2E 18 файл / 150 тест — 2026-09-21**)
 
 ```powershell
 $env:RUN_AUTH_INTEGRATION_TESTS="1"; $env:COMMERCE_INTEGRATION_TESTS="1"; $env:RUN_MEDIA_INTEGRATION_TESTS="1"
 pnpm exec vitest run --no-file-parallelism   # ~17 минут, бодит Aiven дээр
 pnpm check   # tsc (app) + tsc -p tsconfig.tests.json (тест/скрипт) — 2026-09-12-оос тестүүд ч type-check хийгдэнэ
+pnpm e2e     # Playwright, 18 файл / 150 тест (desktop + mobile), sugi_staging схем дээр
 pnpm lint    # ESLint flat config: typescript-eslint recommended + react-hooks (rules-of-hooks, exhaustive-deps). CI-д ч ажиллана
 ```
 
@@ -291,7 +296,7 @@ pnpm build ; pnpm e2e        # 54 тест, компьютер + утас, produ
 
 ## 10. Скриптүүд (`scripts/`)
 
-`db-apply-migration.ts` (migration, нэг файл, prod), `db-apply-all-migrations.ts` (хоосон DB-д бүх migration — CI/шинэ орчин), `ci-seed.ts` (4 салбар), `enrich-products-from-open-facts.ts` (Open Facts TSV → барааны факт), `seed-gift-cards.ts`, `db-backup.ps1` / `db-restore.ps1`, `stock-ledger-rebaseline.ts` (drift засах), `test-residue-report.ts` / `test-residue-purge.ts` (амьд DB-ийн тестийн үлдэгдэл), `schema-drift-check.ts` (`drizzle/schema.ts` vs бодит `information_schema` + FK индекс — нөгөө лаптопын migration-ыг илрүүлнэ), `check-updates.ps1` (долоо хоног тутмын `pnpm audit` + `pnpm outdated` + override эрүүл мэндийн тайлан, Windows toast; `-Install`-аар Task Scheduler-т бүртгэнэ, зөвхөн мэдээлнэ — юу ч суулгахгүй), `tmp-*.ts` (gitignore, нэг удаагийн), зураг/брэндийн seed скриптүүд.
+`db-apply-migration.ts` (migration, нэг файл, prod; **2026-09-20-оос `schema_migrations`-д бүртгэнэ, `--mark-applied`-аар хуучныг бүртгэх**), `db-migration-status.ts` (**prod/staging-ийн дутуу migration-ийг нэрлэнэ**), `oci/media-backup.mjs` (**R2 зургийн нэмэгдүүлсэн нөөц, ETag-аар; `--dry-run`**), `db-apply-all-migrations.ts` (хоосон DB-д бүх migration — CI/шинэ орчин), `ci-seed.ts` (4 салбар), `enrich-products-from-open-facts.ts` (Open Facts TSV → барааны факт), `seed-gift-cards.ts`, `db-backup.ps1` / `db-restore.ps1`, `stock-ledger-rebaseline.ts` (drift засах), `test-residue-report.ts` / `test-residue-purge.ts` (амьд DB-ийн тестийн үлдэгдэл), `schema-drift-check.ts` (`drizzle/schema.ts` vs бодит `information_schema` + FK индекс — нөгөө лаптопын migration-ыг илрүүлнэ), `check-updates.ps1` (долоо хоног тутмын `pnpm audit` + `pnpm outdated` + override эрүүл мэндийн тайлан, Windows toast; `-Install`-аар Task Scheduler-т бүртгэнэ, зөвхөн мэдээлнэ — юу ч суулгахгүй), `tmp-*.ts` (gitignore, нэг удаагийн), зураг/брэндийн seed скриптүүд.
 
 ---
 
