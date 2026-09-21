@@ -10,10 +10,12 @@ import { hasAvif } from "./imagePreload";
  * ЯАГААД: утасны Lighthouse дээр LCP 4–5 с, үүний 1.5–3 с нь "render delay" —
  * зураг аль хэдийн татагдчихсан ч React (507 KB) ажиллаж зурах хүртэл дэлгэц
  * хоосон. Энэ функц HeroSection/HeroImageSlideshow/CommerceHeader/SitePromo-ийн
- * гаргадаг DOM-ыг ЯГ ИЖИЛ class-уудаар `<div id="root">` ДОТОР статикаар зурна:
- * CSS-ийг хөтөч уншмагц hero зураг харагдана. React `createRoot().render()` нь
- * эхний commit-доо #root-ын хуучин агуулгыг арчаад өөрийн DOM-оо тавьдаг —
- * нэг frame-д, ижил pixel: хэрэглэгч солигдсоныг мэдэхгүй.
+ * гаргадаг DOM-ыг ЯГ ИЖИЛ class-уудаар `<div id="root">`-ын ӨМНӨ статикаар зурна:
+ * CSS-ийг хөтөч уншмагц hero зураг харагдана. Home.tsx нь React-ийн эхний
+ * зурагдалттай НЭГ frame-д (useLayoutEffect) shell-ийг нуугаад текст/толгойг нь
+ * устгана — ижил pixel, хэрэглэгч солигдсоныг мэдэхгүй. Нуусан `<img>` баримтад
+ * үлддэг нь зориудынх: Lighthouse LCP элементээ олж чадвал зургийн замаар
+ * загварчилдаг, устгасан бол JS-ээс хамаарсан пессимист загвар руу унадаг.
  *
  * ДҮРЭМ: markup энд React-ийнхаас салж болохгүй — `e2e/hero-shell.spec.ts` нь
  * JS-гүй shell ба React-ийн зурсан hero зургийн байрлал/хэмжээг утас ба
@@ -125,7 +127,7 @@ export async function renderHeroShell({ media, textFor, brandLogo, promo }: Hero
     + `</div></div>`
     + `<nav class="commerce-header-navrow commerce-marketing-nav">${nav}</nav>`
     + `</header>`
-    + `<main><section class="hero-section">`
+    + `<div><section class="hero-section">`
     + `<div class="hero-rail-wrap"><div class="hero-rail" role="group">${figures}</div></div>`
     + `<div class="hero-copy">`
     + `<p class="eyebrow hero-eyebrow">${eyebrow}</p>`
@@ -133,5 +135,5 @@ export async function renderHeroShell({ media, textFor, brandLogo, promo }: Hero
     + `<p class="hero-description">${esc(textFor("home-text-hero-description"))}</p>`
     + `<div class="hero-actions"><a class="button button-primary" href="/shop" tabindex="-1">Бүтээгдэхүүн үзэх ${icon("chevron-right", 16)}</a><a class="quiet-link" href="#stores" tabindex="-1">Салбар олох</a></div>`
     + `<div class="hero-trust">${icon("badge-check", 18)}<div><strong>${esc(textFor("home-text-hero-trust-title"))}</strong><span>${esc(textFor("home-text-hero-trust-subtitle"))}</span></div></div>`
-    + `</div></section></main></div></div>`;
+    + `</div></section></div></div></div>`;
 }

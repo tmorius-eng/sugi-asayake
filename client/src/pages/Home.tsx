@@ -22,7 +22,7 @@
  * EditorialBanner primitive-ээр) -> StoreLocatorSection -> Footer (хуучин final-cta-г
  * opt-in banner болгон шингээсэн, SiteFooter.tsx).
  */
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useState } from "react";
 import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
 import SiteFooter from "@/components/SiteFooter";
@@ -58,6 +58,18 @@ const symbolImage = "/images/brand/sugi-symbol-256.webp";
 export default function Home() {
   const { user } = useAuth();
   const [cartOpen, setCartOpen] = useState(false);
+  // Серверийн зурсан shell-ийг (server/_core/heroShell.ts) React-ийн ЭХНИЙ
+  // зурагдалттай нэг frame-д нуух: layout effect нь DOM өөрчлөгдсөний дараа,
+  // paint-аас ӨМНӨ ажилладаг тул хэрэглэгч shell → React солигдохыг харахгүй.
+  // Толгой/текстийг устгана (дэлгэц уншигч, SEO-д давхар h1 үлдэхгүй), харин
+  // нуусан rail-ийн <img>-үүд үлдэнэ — Lighthouse LCP элементээ (тэр зураг)
+  // баримтаас олж чадвал зургийн замаар загварчилна; устгавал олохгүй.
+  useLayoutEffect(() => {
+    const shell = document.getElementById("hero-shell");
+    if (!shell) return;
+    shell.hidden = true;
+    shell.querySelectorAll(".site-promo-banner, header, .hero-copy").forEach(node => node.remove());
+  }, []);
   // NEWVISION.md §8: Home used to have no cart integration in its header at
   // all -- a signed-in shopper browsing the homepage had no way to see
   // their cart without navigating to /shop first. Same trpc.cart.current

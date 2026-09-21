@@ -58,11 +58,13 @@ for (const [name, viewport] of [["утас", { width: 390, height: 844 }], ["к�
         return { top: Math.round(box.top + window.scrollY), left: Math.round(box.left), width: Math.round(box.width), height: Math.round(box.height) };
       };
       const observer = new MutationObserver(() => {
-        if (document.getElementById("hero-shell") || !document.querySelector(".hero-rail-slide img")) return;
-        const tile = Array.from(document.querySelectorAll(".hero-rail-slide img")).map(img => ({ img, box: img.getBoundingClientRect() })).filter(t => t.box.left >= -1).sort((a, b) => a.box.left - b.box.left)[0];
+        // Shell нуугдсан (Home.tsx-ийн layout effect) ба React-ийн rail орсон мөч.
+        const shell = document.getElementById("hero-shell");
+        if (!shell || !shell.hidden || !document.querySelector("#root .hero-rail-slide img")) return;
+        const tile = Array.from(document.querySelectorAll("#root .hero-rail-slide img")).map(img => ({ img, box: img.getBoundingClientRect() })).filter(t => t.box.left >= -1).sort((a, b) => a.box.left - b.box.left)[0];
         (window as unknown as { __swap: unknown }).__swap = {
           img: rect(tile?.img ?? null),
-          header: rect(document.querySelector(".commerce-header")),
+          header: rect(document.querySelector("#root .commerce-header")),
           src: tile?.img.getAttribute("src") ?? null,
         };
         observer.disconnect();
@@ -91,6 +93,9 @@ test("бусад хуудсанд shell байхгүй, нүүрэнд React и�
   expect(homeHtml).toContain('id="hero-shell"');
   await page.goto("/");
   await page.waitForLoadState("networkidle");
-  expect(await page.locator("#hero-shell").count(), "React mount-ийн дараа shell үлдэж, hero давхардсан").toBe(0);
+  // React ирмэгц shell нуугдаж, толгой/текст нь устана (зөвхөн нуусан rail үлдэнэ).
+  await expect(page.locator("#hero-shell")).toBeHidden();
+  expect(await page.locator("#hero-shell header, #hero-shell .hero-copy, #hero-shell .site-promo-banner").count(), "shell-ийн толгой/текст устаагүй").toBe(0);
   expect(await page.locator("h1").count(), "h1 давхардсан").toBe(1);
+  expect(await page.locator(".commerce-header").count(), "толгой давхардсан").toBe(1);
 });

@@ -122,10 +122,15 @@
   <body>
     <!-- Homepage only (2026-09-21): the promo bar, header and hero rendered
          server-side (server/_core/heroShell.ts) so the hero photograph is on
-         screen as soon as the CSS is, not after 500 KB of JS has run. React's
-         first commit replaces it with the identical DOM in the same frame.
+         screen as soon as the CSS is, not after 500 KB of JS has run. It sits
+         BEFORE #root, not inside it: Home.tsx hides it in a layout effect of
+         the same frame React first paints (identical DOM, same pixels), and
+         the hidden <img> stays in the document so Lighthouse can still
+         attribute the LCP to the photograph (a removed node is
+         unattributable and the metric falls back to a JS-bound model).
          Empty on every other route. -->
-    <div id="root">%SITE_HERO_SHELL%</div>
+    %SITE_HERO_SHELL%
+    <div id="root"></div>
     <script src="/vendor/hero-shell.js" defer></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
