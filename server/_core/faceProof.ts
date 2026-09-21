@@ -14,7 +14,7 @@
  */
 
 import { SignJWT, jwtVerify } from "jose";
-import { parse as parseCookieHeader } from "cookie";
+import { parseCookie as parseCookieHeader } from "cookie";
 import { TRPCError } from "@trpc/server";
 import type { Request, Response } from "express";
 import { FACE_IDLE_TIMEOUT_MS, FACE_VERIFICATION_TTL_MS, isAdminPanelRole } from "../../shared/face-auth";

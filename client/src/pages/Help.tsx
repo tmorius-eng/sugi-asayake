@@ -1,4 +1,5 @@
-import { Clock, Facebook, Instagram, Mail, MapPin, MessageCircle, Phone, Search } from "lucide-react";
+import { Clock, Mail, MapPin, MessageCircle, Phone, Search } from "lucide-react";
+import { Facebook, Instagram } from "@/components/icons/BrandIcons";
 import { Link } from "wouter";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import SiteFooter from "@/components/SiteFooter";

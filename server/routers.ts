@@ -13,7 +13,7 @@ import { invalidateIndexHtmlCache } from "./_core/indexHtml";
 import { siteDocumentKeys } from "@shared/site-documents";
 import { LOCALES } from "@shared/i18n";
 import { TRPCError } from "@trpc/server";
-import { parse as parseCookieHeader } from "cookie";
+import { parseCookie as parseCookieHeader } from "cookie";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { getGuestCartCookieOptions, getSessionCookieOptions, getVisitorSessionCookieOptions } from "./_core/cookies";

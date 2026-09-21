@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Check, Facebook, Link2, MessageCircle, Send, Share2 } from "lucide-react";
+import { Check, Link2, MessageCircle, Send, Share2 } from "lucide-react";
+import { Facebook } from "@/components/icons/BrandIcons";
 import { useT } from "@/hooks/useLocale";
 import { useConfirm } from "@/components/ConfirmDialog";
 

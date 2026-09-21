@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import { randomBytes } from "node:crypto";
-import { parse as parseCookieHeader } from "cookie";
+import { parseCookie as parseCookieHeader } from "cookie";
 import { jwtVerify } from "jose";
 import { COOKIE_NAME } from "@shared/const";
 import { ENV } from "./env";

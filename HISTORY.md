@@ -521,6 +521,49 @@ Migration 0092, 0093 prod + staging хоёуланд, бүртгэл 94/94. **vi
 газар `export`-ийг doc comment-ийн ӨМНӨ тавьсан байв (`export /** … */ function`) — ажилладаг ч
 editor doc-оо алддаг → declaration-ийн өмнө рүү зөөв.
 
+### 6m. Толгой бүх хуудсанд, буруу хаяг → 404, Dependabot-ийн 6 PR бүгд (2026-09-21, шөнө)
+
+Tom: *"Legal pages … Dependabot … fix all of them!!!"* (өмнөх тайлангийн 2–4-р зүйл).
+
+**Толгой ба сагс.** /privacy /terms /about /help-д сайтын толгой (хайлт, хэл, сагс, цэс)
+нэмэгдэж, давхардсан "Нүүр хуудас руу буцах" холбоосыг толгойн сум орлов. Замдаа **бодит алдаа**:
+/journal, /brands, нийтлэл, /track-order, /login, /forgot-password, /checkout дээр толгойн сагсны
+дүрс "үхсэн" байв — тоо үргэлж 0, дарахад юу ч болдоггүй (эдгээр хуудас `onCartOpen` дамжуулдаггүй).
+Одоо `CommerceHeader` хуудас сагсаа холбоогүй бол өөрөө удирдана (бодит тоо + өөрийн `CartDrawer`);
+сагсаа удирддаг хуудсууд (нүүр, shop, бараа, routine, профайл) хөндөгдөөгүй → hero shell ч хэвээр.
+
+**Буруу хаяг.** Нэг үгтэй буруу хаяг (`/shopp`) нийтлэлийн `/:slug` руу орж "Мэдээ олдсонгүй"
+гэдэг байв → брэндийн `NotFound`. Мөн сервер БҮХ замд 200 буцаадаг байсан ("soft 404" — Google
+буруу хаяг, устсан бараа/нийтлэлийг жинхэнэ хуудас мэт индексжүүлдэг): **`server/_core/routeStatus.ts`**
+— статик route жагсаалт + бараа/routine/нийтлэлийн slug-ийг шалгаж 404 (60 с кэш; lookup унавал
+200 — жинхэнэ хуудсыг хэзээ ч нуухгүй). `server/route-status.test.ts` нь `App.tsx`-ийн `<Route path>`
+жагсаалтыг уншиж зөрвөл унана — **шинэ хуудас нэмбэл `STATIC_ROUTES`-д мөн нэм**. Service worker
+navigation-ийг шууд дамжуулдаг тул 404 хуудас офлайн хуудсаар солигдохгүй (шалгасан).
+`BottomNavBar` `/shopp` дээр "Ангилал"-ыг идэвхтэй харуулдаг байсан (prefix шалгалт) → замын хилтэй.
+
+**Dependabot — 6 PR** (өмнөх тайланд "3" гэсэн нь буруу байв: CI-гүй 3-ыг алгассан).
+Салбаруудыг merge хийлгүй (хуучин суурьтай, lockfile зөрчилдөнө) хувилбаруудыг `main` дээр
+шууд тавьж `pnpm install`-оор lockfile-ыг шинээр үүсгэв; скриптээр салбар бүрийн bump бүгд
+орсныг шалгав (32 + 5 + 1 + 1 + 1 = 40):
+- #10 production-minor 30 (React 19.3, tRPC 11.19, TanStack Query 5.103, zod 4.6, wouter 3.11, mysql2 3.24, AWS SDK, transformers 4.3 …),
+  #9 dev-tooling 5 (Tailwind 4.3.3, tsx, prettier …), #4 `@types/node` 26 — кодын өөрчлөлтгүй.
+- #6 **`lucide-react` 0.453 → 1.47** (мажор): 1.0 брэндийн лого (Facebook, Instagram, YouTube)-г хассан →
+  `client/src/components/icons/BrandIcons.tsx` — хуучин яг ижил зураглалыг lucide-ийн өөрийн
+  `createLucideIcon`-оор; харагдац өөрчлөгдөөгүй.
+- #5 **`cookie` 1 → 2** (мажор): `parse` → `parseCookie` (3 файл, ижил зан төлөв).
+- #1 Actions: `checkout@v7`, `setup-node@v7`. Тэр PR-ийн CI уналт нь хуучин суурийн `openId` алдаа байв.
+- `pnpm.overrides` (16 аюулгүй байдлын override) lockfile-д хэвээр, `pnpm audit --prod` 0.
+  `onnxruntime-node` 1.30-ийн алгассан install script нь зөвхөн CUDA (GPU) binary татдаг — CPU
+  binary (Windows + Linux) багцад байгаа тул сервер хэвийн.
+
+**Хэмжээ (бодит баримт):** main chunk 484 → 528 KB (gzip 152 → 165), vendor 97 → 85 KB; өсөлтийн
+бараг бүгд **React 19.3-ийн `react-dom` 173 → 201 KB**, `lucide-react` +4, `tailwind-merge` +3 KB.
+⚠️ Lighthouse-ийн өмнө/дараа харьцуулалт энэ шөнө ХИЙГДЭЭГҮЙ: лаптоп дээр тоглоом (CPU ~46%)
+ажиллаж байсан тул хоёр горим хоёулаа CPU-д мэдрэмтгий — production-ы өөрчлөгдөөгүй build ч
+"71 / LCP 5.1 с" гэж худал муу гарав. Машин сул үед дахин хэмжинэ.
+
+**Баталгаа:** vitest **1111 passed / 115 файл**, E2E **236 passed / 0 failed** (бүтнээр), icon-ийн харагдацыг шинэчлэлийн өмнө/дараах screenshot-ын pixel diff-ээр (толгой, доод цэс, footer-ийн Facebook/Instagram — зөвхөн sub-pixel anti-aliasing, 0.05–0.6%) баталсан.
+
 ### 7. Тест
 Шинэ: `e2e/checkout.spec.ts` — **зочин анх удаа бүтэн захиалга өгнө** (сагс → маягтын
 алдаа → салбараас авах → бэлэн мөнгө → баталгаажуулах дэлгэц → DB-д мөр бодитоор

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { BarChart3, CheckCircle2, CircleDashed, Facebook, LoaderCircle, Power, TriangleAlert } from "lucide-react";
+import { BarChart3, CheckCircle2, CircleDashed, LoaderCircle, Power, TriangleAlert } from "lucide-react";
+import { Facebook } from "@/components/icons/BrandIcons";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { checkStoreSettingFormat, getStoreSettingSlot, storeSettingStatus, type StoreSettingKey, type StoreSettingStatus } from "@shared/store-settings";

@@ -1,4 +1,5 @@
-import { Facebook, Instagram, Phone, Youtube } from "lucide-react";
+import { Phone } from "lucide-react";
+import { Facebook, Instagram, Youtube } from "@/components/icons/BrandIcons";
 import { Link } from "wouter";
 import InstallAppButton from "@/components/InstallAppButton";
 import NotificationOptIn from "@/components/NotificationOptIn";
