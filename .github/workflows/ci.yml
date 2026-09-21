@@ -45,8 +45,16 @@ jobs:
       # none, so this workflow needs no repository secret. The application
       # itself still refuses to encrypt without a real key -- the fallback
       # lives only in the test setup.
-      - name: Unit tests
-        run: pnpm test
+      - name: Unit tests (+ coverage report)
+        run: pnpm test:coverage
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-unit
+          path: coverage/
+          retention-days: 14
 
       - name: Build
         run: pnpm build

@@ -289,6 +289,7 @@ host=github.com
 
 " | git credential fill | sed -n "s/^password=//p")`, дараа нь `"/c/Program Files/GitHub CLI/gh.exe" run list --repo tmorius-eng/sugi-asayake`.
 - Тест: `pnpm exec vitest run --no-file-parallelism` (параллель горим race үүсгэдэг).
+- **Coverage**: `pnpm test:coverage` → `coverage/index.html` (server + shared). CI-ийн unit job тайланг artifact болгоно (`coverage-unit`).
 - Integration тестэд fake session user бичихгүй — `server/_test-helpers.ts`-ийн `testSessionUser()`; IP санамсаргүй (rate limit 15 мин).
 - Бодит production slot/мөрийг тестээр болзолгүй устгахгүй (snapshot-and-restore).
 - **UI өөрчлөлтийг хөтөч дээр ажиллуулж үзэлгүйгээр дуусгасанд тооцохгүй**

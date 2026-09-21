@@ -82,7 +82,10 @@ export default function JobApplicationModal({ target, onClose }: { target: Apply
             <button type="button" onClick={onClose} className="mt-2 rounded-full bg-[#df1f3d] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-[#c81b34]">{t("Хаах")}</button>
           </div>
         ) : (
-          <form onSubmit={submit} className="grid gap-3">
+          <form onSubmit={submit} className="grid gap-3" noValidate>
+            {/* noValidate (2026-09-21, E2E олсон): `required` талбартай үед хөтөч өөрийн
+                хөөсөн мессежээр илгээлтийг хаадаг тул useFieldErrors-ийн талбарын алдаа
+                хэзээ ч гардаггүй байв. Шалгалтыг submit() өөрөө хийнэ. */}
             <label className="grid gap-1.5 text-xs font-bold">{t("Нэр")}<input value={fullName} onChange={event => { setFullName(event.target.value); clearError("job-name"); }} autoComplete="name" required className={fieldClass} {...fieldProps("job-name")} /><FieldError field="job-name" message={errorFor("job-name")} /></label>
             <label className="grid gap-1.5 text-xs font-bold">{t("Утас")}<input value={phone} onChange={event => { setPhone(event.target.value); clearError("job-phone"); }} inputMode="tel" autoComplete="tel" required className={fieldClass} {...fieldProps("job-phone")} /><FieldError field="job-phone" message={errorFor("job-phone")} /></label>
             <label className="grid gap-1.5 text-xs font-bold">{t("Имэйл (сонголттой)")}<input value={email} onChange={event => setEmail(event.target.value)} inputMode="email" autoComplete="email" className={fieldClass} /></label>

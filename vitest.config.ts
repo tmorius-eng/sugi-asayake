@@ -22,5 +22,16 @@ export default defineConfig({
     // a red suite that said nothing about the code. High enough for the
     // network, still low enough to catch a genuine hang.
     testTimeout: 30000,
+    // Coverage (2026-09-21): `pnpm test:coverage` → coverage/ (html + json-summary),
+    // CI дээр artifact болно. Зөвхөн сервер ба shared — клиентийг E2E (Playwright)
+    // хамгаалдаг тул энд тоологдвол хиймэл бага тоо гарна. Босго тавиагүй:
+    // integration gate-гүй CI run ба бүх gate-тэй локал run хоёр ялгаатай тоо өгнө.
+    coverage: {
+      provider: "v8",
+      include: ["server/**/*.ts", "shared/**/*.ts"],
+      exclude: ["**/*.test.ts", "**/*.spec.ts", "server/_test-*.ts", "server/**/*.d.ts"],
+      reporter: ["text-summary", "html", "json-summary"],
+      reportsDirectory: "coverage",
+    },
   },
 });
