@@ -27,6 +27,10 @@
     %SEO_VERIFICATION%
     <meta name="twitter:description" content="%SEO_TWITTER_DESCRIPTION%" />
     <script type="application/ld+json">%SEO_STRUCTURED_DATA%</script>
+    <!-- R2 preconnect (2026-09-21): the hero photo is a /cdn/ 302 to another
+         origin; warming that connection while the HTML parses saves its
+         DNS+TCP+TLS on the LCP path. Empty when storage is not configured. -->
+    %STOREFRONT_CDN_PRECONNECT%
     <!-- Hero photo preload, filled by server/_core/indexHtml.ts (LCP). -->
     %SEO_HERO_PRELOAD%
     <link rel="icon" type="image/png" sizes="64x64" href="/icons/favicon-64.png" />

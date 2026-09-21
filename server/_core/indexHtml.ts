@@ -9,6 +9,23 @@ import { resolveRouteMeta } from "./routeMeta";
 // Open Graph needs absolute URLs; storage URLs may already be absolute (R2
 // public host) or site-relative (/cdn/...). Нэг хэрэгжилт: ./publicUrl.
 import { absoluteUrl, publicOrigin } from "./publicUrl";
+import { ENV } from "./env";
+
+/**
+ * `<link rel="preconnect">` R2-ийн нийтийн хост руу (2026-09-21). Hero зураг
+ * `/cdn/…` → 302 → `pub-….r2.dev` замаар ирдэг: өөр origin тул DNS + TCP + TLS
+ * (утсанд 3 RTT ≈ 450 мс) hero-ийн хүсэлтийн ӨМНӨ л явдаг байв. Preconnect нь
+ * HTML уншиж байхад холболтыг бэлдэнэ; тохируулаагүй бол хоосон.
+ */
+function cdnPreconnectTag(): string {
+  try {
+    const origin = ENV.s3PublicBaseUrl ? new URL(ENV.s3PublicBaseUrl).origin : "";
+    if (!origin || origin === publicOrigin()) return "";
+    return `<link rel="preconnect" href="${escapeAttribute(origin)}" /><link rel="dns-prefetch" href="${escapeAttribute(origin)}" />`;
+  } catch {
+    return "";
+  }
+}
 
 /**
  * Substitutes the admin-editable site-wide SEO values into
@@ -176,6 +193,7 @@ async function resolveValues(): Promise<Map<string, string>> {
     ["COOKIE_MARKETING_DESCRIPTION", escapeJsString(textFor("cookie-text-marketing-description"))],
     ["ANALYTICS_CONFIG_JSON", analyticsConfig],
     ["STOREFRONT_BOOTSTRAP_JSON", bootstrapJson],
+    ["STOREFRONT_CDN_PRECONNECT", cdnPreconnectTag()],
     // Нүүрний дээд хэсэг серверээс (heroShell.ts). `HERO_SHELL=0` = унтраах
     // (kill switch); renderIndexHtml нь зөвхөн "/" дээр л оруулна.
     ["SITE_HERO_SHELL", process.env.HERO_SHELL === "0" ? "" : await renderHeroShell({
@@ -267,6 +285,7 @@ function fallbackFor(key: string): string | undefined {
     // нь JSON.parse-д унана. Хоосон объект = хэсэг бүр байхгүй = ердийн query
     // (лого, hero нь slot-ын brand default руу буцна — яг DB-гүй үеийн зөв дүр).
     case "STOREFRONT_BOOTSTRAP_JSON": return "{}";
+    case "STOREFRONT_CDN_PRECONNECT": return cdnPreconnectTag();
     case "SITE_HERO_SHELL": return "";
     case "SEO_OG_TYPE": return "website";
     case "SEO_OG_IMAGE_META": return "";
