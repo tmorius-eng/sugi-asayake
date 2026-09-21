@@ -267,13 +267,13 @@ browser → /api/trpc/<router>.<procedure>
 
 ---
 
-## 9. Тест (107 vitest файл, 1030+ тест — 2026-09-20; **E2E 18 файл / 150 тест — 2026-09-21**)
+## 9. Тест (107 vitest файл, 1030+ тест — 2026-09-20; **E2E 19 файл / 156 тест — 2026-09-21**)
 
 ```powershell
 $env:RUN_AUTH_INTEGRATION_TESTS="1"; $env:COMMERCE_INTEGRATION_TESTS="1"; $env:RUN_MEDIA_INTEGRATION_TESTS="1"
 pnpm exec vitest run --no-file-parallelism   # ~17 минут, бодит Aiven дээр
 pnpm check   # tsc (app) + tsc -p tsconfig.tests.json (тест/скрипт) — 2026-09-12-оос тестүүд ч type-check хийгдэнэ
-pnpm e2e     # Playwright, 18 файл / 150 тест (desktop + mobile), sugi_staging схем дээр
+pnpm e2e     # Playwright, 19 файл / 156 тест (desktop + mobile), sugi_staging схем дээр
 pnpm lint    # ESLint flat config: typescript-eslint recommended + react-hooks (rules-of-hooks, exhaustive-deps). CI-д ч ажиллана
 ```
 
