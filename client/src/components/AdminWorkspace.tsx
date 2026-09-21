@@ -56,6 +56,7 @@ import { formatMnt } from "@shared/format";
 import { PRODUCT_SHAPE, IMAGE_UPLOAD_ACCEPT, MAX_UPLOAD_BYTES, isUploadableImageType, prepareImageUpload, type UploadImageType } from "@/lib/prepareImageUpload";
 import UploadTips from "@/components/admin/UploadTips";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 type ProductRow = {
   id: number;
   categoryId: number;
@@ -192,6 +193,7 @@ export type AdminSection = "dashboard" | "analytics" | "products" | "orders" | "
 
 
 export default function AdminWorkspace({ preview = false }: { preview?: boolean }) {
+  const { confirm } = useConfirm();
   const { user: currentUser, logout } = useAuth();
   // Admin overhaul (2026-09-08, Phase C): the old single isFullAdmin boolean
   // was overloaded for three unrelated meanings (nav-section visibility,
@@ -589,7 +591,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
       toast.message("Preview горим", { description: "Бодит устгал зөвхөн хамгаалагдсан /admin хэсэгт ажиллана." });
       return;
     }
-    if (!window.confirm(`“${categoryForm.name}” ангиллыг устгах уу? Энэ үйлдэл буцаах боломжгүй.`)) return;
+    if (!await confirm({ title: `“${categoryForm.name}” ангиллыг устгах уу? Энэ үйлдэл буцаах боломжгүй.`, danger: true })) return;
     try {
       await deleteCategory.mutateAsync({ id: categoryForm.id });
       toast.success("Ангиллыг устгалаа.");
@@ -604,7 +606,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
       toast.message("Preview горим", { description: "Бодит устгал зөвхөн хамгаалагдсан /admin хэсэгт ажиллана." });
       return;
     }
-    if (!window.confirm(`“${product.name}” бүтээгдэхүүнийг устгах уу? Энэ үйлдэл буцаах боломжгүй.`)) return;
+    if (!await confirm({ title: `“${product.name}” бүтээгдэхүүнийг устгах уу? Энэ үйлдэл буцаах боломжгүй.`, danger: true })) return;
     try {
       await deleteProduct.mutateAsync({ id: product.id });
       toast.success("Бүтээгдэхүүнийг устгалаа.");

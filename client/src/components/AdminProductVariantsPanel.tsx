@@ -5,6 +5,7 @@ import { trpc } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
 import AdminBranchStockEditor from "./AdminBranchStockEditor";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 // Product variants -- shoppers pick between these at checkout once a
 // product has more than one (see the long comment on productVariants in
 // drizzle/schema.ts). The "Үлдэгдэл" field below is now sugar over
@@ -37,6 +38,7 @@ function parseAttributes(json: string | null): AttributeRow[] {
 }
 
 export default function AdminProductVariantsPanel({ productId }: { productId: number }) {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const variantsQuery = trpc.admin.productVariants.useQuery({ productId });
   const createVariant = trpc.admin.createProductVariant.useMutation();
@@ -127,7 +129,7 @@ export default function AdminProductVariantsPanel({ productId }: { productId: nu
                 {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}Салбараар
               </button>
               <button type="button" onClick={() => openForm(variant)} className="shrink-0 text-[11px] font-bold text-[var(--a-info)] hover:underline">Засах</button>
-              <button type="button" onClick={() => { if (window.confirm(`"${variant.sku}" variant-ыг устгах уу?`)) deleteVariant.mutate({ id: variant.id }); }} className="shrink-0 rounded-full p-1.5 text-[var(--a-muted)] hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${variant.sku} устгах`}><Trash2 size={13} /></button>
+              <button type="button" onClick={async () => { if (await confirm({ title: `"${variant.sku}" variant-ыг устгах уу?`, danger: true })) deleteVariant.mutate({ id: variant.id }); }} className="shrink-0 rounded-full p-1.5 text-[var(--a-muted)] hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${variant.sku} устгах`}><Trash2 size={13} /></button>
             </div>
             {isExpanded && <AdminBranchStockEditor variantId={variant.id} />}
           </div>;

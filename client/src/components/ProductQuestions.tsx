@@ -30,32 +30,39 @@ function Avatar({ name, url, size = 40 }: { name: string; url: string | null; si
     : <span className="review-avatar review-avatar--initials" style={{ width: size, height: size }} aria-hidden="true">{initials(name)}</span>;
 }
 
+const QUESTION_PAGE_SIZE = 20;
+
 export default function ProductQuestions({ productId, canAnswer }: { productId: number; canAnswer: boolean }) {
   const { isAuthenticated, user } = useAuth();
   const utils = trpc.useUtils();
-  const list = trpc.questions.list.useQuery({ productId });
+  // Хуудаслалт (2026-09-21): reviews-тэй ижил cursor загвар; нийт тоо тусдаа query.
+  const list = trpc.questions.list.useInfiniteQuery({ productId, limit: QUESTION_PAGE_SIZE }, {
+    getNextPageParam: last => (last.length === QUESTION_PAGE_SIZE ? last[last.length - 1].id : undefined),
+  });
+  const countQuery = trpc.questions.count.useQuery({ productId });
   const [askOpen, setAskOpen] = useState(false);
   const [askDraft, setAskDraft] = useState("");
   const [answeringId, setAnsweringId] = useState<number | null>(null);
   const [answerDraft, setAnswerDraft] = useState("");
 
   const ask = trpc.questions.ask.useMutation({
-    onSuccess: () => { toast.success("Асуулт нийтлэгдлээ. Ажилтан эсвэл худалдан авагч удахгүй хариулна."); setAskDraft(""); setAskOpen(false); utils.questions.list.invalidate({ productId }); },
+    onSuccess: () => { toast.success("Асуулт нийтлэгдлээ. Ажилтан эсвэл худалдан авагч удахгүй хариулна."); setAskDraft(""); setAskOpen(false); void utils.questions.invalidate(); utils.questions.list.invalidate({ productId }); },
     onError: error => toast.error(messageFrom(error)),
   });
   const answer = trpc.questions.answer.useMutation({
-    onSuccess: () => { toast.success("Хариулт нийтлэгдлээ."); setAnswerDraft(""); setAnsweringId(null); utils.questions.list.invalidate({ productId }); },
+    onSuccess: () => { toast.success("Хариулт нийтлэгдлээ."); setAnswerDraft(""); setAnsweringId(null); void utils.questions.invalidate(); },
     onError: error => toast.error(messageFrom(error)),
   });
 
-  const questions = (list.data ?? []) as Question[];
+  const questions = (list.data?.pages.flat() ?? []) as Question[];
+  const questionTotal = countQuery.data ?? questions.length;
   const requireLogin = () => toast.error("Асуулт асуухын тулд нэвтэрнэ үү.");
 
   return (
     <section id="product-questions" className="product-questions pdp-anchor-section" aria-labelledby="product-questions-heading">
       <div className="product-questions-head">
         <div>
-          <h2 id="product-questions-heading" className="product-questions-title"><MessageCircleQuestion size={20} aria-hidden="true" /> Асуулт, хариулт{questions.length ? ` · ${questions.length}` : ""}</h2>
+          <h2 id="product-questions-heading" className="product-questions-title"><MessageCircleQuestion size={20} aria-hidden="true" /> Асуулт, хариулт{questionTotal ? ` · ${questionTotal}` : ""}</h2>
           <p className="product-questions-sub">Энэ барааны талаар асуултаа бичээрэй — ажилтан эсвэл өмнө авсан хэрэглэгч хариулна.</p>
         </div>
         <button type="button" className="review-action review-action--primary" onClick={() => (isAuthenticated ? setAskOpen(open => !open) : requireLogin())}>

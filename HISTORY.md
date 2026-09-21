@@ -398,6 +398,54 @@ storefront-д очих зургийн URL-ыг сервер `directStorageUrl`-�
 `--mark-applied`-аар prod ба staging хоёуланд бүртгэв → **Бүртгэгдсэн 92 / Дутуу 0** хоёуланд.
 Одооноос шинэ migration бүр `db-apply-migration.ts`-ээр орж бүртгэгддэг тул статус жинхэнэ утгатай.
 
+### 6h. `window.confirm`/`prompt` 47 газар → сайтын өөрийн dialog (2026-09-21, 4-р хэсэг)
+
+Хөтчийн төрөлх confirm нь утсан дээр (PWA/standalone горимд ялангуяа) "сайтын гадна" цонх
+шиг харагддаг, загвар/харанхуй горим/хэл дагадаггүй, Playwright-д тусгай зам (`page.once
+("dialog")`) шаарддаг байв. Одоо **`client/src/components/ConfirmDialog.tsx`**:
+`ConfirmProvider` (App.tsx-д нэг), `useConfirm()` → `{ confirm, prompt }` хоёулаа async
+(`await confirm({ title, body?, confirmLabel?, danger? })` → boolean; `await prompt({ title,
+input: { initial?, multiline?, readOnly?, required? } })` → string | null). ui/dialog (Radix)
+дээр: фокус баригдана, Esc/overlay хаана, `role="dialog"`, `data-testid="confirm-dialog"`.
+Provider-гүй газар hook нь хөтчийн confirm руу буцна.
+
+- **Storefront 4** (гараар): Profile — захиалга цуцлах, хаяг устгах, бүх төхөөрөмжөөс гарах
+  (гарчиг + тайлбар + улаан товч); ShareBar — clipboard хаалттай үед холбоосыг readOnly
+  талбарт харуулна.
+- **Admin/inventory 43 газар, 28 файл** — механик хөрвүүлэгч (`window.confirm(X)` → `await
+  confirm({ title: X, danger })`, `window.prompt(A, B)` → `await prompt(...)`, хамгийн ойрын
+  хамрагч функцийг `async`, компонент бүрт hook + import), дараа нь `pnpm check` барьсан нэг
+  зөрчил: `TransfersView`-ийн tRPC mutation `confirm` нэртэй байсан → dialog `ask`. "устга/
+  цуцла/хүчингүй/унтраа/хаса/гарга/солих" агуулсан асуулт автоматаар `danger` (улаан товч).
+- E2E: `page.once("dialog", …)` 5 газар → `e2e/helpers/confirm.ts`-ийн `acceptConfirm(page)`;
+  шинэ `e2e/confirm-dialog.spec.ts` (Болих нь юу ч хийхгүй, Esc хаана, session хэвээр).
+- CSS `.confirm-dialog*` — буцаалтын dialog-той нэг хэл (дугуй товч, улаан зөвхөн аюултайд).
+
+Дүрэм: шинэ код `window.confirm`/`window.prompt` бичихгүй — `useConfirm()`.
+
+### 6i. Backend: хязгааргүй жагсаалтууд хуудаслагдав, analytics 60 с кэш (2026-09-21, 5-р хэсэг)
+
+- **`reviews.list`, `questions.list`**: `limit` (анхдагч 20, дээд 50) + `cursor` (сүүлийн `id`),
+  эрэмбэ `id DESC` (createdAt-тай ижил дараалал, секундын тэнцэлгүй — "тогтвортой тэнцвэр"
+  дүрэм). Клиент `useInfiniteQuery` (бүтэн хуудас = дараагийн cursor), барааны хуудсанд
+  "Бусад сэтгэгдлийг харах"; асуултын тоо тусдаа `questions.count` (`ProductSectionJumps` бүх
+  жагсаалтыг татдаггүй болов). Хариу нь массив хэвээр тул одоо байгаа тестүүд хөндөгдөөгүй.
+- **`content.allPosts`**: `{ page, pageSize }` → `{ items, total, page, pageSize, pageCount }`
+  (кэштэй жагсаалтыг санах ойд зүснэ); /journal хуудас URL-д (`?page=2`), 12/хуудас, Өмнөх/Дараах.
+  `latestPosts` 6-аар хязгаарлав. `admin.storeCreditLedger` 100-аар.
+- **`getAnalyticsReport` 60 с кэш** (`analytics:report:<from>:<to>`), тестэд кэшгүй
+  (`NODE_ENV=test` — захиалга үүсгээд шууд тайлан уншдаг).
+- Замдаа E2E олсон 3 бодит алдаа: (1) **сагсны drawer-ийн тоо нэмэх/хасах/устгах товчны
+  aria-label латин `item.name` ашигладаг байв** — гарчиг нь монгол нэр (staging шинэчлэгдмэгц
+  илэрсэн) → `displayName(item).primary`; (2) `AdminSearchPanel` bare `confirm(` (window-гүй)
+  хөрвүүлэгчээс мултарсан → dialog; (3) `.product-name-secondary` гэрэл горимд хуудасны суурь
+  дээр 3.78:1 → #5b615b; (4) картын **зурсан хуучин үнэ** (`s`) #9a9a9a = 2.81:1 → #5b615b (хямдралтай
+  бараа staging-д ирмэгц илэрсэн — өмнө нь тест өгөгдөлгүй тул хэзээ ч харж чадаагүй).
+- **Үр дүн (4–5-р хэсэг хамт): vitest 1100 passed / 112 файл ✅, E2E 198 passed / 0 failed ✅**
+  (`site-media.integration` нь `content.siteMedia` шууд R2 хаяг өгдөг шинэ гэрээнд тохирч засагдав).
+- **Хийгээгүй (зориуд)**: захиалгын мөр бүрийн нөөцийн query (N+1) — нэг захиалгад ≤20 мөр,
+  transaction дотор, ledger-ийн дүрмээр `applyBranchStockDelta` заавал; ашиг бага, эрсдэл өндөр.
+
 ### 7. Тест
 Шинэ: `e2e/checkout.spec.ts` — **зочин анх удаа бүтэн захиалга өгнө** (сагс → маягтын
 алдаа → салбараас авах → бэлэн мөнгө → баталгаажуулах дэлгэц → DB-д мөр бодитоор

@@ -2,6 +2,7 @@ import { HELP_FAQ } from "@shared/help-faq";
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
+import { useConfirm } from "@/components/ConfirmDialog";
 import { Link, useLocation, useSearch } from "wouter";
 import {
   Bell, Camera, ChevronDown, ClipboardList, CreditCard, Heart, HelpCircle, Home, LayoutDashboard,
@@ -274,6 +275,7 @@ function OrderTimeline({ status }: { status: string }) {
 }
 
 function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
+  const { confirm } = useConfirm();
   // Audit 2026-09-09 (R4): 20 orders per page, "Илүү үзэх" loads the next
   // page by cursor -- a customer's history is no longer one unbounded query.
   const orders = trpc.orders.mine.useInfiniteQuery({ limit: 20 }, { getNextPageParam: lastPage => lastPage.nextCursor ?? undefined });
@@ -389,7 +391,7 @@ function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
                   </button>
                 )}
                 {(order.status === "pending" || order.status === "confirmed") && (
-                  <button type="button" className="order-buy-again" disabled={cancelOrder.isPending} onClick={() => { if (window.confirm("Энэ захиалгыг цуцлах уу? Энэ үйлдлийг буцаах боломжгүй.")) cancelOrder.mutate({ id: order.id }); }}>
+                  <button type="button" className="order-buy-again" disabled={cancelOrder.isPending} onClick={async () => { if (await confirm({ title: "Энэ захиалгыг цуцлах уу?", body: "Энэ үйлдлийг буцаах боломжгүй.", confirmLabel: "Цуцлах", danger: true })) cancelOrder.mutate({ id: order.id }); }}>
                     {cancelOrder.isPending ? <Loader2 className="animate-spin" size={14} /> : <X size={14} />} Захиалга цуцлах
                   </button>
                 )}
@@ -707,6 +709,7 @@ function AddressForm({ initial, onCancel, onSubmit, isSubmitting }: {
 }
 
 function AddressesTab() {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const [addingAddress, setAddingAddress] = useState(false);
   const [editingAddressId, setEditingAddressId] = useState<number | null>(null);
@@ -765,7 +768,7 @@ function AddressesTab() {
                 <div className="address-card-actions">
                   {!address.isDefault && <button type="button" onClick={() => updateAddress.mutate({ id: address.id, isDefault: true })}><Star size={13} /> Үндсэн болгох</button>}
                   <button type="button" onClick={() => { setAddingAddress(false); setEditingAddressId(address.id); }}><Pencil size={13} /> Засах</button>
-                  <button type="button" className="danger" onClick={() => { if (window.confirm("Энэ хаягийг устгах уу?")) deleteAddress.mutate({ id: address.id }); }}><Trash2 size={13} /> Устгах</button>
+                  <button type="button" className="danger" onClick={async () => { if (await confirm({ title: "Энэ хаягийг устгах уу?", confirmLabel: "Устгах", danger: true })) deleteAddress.mutate({ id: address.id }); }}><Trash2 size={13} /> Устгах</button>
                 </div>
               </div>
             )
@@ -877,6 +880,7 @@ function PushToggleRow() {
 /* ---------------------------------------------------------------------- */
 
 function SecurityTab() {
+  const { confirm } = useConfirm();
   const { user } = useAuth();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -929,7 +933,7 @@ function SecurityTab() {
 
       <section className="profile-section" data-reveal>
         <div className="profile-section-head"><div><h2>Session удирдлага</h2><p>Бусад төхөөрөмж/хөтчөөс гарах</p></div></div>
-        <button type="button" onClick={() => { if (window.confirm("Энэ таны БҮХ төхөөрөмж дээрх session-г хүчингүй болгоно (энэ хөтчийг оруулаад). Үргэлжлүүлэх үү?")) logoutAllDevices.mutate(); }} disabled={logoutAllDevices.isPending} className="button" style={{ background: "#17181b", color: "#fff" }}>
+        <button type="button" onClick={async () => { if (await confirm({ title: "Бүх төхөөрөмжөөс гарах уу?", body: "Энэ таны БҮХ төхөөрөмж дээрх session-г хүчингүй болгоно (энэ хөтчийг оруулаад).", confirmLabel: "Гарах", danger: true })) logoutAllDevices.mutate(); }} disabled={logoutAllDevices.isPending} className="button" style={{ background: "#17181b", color: "#fff" }}>
           <ShieldOff size={15} /> Бүх төхөөрөмжөөс гарах
         </button>
       </section>

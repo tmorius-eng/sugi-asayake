@@ -5,6 +5,7 @@ import { trpc } from "@/lib/trpc";
 import { GenericListView, type GenericListColumn } from "./admin/GenericListView";
 import { formatMnt } from "@shared/format";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 // Manually-entered checkout discount codes ("SALE10") -- distinct from the
 // automatic routine-bundle and loyalty-tier discounts, which need no code.
 // See discountCodes in drizzle/schema.ts; real, server-side re-validated
@@ -49,6 +50,7 @@ const toLocalInputValue = (value: string | Date | null) => {
 };
 
 export default function AdminDiscountCodesPanel() {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const codesQuery = trpc.admin.discountCodes.useQuery();
 
@@ -148,7 +150,7 @@ export default function AdminDiscountCodesPanel() {
             rowActions={code => (
               <div className="flex justify-end gap-1">
                 <button type="button" onClick={() => openComposer(code)} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)] hover:text-[#df1f3d]" aria-label={`${code.code} засах`}><Pencil size={15} /></button>
-                <button type="button" onClick={() => { if (window.confirm(`"${code.code}" кодыг бүрмөсөн устгах уу?`)) deleteCode.mutate({ id: code.id }); }} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${code.code} устгах`}><Trash2 size={15} /></button>
+                <button type="button" onClick={async () => { if (await confirm({ title: `"${code.code}" кодыг бүрмөсөн устгах уу?`, danger: true })) deleteCode.mutate({ id: code.id }); }} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${code.code} устгах`}><Trash2 size={15} /></button>
               </div>
             )}
           />

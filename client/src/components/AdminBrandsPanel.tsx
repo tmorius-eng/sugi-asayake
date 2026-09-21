@@ -6,6 +6,7 @@ import { GenericListView } from "./admin/GenericListView";
 import { IMAGE_UPLOAD_ACCEPT, MAX_UPLOAD_BYTES, isUploadableImageType, prepareImageUpload, type UploadImageType } from "@/lib/prepareImageUpload";
 import UploadTips from "@/components/admin/UploadTips";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 // NEWVISION.md §5 "Топ брэндүүд" -- Tom's explicit correction to the
 // original plan, which had omitted a Brands admin section entirely. Same
 // staffProcedure weight, same composer-form shape, as
@@ -33,6 +34,7 @@ type BrandForm = { id: number | null; brandName: string; tagline: string; photoU
 const emptyForm = (): BrandForm => ({ id: null, brandName: "", tagline: "", photoUrl: "", logoUrl: "", isActive: true });
 
 export default function AdminBrandsPanel() {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const brandsQuery = trpc.admin.featuredBrands.useQuery();
   const realBrandsQuery = trpc.admin.distinctRealBrands.useQuery();
@@ -167,7 +169,7 @@ export default function AdminBrandsPanel() {
                     <button type="button" disabled={index === 0} onClick={() => move(brand, -1)} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)] hover:text-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-30" aria-label="Дээш зөөх"><ArrowUp size={15} /></button>
                     <button type="button" disabled={index === brands.length - 1} onClick={() => move(brand, 1)} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)] hover:text-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-30" aria-label="Доош зөөх"><ArrowDown size={15} /></button>
                     <button type="button" onClick={() => openComposer(brand)} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)] hover:text-[#df1f3d]" aria-label={`${brand.brandName} засах`}><Pencil size={15} /></button>
-                    <button type="button" onClick={() => { if (window.confirm(`"${brand.brandName}"-г Топ брэндийн жагсаалтаас устгах уу?`)) deleteBrand.mutate({ id: brand.id }); }} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${brand.brandName} устгах`}><Trash2 size={15} /></button>
+                    <button type="button" onClick={async () => { if (await confirm({ title: `"${brand.brandName}"-г Топ брэндийн жагсаалтаас устгах уу?`, danger: true })) deleteBrand.mutate({ id: brand.id }); }} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${brand.brandName} устгах`}><Trash2 size={15} /></button>
                   </div>
                 </div>
               );

@@ -2704,9 +2704,15 @@ export async function createProductReview(input: { userId: number; productId: nu
  * its approved replies in posting order. Three queries, not N+1: reviews,
  * then likes and replies for exactly those review ids.
  */
-export async function getProductReviews(productId: number, viewerUserId: number | null = null) {
+/** Хуудаслалт (2026-09-21): `limit` (анхдагч 20, дээд 50) + `cursor` = хамгийн сүүлд
+ *  авсан мөрийн `id` (түүнээс бага id-ууд). Эрэмбэ `id DESC` — createdAt-тай ижил
+ *  дараалал (autoincrement) боловч секундын нарийвчлалын тэнцэл байхгүй (дүрэм:
+ *  хуудаслалттай query бүрт тогтвортой тэнцвэр). Клиент нь бүтэн хуудас (= limit)
+ *  ирвэл сүүлийн id-г дараагийн cursor болгоно. */
+export async function getProductReviews(productId: number, viewerUserId: number | null = null, page: { limit?: number; cursor?: number } = {}) {
   const db = await getDb();
   if (!db) return [];
+  const limit = Math.min(Math.max(page.limit ?? 20, 1), 50);
   const reviews = await db
     .select({
       id: productReviews.id,
@@ -2720,8 +2726,9 @@ export async function getProductReviews(productId: number, viewerUserId: number 
     })
     .from(productReviews)
     .innerJoin(users, eq(users.id, productReviews.userId))
-    .where(and(eq(productReviews.productId, productId), eq(productReviews.isApproved, true)))
-    .orderBy(desc(productReviews.createdAt));
+    .where(and(eq(productReviews.productId, productId), eq(productReviews.isApproved, true), page.cursor ? lt(productReviews.id, page.cursor) : undefined))
+    .orderBy(desc(productReviews.id))
+    .limit(limit);
   if (reviews.length === 0) return [];
   const ids = reviews.map(r => r.id);
 
@@ -4069,6 +4076,16 @@ export async function getPublishedPosts() {
   });
 }
 
+/** /journal хуудаслалт (2026-09-21): жагсаалт бүхэлдээ 30 с кэштэй (дээрх) тул хуудсыг
+ *  санах ойд зүснэ — DB-д нэмэлт query байхгүй, `total` үнэн. */
+export async function getPublishedPostsPage(page: { page?: number; pageSize?: number } = {}) {
+  const all = await getPublishedPosts();
+  const pageSize = Math.min(Math.max(page.pageSize ?? 12, 1), 48);
+  const pageCount = Math.max(1, Math.ceil(all.length / pageSize));
+  const current = Math.min(Math.max(page.page ?? 1, 1), pageCount);
+  return { items: all.slice((current - 1) * pageSize, current * pageSize), total: all.length, page: current, pageSize, pageCount };
+}
+
 /**
  * `bypassGate`: used by content.bySlug when the requester is a signed-in
  * staff/admin, so "Preview" (see AdminPostsPanel.tsx) can open a real,
@@ -5197,7 +5214,9 @@ export async function getStoreCreditLedger(userId: number) {
     // секундэд багтдаг тул яг энд баригдсан; HeatWave-ийн тунелийн
     // саатлаас болж хөгжүүлэгчийн машин дээр санамсаргүй ногоон гардаг байв.
     // Гарын авлагын "хуудаслалтад тогтвортой тэнцвэр" дүрэмтэй ижил анги.
-    .orderBy(desc(storeCreditLedger.createdAt), desc(storeCreditLedger.id));
+    .orderBy(desc(storeCreditLedger.createdAt), desc(storeCreditLedger.id))
+    // Admin-ий drawer сүүлийн 5-ыг харуулдаг; хязгааргүй жагсаалт (2026-09-21 аудит) 100-аар.
+    .limit(100);
 }
 
 /** Tier F: CAC's one input. Same upsert-by-unique-key shape as
@@ -6715,9 +6734,11 @@ export async function deleteAdminProductVariant(id: number) {
 // the storefront never needs a per-row lookup.
 // ---------------------------------------------------------------------------
 
-export async function getProductQuestions(productId: number) {
+/** getProductReviews-тэй ижил хуудаслалт (2026-09-21); өмнө нь хатуу 50 байв. */
+export async function getProductQuestions(productId: number, page: { limit?: number; cursor?: number } = {}) {
   const db = await getDb();
   if (!db) return [];
+  const limit = Math.min(Math.max(page.limit ?? 20, 1), 50);
   const questions = await db
     .select({
       id: productQuestions.id,
@@ -6730,9 +6751,9 @@ export async function getProductQuestions(productId: number) {
     })
     .from(productQuestions)
     .innerJoin(users, eq(users.id, productQuestions.userId))
-    .where(and(eq(productQuestions.productId, productId), eq(productQuestions.isApproved, true)))
-    .orderBy(desc(productQuestions.createdAt))
-    .limit(50);
+    .where(and(eq(productQuestions.productId, productId), eq(productQuestions.isApproved, true), page.cursor ? lt(productQuestions.id, page.cursor) : undefined))
+    .orderBy(desc(productQuestions.id))
+    .limit(limit);
   if (questions.length === 0) return [];
   const ids = questions.map(q => q.id);
   const answerRows = await db
@@ -6769,6 +6790,15 @@ export async function getProductQuestions(productId: number) {
     ...shape(q),
     answers: (byQuestion.get(q.id) ?? []).map(a => ({ id: a.id, body: a.body, createdAt: a.createdAt, ...shape(a) })),
   }));
+}
+
+/** Барааны хуудасны "Асуулт (N)" тоо — жагсаалт хуудаслагдсан тул тусад нь. */
+export async function countProductQuestions(productId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const [row] = await db.select({ count: sql<number>`count(*)` }).from(productQuestions)
+    .where(and(eq(productQuestions.productId, productId), eq(productQuestions.isApproved, true)));
+  return Number(row?.count ?? 0);
 }
 
 export async function createProductQuestion(input: { productId: number; userId: number; body: string }) {

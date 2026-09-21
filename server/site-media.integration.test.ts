@@ -3,6 +3,7 @@ import { testSessionUser } from "./_test-helpers";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 
+import { directStorageUrl } from "./_core/publicUrl";
 const runIntegration = process.env.RUN_MEDIA_INTEGRATION_TESTS === "1";
 const maybeDescribe = runIntegration ? describe : describe.skip;
 const slotKey = "home-hero" as const;
@@ -71,7 +72,9 @@ maybeDescribe("managed site-media integration", () => {
 
     await adminCaller.admin.updateSiteMedia({ slotKey, imageUrl: upload.url, altText: "Integration media check" });
     const publicMedia = await publicCaller.content.siteMedia();
-    expect(publicMedia.find(media => media.slotKey === slotKey)).toMatchObject({ imageUrl: upload.url, altText: "Integration media check" });
+    // 2026-09-21: storefront-д R2-ийн шууд хаяг очдог (publicUrl.ts-ийн directStorageUrl);
+    // admin.siteMedia нь `/cdn/` хэвээр. Хоёр хэлбэр нэг key рүү заана.
+    expect(publicMedia.find(media => media.slotKey === slotKey)).toMatchObject({ imageUrl: directStorageUrl(upload.url), altText: "Integration media check" });
 
     await adminCaller.admin.clearSiteMedia({ slotKey });
     const resetMedia = await publicCaller.content.siteMedia();

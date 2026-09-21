@@ -1,4 +1,5 @@
 import { eq, like } from "drizzle-orm";
+import { acceptConfirm } from "./helpers/confirm";
 import { expect, test } from "./helpers/fixtures";
 import { E2E_MARKER } from "./helpers/environment";
 import { signInAs } from "./helpers/session";
@@ -61,8 +62,8 @@ test.describe("админ захиалга устгах", () => {
       const deleteButton = card.getByRole("button", { name: "Захиалга устгах" });
       await expect(deleteButton, "цуцлагдсан+төлөгдөөгүй захиалгад устгах товч байх ёстой").toBeVisible();
 
-      page.once("dialog", dialog => dialog.accept());
       await deleteButton.click();
+      await acceptConfirm(page);
 
       await expect(card).toHaveCount(0, { timeout: 20_000 });
 

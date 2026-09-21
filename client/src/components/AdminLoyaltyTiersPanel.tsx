@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 type TierRow = {
   id: number;
   name: string;
@@ -33,6 +34,7 @@ const messageFrom = (error: unknown) => error instanceof Error ? error.message :
  * storefront.
  */
 export default function AdminLoyaltyTiersPanel({ preview = false }: { preview?: boolean }) {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const tiersQuery = trpc.admin.loyaltyTiers.useQuery(undefined, { enabled: !preview });
   const saveTier = trpc.admin.saveLoyaltyTier.useMutation();
@@ -79,7 +81,7 @@ export default function AdminLoyaltyTiersPanel({ preview = false }: { preview?: 
 
   const remove = async (tier: TierRow) => {
     if (preview) return toast.message("Preview горим", { description: "Бодит устгалт зөвхөн хамгаалагдсан admin хэсэгт ажиллана." });
-    if (!window.confirm(`"${tier.name}" зэрэглэлийг устгах уу? Энэ зэрэглэлд байсан харилцагчид доод зэрэглэл рүү шилжинэ.`)) return;
+    if (!await confirm({ title: `"${tier.name}" зэрэглэлийг устгах уу? Энэ зэрэглэлд байсан харилцагчид доод зэрэглэл рүү шилжинэ.`, danger: true })) return;
     try {
       await removeTier.mutateAsync({ id: tier.id });
       await refresh();

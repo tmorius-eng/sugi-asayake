@@ -3,6 +3,7 @@ import { ArrowDownUp, Check, FileText, LoaderCircle, RefreshCw, TriangleAlert } 
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 /**
  * /admin -> Интеграцууд -> Smart Software -> Үнэ / Барааны факт (2026-09-15).
  *
@@ -30,6 +31,7 @@ const messageFrom = (error: unknown) => error instanceof Error ? error.message :
 const shorten = (text: string | null, max = 70) => !text ? "—" : text.length > max ? `${text.slice(0, max)}…` : text;
 
 export default function VendorCatalogPanel() {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const compare = trpc.admin.vendorCatalogDiff.useMutation();
   const apply = trpc.admin.applyVendorCatalog.useMutation();
@@ -67,7 +69,7 @@ export default function VendorCatalogPanel() {
     // The key carries the field for a fact row; the server takes barcodes.
     const skus = Array.from(chosen).map(key => key.split(":")[0]);
     if (!skus.length) return toast.message("Нэг ч мөр сонгоогүй байна.");
-    if (tab === "price" && !window.confirm(`${skus.length} барааны үнийг вендорын үнээр солих уу? Энэ нь харилцагчийн төлөх үнэ.`)) return;
+    if (tab === "price" && !await confirm({ title: `${skus.length} барааны үнийг вендорын үнээр солих уу? Энэ нь харилцагчийн төлөх үнэ.`, danger: true })) return;
     try {
       const result = await apply.mutateAsync({ kind: tab, skus: Array.from(new Set(skus)) });
       toast.success(`${result.applied} мөр шинэчлэгдлээ.`);

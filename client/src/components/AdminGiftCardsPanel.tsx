@@ -5,6 +5,7 @@ import { trpc } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
 import { GenericListView, type GenericListColumn } from "./admin/GenericListView";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 /**
  * Gift cards (2026-09-13, growth tier). Finance/admin issues codes here
  * (printed or messaged to the buyer by hand for now); the customer redeems
@@ -17,6 +18,7 @@ const messageFrom = (error: unknown) => error instanceof Error ? error.message :
 const PRESETS = [20_000, 50_000, 100_000, 200_000];
 
 export default function AdminGiftCardsPanel() {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const query = trpc.admin.giftCards.useQuery();
   const [amount, setAmount] = useState(50_000);
@@ -101,7 +103,7 @@ export default function AdminGiftCardsPanel() {
             actionsCellClassName={`${bodyCell} text-right whitespace-nowrap`}
             emptyMessage={<><Gift className="mx-auto mb-2 text-[var(--a-faint)]" size={22} />Бэлгийн карт үүсгээгүй байна.</>}
             rowActions={c => c.status === "active" ? (
-              <button type="button" onClick={() => { if (window.confirm(`${c.code} картыг хүчингүй болгох уу?`)) voidCard.mutate({ id: c.id }); }} disabled={voidCard.isPending} className="rounded-full border border-[var(--a-neg)] px-3 py-1.5 text-[11px] font-bold text-[var(--a-neg)] hover:bg-[var(--a-neg-soft)]"><Ban size={12} className="mr-1 inline" />Хүчингүй</button>
+              <button type="button" onClick={async () => { if (await confirm({ title: `${c.code} картыг хүчингүй болгох уу?`, danger: true })) voidCard.mutate({ id: c.id }); }} disabled={voidCard.isPending} className="rounded-full border border-[var(--a-neg)] px-3 py-1.5 text-[11px] font-bold text-[var(--a-neg)] hover:bg-[var(--a-neg-soft)]"><Ban size={12} className="mr-1 inline" />Хүчингүй</button>
             ) : null}
           />
         </div>

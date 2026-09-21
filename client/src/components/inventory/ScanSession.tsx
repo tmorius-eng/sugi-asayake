@@ -6,6 +6,7 @@ import { sortedLines, totalPieces, type ScanAction, type ScanState } from "@shar
 import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 import { scanSounds } from "@/lib/scanSounds";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 /**
  * The shared barcode scan screen (2026-09-11) -- receiving goods, counting a
  * shelf, and (Phase 4) checking a transfer that arrived. Each scan from the
@@ -50,6 +51,7 @@ export default function ScanSession({ state, dispatch, lookup, editable, hint }:
   editable: boolean;
   hint?: string;
 }) {
+  const { confirm, prompt } = useConfirm();
   const [flash, setFlash] = useState<"ok" | "unknown" | null>(null);
   const [scannerPaused, setScannerPaused] = useState(false);
   const [manualCode, setManualCode] = useState("");
@@ -91,8 +93,8 @@ export default function ScanSession({ state, dispatch, lookup, editable, hint }:
     manualRef.current?.blur();
   };
 
-  const setQuantity = (code: string, current: number) => {
-    const answer = window.prompt("Тоо ширхэг", String(current));
+  const setQuantity = async (code: string, current: number) => {
+    const answer = await prompt({ title: "Тоо ширхэг", input: { initial: String(current) } });
     if (answer === null) return;
     const quantity = Number(answer.trim());
     if (!Number.isFinite(quantity) || quantity < 0) return;
@@ -158,7 +160,7 @@ export default function ScanSession({ state, dispatch, lookup, editable, hint }:
                     <button type="button" onClick={() => dispatch({ type: "set", code: line.code, quantity: line.quantity - 1, at: Date.now() })} className="grid size-8 place-items-center rounded-full bg-[var(--a-soft)] hover:bg-[var(--a-soft-hover)]" aria-label={`${line.code} нэгээр хасах`}><Minus size={13} /></button>
                     <button type="button" onClick={() => setQuantity(line.code, line.quantity)} className="min-w-10 rounded-lg px-1.5 py-1 text-center text-sm font-extrabold hover:bg-[var(--a-soft)]" title="Тоо оруулах">{line.quantity}</button>
                     <button type="button" onClick={() => dispatch({ type: "scan", code: line.code, variantId: line.variantId, at: Date.now() })} className="grid size-8 place-items-center rounded-full bg-[var(--a-soft)] hover:bg-[var(--a-soft-hover)]" aria-label={`${line.code} нэгээр нэмэх`}><Plus size={13} /></button>
-                    <button type="button" onClick={() => { if (window.confirm(`${entry?.productName ?? line.code} мөрийг хасах уу?`)) dispatch({ type: "remove", code: line.code }); }} className="ml-1 grid size-8 place-items-center rounded-full text-[var(--a-muted)] hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${line.code} мөрийг хасах`}><Trash2 size={13} /></button>
+                    <button type="button" onClick={async () => { if (await confirm({ title: `${entry?.productName ?? line.code} мөрийг хасах уу?`, danger: true })) dispatch({ type: "remove", code: line.code }); }} className="ml-1 grid size-8 place-items-center rounded-full text-[var(--a-muted)] hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${line.code} мөрийг хасах`}><Trash2 size={13} /></button>
                   </div>
                 ) : (
                   <span className="flex shrink-0 items-center gap-1 text-sm font-extrabold"><Hash size={12} className="text-[var(--a-faint)]" />{line.quantity}</span>

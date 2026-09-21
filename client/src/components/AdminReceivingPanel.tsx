@@ -6,6 +6,7 @@ import { useScanDraft } from "@/hooks/useScanDraft";
 import ScanSession, { buildSkuLookup } from "./inventory/ScanSession";
 import TransfersView from "./inventory/TransfersView";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 /**
  * /admin -> Бараа хүлээн авах (2026-09-11, Phase 3).
  *
@@ -51,6 +52,7 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 function ReceiptView({ id, lookup, onBack }: { id: number; lookup: ReturnType<typeof buildSkuLookup>; onBack: () => void }) {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const receiptQuery = trpc.inventory.receipt.useQuery({ id });
   const saveLines = trpc.inventory.saveReceiptLines.useMutation();
@@ -100,7 +102,7 @@ function ReceiptView({ id, lookup, onBack }: { id: number; lookup: ReturnType<ty
     // Only what will actually be booked -- unknown codes stay out of stock.
     const pieces = lines.filter(line => !isUnknown(line)).reduce((sum, line) => sum + line.quantity, 0);
     const message = `${receipt.branchName}-д ${lines.length - unknown} төрөл, нийт ${pieces} ширхэг бараа нөөцөд нэмэгдэнэ.${unknown ? `\n\n${unknown} бүртгэлгүй код нөөцөд ОРОХГҮЙ (тэмдэглэлд үлдэнэ).` : ""}\n\nҮргэлжлүүлэх үү?`;
-    if (!window.confirm(message)) return;
+    if (!await confirm({ title: message })) return;
     try {
       await draft.flush();
       const result = await post.mutateAsync({ id, skipUnknown: unknown > 0 });
@@ -111,7 +113,7 @@ function ReceiptView({ id, lookup, onBack }: { id: number; lookup: ReturnType<ty
   };
 
   const doCancel = async () => {
-    if (!window.confirm("Энэ хүлээн авалтыг цуцлах уу? Нөөцөд юу ч нэмэгдэхгүй.")) return;
+    if (!await confirm({ title: "Энэ хүлээн авалтыг цуцлах уу? Нөөцөд юу ч нэмэгдэхгүй.", danger: true })) return;
     try { await cancel.mutateAsync({ id }); draft.discardLocal(); await refresh(); onBack(); } catch (error) { toast.error(messageFrom(error)); }
   };
 
@@ -157,6 +159,7 @@ function ReceiptView({ id, lookup, onBack }: { id: number; lookup: ReturnType<ty
 }
 
 function CountView({ id, lookup, canPost, onBack }: { id: number; lookup: ReturnType<typeof buildSkuLookup>; canPost: boolean; onBack: () => void }) {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const countQuery = trpc.inventory.count.useQuery({ id });
   const saveLines = trpc.inventory.saveCountLines.useMutation({ onSuccess: () => utils.inventory.count.invalidate({ id }) });
@@ -179,13 +182,13 @@ function CountView({ id, lookup, canPost, onBack }: { id: number; lookup: Return
   const variances = count.lines.filter(line => line.variance);
 
   const doSubmit = async () => {
-    if (!window.confirm("Тооллогыг агуулах/админд батлуулахаар илгээх үү? Илгээсний дараа засах боломжгүй.")) return;
+    if (!await confirm({ title: "Тооллогыг агуулах/админд батлуулахаар илгээх үү? Илгээсний дараа засах боломжгүй." })) return;
     try { await draft.flush(); await submit.mutateAsync({ id }); draft.discardLocal(); await refresh(); toast.success("Илгээлээ — батлагдмагц нөөц засагдана."); } catch (error) { toast.error(messageFrom(error)); }
   };
   const doPost = async () => {
     const zeroed = count.scope === "full" ? count.unscanned.length : 0;
     const message = `${count.branchName}-ийн нөөцийг тооллогоор засна: ${variances.length} бараа зөрүүтэй${zeroed ? `, уншуулаагүй ${zeroed} бараа 0 болно` : ""}.${count.isOpening ? "\n\nЭнэ бол ЭХНИЙ ҮЛДЭГДЭЛ тооллого." : ""}\n\nҮргэлжлүүлэх үү?`;
-    if (!window.confirm(message)) return;
+    if (!await confirm({ title: message })) return;
     try {
       await draft.flush();
       const result = await post.mutateAsync({ id });
@@ -195,7 +198,7 @@ function CountView({ id, lookup, canPost, onBack }: { id: number; lookup: Return
     } catch (error) { toast.error(messageFrom(error)); }
   };
   const doCancel = async () => {
-    if (!window.confirm("Энэ тооллогыг цуцлах уу? Нөөц өөрчлөгдөхгүй.")) return;
+    if (!await confirm({ title: "Энэ тооллогыг цуцлах уу? Нөөц өөрчлөгдөхгүй.", danger: true })) return;
     try { await cancel.mutateAsync({ id }); draft.discardLocal(); await refresh(); onBack(); } catch (error) { toast.error(messageFrom(error)); }
   };
 

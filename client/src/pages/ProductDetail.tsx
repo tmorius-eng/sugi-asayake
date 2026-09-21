@@ -138,11 +138,17 @@ function QuestionsSection({ productId }: { productId: number }) {
   return <ProductQuestions productId={productId} canAnswer={canAnswer} />;
 }
 
+const REVIEW_PAGE_SIZE = 20;
+
 function ReviewsSection({ productId }: { productId: number }) {
   const textFor = useSiteText();
   const { isAuthenticated, user } = useAuth();
   const utils = trpc.useUtils();
-  const reviewsQuery = trpc.reviews.list.useQuery({ productId });
+  // Хуудаслалт (2026-09-21): эхний 20, "Бусад сэтгэгдлийг харах" нь дараагийн 20-ыг
+  // сүүлийн id-г cursor болгон татна (бүтэн хуудас ирээгүй = дууссан).
+  const reviewsQuery = trpc.reviews.list.useInfiniteQuery({ productId, limit: REVIEW_PAGE_SIZE }, {
+    getNextPageParam: last => (last.length === REVIEW_PAGE_SIZE ? last[last.length - 1].id : undefined),
+  });
   const eligibilityQuery = trpc.reviews.eligibility.useQuery({ productId }, { enabled: isAuthenticated });
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");
@@ -158,15 +164,20 @@ function ReviewsSection({ productId }: { productId: number }) {
     },
     onError: error => toast.error(reviewMessageFrom(error)),
   });
-  const reviews = reviewsQuery.data ?? [];
+  const reviews = reviewsQuery.data?.pages.flat() ?? [];
   const reviewRewardMnt = Number(useStoreSetting()("review-reward-mnt", "0")) || 0;
   const eligibility = eligibilityQuery.data;
 
   return <section id="product-reviews" className="pdp-anchor-section mt-16 border-t border-border pt-10">
-    <h2 className="font-[var(--font-display)] text-3xl font-semibold tracking-[-.06em]">{textFor("pdp-text-reviews-heading", "Хэрэглэгчийн сэтгэгдэл")}{reviews.length ? ` (${reviews.length})` : ""}</h2>
+    <h2 className="font-[var(--font-display)] text-3xl font-semibold tracking-[-.06em]">{textFor("pdp-text-reviews-heading", "Хэрэглэгчийн сэтгэгдэл")}{reviews.length ? ` (${reviews.length}${reviewsQuery.hasNextPage ? "+" : ""})` : ""}</h2>
     {reviewsQuery.isLoading ? <p className="mt-4 text-sm text-muted-foreground">Ачааллаж байна...</p>
       : reviews.length === 0 ? <p className="mt-4 text-sm text-muted-foreground">{textFor("pdp-text-reviews-empty", "Одоогоор сэтгэгдэл байхгүй байна. Эхний сэтгэгдлийг та үлдээгээрэй!")}</p>
       : <ReviewThread productId={productId} reviews={reviews} canReply={Boolean(isAuthenticated && (eligibility?.canReview || eligibility?.alreadyReviewed || user?.role && user.role !== "user"))} />}
+    {reviewsQuery.hasNextPage && (
+      <button type="button" className="thread-load-more" onClick={() => void reviewsQuery.fetchNextPage()} disabled={reviewsQuery.isFetchingNextPage}>
+        {reviewsQuery.isFetchingNextPage ? "Ачааллаж байна…" : textFor("pdp-text-reviews-more", "Бусад сэтгэгдлийг харах")}
+      </button>
+    )}
 
     {!isAuthenticated ? <p className="mt-7 text-sm text-muted-foreground"><Link href="/login" className="font-bold text-[#df1f3d]">Нэвтэрч</Link> сэтгэгдэл үлдээгээрэй.</p>
       : eligibility?.canReview ? <form onSubmit={event => { event.preventDefault(); createReview.mutate({ productId, rating, comment: comment.trim() || null }); }} className="mt-8 max-w-lg rounded-2xl border border-border bg-muted p-6">

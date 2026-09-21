@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { GenericListView, type GenericListColumn } from "./admin/GenericListView";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 // Product Q&A moderation (2026-09-13). Same flat list shape as
 // AdminReviewsPanel: questions go live immediately (moderation already ran
 // on the text), staff hide/delete after the fact. Answers are removed
@@ -12,6 +13,7 @@ const formatDateTime = (date: Date) => new Date(date).toLocaleString("mn-MN", { 
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Үйлдэл амжилтгүй боллоо.";
 
 export default function AdminQuestionsPanel() {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const [statusFilter, setStatusFilter] = useState<"all" | "approved" | "hidden">("all");
   const query = trpc.admin.questions.useQuery();
@@ -73,7 +75,7 @@ export default function AdminQuestionsPanel() {
                 <button type="button" onClick={() => setApproved.mutate({ id: q.id, isApproved: !q.isApproved })} disabled={setApproved.isPending} className="mr-2 rounded-full border border-[var(--a-border)] px-3 py-1.5 text-[11px] font-bold hover:bg-[var(--a-soft)]">
                   {q.isApproved ? <><EyeOff size={12} className="mr-1 inline" />Нуух</> : <><CheckCircle2 size={12} className="mr-1 inline" />Харуулах</>}
                 </button>
-                <button type="button" onClick={() => { if (window.confirm("Энэ асуултыг хариултуудтай нь бүрмөсөн устгах уу?")) remove.mutate({ id: q.id }); }} disabled={remove.isPending} className="rounded-full border border-[var(--a-neg)] px-3 py-1.5 text-[11px] font-bold text-[var(--a-neg)] hover:bg-[var(--a-neg-soft)]">
+                <button type="button" onClick={async () => { if (await confirm({ title: "Энэ асуултыг хариултуудтай нь бүрмөсөн устгах уу?", danger: true })) remove.mutate({ id: q.id }); }} disabled={remove.isPending} className="rounded-full border border-[var(--a-neg)] px-3 py-1.5 text-[11px] font-bold text-[var(--a-neg)] hover:bg-[var(--a-neg-soft)]">
                   <Trash2 size={12} className="mr-1 inline" />Устгах
                 </button>
               </>

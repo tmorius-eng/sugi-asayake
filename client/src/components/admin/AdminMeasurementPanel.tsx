@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { checkStoreSettingFormat, getStoreSettingSlot, storeSettingStatus, type StoreSettingKey, type StoreSettingStatus } from "@shared/store-settings";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 /**
  * /admin -> Хэмжилт (2026-09-15).
  *
@@ -72,6 +73,7 @@ const STATUS_STYLE: Record<StoreSettingStatus, string> = {
 };
 
 export default function AdminMeasurementPanel({ preview = false }: { preview?: boolean }) {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const settingsQuery = trpc.admin.storeSettings.useQuery(undefined, { enabled: !preview });
   const updateSetting = trpc.admin.updateStoreSetting.useMutation();
@@ -121,7 +123,7 @@ export default function AdminMeasurementPanel({ preview = false }: { preview?: b
 
   const switchOff = async (key: StoreSettingKey) => {
     if (preview) return toast.message("Preview горим", { description: "Бодит өөрчлөлт зөвхөн хамгаалагдсан admin хэсэгт ажиллана." });
-    if (!window.confirm("Энэ тоолуурыг унтраах уу? Сайт дээр хэмжилт цуглуулахаа болино.")) return;
+    if (!await confirm({ title: "Энэ тоолуурыг унтраах уу? Сайт дээр хэмжилт цуглуулахаа болино.", danger: true })) return;
     setBusy(true);
     try {
       await clearSetting.mutateAsync({ settingKey: key });

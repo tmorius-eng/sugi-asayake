@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { GenericListView, type GenericListColumn } from "./admin/GenericListView";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 // PREMIUM-FEATURES.md TIER 2: "жижиг moderation хэсэг" — a flat, filterable
 // list an admin/staff can approve/hide/delete from, not a pre-publish
 // approval queue (reviews already go live immediately once the
@@ -17,6 +18,7 @@ function Stars({ value }: { value: number }) {
 }
 
 export default function AdminReviewsPanel() {
+  const { confirm } = useConfirm();
   const [statusFilter, setStatusFilter] = useState<"all" | "approved" | "hidden">("all");
   const utils = trpc.useUtils();
   const query = trpc.admin.reviews.useQuery();
@@ -98,7 +100,7 @@ export default function AdminReviewsPanel() {
                 <button type="button" onClick={() => setEditing({ id: review.id, rating: review.rating, comment: review.comment ?? "" })} className="mr-2 rounded-full border border-[var(--a-border)] px-3 py-1.5 text-[11px] font-bold hover:bg-[var(--a-soft)]" aria-label="Засах"><Pencil size={12} className="inline" /> Засах</button>
                 <button type="button" onClick={() => setRepliesFor(review.id)} className="mr-2 rounded-full border border-[var(--a-border)] px-3 py-1.5 text-[11px] font-bold hover:bg-[var(--a-soft)]" aria-label="Хариултууд"><MessageSquare size={12} className="inline" /> Хариулт{review.replyCount ? ` ${review.replyCount}` : ""}</button>
                 <button type="button" onClick={() => updateApproval.mutate({ id: review.id, isApproved: !review.isApproved })} disabled={updateApproval.isPending} className="mr-2 rounded-full border border-[var(--a-border)] px-3 py-1.5 text-[11px] font-bold text-[var(--a-text-soft)] transition hover:border-[#df1f3d] hover:text-[#df1f3d] disabled:opacity-50">{review.isApproved ? <EyeOff size={13} className="inline" /> : <CheckCircle2 size={13} className="inline" />} {review.isApproved ? "Нуух" : "Сэргээх"}</button>
-                <button type="button" onClick={() => { if (window.confirm("Энэ сэтгэгдлийг бүрмөсөн устгах уу?")) deleteReview.mutate({ id: review.id }); }} disabled={deleteReview.isPending} className="rounded-full border border-[#df1f3d]/25 px-3 py-1.5 text-[11px] font-bold text-[var(--a-neg)] transition hover:border-[#df1f3d] disabled:opacity-50"><Trash2 size={13} className="inline" /> Устгах</button>
+                <button type="button" onClick={async () => { if (await confirm({ title: "Энэ сэтгэгдлийг бүрмөсөн устгах уу?", danger: true })) deleteReview.mutate({ id: review.id }); }} disabled={deleteReview.isPending} className="rounded-full border border-[#df1f3d]/25 px-3 py-1.5 text-[11px] font-bold text-[var(--a-neg)] transition hover:border-[#df1f3d] disabled:opacity-50"><Trash2 size={13} className="inline" /> Устгах</button>
               </>
             )}
           />
@@ -131,7 +133,7 @@ export default function AdminReviewsPanel() {
                   <textarea defaultValue={reply.body} maxLength={2000} rows={2} className="mt-2 w-full rounded-lg border border-[var(--a-border)] bg-[var(--a-soft)] p-2" onBlur={event => { const body = event.target.value.trim(); if (body && body !== reply.body) updateReply.mutate({ id: reply.id, body }); }} aria-label="Хариултын текст" />
                   <div className="mt-2 flex justify-end gap-2">
                     <button type="button" onClick={() => updateReply.mutate({ id: reply.id, isApproved: !reply.isApproved })} className="rounded-full border border-[var(--a-border)] px-3 py-1 font-bold">{reply.isApproved ? "Нуух" : "Харуулах"}</button>
-                    <button type="button" onClick={() => { if (window.confirm("Хариултыг устгах уу?")) deleteReply.mutate({ id: reply.id }); }} className="rounded-full border border-[var(--a-neg)] px-3 py-1 font-bold text-[var(--a-neg)]">Устгах</button>
+                    <button type="button" onClick={async () => { if (await confirm({ title: "Хариултыг устгах уу?", danger: true })) deleteReply.mutate({ id: reply.id }); }} className="rounded-full border border-[var(--a-neg)] px-3 py-1 font-bold text-[var(--a-neg)]">Устгах</button>
                   </div>
                 </li>
               ))}</ul>}

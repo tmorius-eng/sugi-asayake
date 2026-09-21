@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { siteTextSlots, type SiteTextSlotKey } from "@shared/site-text";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 type TextRow = { slotKey: string; textValue: string; updatedAt: Date };
 
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Текстийг хадгалж чадсангүй. Дахин оролдоно уу.";
@@ -13,6 +14,7 @@ const messageFrom = (error: unknown) => error instanceof Error ? error.message :
 const GROUPS = Array.from(new Set(siteTextSlots.map(slot => slot.group)));
 
 export default function ContentTextPanel({ preview = false }: { preview?: boolean }) {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const textQuery = trpc.admin.siteText.useQuery(undefined, { enabled: !preview });
   const updateText = trpc.admin.updateSiteText.useMutation();
@@ -46,7 +48,7 @@ export default function ContentTextPanel({ preview = false }: { preview?: boolea
 
   const resetSlot = async (slotKey: SiteTextSlotKey) => {
     if (preview) return toast.message("Preview горим", { description: "Бодит тохиргоо сэргээх нь хамгаалагдсан admin хэсэгт ажиллана." });
-    if (!window.confirm("Энэ текстийг SUGI-ийн анхны хувилбар руу буцаах уу?")) return;
+    if (!await confirm({ title: "Энэ текстийг SUGI-ийн анхны хувилбар руу буцаах уу?" })) return;
     setActiveSlot(slotKey);
     try {
       await clearText.mutateAsync({ slotKey });

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Check, Facebook, Link2, MessageCircle, Send, Share2 } from "lucide-react";
 import { useT } from "@/hooks/useLocale";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 /**
  * "Share this product" row on the product page (2026-09-14, Tom: "baraa
@@ -22,6 +23,7 @@ import { useT } from "@/hooks/useLocale";
  */
 export default function ShareBar({ title, url }: { title: string; url?: string }) {
   const t = useT();
+  const { prompt } = useConfirm();
   const [copied, setCopied] = useState(false);
   const shareUrl = url ?? (typeof window !== "undefined" ? window.location.href : "");
   const encodedUrl = encodeURIComponent(shareUrl);
@@ -50,7 +52,8 @@ export default function ShareBar({ title, url }: { title: string; url?: string }
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
-      window.prompt(t("Холбоосыг хуулна уу:"), shareUrl);
+      // Clipboard хаалттай (http, хуучин хөтөч): холбоосыг гараар хуулуулна.
+      void prompt({ title: t("Холбоосыг хуулна уу:"), input: { initial: shareUrl, readOnly: true }, confirmLabel: t("Хаах"), cancelLabel: t("Болих") });
     }
   };
 

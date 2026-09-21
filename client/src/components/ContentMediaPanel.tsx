@@ -6,11 +6,13 @@ import { logoSlotKeys, siteMediaSlots, type SiteMediaSlotKey } from "@shared/sit
 import { HERO_SHAPE, IMAGE_UPLOAD_ACCEPT, MAX_UPLOAD_BYTES, isUploadableImageType, prepareImageUpload, type UploadImageType } from "@/lib/prepareImageUpload";
 import UploadTips from "@/components/admin/UploadTips";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 type MediaRow = { slotKey: string; imageUrl: string; altText: string | null; updatedAt: Date };
 
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Зургийн тохиргоог хадгалж чадсангүй. Дахин оролдоно уу.";
 
 export default function ContentMediaPanel({ preview = false }: { preview?: boolean }) {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const mediaQuery = trpc.admin.siteMedia.useQuery(undefined, { enabled: !preview });
   const uploadImage = trpc.admin.uploadSiteMediaImage.useMutation();
@@ -85,7 +87,7 @@ export default function ContentMediaPanel({ preview = false }: { preview?: boole
 
   const resetSlot = async (slotKey: SiteMediaSlotKey) => {
     if (preview) return toast.message("Preview горим", { description: "Бодит тохиргоо сэргээх нь хамгаалагдсан admin хэсэгт ажиллана." });
-    if (!window.confirm("Энэ зургийг SUGI-ийн анхны дизайн руу буцаах уу?")) return;
+    if (!await confirm({ title: "Энэ зургийг SUGI-ийн анхны дизайн руу буцаах уу?" })) return;
     setActiveSlot(slotKey);
     try {
       await clearMedia.mutateAsync({ slotKey });

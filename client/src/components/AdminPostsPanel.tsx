@@ -10,6 +10,7 @@ import MediaLibraryModal from "./admin/MediaLibraryModal";
 import { COVER_SHAPE, IMAGE_UPLOAD_ACCEPT, MAX_UPLOAD_BYTES, isUploadableImageType, prepareImageUpload, type UploadImageType } from "@/lib/prepareImageUpload";
 import UploadTips from "@/components/admin/UploadTips";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 // Lazy, not a static import: TinyMCE is a genuinely large library (it alone
 // pushed the whole /admin chunk over 2MB in a real `pnpm build` check) --
 // every OTHER admin section (Orders, Analytics, Users, ...) would otherwise
@@ -83,6 +84,7 @@ const emptyForm = {
  * screenshot).
  */
 export default function AdminPostsPanel({ preview = false }: { preview?: boolean }) {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const postsQuery = trpc.admin.posts.useQuery(undefined, { enabled: !preview });
   const categoriesQuery = trpc.admin.postCategories.useQuery(undefined, { enabled: !preview });
@@ -385,8 +387,8 @@ export default function AdminPostsPanel({ preview = false }: { preview?: boolean
                 <button
                   type="button"
                   disabled={deletePostCategory.isPending}
-                  onClick={() => {
-                    if (!window.confirm(`“${category.name}” ангиллыг устгах уу?`)) return;
+                  onClick={async () => {
+                    if (!await confirm({ title: `“${category.name}” ангиллыг устгах уу?`, danger: true })) return;
                     deletePostCategory.mutate({ id: category.id });
                   }}
                   aria-label={`${category.name} устгах`}
@@ -443,7 +445,7 @@ export default function AdminPostsPanel({ preview = false }: { preview?: boolean
             onEdit={startEditPost}
             onTrash={id => trashPost.mutate({ id })}
             onRestore={id => restorePost.mutate({ id })}
-            onPermanentlyDelete={(id, title) => { if (window.confirm(`"${title}" нийтлэлийг бүрмөсөн устгах уу? Энэ үйлдлийг буцаах боломжгүй.`)) permanentlyDeletePost.mutate({ id }); }}
+            onPermanentlyDelete={async (id, title) => { if (await confirm({ title: `"${title}" нийтлэлийг бүрмөсөн устгах уу? Энэ үйлдлийг буцаах боломжгүй.`, danger: true })) permanentlyDeletePost.mutate({ id }); }}
           />
         )}
         {viewMode === "list" && (pagedPosts.length === 0 && !postsQuery.isLoading ? (
@@ -469,7 +471,7 @@ export default function AdminPostsPanel({ preview = false }: { preview?: boolean
                   ) : (
                     <>
                       <button type="button" onClick={() => restorePost.mutate({ id: item.id })} className="inline-flex items-center gap-1 text-xs font-bold text-[var(--a-pos)]"><RotateCcw size={12} />Сэргээх</button>
-                      <button type="button" onClick={() => { if (window.confirm(`"${item.title}" нийтлэлийг бүрмөсөн устгах уу? Энэ үйлдлийг буцаах боломжгүй.`)) permanentlyDeletePost.mutate({ id: item.id }); }} className="inline-flex items-center gap-1 text-xs font-bold text-[var(--a-neg)]"><Trash2 size={12} />Бүрмөсөн устгах</button>
+                      <button type="button" onClick={async () => { if (await confirm({ title: `"${item.title}" нийтлэлийг бүрмөсөн устгах уу? Энэ үйлдлийг буцаах боломжгүй.`, danger: true })) permanentlyDeletePost.mutate({ id: item.id }); }} className="inline-flex items-center gap-1 text-xs font-bold text-[var(--a-neg)]"><Trash2 size={12} />Бүрмөсөн устгах</button>
                     </>
                   )}
                 </div>

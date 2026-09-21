@@ -145,7 +145,7 @@ import {
   getRecommendedProducts,
   getFrequentlyBoughtTogether,
   getRelatedProducts,
-  getPublishedPosts,
+  getPublishedPostsPage, getPublishedPosts,
   getPublishedPostBySlug,
   getMarketingSpendRows,
   getReviewEligibility,
@@ -228,7 +228,7 @@ import {
 import { classifyImageSafety, formatScores, IMAGE_SAFETY_REJECT_MESSAGE } from "./_core/imageSafety";
 import { MODERATION_REJECT_MESSAGE, screenText } from "./_core/moderation";
 import { canReplyToReview, createReviewReply, deleteAdminReviewReply, getAdminReviewReplies, toggleReviewLike, updateAdminReview, updateAdminReviewReply } from "./db";
-import { canAnswerQuestion, createProductQuestion, createQuestionAnswer, deleteQuestion, deleteQuestionAnswer, getAdminQuestions, getProductQuestions, setQuestionApproved } from "./db";
+import { canAnswerQuestion, createProductQuestion, createQuestionAnswer, deleteQuestion, deleteQuestionAnswer, getAdminQuestions, getProductQuestions, countProductQuestions, setQuestionApproved } from "./db";
 import { renderOrderInvoice, renderOrderInvoiceForStaff, renderPackingSlip } from "./invoice";
 import { deletePushSubscription, hasPushSubscription, issueGiftCards, listGiftCards, redeemGiftCard, upsertPushSubscription, voidGiftCard } from "./db";
 import { sendOrderStatusPush, sendPushToUser, webPushEnabled } from "./_core/webPush";
@@ -1312,7 +1312,9 @@ export const appRouter = router({
   // shape as reviews.reply; answering follows the review-reply permission
   // rule (staff or a verified buyer of that product).
   questions: router({
-    list: publicProcedure.input(z.object({ productId: z.number().int().positive() })).query(({ input }) => getProductQuestions(input.productId)),
+    // Хуудаслалт (2026-09-21): limit/cursor — useInfiniteQuery-д `cursor` шаардлагатай.
+    list: publicProcedure.input(z.object({ productId: z.number().int().positive(), limit: z.number().int().min(1).max(50).optional(), cursor: z.number().int().positive().nullish() })).query(({ input }) => getProductQuestions(input.productId, { limit: input.limit, cursor: input.cursor ?? undefined })),
+    count: publicProcedure.input(z.object({ productId: z.number().int().positive() })).query(({ input }) => countProductQuestions(input.productId)),
     ask: strictRateLimitedProtectedProcedure
       .input(z.object({ productId: z.number().int().positive(), body: z.string().trim().min(5).max(1_000) }))
       .mutation(async ({ ctx, input }) => {
@@ -1341,7 +1343,8 @@ export const appRouter = router({
       }),
   }),
   reviews: router({
-    list: publicProcedure.input(z.object({ productId: z.number().int().positive() })).query(({ ctx, input }) => getProductReviews(input.productId, ctx.user?.id ?? null)),
+    // Хуудаслалт (2026-09-21): limit/cursor — useInfiniteQuery-д `cursor` шаардлагатай.
+    list: publicProcedure.input(z.object({ productId: z.number().int().positive(), limit: z.number().int().min(1).max(50).optional(), cursor: z.number().int().positive().nullish() })).query(({ ctx, input }) => getProductReviews(input.productId, ctx.user?.id ?? null, { limit: input.limit, cursor: input.cursor ?? undefined })),
     // Threaded conversation (2026-09-13): replies and likes.
     reply: strictRateLimitedProtectedProcedure
       .input(z.object({ reviewId: z.number().int().positive(), body: z.string().trim().min(1).max(2_000) }))
@@ -1471,13 +1474,13 @@ export const appRouter = router({
   }),
 
   content: router({
-    latestPosts: publicProcedure.query(() => getPublishedPosts()),
+    latestPosts: publicProcedure.query(async () => (await getPublishedPosts()).slice(0, 6)),
     // Same underlying query as latestPosts (getPublishedPosts already has no
     // LIMIT -- Home.tsx just .slice(0,3)s the result client-side) -- a
     // second, clearly-named endpoint for the /journal archive page so that
     // page doesn't read as "fetch the latest posts" for what's actually
     // every published post.
-    allPosts: publicProcedure.query(() => getPublishedPosts()),
+    allPosts: publicProcedure.input(z.object({ page: z.number().int().min(1).optional(), pageSize: z.number().int().min(1).max(48).optional() }).optional()).query(({ input }) => getPublishedPostsPage(input ?? {})),
     // publicProcedure, not staffProcedure: a guest reading a real published
     // post is the overwhelmingly common case. The staff/admin bypass below
     // is what makes "Preview" (AdminPostsPanel.tsx) work on an unpublished

@@ -3,6 +3,7 @@ import { LoaderCircle, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 /**
  * Нээлттэй ажлын байрны зар — /admin -> Баримт бичиг (2026-09-14).
  *
@@ -32,6 +33,7 @@ const EMPTY: Draft = { title: "", employmentType: "Бүтэн цаг", location:
 const field = "h-10 w-full rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-sm outline-none transition focus:border-[var(--a-info)]";
 
 export default function AdminJobPostingsPanel({ preview = false }: { preview?: boolean }) {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const postingsQuery = trpc.admin.jobPostings.useQuery(undefined, { enabled: !preview });
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -110,7 +112,7 @@ export default function AdminJobPostingsPanel({ preview = false }: { preview?: b
             <div className="flex items-center gap-2">
               <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${posting.isPublished ? "bg-[var(--a-pos-soft)] text-[var(--a-pos)]" : "bg-[var(--a-soft)] text-[var(--a-muted)]"}`}>{posting.isPublished ? "Нийтлэгдсэн" : "Ноорог"}</span>
               <button type="button" onClick={() => setDraft({ id: posting.id, title: posting.title, employmentType: posting.employmentType, location: posting.location, salaryRange: posting.salaryRange, description: posting.description ?? "", applyEmail: posting.applyEmail ?? "", applyUrl: posting.applyUrl ?? "", isPublished: posting.isPublished, sortOrder: posting.sortOrder })} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)] hover:text-[#df1f3d]" aria-label={`${posting.title} засах`} title="Засах"><Pencil size={15} /></button>
-              <button type="button" disabled={remove.isPending} onClick={() => { if (window.confirm(`"${posting.title}" зарыг устгах уу?`)) remove.mutate({ id: posting.id }); }} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${posting.title} устгах`} title="Устгах"><Trash2 size={15} /></button>
+              <button type="button" disabled={remove.isPending} onClick={async () => { if (await confirm({ title: `"${posting.title}" зарыг устгах уу?`, danger: true })) remove.mutate({ id: posting.id }); }} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${posting.title} устгах`} title="Устгах"><Trash2 size={15} /></button>
             </div>
           </div>
         ))}

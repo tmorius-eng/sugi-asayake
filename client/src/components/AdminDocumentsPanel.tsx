@@ -13,6 +13,7 @@ import { LOCALE_LABELS } from "@shared/i18n";
 
 import MediaLibraryModal from "./admin/MediaLibraryModal";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 const TinyMceEditor = lazy(() => import("./admin/TinyMceEditor"));
 
 type DocumentRow = {
@@ -51,6 +52,7 @@ const messageFrom = (error: unknown) => error instanceof Error ? error.message :
  */
 const DOCUMENT_LOCALES: readonly SiteDocumentLocale[] = ["mn", "en", "ja"];
 export default function AdminDocumentsPanel({ preview = false }: { preview?: boolean }) {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const documentsQuery = trpc.admin.siteDocuments.useQuery(undefined, { enabled: !preview });
   const updateDocument = trpc.admin.updateSiteDocument.useMutation();
@@ -133,7 +135,7 @@ export default function AdminDocumentsPanel({ preview = false }: { preview?: boo
 
   const reset = async () => {
     if (preview) return toast.message("Preview горим", { description: "Бодит сэргээлт зөвхөн хамгаалагдсан admin хэсэгт ажиллана." });
-    if (!window.confirm("Энэ баримтыг SUGI-ийн анхны хувилбар руу буцаах уу? Таны бичсэн засвар устана.")) return;
+    if (!await confirm({ title: "Энэ баримтыг SUGI-ийн анхны хувилбар руу буцаах уу? Таны бичсэн засвар устана." })) return;
     try {
       await clearDocument.mutateAsync({ documentKey: activeKey, locale: activeLocale });
       await refresh();

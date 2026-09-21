@@ -1,4 +1,5 @@
 import { expect, test } from "./helpers/fixtures";
+import { acceptConfirm } from "./helpers/confirm";
 import { E2E_MARKER } from "./helpers/environment";
 import { signInAs } from "./helpers/session";
 import { openAdminSection } from "./helpers/admin";
@@ -91,8 +92,8 @@ test.describe("барааны хувилбар", () => {
     await page.goto("/admin");
     await openAdminSection(page, "Бүтээгдэхүүн");
     await page.getByPlaceholder("Нэр, SKU хайх").fill(name);
-    page.once("dialog", dialog => dialog.accept());
     await page.getByRole("button", { name: `${name} устгах` }).click();
+    await acceptConfirm(page);
     await expect(page.getByRole("button", { name: `${name} устгах` })).toHaveCount(0, { timeout: 20_000 });
   });
 });

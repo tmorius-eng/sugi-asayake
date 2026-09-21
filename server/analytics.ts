@@ -11,6 +11,7 @@ import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import { carts, cartItems, orderItems, orders, productCategories, products, users, visitorSessions } from "../drizzle/schema";
 import { getDb, getLoyaltyTierTable, getMarketingSpendRows, settledSaleSql, getSiteName } from "./db";
+import { getOrSetCached } from "./_core/ttlCache";
 import { ubDistrictLabels, type UbDistrict } from "../shared/districts";
 import { getLoyaltyTier } from "../shared/loyalty";
 import { formatMnt } from "@shared/format";
@@ -914,6 +915,14 @@ export async function getReturnRateOverview(input: DateRangeInput = {}): Promise
  *  round trips, and the two export functions below render from the exact
  *  same object so the downloaded file always matches what's on screen. */
 export async function getAnalyticsReport(input: DateRangeInput = {}) {
+  // 60 с кэш (2026-09-21, аудит #5): 29 query-тай тайланг admin таб бүр, refetch бүр
+  // дахин тооцдог байв. Тестэд кэшгүй (захиалга үүсгээд шууд тайлан уншдаг).
+  if (process.env.NODE_ENV === "test") return computeAnalyticsReport(input);
+  const key = `analytics:report:${input.dateFrom?.toISOString() ?? ""}:${input.dateTo?.toISOString() ?? ""}`;
+  return getOrSetCached(key, 60_000, () => computeAnalyticsReport(input));
+}
+
+async function computeAnalyticsReport(input: DateRangeInput) {
   const [overview, revenueTimeseries, topProducts, topCategories, districtBreakdown, demographics, loyaltyTiers, ordersByChannel, cartAbandonment, inventory, profit, traffic, periodComparison, pnl, returnRate, cac, conversion, visitorSessionTimeseries, preferenceSegments, recommendationCoverage] = await Promise.all([
     getSalesOverview(input),
     getRevenueTimeseries(input),

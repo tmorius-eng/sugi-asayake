@@ -6,6 +6,7 @@ import { useScanDraft } from "@/hooks/useScanDraft";
 import { reconcileTransfer, RECONCILE_LABELS, OVER_RESOLUTIONS, RESOLUTION_LABELS, SHORT_RESOLUTIONS, type TransferResolution } from "@shared/transfer-reconcile";
 import ScanSession, { buildSkuLookup } from "./ScanSession";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 /**
  * Warehouse -> store transfers (2026-09-11, Phase 4), inside "Бараа хүлээн
  * авах". The warehouse scans what goes in the box and sends it (the goods
@@ -38,6 +39,8 @@ function SaveBadge({ status, dirty }: { status: string; dirty: boolean }) {
 }
 
 function TransferDetail({ id, lookup, role, myBranchId, onBack }: { id: number; lookup: Lookup; role: string; myBranchId: number | null; onBack: () => void }) {
+  // `confirm` нь энд tRPC mutation-ий нэр тул dialog-ийг `ask` гэж нэрлэв.
+  const { confirm: ask, prompt } = useConfirm();
   const utils = trpc.useUtils();
   const transferQuery = trpc.inventory.transfer.useQuery({ id });
   const savePick = trpc.inventory.saveTransferLines.useMutation();
@@ -86,19 +89,19 @@ function TransferDetail({ id, lookup, role, myBranchId, onBack }: { id: number; 
 
   const doSend = async () => {
     const pieces = draft.state.lines.reduce((sum, line) => sum + line.quantity, 0);
-    if (!window.confirm(`${transfer.fromBranchName} → ${transfer.toBranchName}: ${draft.state.lines.length} төрөл, ${pieces} ширхэг илгээнэ. Бараа ${transfer.fromBranchName}-с одоо хасагдана.\n\nИлгээх үү?`)) return;
+    if (!await ask({ title: `${transfer.fromBranchName} → ${transfer.toBranchName}: ${draft.state.lines.length} төрөл, ${pieces} ширхэг илгээнэ. Бараа ${transfer.fromBranchName}-с одоо хасагдана.\n\nИлгээх үү?`, danger: true })) return;
     try { await draft.flush(); await send.mutateAsync({ id }); draft.discardLocal(); await refresh(); toast.success("Илгээлээ — дэлгүүрт мэдэгдэл очлоо."); } catch (error) { toast.error(messageFrom(error)); }
   };
   const doConfirm = async () => {
-    if (!window.confirm("Ирсэн барааг баталгаажуулах уу? Уншуулсан тоогоор дэлгүүрийн нөөцөд нэмэгдэж, зөрүү байвал админд мэдэгдэнэ.")) return;
+    if (!await ask({ title: "Ирсэн барааг баталгаажуулах уу? Уншуулсан тоогоор дэлгүүрийн нөөцөд нэмэгдэж, зөрүү байвал админд мэдэгдэнэ." })) return;
     try { await draft.flush(); await confirm.mutateAsync({ id, note: receiveNote.trim() || undefined }); draft.discardLocal(); await refresh(); toast.success("Хүлээн авлаа."); } catch (error) { toast.error(messageFrom(error)); }
   };
   const doCancel = async () => {
-    if (!window.confirm(transfer.status === "sent" ? "Илгээсэн шилжүүлгийг цуцлах уу? Бүх бараа илгээсэн салбарт буцаж нэмэгдэнэ." : "Энэ шилжүүлгийг цуцлах уу?")) return;
+    if (!await ask({ title: transfer.status === "sent" ? "Илгээсэн шилжүүлгийг цуцлах уу? Бүх бараа илгээсэн салбарт буцаж нэмэгдэнэ." : "Энэ шилжүүлгийг цуцлах уу?", danger: true })) return;
     try { await cancel.mutateAsync({ id }); draft.discardLocal(); await refresh(); onBack(); } catch (error) { toast.error(messageFrom(error)); }
   };
   const doResolve = async (lineId: number, resolution: TransferResolution) => {
-    const note = window.prompt(`${RESOLUTION_LABELS[resolution]}\n\nТайлбар (заавал биш):`);
+    const note = await prompt({ title: `${RESOLUTION_LABELS[resolution]}\n\nТайлбар (заавал биш):`, input: { multiline: true } });
     if (note === null) return;
     try { await resolve.mutateAsync({ lineId, resolution, note: note.trim() || undefined }); await refresh(); toast.success("Шийдвэр бүртгэгдлээ."); } catch (error) { toast.error(messageFrom(error)); }
   };

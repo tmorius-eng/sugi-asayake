@@ -1,4 +1,5 @@
 import { expect, test } from "./helpers/fixtures";
+import { acceptConfirm } from "./helpers/confirm";
 import { E2E_MARKER } from "./helpers/environment";
 import { ensureE2EUser, signInAs } from "./helpers/session";
 import { openAdminSection } from "./helpers/admin";
@@ -73,8 +74,8 @@ test.describe("admin", () => {
     await expect(deleteButton).toBeVisible({ timeout: 20_000 });
 
     // Цэвэрлэгээ нь тестийн нэг хэсэг: staging ч гэсэн хог хураах ёсгүй.
-    page.once("dialog", dialog => dialog.accept());
     await deleteButton.click();
+    await acceptConfirm(page);
     await expect(deleteButton).toHaveCount(0, { timeout: 20_000 });
   });
 });
@@ -120,10 +121,10 @@ test.describe("admin — хэрэглэгчийн удирдлага", () => {
     const drawer = page.getByRole("dialog");
     await expect(drawer.getByRole("heading", { name: target.name ?? "" })).toBeVisible();
 
-    // "Түр хаах" нь window.confirm асуудаг (идэвхтэй session шууд хүчингүй
-    // болдог тул зөв) — Playwright анхдагчаар цонхыг ТАТГАЛЗДАГ.
-    page.once("dialog", dialog => dialog.accept());
+    // "Түр хаах" нь сайтын өөрийн confirm dialog асуудаг (идэвхтэй session
+    // шууд хүчингүй болдог тул зөв) — acceptConfirm батална.
     await drawer.getByRole("button", { name: "Түр хаах" }).click();
+    await acceptConfirm(page);
     await expect(drawer.getByRole("button", { name: "Хандалт сэргээх" })).toBeVisible({ timeout: 20_000 });
 
     // Цэвэрлэгээ: тестийн хэрэглэгч хаалттай үлдэх ёсгүй.

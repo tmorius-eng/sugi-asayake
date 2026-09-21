@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 /**
  * /admin -> Утасны мэдэгдэл (2026-09-11). Where each staff member puts the
  * shop's push notifications on their own phone: install the free ntfy app,
@@ -41,6 +42,7 @@ function TopicQr({ value }: { value: string }) {
 }
 
 export default function AdminNotificationsPanel() {
+  const { prompt } = useConfirm();
   const { user } = useAuth();
   const subscriptionsQuery = trpc.notifications.mySubscriptions.useQuery();
   const sendTest = trpc.notifications.sendTestToMyGroup.useMutation();
@@ -54,7 +56,7 @@ export default function AdminNotificationsPanel() {
       // navigator.clipboard is undefined outside a secure context (plain-http
       // LAN testing, 2026-09-12); fall back to a selectable prompt.
       if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
-      else window.prompt("Хуулах текст:", text);
+      else await prompt({ title: "Хуулах текст:", input: { initial: text } });
       toast.success("Хууллаа.");
     } catch {
       toast.error("Хуулж чадсангүй — гараар сонгож хуулна уу.");

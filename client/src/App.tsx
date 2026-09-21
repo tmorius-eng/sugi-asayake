@@ -12,6 +12,7 @@ import BottomNavBar from "./components/BottomNavBar";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SitePromo from "./components/SitePromo";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { ConfirmProvider } from "@/components/ConfirmDialog";
 import TranslateSurface from "@/components/TranslateSurface";
 import Home from "./pages/Home";
 import { PageviewTracker } from "./lib/pageviewTracking";
@@ -153,6 +154,8 @@ function App() {
   return <ErrorBoundary>
     <ThemeProvider defaultTheme="light">
       <TooltipProvider>
+        {/* Сайтын өөрийн confirm/prompt dialog (window.confirm-ийн оронд, 2026-09-21). */}
+        <ConfirmProvider>
         <SkipLink />
         <Toaster />
         <PageviewTracker />
@@ -165,6 +168,7 @@ function App() {
         <MessengerButton />
         <AddedToCartToast />
         <Router />
+        </ConfirmProvider>
       </TooltipProvider>
     </ThemeProvider>
   </ErrorBoundary>;

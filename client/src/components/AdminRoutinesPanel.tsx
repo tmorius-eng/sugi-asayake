@@ -6,6 +6,7 @@ import { GenericListView, type GenericListColumn } from "./admin/GenericListView
 import { formatMnt } from "@shared/format";
 import { slugify } from "@shared/slugify";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 // PREMIUM-FEATURES.md TIER 4: admin management for "Routine" bundles — an
 // ordered list of products (Алхам 1: Цэвэрлэгч -> Алхам 2: Тонер -> ...)
 // with an optional bundle discount that's actually enforced at checkout
@@ -18,6 +19,7 @@ type RoutineForm = { id: number | null; name: string; slug: string; description:
 const emptyForm = (): RoutineForm => ({ id: null, name: "", slug: "", description: "", discountPercent: "0", isPublished: false });
 
 export default function AdminRoutinesPanel() {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const routinesQuery = trpc.admin.routines.useQuery();
   const productsQuery = trpc.admin.products.useQuery();
@@ -142,7 +144,7 @@ export default function AdminRoutinesPanel() {
               <div className="flex justify-end gap-1">
                 {routine.isPublished && <a href={`/routine/${routine.slug}`} target="_blank" rel="noopener noreferrer" className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)] hover:text-[var(--a-info)]" aria-label={`${routine.name} — амьд хуудсыг харах`} title="Амьд хуудсыг харах"><ExternalLink size={15} /></a>}
                 <button type="button" onClick={() => openComposer(routine)} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)] hover:text-[#df1f3d]" aria-label={`${routine.name} засах`} title="Засах"><Pencil size={15} /></button>
-                <button type="button" onClick={() => { if (window.confirm(`"${routine.name}" routine-ыг бүрмөсөн устгах уу?`)) deleteRoutine.mutate({ id: routine.id }); }} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${routine.name} устгах`} title="Устгах"><Trash2 size={15} /></button>
+                <button type="button" onClick={async () => { if (await confirm({ title: `"${routine.name}" routine-ыг бүрмөсөн устгах уу?`, danger: true })) deleteRoutine.mutate({ id: routine.id }); }} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${routine.name} устгах`} title="Устгах"><Trash2 size={15} /></button>
               </div>
             )}
           />

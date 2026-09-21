@@ -8,6 +8,7 @@ import { slugify } from "@shared/slugify";
 import { IMAGE_UPLOAD_ACCEPT, MAX_UPLOAD_BYTES, isUploadableImageType, prepareImageUpload, type UploadImageType } from "@/lib/prepareImageUpload";
 import UploadTips from "@/components/admin/UploadTips";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 // "Controls everything" admin overhaul (2026-09-08, Phase J): replaces
 // client/src/components/home/locations-data.ts's pure hardcoded array with
 // a real, admin-managed table -- same composer-form/GenericListView shape
@@ -39,6 +40,7 @@ type BranchForm = { id: number | null; name: string; slug: string; address: stri
 const emptyForm = (): BranchForm => ({ id: null, name: "", slug: "", address: "", phone: "", mapUrl: "", photoUrl: "", isActive: true, isFulfillmentDefault: false, kind: "store", countsTowardOnlineStock: true, lowStockThreshold: "" });
 
 export default function AdminBranchesPanel() {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   // 2026-09-11: the stock-related fields (online fulfilment branch, kind,
   // counts-as-online-stock, low-stock level) are admin-only on the server;
@@ -179,7 +181,7 @@ export default function AdminBranchesPanel() {
                     <button type="button" disabled={index === 0} onClick={() => move(branch, -1)} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)] hover:text-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-30" aria-label="Дээш зөөх"><ArrowUp size={15} /></button>
                     <button type="button" disabled={index === branches.length - 1} onClick={() => move(branch, 1)} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)] hover:text-[#df1f3d] disabled:cursor-not-allowed disabled:opacity-30" aria-label="Доош зөөх"><ArrowDown size={15} /></button>
                     <button type="button" onClick={() => openComposer(branch)} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)] hover:text-[#df1f3d]" aria-label={`${branch.name} засах`}><Pencil size={15} /></button>
-                    <button type="button" onClick={() => { if (window.confirm(`"${branch.name}"-г устгах уу?`)) deleteBranch.mutate({ id: branch.id }); }} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${branch.name} устгах`}><Trash2 size={15} /></button>
+                    <button type="button" onClick={async () => { if (await confirm({ title: `"${branch.name}"-г устгах уу?`, danger: true })) deleteBranch.mutate({ id: branch.id }); }} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${branch.name} устгах`}><Trash2 size={15} /></button>
                   </div>
                 </div>
               );

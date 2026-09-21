@@ -1,4 +1,5 @@
 import { expect, test } from "./helpers/fixtures";
+import { acceptConfirm } from "./helpers/confirm";
 import { signInAs } from "./helpers/session";
 import { openAdminSection } from "./helpers/admin";
 
@@ -35,9 +36,9 @@ test.describe("admin — хайлт", () => {
     await expect(page.getByText(/^[1-9]\d* бараа/)).toBeVisible({ timeout: 20_000 });
 
     // Цэвэрлэгээ: жагсаалтаас устгана.
-    page.once("dialog", dialog => dialog.accept());
     const row = page.locator("div").filter({ has: page.getByText(nonsense, { exact: true }) }).getByRole("button", { name: "Устгах" }).first();
     await row.click();
+    await acceptConfirm(page);
     await expect(page.getByText(/Устгагдлаа/)).toBeVisible({ timeout: 15_000 });
   });
 

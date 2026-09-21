@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { getStoreSettingSlot } from "@shared/store-settings";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 /**
  * The one switch that decides whether the vendor's stock figures post by
  * themselves (2026-09-15, Tom's call: they do).
@@ -16,6 +17,7 @@ import { getStoreSettingSlot } from "@shared/store-settings";
 const KEY = "vendor-stock-auto-apply" as const;
 
 export default function VendorStockAutoApplySwitch() {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const settingsQuery = trpc.admin.storeSettings.useQuery();
   const updateSetting = trpc.admin.updateStoreSetting.useMutation();
@@ -26,7 +28,7 @@ export default function VendorStockAutoApplySwitch() {
 
   const toggle = async () => {
     const next = on ? "0" : "1";
-    if (on && !window.confirm("Автоматыг унтраах уу? Үүний дараа татсан үлдэгдэл бүрийг Бараа хүлээн авах → Тооллого дээр гараар батлах шаардлагатай болно.")) return;
+    if (on && !await confirm({ title: "Автоматыг унтраах уу? Үүний дараа татсан үлдэгдэл бүрийг Бараа хүлээн авах → Тооллого дээр гараар батлах шаардлагатай болно.", danger: true })) return;
     try {
       await updateSetting.mutateAsync({ settingKey: KEY, settingValue: next });
       await Promise.all([utils.admin.storeSettings.invalidate(), utils.content.storeSettings.invalidate()]);

@@ -18,8 +18,8 @@ import { useT } from "@/hooks/useLocale";
  */
 export default function ProductSectionJumps({ productId, reviewCount }: { productId: number; reviewCount: number }) {
   const t = useT();
-  const questions = trpc.questions.list.useQuery({ productId });
-  const questionCount = questions.data?.length ?? 0;
+  const questions = trpc.questions.count.useQuery({ productId });
+  const questionCount = questions.data ?? 0;
   const jump = (id: string) => (event: React.MouseEvent<HTMLAnchorElement>) => {
     const target = document.getElementById(id);
     if (!target) return;

@@ -244,6 +244,7 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
 - Мэдэгдэлд харилцагчийн нэр/утас/хаяг ХЭЗЭЭ Ч оруулахгүй (ntfy сэдэв нээлттэй).
 
 **Frontend**
+- **`window.confirm`/`window.prompt` БИЧИХГҮЙ** — `useConfirm()` (`components/ConfirmDialog.tsx`, async: `await confirm({ title, danger })`). E2E-д `acceptConfirm(page)`, `page.once("dialog")` биш (2026-09-21, 47 газар хөрвүүлсэн).
 - **Маягтын алдааг талбар дээр нь** — `hooks/useFieldErrors.tsx` (`fieldProps`/`FieldError`/`showErrors`); toast дангаараа хангалтгүй (WCAG 3.3.1). Талбарын `id` = алдааны түлхүүр.
 - **aria-label нь харагдах текстээ АГУУЛНА** (WCAG 2.5.3) — тоон badge-ийг `aria-hidden`, глиф/дүрсийг SVG. Lighthouse `label-content-name-mismatch` оноонд нөлөөлдөггүй ч дэлгэц уншигч/дуут удирдлагад бодит алдаа.
 - **Нүүрний толгой/hero-ийн markup өөрчилбөл `server/_core/heroShell.ts`-ийг МӨН өөрчил** (2026-09-21): сервер тэр DOM-ыг React-ээс өмнө ижил class-уудаар зурдаг; зөрвөл React ирэх мөчид hero үсэрнэ. `e2e/hero-shell.spec.ts` (shell ба React-ийн rect тэнцүү) хамгаална — унавал шалтгаан нь яг энэ. Унтраах: `HERO_SHELL=0`.

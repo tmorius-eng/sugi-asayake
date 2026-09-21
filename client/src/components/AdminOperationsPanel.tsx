@@ -20,6 +20,7 @@ const paymentToneClass: Record<ReturnType<typeof paymentBadgeFor>["tone"], strin
 };
 import { formatMnt } from "@shared/format";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 type OrderStatus = "pending" | "confirmed" | "packed" | "out_for_delivery" | "completed" | "cancelled" | "returned";
 const statusLabels: Record<string, string> = { pending: "Хүлээгдэж байна", confirmed: "Баталгаажсан", packed: "Бэлтгэсэн", out_for_delivery: "Хүргэлтэд гарсан", completed: "Дууссан", cancelled: "Цуцалсан", returned: "Буцаагдсан" };
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Хүсэлт амжилтгүй боллоо.";
@@ -35,6 +36,7 @@ type KanbanOrder = { id: number; orderNumber: string; customerName: string; tota
 // now: TinyMCE, media library, categories/tags, SEO, trash) so this file is
 // orders-only.
 export default function AdminOperationsPanel({ preview = false, query = "", role = "admin" }: { preview?: boolean; query?: string; role?: string }) {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const ordersQuery = trpc.admin.orders.useQuery(undefined, { enabled: !preview });
   const updateOrder = trpc.admin.updateOrder.useMutation({ onSuccess: () => utils.admin.orders.invalidate(), onError: error => toast.error(messageFrom(error)) });
@@ -219,8 +221,8 @@ export default function AdminOperationsPanel({ preview = false, query = "", role
               <button
                 type="button"
                 disabled={preview || deleteOrder.isPending}
-                onClick={() => {
-                  if (!window.confirm(`${order.orderNumber} захиалгыг бүрмөсөн устгах уу?\n\nЭнэ үйлдэл буцаах боломжгүй. Захиалгын мөр, барааны жагсаалт, нөөцийн хөдөлгөөн бүгд арилна.`)) return;
+                onClick={async () => {
+                  if (!await confirm({ title: `${order.orderNumber} захиалгыг бүрмөсөн устгах уу?\n\nЭнэ үйлдэл буцаах боломжгүй. Захиалгын мөр, барааны жагсаалт, нөөцийн хөдөлгөөн бүгд арилна.`, danger: true })) return;
                   deleteOrder.mutate({ id: order.id });
                 }}
                 className="mt-3 ml-2 inline-flex h-10 items-center gap-2 rounded-full border border-[var(--a-neg)] px-4 text-xs font-bold text-[var(--a-neg)] transition hover:bg-[var(--a-neg-soft)] disabled:opacity-60"

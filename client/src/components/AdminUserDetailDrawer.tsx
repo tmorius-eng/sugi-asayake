@@ -5,6 +5,7 @@ import { trpc } from "@/lib/trpc";
 import { roleBadgeClass, roleLabel } from "@/lib/adminRoles";
 import { formatMnt } from "@shared/format";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 const statusLabels: Record<string, string> = { pending: "Хүлээгдэж байна", confirmed: "Баталгаажсан", packed: "Бэлтгэсэн", out_for_delivery: "Хүргэлтэд гарсан", completed: "Дууссан", cancelled: "Цуцалсан" };
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Үйлдлийг гүйцэтгэж чадсангүй. Дахин оролдоно уу.";
 
@@ -17,6 +18,7 @@ const messageFrom = (error: unknown) => error instanceof Error ? error.message :
 // class of bug a finance-viewing-the-Kanban-board case caught earlier in
 // this overhaul).
 export default function AdminUserDetailDrawer({ userId, role, onClose }: { userId: number; role: string; onClose: () => void }) {
+  const { confirm } = useConfirm();
   const isAdmin = role === "admin";
   const utils = trpc.useUtils();
   const detailQuery = trpc.admin.userDetail.useQuery({ userId });
@@ -108,7 +110,7 @@ export default function AdminUserDetailDrawer({ userId, role, onClose }: { userI
   };
 
   const onSuspend = async () => {
-    if (!window.confirm("Энэ хэрэглэгчийг түр хаах уу? Идэвхтэй session нь шууд хүчингүй болно.")) return;
+    if (!await confirm({ title: "Энэ хэрэглэгчийг түр хаах уу? Идэвхтэй session нь шууд хүчингүй болно.", danger: true })) return;
     try {
       await suspendUser.mutateAsync({ userId, reason: reason.trim() || undefined });
       setReason("");
@@ -142,7 +144,7 @@ export default function AdminUserDetailDrawer({ userId, role, onClose }: { userI
   };
 
   const onForceLogout = async () => {
-    if (!window.confirm("Энэ хэрэглэгчийг бүх төхөөрөмжөөс гаргах уу?")) return;
+    if (!await confirm({ title: "Энэ хэрэглэгчийг бүх төхөөрөмжөөс гаргах уу?", danger: true })) return;
     try {
       await forceLogoutUser.mutateAsync({ userId });
       toast.success("Бүх идэвхтэй session-ийг хүчингүй болголоо.");

@@ -9,6 +9,7 @@ import VendorCatalogPanel from "./admin/VendorCatalogPanel";
 import VendorStockAutoApplySwitch from "./admin/VendorStockAutoApplySwitch";
 import { NOTIFICATION_EVENTS, NOTIFICATION_GROUP_LABELS, NTFY_TOPIC_FIELD, type NotificationEventType, type NotificationGroup } from "@shared/notification-events";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 /**
  * /admin -> Интеграцууд.
  *
@@ -56,6 +57,7 @@ const statusStyles: Record<string, string> = {
 const statusLabels: Record<string, string> = { sent: "Илгээсэн", pending: "Хүлээгдэж буй", sending: "Илгээж байна", failed: "Амжилтгүй", expired: "Хугацаа хэтэрсэн", suppressed: "Илгээгээгүй" };
 
 function ProviderCard({ row }: { row: IntegrationRow }) {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const updateIntegration = trpc.admin.updateIntegration.useMutation();
   const testIntegration = trpc.admin.testIntegration.useMutation();
@@ -101,8 +103,8 @@ function ProviderCard({ row }: { row: IntegrationRow }) {
     return run("save", () => updateIntegration.mutateAsync({ provider: row.provider, set, replaceAll: replaceAll || undefined }).then(() => { setDrafts({}); setExtraRows([]); setReplaceAll(false); }), "Тохиргоо хадгалагдлаа.");
   };
 
-  const clearKey = (key: string) => {
-    if (!window.confirm(`"${key}" тохиргоог устгах уу?`)) return;
+  const clearKey = async (key: string) => {
+    if (!await confirm({ title: `"${key}" тохиргоог устгах уу?`, danger: true })) return;
     return run(`clear:${key}`, () => updateIntegration.mutateAsync({ provider: row.provider, clearKeys: [key] }), "Устгалаа.");
   };
 
@@ -195,7 +197,7 @@ function ProviderCard({ row }: { row: IntegrationRow }) {
                     <span className="font-normal text-[var(--a-faint)]">· {state?.isSet ? (isSecret ? "тохируулсан (нууц)" : "тохируулсан") : "хоосон"}</span>
                   </p>
                   <div className="flex flex-wrap items-center gap-1.5">
-                    {topicGroup && <button type="button" disabled={busyKey !== null} onClick={() => { if (state?.isSet && !window.confirm(`"${NOTIFICATION_GROUP_LABELS[topicGroup]}" бүлгийн сэдвийг шинэчлэх үү? Одоо бүртгүүлсэн хүмүүс QR кодыг дахин уншуулах шаардлагатай болно.`)) return; void run(`topic:${field.key}`, () => generateTopic.mutateAsync({ group: topicGroup }), "Сэдэв үүслээ."); }} className="inline-flex items-center gap-1 rounded-full border border-[var(--a-border)] bg-[var(--a-card)] px-2.5 py-1 text-[10px] font-extrabold text-[var(--a-text-soft)] hover:border-[var(--a-info)] hover:text-[var(--a-info)]">
+                    {topicGroup && <button type="button" disabled={busyKey !== null} onClick={async () => { if (state?.isSet && !await confirm({ title: `"${NOTIFICATION_GROUP_LABELS[topicGroup]}" бүлгийн сэдвийг шинэчлэх үү? Одоо бүртгүүлсэн хүмүүс QR кодыг дахин уншуулах шаардлагатай болно.` })) return; void run(`topic:${field.key}`, () => generateTopic.mutateAsync({ group: topicGroup }), "Сэдэв үүслээ."); }} className="inline-flex items-center gap-1 rounded-full border border-[var(--a-border)] bg-[var(--a-card)] px-2.5 py-1 text-[10px] font-extrabold text-[var(--a-text-soft)] hover:border-[var(--a-info)] hover:text-[var(--a-info)]">
                       {busyKey === `topic:${field.key}` ? <LoaderCircle className="animate-spin" size={11} /> : <RefreshCw size={11} />}{state?.isSet ? "Шинэчлэх" : "Сэдэв үүсгэх"}
                     </button>}
                     {topicGroup && meta.testable && state?.isSet && <button type="button" disabled={busyKey !== null} onClick={() => run(`test:${field.key}`, async () => { const result = await testIntegration.mutateAsync({ provider: "ntfy", group: topicGroup }); if (!result.ok) throw new Error(result.error ?? "Илгээж чадсангүй."); }, "Туршилт илгээлээ — утсаа шалгана уу.")} className="inline-flex items-center gap-1 rounded-full bg-[var(--a-info)] px-2.5 py-1 text-[10px] font-extrabold text-white disabled:opacity-60">

@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 /**
  * Admin → Хайлт (2026-09-20, хайлт v3). Tom: "бүгдийг data driven, admin
  * хэсгээс editable болго". Гурван таб:
@@ -75,6 +76,7 @@ function InsightsTab({ onAddSynonym }: { onAddSynonym: (term: string) => void })
 }
 
 function SynonymsTab({ draft, setDraft }: { draft: SynonymDraft; setDraft: (draft: SynonymDraft) => void }) {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const synonyms = trpc.admin.searchSynonyms.useQuery();
   const [filter, setFilter] = useState("");
@@ -103,7 +105,7 @@ function SynonymsTab({ draft, setDraft }: { draft: SynonymDraft; setDraft: (draf
       <div className="mt-3 grid max-h-[520px] gap-1 overflow-y-auto">
         {rows.map(row => <div key={row.id} className={`flex items-start justify-between gap-3 rounded-2xl bg-[var(--a-card)] px-3 py-2 ${row.isActive ? "" : "opacity-50"}`}>
           <button type="button" onClick={() => setDraft({ id: row.id, concept: row.concept, terms: row.terms, isActive: row.isActive })} className="min-w-0 flex-1 text-left"><strong className="block text-xs">{row.concept}{row.isActive ? "" : " · идэвхгүй"}</strong><span className="block text-[11px] leading-5 text-[var(--a-muted)]">{row.terms}</span></button>
-          <button type="button" onClick={() => { if (confirm(`"${row.concept}" ойлголтыг устгах уу?`)) remove.mutate({ id: row.id }); }} className="text-[var(--a-faint)] hover:text-[#df1f3d]" aria-label="Устгах"><Trash2 size={14} /></button>
+          <button type="button" onClick={async () => { if (await confirm({ title: `"${row.concept}" ойлголтыг устгах уу?`, danger: true })) remove.mutate({ id: row.id }); }} className="text-[var(--a-faint)] hover:text-[#df1f3d]" aria-label="Устгах"><Trash2 size={14} /></button>
         </div>)}
         {!rows.length && <p className="text-xs text-[var(--a-muted)]">{synonyms.isLoading ? "Ачаалж байна…" : "Мөр олдсонгүй."}</p>}
       </div>

@@ -1,6 +1,6 @@
 import { ArrowUpRight, LoaderCircle, Newspaper } from "lucide-react";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
-import { Link } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import CommerceHeader from "@/components/CommerceHeader";
 import SiteFooter from "@/components/SiteFooter";
 import { trpc } from "@/lib/trpc";
@@ -32,8 +32,15 @@ export default function Journal() {
   const textFor = useSiteText();
   useDocumentMeta(textFor("seo-text-journal-title", "Зөвлөгөө ба мэдээ — SUGI ASAYAKE"), null);
   const [journalLine1, journalLine2] = textFor("journal-text-heading", JOURNAL_HEADING_FALLBACK).split("\n");
-  const postsQuery = trpc.content.allPosts.useQuery();
-  const posts = postsQuery.data ?? [];
+  // Хуудаслалт (2026-09-21): хуудас URL-д (`?page=2`) — refresh/буцахад хадгалагдана
+  // (/shop-ийн дүрэмтэй ижил). 12 нийтлэл = 3 багана × 4 мөр.
+  const search = useSearch();
+  const [, setLocation] = useLocation();
+  const page = Math.max(1, Number(new URLSearchParams(search).get("page")) || 1);
+  const postsQuery = trpc.content.allPosts.useQuery({ page, pageSize: 12 });
+  const posts = postsQuery.data?.items ?? [];
+  const pageCount = postsQuery.data?.pageCount ?? 1;
+  const goTo = (next: number) => setLocation(next <= 1 ? "/journal" : `/journal?page=${next}`);
 
   return (
     <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]">
@@ -91,6 +98,14 @@ export default function Journal() {
               </Link>
             ))}
           </div>
+        )}
+
+        {pageCount > 1 && (
+          <nav className="mt-12 flex items-center justify-center gap-3" aria-label="Нийтлэлийн хуудас">
+            <button type="button" className="journal-page-btn" disabled={page <= 1} onClick={() => goTo(page - 1)}>← Өмнөх</button>
+            <span className="text-sm text-[#67686c]">{`${page} / ${pageCount}`}</span>
+            <button type="button" className="journal-page-btn" disabled={page >= pageCount} onClick={() => goTo(page + 1)}>Дараах →</button>
+          </nav>
         )}
       </main>
       <SiteFooter />

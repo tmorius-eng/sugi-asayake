@@ -865,7 +865,9 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .header-search-viewall:hover { background: #ced5cf; color: var(--primary); }
 .header-search-empty { padding: 14px 4px; color: #6a706b; font-size: 12px; text-align: center; }
 /* Монгол нэр (2026-09-20): үндсэн нэрийн доорх латин/монгол дэд мөр — карт, quick view, дэлгэрэнгүй */
-.product-name-secondary { display: block; margin-top: 2px; overflow: hidden; color: #6a706b; font-size: 11px; font-weight: 600; letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap; }
+/* #6a706b нь карт (#f2f5f2) дээр 4.61 боловч хуудасны суурь (#dae0da) дээр 3.78 байв
+   (contrast E2E, staging-д монгол нэр ирмэгц 2026-09-21) — #5b615b: 4.74 / 5.78. */
+.product-name-secondary { display: block; margin-top: 2px; overflow: hidden; color: #5b615b; font-size: 11px; font-weight: 600; letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap; }
 /* Санал болголт v3 (2026-09-20): "яагаад энэ бараа" чип */
 .rail-reason-chip { display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 999px; background: #e7ece7; color: #2c7650; font-size: 10px; font-weight: 800; letter-spacing: .02em; }
 /* Хайлт v3 (2026-09-20): брэнд/ангиллын мөр, монгол/латин дэд нэр, "та … хайсан уу" */
@@ -2711,7 +2713,8 @@ body:has(.sugi-site) { background: var(--ck-page); }
 }
 .shelf-card-price { display: block; margin-top: 10px; }
 .shelf-card-price strong { color: var(--ck-ink); font-size: 21px; font-weight: 700; letter-spacing: .02em; }
-.shelf-card-price s { margin-left: 8px; color: #9a9a9a; font-size: 15px; }
+/* Хуучин үнэ #9a9a9a = 2.81:1 (contrast E2E, staging-д хямдралтай бараа ирмэгц 2026-09-21) → #5b615b. */
+.shelf-card-price s { margin-left: 8px; color: #5b615b; font-size: 15px; }
 .shelf-card-rating { display: flex; align-items: center; gap: 5px; margin: 8px 0 0; color: var(--ck-muted); font-size: 13px; font-weight: 500; }
 .shelf-card-stars { display: inline-flex; gap: 1px; color: #e0b93c; }
 .shelf-card-rating em { color: var(--ck-muted); font-style: normal; }
@@ -3061,7 +3064,7 @@ body:has(.auth-shell) { background: var(--ck-page); }
 .sugi-site .shop-product-card:hover { border-color: #cfcfcf; box-shadow: none; transform: none; }
 .sugi-site .shop-product-copy h2 { font-size: 15px; font-weight: 700; line-height: 1.55; color: var(--ck-ink); }
 .sugi-site .shop-product-prices strong { font-size: 21px; font-weight: 700; color: var(--ck-ink); }
-.sugi-site .shop-product-prices s { color: #9a9a9a; font-size: 13px; }
+.sugi-site .shop-product-prices s { color: #5b615b; font-size: 13px; }
 .sugi-site .shop-brand-chip { border-radius: 3px; background: var(--ck-chip); color: var(--ck-muted); font-size: 12px; font-weight: 700; }
 .sugi-site .shop-product-rating { color: var(--ck-muted); font-size: 13px; }
 .sugi-site .shop-filter-pills button,
@@ -3849,6 +3852,27 @@ html[data-storefront-theme="dark"] .cart-free-shipping-text { color: #8fd6a8; }
 .return-dialog-hint { font-size: 11px; color: var(--muted-foreground); }
 .return-dialog-submit { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--primary); color: #fff; font-size: 13px; font-weight: 800; cursor: pointer; }
 .return-dialog-submit:disabled { opacity: .5; cursor: not-allowed; }
+/* Сайтын өөрийн confirm/prompt (components/ConfirmDialog.tsx, 2026-09-21) — window.confirm-ийн
+   оронд. Буцаалтын dialog-той нэг хэл: дугуй товч, брэндийн улаан нь зөвхөн аюултай үйлдэлд. */
+.confirm-dialog { display: grid; gap: 14px; max-width: 420px; }
+.confirm-dialog-field { display: grid; gap: 6px; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--muted-foreground); }
+.confirm-dialog-input { min-width: 0; width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--foreground); font: inherit; font-size: 14px; letter-spacing: 0; text-transform: none; }
+textarea.confirm-dialog-input { min-height: 96px; resize: vertical; }
+.confirm-dialog-input:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; border-color: var(--primary); }
+.confirm-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.confirm-dialog-cancel, .confirm-dialog-ok { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 0 18px; border-radius: 999px; font-size: 13px; font-weight: 700; cursor: pointer; transition: background .15s var(--ease-out), color .15s var(--ease-out); }
+.confirm-dialog-cancel { border: 1px solid var(--border); background: transparent; color: var(--foreground); }
+.confirm-dialog-cancel:hover { border-color: var(--foreground); }
+.confirm-dialog-ok { border: 0; background: var(--foreground); color: var(--background); }
+.confirm-dialog-ok.is-danger { background: #df1f3d; color: #fff; }
+.confirm-dialog-ok.is-danger:hover { background: #bc1732; }
+.confirm-dialog-ok:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Хуудаслалт (2026-09-21): сэтгэгдэл/асуултын "Бусад … харах" ба /journal-ийн хуудас. */
+.thread-load-more, .journal-page-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 0 18px; border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--foreground); font-size: 13px; font-weight: 700; cursor: pointer; transition: border-color .15s var(--ease-out); }
+.thread-load-more { margin-top: 18px; }
+.thread-load-more:hover, .journal-page-btn:hover { border-color: var(--foreground); }
+.thread-load-more:disabled, .journal-page-btn:disabled { opacity: .45; cursor: not-allowed; }
 
 /* ---- Сүүлд хайсан үгс (2026-09-20) --------------------------------------- */
 .header-search-recent-head { padding: 10px 14px 4px; font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--muted-foreground); }

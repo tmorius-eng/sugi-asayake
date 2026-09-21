@@ -3,6 +3,7 @@ import { FileText, LoaderCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 /**
  * Ирсэн анкетууд — /admin → Баримт бичиг (2026-09-14, зөвхөн admin эрх).
  *
@@ -25,6 +26,7 @@ const STATUS_STYLE: Record<Status, string> = {
 const formatWhen = (value: string | Date) => new Date(value).toLocaleString("mn-MN", { timeZone: "Asia/Ulaanbaatar", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 
 export default function AdminJobApplicationsPanel({ preview = false }: { preview?: boolean }) {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const query = trpc.admin.jobApplications.useQuery(undefined, { enabled: !preview });
   const [filter, setFilter] = useState<Status | "all">("all");
@@ -89,7 +91,7 @@ export default function AdminJobApplicationsPanel({ preview = false }: { preview
                   {row.cvKey && (
                     <button type="button" disabled={cvLoadingId === row.id} onClick={() => openCv(row.id)} className="inline-flex items-center gap-1.5 rounded-full border border-[var(--a-border)] px-3 py-1.5 text-[11px] font-bold transition hover:bg-[var(--a-soft)] disabled:opacity-50">{cvLoadingId === row.id ? <LoaderCircle className="animate-spin" size={13} /> : <FileText size={13} />}CV</button>
                   )}
-                  <button type="button" disabled={remove.isPending} onClick={() => { if (window.confirm(`${row.fullName} — анкетыг устгах уу? CV файл хамт устгагдана.`)) remove.mutate({ id: row.id }); }} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${row.fullName} устгах`} title="Устгах"><Trash2 size={15} /></button>
+                  <button type="button" disabled={remove.isPending} onClick={async () => { if (await confirm({ title: `${row.fullName} — анкетыг устгах уу? CV файл хамт устгагдана.`, danger: true })) remove.mutate({ id: row.id }); }} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${row.fullName} устгах`} title="Устгах"><Trash2 size={15} /></button>
                 </div>
               </div>
               {isOpen && (

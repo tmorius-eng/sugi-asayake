@@ -6,6 +6,7 @@ import { GenericListView, type GenericListColumn } from "./admin/GenericListView
 import { PROMO_SHAPE, IMAGE_UPLOAD_ACCEPT, MAX_UPLOAD_BYTES, isUploadableImageType, prepareImageUpload, type UploadImageType } from "@/lib/prepareImageUpload";
 import UploadTips from "@/components/admin/UploadTips";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 // Admin-controlled site-wide marketing popup/banner (new-arrival announcement,
 // seasonal sale, store event). Whatever is entered here is exactly what
 // shoppers see, in exactly the scheduled window -- no auto-generated urgency
@@ -50,6 +51,7 @@ const toLocalInputValue = (value: string | Date | null) => {
 };
 
 export default function AdminPromotionsPanel() {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const promotionsQuery = trpc.admin.promotions.useQuery();
   const uploadImage = trpc.admin.uploadProductImage.useMutation();
@@ -178,7 +180,7 @@ export default function AdminPromotionsPanel() {
             rowActions={promotion => (
               <div className="flex justify-end gap-1">
                 <button type="button" onClick={() => openComposer(promotion)} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-soft)] hover:text-[#df1f3d]" aria-label={`${promotion.headline} засах`}><Pencil size={15} /></button>
-                <button type="button" onClick={() => { if (window.confirm(`"${promotion.headline}" урамшууллыг бүрмөсөн устгах уу?`)) deletePromotion.mutate({ id: promotion.id }); }} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${promotion.headline} устгах`}><Trash2 size={15} /></button>
+                <button type="button" onClick={async () => { if (await confirm({ title: `"${promotion.headline}" урамшууллыг бүрмөсөн устгах уу?`, danger: true })) deletePromotion.mutate({ id: promotion.id }); }} className="rounded-full p-2 text-[var(--a-muted)] transition hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${promotion.headline} устгах`}><Trash2 size={15} /></button>
               </div>
             )}
           />

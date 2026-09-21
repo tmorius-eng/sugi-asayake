@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { PANEL_OWNED_GROUPS, checkStoreSettingFormat, storeSettingSlots, type StoreSettingKey } from "@shared/store-settings";
 
+import { useConfirm } from "@/components/ConfirmDialog";
 type SettingRow = { settingKey: string; settingValue: string; updatedAt: Date };
 
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Тохиргоог хадгалж чадсангүй. Дахин оролдоно уу.";
@@ -15,6 +16,7 @@ const messageFrom = (error: unknown) => error instanceof Error ? error.message :
 const GROUPS = Array.from(new Set(storeSettingSlots.map(slot => slot.group))).filter(group => !PANEL_OWNED_GROUPS.includes(group));
 
 export default function AdminStoreSettingsPanel({ preview = false }: { preview?: boolean }) {
+  const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const settingsQuery = trpc.admin.storeSettings.useQuery(undefined, { enabled: !preview });
   const updateSetting = trpc.admin.updateStoreSetting.useMutation();
@@ -52,7 +54,7 @@ export default function AdminStoreSettingsPanel({ preview = false }: { preview?:
 
   const resetSetting = async (settingKey: StoreSettingKey) => {
     if (preview) return toast.message("Preview горим", { description: "Бодит тохиргоо сэргээх нь хамгаалагдсан admin хэсэгт ажиллана." });
-    if (!window.confirm("Энэ тохиргоог анхны утга руу буцаах уу?")) return;
+    if (!await confirm({ title: "Энэ тохиргоог анхны утга руу буцаах уу?" })) return;
     setActiveKey(settingKey);
     try {
       await clearSetting.mutateAsync({ settingKey });
