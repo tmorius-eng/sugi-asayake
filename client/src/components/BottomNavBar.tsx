@@ -53,7 +53,7 @@ export default function BottomNavBar() {
         <button type="button" onClick={() => setCartOpen(true)} className="bottom-nav-item" aria-label={cartCount > 0 ? `Сагс нээх, ${cartCount} бараатай` : "Сагс нээх"}>
           <span className="bottom-nav-item-icon">
             <ShoppingBag size={20} aria-hidden="true" />
-            {cartCount > 0 && <span className="bottom-nav-item-badge">{cartCount}</span>}
+            {cartCount > 0 && <span className="bottom-nav-item-badge" aria-hidden="true">{cartCount}</span>}
           </span>
           <span>Сагс</span>
         </button>

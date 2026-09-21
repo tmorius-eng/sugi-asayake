@@ -315,6 +315,62 @@ mount-ийн ЯГ commit дээрх (MutationObserver) hero зураг/толг�
 хоёр pixel-ээрээ ижил (3 өргөнд, гэрэл + харанхуй). `e2e/brand-logo.spec.ts` шинэ блокт.
 **Үр дүн: vitest 1100 passed / 112 файл ✅, E2E 198 passed / 0 failed ✅** (бүтнээр, компьютер+утас).
 
+**Production дээр (deploy-ийн дараа, утас, 3 удаагийн медиан), дараалсан гурван commit:**
+
+| Алхам | Simulated (PSI-тэй ижил) | Devtools (бодит) throttling |
+|---|---|---|
+| Өмнө (6c, 09-21 өглөө) | оноо 69, LCP 5.3 с | — |
+| Shell #root дотор (56b2f08) | **оноо 87, LCP 3.38 с**, FCP 1.7 с | **LCP 2.52 с** (= FCP, hero эхний зурагдалтад) |
+| + R2 preconnect (1f24eac) | 88, 3.46 с (шуугиан дотор) | — |
+| + Shell #root-ын ГАДНА, нуудаг (ddc6109) | 89, 3.40 с — LCP элемент одоо олддог (breakdown гарна) | — |
+| + `/cdn/` 302-гүй шууд R2 URL (803a9b9) | 89, 3.33 с; load delay 1.0 → 0.4–0.9 с | — |
+
+Shell-ийг #root-ын гадна гаргасан шалтгаан: #root дотор байхад React эхний commit-доо устгадаг
+тул Lighthouse LCP элементээ олохгүй, JS-ээс хамаарсан пессимист загвар руу унадаг байв. Одоо
+Home.tsx layout effect-ээр (нэг frame) нууж, толгой/текстийг нь устгана (давхар h1/main
+үлдэхгүй — E2E `storefront.spec` `main` давхардсанаар анх барьсан), rail-ийн нуусан `<img>`
+үлдэнэ. Хоёр дахь нь: `/cdn/<key>` 302 → R2 нь hero-ийн замд нэг RTT нэмдэг байсан тул
+storefront-д очих зургийн URL-ыг сервер `directStorageUrl`-ээр шууд R2 хаяг болгодог
+(DB `/cdn/` хэвээр, admin хөндөгдөөгүй, `content.siteMedia` ч ижил тул React дахин татахгүй).
+
+**Үлдсэн 3.3 с-ийн шалтгаан загварт ил**: TTFB 0.45 + hero зураг ӨӨР origin (`pub-….r2.dev`)
+дээр — шинэ холболт (DNS+TCP+TLS = 3 RTT) + шрифт 61 KB, CSS 48 KB-тай нэг зурвасын өргөнийг
+хуваана. Кодоор цааш багасахгүй; **Tom-ийн шийдвэр**: R2 bucket-ийг Cloudflare custom domain
+(`cdn.sugi…`)-д холбох эсвэл Worker-оор `/cdn/*`-ийг ижил host дээр үйлчлүүлэх — тэгвэл
+холболт дахин ашиглагдаж LCP ~2.5 с орчим болно (бодит throttling-д одоо ч 2.5 с).
+
+### 6f. Хүртээмж: Lighthouse a11y 87–95 → 100 (2026-09-21, төлөвлөгөөний 2-р хэсэг)
+
+Хэмжсэн зүйл бүр локал production build дээр Lighthouse accessibility (утас) — нүүр, /shop,
+барааны хуудас, /login, /track-order, /careers **зургуулаа 100, унасан аудит 0**
+(өмнө 87–95; /login ба /careers 95 нь контрастаас).
+
+- **`AddedToCartToast`**: хаах товч `tabIndex={visible ? 0 : -1}` — toast нь opacity-гаар
+  нуугддаг тул хуудас БҮР дээр гар ашиглагчийн Tab дараалалд үл үзэгдэх зогсоол байв.
+- **/shop "Эрэмбэ" select**: label-ийн текст ≤620px-д `display:none` → нэргүй; `aria-label`.
+  **Асуулгын дүүргийн select**: `<p>` → `<label htmlFor>` + тайлбар `aria-describedby`.
+- **aria-label ↔ харагдах текст (WCAG 2.5.3)**: сагс/хүслийн тоон badge `aria-hidden`
+  (нэр нь "Сагс нээх, 3 бараатай" хэвээр, харагдах "Сагс" одоо агуулагдана); салбарын мөр
+  aria-label-гүй + далд " — Google Maps дээр нээх"; газрын зургийн pin-д дугаар нь орсон;
+  ShareBar-ийн 𝕏 глиф → SVG лого (глиф "X" нэрэнд агуулагддаггүй байв); Silktide-ийн
+  "Дэлгэрэнгүй" товчны aria-label харагдах текстээ агуулдаг болов — vendor нэг мөрийг
+  prompt-ийн товч ба modal-ийн хаах товч хоёуланд хэрэглэдэг байсан тул
+  `silktide-consent-manager.js`-д **SUGI patch**: `text.preferences.closeButtonAccessibleLabel`.
+- **Давхар alt**: ангиллын дугуй зураг, тавиурын карт, сүүлд үзсэн карт — нэр нь хажууд нь
+  бичигдсэн тул `alt=""` (дэлгэц уншигч нэг нэрийг хоёр сонсдог байв).
+- **Контраст**: `.product-name-secondary` харанхуйд 3.39 → `--ck-muted`; Facebook товч
+  #1877f2 дээр цагаан 4.23 → #1260cc (5.9); карьерын хажуугийн имэйл #df1f3d харанхуй
+  дээр 3.72 → #ff6b81 (6.5).
+- **Маягтын алдаа талбар дээр нь** (WCAG 3.3.1): Checkout-ийн 09-20-ны загварыг
+  **`client/src/hooks/useFieldErrors.tsx`** болгож (`fieldProps`/`errorFor`/`clearError`/
+  `showErrors` + `<FieldError>`), Login (нэвтрэх + бүртгэл), ForgotPassword, TrackOrder,
+  карьерын анкетад хэрэглэв — өмнө нь эдгээр зөвхөн toast-оор хэлдэг байв. CSS
+  `.field-error` + `[aria-invalid]` хүрээ бүх маягтад.
+- **Карьерын анкетын CV талбар**: `<label>` дотор `<button>` байсан (label-ийн активац
+  давхардаж, бүхэл хайрцаг нэг label болж уншигддаг) → `<div>` + `aria-labelledby`.
+
+Дараа нь: Lighthouse-ийн `label-content-name-mismatch` оноонд нөлөөлдөггүй ч бүгдийг цэвэрлэв.
+
 ### 7. Тест
 Шинэ: `e2e/checkout.spec.ts` — **зочин анх удаа бүтэн захиалга өгнө** (сагс → маягтын
 алдаа → салбараас авах → бэлэн мөнгө → баталгаажуулах дэлгэц → DB-д мөр бодитоор

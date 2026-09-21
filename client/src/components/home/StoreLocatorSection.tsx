@@ -93,7 +93,7 @@ export default function StoreLocatorSection() {
             {locations.map((location) => {
               const pos = PIN_POSITIONS[location.number] ?? { x: 200, y: 150 };
               return (
-                <a key={location.number} href={location.mapUrl} target="_blank" rel="noreferrer" className="locator-pin" data-branch={location.number} aria-label={`${location.name} — Google Maps дээр нээх`}>
+                <a key={location.number} href={location.mapUrl} target="_blank" rel="noreferrer" className="locator-pin" data-branch={location.number} aria-label={`${location.number} — ${location.name}, Google Maps дээр нээх`}>
                   <circle className="locator-pin-dot" cx={pos.x} cy={pos.y} r="8" />
                   <text x={pos.x} y={pos.y + 3} textAnchor="middle">{location.number}</text>
                 </a>
@@ -111,12 +111,14 @@ export default function StoreLocatorSection() {
                 href={location.mapUrl}
                 target="_blank"
                 rel="noreferrer"
-                aria-label={`${location.name} Google Maps дээр нээх`}
                 key={location.number}
               >
                 <span>{location.number}</span>
                 <div>
                   <strong>{location.name}</strong>
+                  {/* Холбоосын нэр = харагдах агуулга + энэ далд төгсгөл (aria-label-ыг
+                      хассан: харагдах текст нэрэнд нь агуулагдах ёстой, WCAG 2.5.3). */}
+                  <span className="sr-only"> — Google Maps дээр нээх</span>
                   <small>{location.detail}</small>
                   <small className="location-meta">
                     <Clock3 size={11} /> {contact.hours}

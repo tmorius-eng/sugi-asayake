@@ -138,7 +138,7 @@ export default function CategoryMasonry({
               <span className="cat-mosaic-item-photo">
                 {/* 66px-ийн дүрсэнд 3840px хүртэлх эх файл (412 KB) татдаг байв —
                     webp бол upload-ын -600w хувилбарыг санал болгоно. */}
-                <ResponsivePicture src={imageSrc} fullWidth={1920} sizes="80px" alt={category.name} loading="lazy" draggable={false} />
+                <ResponsivePicture src={imageSrc} fullWidth={1920} sizes="80px" alt="" loading="lazy" draggable={false} />
               </span>
               <span className="cat-mosaic-item-body">
                 {/* 2026-09-11 audit: the "01".."06" index was removed. The six

@@ -38,7 +38,7 @@ export default function ShelfProductCard({ product, rank }: { product: ShelfProd
       <span className="shelf-card-frame">
         <span className="shelf-card-image">
           {salePercent ? <span className="shop-sale-badge">-{salePercent}%</span> : null}
-          <ResponsivePicture src={product.imageUrl ?? fallbackImage} fullWidth={1600} sizes="220px" alt={names.primary} loading="lazy" />
+          <ResponsivePicture src={product.imageUrl ?? fallbackImage} fullWidth={1600} sizes="220px" alt="" loading="lazy" />
         </span>
         <span className="shelf-card-body">
           <p>{product.brand ?? "SUGI ASAYAKE"}</p>

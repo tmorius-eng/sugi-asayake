@@ -51,7 +51,11 @@ export default function AddedToCartToast() {
     <div className={`added-to-cart-toast${visible ? " is-visible" : ""}`} role="status" aria-live="polite" aria-hidden={!visible}>
       <span className="added-to-cart-toast-icon"><Check size={13} strokeWidth={3} aria-hidden="true" /></span>
       <p>{message}</p>
-      <button type="button" onClick={() => setVisible(false)} aria-label="Хаах" style={{ padding: 6, margin: -6 }}><X size={14} aria-hidden="true" /></button>
+      {/* tabIndex -1 while hidden (2026-09-21, a11y): the toast hides with
+          opacity/pointer-events, not display:none, so its close button stayed
+          in the Tab order of EVERY page as an invisible stop (BackToTop.tsx has
+          the same guard). */}
+      <button type="button" onClick={() => setVisible(false)} aria-label="Хаах" tabIndex={visible ? 0 : -1} style={{ padding: 6, margin: -6 }}><X size={14} aria-hidden="true" /></button>
       {visible && <span key={nonce} className="added-to-cart-toast-bar" style={{ animationDuration: `${DURATION_MS}ms` }} />}
     </div>
   );

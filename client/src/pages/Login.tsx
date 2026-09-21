@@ -3,6 +3,7 @@ import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { Link, useLocation, useSearch } from "wouter";
 import { LoaderCircle, Lock, LogIn, Phone, User as UserIcon, UserPlus } from "lucide-react";
 import { toast } from "sonner";
+import { FieldError, useFieldErrors } from "@/hooks/useFieldErrors";
 import CommerceHeader from "@/components/CommerceHeader";
 import PhoneVerificationStep from "@/components/PhoneVerificationStep";
 import SiteFooter from "@/components/SiteFooter";
@@ -33,6 +34,7 @@ export default function Login() {
   // read-once-at-mount pattern as redirectTarget below.
   const [mode, setMode] = useState<"login" | "register">(() => new URLSearchParams(search).get("mode") === "register" ? "register" : "login");
   const [phone, setPhone] = useState("");
+  const { errorFor, fieldProps, clearError, showErrors } = useFieldErrors();
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   // Set the instant PhoneVerificationStep reports "verified" -- its presence
@@ -65,10 +67,10 @@ export default function Login() {
   const isSubmitting = loginMutation.isPending || completeRegistration.isPending;
 
   const submitLogin = async () => {
-    if (!phone.trim() || !password) {
-      toast.error("Утасны дугаар болон нууц үгээ оруулна уу.");
-      return;
-    }
+    const nextErrors: Record<string, string> = {};
+    if (!phone.trim()) nextErrors["login-phone"] = "Утасны дугаараа оруулна уу.";
+    if (!password) nextErrors["login-password"] = "Нууц үгээ оруулна уу.";
+    if (showErrors(nextErrors)) return;
     try {
       await loginMutation.mutateAsync({ phone: phone.trim(), password });
       await utils.auth.me.invalidate();
@@ -79,10 +81,8 @@ export default function Login() {
   };
 
   const submitRegistration = async () => {
-    if (!verifiedSessionId || !password) {
-      toast.error("Нууц үгээ оруулна уу.");
-      return;
-    }
+    if (!verifiedSessionId) return;
+    if (showErrors(password ? {} : { "register-password": "Нууц үгээ оруулна уу." })) return;
     try {
       await completeRegistration.mutateAsync({ sessionId: verifiedSessionId, password, name: name.trim() || undefined });
       await utils.auth.me.invalidate();
@@ -123,15 +123,17 @@ export default function Login() {
               Утасны дугаар
               <div className="auth-field-shell">
                 <Phone size={16} aria-hidden="true" />
-                <input type="tel" inputMode="tel" value={phone} onChange={event => setPhone(event.target.value)} placeholder="9911 2233" autoComplete="tel" />
+                <input type="tel" inputMode="tel" value={phone} onChange={event => { setPhone(event.target.value); clearError("login-phone"); }} placeholder="9911 2233" autoComplete="tel" {...fieldProps("login-phone")} />
               </div>
+              <FieldError field="login-phone" message={errorFor("login-phone")} />
             </label>
             <label className="auth-field">
               Нууц үг
               <div className="auth-field-shell">
                 <Lock size={16} aria-hidden="true" />
-                <input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="••••••••" autoComplete="current-password" />
+                <input type="password" value={password} onChange={event => { setPassword(event.target.value); clearError("login-password"); }} placeholder="••••••••" autoComplete="current-password" {...fieldProps("login-password")} />
               </div>
+              <FieldError field="login-password" message={errorFor("login-password")} />
             </label>
             <div style={{ textAlign: "right" }}>
               <Link href="/forgot-password" className="auth-quiet" style={{ display: "inline" }}>Нууц үгээ мартсан уу?</Link>
@@ -156,8 +158,9 @@ export default function Login() {
               Нууц үг
               <div className="auth-field-shell">
                 <Lock size={16} aria-hidden="true" />
-                <input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="8-с дээш тэмдэгт" autoComplete="new-password" />
+                <input type="password" value={password} onChange={event => { setPassword(event.target.value); clearError("register-password"); }} placeholder="8-с дээш тэмдэгт" autoComplete="new-password" {...fieldProps("register-password")} />
               </div>
+              <FieldError field="register-password" message={errorFor("register-password")} />
             </label>
 
             <button type="submit" disabled={isSubmitting} className="auth-submit">

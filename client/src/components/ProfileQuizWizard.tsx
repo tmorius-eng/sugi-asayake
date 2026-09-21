@@ -182,9 +182,9 @@ export default function ProfileQuizWizard({ open, onOpenChange }: { open: boolea
                 <PillGroup options={genderOptions} selected={draft.gender ? [draft.gender] : []} onToggle={value => setDraft(current => ({ ...current, gender: current.gender === value ? "" : value }))} />
               </div>
               <div>
-                <p style={{ margin: "0 0 8px", fontSize: "11px", fontWeight: 800 }}>Дүүрэг</p>
-                <p style={{ margin: "0 0 8px", fontSize: "11px", color: "#77787d" }}>Хүргэлтийн хаяг тусад нь "Хүргэлтийн хаяг" таб дээр хадгалагдана — энэ зөвхөн зөвлөмжид ашиглагдана.</p>
-                <select value={draft.primaryDistrict} onChange={event => setDraft(current => ({ ...current, primaryDistrict: event.target.value }))} className="auth-field-shell" style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(23,24,27,.14)", fontSize: "13px", width: "100%" }}>
+                <label htmlFor="quiz-district" style={{ display: "block", margin: "0 0 8px", fontSize: "11px", fontWeight: 800 }}>Дүүрэг</label>
+                <p id="quiz-district-hint" style={{ margin: "0 0 8px", fontSize: "11px", color: "#77787d" }}>Хүргэлтийн хаяг тусад нь "Хүргэлтийн хаяг" таб дээр хадгалагдана — энэ зөвхөн зөвлөмжид ашиглагдана.</p>
+                <select id="quiz-district" aria-describedby="quiz-district-hint" value={draft.primaryDistrict} onChange={event => setDraft(current => ({ ...current, primaryDistrict: event.target.value }))} className="auth-field-shell" style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(23,24,27,.14)", fontSize: "13px", width: "100%" }}>
                   <option value="">Сонгоогүй</option>
                   {ubDistricts.map(key => <option key={key} value={key}>{ubDistrictLabels[key]}</option>)}
                 </select>

@@ -3,6 +3,7 @@ import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { Link, useLocation } from "wouter";
 import { CheckCircle2, Lock } from "lucide-react";
 import { toast } from "sonner";
+import { FieldError, useFieldErrors } from "@/hooks/useFieldErrors";
 import CommerceHeader from "@/components/CommerceHeader";
 import PhoneVerificationStep from "@/components/PhoneVerificationStep";
 import SiteFooter from "@/components/SiteFooter";
@@ -25,19 +26,16 @@ export default function ForgotPassword() {
   const [, setLocation] = useLocation();
   const [verifiedPhoneSessionId, setVerifiedPhoneSessionId] = useState<string | null>(null);
   const [phonePassword, setPhonePassword] = useState("");
+  const { errorFor, fieldProps, clearError, showErrors } = useFieldErrors();
   const [phoneConfirmPassword, setPhoneConfirmPassword] = useState("");
   const resetPasswordViaPhone = trpc.auth.resetPasswordViaPhone.useMutation();
 
   const submitPhoneReset = async () => {
     if (!verifiedPhoneSessionId) return;
-    if (phonePassword.length < 8) {
-      toast.error("Нууц үг дор хаяж 8 тэмдэгт байх ёстой.");
-      return;
-    }
-    if (phonePassword !== phoneConfirmPassword) {
-      toast.error("Нууц үг таарахгүй байна.");
-      return;
-    }
+    const nextErrors: Record<string, string> = {};
+    if (phonePassword.length < 8) nextErrors["reset-password"] = "Нууц үг дор хаяж 8 тэмдэгт байх ёстой.";
+    else if (phonePassword !== phoneConfirmPassword) nextErrors["reset-confirm"] = "Нууц үг таарахгүй байна.";
+    if (showErrors(nextErrors)) return;
     try {
       await resetPasswordViaPhone.mutateAsync({ sessionId: verifiedPhoneSessionId, password: phonePassword });
     } catch (error) {
@@ -69,15 +67,17 @@ export default function ForgotPassword() {
               Шинэ нууц үг
               <div className="auth-field-shell">
                 <Lock size={16} aria-hidden="true" />
-                <input type="password" value={phonePassword} onChange={event => setPhonePassword(event.target.value)} placeholder="8-с дээш тэмдэгт" autoComplete="new-password" />
+                <input type="password" value={phonePassword} onChange={event => { setPhonePassword(event.target.value); clearError("reset-password"); }} placeholder="8-с дээш тэмдэгт" autoComplete="new-password" {...fieldProps("reset-password")} />
               </div>
+              <FieldError field="reset-password" message={errorFor("reset-password")} />
             </label>
             <label className="auth-field">
               Шинэ нууц үг давтах
               <div className="auth-field-shell">
                 <Lock size={16} aria-hidden="true" />
-                <input type="password" value={phoneConfirmPassword} onChange={event => setPhoneConfirmPassword(event.target.value)} placeholder="Дахин оруулна уу" autoComplete="new-password" />
+                <input type="password" value={phoneConfirmPassword} onChange={event => { setPhoneConfirmPassword(event.target.value); clearError("reset-confirm"); }} placeholder="Дахин оруулна уу" autoComplete="new-password" {...fieldProps("reset-confirm")} />
               </div>
+              <FieldError field="reset-confirm" message={errorFor("reset-confirm")} />
             </label>
             <button type="submit" className="auth-submit">Нууц үг шинэчлэх</button>
           </form>

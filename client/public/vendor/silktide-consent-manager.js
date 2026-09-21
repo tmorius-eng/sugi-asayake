@@ -998,7 +998,11 @@ class SilktideConsentManager {
       "<p>We respect your right to privacy. You can choose not to allow some types of cookies. Your cookie preferences will apply across our website.</p>";
 
     // Preferences button
-    const preferencesButtonLabel = this.config.text?.prompt?.preferencesButtonAccessibleLabel;
+    // SUGI patch (2026-09-21): the close button is icon-only and needs its OWN
+    // accessible name -- upstream reused preferencesButtonAccessibleLabel, which
+    // also names the prompt's visible "preferences" button, so one string could
+    // not fit both. `text.preferences.closeButtonAccessibleLabel` wins here.
+    const preferencesButtonLabel = this.config.text?.preferences?.closeButtonAccessibleLabel || this.config.text?.prompt?.preferencesButtonAccessibleLabel;
 
     const closeModalButton = `<button class="stcm-modal-close"${preferencesButtonLabel ? ` aria-label="${preferencesButtonLabel}"` : ''}>
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">

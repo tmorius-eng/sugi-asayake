@@ -18,7 +18,9 @@
 /* Social sign-in button on /login (2026-09-13). Facebook's brand blue is
    the one hard-coded colour on purpose; white text on #1877f2 is 4.6:1. */
 .auth-social { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 48px; margin-top: 14px; padding: 0 18px; border-radius: 4px; font-weight: 700; font-size: 15px; text-decoration: none; border: 1px solid transparent; }
-.auth-social--facebook { background: #1877f2; color: #fff; }
+/* #1877f2 (Facebook-ийн брэнд хөх) дээр цагаан 15px bold = 4.23:1 (Lighthouse, /login) — AA-д
+   4.5 хэрэгтэй; хамгийн ойрын давдаг хөх (5.9:1). */
+.auth-social--facebook { background: #1260cc; color: #fff; }
 .auth-social--facebook:hover { background: #166fe5; color: #fff; }
 .auth-social:focus-visible { outline: 3px solid #f0b52d; outline-offset: 2px; }
 
@@ -3760,6 +3762,10 @@ html[data-storefront-theme="dark"] .sugi-site .qs-stage small { color: var(--ck-
 .careers-side-label { margin: 112px 0 0; font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--careers-ink); }
 .careers-side-email { display: inline-block; margin-top: 14px; font-size: 20px; color: var(--careers-accent); text-decoration: underline; text-underline-offset: 6px; text-decoration-thickness: 1.5px; overflow-wrap: anywhere; }
 .careers-side-email:hover { color: var(--careers-accent-hover); }
+/* Харанхуй хажуугийн самбар дээр брэндийн улаан #df1f3d = 3.72:1 (Lighthouse, /careers) —
+   харанхуй дэвсгэр дээрх текстийн улаан (--primary-text-ийн харанхуй утга) 6.5:1. */
+.careers-side .careers-side-email { color: #ff6b81; }
+.careers-side .careers-side-email:hover { color: #ff9aa9; }
 .careers-side-apply { display: inline-flex; align-items: center; margin-top: 22px; height: 44px; padding: 0 20px; border-radius: 999px; border: 1.5px solid var(--careers-ink); background: transparent; color: var(--careers-ink); font-size: 14px; font-weight: 600; cursor: pointer; transition: background .15s, color .15s; }
 .careers-side-apply:hover { background: var(--careers-ink); color: #fff; }
 .careers-side-links { display: grid; gap: 12px; margin-top: 80px; }
@@ -3856,6 +3862,15 @@ html[data-storefront-theme="dark"] .cart-free-shipping-text { color: #8fd6a8; }
 .checkout-input[aria-invalid="true"] { border-color: #b3261e; }
 .checkout-input[aria-invalid="true"]:focus-visible { outline: 2px solid #b3261e; outline-offset: 1px; }
 html[data-storefront-theme="dark"] .checkout-field-error { color: #ff8a80; }
+/* Маягтын алдааны мөр бүх маягтад (2026-09-21, hooks/useFieldErrors.tsx): checkout-ийн
+   загвар Login/ForgotPassword/TrackOrder/Карьерын анкетад ч. Давхаргагүй тул алдаатай
+   талбарын хүрээ Tailwind-ийн border utility-г давна. */
+.field-error { font-size: 11px; font-weight: 700; color: #b3261e; }
+html[data-storefront-theme="dark"] .field-error { color: #ff8a80; }
+.auth-field-shell:has([aria-invalid="true"]), input[aria-invalid="true"]:not(.checkout-input), textarea[aria-invalid="true"]:not(.checkout-input) { border-color: #b3261e; }
+/* Латин дэд нэр (product-name-secondary) харанхуй загварт 3.39:1 байв (Lighthouse,
+   shop/shelf/PDP бүх карт) — токены muted өнгө. */
+html[data-storefront-theme="dark"] .product-name-secondary { color: var(--ck-muted); }
 
 /* ---- <picture> AVIF-д (2026-09-21) ---------------------------------------
    ResponsivePicture нь <img>-ийг <picture>-д ороодог. `display: contents`

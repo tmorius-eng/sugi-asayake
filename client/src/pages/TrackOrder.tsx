@@ -3,6 +3,7 @@ import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { Link } from "wouter";
 import { LoaderCircle, Package, Phone, Search } from "lucide-react";
 import { toast } from "sonner";
+import { FieldError, useFieldErrors } from "@/hooks/useFieldErrors";
 import CommerceHeader from "@/components/CommerceHeader";
 import GiftCardCodes from "@/components/GiftCardCodes";
 import SiteFooter from "@/components/SiteFooter";
@@ -30,13 +31,14 @@ export default function TrackOrder() {
   const [trackLine1, trackLine2] = textFor("track-text-heading", "Захиалгаа\nхянах.").split("\n");
   const [orderNumber, setOrderNumber] = useState("");
   const [phone, setPhone] = useState("");
+  const { errorFor, fieldProps, clearError, showErrors } = useFieldErrors();
   const lookup = trpc.orders.lookup.useMutation();
 
   const submit = async () => {
-    if (!orderNumber.trim() || !phone.trim()) {
-      toast.error("Захиалгын дугаар болон утасны дугаараа оруулна уу.");
-      return;
-    }
+    const nextErrors: Record<string, string> = {};
+    if (!orderNumber.trim()) nextErrors["track-order-number"] = "Захиалгын дугаараа оруулна уу.";
+    if (!phone.trim()) nextErrors["track-phone"] = "Утасны дугаараа оруулна уу.";
+    if (showErrors(nextErrors)) return;
     try {
       await lookup.mutateAsync({ orderNumber: orderNumber.trim(), phone: phone.trim() });
     } catch (error) {
@@ -60,15 +62,17 @@ export default function TrackOrder() {
             Захиалгын дугаар
             <div className="auth-field-shell">
               <Package size={16} aria-hidden="true" />
-              <input value={orderNumber} onChange={event => setOrderNumber(event.target.value)} placeholder="SAMT..." autoComplete="off" />
+              <input value={orderNumber} onChange={event => { setOrderNumber(event.target.value); clearError("track-order-number"); }} placeholder="SAMT..." autoComplete="off" {...fieldProps("track-order-number")} />
             </div>
+            <FieldError field="track-order-number" message={errorFor("track-order-number")} />
           </label>
           <label className="auth-field">
             Утасны дугаар
             <div className="auth-field-shell">
               <Phone size={16} aria-hidden="true" />
-              <input type="tel" inputMode="tel" value={phone} onChange={event => setPhone(event.target.value)} placeholder="9911 2233" autoComplete="tel" />
+              <input type="tel" inputMode="tel" value={phone} onChange={event => { setPhone(event.target.value); clearError("track-phone"); }} placeholder="9911 2233" autoComplete="tel" {...fieldProps("track-phone")} />
             </div>
+            <FieldError field="track-phone" message={errorFor("track-phone")} />
           </label>
           <button type="submit" disabled={lookup.isPending} className="auth-submit">
             {lookup.isPending ? <LoaderCircle className="animate-spin" size={17} /> : <Search size={16} />}

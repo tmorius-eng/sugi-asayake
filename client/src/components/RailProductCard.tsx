@@ -41,7 +41,7 @@ export default function RailProductCard({ product, onRemember, onQuickView, reas
           single-source <img> for pre-derivative uploads. */}
       <span className="recently-viewed-image">
         {salePercent ? <span className="shop-sale-badge">-{salePercent}%</span> : null}
-        <img src={product.imageUrl ?? getCategoryPlaceholderImage(product.categorySlug)} alt={names.primary} loading="lazy" {...(imageSrcSet(product.imageUrl, 1600) ? { srcSet: imageSrcSet(product.imageUrl, 1600)!, sizes: "112px" } : {})} />
+        <img src={product.imageUrl ?? getCategoryPlaceholderImage(product.categorySlug)} alt="" loading="lazy" {...(imageSrcSet(product.imageUrl, 1600) ? { srcSet: imageSrcSet(product.imageUrl, 1600)!, sizes: "112px" } : {})} />
       </span>
       <div>
         <p>{product.brand ?? product.categoryName ?? "SUGI ASAYAKE"}</p>

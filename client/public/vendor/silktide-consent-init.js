@@ -40,11 +40,17 @@
         acceptAllButtonText: text.acceptAll,
         rejectNonEssentialButtonText: text.reject,
         preferencesButtonText: text.preferencesButton,
-        // Accessible name for the icon-only "close preferences" button;
-        // without it the vendor renders an unlabeled <button>.
-        preferencesButtonAccessibleLabel: "Күүкийн тохиргоог хаах",
+        // The vendor puts this aria-label on the prompt's "Дэлгэрэнгүй"
+        // button (silktide-consent-manager.js ~886). An accessible name must
+        // CONTAIN the visible text (WCAG 2.5.3; Lighthouse flagged it on every
+        // page, 2026-09-21), so it extends the visible label rather than
+        // replacing it.
+        preferencesButtonAccessibleLabel: text.preferencesButton + " — күүкийн тохиргоо",
       },
       preferences: {
+        // Icon-only close button of the preferences modal (SUGI patch in
+        // silktide-consent-manager.js, see the note there).
+        closeButtonAccessibleLabel: "Күүкийн тохиргоог хаах",
         title: text.preferencesTitle,
         description: text.preferencesDescription,
         saveButtonText: text.save,

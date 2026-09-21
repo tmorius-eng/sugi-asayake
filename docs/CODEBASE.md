@@ -80,6 +80,7 @@ browser → /api/trpc/<router>.<procedure>
 | `honeybadger.ts` / `honeybadgerReadApi.ts` | алдааны хяналт | түлхүүргүй бол чимээгүй no-op |
 | `sqlQueryLog.ts` | Drizzle Logger → ring buffer | админы SQL лог самбар үүнээс уншина |
 | `indexHtml.ts` | SSR-гүй HTML бэлтгэх (SEO мета, салбарууд, `#storefront-bootstrap` JSON: site media + site text + promo, 60 с кэш) | `getStorefrontBranches`-ийг ашиглана (агуулах харагдахгүй) |
+| `publicUrl.ts` | `publicOrigin`/`absoluteUrl` + **`directStorageUrl`/`storageKeyOf`** (2026-09-21): `/cdn/<key>` → R2-ийн шууд хаяг, storefront-ийн эхний render (preload/shell/bootstrap) ба `content.siteMedia`-д — 302-ын RTT hero-ийн замаас хасагдана; DB `/cdn/` хэвээр | admin-ий siteMedia `/cdn/` хэвээр (зориуд) |
 | `heroShell.ts` | Нүүрний promo/толгой/hero-г React-ээс ӨМНӨ статик HTML-ээр `#root` дотор (2026-09-21, зөвхөн `/`) | ⚠️ Markup React-ийн `CommerceHeader`/`HeroSection`/`HeroImageSlideshow`/`SitePromo`-той ИЖИЛ class байх ёстой — `e2e/hero-shell.spec.ts`; `HERO_SHELL=0` унтраана |
 | `imagePreload.ts` | `<link rel=preload as=image>` — `<img>`-тэй ижил srcset/sizes, AVIF R2-д байгаа үед л (`hasAvif`, 10 мин кэш) | hero ба барааны хуудас хоёулаа |
 | `vite.ts` | dev middleware / production static | |

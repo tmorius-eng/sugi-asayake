@@ -119,7 +119,7 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
 **Өнгөний систем (2026-09-11):** storefront нь **Linen** цайвар палитр (суурь `#dae0da`, карт `#f2f5f2`, band `#ced5cf`) — харанхуй горим БИШ. 7 хуудас × 4 өргөнд WCAG 2.2 AA контрастын алдаа 0 (бодит computed дэвсгэр дээр хэмжсэн). Дэлгэрэнгүй доорх 2026-09-11 хэсэгт.
 **Навигацийн засвар (2026-08-28):** Shop-ийн хайлт/ангилал/хуудаслалт URL-д хадгалагдаж refresh болон product-оос буцахад state сэргээнэ; product breadcrumb болон Admin-ийн нүүр хуудасны холбоосууд ажиллана.
 
-**Гүйцэтгэл — 2026-09-21-нд production дээр анх удаа хэмжсэн (Lighthouse):** компьютер **94/100, LCP 1.5 с** (сайн); **утас**: нүүр 59 (LCP 6.9 с), /shop 74 (5.2 с), бараа 75 (4.8 с). LCP элемент нь **hero каруселийн зураг** байв: харагдах слайд `loading="lazy"` авдаг байсныг 09-21-нд зассанаар локал хэмжилтэд **9.8 с → 5.3 с** (оноо 54 → 65). Үлдсэн хэмнэлт: AVIF (~222 KB), consent manager-ийн render-blocking (~770 мс). SEO 100 (нүүр, бараа), хүртээмж 87–93.
+**Гүйцэтгэл (Lighthouse, production, утас):** 09-21 өглөө нүүр 59 → 69 (зураг), **үдээс хойш 69 → 89, LCP 5.3 → 3.3 с** (серверийн зурсан hero shell, bootstrap блок, JS low priority, admin CSS салгав — HISTORY 6e); **бодит (devtools) throttling-д LCP 2.5 с** (hero эхний зурагдалтад). Компьютер 94–97. Үлдсэн 3.3 с нь загварт ил: hero зураг өөр origin (`pub-….r2.dev`) дээр → шинэ холболт + шрифт/CSS-тэй зурвас хуваалцах — **кодоор биш, Tom-ийн шийдвэр** (R2 custom domain эсвэл Worker, HISTORY 6e-ийн төгсгөл). SEO 100 (нүүр, бараа), **хүртээмж 100** (нүүр, /shop, бараа, /login, /track-order, /careers — 09-21 үдээс хойш, HISTORY 6f).
 
 **Шалгагдаагүй/хараахан идэвхгүй:**
 - QPay төлбөр (жинхэнэ merchant credential шаардана; ⚠️ 2026-09-12: QPay-д **sandbox** орчин байдаг — `QPAY_ENVIRONMENT=sandbox` + sandbox merchant эрхээр бүх урсгалыг гэрээний өмнө туршиж болно)
@@ -242,6 +242,8 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
 - Мэдэгдэлд харилцагчийн нэр/утас/хаяг ХЭЗЭЭ Ч оруулахгүй (ntfy сэдэв нээлттэй).
 
 **Frontend**
+- **Маягтын алдааг талбар дээр нь** — `hooks/useFieldErrors.tsx` (`fieldProps`/`FieldError`/`showErrors`); toast дангаараа хангалтгүй (WCAG 3.3.1). Талбарын `id` = алдааны түлхүүр.
+- **aria-label нь харагдах текстээ АГУУЛНА** (WCAG 2.5.3) — тоон badge-ийг `aria-hidden`, глиф/дүрсийг SVG. Lighthouse `label-content-name-mismatch` оноонд нөлөөлдөггүй ч дэлгэц уншигч/дуут удирдлагад бодит алдаа.
 - **Нүүрний толгой/hero-ийн markup өөрчилбөл `server/_core/heroShell.ts`-ийг МӨН өөрчил** (2026-09-21): сервер тэр DOM-ыг React-ээс өмнө ижил class-уудаар зурдаг; зөрвөл React ирэх мөчид hero үсэрнэ. `e2e/hero-shell.spec.ts` (shell ба React-ийн rect тэнцүү) хамгаална — унавал шалтгаан нь яг энэ. Унтраах: `HERO_SHELL=0`.
 - **Storefront-ийн эхний render-д хэрэгтэй жижиг хүснэгтийг tRPC-ээр хүлээхгүй** — `#storefront-bootstrap` блок (`indexHtml.ts` → `client/src/lib/bootstrap.ts` → `initialData`). Шинэ хэсэг нэмбэл хоёр талд нь нэм; `<` тэмдэгтийг сервер `<` болгодог.
 - **Admin-д л хэрэглэгддэг CSS `client/src/admin.css`-д**, `index.css`-д БИШ (storefront-ийн render-blocking файл). Storefront/хуваалцсан дүрэм `index.css`-д хэвээр. Admin-ий `@layer components` wrapper-ийг admin.css-д хадгалсан.
@@ -328,6 +330,7 @@ session-ий тэмдэглэл HISTORY.md-д, дүрэм л энд. Ажилл�
 
 ## ⚠️ Tom-оос хүлээж буй (2026-09-14, "Za bugdiin hii"-ийн дараа)
 - ✅ **Монгол нэр ДУУССАН (2026-09-20)**: 979/984 бараа монгол нэртэй (үлдсэн 5 нь аль хэдийн монгол — 4 бэлгийн карт + нэг эвдэрсэн нэр). Гадны API түлхүүр ашиглаагүй: нэрийг 10 багцаар гараар орчуулж `docs/product-names-mn.tsv`-д хадгалсан. Засвар хийвэл тэр файлд бичээд `pnpm exec tsx scripts/apply-product-names-mn.ts docs/product-names-mn.tsv --apply --force`, эсвэл /admin → Бүтээгдэхүүн → "Монгол нэр" талбар. `scripts/generate-product-names-mn.ts` (Claude API) үлдсэн ч хэрэгцээгүй болсон.
+- **Hero зургийн origin (2026-09-21, гүйцэтгэл)**: утасны LCP 3.3 с-ийн үлдсэн хэсэг нь hero зураг `pub-….r2.dev` (өөр origin) дээр байдгаас. Cloudflare → R2 → bucket → **Custom domain** (жишээ `cdn.sugi.karkaron.com`) холбоод `.env`-ийн `S3_PUBLIC_BASE_URL`-ийг тэр хаяг болгоход л сервер бүх зургийг тэндээс өгнө (код бэлэн, `directStorageUrl`). Хүлээгдэх үр дүн: PSI LCP ~3.3 → ~2.5–2.8 с.
 - **Санал болголтын жин** /admin → Дэлгүүрийн тохиргоо → "Санал болголт"; барааны нэрийн харагдац → "Каталог" (`mn`/`latin`).
 - **Хайлтын статистик** /admin → Хайлт: хэдэн өдрийн дараа "Олдоогүй хайлтууд"-ыг үзэж "+ синоним" дарна — толь Tom-ийн гараар л баяжна.
 - **Staging DNS**: Cloudflare → karkaron.com → DNS → CNAME `sugi-staging` → `bbd3128e-486e-481d-8c21-f9d3d240a56c.cfargotunnel.com`, proxied. Дараа нь `https://sugi-staging.karkaron.com` (өөрийн `sugi_staging` схем — prod-ын 2026-09-14-ний хуулбар, туршилтын захиалга энд хийнэ; push илгээхгүй).

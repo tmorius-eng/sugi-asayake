@@ -147,7 +147,7 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
                     the mobile drawer; the header itself shows icons only,
                     as the reference does. */}
                 <span className="header-action-label">{t("Хүслийн жагсаалт")}</span>
-                {wishlistCount > 0 && <span className="header-action-count">{wishlistCount}</span>}
+                {wishlistCount > 0 && <span className="header-action-count" aria-hidden="true">{wishlistCount}</span>}
               </Link>
             )}
             {/* Order history lives inside Профайл -> Захиалга (with a
@@ -165,7 +165,7 @@ export default function CommerceHeader({ cartCount = 0, onCartOpen, backLabel = 
             <button type="button" onClick={onCartOpen} aria-label={cartCount > 0 ? `Сагс нээх, ${cartCount} бараатай` : "Сагс нээх"}>
               <ShoppingBag size={19} aria-hidden="true" />
               <span className="header-action-label">{t("Сагс")}</span>
-              {cartCount > 0 && <span className="header-action-count">{cartCount}</span>}
+              {cartCount > 0 && <span className="header-action-count" aria-hidden="true">{cartCount}</span>}
             </button>
             <button type="button" className="commerce-menu-toggle" aria-expanded={menuOpen} aria-label={menuOpen ? "Цэс хаах" : "Цэс нээх"} onClick={() => setMenuOpen(open => !open)}>
               {menuOpen ? <X size={20} /> : <Menu size={20} />}
