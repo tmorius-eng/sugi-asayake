@@ -55,8 +55,11 @@ $match = [regex]::Match($DatabaseUrl, '^mysql://(?<user>[^:@]+):(?<pass>[^@]*)@(
 if (-not $match.Success) {
   throw "Could not parse DATABASE_URL. Expected format: mysql://user:password@host:port/dbname"
 }
-$dbUser = $match.Groups["user"].Value
-$dbPass = $match.Groups["pass"].Value
+# URL-decoded like db-backup.ps1 (2026-09-21): a percent-encoded character in the
+# password (e.g. %40 for @) made every restore fail with "Access denied" while the
+# backup with the very same URL worked -- found while refreshing sugi_staging.
+$dbUser = [uri]::UnescapeDataString($match.Groups["user"].Value)
+$dbPass = [uri]::UnescapeDataString($match.Groups["pass"].Value)
 $dbHost = $match.Groups["host"].Value
 $dbPort = if ($match.Groups["port"].Success) { $match.Groups["port"].Value } else { "3306" }
 $sourceDb = $match.Groups["db"].Value
@@ -93,7 +96,14 @@ try {
   if ($LASTEXITCODE -ne 0) { throw "Failed to create/verify database '$restoreDb' (exit $LASTEXITCODE)" }
 
   Write-Host "Restoring $sqlFile into '$restoreDb' ..."
-  Get-Content $sqlFile -Raw | & $mysqlPath @mysqlArgs $restoreDb
+  # mysql reads the file ITSELF (2026-09-21). Piping the text through a
+  # PowerShell pipeline re-encodes it with the console code page (cp932 on a
+  # Japanese-locale Windows): every Cyrillic character became "?" and a quote
+  # inside a string was eaten, so the restore died with a syntax error at the
+  # first Mongolian brand name -- and a "successful" restore on another
+  # machine would have silently replaced every Mongolian name with "?".
+  $sourcePath = $sqlFile.Replace([string][char]92, '/')
+  & $mysqlPath @mysqlArgs --default-character-set=utf8mb4 $restoreDb -e "source $sourcePath"
   if ($LASTEXITCODE -ne 0) { throw "mysql restore exited with code $LASTEXITCODE" }
 } finally {
   if ($null -eq $previousPwd) { Remove-Item Env:\MYSQL_PWD -ErrorAction SilentlyContinue } else { $env:MYSQL_PWD = $previousPwd }

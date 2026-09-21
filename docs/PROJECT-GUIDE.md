@@ -228,6 +228,8 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
 - Store setting-д формат шаардлагатай бол `format` slot-д бич — regex-ийг хоёр дахь газар хуулахгүй (`checkStoreSettingFormat`).
 - zod update schema-д `.partial()` биш **`partialForUpdate()`** (zod 4-д `.default()` partial дотор ч хэрэгждэг).
 - Migration нэг нэгээр: `pnpm exec tsx scripts/db-apply-migration.ts drizzle/00NN_*.sql` (admin эрхээр, `DATABASE_ADMIN_URL`).
+- **`schema_migrations` бүртгэл 2026-09-21-ээс бүрэн** (92/92 prod ба staging) — `scripts/db-migration-status.ts [--staging]` одоо жинхэнэ дутууг л харуулна; гараар/өөр замаар ажиллуулсан migration-ийг `--mark-applied`-аар бүртгэ.
+- **`db-restore.ps1` 2026-09-21-ээс л бодитоор ажилладаг** (нууц үг URL-decode, кирилл-аварсан `source`) — өмнөх хувилбараар сэргээсэн DB-д монгол нэр `?` болсон байж болно.
 - **Хуудаслалттай query бүрт тогтвортой эцсийн тэнцвэр** (`id`) — `createdAt` тэнцүү
   мөрүүдийн дарааллыг MySQL баталгаажуулдаггүй тул худалдан авагч нэг барааг хоёр
   хуудсанд харах, эсвэл огт харахгүй өнгөрөх боломжтой (2026-09-16).
@@ -333,7 +335,7 @@ session-ий тэмдэглэл HISTORY.md-д, дүрэм л энд. Ажилл�
 - **Hero зургийн origin (2026-09-21, гүйцэтгэл)**: утасны LCP 3.3 с-ийн үлдсэн хэсэг нь hero зураг `pub-….r2.dev` (өөр origin) дээр байдгаас. Cloudflare → R2 → bucket → **Custom domain** (жишээ `cdn.sugi.karkaron.com`) холбоод `.env`-ийн `S3_PUBLIC_BASE_URL`-ийг тэр хаяг болгоход л сервер бүх зургийг тэндээс өгнө (код бэлэн, `directStorageUrl`). Хүлээгдэх үр дүн: PSI LCP ~3.3 → ~2.5–2.8 с.
 - **Санал болголтын жин** /admin → Дэлгүүрийн тохиргоо → "Санал болголт"; барааны нэрийн харагдац → "Каталог" (`mn`/`latin`).
 - **Хайлтын статистик** /admin → Хайлт: хэдэн өдрийн дараа "Олдоогүй хайлтууд"-ыг үзэж "+ синоним" дарна — толь Tom-ийн гараар л баяжна.
-- **Staging DNS**: Cloudflare → karkaron.com → DNS → CNAME `sugi-staging` → `bbd3128e-486e-481d-8c21-f9d3d240a56c.cfargotunnel.com`, proxied. Дараа нь `https://sugi-staging.karkaron.com` (өөрийн `sugi_staging` схем — prod-ын 2026-09-14-ний хуулбар, туршилтын захиалга энд хийнэ; push илгээхгүй).
+- **Staging DNS**: Cloudflare → karkaron.com → DNS → CNAME `sugi-staging` → `bbd3128e-486e-481d-8c21-f9d3d240a56c.cfargotunnel.com`, proxied. Дараа нь `https://sugi-staging.karkaron.com` (өөрийн `sugi_staging` схем — prod-ын 2026-09-21-ний хуулбар; шинэчлэх: prod backup → `scripts/db-restore.ps1 -DatabaseUrl <…/sugi_staging> -BackupFile <zip> -Force` (DATABASE_ADMIN_URL-ийн эрхээр); туршилтын захиалга энд хийнэ; push илгээхгүй).
 - **Хэмжилт**: GA4 Measurement ID + Meta Pixel ID → /admin → **Хэмжилт** (09-15-аас тусдаа цэс). Буруу форматтай ID одоо хадгалагдахгүй — өмнө нь ногоон хадгалагдаад чимээгүй ачаалагддаггүй байв.
 - **Захиалгын SMS** асаах бол Brevo SMS кредит → `sms-order-notifications=1`. verify.mn үлдэгдэл дуусвал `checkout-guest-phone-verification=0`.
 - **Сэтгэгдлийн урамшуулал**: `review-reward-mnt` (жишээ 2000) тавибал асна.

@@ -10,7 +10,7 @@ import "dotenv/config";
  * admin эрхтэй тестийн хэрэглэгч.
  *
  * Анхдагч зорилт нь нэг ижил HeatWave дээрх `sugi_staging` (prod-ын
- * 2026-09-14-ний хуулбар). `E2E_DATABASE_URL`-ээр бүрэн дарж болно.
+ * 2026-09-21-ний хуулбар — `scripts/db-restore.ps1 … -Force`-оор шинэчилнэ). `E2E_DATABASE_URL`-ээр бүрэн дарж болно.
  */
 const FORBIDDEN_SCHEMAS = new Set(["defaultdb", "mysql", "sys"]);
 const DEFAULT_E2E_SCHEMA = "sugi_staging";
