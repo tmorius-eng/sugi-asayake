@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, CameraOff, CheckCircle2, KeyRound, LoaderCircle, ScanFace, ShieldCheck } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import AdminPasswordStep from "./admin/AdminPasswordStep";
 import FaceHandoffPanel from "./admin/FaceHandoffPanel";
 import FaceMethodChooser from "./admin/FaceMethodChooser";
+import { FACE_REQUIRED_ERR_MSG, REAUTH_REQUIRED_ERR_MSG } from "@shared/const";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
   FACE_HEARTBEAT_INTERVAL_MS,
@@ -12,6 +14,7 @@ import {
   averageFaceDescriptors,
 } from "@shared/face-auth";
 import {
+  BLINK_OPEN,
   BlinkDetector,
   COVERAGE_SECTORS,
   CoverageTracker,
@@ -46,10 +49,17 @@ import { faceBackendName, warmUpFaceModels } from "@/lib/faceEngine";
  * only. No storefront page renders this, and no customer is ever asked for a
  * camera.
  *
- * Three states, decided by faceAuth.status:
- *   1. gate off, or this device already verified  -> render the panel, no camera
- *   2. no enrollment yet (or a stale model)       -> consent, then enroll, then verify
- *   3. enrolled but this device not verified      -> verify
+ * States, decided by faceAuth.status:
+ *   1. gate off, or this tab already verified     -> render the panel, no camera
+ *   2. password not confirmed in this tab         -> the password (2026-09-22)
+ *   3. no enrollment yet (or a stale model)       -> consent, then enroll, then verify
+ *   4. enrolled but this tab not verified         -> choose camera/phone, verify
+ *
+ * PASSWORD FIRST (2026-09-22, Tom: "эхлээд нууц үгээ хийгээд, дараа нь царай").
+ * The session cookie lasts a year, so until now the password was asked once
+ * at the first sign-in and /admin went straight to the camera. Step 2 is the
+ * fix; the server enforces it too (every call that starts a face check needs
+ * the step-up cookie -- server/_core/faceProof.ts assertReauthProof).
  *
  * DESIGNED SO IT CANNOT LOCK ANYONE OUT, which matters more here than
  * anywhere else in the app because the thing behind this gate is the tool you
@@ -71,10 +81,12 @@ import { faceBackendName, warmUpFaceModels } from "@/lib/faceEngine";
  *    verification later matches whichever one is closest to how the person
  *    is actually sitting. Sweeping past a direction does not count; it has
  *    to be held for a few frames.
- *  - Login stays frictionless (look at the camera, three still snapshots,
- *    done) but now MEASURES liveness passively: a natural blink seen by the
- *    blendshapes is reported honestly as livenessPassed. It is recorded, not
- *    enforced, exactly as before (ADMIN_FACE_LIVENESS_ENFORCED).
+ *  - Login stays short (look at the camera, three still snapshots) and now
+ *    REQUIRES one blink (2026-09-22, Tom chose "анивчилт заавал"): a natural
+ *    blink usually happens on its own within the first seconds; if not, the
+ *    screen asks for one. No blink, no submission -- a held-up photograph
+ *    cannot blink. The server refuses a check without one too
+ *    (ADMIN_FACE_LIVENESS_ENFORCED, on by default).
  */
 export default function AdminFaceGate({ children }: { children: React.ReactNode }) {
   /**
@@ -123,6 +135,13 @@ export default function AdminFaceGate({ children }: { children: React.ReactNode 
         {children}
       </>
     );
+  }
+
+  // 1-р алхам — нууц үг (2026-09-22). Бүртгэл, аргаа сонгох, камер, QR бүгд
+  // үүний ДАРАА. Idle lock-ийн дараа (8 цагийн дотор, ижил табд) энэ алхам
+  // алгасагдана — зөвхөн царай дахин асууна (docs/ADMIN-MANUAL.md §1).
+  if (!status.passwordConfirmed) {
+    return <AdminPasswordStep onConfirmed={() => { setMethod(null); void statusQuery.refetch(); }} />;
   }
 
   // Царайн БҮРТГЭЛ хийхэд камер зайлшгүй (олон өнцгийн зураг) тул утсаар
@@ -177,20 +196,34 @@ function IdleLockWatcher({ idleTimeoutMs, onLocked }: { idleTimeoutMs: number; o
 
   const timeout = idleTimeoutMs > 0 ? idleTimeoutMs : FACE_IDLE_TIMEOUT_MS;
 
+  // The mutation objects and onLocked change identity on EVERY render (and
+  // during the two-minute warning this re-renders every second). Held in refs
+  // so the interval and the BroadcastChannel below are created once, not torn
+  // down and rebuilt each tick -- the bug class that stopped the QR handoff
+  // from ever polling (FaceHandoffPanel.tsx, 2026-09-16).
+  const lockRef = useRef(lock.mutateAsync);
+  const heartbeatRef = useRef(heartbeat.mutate);
+  const onLockedRef = useRef(onLocked);
+  useEffect(() => {
+    lockRef.current = lock.mutateAsync;
+    heartbeatRef.current = heartbeat.mutate;
+    onLockedRef.current = onLocked;
+  });
+
+  const channelRef = useRef<BroadcastChannel | null>(null);
   const doLock = useCallback(async (broadcast: boolean) => {
     if (lockingRef.current) return;
     lockingRef.current = true;
     try {
       if (broadcast) channelRef.current?.postMessage("lock");
-      await lock.mutateAsync({ reason: "idle" });
+      await lockRef.current({ reason: "idle" });
     } catch {
       // Even if the call fails, fall through to onLocked: the proof has
       // expired on its own by now, so the refetched status will say so.
     }
-    onLocked();
-  }, [lock, onLocked]);
+    onLockedRef.current();
+  }, []);
 
-  const channelRef = useRef<BroadcastChannel | null>(null);
   useEffect(() => {
     channelRef.current = typeof BroadcastChannel === "function" ? new BroadcastChannel("sugi-admin-idle") : null;
     const channel = channelRef.current;
@@ -207,7 +240,7 @@ function IdleLockWatcher({ idleTimeoutMs, onLocked }: { idleTimeoutMs: number; o
       setRemainingMs(null);
       if (Date.now() - lastBeatRef.current >= FACE_HEARTBEAT_INTERVAL_MS) {
         lastBeatRef.current = Date.now();
-        heartbeat.mutate();
+        heartbeatRef.current();
       }
     };
     const events: (keyof WindowEventMap)[] = ["pointerdown", "keydown", "wheel", "touchstart", "scroll"];
@@ -225,7 +258,7 @@ function IdleLockWatcher({ idleTimeoutMs, onLocked }: { idleTimeoutMs: number; o
       for (const event of events) window.removeEventListener(event, markActive);
       window.clearInterval(tick);
     };
-  }, [doLock, heartbeat, timeout]);
+  }, [doLock, timeout]);
 
   if (remainingMs === null) return null;
   const seconds = Math.max(0, Math.ceil(remainingMs / 1000));
@@ -235,7 +268,7 @@ function IdleLockWatcher({ idleTimeoutMs, onLocked }: { idleTimeoutMs: number; o
       <p className="mt-1 text-xs leading-5 text-white/80">
         Удаан хугацаанд үйлдэл хийгээгүй тул {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")} минутын дараа /admin түгжигдэж, нүүрээ дахин таниулах шаардлагатай болно.
       </p>
-      <button type="button" onClick={() => { lastActivityRef.current = Date.now(); lastBeatRef.current = Date.now(); heartbeat.mutate(); setRemainingMs(null); }} className="mt-2 rounded-full bg-[#f0b52d] px-3 py-1.5 text-[11px] font-extrabold text-[#17181b]">
+      <button type="button" onClick={() => { lastActivityRef.current = Date.now(); lastBeatRef.current = Date.now(); heartbeatRef.current(); setRemainingMs(null); }} className="mt-2 rounded-full bg-[#f0b52d] px-3 py-1.5 text-[11px] font-extrabold text-[#17181b]">
         Үргэлжлүүлэх
       </button>
     </div>
@@ -271,6 +304,7 @@ type Phase = "consent" | "camera" | "working" | "done";
 const FACE_TIPS = [
   "Гэрэл нүүр рүү тань тусаж байх ёстой — цонх эсвэл гэрлийг ард биш, урдаа байлга.",
   "Дэлгэцээс 40-60 см зайд, царай дугуй хүрээг дүүргэж байрлана уу.",
+  "Нэвтрэхдээ камер руу шууд харж, нэг удаа энгийнээр анивчина — зураг анивчиж чаддаггүй тул энэ нь амьд хүн гэдгийг баталдаг.",
   "Бүртгүүлэхдээ толгойгоо АААЖУУ тойруулан эргүүлнэ — цагирагийн хэсэг бүр гэрэлтэх хүртэл тэр чиглэлд түр барина.",
   "Малгай, нарны шил, амны хаалт зэргийг түр авна уу (энгийн нүдний шил зүгээр).",
 ] as const;
@@ -285,9 +319,14 @@ const ENROLL_DEADLINE_MS = 90_000;
 /** Login gives up after this long without three usable snapshots. */
 const LOGIN_DEADLINE_MS = 30_000;
 
-/** The mesh renderer interpolates a box it does not need for the 478-point
- *  painter; this placeholder keeps its interface unchanged. */
-const NO_BOX = { x: 0, y: 0, width: 0, height: 0 } as unknown as Parameters<SmoothMeshRenderer["push"]>[1];
+/** How long a face may be in view without a natural blink before the screen
+ *  asks for one ("Нэг удаа анивчина уу"). People blink every 3-4 s on average,
+ *  so most logins never see the prompt. */
+const BLINK_PROMPT_AFTER_MS = 2_500;
+/** Consecutive frames without exactly one face before a login capture starts
+ *  over (~160 ms at the tracking cadence). One dropped frame is normal
+ *  MediaPipe jitter in poor light; a face that is really gone stays gone. */
+const LOST_FACE_RESET_FRAMES = 4;
 
 function nextFrame(): Promise<void> {
   return new Promise(resolve => requestAnimationFrame(() => resolve()));
@@ -298,7 +337,12 @@ export type FaceVerificationSubmit = (payload: {
   descriptor: number[];
   livenessPassed: boolean;
   diagnostic: string;
-}) => Promise<{ ok: boolean; reason?: string; distance?: number }>;
+}) => Promise<{ ok: boolean; reason?: string }>;
+
+/** Starts a challenge. Defaults to faceAuth.startVerification (this tab's own
+ *  check, behind the password step); the phone side of the QR handoff passes
+ *  faceAuth.startHandoffVerification, which is authorised by the QR token. */
+export type FaceChallengeStart = () => Promise<{ challengeId: number }>;
 
 /**
  * `submitVerification` (2026-09-16): камергүй компьютерийн QR handoff-д
@@ -308,7 +352,7 @@ export type FaceVerificationSubmit = (payload: {
  * дескриптор, алдааны мессеж бүгд ганц эх сурвалжтай хэвээр — утсанд
  * зориулж хоёр дахь камерын код бичих нь тэр даруй хоцрох байсан.
  */
-export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVerification, onUseHandoff, onBack }: { needsEnrollment: boolean; modelStale: boolean; onPassed: () => void; submitVerification?: FaceVerificationSubmit; onUseHandoff?: () => void; onBack?: () => void }) {
+export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVerification, startChallenge, onUseHandoff, onBack }: { needsEnrollment: boolean; modelStale: boolean; onPassed: () => void; submitVerification?: FaceVerificationSubmit; startChallenge?: FaceChallengeStart; onUseHandoff?: () => void; onBack?: () => void }) {
   const [phase, setPhase] = useState<Phase>(needsEnrollment ? "consent" : "camera");
   const [hint, setHint] = useState<string>("Бэлтгэж байна…");
   const [fatalError, setFatalError] = useState<string | null>(null);
@@ -321,6 +365,9 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
   const [centerDone, setCenterDone] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
   const [processing, setProcessing] = useState<string | null>(null);
+  /** Shows "Нэг удаа анивчина уу" once a face has been in view for a while
+   *  without a blink. */
+  const [blinkPrompt, setBlinkPrompt] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   /** The visible preview. The <video> itself is kept at opacity 0 (still
@@ -350,6 +397,9 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
     rendererRef.current = null;
     stopCamera(streamRef.current);
     streamRef.current = null;
+    // Detach the dead stream too: leaving it on the element keeps a reference
+    // to stopped tracks and, on some browsers, the last frame frozen on screen.
+    if (videoRef.current) videoRef.current.srcObject = null;
   }, []);
 
   useEffect(() => cleanup, [cleanup]);
@@ -379,7 +429,7 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
     if (abortRef.current) throw new Error("ABORTED");
     lastAt.t = performance.now();
     const frame = trackFrame(video);
-    if (frame.landmarks) rendererRef.current?.push(frame.landmarks, NO_BOX);
+    if (frame.landmarks) rendererRef.current?.push(frame.landmarks);
     else rendererRef.current?.clear();
     setFaceLocked(!!frame.landmarks);
     return frame;
@@ -492,21 +542,34 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
 
   /**
    * Login capture: three still, frontal snapshots a few hundred milliseconds
-   * apart, while a blink detector watches the blendshapes.
+   * apart AND one blink (2026-09-22, required).
+   *
+   * The blink and the snapshots must come from ONE continuous presence: if
+   * the face leaves the frame, or a second face appears, everything captured
+   * so far is thrown away and the capture starts over. Otherwise someone
+   * could blink live and then hold up a photograph for the snapshots.
+   * Snapshots are never taken with the eyes closing -- a half-closed frame
+   * makes a worse descriptor.
    */
-  const runLoginCapture = useCallback(async (video: HTMLVideoElement): Promise<{ frames: HTMLCanvasElement[]; blinks: number; frontal: number; trackMsAvg: number }> => {
-    const blink = new BlinkDetector();
+  const runLoginCapture = useCallback(async (video: HTMLVideoElement): Promise<{ frames: HTMLCanvasElement[]; blinks: number; frontal: number; trackMsAvg: number; restarts: number }> => {
+    let blink = new BlinkDetector();
     const still = new StillnessTracker();
-    const frames: HTMLCanvasElement[] = [];
+    let frames: HTMLCanvasElement[] = [];
     const lastAt = { t: 0 };
     const deadline = Date.now() + LOGIN_DEADLINE_MS;
     let lastSnapshotAt = 0;
     let frontalFrames = 0;
+    let faceSince: number | null = null;
+    let restarts = 0;
+    let lostFrames = 0;
+
+    const showProgress = () => setProgress(Math.round((frames.length / LOGIN_SNAPSHOTS) * 45 + (blink.seen ? 15 : 0)));
 
     setHint("Камер руу шууд харна уу");
+    setBlinkPrompt(false);
     let trackMsTotal = 0;
     let trackCount = 0;
-    while (frames.length < LOGIN_SNAPSHOTS && Date.now() < deadline) {
+    while ((frames.length < LOGIN_SNAPSHOTS || !blink.seen) && Date.now() < deadline) {
       const t0 = performance.now();
       const frame = await track(video, lastAt);
       trackMsTotal += performance.now() - t0;
@@ -515,9 +578,31 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
       if (framing || !frame.landmarks) {
         setHint(FRAMING_COPY[framing ?? "NO_FACE"]);
         still.reset();
+        // The person left, or someone else joined: start over (see above) --
+        // once it has lasted a few frames, not on a single tracker dropout.
+        const lost = !frame.landmarks || framing === "NO_FACE" || framing === "MULTIPLE_FACES";
+        lostFrames = lost ? lostFrames + 1 : 0;
+        if (lostFrames === LOST_FACE_RESET_FRAMES) {
+          if (frames.length > 0 || blink.seen) restarts += 1;
+          frames = [];
+          blink = new BlinkDetector();
+          faceSince = null;
+          setBlinkPrompt(false);
+          showProgress();
+        }
         continue;
       }
+      lostFrames = 0;
+      faceSince ??= performance.now();
       blink.observe(frame.blendshapes);
+      const needPrompt = !blink.seen && (frames.length >= LOGIN_SNAPSHOTS || performance.now() - faceSince >= BLINK_PROMPT_AFTER_MS);
+      setBlinkPrompt(needPrompt);
+      showProgress();
+      if (frames.length >= LOGIN_SNAPSHOTS) {
+        // Snapshots done; only the blink is missing.
+        setHint("Нэг удаа анивчина уу");
+        continue;
+      }
       const pose = getHeadPose(frame.landmarks);
       const frontal = Math.abs(pose.yaw) < LOGIN_FRONTAL_TOLERANCE && Math.abs(pose.pitch) < LOGIN_FRONTAL_TOLERANCE;
       const isStill = still.observe(frame.landmarks);
@@ -530,21 +615,31 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
         setHint("Хөдөлгөөнгүй байна уу…");
         continue;
       }
-      if (performance.now() - lastSnapshotAt >= LOGIN_SNAPSHOT_SPACING_MS) {
+      const eyesClosing = Math.min(frame.blendshapes.get("eyeBlinkLeft") ?? 0, frame.blendshapes.get("eyeBlinkRight") ?? 0) > BLINK_OPEN;
+      if (!eyesClosing && performance.now() - lastSnapshotAt >= LOGIN_SNAPSHOT_SPACING_MS) {
         frames.push(snapshotFrame(video));
         lastSnapshotAt = performance.now();
-        setProgress(Math.round((frames.length / LOGIN_SNAPSHOTS) * 60));
-        setHint(frames.length < LOGIN_SNAPSHOTS ? "Царай уншиж байна…" : "Боловсруулж байна…");
+        showProgress();
+        setHint(frames.length < LOGIN_SNAPSHOTS ? "Царай уншиж байна…" : blink.seen ? "Боловсруулж байна…" : "Нэг удаа анивчина уу");
       }
     }
+    setBlinkPrompt(false);
     if (frames.length === 0) throw new Error("CAPTURE_TIMEOUT");
-    return { frames, blinks: blink.count, frontal: frontalFrames, trackMsAvg: trackCount ? trackMsTotal / trackCount : 0 };
+    // Nothing is submitted without a blink: the server would refuse it anyway
+    // (ADMIN_FACE_LIVENESS_ENFORCED), and not sending it keeps an honest miss
+    // from counting towards the account lockout.
+    if (!blink.seen) throw new Error("NO_BLINK");
+    return { frames, blinks: blink.count, frontal: frontalFrames, trackMsAvg: trackCount ? trackMsTotal / trackCount : 0, restarts };
   }, [track]);
 
   const run = useCallback(async () => {
+    // A retry must not inherit the previous attempt's camera: stop and detach
+    // it first (otherwise the old stream is orphaned and the light stays on).
+    cleanup();
     setFatalError(null);
     setProgress(0);
     setProcessing(null);
+    setBlinkPrompt(false);
     abortRef.current = false;
     setPhase("camera");
 
@@ -613,20 +708,15 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
       }
 
       setHint("Шалгаж байна…");
-      const { challengeId } = await startVerification.mutateAsync();
+      const { challengeId } = await (startChallenge ? startChallenge() : startVerification.mutateAsync());
       setProgress(0);
 
-      // LOGIN IS DELIBERATELY FRICTIONLESS: look at the camera, get matched,
-      // get in. No head turns, no colour flash, no instructions to follow.
-      // The guided capture belongs to ENROLMENT; repeating hoops on every
-      // login rejected legitimate users while the match itself was fine.
-      //
-      // Liveness is still MEASURED: a natural blink during the second or so
-      // of capture is reported as livenessPassed. Recorded, never enforced
-      // (ADMIN_FACE_LIVENESS_ENFORCED). Stated plainly: without an enforced
-      // challenge, someone with the enrolled person's phone AND password
-      // AND a photograph of them could pass this step. This is the second
-      // factor, not the first.
+      // LOGIN STAYS SHORT: look at the camera, blink once, get matched. No
+      // head turns, no colour flash -- the guided capture belongs to
+      // ENROLMENT; repeating hoops on every login rejected legitimate users
+      // while the match itself was fine. The one hoop kept is the blink
+      // (2026-09-22): it costs nothing when it happens naturally, and it is
+      // what a photograph cannot do.
       const capture = await runLoginCapture(video);
       setPhase("working");
       const descriptors: number[][] = [];
@@ -644,10 +734,12 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
         challengeId,
         descriptor: averageFaceDescriptors(descriptors),
         livenessPassed: capture.blinks > 0,
+        // (runLoginCapture refuses to return without a blink, so this is true
+        // for every submission; kept explicit for the server's audit trail.)
         // Machine-diagnosable from the Security Center: which backends ran
         // and how long the recogniser took, so "it was slow on that laptop"
         // comes with numbers.
-        diagnostic: `login=mp snaps=${descriptors.length}/${capture.frames.length} blinks=${capture.blinks} frontal=${capture.frontal} tfjs=${faceBackendName()} mp=${trackerDelegate()} describeMs=${describeMs} trackMs=${Math.round(capture.trackMsAvg)}`.slice(0, FACE_DIAGNOSTIC_MAX),
+        diagnostic: `login=mp snaps=${descriptors.length}/${capture.frames.length} blinks=${capture.blinks} restarts=${capture.restarts} frontal=${capture.frontal} tfjs=${faceBackendName()} mp=${trackerDelegate()} describeMs=${describeMs} trackMs=${Math.round(capture.trackMsAvg)}`.slice(0, FACE_DIAGNOSTIC_MAX),
       });
 
       cleanup();
@@ -664,7 +756,7 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
           setFatalError("Царайг тань таньсангүй. Дахин уншуулна уу — гэрэлтэй газар, камер руу шууд харна уу. Хэд дахин болохгүй бол админд хандаж царайн бүртгэлээ шинэчлүүлээрэй.");
           break;
         case "liveness_failed":
-          setFatalError("Хөдөлгөөн баталгаажсангүй. Дэлгэц дээрх зааврыг гүйцэтгэнэ үү.");
+          setFatalError("Анивчилт баталгаажсангүй. Дахин оролдоод камер руу харж нэг удаа анивчина уу.");
           break;
         case "bad_challenge":
           setFatalError("Шалгалтын хугацаа дууссан байна. Дахин оролдоно уу.");
@@ -691,12 +783,18 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
         setFatalError("Цагираг бүрэн дүүрсэнгүй. Толгойгоо аажуу тойруулан эргүүлж, гэрэлтэх хүртэл чиглэл бүрд түр барина уу. Эхнээс нь дахин оролдоно уу.");
       } else if (error instanceof Error && (error.message === "CAPTURE_TIMEOUT" || error.message === "VIDEO_TIMEOUT")) {
         setFatalError("Царайг тодорхойлж чадсангүй. Гэрэлтэй газар, камерт ойртож дахин оролдоно уу.");
+      } else if (error instanceof Error && error.message === "NO_BLINK") {
+        setFatalError("Анивчилт илэрсэнгүй. Камер руу харж, нэг удаа энгийнээр анивчина уу. Нүдний шил гэрэл ойлгож байвал түр авч үзээрэй.");
+      } else if (error instanceof Error && (error.message === REAUTH_REQUIRED_ERR_MSG || error.message === FACE_REQUIRED_ERR_MSG)) {
+        // The gate refetches its status and swaps this screen for the password
+        // step (client/src/main.tsx); this line only shows for that instant.
+        setFatalError("Нууц үгийн баталгаажуулалтын хугацаа дууссан. Нууц үгээ дахин оруулна уу.");
       } else {
         setFatalError(error instanceof Error ? error.message : "Алдаа гарлаа. Дахин оролдоно уу.");
       }
       setPhase("camera");
     }
-  }, [needsEnrollment, waitForVideo, runRingEnrollment, describeSnapshots, runLoginCapture, enroll, startVerification, completeVerification, submitVerification, cleanup, onPassed]);
+  }, [needsEnrollment, waitForVideo, runRingEnrollment, describeSnapshots, runLoginCapture, enroll, startVerification, completeVerification, submitVerification, startChallenge, cleanup, onPassed]);
 
   // Auto-start for the verify-only path. Enrollment waits for explicit
   // consent first -- capturing a face before someone has agreed to it being
@@ -779,6 +877,10 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
           )}
         </div>
 
+        {blinkPrompt && !fatalError && (
+          <p className="face-gate-instruction" role="status">Нэг удаа анивчина уу</p>
+        )}
+
         {showRing && (
           <p className="face-gate-count" aria-live="polite">
             {covered.size + (centerDone ? 1 : 0)}/{COVERAGE_SECTORS + 1} чиглэл
@@ -807,10 +909,17 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
         {/* Камергүй/эвдэрсэн камертай компьютерийн цорын ганц зам. Алдаа
             гарсан үед ТОМООР, бусад үед чимээгүй холбоосоор — камертай хүнд
             энэ нь илүү удаан зам тул түрүүлж санал болгохгүй. */}
-        {onUseHandoff && (fatalError
-          ? <button type="button" className="face-gate-btn face-gate-btn-quiet" onClick={onUseHandoff}>Утсаараа баталгаажуулах</button>
-          : <button type="button" className="face-gate-link" onClick={onUseHandoff}>Энэ компьютерт камер алга — утсаараа баталгаажуулах</button>)}
-        {onBack && <button type="button" className="face-gate-link" onClick={onBack}>← Буцах</button>}
+        {onUseHandoff && fatalError && (
+          <button type="button" className="face-gate-btn face-gate-btn-quiet" onClick={onUseHandoff}>Утсаараа баталгаажуулах</button>
+        )}
+        {/* One row with a real gap (2026-09-22): the two links used to sit
+            inline with no space and read as one ("...баталгаажуулах← Буцах"). */}
+        {(onBack || (onUseHandoff && !fatalError)) && (
+          <div className="face-gate-links">
+            {onBack && <button type="button" className="face-gate-link" onClick={onBack}>← Буцах</button>}
+            {onUseHandoff && !fatalError && <button type="button" className="face-gate-link" onClick={onUseHandoff}>Энэ компьютерт камер алга — утсаараа баталгаажуулах</button>}
+          </div>
+        )}
 
         {/* Practical advice, always visible rather than hidden behind a
             "why did this fail?" link -- these are the real causes of failure
@@ -931,13 +1040,13 @@ function ConsentScreen({ modelStale, onAccept }: { modelStale: boolean; onAccept
             architecture ever changes, this copy must change with it. */}
         <ul className="face-gate-facts">
           <li><strong>Зураг хадгалагдахгүй.</strong> Таны царайны зураг сервер рүү илгээгдэхгүй, хаана ч хадгалагдахгүй.</li>
-          <li><strong>Зөвхөн 128 тоо.</strong> Царайг тань таних математик утга (128 тоо) л хадгалагдана. Үүнээс таны зургийг сэргээх боломжгүй.</li>
+          <li><strong>Зөвхөн 128 тоо, шифрлэгдэнэ.</strong> Царайг тань таних математик утга (128 тоо) л шифрлэгдэж хадгалагдана. Үүнээс таны зургийг сэргээх боломжгүй.</li>
           <li><strong>Таны төхөөрөмж дээр боловсруулагдана.</strong> Камерын дүрс энэ төхөөрөмжөөс гарахгүй. Гадны ямар ч үйлчилгээ рүү илгээгдэхгүй.</li>
           <li><strong>Зөвхөн админ хэсэгт.</strong> Худалдан авагчид энэ шалгалтыг хэзээ ч харахгүй.</li>
         </ul>
 
         <p className="face-gate-limit">
-          Бүртгэхдээ толгойгоо аажуу тойруулан эргүүлж, 8 чиглэл + төвийг бүртгэнэ (30 секунд орчим). Энэ шалгалт нь зураг барьж харуулах зэрэг энгийн хуурамчлалаас хамгаална. Гэхдээ таны бичлэгийг урьдчилан бэлтгэсэн, зорилготой халдлагаас бүрэн хамгаалахгүй — тиймээс нууц үг үргэлж эхний хамгаалалт хэвээр байна.
+          Бүртгэхдээ толгойгоо аажуу тойруулан эргүүлж, 8 чиглэл + төвийг бүртгэнэ (30 секунд орчим). Нэвтрэх бүрт камер руу харж нэг удаа анивчина — зураг барьж харуулах зэрэг энгийн хуурамчлалаас хамгаална. Гэхдээ урьдчилан бэлтгэсэн бичлэгтэй, зорилготой халдлагаас бүрэн хамгаалахгүй — тиймээс нууц үг үргэлж эхний хамгаалалт хэвээр байна.
         </p>
 
         <label className="face-gate-consent">

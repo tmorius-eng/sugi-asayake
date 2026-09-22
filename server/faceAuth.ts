@@ -17,8 +17,10 @@
 import { TRPCError } from "@trpc/server";
 import type { Request, Response } from "express";
 import {
-  FACE_CHALLENGE_ACTIONS,
   FACE_CHALLENGE_TTL_MS,
+  FACE_FAILURE_LOCKOUT_MAX,
+  FACE_FAILURE_LOCKOUT_WINDOW_MS,
+  FACE_LOGIN_CHALLENGE,
   FACE_MATCH_THRESHOLD,
   FACE_MODEL_VERSION,
   bestFaceDistance,
@@ -28,8 +30,11 @@ import {
 import { ENV } from "./_core/env";
 import {
   consumeFaceChallenge,
+  countRecentFailedFaceAttempts,
   createFaceChallenge,
+  encryptFaceEnrollmentIfPlain,
   getFaceEnrollment,
+  logAdminAction,
   recordFaceAttempt,
   touchFaceVerified,
 } from "./db";
@@ -57,18 +62,43 @@ export async function lockFaceSession(input: { req: Request; res: Response; user
 
 
 /**
- * Issues a fresh single-use liveness challenge.
+ * Per-account lockout (2026-09-22 audit). The IP rate limit alone let anyone
+ * with several addresses keep trying descriptors against one account; after
+ * FACE_FAILURE_LOCKOUT_MAX real failures inside the window no further check
+ * starts or completes for that account until the window passes.
  *
- * The action is randomised per attempt specifically so that a photograph held
- * up to the camera cannot satisfy it, and so a recording of one successful
- * attempt is unlikely to satisfy the next one.
+ * An admin can get the person in sooner by resetting their enrolment: only
+ * failures since the current enrolment was written count (`enrolledAt`). A
+ * missing blink counts only while it actually blocks -- with
+ * ADMIN_FACE_LIVENESS_ENFORCED=0 those attempts PASSED, and must not lock.
  */
-export async function startFaceVerification(userId: number): Promise<{ challengeId: number; action: FaceChallengeAction }> {
+export async function assertFaceNotLockedOut(userId: number, ip: string | null, enrolledAt?: Date): Promise<void> {
+  const failures = await countRecentFailedFaceAttempts(userId, FACE_FAILURE_LOCKOUT_WINDOW_MS, {
+    since: enrolledAt,
+    outcomes: ENV.adminFaceLivenessEnforced ? ["no_match", "liveness_failed"] : ["no_match"],
+  });
+  if (failures < FACE_FAILURE_LOCKOUT_MAX) return;
+  // Logged once per refused attempt so the Security Center shows the
+  // lockout next to the failures that caused it.
+  await logAdminAction({ actorUserId: userId, action: "face.lockout", entityType: "user", entityId: userId, metadata: { failures, ip } });
+  throw new TRPCError({
+    code: "TOO_MANY_REQUESTS",
+    message: `Царай ${FACE_FAILURE_LOCKOUT_MAX} удаа таарсангүй тул түр түгжигдлээ. 15 минутын дараа дахин оролдоно уу, эсвэл админд хандаж бүртгэлээ шинэчлүүлнэ үү.`,
+  });
+}
+
+/**
+ * Issues a fresh single-use challenge. Always a blink since 2026-09-22 (see
+ * FACE_LOGIN_CHALLENGE): the browser refuses to submit without one, and the
+ * server refuses a submission that reports none (ENV.adminFaceLivenessEnforced).
+ */
+export async function startFaceVerification(userId: number, ip: string | null = null): Promise<{ challengeId: number; action: FaceChallengeAction }> {
   const enrollment = await getFaceEnrollment(userId);
   if (!enrollment) {
     throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Царай бүртгэгдээгүй байна." });
   }
-  const action = FACE_CHALLENGE_ACTIONS[Math.floor(Math.random() * FACE_CHALLENGE_ACTIONS.length)];
+  await assertFaceNotLockedOut(userId, ip, enrollment.updatedAt);
+  const action = FACE_LOGIN_CHALLENGE;
   const challengeId = await createFaceChallenge({
     userId,
     action,
@@ -77,16 +107,23 @@ export async function startFaceVerification(userId: number): Promise<{ challenge
   return { challengeId, action };
 }
 
+/**
+ * What the BROWSER is told. Deliberately no distance (2026-09-22 audit): an
+ * exact distance on every failure is a hill-climbing oracle -- nudge a
+ * descriptor, watch the number fall, repeat until it is under the threshold.
+ * The distance stays in face_attempts, where the Security Center reads it.
+ */
 export type FaceVerificationResult =
-  | { ok: true; distance: number }
-  | { ok: false; reason: "no_enrollment" | "stale_model" | "bad_challenge" | "liveness_failed" | "no_match"; distance?: number };
+  | { ok: true }
+  | { ok: false; reason: "no_enrollment" | "stale_model" | "bad_challenge" | "liveness_failed" | "no_match" };
 
 /**
  * Completes a face check: consumes the challenge, confirms the browser
  * reported the challenged action as performed, and compares the submitted
  * descriptor against the enrolled one.
  *
- * ON TRUSTING THE CLIENT'S LIVENESS FLAG, stated plainly rather than buried:
+ * ON TRUSTING THE CLIENT'S LIVENESS FLAG, stated plainly rather than buried
+ * (2026-09-22: blocking by default now, see ENV.adminFaceLivenessEnforced):
  * `livenessPassed` is asserted by the browser, because the frames it was
  * derived from never leave the browser. A technically capable attacker who
  * already holds this account's password could therefore assert it falsely.
@@ -128,6 +165,7 @@ export async function completeFaceVerification(input: {
     await recordFaceAttempt({ userId: input.userId, outcome: "error", detail: "no_enrollment", ip });
     return { ok: false, reason: "no_enrollment" };
   }
+  await assertFaceNotLockedOut(input.userId, ip, enrollment.updatedAt);
 
   // A descriptor produced by a different model is not comparable with this
   // one -- comparing them anyway would reject everybody while looking like a
@@ -202,7 +240,7 @@ export async function completeFaceVerification(input: {
 
   if (distance > FACE_MATCH_THRESHOLD) {
     await recordFaceAttempt({ userId: input.userId, outcome: "no_match", distance: distanceMilli, detail: challenge.action, ip });
-    return { ok: false, reason: "no_match", distance };
+    return { ok: false, reason: "no_match" };
   }
 
   if (input.issueProof !== false) {
@@ -210,5 +248,8 @@ export async function completeFaceVerification(input: {
   }
   await touchFaceVerified(input.userId);
   await recordFaceAttempt({ userId: input.userId, outcome: "verified", distance: distanceMilli, detail: input.issueProof === false ? `handoff ${challenge.action}`.slice(0, 160) : challenge.action, ip });
-  return { ok: true, distance };
+  // A template stored before encryption at rest is rewritten encrypted now,
+  // by the person it belongs to, with no manual migration step.
+  await encryptFaceEnrollmentIfPlain(input.userId);
+  return { ok: true };
 }

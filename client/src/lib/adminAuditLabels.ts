@@ -14,6 +14,11 @@ export const actionLabels: Record<string, string> = {
   "user.role_updated": "Хэрэглэгчийн эрх өөрчилсөн",
   "user.phone_updated": "Хэрэглэгчийн утас засварласан",
   "user.face_enrollment_reset": "Царайн бүртгэлийг цуцалсан",
+  // Царайны хаалга (2026-09-22): эдгээр нь өмнө нь түүхий мөрөөрөө гардаг байв.
+  "face.lockout": "Царай олон удаа таарсангүй — данс түр түгжигдсэн",
+  "face.handoff_approved": "Утсаар компьютерийн admin-ийг нээсэн",
+  "face.handoff_denied": "Утсаар QR хүсэлтийг татгалзсан",
+  "face.handoff_wrong_number": "QR хүсэлтэд буруу тоо сонгосон",
   "user.loyalty_adjustment_updated": "Гишүүнчлэлийн урьдчилсан дүн шинэчилсэн",
   "user.suspended": "Хэрэглэгчийг түр хаасан",
   "user.unsuspended": "Хандалт сэргээсэн",

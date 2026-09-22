@@ -3,6 +3,7 @@ import { expect, test } from "./helpers/fixtures";
 import { faceEnrollments, faceHandoffRequests } from "../drizzle/schema";
 import { getDb } from "../server/db";
 import { FACE_MODEL_VERSION } from "../shared/face-auth";
+import { E2E_MARKER } from "./helpers/environment";
 import { ensureE2EUser, signInAs } from "./helpers/session";
 
 /**
@@ -52,6 +53,11 @@ test.describe("камергүй компьютерийн QR handoff", () => {
     try {
       await signInAs(context, "admin", baseURL!);
       await page.goto("/admin");
+
+      // 0) Нууц үг ЭХЛЭЭД (2026-09-22): QR-ийг зөвхөн нууц үгээ баталсан
+      //    компьютер гаргана — утас нууц үгийг орлохгүй.
+      await page.locator("#admin-password").fill(`${E2E_MARKER}-password-admin`);
+      await page.getByRole("button", { name: "Үргэлжлүүлэх" }).click();
 
       // 1) Сонголтын дэлгэц: хоёр зам ижил түвшинд.
       await expect(page.getByRole("button", { name: /Энэ төхөөрөмжөөр баталгаажуулах/ })).toBeVisible();

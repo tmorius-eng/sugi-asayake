@@ -29,6 +29,40 @@ export function encryptJson(value: Record<string, string>): string {
   return [iv.toString("hex"), authTag.toString("hex"), ciphertext.toString("hex")].join(":");
 }
 
+/** Prefix that marks a value written by encryptText, so a column that used to
+ *  hold plaintext can be read transparently during the switch-over. */
+export const ENCRYPTED_TEXT_PREFIX = "enc1:";
+
+/** Whether the at-rest key is configured (encryptText would not throw). */
+export function hasEncryptionKey(): boolean {
+  const hex = ENV.integrationsEncryptionKey;
+  return Boolean(hex && hex.length === 64);
+}
+
+/**
+ * Encrypts an arbitrary string into "enc1:<iv>:<tag>:<ciphertext>", BASE64
+ * (2026-09-22, face templates). Base64 rather than encryptJson's hex because
+ * the face template's twelve poses are ~32 KB of JSON: hex would double that
+ * past a MySQL TEXT column's 65,535 bytes, base64 keeps it near 43 KB.
+ */
+export function encryptText(plain: string): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv(ALGORITHM, getKey(), iv);
+  const ciphertext = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
+  return `${ENCRYPTED_TEXT_PREFIX}${iv.toString("base64")}:${cipher.getAuthTag().toString("base64")}:${ciphertext.toString("base64")}`;
+}
+
+/** Reverses encryptText. Throws when the blob is malformed, tampered with, or
+ *  was encrypted under a different key. */
+export function decryptText(blob: string): string {
+  if (!blob.startsWith(ENCRYPTED_TEXT_PREFIX)) throw new Error("Not an encrypted text blob.");
+  const [ivB64, tagB64, ctB64] = blob.slice(ENCRYPTED_TEXT_PREFIX.length).split(":");
+  if (!ivB64 || !tagB64 || ctB64 === undefined) throw new Error("Malformed encrypted text blob.");
+  const decipher = createDecipheriv(ALGORITHM, getKey(), Buffer.from(ivB64, "base64"));
+  decipher.setAuthTag(Buffer.from(tagB64, "base64"));
+  return Buffer.concat([decipher.update(Buffer.from(ctB64, "base64")), decipher.final()]).toString("utf8");
+}
+
 /** Reverses encryptJson. Throws if the blob is malformed or the key/authTag
  *  don't match (tampered or encrypted under a different key). */
 export function decryptJson(blob: string): Record<string, string> {

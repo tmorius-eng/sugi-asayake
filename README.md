@@ -175,7 +175,7 @@ Server running on http://localhost:3000/
 | `S3_*` (5 мөр) | Cloudflare R2 — зургийн сан |
 | `INTEGRATIONS_ENCRYPTION_KEY` | Яг 64 тэмдэгт hex; интеграцийн түлхүүрүүдийг баазад шифрлэнэ |
 
-**Сонголттой** — байхгүй бол тухайн функц л унтарна: `VERIFY_MN_API_KEY` (⚠️ байхгүй бол **бүртгэл шууд алдаа өгнө**), `BREVO_*`, `QPAY_*`, `VAPID_*` (web push), `FACEBOOK_APP_*`, `HONEYBADGER_API_KEY` / `HONEYBADGER_PERSONAL_AUTH_TOKEN`, `PUBLIC_BASE_URL`, `DATABASE_CA_CERT`, `ADMIN_FACE_GATE_ENABLED`, `MODERATION_MODEL`, `NOTIFICATIONS_DISPATCH`, `SMS_CAMPAIGNS_ENABLED`, `ANTHROPIC_API_KEY` (moderation), `DB_POOL_SIZE`, `RUN_BACKGROUND_JOBS`, `LOG_REQUESTS` / `LOG_SQL`, `DEV_ALLOWED_HOSTS`. ⚠️ `GUEST_CHECKOUT_OTP=0` нь ЗӨВХӨН тестийн хувьсагч — production `.env`-д тавибал зочны OTP чимээгүй унтарна.
+**Сонголттой** — байхгүй бол тухайн функц л унтарна: `VERIFY_MN_API_KEY` (⚠️ байхгүй бол **бүртгэл шууд алдаа өгнө**), `BREVO_*`, `QPAY_*`, `VAPID_*` (web push), `FACEBOOK_APP_*`, `HONEYBADGER_API_KEY` / `HONEYBADGER_PERSONAL_AUTH_TOKEN`, `PUBLIC_BASE_URL`, `DATABASE_CA_CERT`, `ADMIN_FACE_GATE_ENABLED` (+ `ADMIN_FACE_LIVENESS_ENFORCED=0` анивчилтыг блоклохгүй болгоно), `MODERATION_MODEL`, `NOTIFICATIONS_DISPATCH`, `SMS_CAMPAIGNS_ENABLED`, `ANTHROPIC_API_KEY` (moderation), `DB_POOL_SIZE`, `RUN_BACKGROUND_JOBS`, `LOG_REQUESTS` / `LOG_SQL`, `DEV_ALLOWED_HOSTS`. ⚠️ `GUEST_CHECKOUT_OTP=0` нь ЗӨВХӨН тестийн хувьсагч — production `.env`-д тавибал зочны OTP чимээгүй унтарна.
 
 > ⚠️ **Production-д `DATABASE_CA_CERT`-ыг заавал тохируулна.** Байхгүй бол холболт шифрлэгдэх ч серверийн сертификат шалгагдахгүй (сервер асахад анхааруулга бичнэ).
 

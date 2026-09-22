@@ -44,7 +44,6 @@ import {
   FACE_MIN_BOX_RATIO,
   FACE_MIN_DETECTION_SCORE,
   FACE_MODEL_URL,
-  type FaceColorSample,
 } from "@shared/face-auth";
 
 /** Fixed on purpose — see the GPU-memory note in the file header. 320 is the
@@ -531,8 +530,8 @@ export function drawFaceMesh(
  * closely rather than lagging noticeably behind.
  */
 export class SmoothMeshRenderer {
-  private previous: { points: LandmarkSet; box: FaceApi.Box } | null = null;
-  private latest: { points: LandmarkSet; box: FaceApi.Box } | null = null;
+  private previous: { points: LandmarkSet; box: FaceApi.Box | null } | null = null;
+  private latest: { points: LandmarkSet; box: FaceApi.Box | null } | null = null;
   private receivedAt = 0;
   private frame: number | null = null;
   /** Expected gap between detections, used to pace the interpolation. Adapts
@@ -546,11 +545,13 @@ export class SmoothMeshRenderer {
     /** How to paint one interpolated frame. Defaults to the 68-point mesh;
      *  the MediaPipe tracker passes its own 478-point painter, which ignores
      *  the box and takes normalised points. */
-    private readonly draw: (canvas: HTMLCanvasElement, video: HTMLVideoElement, points: LandmarkSet, box: FaceApi.Box) => void = drawFaceMesh,
+    private readonly draw: (canvas: HTMLCanvasElement, video: HTMLVideoElement, points: LandmarkSet, box: FaceApi.Box | null) => void = drawFaceMesh,
   ) {}
 
-  /** Feed a new detection. Cheap: it only stores state, never draws. */
-  push(points: LandmarkSet, box: FaceApi.Box): void {
+  /** Feed a new detection. Cheap: it only stores state, never draws. The box
+   *  is optional: the MediaPipe painter works from the points alone, and
+   *  interpolating a placeholder box every frame was pure waste. */
+  push(points: LandmarkSet, box: FaceApi.Box | null = null): void {
     const now = performance.now();
     if (this.latest) {
       const gap = now - this.receivedAt;
@@ -588,13 +589,15 @@ export class SmoothMeshRenderer {
         const q = from.points[i] ?? p;
         return { x: q.x + (p.x - q.x) * t, y: q.y + (p.y - q.y) * t };
       });
-      const box = {
-        ...this.latest.box,
-        x: from.box.x + (this.latest.box.x - from.box.x) * t,
-        y: from.box.y + (this.latest.box.y - from.box.y) * t,
-        width: from.box.width + (this.latest.box.width - from.box.width) * t,
-        height: from.box.height + (this.latest.box.height - from.box.height) * t,
-      } as FaceApi.Box;
+      const to = this.latest.box;
+      const was = from.box ?? to;
+      const box = to && was ? {
+        ...to,
+        x: was.x + (to.x - was.x) * t,
+        y: was.y + (to.y - was.y) * t,
+        width: was.width + (to.width - was.width) * t,
+        height: was.height + (to.height - was.height) * t,
+      } as FaceApi.Box : null;
 
       this.draw(this.canvas, this.video, points, box);
     };
@@ -613,86 +616,3 @@ export function clearFaceMesh(canvas: HTMLCanvasElement): void {
   const ctx = canvas.getContext("2d");
   ctx?.clearRect(0, 0, canvas.width, canvas.height);
 }
-
-// ---------------------------------------------------------------------------
-// ACTIVE FLASH LIVENESS — the technique real eKYC systems use (AWS Rekognition
-// Face Liveness calls it a "colour challenge"; ekyc.mn does the same thing).
-//
-// How it works: the screen flashes a RANDOMISED sequence of saturated colours.
-// A real, three-dimensional face sitting in front of a monitor reflects that
-// light, so the skin measurably shifts towards each colour in turn. Then:
-//
-//   - A printed photo is flat and matte; it reflects far less and far more
-//     uniformly than living skin.
-//   - A video replay cannot fake it at all, because the attacker would have
-//     had to record the reaction to a colour sequence that is chosen at random
-//     AFTER they started -- this is the property blink detection lacks, and
-//     the reason blink alone is beatable with a recording.
-//
-// Honest limits, stated here rather than oversold: the effect depends on
-// ambient light and monitor brightness, so it is weaker in a very bright room
-// than a dim one. It raises the bar substantially over motion-only liveness;
-// it is not an unbeatable presentation-attack defence, and this remains a
-// second factor behind a password.
-// ---------------------------------------------------------------------------
-
-// One reusable offscreen canvas: allocating a new one per frame is a known
-// way to make the browser's GC thrash during a capture loop.
-let colorCanvas: HTMLCanvasElement | null = null;
-
-/**
- * Averages the pixels of the face region for the current video frame.
- *
- * Samples the CENTRE of the detected face box (the middle 50%) rather than the
- * whole box, so the background around the head -- which is also being lit by
- * the flash -- cannot contaminate the reading. Downscales to a small canvas
- * first: a mean does not need full resolution, and this keeps the per-frame
- * cost negligible.
- */
-export function sampleFaceColor(video: HTMLVideoElement, box: FaceApi.Box): FaceColorSample | null {
-  if (video.readyState < 2 || video.videoWidth === 0) return null;
-
-  const cx = box.x + box.width / 2;
-  const cy = box.y + box.height / 2;
-  const w = Math.max(8, box.width * 0.5);
-  const h = Math.max(8, box.height * 0.5);
-  const sx = Math.max(0, Math.min(video.videoWidth - 1, cx - w / 2));
-  const sy = Math.max(0, Math.min(video.videoHeight - 1, cy - h / 2));
-  const sw = Math.min(w, video.videoWidth - sx);
-  const sh = Math.min(h, video.videoHeight - sy);
-  if (sw <= 0 || sh <= 0) return null;
-
-  const TARGET = 24;
-  if (!colorCanvas) colorCanvas = document.createElement("canvas");
-  colorCanvas.width = TARGET;
-  colorCanvas.height = TARGET;
-  // willReadFrequently avoids the browser repeatedly moving the canvas
-  // between GPU and CPU memory, which it warns about otherwise.
-  const ctx = colorCanvas.getContext("2d", { willReadFrequently: true });
-  if (!ctx) return null;
-
-  try {
-    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, TARGET, TARGET);
-    const { data } = ctx.getImageData(0, 0, TARGET, TARGET);
-    let r = 0, g = 0, b = 0;
-    const pixels = data.length / 4;
-    for (let i = 0; i < data.length; i += 4) {
-      r += data[i];
-      g += data[i + 1];
-      b += data[i + 2];
-    }
-    return { r: r / pixels, g: g / pixels, b: b / pixels };
-  } catch {
-    // A tainted canvas would throw here. It cannot happen with a
-    // getUserMedia stream (same-origin by definition), but failing soft beats
-    // breaking the whole check if some browser disagrees.
-    return null;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Motion liveness, derived from the 68-point landmark model. Runs alongside
-// the flash challenge above (real eKYC flows ask for both: ekyc.mn shows
-// "turn your head slowly" AND flashes colours).
-// ---------------------------------------------------------------------------
-

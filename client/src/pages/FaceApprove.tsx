@@ -1,9 +1,13 @@
 import { useState } from "react";
+import { TRPCClientError } from "@trpc/client";
 import { Link } from "wouter";
 import { AlertTriangle, LoaderCircle, MonitorSmartphone, ShieldCheck } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { FaceGateFlow } from "@/components/AdminFaceGate";
+// The camera stage, number buttons and cards (2026-09-22): this page is opened
+// cold on the phone and never loads /admin's stylesheet.
+import "@/face.css";
 
 /**
  * Утсан дээр нээгдэх хуудас: камергүй компьютерийн admin хандалтыг
@@ -18,12 +22,26 @@ export default function FaceApprove() {
   const token = new URLSearchParams(window.location.search).get("token") ?? "";
   const { isAuthenticated, loading } = useAuth();
   const contextQuery = trpc.faceAuth.handoffContext.useQuery({ token }, { enabled: Boolean(token) && isAuthenticated, retry: false });
+  const startChallenge = trpc.faceAuth.startHandoffVerification.useMutation();
   const approve = trpc.faceAuth.approveHandoff.useMutation();
   const deny = trpc.faceAuth.denyHandoff.useMutation();
   const [chosen, setChosen] = useState<number | null>(null);
   const [done, setDone] = useState(false);
   const [denied, setDenied] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  /**
+   * The request is over and cannot be retried from this phone (2026-09-22):
+   * the wrong number was picked (the server closes the request on the spot),
+   * it expired, or it was already used. Before this, the error surfaced inside
+   * the camera screen with a "try again" button that could only fail again.
+   */
+  const [closed, setClosed] = useState<string | null>(null);
+
+  /** A server refusal that ends this request: show it and stop the camera
+   *  flow. FaceGateFlow treats "ABORTED" as a silent exit. */
+  const endWith = (error: unknown): never => {
+    setClosed(error instanceof TRPCClientError && error.message ? error.message : "Хүсэлт хаагдлаа. Компьютер дээрээ шинэ код гаргана уу.");
+    throw new Error("ABORTED");
+  };
 
   if (!token) return <Shell title="Код олдсонгүй"><p>Энэ холбоос бүрэн биш байна. Компьютер дээрх QR кодыг дахин уншуулна уу.</p></Shell>;
   if (loading) return <Shell title="Ачаалж байна…"><LoaderCircle className="animate-spin" /></Shell>;
@@ -52,22 +70,39 @@ export default function FaceApprove() {
     );
   }
   if (denied) return <Shell title="Татгалзлаа"><p>Хүсэлтийг хаалаа. Хэрэв энэ таны үйлдэл биш байсан бол нууц үгээ яг одоо солиод бүх төхөөрөмжөөс гарна уу.</p></Shell>;
+  if (closed) return <Shell title="Хүсэлт хаагдлаа"><p>{closed}</p><p className="face-approve-note">Компьютер дээрээ "Утсаараа баталгаажуулах"-ыг дахин дарж шинэ код гаргана уу.</p></Shell>;
 
   if (contextQuery.isLoading) return <Shell title="Шалгаж байна…"><LoaderCircle className="animate-spin" /></Shell>;
   if (contextQuery.isError) return <Shell title="Хүчингүй код"><p>{contextQuery.error.message}</p></Shell>;
 
   const context = contextQuery.data!;
 
-  // 3-р алхам: тоо таарсны дараа л камер асна.
+  // 3-р алхам: тоо таарсны дараа л камер асна. Тоог сервер challenge
+  // гаргахаас ӨМНӨ шалгана (startHandoffVerification) — буруу бол хүсэлт тэр
+  // даруй хаагдаж, камер огт асахгүй.
   if (chosen !== null) {
     return (
       <FaceGateFlow
         needsEnrollment={false}
         modelStale={false}
         onPassed={() => setDone(true)}
+        startChallenge={async () => {
+          try {
+            return await startChallenge.mutateAsync({ token, matchNumber: chosen });
+          } catch (error) {
+            // The account lockout is not the end of THIS request -- show it
+            // in the camera screen like on the desktop; everything else is.
+            if (error instanceof TRPCClientError && error.data?.code === "TOO_MANY_REQUESTS") throw error;
+            return endWith(error);
+          }
+        }}
         submitVerification={async payload => {
-          const result = await approve.mutateAsync({ ...payload, token, matchNumber: chosen });
-          return result;
+          try {
+            return await approve.mutateAsync({ ...payload, token, matchNumber: chosen });
+          } catch (error) {
+            if (error instanceof TRPCClientError && error.data?.code === "TOO_MANY_REQUESTS") throw error;
+            return endWith(error);
+          }
         }}
       />
     );
@@ -92,17 +127,21 @@ export default function FaceApprove() {
       <p className="face-approve-question">Компьютер дээр ямар тоо харагдаж байна вэ?</p>
       <div className="face-approve-numbers">
         {context.numberChoices.map(choice => (
-          <button key={choice} type="button" className="face-approve-number" onClick={async () => {
-            setError(null);
+          <button key={choice} type="button" className="face-approve-number" onClick={() => {
             // Тоог энд шалгахгүй — сервер шалгана. Буруу бол хүсэлт бүхэлдээ
             // хаагдана (дахин таах боломжгүй).
             setChosen(choice);
           }}>{choice}</button>
         ))}
       </div>
-      {error && <p className="face-approve-warning">{error}</p>}
-
-      <button type="button" className="face-approve-deny" onClick={async () => { await deny.mutateAsync({ token }); setDenied(true); }}>
+      <button type="button" className="face-approve-deny" disabled={deny.isPending} onClick={async () => {
+        try {
+          await deny.mutateAsync({ token });
+          setDenied(true);
+        } catch (error) {
+          setClosed(error instanceof TRPCClientError && error.message ? error.message : "Хүсэлтийг хааж чадсангүй. Компьютер дээрх код 90 секундэд өөрөө хүчингүй болно.");
+        }
+      }}>
         Би биш — хаах
       </button>
     </Shell>

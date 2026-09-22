@@ -4,6 +4,134 @@
 
 ---
 
+## Admin: нууц үг → царай → admin (step-up) + царайны системийн бүрэн аудит (2026-09-22)
+
+Tom: *"neeree ene anh ./admin aar ehleed passwordoo hiicheed daraan nuur tanih system
+garj ireed tgd nuuree taniulchaad admin uruu nevtreh ystoi bizde... odoo nuuts ug edr
+shaardahgui zgr nuuree taniadl orj baina! bas nuur tanih systemd bugs ali eswel dutuu
+dulimag ym geeed buh ymiign zasaarai!!! heterhii basic nuur tanih code bichsen bololtoi"*
+
+### Яагаад нууц үг асуухгүй байв
+Сешн cookie **365 хоног** амьдардаг (`signSessionToken` → `"365d"`). Нууц үг зөвхөн анх
+нэвтрэхэд нэг удаа асуугдаж, дараагийн бүх /admin зочлол шууд камер руу ордог байв.
+`docs/ADMIN-MANUAL.md §1` ("утас + нууц үг → царай") болон `FACE-HANDOFF-PLAN.md`-ийн
+хяналт #7 ("нууц үгийг ОРЛОХГҮЙ") хоёулаа үүнийг амласан ч код хэзээ ч хэрэгжүүлээгүй.
+
+### Tom-ийн 3 шийдвэр (AskUserQuestion)
+1. **Liveness: анивчилт заавал** (санамсаргүй толгой эргүүлэх биш).
+2. **Дахин бүртгэл: нууц үг + одоогийн царай**; царай таарахаа больсон бол admin цуцалж өгнө.
+3. **Хог кодыг устга** (flash liveness, 68 цэгийн LivenessTracker, хуучин 3-pose тогтмол).
+
+### Хийсэн
+**Нууц үгийн step-up** (`server/_core/faceProof.ts`): шинэ cookie `sugi_admin_pw`
+(`typ:"reauth"`, user + sessionVersion + таб, **8 цаг** = `FACE_REAUTH_TTL_MS`).
+- `auth.login` панелийн эрхтэнд өөрөө үүсгэнэ (дөнгөж нууц үгээ оруулсан тул дахин асуухгүй).
+- Шинэ `faceAuth.confirmPassword` (login tier 20/15мин/IP + нэвтрэлттэй **хуваалцсан**
+  данс тус бүрийн lockout 10/15мин; `login_attempts`-д `reauth`/`reauth_invalid`/`reauth_locked`).
+- `startVerification`, `completeVerification` (#20-ыг үз), `enroll`, `startHandoff` түүнгүй
+  `FORBIDDEN (10004)` өгнө. `handoffStatus`-д шаардаагүй: token-ийг зөвхөн нууц үгтэй
+  `startHandoff` гаргадаг, табтай холбоотой, 90 с амьдардаг тул тэр өөрөө эрх.
+- Idle lock (25 мин) зөвхөн царайны proof-ийг арилгана → **зөвхөн царай** дахин асууна.
+  Шинэ таб, гарах, нууц үг солих, 8 цаг → нууц үг + царай.
+- Царайны proof-ийн `abs` нь step-up-ийн хугацаагаар хязгаарлагдана ("8 цаг" нууц үгнээс тоологдоно).
+- Клиент: `components/admin/AdminPasswordStep.tsx` (зөвшөөрлийн дэлгэцийн ижил загвар —
+  брэнд зурвас, дансны нэр, "1. Нууц үг → 2. Царай → 3. Админ" диаграм; талбар дээрх
+  алдаа `useFieldErrors`; "Нууц үгээ мартсан уу?" / "Өөр дансаар нэвтрэх"). `main.tsx`
+  `REAUTH_REQUIRED_ERR_MSG`-г `FACE_REQUIRED`-тэй адил зохицуулна.
+
+**Аудитаар олдсон, зассан** (3 Explore агент + 1 Plan агент, дараа нь өөрөө уншиж баталсан):
+1. 🔴 **Сешн cookie-оор л бусдын царайг солих** — `faceAuth.enroll` зөвхөн сешн шаарддаг
+   бөгөөд бүртгэлийг ДАРЖ бичдэг байв; `resetOwnEnrollment` (ямар ч дэлгэц дууддаггүй)
+   сешнээр л царайг устгадаг байв. Хулгайлсан сешнтэй хүн өөрийн царайг бүртгүүлээд
+   хаалгаар орж чадах байсан. Одоо: `enroll` = нууц үг + (ажилладаг царай байвал) одоогийн
+   царайны proof; `resetOwnEnrollment` устгасан.
+2. 🔴 **Distance oracle** — `no_match` бүрт яг зайг клиент рүү буцаадаг байв (hill-climbing).
+   Одоо `{ ok, reason }` л; зай `face_attempts`-д хэвээр.
+3. 🟠 **Данс тус бүрийн царайны lockout** байгаагүй (зөвхөн 8/15мин/IP). Одоо 5 бүтэлгүйтэл
+   (`no_match`+`liveness_failed`)/15 мин → `TOO_MANY_REQUESTS` + `face.lockout` аудит.
+4. 🟠 **Токен төөрөгдөл** — сешн ба царайны proof нэг түлхүүр, ижил `{sub, sv}`: царайны
+   proof-ийг `app_session_id` болгож тавихад бүтэн сешн болдог байв. Одоо `typ`
+   (`session`/`face`/`reauth`); `typ`-гүй хуучин сешн хүчинтэй хэвээр (хэнийг ч гаргаагүй).
+5. 🟠 **Загвар plaintext** — `descriptorJson`/`posesJson` JSON-оор ил байв (нөөц алдагдвал
+   ажиллах хоёр дахь фактор). Одоо AES-256-GCM `enc1:` (base64 — hex нь 12 pose-д TEXT-ийг
+   давна), `INTEGRATIONS_ENCRYPTION_KEY`; түлхүүргүй бол шинэ бүртгэл татгалзана; хуучин мөр
+   амжилттай шалгалтын дараа өөрөө шифрлэгдэнэ; тайлж чадахгүй бол "дахин бүртгүүлнэ үү".
+6. 🟠 **Liveness нэрийн төдий** — анивчилт бүртгэгддэг ч шаардагддаггүй, сервер санамсаргүй
+   үйлдэл өгдөг ч клиент огт уншдаггүй байв. Одоо challenge үргэлж `blink`, клиент анивчилт
+   харахгүй бол илгээхгүй (2.5 с-ийн дараа "Нэг удаа анивчина уу"), царай алга болох/2 царай
+   гарвал бүгдийг дахин эхлүүлнэ (амьдаар анивчаад зураг барих боломжгүй), нүд аних үеийн
+   frame авахгүй; `ADMIN_FACE_LIVENESS_ENFORCED` анхдагчаар **асаалттай** ("0" унтраана, getter).
+7. 🟠 **`/face-approve` утасны хуудас CSS-гүй** — бүх `.face-*` дүрэм `admin.css`-д, түүнийг
+   зөвхөн AdminDashboard импортлодог. Утас QR-ээр шууд ордог тул тоо, камер загваргүй байв.
+   Одоо `client/src/face.css` (хоёр хуудас импортлоно; E2E-ээр computed style шалгана).
+8. Handoff: буруу тоог камер асахаас **өмнө** шалгана (`startHandoffVerification`), буруу/хугацаа
+   дууссан бол "Хүсэлт хаагдлаа" дэлгэц (өмнө нь камерын дэлгэцэн дээр дахин оролдох товч
+   — дандаа дахин унадаг); `FaceApprove`-ийн үхсэн `error` state; deny-ийн алдаа.
+9. `matchNumber` ба хуурамч сонголтууд `Math.random` → `randomInt`; хазайлттай
+   `sort(() => Math.random()-0.5)` → Fisher–Yates.
+10. `face_challenges` хэзээ ч устдаггүй байв → өдөр тутмын retention (24 ц).
+11. Mint хийхэд жинхэнэ таб id заавал (`"-"` нь хуваалцсан таамаглаж болох identity байв).
+12. `faceProof.ts`-ийн dev түлхүүр `Math.random` → `randomBytes(32)`.
+13. `IdleLockWatcher`-ийн effect-ийн хамаарлын жагсаалтад mutation объект (render бүрт шинэ)
+    байсан — сэрэмжлүүлгийн 2 минутад interval/BroadcastChannel секунд тутам дахин үүсдэг
+    байв (handoff-ийн 09-16-ны алдаатай ижил анги). Refs болгов.
+14. `run()` дахин оролдлогод өмнөх камерыг зогсоодоггүй, `video.srcObject` хэзээ ч
+    цэвэрлэгддэггүй байв.
+15. `NO_BOX` type-cast хак → `SmoothMeshRenderer.push(points, box?)`.
+16. AdminDashboard-ийн гараар хуулсан `ADMIN_PANEL_ROLES` → `isAdminPanelRole`.
+17. Камерын дэлгэцийн "утсаараа баталгаажуулах" ба "← Буцах" холбоос зайгүй наалдсан байв.
+18. `admin.updateUserRole`: утасгүй (Facebook) дансыг ажилтны эрхтэй болгохыг хориглов —
+    ийм данс нууц үгийн алхмыг давж, нууц үгээ сэргээж чадахгүй.
+19. Аюулгүй байдлын төвд `face.*` аудит, `reauth*` нэвтрэлтийн шалтгаан монгол нэртэй болов.
+
+**Verifier агентын олсон 4 (мөн зассан):**
+20. Утас `startHandoffVerification`-ээс авсан challenge-ийг `approveHandoff` биш
+    `completeVerification`-д өгвөл нууц үггүйгээр өөртөө proof авч болох байв →
+    `completeVerification` мөн `assertReauthProof`.
+21. Admin "бүртгэл цуцлах" нь царайны lockout-ыг тайлдаггүй байв → зөвхөн ОДООГИЙН бүртгэлийн
+    (`face_enrollments.updatedAt`-аас хойших) бүтэлгүйтэл тоологдоно.
+22. `ADMIN_FACE_LIVENESS_ENFORCED=0` үед давсан (анивчилтгүй) шалгалт lockout-д тоологдож байв →
+    `liveness_failed` зөвхөн блоклож байх үед тоологдоно.
+23. Ганц frame tracker алдахад бүх snapshot + анивчилт хаягддаг байв → 4 дараалсан frame (~160 мс).
+
+**Устгасан хог** (Tom зөвшөөрсөн): `shared/face-auth.ts`-ийн flash liveness
+(`FLASH_*`, `evaluateFlashResponse`), 68 цэгийн `LivenessTracker`/`SignalSmoother`/
+`getHeadYaw`/`getEyeOpenness`/`getMouthOpenness`, `FACE_ENROLL_*`, `FACE_VERIFY_*`,
+`FACE_CHALLENGE_LABELS`, `StoredFacePose`; `faceEngine.ts`-ийн `sampleFaceColor`;
+`faceAuth.test.ts`-ийн холбогдох тест; `.face-gate-fullflash`, `.face-gate-instruction--flash` CSS.
+
+### Санаатай ХИЙГЭЭГҮЙ
+- Сервер descriptor-ыг клиентээс итгэдэг хэвээр (зураг серверт очдоггүй — нууцлалын үндсэн
+  амлалт). Урьдчилан бэлтгэсэн бичлэгийн халдлагаас бүрэн хамгаалахгүй — зөвшөөрлийн
+  дэлгэцэнд үнэнээр бичсэн хэвээр.
+- Статусын алдаан дээр клиент fail-open хэвээр (сервер panel procedure бүрт хаадаг).
+- Өөрөө дахин бүртгүүлэх товч нэмээгүй (өмнө нь ч байгаагүй) — сервер дүрэм бэлэн.
+
+### Баталгаажуулалт
+- `pnpm check` + `pnpm lint` + `pnpm build` (exit 0).
+- Царайны багц: unit + integration **108/108** (шинэ: step-up, `typ`, шифрлэлт, lockout,
+  oracle, retention, эрх олгох).
+- E2E (`E2E_FACE_GATE=1`): `face-gate.spec.ts` (шинэ — нууц үг түрүүлж гарна, буруу нь
+  талбар дээр, зөв нь сонголт руу, reload алгасна, шинэ таб дахин асууна, `/face-approve`
+  загвартай) + `face-handoff.spec.ts` — компьютер + утас **6/6**.
+- Хуурамч камертай (Chromium fake device) нууц үг → "Энэ төхөөрөмжөөр" → камерын дэлгэц
+  алдаагүй (загвар ачаалагдаж, "Царай олдсонгүй" гэж зөв хэлнэ). Screenshot 1366/390.
+- ⚠️ **Бодит царай + бодит утсаар Tom туршаагүй** — автомат тест жинхэнэ нүүр/анивчилт
+  үзүүлж чадахгүй. Эхний бодит нэвтрэлтэд `face_attempts.detail`-ийн `blinks=`, `restarts=`-г хар.
+- Бүрэн vitest (бүх gate): **1112 passed / 2 skipped, 115 файл, 1125 с**. Verifier-ийн засварын
+  дараа царайны файлууд дахин 55/55.
+- Бүрэн E2E: **232 passed / 4 failed / 6 skipped**. 🔴 4 уналт бүгд commit `ca670e7`-ийн
+  (Tom-ийн хүсэлтээр энэ сешнд commit хийсэн, өмнөх сешний "hero зурагдсаны дараа React mount"
+  LCP өөрчлөлт, `client/src/main.tsx` `afterHeroShellImagePaint`) улмаас: нүүрний **skip link
+  эхний Tab-д фокус авдаггүй** (desktop+mobile) ба утсан дээр **толгойн хайлтын товчийг эрт
+  дарахад юу ч болдоггүй** (2). Батлав: mount-ыг түр шууд болгоход 6/6 давсан, буцаахад унана.
+  Шалтгаан: React хүлээгдэж байх хооронд (≤1.2 с) хэрэглэгчийн дарсан/Tab хийсэн элемент нь
+  серверийн shell, React ирэхэд DOM солигдож фокус/товшилт алга болно. **Push/deploy хийхээс
+  өмнө шийдвэр хэрэгтэй**: (a) `ca670e7`-ийг revert, эсвэл (b) эхний keydown/pointerdown дээр
+  шууд (`flushSync`) mount хийх fix-forward. Царайны ажил үүнд хамааралгүй.
+
+---
+
 ## Зарахад бэлтгэх: худалдан авагчийн баримтууд + дэлхийн жишгийн цоорхойнууд (2026-09-20/21)
 
 Tom: *"Одоо өөр нэмж сайжруулах юм үлдсэн үү? Дэлхийн шилдэг сайтуудын стандартыг судал.

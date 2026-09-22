@@ -1,5 +1,5 @@
 import { discountableSubtotalMnt } from "../shared/gift-cards";
-import { COOKIE_NAME, GUEST_CART_COOKIE_NAME, NOT_ADMIN_ERR_MSG, VISITOR_SESSION_COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME, FACE_REQUIRED_ERR_MSG, GUEST_CART_COOKIE_NAME, NOT_ADMIN_ERR_MSG, VISITOR_SESSION_COOKIE_NAME } from "@shared/const";
 import { formatVariantAttributes } from "@shared/catalog-filter";
 import { ubDistricts } from "@shared/districts";
 import { parseDeviceType, isLikelyBot } from "@shared/deviceType";
@@ -230,10 +230,12 @@ import { renderOrderInvoice, renderOrderInvoiceForStaff, renderPackingSlip } fro
 import { deletePushSubscription, hasPushSubscription, issueGiftCards, listGiftCards, redeemGiftCard, upsertPushSubscription, voidGiftCard } from "./db";
 import { sendOrderStatusPush, sendPushToUser, webPushEnabled } from "./_core/webPush";
 // Admin face gate (2026-09-08) -- see server/faceAuth.ts.
-import { clearFaceProofCookie, completeFaceVerification, faceProofIdleTimeoutMs, isFaceGateEnabled, lockFaceSession, refreshFaceProof, startFaceVerification } from "./faceAuth";
+import { clearFaceProofCookie, completeFaceVerification, faceProofIdleTimeoutMs, hasValidFaceProof, isFaceGateEnabled, lockFaceSession, refreshFaceProof, startFaceVerification } from "./faceAuth";
+import { NO_TAB, assertReauthProof, clearReauthCookie, hasValidReauthProof, issueReauthProof, tabIdFrom } from "./_core/faceProof";
+import { FaceTemplateKeyMissingError } from "./db/face";
 import { approveFaceHandoff, assertHandoffApprovable, claimFaceHandoff, denyFaceHandoff, getFaceHandoffContext, startFaceHandoff } from "./faceHandoff";
 import { FACE_DESCRIPTOR_LENGTH, FACE_DIAGNOSTIC_MAX, FACE_IDLE_TIMEOUT_MS, FACE_MODEL_VERSION, isAdminPanelRole, isValidFaceDescriptor } from "../shared/face-auth";
-import { adminProcedure, anyStaffProcedure, catalogReadProcedure, checkoutRateLimitedProcedure, contentReadProcedure, financeProcedure, lenientRateLimitedProcedure, loginRateLimitedProcedure, marketingProcedure, moderateRateLimitedProcedure, ordersReadProcedure, phoneVerifyRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure, usersReadProcedure, warehouseProcedure } from "./_core/trpc";
+import { adminProcedure, anyStaffProcedure, catalogReadProcedure, checkoutRateLimitedProcedure, contentReadProcedure, financeProcedure, lenientRateLimitedProcedure, loginRateLimitedProcedure, loginRateLimitedProtectedProcedure, marketingProcedure, moderateRateLimitedProcedure, ordersReadProcedure, phoneVerifyRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure, usersReadProcedure, warehouseProcedure } from "./_core/trpc";
 import { storageGetSignedUrl, storagePing, storagePut, storagePutImageVariants } from "./storage";
 import { IMAGE_MAX_DIMENSION, processUploadedImageVariants } from "./_core/imageProcessing";
 import { createQPayInvoice, parseQPayInvoicePayload, getQPayAvailability } from "./qpay";
@@ -963,6 +965,13 @@ export const appRouter = router({
         await logAttempt(true);
         const token = await signSessionToken(user.id, user.sessionVersion);
         ctx.res.cookie(COOKIE_NAME, token, getSessionCookieOptions(ctx.req));
+        // Admin-ийн нууц үгийн step-up (2026-09-22): ажилтан ЭНЭ табд дөнгөж
+        // нууц үгээ оруулсан тул /admin нууц үгийг дахин асуухгүй, шууд царай
+        // руу орно. Толгойгүй (script) хүсэлтэд cookie үүсгэхгүй — нэвтрэлт
+        // өөрөө унахгүй.
+        if (isAdminPanelRole(user.role) && tabIdFrom(ctx.req) !== NO_TAB) {
+          await issueReauthProof({ req: ctx.req, res: ctx.res, userId: user.id, sessionVersion: user.sessionVersion });
+        }
         await mergeGuestCartAndClearCookie(ctx, user.id);
         const { passwordHash: _omit, ...safeUser } = user;
         return safeUser;
@@ -976,6 +985,8 @@ export const appRouter = router({
       // check at all -- exactly the "every time someone logs in" requirement
       // this gate exists to enforce. Found by Tom testing precisely that.
       clearFaceProofCookie(ctx.req, ctx.res);
+      // The password step-up dies with the session too (2026-09-22).
+      clearReauthCookie(ctx.req, ctx.res);
       return {
         success: true,
       } as const;
@@ -2129,7 +2140,7 @@ export const appRouter = router({
       // the panel with no camera anywhere -- exactly today's pre-gate
       // behaviour, which is the entire point of the escape hatch.
       if (!gateEnabled || !isAdminPanelRole(ctx.user.role)) {
-        return { gateEnabled, enrolled: true, verified: true, modelStale: false, idleTimeoutMs: FACE_IDLE_TIMEOUT_MS };
+        return { gateEnabled, passwordConfirmed: true, enrolled: true, verified: true, modelStale: false, idleTimeoutMs: FACE_IDLE_TIMEOUT_MS };
       }
       const enrollment = await getFaceEnrollment(ctx.user.id);
       // The proof's OWN idle window, not the global constant: a session
@@ -2148,12 +2159,16 @@ export const appRouter = router({
       const verified = hasProof && !!enrollment;
       return {
         gateEnabled,
+        // Step one of "password -> face -> admin" (2026-09-22). False means
+        // the browser shows the password screen before anything else.
+        passwordConfirmed: await hasValidReauthProof(ctx.req, ctx.user.id, ctx.user.sessionVersion),
         enrolled: !!enrollment,
         verified,
         // A descriptor from a superseded model can't be compared with a new
         // one; surfaced separately so the UI says "enroll again" rather than
-        // "your face didn't match".
-        modelStale: !!enrollment && enrollment.modelVersion !== FACE_MODEL_VERSION,
+        // "your face didn't match". An enrolment whose encrypted template can
+        // no longer be opened (the key changed) needs the same fresh start.
+        modelStale: !!enrollment && (enrollment.modelVersion !== FACE_MODEL_VERSION || !enrollment.templateReadable),
         // The browser needs the window to run its own countdown and warning;
         // the server enforces it regardless, through the proof's own `exp`.
         idleTimeoutMs: proofIdleMs ?? FACE_IDLE_TIMEOUT_MS,
@@ -2183,6 +2198,40 @@ export const appRouter = router({
     }),
 
     /**
+     * Step one of /admin (2026-09-22, Tom: "эхлээд нууц үгээ хийгээд, дараа нь
+     * царай"): re-enter the account password in this tab. The session cookie
+     * lives a year, so without this the password was only ever asked at the
+     * very first sign-in and /admin went straight to the camera.
+     *
+     * Same protections as auth.login: the login IP tier (20/15 min) and the
+     * per-account lockout, sharing the login's failure budget -- ten wrong
+     * passwords across either door lock the account for 15 minutes.
+     */
+    confirmPassword: loginRateLimitedProtectedProcedure
+      .input(z.object({ password: z.string().min(1).max(200) }))
+      .mutation(async ({ ctx, input }) => {
+        if (!isAdminPanelRole(ctx.user.role)) throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+        const user = await getUserById(ctx.user.id);
+        if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "Хэрэглэгч олдсонгүй." });
+        const ipAddress = ctx.req.ip || ctx.req.socket?.remoteAddress || null;
+        const identifier = user.phone ?? `#${user.id}`;
+        // The hash is checked BEFORE the lockout so "locked" and "wrong" take
+        // the same time to answer, exactly like auth.login.
+        const valid = await verifyPassword(input.password, user.passwordHash);
+        if ((await countRecentFailedLoginAttempts(user.id, LOGIN_LOCKOUT_WINDOW_MS)) >= LOGIN_LOCKOUT_MAX_FAILURES) {
+          await recordLoginAttempt({ email: identifier, userId: user.id, success: false, reason: "reauth_locked", ipAddress });
+          throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Хэт олон буруу оролдлого хийгдсэн тул энэ данс түр түгжигдлээ. 15 минутын дараа дахин оролдоно уу." });
+        }
+        if (!valid) {
+          await recordLoginAttempt({ email: identifier, userId: user.id, success: false, reason: "reauth_invalid", ipAddress });
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Нууц үг буруу байна." });
+        }
+        await issueReauthProof({ req: ctx.req, res: ctx.res, userId: user.id, sessionVersion: user.sessionVersion });
+        await recordLoginAttempt({ email: identifier, userId: user.id, success: true, reason: "reauth", ipAddress });
+        return { ok: true as const };
+      }),
+
+    /**
      * Stores the averaged reference descriptor for this account.
      *
      * `consented` is a literal true rather than a boolean so the consent gate
@@ -2210,6 +2259,22 @@ export const appRouter = router({
         if (!isAdminPanelRole(ctx.user.role)) {
           throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
         }
+        // 2026-09-22 audit, the most serious hole found: enrolling used to
+        // need nothing but the session cookie, and it OVERWRITES the stored
+        // face. Anyone holding a stolen year-long session could replace the
+        // owner's face with their own and walk through the gate. Now:
+        //  - the password step-up is always required, and
+        //  - replacing a face that still works also requires having passed
+        //    THAT face in this tab (Tom: "нууц үг + одоогийн царай").
+        // A first enrolment, a stale model or an unreadable template has no
+        // current face to prove; an admin's reset (Users drawer) is the way
+        // back for someone whose face no longer matches.
+        await assertReauthProof({ req: ctx.req, user: ctx.user });
+        const existing = await getFaceEnrollment(ctx.user.id);
+        const replacingUsableFace = !!existing && existing.modelVersion === FACE_MODEL_VERSION && existing.templateReadable;
+        if (replacingUsableFace && isFaceGateEnabled() && !(await hasValidFaceProof(ctx.req, ctx.user.id, ctx.user.sessionVersion))) {
+          throw new TRPCError({ code: "FORBIDDEN", message: FACE_REQUIRED_ERR_MSG });
+        }
         if (!isValidFaceDescriptor(input.descriptor)) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Царайн өгөгдөл буруу байна." });
         }
@@ -2217,13 +2282,22 @@ export const appRouter = router({
         // a malformed or hand-crafted vector must never reach the distance
         // math, and poses are just as much an input as the main one.
         const poses = (input.poses ?? []).filter(p => isValidFaceDescriptor(p.descriptor));
-        await upsertFaceEnrollment({
-          userId: ctx.user.id,
-          descriptor: input.descriptor,
-          sampleCount: input.sampleCount,
-          poses,
-          modelVersion: FACE_MODEL_VERSION,
-        });
+        try {
+          await upsertFaceEnrollment({
+            userId: ctx.user.id,
+            descriptor: input.descriptor,
+            sampleCount: input.sampleCount,
+            poses,
+            modelVersion: FACE_MODEL_VERSION,
+          });
+        } catch (error) {
+          // Templates are stored encrypted; without the key the server refuses
+          // to write one in plaintext (server/db/face.ts).
+          if (error instanceof FaceTemplateKeyMissingError) {
+            throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Серверийн шифрлэлтийн түлхүүр (INTEGRATIONS_ENCRYPTION_KEY) тохируулаагүй тул царай бүртгэх боломжгүй. Хөгжүүлэгчид хандана уу." });
+          }
+          throw error;
+        }
         await recordFaceAttempt({
           userId: ctx.user.id,
           outcome: "enrolled",
@@ -2236,13 +2310,15 @@ export const appRouter = router({
         return { ok: true as const };
       }),
 
-    /** Issues a fresh single-use liveness challenge (blink / turn / open
-     *  mouth), randomised per attempt so a held-up photo can't satisfy it. */
+    /** Issues a fresh single-use challenge (a blink, see FACE_LOGIN_CHALLENGE).
+     *  Needs the password step-up first (2026-09-22): the face is the SECOND
+     *  factor, so it cannot even be attempted on the session cookie alone. */
     startVerification: strictRateLimitedProtectedProcedure.mutation(async ({ ctx }) => {
       if (!isAdminPanelRole(ctx.user.role)) {
         throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
       }
-      return startFaceVerification(ctx.user.id);
+      await assertReauthProof({ req: ctx.req, user: ctx.user });
+      return startFaceVerification(ctx.user.id, ctx.req.ip ?? null);
     }),
 
     /** Compares the submitted descriptor against the enrolled one and, on a
@@ -2264,6 +2340,12 @@ export const appRouter = router({
         if (!isAdminPanelRole(ctx.user.role)) {
           throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
         }
+        // Checked here too, not only in startVerification: the phone side of
+        // the QR handoff also obtains challenges (startHandoffVerification),
+        // and without this it could hand one to THIS procedure instead of
+        // approveHandoff and mint the proof for itself -- admin on the phone,
+        // with no password ever entered there (2026-09-22 review).
+        await assertReauthProof({ req: ctx.req, user: ctx.user });
         return completeFaceVerification({
           userId: ctx.user.id,
           sessionVersion: ctx.user.sessionVersion,
@@ -2285,6 +2367,11 @@ export const appRouter = router({
     /** Компьютер дуудна: QR-д хийх token + дэлгэц дээр харуулах тоо. */
     startHandoff: strictRateLimitedProtectedProcedure.mutation(async ({ ctx }) => {
       if (!isAdminPanelRole(ctx.user.role)) throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+      // Нууц үгийг КОМПЬЮТЕР дээр (2026-09-22): утас зөвхөн царайг баталдаг,
+      // нууц үгийг орлохгүй (docs/FACE-HANDOFF-PLAN.md, хяналт #7). Санал
+      // асуулгын (handoffStatus) дуудлагад дахин шаардахгүй — token-ийг зөвхөн
+      // энэ procedure гаргадаг тул тэр өөрөө эрх юм.
+      await assertReauthProof({ req: ctx.req, user: ctx.user });
       const started = await startFaceHandoff({ userId: ctx.user.id, sessionVersion: ctx.user.sessionVersion, req: ctx.req });
       return { token: started.token, matchNumber: started.matchNumber, expiresAt: started.expiresAt.toISOString() };
     }),
@@ -2313,6 +2400,21 @@ export const appRouter = router({
         differentNetwork: context.differentNetwork,
       };
     }),
+
+    /**
+     * Утас дуудна: тоо сонгосны ДАРАА, камер асахаас ӨМНӨ (2026-09-22). Тоог
+     * эндээс шалгана — буруу бол хүсэлт тэр даруй хаагдаж, утас камер асаах ч
+     * үгүй. Утсанд нууц үгийн step-up шаардахгүй: нууц үгийг компьютер
+     * startHandoff дээр өгсөн, утас зөвхөн царайг баталдаг. Challenge-ийг
+     * энэ handoff-д л хүчинтэй token-оор гаргана.
+     */
+    startHandoffVerification: strictRateLimitedProtectedProcedure
+      .input(z.object({ token: z.string().min(10).max(120), matchNumber: z.number().int().min(10).max(99) }))
+      .mutation(async ({ ctx, input }) => {
+        if (!isAdminPanelRole(ctx.user.role)) throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+        await assertHandoffApprovable({ token: input.token, userId: ctx.user.id, sessionVersion: ctx.user.sessionVersion, matchNumber: input.matchNumber, req: ctx.req });
+        return startFaceVerification(ctx.user.id, ctx.req.ip ?? null);
+      }),
 
     /**
      * Утас дуудна: тоог таарууулж, царайгаа уншуулсны дараа.
@@ -2359,14 +2461,12 @@ export const appRouter = router({
       return { ok: true as const };
     }),
 
-    /** Lets someone re-enroll their own face without an admin (new glasses,
-     *  a beard, a different camera). Clears the enrollment and the proof
-     *  cookie so the next /admin load starts the flow from the top. */
-    resetOwnEnrollment: strictRateLimitedProtectedProcedure.mutation(async ({ ctx }) => {
-      await deleteFaceEnrollment(ctx.user.id);
-      clearFaceProofCookie(ctx.req, ctx.res);
-      return { ok: true as const };
-    }),
+    // resetOwnEnrollment REMOVED (2026-09-22 audit): no screen ever called
+    // it, and it deleted the account's face on the session cookie alone --
+    // after which `enroll` accepted any new face. The server rule for
+    // replacing a working face is in `enroll` (password + current face; there
+    // is no self-service button for it yet); a face that no longer matches is
+    // reset by an admin (admin.resetUserFaceEnrollment).
   }),
   admin: router({
     // staffProcedure, not adminProcedure: staff should still see what's
@@ -2496,6 +2596,14 @@ export const appRouter = router({
     // role directly. See updateAdminUserRole's own comment in server/db.ts.
     updateUserRole: adminProcedure.input(z.object({ userId: z.number().int().positive(), role: staffRoleSchema })).mutation(async ({ ctx, input }) => {
       if (ctx.user.id === input.userId) throw new TRPCError({ code: "BAD_REQUEST", message: "You cannot change your own administrator role here." });
+      // /admin now asks for the account PASSWORD before the face (2026-09-22).
+      // An account made through Facebook has a random password and no phone,
+      // so it could neither pass that step nor recover the password by SMS --
+      // promoting it would hand out a role nobody can use.
+      if (isAdminPanelRole(input.role)) {
+        const target = await getUserById(input.userId);
+        if (target && !target.phone) throw new TRPCError({ code: "BAD_REQUEST", message: "Утасны дугааргүй дансыг ажилтны эрхтэй болгох боломжгүй: /admin нууц үг шаарддаг, нууц үгээ сэргээхэд утас хэрэгтэй. Эхлээд утасны дугаар холбоно уу." });
+      }
       try {
         const updated = await updateAdminUserRole(input);
         await logAdminAction({ actorUserId: ctx.user.id, action: "user.role_updated", entityType: "user", entityId: input.userId, metadata: { role: input.role } });

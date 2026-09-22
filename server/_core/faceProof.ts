@@ -13,12 +13,13 @@
  * `assertFaceProofForPanelRole` ажиллуулна.
  */
 
+import { randomBytes } from "node:crypto";
 import { SignJWT, jwtVerify } from "jose";
 import { parseCookie as parseCookieHeader } from "cookie";
 import { TRPCError } from "@trpc/server";
 import type { Request, Response } from "express";
-import { FACE_IDLE_TIMEOUT_MS, FACE_VERIFICATION_TTL_MS, isAdminPanelRole } from "../../shared/face-auth";
-import { ADMIN_FACE_COOKIE_NAME, FACE_REQUIRED_ERR_MSG } from "../../shared/const";
+import { FACE_IDLE_TIMEOUT_MS, FACE_REAUTH_TTL_MS, FACE_VERIFICATION_TTL_MS, isAdminPanelRole } from "../../shared/face-auth";
+import { ADMIN_FACE_COOKIE_NAME, ADMIN_REAUTH_COOKIE_NAME, FACE_REQUIRED_ERR_MSG, REAUTH_REQUIRED_ERR_MSG } from "../../shared/const";
 import { ENV } from "./env";
 
 /** Whether the gate is switched on at all. Everything else in this module is
@@ -36,12 +37,21 @@ export function isFaceGateEnabled(): boolean {
 // when JWT_SECRET is unset, which fails safe (nothing survives a restart)
 // instead of using a committed constant. assertProductionSecrets() already
 // refuses to start production without a real JWT_SECRET.
+//
+// TOKEN TYPES (2026-09-22 audit): the session, the face proof and the password
+// step-up are all HS256 under this one key, so each carries a `typ` claim and
+// every reader refuses the other two. Before this a face-proof value pasted
+// into the session cookie was accepted as a full session -- {sub, sv} was all
+// the session reader looked at (server/_core/context.ts).
 let devFallbackSecret: Uint8Array | null = null;
 function secretKey(): Uint8Array {
   if (ENV.cookieSecret) return new TextEncoder().encode(ENV.cookieSecret);
-  if (!devFallbackSecret) devFallbackSecret = new TextEncoder().encode(Math.random().toString(36) + Date.now());
+  // Same fallback as context.ts: 32 random bytes, never Math.random().
+  if (!devFallbackSecret) devFallbackSecret = new Uint8Array(randomBytes(32));
   return devFallbackSecret;
 }
+const FACE_TYP = "face";
+const REAUTH_TYP = "reauth";
 
 /**
  * Mints the proof that THIS browser passed a face check for THIS account.
@@ -63,7 +73,7 @@ function secretKey(): Uint8Array {
  * a real tab never has.
  */
 const ADMIN_TAB_HEADER = "x-admin-tab";
-const NO_TAB = "-";
+export const NO_TAB = "-";
 const MAX_BOUND_TABS = 6;
 export function tabIdFrom(req: Request): string {
   const raw = req.headers?.[ADMIN_TAB_HEADER];
@@ -84,7 +94,7 @@ async function signFaceProof(userId: number, sessionVersion: number, absoluteDea
   // and silently hand it the longer session it was deliberately denied.
   const window = Math.min(Math.max(idleTimeoutMs, 60_000), FACE_IDLE_TIMEOUT_MS);
   const idleDeadline = Math.min(Date.now() + window, absoluteDeadlineMs);
-  return new SignJWT({ sub: String(userId), sv: sessionVersion, abs: absoluteDeadlineMs, idle: window, tabs: tabs.slice(-MAX_BOUND_TABS) })
+  return new SignJWT({ typ: FACE_TYP, sub: String(userId), sv: sessionVersion, abs: absoluteDeadlineMs, idle: window, tabs: tabs.slice(-MAX_BOUND_TABS) })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(new Date(idleDeadline))
@@ -98,6 +108,9 @@ async function readFaceProof(req: Request, userId: number, sessionVersion: numbe
   if (!raw) return null;
   try {
     const { payload } = await jwtVerify(raw, secretKey());
+    // A proof minted before `typ` existed is refused: one more pass through
+    // the password + camera, same policy as the missing-`abs` case below.
+    if (payload.typ !== FACE_TYP) return null;
     if (Number(payload.sub) !== userId) return null;
     if (Number(payload.sv) !== sessionVersion) return null;
     // jwtVerify already rejected an expired `exp` (the idle deadline). The
@@ -179,9 +192,14 @@ export async function issueFaceProof(input: { req: Request; res: Response; userI
   // absolute window and its other tabs kept) rather than replacing it, so
   // two open admin tabs do not keep locking each other out.
   const existing = await readFaceProof(input.req, input.userId, input.sessionVersion, { anyTab: true });
-  const tab = tabIdFrom(input.req);
+  const tab = requireRealTab(input.req);
   const tabs = existing ? [...existing.tabs.filter(t => t !== tab), tab] : [tab];
-  const absolute = existing ? existing.absoluteDeadlineMs : Date.now() + FACE_VERIFICATION_TTL_MS;
+  // The face window never outlives the password step that allowed it
+  // (2026-09-22): "8 цагийн дараа заавал дахин нэвтэрнэ" counts from the
+  // PASSWORD, so the proof's absolute deadline is capped by the step-up's.
+  const reauth = await readReauthProof(input.req, input.userId, input.sessionVersion);
+  const uncapped = existing ? existing.absoluteDeadlineMs : Date.now() + FACE_VERIFICATION_TTL_MS;
+  const absolute = reauth ? Math.min(uncapped, reauth.absoluteDeadlineMs) : uncapped;
   // Joining an existing proof keeps the SHORTER of the two idle windows: a
   // handoff-unlocked session must not be widened by later verifying on a
   // second tab, and a normal session is never shortened by accident either --
@@ -221,6 +239,103 @@ export function faceProofCookieOptions(req: Request) {
 
 export function clearFaceProofCookie(req: Request, res: Response) {
   res.clearCookie(ADMIN_FACE_COOKIE_NAME, { ...faceProofCookieOptions(req), maxAge: undefined });
+}
+
+/**
+ * Minting refuses a request with no real tab id (2026-09-22 audit). Reading a
+ * "-" binding is harmless, but a proof MINTED for "-" would be honoured by
+ * every header-less request afterwards -- one shared, guessable identity. A
+ * real browser always sends the header (client/src/main.tsx), so only scripts
+ * and tests ever hit this.
+ */
+function requireRealTab(req: Request): string {
+  const tab = tabIdFrom(req);
+  if (tab === NO_TAB) throw new TRPCError({ code: "BAD_REQUEST", message: "Хөтчийн таб тодорхойгүй байна. Хуудсаа дахин ачаална уу." });
+  return tab;
+}
+
+// ---------------------------------------------------------------------------
+// Password step-up (2026-09-22, Tom: "/admin-д эхлээд нууц үгээ хийгээд,
+// дараа нь царай таних систем гарч ирээд... гэж хоёулаа ярьсан. Одоо нууц үг
+// шаардахгүй, зүгээр нүүрээ таниад л орж байна").
+//
+// Why it was missing: the session cookie lives 365 days, so the password was
+// asked exactly once, at the first sign-in; every later visit to /admin went
+// straight to the camera. docs/ADMIN-MANUAL.md section 1 and
+// docs/FACE-HANDOFF-PLAN.md control #7 both promised "password, then face" --
+// nothing enforced it.
+//
+// This cookie is that promise: "the password for this account was entered in
+// THIS tab within the last FACE_REAUTH_TTL_MS". Minted by auth.login (panel
+// roles) and faceAuth.confirmPassword; required before a face check can START,
+// before a face is enrolled, and before the desktop opens a QR handoff
+// (server/routers.ts). Bound like the face proof -- user, sessionVersion, the
+// tabs it was entered in -- so a new tab, a sign-out or a password reset all
+// mean "password again". An idle lock does NOT clear it: inside the window
+// the person re-passes only the face, as the manual says.
+// ---------------------------------------------------------------------------
+
+async function signReauthProof(userId: number, sessionVersion: number, absoluteDeadlineMs: number, tabs: readonly string[]): Promise<string> {
+  return new SignJWT({ typ: REAUTH_TYP, sub: String(userId), sv: sessionVersion, tabs: tabs.slice(-MAX_BOUND_TABS) })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(new Date(absoluteDeadlineMs))
+    .sign(secretKey());
+}
+
+async function readReauthProof(req: Request, userId: number, sessionVersion: number, options: { anyTab?: boolean } = {}): Promise<{ absoluteDeadlineMs: number; tabs: string[] } | null> {
+  const raw = parseCookieHeader(req.headers?.cookie ?? "")[ADMIN_REAUTH_COOKIE_NAME];
+  if (!raw) return null;
+  try {
+    const { payload } = await jwtVerify(raw, secretKey());
+    if (payload.typ !== REAUTH_TYP) return null;
+    if (Number(payload.sub) !== userId) return null;
+    if (Number(payload.sv) !== sessionVersion) return null;
+    const absoluteDeadlineMs = Number(payload.exp) * 1000;
+    // A deadline further out than the rule allows is refused, whatever it was
+    // signed with.
+    if (!Number.isFinite(absoluteDeadlineMs) || absoluteDeadlineMs - Date.now() > FACE_REAUTH_TTL_MS + 5_000) return null;
+    const tabs = Array.isArray(payload.tabs) ? payload.tabs.filter((t): t is string => typeof t === "string") : [];
+    if (tabs.length === 0) return null;
+    if (!options.anyTab && !tabs.includes(tabIdFrom(req))) return null;
+    return { absoluteDeadlineMs, tabs };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Records a just-verified password for this tab. A second tab joins the same
+ * cookie (up to MAX_BOUND_TABS) and a fresh password restarts the window --
+ * the password has just been proven again.
+ */
+export async function issueReauthProof(input: { req: Request; res: Response; userId: number; sessionVersion: number }): Promise<void> {
+  const tab = requireRealTab(input.req);
+  const existing = await readReauthProof(input.req, input.userId, input.sessionVersion, { anyTab: true });
+  const tabs = existing ? [...existing.tabs.filter(t => t !== tab), tab] : [tab];
+  const token = await signReauthProof(input.userId, input.sessionVersion, Date.now() + FACE_REAUTH_TTL_MS, tabs);
+  input.res.cookie(ADMIN_REAUTH_COOKIE_NAME, token, { ...faceProofCookieOptions(input.req), maxAge: FACE_REAUTH_TTL_MS });
+}
+
+/** Whether this tab holds a live password step-up for this account. */
+export async function hasValidReauthProof(req: Request, userId: number, sessionVersion: number): Promise<boolean> {
+  return (await readReauthProof(req, userId, sessionVersion)) !== null;
+}
+
+/**
+ * The server-side half of the password step. Throws FORBIDDEN with
+ * REAUTH_REQUIRED_ERR_MSG, which the client maps to "show the password screen"
+ * (client/src/main.tsx). A no-op with the gate off: the escape hatch switches
+ * off the whole second-factor flow, password step included.
+ */
+export async function assertReauthProof(input: { req: Request; user: { id: number; sessionVersion: number } }): Promise<void> {
+  if (!isFaceGateEnabled()) return;
+  if (await hasValidReauthProof(input.req, input.user.id, input.user.sessionVersion)) return;
+  throw new TRPCError({ code: "FORBIDDEN", message: REAUTH_REQUIRED_ERR_MSG });
+}
+
+export function clearReauthCookie(req: Request, res: Response) {
+  res.clearCookie(ADMIN_REAUTH_COOKIE_NAME, { ...faceProofCookieOptions(req), maxAge: undefined });
 }
 
 

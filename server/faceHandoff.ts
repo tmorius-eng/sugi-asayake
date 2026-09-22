@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomInt } from "node:crypto";
 import { and, eq, lt, sql } from "drizzle-orm";
 import type { Request, Response } from "express";
 import { TRPCError } from "@trpc/server";
@@ -79,8 +79,9 @@ export async function startFaceHandoff(input: { userId: number; sessionVersion: 
 
   const token = randomBytes(TOKEN_BYTES).toString("base64url");
   // 10..99: утсан дээр бусад сонголтуудаас ялгарах хангалттай, нүдээр
-  // харьцуулахад хялбар хоёр орон.
-  const matchNumber = 10 + Math.floor(Math.random() * 90);
+  // харьцуулахад хялбар хоёр орон. CSPRNG (2026-09-22 аудит) — Math.random-ын
+  // дарааллыг таах онолын боломжийг ч үлдээхгүй.
+  const matchNumber = randomInt(10, 100);
   const expiresAt = new Date(Date.now() + FACE_HANDOFF_TTL_MS);
   await db.insert(faceHandoffRequests).values({
     tokenHash: hashToken(token),
@@ -137,13 +138,20 @@ export async function getFaceHandoffContext(input: { token: string; userId: numb
   if (row.status !== "pending") throw new TRPCError({ code: "BAD_REQUEST", message: row.status === "expired" ? "Энэ кодны хугацаа дууссан. Компьютер дээрээ шинэ код гаргана уу." : "Энэ кодыг аль хэдийн ашигласан байна." });
 
   const choices = new Set<number>([row.matchNumber]);
-  while (choices.size < FACE_HANDOFF_NUMBER_CHOICES) choices.add(10 + Math.floor(Math.random() * 90));
+  while (choices.size < FACE_HANDOFF_NUMBER_CHOICES) choices.add(randomInt(10, 100));
+  // Fisher–Yates: `sort(() => Math.random() - 0.5)` нь хазайлттай — зөв тоо
+  // эхний байранд илүү олон удаа гардаг байсан (таахад тус болно).
+  const shuffled = [...choices];
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const j = randomInt(0, i + 1);
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
   return {
     device: describeUserAgent(row.desktopAgent ?? undefined),
     ip: row.desktopIp,
     requestedAt: row.createdAt,
     expiresAt: row.expiresAt,
-    numberChoices: [...choices].sort(() => Math.random() - 0.5),
+    numberChoices: shuffled,
     differentNetwork: Boolean(row.desktopIp && input.req.ip && row.desktopIp !== input.req.ip),
   };
 }

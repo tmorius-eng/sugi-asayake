@@ -9,6 +9,11 @@ const reasonLabels: Record<string, string> = {
   invalid_credentials: "Имэйл/нууц үг буруу",
   suspended: "Түр хаагдсан",
   unverified: "Баталгаажаагүй",
+  locked: "Олон буруу оролдлого — түгжигдсэн",
+  // /admin-ийн нууц үгийн алхам (2026-09-22).
+  reauth: "/admin нууц үг баталгаажуулсан",
+  reauth_invalid: "/admin нууц үг буруу",
+  reauth_locked: "/admin нууц үг — түгжигдсэн",
 };
 
 const formatDateTime = (date: Date) => new Date(date).toLocaleString("mn-MN", { dateStyle: "medium", timeStyle: "short" });

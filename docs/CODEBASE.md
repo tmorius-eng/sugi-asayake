@@ -59,14 +59,14 @@ browser → /api/trpc/<router>.<procedure>
 | `index.ts` | процессын эхлэл (§1) | ажлын бүртгэл, dispatcher энд эхэлдэг |
 | `context.ts` | tRPC контекст: cookie → user | `assertProductionSecrets()` энд (2026-09-20: `JWT_SECRET` + `DATABASE_URL` шатна, `INTEGRATIONS_ENCRYPTION_KEY`/`S3_*`/`PUBLIC_BASE_URL`/`OWNER_EMAIL` warning); session token JWT. User мөр **5 с cache** (`getSessionUserById`, түлхүүр = user id, token БИШ) — session-ийн эрхийг өөрчилдөг бичигч бүр `forgetSessionUser` дуудна (§8 дүрэм 10) |
 | `trpc.ts` | procedure-ийн төрлүүд (**panel builder бүр face proof шаардана**) + **`errorFormatter`** (2026-09-20: production-д INTERNAL / driver-хэлбэртэй мессежийг `INTERNAL_ERR_MSG`-ээр маскална — `maskErrorShape`) | `publicProcedure`, `protectedProcedure`, `adminProcedure`, `financeProcedure`, `staffProcedure`, **`inventoryProcedure`** (admin+warehouse+staff), rate-limit tier: `strict` 8 (бүртгэл/сэргээх/царай), **`login` 20 + данс тус бүрийн lockout 10/15мин** (`countRecentFailedLoginAttempts`), **`checkout` 20**, `phoneVerify` 3, `moderate` 30, `lenient` 600. Эрхийн шалгалт бүхэлдээ ЭНД, дэд router-үүд өөрсдөө эрх шалгадаггүй |
-| `faceProof.ts` | admin царайны proof cookie | таб тус бүр (`x-admin-tab`), 8 цагийн дээд хугацаа, идэвхгүй цонх нь **токен дотроо** явдаг (`idle` claim) тул handoff-ийн 10 минут heartbeat-аар уртсахгүй |
+| `faceProof.ts` | admin царайны proof cookie **+ нууц үгийн step-up cookie** (`sugi_admin_pw`, 2026-09-22) | таб тус бүр (`x-admin-tab`), 8 цагийн дээд хугацаа, идэвхгүй цонх нь **токен дотроо** явдаг (`idle` claim) тул handoff-ийн 10 минут heartbeat-аар уртсахгүй. Царайны proof-ийн `abs` нь нууц үгийн step-up-ийн хугацаагаар хязгаарлагдана. Токен бүр `typ` (`session`/`face`/`reauth`) — уншигч бүр бусдынхыг татгалзана. Mint хийхэд жинхэнэ таб id заавал |
 | `clusterRole.ts` | олон процессын үед хэн ард ажиллах ажлуудыг эзэмшихийг шийднэ | pm2 cluster горимд ЗӨВХӨН instance 0; `RUN_BACKGROUND_JOBS=0/1` дардаг. Үгүй бол орхигдсон сагсны сануулга, вендорын таталт N дахин явна |
 | `security.ts` | header, rate limit tier, CSRF | `limitApiTraffic` (IP тутам **1200**/15мин — 2026-09-20-нд 300-аас өсгөв: CGNAT/оффисын нэг IP-ийн ард олон хэрэглэгч, мөн telemetry tier дангаараа 600 зөвшөөрдөг байсан зөрчил), `protectStateChangingApiRequests`, `limitQPayCallbackTraffic` |
 | `scannerProbes.ts` | `.env`/`.git`/`*.php`/CMS-ийн сканнер probe → шууд 404; IP тутам 1 ц/5 probe → 403 ban | loopback/private хаяг хэзээ ч ban болохгүй (proxy-ийн ард бүгд нэг IP болох эрсдэл); `isScannerProbe` цэвэр, 2 жагсаалтаар тестлэгдсэн |
 | `requestLog.ts` | `LOG_REQUESTS=1` үед access-log мөр | dependency-гүй; dev-д Vite-ийн модулиуд алгасагдана. `LOG_SQL=1` нь `sqlQueryLog.ts`-д |
 | `persistentRateLimit.ts` | strict tier-ийн тоолуур **DB дээр** (`rate_limit_buckets`) | олон instance-д ч хүчинтэй, **fail-open** (DB унавал блоклохгүй). Cart/telemetry tier нь санаатайгаар санах ойд |
 | `dbConnection.ts` | `planMysqlConnection` — TLS төлөвлөгөө | loopback-оос бусад бүх host-д TLS; `DATABASE_CA_CERT` байвал сертификат шалгана, байхгүй бол шифрлээд warning |
-| `faceProof.ts` | админы царайны **proof cookie** (sign/read/refresh/clear) + `assertFaceProofForPanelRole` | Домэйнгүй тул `trpc.ts` бүх panel procedure дээр ажиллуулна. `abs`-гүй (2026-09-12-оос өмнөх) token хүчингүй. `faceAuth.ts` эндээс re-export хийдэг |
+| `faceProof.ts` | админы царайны **proof cookie** (sign/read/refresh/clear) + `assertFaceProofForPanelRole` + **`issueReauthProof`/`assertReauthProof`** (нууц үгийн алхам) | Домэйнгүй тул `trpc.ts` бүх panel procedure дээр ажиллуулна. `abs`- эсвэл `typ`-гүй token хүчингүй. `faceAuth.ts` эндээс re-export хийдэг |
 | `crypto.ts` | AES-GCM шифрлэлт | `INTEGRATIONS_ENCRYPTION_KEY` (64 hex) шаардана, байхгүй бол шатна — интеграцийн нууц үг энүүгээр хадгалагдана |
 | `password.ts` | `hashPassword` / `verifyPassword` | |
 | `cookies.ts` | session cookie-ийн тохиргоо | |
@@ -121,7 +121,7 @@ browser → /api/trpc/<router>.<procedure>
 | `integrations.ts` | интеграцийн тохиргоо (шифрлэгдсэн, merge семантик) |
 | `notifications.ts` | мэдэгдлийн outbox/feed, push subscription |
 | `variants.ts` | variant, салбарын нөөц (`setBranchStock`), ledger унших |
-| `face.ts` | admin царай: enrollment/challenge/attempt |
+| `face.ts` | admin царай: enrollment (**шифрлэгдсэн**, `enc1:` AES-GCM, хуучин plaintext мөр амжилттай шалгалтын дараа шифрлэгдэнэ)/challenge (24 ц retention)/attempt, `countRecentFailedFaceAttempts` (данс тус бүрийн lockout) |
 | `questions.ts` | асуулт/хариулт |
 | `gift-cards.ts` | бэлгийн карт (үүсгэх, хүчингүй, redeem) |
 
@@ -209,7 +209,7 @@ browser → /api/trpc/<router>.<procedure>
 Шаардлагатай `shared/`: `search-synonyms.ts` (`buildSynonymDictionary`), `transliterate.ts` (латин→кирилл), `brand-aliases.ts`, `product-name.ts` (монгол/латин нэрийн харагдац, `catalog-name-display` setting), `product-types.ts`.
 
 ### 3.8 Бусад
-`analytics.ts` (29 экспорт: борлуулалт, дүүрэг, ашиг, CAC, хөрвүүлэлт, буцаалтын хувь, Excel/PDF export), `faceAuth.ts` (админы царайны хаалга — proof cookie 2 deadline-тай: sliding idle 25 мин `exp` + absolute 8 ц `abs`; `refreshFaceProof` зөвхөн бодит оролтын heartbeat-аар, `lockFaceSession` → `face_attempts.idle_locked`; descriptor л сервер рүү ирнэ, гадны API байхгүй), `verifyMn.ts` (SMS баталгаажуулалт), `storage.ts` (S3/R2), `automation.ts` (доорх §7), `notificationOutbox.ts`, `notificationsRouter.ts`, `catalog-validation.ts`, `commerce-lifecycle.ts`.
+`analytics.ts` (29 экспорт: борлуулалт, дүүрэг, ашиг, CAC, хөрвүүлэлт, буцаалтын хувь, Excel/PDF export), `faceAuth.ts` (админы царайны хаалга — урсгал **нууц үг → царай → admin** (2026-09-22); proof cookie 2 deadline-тай: sliding idle 25 мин `exp` + absolute 8 ц `abs`; `refreshFaceProof` зөвхөн бодит оролтын heartbeat-аар, `lockFaceSession` → `face_attempts.idle_locked`; challenge үргэлж `blink`, liveness анхдагчаар блоклоно; 5 бүтэлгүйтэл/15 мин → данс түгжинэ; клиент рүү `distance` БУЦААХГҮЙ; descriptor л сервер рүү ирнэ, гадны API байхгүй), `verifyMn.ts` (SMS баталгаажуулалт), `storage.ts` (S3/R2), `automation.ts` (доорх §7), `notificationOutbox.ts`, `notificationsRouter.ts`, `catalog-validation.ts`, `commerce-lifecycle.ts`.
 
 ---
 
@@ -241,7 +241,7 @@ browser → /api/trpc/<router>.<procedure>
 - **`App.tsx`** — wouter route + нэг MutationObserver/IntersectionObserver (scroll reveal) бүх route-д.
 - **`pages/`** — Home, Shop, ProductDetail, Checkout, Profile (914 мөр: хаягийн дэвтэр, тохиргоо, аюулгүй байдал), Login, ForgotPassword, MyOrders, TrackOrder, Journal/PostDetail, RoutineDetail, Brands, Legal, NotFound, **AdminDashboard** (→ `AdminWorkspace`).
 - **`components/`**
-  - Дэлгүүрийн нүүр: `home/*` (HeroImageSlideshow, KeywordChips, CarouselShelf + ShelfProductCard, CategoryMasonry + CategoryRail, FeaturedBrandsCarousel, BrandStorySection, QuickStatsSection, EditorialBanner, StoreLocatorSection). 2026-09-12-нээс нүүрний харагдах байдал нь `client/src/index.css`-ийн ТӨГСГӨЛД байрлах "COSME KITCHEN RESTYLE" давхаргаар тодорхойлогдоно — хэсгийн CSS засахдаа тэр давхаргад мөн шалгах (эс бөгөөс засвар дарагдана). Admin-ий CSS (design system, face gate) 2026-09-21-ээс `client/src/admin.css`-д — `AdminDashboard.tsx` import хийдэг, storefront татдаггүй. `ShelfProductCard`-ыг ProductDetail мөн ашигладаг.
+  - Дэлгүүрийн нүүр: `home/*` (HeroImageSlideshow, KeywordChips, CarouselShelf + ShelfProductCard, CategoryMasonry + CategoryRail, FeaturedBrandsCarousel, BrandStorySection, QuickStatsSection, EditorialBanner, StoreLocatorSection). 2026-09-12-нээс нүүрний харагдах байдал нь `client/src/index.css`-ийн ТӨГСГӨЛД байрлах "COSME KITCHEN RESTYLE" давхаргаар тодорхойлогдоно — хэсгийн CSS засахдаа тэр давхаргад мөн шалгах (эс бөгөөс засвар дарагдана). Admin-ий CSS (design system) 2026-09-21-ээс `client/src/admin.css`-д — `AdminDashboard.tsx` import хийдэг, storefront татдаггүй. Царайны хаалга/нууц үгийн алхам/QR-ийн CSS 2026-09-22-оос `client/src/face.css`-д — `AdminDashboard.tsx` БА утасны `FaceApprove.tsx` хоёулаа import хийнэ (өмнө нь утасны хуудас загваргүй байв). Нууц үгийн алхам: `components/admin/AdminPasswordStep.tsx`. `ShelfProductCard`-ыг ProductDetail мөн ашигладаг.
   - Админ: `AdminWorkspace.tsx` (816 мөр — хэсгүүдийн router), `admin/AdminSidebar.tsx`, `admin/AdminTopBar.tsx`, `admin/AdminNotificationBell.tsx`, `admin/AdminCommandPalette.tsx`, `admin/GenericListView.tsx`, панель бүр (`AdminProductsPanel`, `AdminOrdersPanel`, `AdminIntegrationsPanel`, `AdminReceivingPanel`, `AdminAnalyticsPanel`, `AdminSecurityCenter`, `AdminPosPanel` …).
   - Нөөц: `inventory/ScanSession.tsx` (сканы дэлгэц), `inventory/TransfersView.tsx`.
   - `ui/*` — shadcn маягийн суурь элементүүд.
@@ -301,6 +301,7 @@ browser → /api/trpc/<router>.<procedure>
 10. **`users` мөрийн эрх/sessionVersion/suspend-ийг өөрчилдөг шинэ функц бүр `forgetSessionUser(id)` дуудна** — эс бөгөөс "бүх төхөөрөмжөөс гарах" 5 с хоцорно (2026-09-12-нд бодитоор гарсан P0).
 13. **Захиалгын мөр өөрчилдөг код (`editAdminOrder`, POS, checkout) нөөцийг `adjustOrderLineStock`/`decrementBranchStock`/`restoreStockForOrder`-оор л хөдөлгөнө** — шууд `branch_stock` бичихгүй (§3.3-ийн ledger дүрэм).
 14. **Зочны захиалга = утас баталгаажсан session** (`requireCheckoutPhoneVerification`) — шинэ захиалгын зам (ж. өөр checkout) энэ шалгалтыг алгасахгүй.
+17. **Царайны шалгалт эхлүүлдэг / царай бүртгэдэг / QR нээдэг шинэ procedure бүр `assertReauthProof`** (нууц үгийн step-up, 2026-09-22) — эс бөгөөс 365 хоногийн сешн cookie дангаараа царай руу хүрнэ. Шинэ JWT бүр өөрийн `typ`-тэй, уншигч нь `typ`-ийг шалгана (нэг түлхүүрээр гарын үсэг зурдаг).
 12. **Шинэ admin procedure = role builder** (`adminProcedure`, `staffProcedure`…), `protectedProcedure` БИШ — эс бөгөөс царайны proof шалгагдахгүй (2026-09-12-ны incident: gate зөвхөн дэлгэц байсан).
 11. **Cloud вендорын URL https + public host** (`validateIntegrationSettings`, `isPrivateHost`) — ntfy л LAN-д зөвшөөрөгдөнө.
 15. **Гадагш чиглэсэн `fetch` бүр `AbortSignal.timeout(...)`-той** (2026-09-20: QPay, verify.mn, Brevo, Honeybadger, OG зураг бүгд 10–15с) — гацсан провайдер checkout-ийн хүсэлтийг хязгааргүй барьж болохгүй.
@@ -308,7 +309,7 @@ browser → /api/trpc/<router>.<procedure>
 
 ---
 
-## 9. Тест (107 vitest файл, 1030+ тест — 2026-09-20; **E2E 19 файл / 192 тест — 2026-09-21**)
+## 9. Тест (115 vitest файл, 1112 тест — 2026-09-22; **E2E 19 файл / 192 тест — 2026-09-21**; царайны хаалганы E2E `E2E_FACE_GATE=1`-ээр л: `face-gate.spec.ts`, `face-handoff.spec.ts`)
 
 ```powershell
 $env:RUN_AUTH_INTEGRATION_TESTS="1"; $env:COMMERCE_INTEGRATION_TESTS="1"; $env:RUN_MEDIA_INTEGRATION_TESTS="1"

@@ -222,7 +222,10 @@ pnpm e2e        # БҮТНЭЭР (desktop + mobile)
 DATABASE_URL=mysql://user:pass@127.0.0.1:3307/defaultdb?ssl-mode=REQUIRED
 DATABASE_CA_CERT_PATH=./oci-ca.pem     # байхгүй бол TLS шалгагдахгүй (warning)
 JWT_SECRET=                            # урт санамсаргүй мөр
-INTEGRATIONS_ENCRYPTION_KEY=           # 64 тэмдэгт hex (32 байт). АЛДВАЛ СЭРГЭЭГДЭХГҮЙ
+INTEGRATIONS_ENCRYPTION_KEY=           # 64 тэмдэгт hex (32 байт). АЛДВАЛ СЭРГЭЭГДЭХГҮЙ.
+                                       # Admin-ийн царайны загвар ч үүгээр шифрлэгдэнэ (2026-09-22):
+                                       # БҮХ машин дээр ИЖИЛ байх ёстой, эс бөгөөс өөр машин дээр
+                                       # бүртгэсэн царай "дахин бүртгүүлнэ үү" болно.
 OWNER_EMAIL=                           # энэ хаягаар бүртгүүлсэн хүн admin болно
 PUBLIC_BASE_URL=https://example.com    # төлбөрийн callback, canonical URL
 PORT=3000
@@ -260,6 +263,13 @@ VAPID_PUBLIC_KEY=
 VAPID_PRIVATE_KEY=
 VAPID_SUBJECT=                         # хоосон = mailto:$OWNER_EMAIL
 NOTIFICATIONS_DISPATCH=                # ЗӨВХӨН нэг машин дээр 1 (production host)
+
+# ---- Admin-ий царайны хаалга ----------------------------------------------------
+# /admin: нууц үг -> царай -> admin (5 ажилтны эрх). Худалдан авагчид хамаарахгүй.
+ADMIN_FACE_GATE_ENABLED=1              # 1 = асаалттай. Бусад утга = бүхэлд нь унтрах
+                                       # (нууц үгийн алхам ч) — яаралтай гарц
+ADMIN_FACE_LIVENESS_ENFORCED=          # хоосон/1 = анивчилтгүй бол татгалзана (2026-09-22-оос
+                                       # анхдагч); 0 = зөвхөн бүртгэнэ, блоклохгүй
 
 # ---- Нэвтрэлт, алдаа, AI -----------------------------------------------------
 FACEBOOK_APP_ID=

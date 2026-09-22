@@ -4,9 +4,12 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import AdminWorkspace from "@/components/AdminWorkspace";
 import AdminFaceGate from "@/components/AdminFaceGate";
-// Admin-only styles (design system, face gate) ride with this lazy chunk
-// instead of the storefront's render-blocking index.css (2026-09-21).
+import { isAdminPanelRole } from "@shared/face-auth";
+// Admin-only styles ride with this lazy chunk instead of the storefront's
+// render-blocking index.css (2026-09-21); the face gate's own sheet is shared
+// with the phone page /face-approve (2026-09-22).
 import "@/admin.css";
+import "@/face.css";
 
 /**
  * Tom, 2026-09-05 (explicit): this page used to wrap AdminWorkspace (the
@@ -30,8 +33,9 @@ import "@/admin.css";
 // guard is upstream of AdminWorkspace's own much finer-grained per-section
 // visibility (client/src/components/admin/AdminSidebar.tsx's SECTION_ROLES)
 // -- it only needs to answer "does this role belong in the admin panel at
-// all", which is just "not a plain customer".
-const ADMIN_PANEL_ROLES = new Set(["staff", "finance", "marketing", "warehouse", "admin"]);
+// all", which is just "not a plain customer". The list itself is the shared
+// one the server's face gate uses (2026-09-22: this used to be a second,
+// hand-copied set that could drift from it).
 
 export default function AdminDashboard() {
   // Marks the document so the storefront's cookie-consent widget stays hidden
@@ -42,7 +46,7 @@ export default function AdminDashboard() {
     return () => document.body.classList.remove("admin-route");
   }, []);
   const { user, loading } = useAuth();
-  const hasAccess = Boolean(user?.role && ADMIN_PANEL_ROLES.has(user.role));
+  const hasAccess = isAdminPanelRole(user?.role);
 
   if (loading) {
     return <div className="grid min-h-screen place-items-center bg-[#f8f5ef]"><LoaderCircle className="animate-spin text-[#df1f3d]" size={28} aria-label="Ачаалж байна" /></div>;

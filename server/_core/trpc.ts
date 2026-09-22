@@ -242,6 +242,10 @@ export const strictRateLimitedProtectedProcedure = protectedProcedure.use(strict
 // нууц үг сэргээх, царай бүртгэх нь ховор үйлдэл тул strict хэвээр.
 const loginRateLimit = persistentRateLimitMiddleware("login", 20, 15 * 60 * 1000);
 export const loginRateLimitedProcedure = publicProcedure.use(loginRateLimit);
+// Admin-ийн нууц үгийн step-up (faceAuth.confirmPassword, 2026-09-22): нэвтрэлттэй
+// ижил 20/15мин/IP tier + ДАНС тус бүрийн lockout. Strict tier (8, амжилтыг ч
+// тоолдог) дээр байвал нэг оффисын NAT-ын ард 9 дэх ажилтан түгжигдэнэ.
+export const loginRateLimitedProtectedProcedure = protectedProcedure.use(loginRateLimit);
 const checkoutRateLimit = persistentRateLimitMiddleware("checkout", 20, 15 * 60 * 1000);
 export const checkoutRateLimitedProcedure = publicProcedure.use(checkoutRateLimit);
 

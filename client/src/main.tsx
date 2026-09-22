@@ -1,6 +1,6 @@
 import { adminTabId } from "@/lib/adminTab";
 import { trpc } from "@/lib/trpc";
-import { FACE_REQUIRED_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
+import { FACE_REQUIRED_ERR_MSG, REAUTH_REQUIRED_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
@@ -69,7 +69,9 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
   // татгалзана (idle lock дууссан, эсвэл lock-оос өмнөх баталгаа). faceAuth.status-
   // ийг дахин асуух нь камерыг дэлгэцэнд буцаана; AdminFaceGate зөвхөн тэр query-
   // ээс render хийнэ.
-  if (error.message === FACE_REQUIRED_ERR_MSG) {
+  // 2026-09-22: нууц үгийн step-up дууссан/байхгүй бол ч мөн адил — status
+  // `passwordConfirmed: false` буцааж, хаалга нууц үгийн дэлгэцийг харуулна.
+  if (error.message === FACE_REQUIRED_ERR_MSG || error.message === REAUTH_REQUIRED_ERR_MSG) {
     void queryClient.invalidateQueries({ predicate: query => Array.isArray(query.queryKey[0]) && (query.queryKey[0] as unknown[])[0] === "faceAuth" });
     return;
   }

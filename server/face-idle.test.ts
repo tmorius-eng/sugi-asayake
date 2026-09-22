@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Request, Response } from "express";
-import { FACE_IDLE_TIMEOUT_MS, FACE_VERIFICATION_TTL_MS } from "../shared/face-auth";
-import { ADMIN_FACE_COOKIE_NAME } from "../shared/const";
+import { FACE_IDLE_TIMEOUT_MS, FACE_REAUTH_TTL_MS, FACE_VERIFICATION_TTL_MS } from "../shared/face-auth";
+import { ADMIN_FACE_COOKIE_NAME, ADMIN_REAUTH_COOKIE_NAME, COOKIE_NAME } from "../shared/const";
 
 /**
  * The /admin idle lock (2026-09-12): 25 minutes without real interaction and
@@ -29,13 +29,20 @@ vi.mock("./db", () => ({
   touchFaceVerified: vi.fn(async () => undefined),
   deleteFaceEnrollment: vi.fn(async () => undefined),
   upsertFaceEnrollment: vi.fn(async () => undefined),
+  countRecentFailedFaceAttempts: vi.fn(async () => 0),
+  encryptFaceEnrollmentIfPlain: vi.fn(async () => undefined),
+  logAdminAction: vi.fn(async () => undefined),
+  // For the token-type tests below: every id resolves to a live, unsuspended
+  // account on the current session version.
+  getSessionUserById: vi.fn(async (id: number) => ({ id, sessionVersion: 3, suspendedAt: null, passwordHash: "x", role: "admin" })),
 }));
 
 const { hasValidFaceProof, issueFaceProof, lockFaceSession, refreshFaceProof } = await import("./faceAuth");
-const { assertFaceProofForPanelRole } = await import("./_core/faceProof");
+const { assertFaceProofForPanelRole, assertReauthProof, hasValidReauthProof, issueReauthProof } = await import("./_core/faceProof");
+const { createContext, signSessionToken } = await import("./_core/context");
 const { ENV } = await import("./_core/env");
 const { SignJWT } = await import("jose");
-const { FACE_REQUIRED_ERR_MSG } = await import("../shared/const");
+const { FACE_REQUIRED_ERR_MSG, REAUTH_REQUIRED_ERR_MSG } = await import("../shared/const");
 
 const USER = 42;
 const SESSION_VERSION = 3;
@@ -51,7 +58,11 @@ function fakeResponse() {
   return { res, jar };
 }
 
-function requestWith(jar: Map<string, string>, tab?: string) {
+/** The tab every request below comes from unless a test says otherwise --
+ *  minting refuses a request with no tab id (2026-09-22). */
+const TAB = "tab-test-0001";
+
+function requestWith(jar: Map<string, string>, tab: string | null = TAB) {
   const cookie = Array.from(jar, ([name, value]) => `${name}=${value}`).join("; ");
   return { headers: { cookie, ...(tab ? { "x-admin-tab": tab } : {}) }, protocol: "https", ip: "203.0.113.7" } as unknown as Request;
 }
@@ -184,7 +195,7 @@ describe("face proof is bound to the browser tab that earned it (2026-09-14)", (
     // A freshly opened tab has a new id -- exactly the "closed the tab and came back" case.
     expect(await hasValidFaceProof(requestWith(jar, "tab-bbbbbbbb"), USER, SESSION_VERSION)).toBe(false);
     // A replayed cookie with no tab header at all is not a proof either.
-    expect(await hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION)).toBe(false);
+    expect(await hasValidFaceProof(requestWith(jar, null), USER, SESSION_VERSION)).toBe(false);
     // The second tab passes the camera: it joins, and the first keeps working.
     await issueFaceProof({ req: requestWith(jar, "tab-bbbbbbbb"), res, userId: USER, sessionVersion: SESSION_VERSION });
     expect(await hasValidFaceProof(requestWith(jar, "tab-bbbbbbbb"), USER, SESSION_VERSION)).toBe(true);
@@ -192,3 +203,107 @@ describe("face proof is bound to the browser tab that earned it (2026-09-14)", (
   });
 });
 
+
+describe("minting needs a real tab id (2026-09-22)", () => {
+  it("refuses to mint a face proof or a password step-up for a header-less request", async () => {
+    const { res, jar } = fakeResponse();
+    await expect(issueFaceProof({ req: requestWith(jar, null), res, userId: USER, sessionVersion: SESSION_VERSION })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(issueReauthProof({ req: requestWith(jar, null), res, userId: USER, sessionVersion: SESSION_VERSION })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(jar.size).toBe(0);
+  });
+});
+
+describe("password step-up before the face (2026-09-22, Tom: password -> face -> admin)", () => {
+  beforeEach(() => vi.useFakeTimers({ now: new Date("2026-09-22T09:00:00Z") }));
+  afterEach(() => vi.useRealTimers());
+
+  it("is valid in the tab it was entered in, for FACE_REAUTH_TTL_MS, and not in another tab", async () => {
+    const { res, jar } = fakeResponse();
+    await issueReauthProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION });
+    expect(jar.has(ADMIN_REAUTH_COOKIE_NAME)).toBe(true);
+    expect(await hasValidReauthProof(requestWith(jar), USER, SESSION_VERSION)).toBe(true);
+    // A new tab (closed and reopened) needs the password again.
+    expect(await hasValidReauthProof(requestWith(jar, "tab-other-0001"), USER, SESSION_VERSION)).toBe(false);
+    vi.advanceTimersByTime(FACE_REAUTH_TTL_MS - 60_000);
+    expect(await hasValidReauthProof(requestWith(jar), USER, SESSION_VERSION)).toBe(true);
+    vi.advanceTimersByTime(120_000);
+    expect(await hasValidReauthProof(requestWith(jar), USER, SESSION_VERSION)).toBe(false);
+  });
+
+  it("belongs to one account and one session version", async () => {
+    const { res, jar } = fakeResponse();
+    await issueReauthProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION });
+    expect(await hasValidReauthProof(requestWith(jar), USER + 1, SESSION_VERSION)).toBe(false);
+    expect(await hasValidReauthProof(requestWith(jar), USER, SESSION_VERSION + 1)).toBe(false);
+  });
+
+  it("survives an idle lock (the face is asked again, not the password)", async () => {
+    const { res, jar } = fakeResponse();
+    await issueReauthProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION });
+    await issueProof(jar, res);
+    await lockFaceSession({ req: requestWith(jar), res, userId: USER, reason: "idle" });
+    expect(await hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION)).toBe(false);
+    expect(await hasValidReauthProof(requestWith(jar), USER, SESSION_VERSION)).toBe(true);
+  });
+
+  it("caps the face proof's absolute window at the password's (8 hours counted from the PASSWORD)", async () => {
+    const { res, jar } = fakeResponse();
+    await issueReauthProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION });
+    // Seven hours later the face is passed; it must end one hour on, when the
+    // password step does -- not eight hours after the face.
+    vi.advanceTimersByTime(7 * 60 * 60 * 1000);
+    await issueProof(jar, res);
+    for (let i = 0; i < 8; i += 1) {
+      vi.advanceTimersByTime(10 * 60 * 1000);
+      await refreshFaceProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION });
+    }
+    expect(await hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION)).toBe(false);
+  });
+
+  it("assertReauthProof refuses without it (the message the client maps to the password screen) and is a no-op with the gate off", async () => {
+    const previous = process.env.ADMIN_FACE_GATE_ENABLED;
+    try {
+      process.env.ADMIN_FACE_GATE_ENABLED = "1";
+      await expect(assertReauthProof({ req: requestWith(new Map()), user: { id: USER, sessionVersion: SESSION_VERSION } })).rejects.toMatchObject({ code: "FORBIDDEN", message: REAUTH_REQUIRED_ERR_MSG });
+      const { res, jar } = fakeResponse();
+      await issueReauthProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION });
+      await expect(assertReauthProof({ req: requestWith(jar), user: { id: USER, sessionVersion: SESSION_VERSION } })).resolves.toBeUndefined();
+      process.env.ADMIN_FACE_GATE_ENABLED = "0";
+      await expect(assertReauthProof({ req: requestWith(new Map()), user: { id: USER, sessionVersion: SESSION_VERSION } })).resolves.toBeUndefined();
+    } finally {
+      process.env.ADMIN_FACE_GATE_ENABLED = previous;
+    }
+  });
+});
+
+describe("token types cannot stand in for each other (2026-09-22 audit)", () => {
+  async function sessionUserFrom(cookieName: string, value: string) {
+    const req = { headers: { cookie: `${cookieName}=${value}` } } as unknown as Request;
+    const ctx = await createContext({ req, res: {} as Response, info: {} } as unknown as Parameters<typeof createContext>[0]);
+    return ctx.user;
+  }
+
+  it("refuses a face proof or a password step-up pasted into the session cookie", async () => {
+    const { res, jar } = fakeResponse();
+    await issueReauthProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION });
+    await issueProof(jar, res);
+    expect(await sessionUserFrom(COOKIE_NAME, jar.get(ADMIN_FACE_COOKIE_NAME)!)).toBeNull();
+    expect(await sessionUserFrom(COOKIE_NAME, jar.get(ADMIN_REAUTH_COOKIE_NAME)!)).toBeNull();
+    // ...and neither proof is accepted in the other's place.
+    const swapped = new Map([[ADMIN_FACE_COOKIE_NAME, jar.get(ADMIN_REAUTH_COOKIE_NAME)!], [ADMIN_REAUTH_COOKIE_NAME, jar.get(ADMIN_FACE_COOKIE_NAME)!]]);
+    expect(await hasValidFaceProof(requestWith(swapped), USER, SESSION_VERSION)).toBe(false);
+    expect(await hasValidReauthProof(requestWith(swapped), USER, SESSION_VERSION)).toBe(false);
+  });
+
+  it("still accepts a real session, including one minted before typ existed (nobody is signed out)", async () => {
+    expect((await sessionUserFrom(COOKIE_NAME, await signSessionToken(USER, SESSION_VERSION)))?.id).toBe(USER);
+    const key = new TextEncoder().encode(ENV.cookieSecret);
+    const legacySession = await new SignJWT({ sub: String(USER), sv: SESSION_VERSION })
+      .setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("365d").sign(key);
+    expect((await sessionUserFrom(COOKIE_NAME, legacySession))?.id).toBe(USER);
+    // A session token is not a proof of anything at the gate.
+    const asProof = new Map([[ADMIN_FACE_COOKIE_NAME, legacySession], [ADMIN_REAUTH_COOKIE_NAME, legacySession]]);
+    expect(await hasValidFaceProof(requestWith(asProof), USER, SESSION_VERSION)).toBe(false);
+    expect(await hasValidReauthProof(requestWith(asProof), USER, SESSION_VERSION)).toBe(false);
+  });
+});

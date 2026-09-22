@@ -31,7 +31,7 @@ export function assertProductionSecrets() {
     throw new Error("DATABASE_URL must be set in production -- every request needs the database.");
   }
   const warnings: string[] = [];
-  if (!ENV.integrationsEncryptionKey || ENV.integrationsEncryptionKey.length !== 64) warnings.push("INTEGRATIONS_ENCRYPTION_KEY (64 hex) -- admin cannot save/read integration credentials (ntfy, StorePay, Smart Software)");
+  if (!ENV.integrationsEncryptionKey || ENV.integrationsEncryptionKey.length !== 64) warnings.push("INTEGRATIONS_ENCRYPTION_KEY (64 hex) -- admin cannot save/read integration credentials (ntfy, StorePay, Smart Software), and no admin can enrol a face (templates are stored encrypted)");
   if (!ENV.s3Bucket || !ENV.s3AccessKeyId || !ENV.s3SecretAccessKey || !ENV.s3PublicBaseUrl) warnings.push("S3_BUCKET / S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY / S3_PUBLIC_BASE_URL -- image uploads and /cdn/* will fail");
   if (!ENV.publicBaseUrl) warnings.push("PUBLIC_BASE_URL -- payment callback URLs, sitemap and OG images fall back to the request Host header");
   if (!ENV.ownerEmail) warnings.push("OWNER_EMAIL -- no account is auto-promoted to admin on registration");
@@ -69,9 +69,14 @@ function secretKey() {
   return devFallbackSecret;
 }
 
+const SESSION_TYP = "session";
+
 export async function signSessionToken(userId: number, sessionVersion: number): Promise<string> {
   const { SignJWT } = await import("jose");
-  return new SignJWT({ sub: String(userId), sv: sessionVersion })
+  // `typ` (2026-09-22): the face proof and the password step-up are signed
+  // with this same key (server/_core/faceProof.ts); each reader refuses the
+  // other kinds.
+  return new SignJWT({ typ: SESSION_TYP, sub: String(userId), sv: sessionVersion })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("365d")
@@ -86,6 +91,14 @@ async function userFromToken(token: string | undefined): Promise<SessionUser | n
 async function resolveUserFromToken(token: string): Promise<SessionUser | null> {
   try {
     const { payload } = await jwtVerify(token, secretKey());
+    // Token confusion (2026-09-22 audit): a face-proof or password-step token
+    // is signed with this same key and also carries {sub, sv}, so before this
+    // check pasting one into the session cookie produced a full session. A
+    // session token minted before `typ` existed has none and stays valid (no
+    // customer is signed out by the fix); another `typ`, or the proof-only
+    // claims, are refused.
+    if (payload.typ !== undefined && payload.typ !== SESSION_TYP) return null;
+    if (payload.abs !== undefined || payload.tabs !== undefined) return null;
     const userId = Number(payload.sub);
     if (!Number.isFinite(userId)) return null;
     // The row comes from a per-user cache (server/db.ts getSessionUserById)

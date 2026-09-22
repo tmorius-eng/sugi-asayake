@@ -20,6 +20,14 @@ export const VISITOR_SESSION_COOKIE_NAME = "sugi_visitor_session";
  * invalidate it exactly like a session.
  */
 export const ADMIN_FACE_COOKIE_NAME = "sugi_admin_face";
+/**
+ * Admin-ийн нууц үгийн step-up (2026-09-22, Tom: "/admin-д эхлээд нууц үг,
+ * дараа нь царай"). Сешн cookie 365 хоног амьдардаг тул нууц үг зөвхөн анх
+ * нэг удаа асуугддаг байсан — /admin шууд царай руу ордог байв. Энэ cookie нь
+ * "энэ табд саяхан нууц үг оруулсан" гэдгийг баталж, царайны шалгалт түүнгүйгээр
+ * эхлэхгүй (server/_core/faceProof.ts).
+ */
+export const ADMIN_REAUTH_COOKIE_NAME = "sugi_admin_pw";
 export const ONE_YEAR_MS = 1000 * 60 * 60 * 24 * 365;
 export const NINETY_DAYS_MS = 1000 * 60 * 60 * 24 * 90;
 export const UNAUTHED_ERR_MSG = 'Please login (10001)';
@@ -27,6 +35,9 @@ export const NOT_ADMIN_ERR_MSG = 'You do not have required permission (10002)';
 /** Admin-panel call made without a live face proof (gate on, idle lock lapsed,
  *  or a proof from before the idle lock existed). The client shows the camera. */
 export const FACE_REQUIRED_ERR_MSG = 'Face verification required (10003)';
+/** Царайны алхам нууц үгийн step-up-гүйгээр дуудагдсан (эсвэл 8 цагийн цонх
+ *  дууссан). Клиент нууц үгийн дэлгэцийг харуулна. */
+export const REAUTH_REQUIRED_ERR_MSG = 'Password confirmation required (10004)';
 /**
  * Аудит 2026-09-20 (P0-2): production-д гэнэтийн (INTERNAL_SERVER_ERROR) эсвэл
  * driver/SQL хэлбэртэй алдааны мессежийн оронд клиент рүү очих цорын ганц текст —

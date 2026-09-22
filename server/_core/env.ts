@@ -155,8 +155,15 @@ export const ENV = {
 
   // Admin face gate: whether a FAILED liveness check blocks entry.
   //
-  // Off by default, deliberately, and this is a considered trade-off rather
-  // than a shortcut. Two separate things happen during a check:
+  // ON BY DEFAULT since 2026-09-22 (Tom chose "анивчилт заавал"): the browser
+  // now asks for a blink and will not submit without seeing one, so a real
+  // person is no longer rejected for failing to blink by chance inside a one-
+  // second capture -- which is what made the earlier default "off" necessary.
+  // "0" switches blocking off again (still recorded). A getter so a test can
+  // toggle it.
+  //
+  // The history below explains the original trade-off. Two separate things
+  // happen during a check:
   //
   //   1. FACE MATCHING -- "is this the enrolled person?" This is the actual
   //      identity control, it is measured server-side against a stored
@@ -177,7 +184,7 @@ export const ENV = {
   //
   // Shipping a door that keeps the owner out is not more secure than one
   // that reliably admits the right person and logs everything.
-  adminFaceLivenessEnforced: process.env.ADMIN_FACE_LIVENESS_ENFORCED === "1",
+  get adminFaceLivenessEnforced() { return process.env.ADMIN_FACE_LIVENESS_ENFORCED !== "0"; },
 
   // Phone push notifications (2026-09-11, server/notifications.ts). Both
   // laptops and any future host share ONE database, and every one of them
