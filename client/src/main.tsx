@@ -3,6 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { FACE_REQUIRED_ERR_MSG, REAUTH_REQUIRED_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, TRPCClientError } from "@trpc/client";
+import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
@@ -163,9 +164,76 @@ function afterHeroShellImagePaint(mount: () => void) {
   setTimeout(mountOnce, 1200);
 }
 
-// Honeybadger-т мэдээлдэг React error boundary ижил багцад байдаг; түлхүүргүй
-// бол App доторх энгийн ErrorBoundary нь хил болно.
-afterHeroShellImagePaint(() => createRoot(document.getElementById("root")!).render(app));
+/**
+ * The wait above must never cost the visitor an interaction (2026-09-22).
+ *
+ * While React waited for the hero to paint (up to 1.2 s), everything on screen
+ * was the server-drawn shell: a Tab went nowhere useful (the skip link did not
+ * exist yet) and a tap on the header's search button did nothing, because the
+ * shell's controls are pictures of controls. The full E2E run caught both.
+ *
+ * So the first sign of a person -- a key, a pointer going down -- mounts React
+ * at once, synchronously (flushSync), before the browser acts on that input:
+ *  - a key: its default action (Tab moving focus) runs on React's DOM, so the
+ *    first Tab lands on the skip link;
+ *  - a pointer: the shell is `inert` (server/_core/heroShell.ts), so the press
+ *    lands on <body>; React's identical DOM is in place by the time the finger
+ *    lifts, and the resulting click -- delivered to <body>, the only common
+ *    ancestor -- is handed to the React element now under that same point.
+ * Nothing changes for a visitor who just looks: the paint-first wait (and the
+ * LCP it protects) stays exactly as measured.
+ */
+const rootElement = document.getElementById("root")!;
+let appMounted = false;
+let pendingTap: { x: number; y: number; at: number } | null = null;
+
+function mountApp(sync: boolean) {
+  if (appMounted) return;
+  appMounted = true;
+  window.removeEventListener("keydown", onFirstKey, true);
+  window.removeEventListener("pointerdown", onFirstPointer, true);
+  const root = createRoot(rootElement);
+  // Honeybadger-т мэдээлдэг React error boundary ижил багцад байдаг; түлхүүргүй
+  // бол App доторх энгийн ErrorBoundary нь хил болно.
+  if (sync) flushSync(() => root.render(app));
+  else root.render(app);
+}
+
+function onFirstKey() {
+  mountApp(true);
+}
+
+function onFirstPointer(event: PointerEvent) {
+  if (event.button !== 0) return;
+  pendingTap = { x: event.clientX, y: event.clientY, at: performance.now() };
+  mountApp(true);
+}
+
+// The click that ends the early press. If the browser already delivered it to
+// a React element there is nothing to do; if it went to <body> (see above),
+// replay it on whatever React drew under the finger. A drag, a scroll or a
+// long press is not a tap and is left alone.
+window.addEventListener("click", event => {
+  const tap = pendingTap;
+  pendingTap = null;
+  if (!tap) return;
+  const target = event.target as Element | null;
+  if (target && target !== rootElement && rootElement.contains(target)) return;
+  if (Math.hypot(event.clientX - tap.x, event.clientY - tap.y) > 12 || performance.now() - tap.at > 1500) return;
+  const under = document.elementFromPoint(tap.x, tap.y);
+  const control = under?.closest<HTMLElement>("a[href], button, input, select, textarea, label, summary, [role='button'], [role='link']");
+  if (!control || !rootElement.contains(control)) return;
+  event.preventDefault();
+  if (control.matches("input, select, textarea")) control.focus();
+  else control.click();
+}, true);
+window.addEventListener("pointercancel", () => { pendingTap = null; }, true);
+
+if (document.getElementById("hero-shell")) {
+  window.addEventListener("keydown", onFirstKey, true);
+  window.addEventListener("pointerdown", onFirstPointer, true);
+}
+afterHeroShellImagePaint(() => mountApp(false));
 if (honeybadgerApiKey) {
   void import("@honeybadger-io/react").then(({ Honeybadger }) => {
     window.addEventListener("error", event => Honeybadger.notify(event.error ?? event.message));

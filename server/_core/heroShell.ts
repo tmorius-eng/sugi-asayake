@@ -22,6 +22,10 @@ import { hasAvif } from "./imagePreload";
  * компьютерийн өргөнд харьцуулж хамгаална. Толгойн бүтэц өөрчлөгдвөл энд
  * мөн өөрчил.
  *
+ * Shell бүхэлдээ `inert` (2026-09-22): фокус, товшилт авахгүй — React ирэхээс
+ * өмнөх анхны Tab/товшилтыг client/src/main.tsx барьж аваад React-ийг шууд
+ * mount хийж, тэр товшилтыг React-ийн ижил элемент рүү дамжуулна.
+ *
  * Дотор нь юу ЗУРАХГҮЙ: интерактив зүйл (цэс, хайлтын хариу), хэрэглэгчийн
  * төлөв (сагсны тоо, хүслийн зүрх) — тэдгээр React ирмэгц гарна; өндөрт
  * нөлөөлөхгүй тул зураг хөдлөхгүй. `aria-hidden` учир дэлгэц уншигчид давхар
@@ -113,7 +117,13 @@ export async function renderHeroShell({ media, textFor, brandLogo, promo }: Hero
 
   const nav = NAV_ITEMS.map(item => `<a href="${item.href}">${esc(textFor(item.slot) || item.fallback)}</a>`).join("");
 
-  return `<div id="hero-shell" aria-hidden="true">${promoBar}<div class="sugi-site">`
+  // `inert` (2026-09-22): the shell is a picture of the page, not the page.
+  // aria-hidden alone left its nav links and brand link focusable (a Tab
+  // before React landed on hidden content and was lost when the shell went
+  // away), and its buttons clickable-but-dead. Inert takes the whole subtree
+  // out of focus and hit-testing; client/src/main.tsx mounts React on the
+  // first key or press and hands the tap to React's identical control.
+  return `<div id="hero-shell" aria-hidden="true" inert>${promoBar}<div class="sugi-site">`
     + `<header class="commerce-header"><div class="commerce-header-inner">`
     + `<div class="commerce-header-left"><a href="/" class="commerce-brand"><img src="${esc(brandLogo)}" alt=""></a></div>`
     + `<div class="commerce-header-search-slot"><div class="header-search header-search--inline"><div class="header-search-field"><input class="header-search-input" placeholder="Бүтээгдэхүүн, брэндээр хайх" readonly tabindex="-1"><button type="button" tabindex="-1" class="header-search-submit">${icon("search", 18)}</button></div></div></div>`

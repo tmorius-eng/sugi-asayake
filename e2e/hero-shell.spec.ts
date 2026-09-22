@@ -99,3 +99,44 @@ test("бусад хуудсанд shell байхгүй, нүүрэнд React и�
   expect(await page.locator("h1").count(), "h1 давхардсан").toBe(1);
   expect(await page.locator(".commerce-header").count(), "толгой давхардсан").toBe(1);
 });
+
+/**
+ * React is held back until the hero has painted (client/src/main.tsx, up to
+ * 1.2 s). That wait must never swallow what the visitor does (2026-09-22):
+ * the full E2E run showed a Tab and a tap on the header search both lost in
+ * that window. Here the hero photograph is slowed down on purpose so the page
+ * sits in exactly that state, and the tap / key happen inside it.
+ */
+test.describe("React хүлээгдэж байх үеийн анхны үйлдэл алдагдахгүй", () => {
+  const holdHero = async (page: Page) => {
+    await page.route(/\.(avif|webp|jpe?g|png)(\?|$)/, async route => {
+      await new Promise(resolve => setTimeout(resolve, 2500));
+      await route.continue().catch(() => undefined);
+    });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.locator("#hero-shell").waitFor();
+  };
+
+  test("анхны Tab нь skip link дээр буна", async ({ page }) => {
+    await holdHero(page);
+    expect(await page.evaluate(() => document.getElementById("root")!.childElementCount), "React аль хэдийн mount болсон — тест хүлээлтийн цонхыг шалгаж чадахгүй").toBe(0);
+    await page.keyboard.press("Tab");
+    await expect(page.locator("a.skip-link")).toBeFocused();
+  });
+
+  test("толгойн товчийг эрт дарахад React-ийн ижил товч ажиллана", async ({ page, isMobile }) => {
+    await holdHero(page);
+    // Утсанд хайлтын дүрс товч, компьютерт харанхуй загварын товч — хоёулаа
+    // shell-д зураг, React-д жинхэнэ товч.
+    const selector = isMobile ? "#hero-shell .header-search-trigger" : "#hero-shell .header-theme-toggle";
+    const box = (await page.locator(selector).boundingBox())!;
+    expect(await page.evaluate(() => document.getElementById("root")!.childElementCount), "React аль хэдийн mount болсон").toBe(0);
+    const themeBefore = await page.evaluate(() => document.documentElement.getAttribute("data-storefront-theme"));
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    if (isMobile) {
+      await expect(page.locator(".header-search-input:visible").first()).toBeVisible({ timeout: 5_000 });
+    } else {
+      await expect.poll(() => page.evaluate(() => document.documentElement.getAttribute("data-storefront-theme")), { timeout: 5_000 }).not.toBe(themeBefore);
+    }
+  });
+});
