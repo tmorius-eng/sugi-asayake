@@ -129,6 +129,13 @@ dulimag ym geeed buh ymiign zasaarai!!! heterhii basic nuur tanih code bichsen b
   серверийн shell, React ирэхэд DOM солигдож фокус/товшилт алга болно. **Push/deploy хийхээс
   өмнө шийдвэр хэрэгтэй**: (a) `ca670e7`-ийг revert, эсвэл (b) эхний keydown/pointerdown дээр
   шууд (`flushSync`) mount хийх fix-forward. Царайны ажил үүнд хамааралгүй.
+- **Deploy (Tom: "Za bugdiin commit push deploy hii")**: commit `7945079` + `ca670e7`,
+  production 09:03 — `DEPLOY-RESTART-OK`, нийтийн health 200, pm2 лог цэвэр. Production
+  хөтчөөр: `/face-approve` картын загвар ачаалагдсан (`face-*.css`), JS алдаа 0. Deploy-ээс
+  өмнө `INTEGRATIONS_ENCRYPTION_KEY` лаптоп ба VM дээр ижил болохыг hash-аар шалгасан.
+  Migration шаардлагагүй. Deploy-ийн дараа бүх admin нэг удаа нууц үг + царай дахин өгнө
+  (хуучин царайны proof `typ`-гүй тул хүчингүй); худалдан авагчийн сешн хөндөгдөөгүй.
+  ⚠️ `ca670e7`-ийн E2E регресс (дээрх) production-д очсон — Tom бүгдийг deploy хийхийг хэлсэн.
 
 ---
 
