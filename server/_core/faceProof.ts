@@ -194,12 +194,7 @@ export async function issueFaceProof(input: { req: Request; res: Response; userI
   const existing = await readFaceProof(input.req, input.userId, input.sessionVersion, { anyTab: true });
   const tab = requireRealTab(input.req);
   const tabs = existing ? [...existing.tabs.filter(t => t !== tab), tab] : [tab];
-  // The face window never outlives the password step that allowed it
-  // (2026-09-22): "8 цагийн дараа заавал дахин нэвтэрнэ" counts from the
-  // PASSWORD, so the proof's absolute deadline is capped by the step-up's.
-  const reauth = await readReauthProof(input.req, input.userId, input.sessionVersion);
-  const uncapped = existing ? existing.absoluteDeadlineMs : Date.now() + FACE_VERIFICATION_TTL_MS;
-  const absolute = reauth ? Math.min(uncapped, reauth.absoluteDeadlineMs) : uncapped;
+  const absolute = existing ? existing.absoluteDeadlineMs : Date.now() + FACE_VERIFICATION_TTL_MS;
   // Joining an existing proof keeps the SHORTER of the two idle windows: a
   // handoff-unlocked session must not be widened by later verifying on a
   // second tab, and a normal session is never shortened by accident either --
@@ -207,6 +202,10 @@ export async function issueFaceProof(input: { req: Request; res: Response; userI
   const idleTimeoutMs = Math.min(input.idleTimeoutMs ?? FACE_IDLE_TIMEOUT_MS, existing?.idleTimeoutMs ?? FACE_IDLE_TIMEOUT_MS);
   const proof = await signFaceProof(input.userId, input.sessionVersion, absolute, tabs, idleTimeoutMs);
   input.res.cookie(ADMIN_FACE_COOKIE_NAME, proof, faceProofCookieOptions(input.req));
+  // The password step that allowed this check is used up (one-shot, see
+  // FACE_REAUTH_TTL_MS): the next time this tab needs the face -- idle lock,
+  // 8 hours -- it needs the password first again.
+  await consumeReauthForTab(input.req, input.res, input.userId, input.sessionVersion, tab);
 }
 
 export async function refreshFaceProof(input: { req: Request; res: Response; userId: number; sessionVersion: number }): Promise<{ ok: boolean; idleExpiresAt: number | null; absoluteExpiresAt: number | null }> {
@@ -266,13 +265,14 @@ function requireRealTab(req: Request): string {
 // nothing enforced it.
 //
 // This cookie is that promise: "the password for this account was entered in
-// THIS tab within the last FACE_REAUTH_TTL_MS". Minted by auth.login (panel
-// roles) and faceAuth.confirmPassword; required before a face check can START,
-// before a face is enrolled, and before the desktop opens a QR handoff
-// (server/routers.ts). Bound like the face proof -- user, sessionVersion, the
-// tabs it was entered in -- so a new tab, a sign-out or a password reset all
-// mean "password again". An idle lock does NOT clear it: inside the window
-// the person re-passes only the face, as the manual says.
+// THIS tab, on the /admin password screen, within the last FACE_REAUTH_TTL_MS".
+// Minted ONLY by faceAuth.confirmPassword (a sign-in on /login does not count:
+// Tom wants the password screen at /admin itself); required before a face
+// check can start or complete, before a face is enrolled, and before the
+// desktop opens a QR handoff (server/routers.ts). ONE-SHOT: a successful face
+// check uses it up (consumeReauthForTab), so every face check -- a new tab,
+// the idle lock, 8 hours, signing out -- is password first, then face. Bound
+// like the face proof: user, sessionVersion, the tabs it was entered in.
 // ---------------------------------------------------------------------------
 
 async function signReauthProof(userId: number, sessionVersion: number, absoluteDeadlineMs: number, tabs: readonly string[]): Promise<string> {
@@ -336,6 +336,20 @@ export async function assertReauthProof(input: { req: Request; user: { id: numbe
 
 export function clearReauthCookie(req: Request, res: Response) {
   res.clearCookie(ADMIN_REAUTH_COOKIE_NAME, { ...faceProofCookieOptions(req), maxAge: undefined });
+}
+
+/** Uses up this tab's password step. Other tabs that entered the password and
+ *  are still mid-way through their own face check keep theirs. */
+async function consumeReauthForTab(req: Request, res: Response, userId: number, sessionVersion: number, tab: string): Promise<void> {
+  const existing = await readReauthProof(req, userId, sessionVersion, { anyTab: true });
+  if (!existing) return;
+  const remaining = existing.tabs.filter(t => t !== tab);
+  if (remaining.length === 0) {
+    clearReauthCookie(req, res);
+    return;
+  }
+  const token = await signReauthProof(userId, sessionVersion, existing.absoluteDeadlineMs, remaining);
+  res.cookie(ADMIN_REAUTH_COOKIE_NAME, token, { ...faceProofCookieOptions(req), maxAge: Math.max(0, existing.absoluteDeadlineMs - Date.now()) });
 }
 
 

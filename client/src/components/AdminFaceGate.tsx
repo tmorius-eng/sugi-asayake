@@ -138,8 +138,9 @@ export default function AdminFaceGate({ children }: { children: React.ReactNode 
   }
 
   // 1-р алхам — нууц үг (2026-09-22). Бүртгэл, аргаа сонгох, камер, QR бүгд
-  // үүний ДАРАА. Idle lock-ийн дараа (8 цагийн дотор, ижил табд) энэ алхам
-  // алгасагдана — зөвхөн царай дахин асууна (docs/ADMIN-MANUAL.md §1).
+  // үүний ДАРАА. Царай асуух БҮРТ (шинэ таб, idle lock, гарч орсон, 8 цаг)
+  // эхлээд энэ дэлгэц гарна: алхам нэг удаагийн, /login-ы нууц үг тооцогдохгүй
+  // (Tom туршаад: "зөвхөн царай уншиж байна, нууц үг гарч ирэхгүй").
   if (!status.passwordConfirmed) {
     return <AdminPasswordStep onConfirmed={() => { setMethod(null); void statusQuery.refetch(); }} />;
   }
@@ -266,7 +267,7 @@ function IdleLockWatcher({ idleTimeoutMs, onLocked }: { idleTimeoutMs: number; o
     <div role="status" aria-live="polite" className="fixed inset-x-3 bottom-3 z-[120] mx-auto max-w-md rounded-2xl border border-[#f0b52d] bg-[#17181b] px-4 py-3 text-white shadow-lg sm:inset-x-auto sm:right-4">
       <p className="text-sm font-bold text-[#f0b52d]">Түгжигдэх гэж байна</p>
       <p className="mt-1 text-xs leading-5 text-white/80">
-        Удаан хугацаанд үйлдэл хийгээгүй тул {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")} минутын дараа /admin түгжигдэж, нүүрээ дахин таниулах шаардлагатай болно.
+        Удаан хугацаанд үйлдэл хийгээгүй тул {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")} минутын дараа /admin түгжигдэж, нууц үг болон царайгаа дахин баталгаажуулах шаардлагатай болно.
       </p>
       <button type="button" onClick={() => { lastActivityRef.current = Date.now(); lastBeatRef.current = Date.now(); heartbeatRef.current(); setRemainingMs(null); }} className="mt-2 rounded-full bg-[#f0b52d] px-3 py-1.5 text-[11px] font-extrabold text-[#17181b]">
         Үргэлжлүүлэх

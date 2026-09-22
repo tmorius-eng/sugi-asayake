@@ -152,12 +152,17 @@ export type FaceChallengeAction = (typeof FACE_CHALLENGE_ACTIONS)[number];
 export const FACE_LOGIN_CHALLENGE: FaceChallengeAction = "blink";
 
 /**
- * How long a password step-up (ADMIN_REAUTH_COOKIE_NAME) stays good for starting
- * face checks in one tab. Same as the face proof's absolute window: an idle lock
- * inside the shift asks for the FACE again, not the password; after 8 hours
- * both expire and /admin starts from the password (docs/ADMIN-MANUAL.md §1).
+ * How long a password step-up (ADMIN_REAUTH_COOKIE_NAME) stays good for the
+ * face check that follows it, in one tab.
+ *
+ * 2026-09-22, second pass (Tom tested it: "zuwhun face unshij baina, password
+ * garj irehgui baina"): the step is now ONE-SHOT. It is used up the moment a
+ * face check succeeds, and a sign-in no longer counts as it -- so every time
+ * /admin asks for the face (a new tab, after the 25-minute idle lock, after
+ * signing out, after 8 hours) the password screen comes first. Ten minutes is
+ * the time to finish that face check: enrolment is ~90 s, a QR handoff 90 s.
  */
-export const FACE_REAUTH_TTL_MS = FACE_VERIFICATION_TTL_MS;
+export const FACE_REAUTH_TTL_MS = 1000 * 60 * 10;
 
 /**
  * Per-account face lockout (2026-09-22 audit): this many failed matches or

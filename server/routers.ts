@@ -231,7 +231,7 @@ import { deletePushSubscription, hasPushSubscription, issueGiftCards, listGiftCa
 import { sendOrderStatusPush, sendPushToUser, webPushEnabled } from "./_core/webPush";
 // Admin face gate (2026-09-08) -- see server/faceAuth.ts.
 import { clearFaceProofCookie, completeFaceVerification, faceProofIdleTimeoutMs, hasValidFaceProof, isFaceGateEnabled, lockFaceSession, refreshFaceProof, startFaceVerification } from "./faceAuth";
-import { NO_TAB, assertReauthProof, clearReauthCookie, hasValidReauthProof, issueReauthProof, tabIdFrom } from "./_core/faceProof";
+import { assertReauthProof, clearReauthCookie, hasValidReauthProof, issueReauthProof } from "./_core/faceProof";
 import { FaceTemplateKeyMissingError } from "./db/face";
 import { approveFaceHandoff, assertHandoffApprovable, claimFaceHandoff, denyFaceHandoff, getFaceHandoffContext, startFaceHandoff } from "./faceHandoff";
 import { FACE_DESCRIPTOR_LENGTH, FACE_DIAGNOSTIC_MAX, FACE_IDLE_TIMEOUT_MS, FACE_MODEL_VERSION, isAdminPanelRole, isValidFaceDescriptor } from "../shared/face-auth";
@@ -965,13 +965,10 @@ export const appRouter = router({
         await logAttempt(true);
         const token = await signSessionToken(user.id, user.sessionVersion);
         ctx.res.cookie(COOKIE_NAME, token, getSessionCookieOptions(ctx.req));
-        // Admin-ийн нууц үгийн step-up (2026-09-22): ажилтан ЭНЭ табд дөнгөж
-        // нууц үгээ оруулсан тул /admin нууц үгийг дахин асуухгүй, шууд царай
-        // руу орно. Толгойгүй (script) хүсэлтэд cookie үүсгэхгүй — нэвтрэлт
-        // өөрөө унахгүй.
-        if (isAdminPanelRole(user.role) && tabIdFrom(ctx.req) !== NO_TAB) {
-          await issueReauthProof({ req: ctx.req, res: ctx.res, userId: user.id, sessionVersion: user.sessionVersion });
-        }
+        // /admin-ий нууц үгийн алхмыг энд ҮҮСГЭХГҮЙ (2026-09-22, Tom туршаад:
+        // "зөвхөн царай уншиж байна, нууц үг гарч ирэхгүй байна") — /login дээр
+        // оруулсан нууц үг /admin-ий алхмыг алгасуулдаг байсан. Одоо /admin
+        // өөрийн нууц үгийн дэлгэцийг ҮРГЭЛЖ харуулна (faceAuth.confirmPassword).
         await mergeGuestCartAndClearCookie(ctx, user.id);
         const { passwordHash: _omit, ...safeUser } = user;
         return safeUser;
@@ -2160,7 +2157,9 @@ export const appRouter = router({
       return {
         gateEnabled,
         // Step one of "password -> face -> admin" (2026-09-22). False means
-        // the browser shows the password screen before anything else.
+        // the browser shows the password screen before anything else -- which
+        // is every time the face is needed: the step is one-shot and a
+        // sign-in does not count as it.
         passwordConfirmed: await hasValidReauthProof(ctx.req, ctx.user.id, ctx.user.sessionVersion),
         enrolled: !!enrollment,
         verified,

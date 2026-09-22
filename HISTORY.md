@@ -25,6 +25,9 @@ dulimag ym geeed buh ymiign zasaarai!!! heterhii basic nuur tanih code bichsen b
 ### Хийсэн
 **Нууц үгийн step-up** (`server/_core/faceProof.ts`): шинэ cookie `sugi_admin_pw`
 (`typ:"reauth"`, user + sessionVersion + таб, **8 цаг** = `FACE_REAUTH_TTL_MS`).
+> ⚠️ Энэ хэсгийн анхны хувилбар (login алгасуулдаг, 8 цаг, idle lock-ийн дараа зөвхөн царай)
+> Tom-ийн туршилтын дараа өөрчлөгдсөн — доорх **"Үргэлжлэл 2"**-ыг үз: одоо нэг удаагийн,
+> 10 мин, царай асуух бүрт нууц үг.
 - `auth.login` панелийн эрхтэнд өөрөө үүсгэнэ (дөнгөж нууц үгээ оруулсан тул дахин асуухгүй).
 - Шинэ `faceAuth.confirmPassword` (login tier 20/15мин/IP + нэвтрэлттэй **хуваалцсан**
   данс тус бүрийн lockout 10/15мин; `login_attempts`-д `reauth`/`reauth_invalid`/`reauth_locked`).
@@ -136,6 +139,23 @@ dulimag ym geeed buh ymiign zasaarai!!! heterhii basic nuur tanih code bichsen b
   Migration шаардлагагүй. Deploy-ийн дараа бүх admin нэг удаа нууц үг + царай дахин өгнө
   (хуучин царайны proof `typ`-гүй тул хүчингүй); худалдан авагчийн сешн хөндөгдөөгүй.
   ⚠️ `ca670e7`-ийн E2E регресс (дээрх) production-д очсон — Tom бүгдийг deploy хийхийг хэлсэн.
+
+### Үргэлжлэл 2: /admin-ий нууц үгийн дэлгэц ҮРГЭЛЖ (2026-09-22)
+Tom туршаад: *"Zunduu ih test hiilee!! Zuwhun face unshij baina!! Password hiih ym garj
+irhgu baina!!!"* Серверийн бүртгэлээр шалгахад яг ижил дараалал 2 удаа: `/login`-оор нууц
+үгээр нэвтэрсэн → ~20 с-ийн дараа царай `verified blink`. Шалтгаан нь миний дизайн:
+`auth.login` step-up-ийг өөрөө үүсгэдэг, мөн 8 цагийн дотор idle lock-ийн дараа зөвхөн
+царай асуудаг байв. Tom-ийн хүсэлт — **/admin өөрийн нууц үгийн дэлгэцийг царай асуух бүрт**.
+- `auth.login` step-up үүсгэхээ болив.
+- Step-up **нэг удаагийн**: `FACE_REAUTH_TTL_MS` 8 ц → **10 мин**, амжилттай царай
+  (`issueFaceProof`) тухайн табын алхмыг зарцуулна (`consumeReauthForTab`; өөр таб дахь
+  хүлээгдэж буй алхам хэвээр). Үр дүн: шинэ таб, idle lock, гарч орсон, 8 цаг → нууц үг + царай;
+  нээлттэй байх хооронд refresh → юу ч асуухгүй; царай бүтэлгүйтвэл 10 мин дотор нууц үггүй дахин.
+- Царайны proof-ийн `abs`-ийг step-up-аар хязгаарладаг байсныг хасав (10 минут болох байсан).
+- Тест: `face-idle.test.ts` (нэг удаагийн, табын тусгаарлалт, proof 8 ц хэвээр),
+  `faceAuth.integration.test.ts` (login тооцогдохгүй; амжилттай царайны дараа дахин шалгалт
+  `REAUTH_REQUIRED`), `e2e/face-gate.spec.ts` — **Tom-ийн яг туршсан зам**: `/login`
+  маягтаар нууц үг → /admin → нууц үгийн дэлгэц (хуучин кодоор унах байсан). 119/119, E2E 8/8.
 
 ### Үргэлжлэл: эхний агшны товч/Tab алдагдахгүй болгов (2026-09-22)
 Tom: *"Ali boloh hereglegchid taalamjtai medremj turuulhiin tuld chadah buhnee hii!!"*

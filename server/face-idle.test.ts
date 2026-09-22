@@ -237,27 +237,38 @@ describe("password step-up before the face (2026-09-22, Tom: password -> face ->
     expect(await hasValidReauthProof(requestWith(jar), USER, SESSION_VERSION + 1)).toBe(false);
   });
 
-  it("survives an idle lock (the face is asked again, not the password)", async () => {
+  it("is ONE-SHOT: a passed face check uses it up, so after an idle lock the password comes first again", async () => {
+    // Tom, after testing the first version: "zuwhun face unshij baina,
+    // password garj irehgui baina" -- the idle lock asked only for the face.
     const { res, jar } = fakeResponse();
     await issueReauthProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION });
     await issueProof(jar, res);
+    expect(await hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION)).toBe(true);
+    expect(await hasValidReauthProof(requestWith(jar), USER, SESSION_VERSION)).toBe(false);
     await lockFaceSession({ req: requestWith(jar), res, userId: USER, reason: "idle" });
     expect(await hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION)).toBe(false);
-    expect(await hasValidReauthProof(requestWith(jar), USER, SESSION_VERSION)).toBe(true);
+    expect(await hasValidReauthProof(requestWith(jar), USER, SESSION_VERSION)).toBe(false);
   });
 
-  it("caps the face proof's absolute window at the password's (8 hours counted from the PASSWORD)", async () => {
+  it("using it up in one tab leaves another tab's pending password step alone", async () => {
+    const { res, jar } = fakeResponse();
+    await issueReauthProof({ req: requestWith(jar, "tab-aaaaaaaa"), res, userId: USER, sessionVersion: SESSION_VERSION });
+    await issueReauthProof({ req: requestWith(jar, "tab-bbbbbbbb"), res, userId: USER, sessionVersion: SESSION_VERSION });
+    await issueFaceProof({ req: requestWith(jar, "tab-aaaaaaaa"), res, userId: USER, sessionVersion: SESSION_VERSION });
+    expect(await hasValidReauthProof(requestWith(jar, "tab-aaaaaaaa"), USER, SESSION_VERSION)).toBe(false);
+    expect(await hasValidReauthProof(requestWith(jar, "tab-bbbbbbbb"), USER, SESSION_VERSION)).toBe(true);
+  });
+
+  it("does not shorten the face proof: it keeps its own 8-hour window after the 10-minute password step lapses", async () => {
     const { res, jar } = fakeResponse();
     await issueReauthProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION });
-    // Seven hours later the face is passed; it must end one hour on, when the
-    // password step does -- not eight hours after the face.
-    vi.advanceTimersByTime(7 * 60 * 60 * 1000);
     await issueProof(jar, res);
-    for (let i = 0; i < 8; i += 1) {
+    // Keep working for an hour, heartbeat every 10 minutes.
+    for (let i = 0; i < 6; i += 1) {
       vi.advanceTimersByTime(10 * 60 * 1000);
       await refreshFaceProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION });
     }
-    expect(await hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION)).toBe(false);
+    expect(await hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION)).toBe(true);
   });
 
   it("assertReauthProof refuses without it (the message the client maps to the password screen) and is a no-op with the gate off", async () => {

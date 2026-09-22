@@ -83,7 +83,7 @@ function callerFor(userId: number, role: string, sessionVersion = 0, cookie?: st
       lastSignedIn: new Date(),
     } as unknown as TrpcContext["user"],
     req: { protocol: "https", headers: { "x-admin-tab": TAB, ...(cookie ? { cookie } : {}) }, cookies: {}, ip, socket: { remoteAddress: ip } } as unknown as TrpcContext["req"],
-    res: { cookie: (name: string, value: string) => { jar?.set(name, value); }, clearCookie: () => undefined } as unknown as TrpcContext["res"],
+    res: { cookie: (name: string, value: string) => { jar?.set(name, value); }, clearCookie: (name: string) => { jar?.delete(name); } } as unknown as TrpcContext["res"],
   };
   return appRouter.createCaller(ctx);
 }
@@ -95,8 +95,11 @@ async function proofCookie(userId: number, options: { sessionVersion?: number; f
   const res = { cookie: (name: string, value: string) => { jar.set(name, value); }, clearCookie: () => undefined } as unknown as TrpcContext["res"];
   const req = () => ({ protocol: "https", headers: { "x-admin-tab": TAB, cookie: Array.from(jar, ([n, v]) => `${n}=${v}`).join("; ") } }) as unknown as TrpcContext["req"];
   const sessionVersion = options.sessionVersion ?? 0;
-  await issueReauthProof({ req: req(), res, userId, sessionVersion });
+  // Face first: a passed face check uses up the password step (one-shot), so
+  // a caller that needs BOTH (e.g. replacing a working face) gets the step
+  // entered after it, the way a browser would by confirming the password again.
   if (options.face) await issueFaceProof({ req: req(), res, userId, sessionVersion });
+  await issueReauthProof({ req: req(), res, userId, sessionVersion });
   return Array.from(jar, ([name, value]) => `${name}=${value}`).join("; ");
 }
 
@@ -314,7 +317,7 @@ describeWithDatabase("admin face gate (real DB)", () => {
     await expect(callerFor(lockedId, "staff").faceAuth.confirmPassword({ password: PASSWORD })).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS" });
   });
 
-  it("a fresh login by a panel role already counts as the password step; a customer's does not", async () => {
+  it("a sign-in on /login does NOT count as the /admin password step (Tom: the password screen must appear at /admin)", async () => {
     const adminId = await makeUser("admin");
     // A per-run IP: the login tier counts in the database, and a fixed one
     // would block a re-run inside 15 minutes.
@@ -326,10 +329,8 @@ describeWithDatabase("admin face gate (real DB)", () => {
     });
     const adminJar = new Map<string, string>();
     await loginCaller(adminJar).auth.login({ phone: phones.get(adminId)!, password: PASSWORD });
-    expect(adminJar.has(ADMIN_REAUTH_COOKIE_NAME)).toBe(true);
-    const customerJar = new Map<string, string>();
-    await loginCaller(customerJar).auth.login({ phone: phones.get(customerUserId)!, password: PASSWORD });
-    expect(customerJar.has(ADMIN_REAUTH_COOKIE_NAME)).toBe(false);
+    expect(adminJar.has(ADMIN_REAUTH_COOKIE_NAME)).toBe(false);
+    expect((await callerFor(adminId, "admin").faceAuth.status()).passwordConfirmed).toBe(false);
   });
 
   it("replacing a face that still works needs the CURRENT face too (Tom: password + current face)", async () => {
@@ -440,6 +441,20 @@ describeWithDatabase("admin face gate (real DB)", () => {
       if (previous === undefined) delete process.env.ADMIN_FACE_LIVENESS_ENFORCED;
       else process.env.ADMIN_FACE_LIVENESS_ENFORCED = previous;
     }
+  });
+
+  it("a passed face check uses up the password step: the next face check (idle lock) needs the password again", async () => {
+    await upsertFaceEnrollment({ userId: staffUserId, descriptor: descriptorOf(0), sampleCount: 5, modelVersion: FACE_MODEL_VERSION });
+    const jar = new Map<string, string>();
+    for (const part of (await proofCookie(staffUserId)).split("; ")) { const i = part.indexOf("="); jar.set(part.slice(0, i), part.slice(i + 1)); }
+    const browser = () => callerFor(staffUserId, "staff", 0, Array.from(jar, ([n, v]) => `${n}=${v}`).join("; "), jar);
+    const { challengeId } = await browser().faceAuth.startVerification();
+    expect((await browser().faceAuth.completeVerification({ challengeId, descriptor: descriptorOf(0.005), livenessPassed: true })).ok).toBe(true);
+    const status = await browser().faceAuth.status();
+    expect(status.verified).toBe(true);
+    expect(status.passwordConfirmed).toBe(false);
+    // A second face check (what the idle lock leads to) is refused without it.
+    await expect(browser().faceAuth.startVerification()).rejects.toMatchObject({ message: REAUTH_REQUIRED_ERR_MSG });
   });
 
   it("accepts a matching face that passed liveness, and records the attempt", async () => {

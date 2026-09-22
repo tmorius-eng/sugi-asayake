@@ -1,7 +1,8 @@
 import { eq } from "drizzle-orm";
 import { expect, test } from "./helpers/fixtures";
-import { faceEnrollments } from "../drizzle/schema";
+import { adminAuditLogs, faceEnrollments, loginAttempts, users } from "../drizzle/schema";
 import { getDb } from "../server/db";
+import { hashPassword } from "../server/_core/password";
 import { FACE_MODEL_VERSION } from "../shared/face-auth";
 import { E2E_MARKER } from "./helpers/environment";
 import { ensureE2EUser, signInAs } from "./helpers/session";
@@ -65,8 +66,8 @@ test.describe("admin: нууц үг -> царай", () => {
       await page.getByRole("button", { name: "Үргэлжлүүлэх" }).click();
       await expect(page.getByRole("button", { name: /Энэ төхөөрөмжөөр баталгаажуулах/ })).toBeVisible({ timeout: 15_000 });
 
-      // A reload in the SAME tab keeps the step (8 hours); the admin is not
-      // asked for the password again on every refresh.
+      // A reload in the SAME tab before the face check keeps the step (it
+      // lives 10 minutes, and is used up only by a PASSED face check).
       await page.reload();
       await expect(page.getByRole("button", { name: /Энэ төхөөрөмжөөр баталгаажуулах/ })).toBeVisible({ timeout: 15_000 });
 
@@ -77,6 +78,33 @@ test.describe("admin: нууц үг -> царай", () => {
       await second.close();
     } finally {
       await db!.delete(faceEnrollments).where(eq(faceEnrollments.userId, admin.id));
+    }
+  });
+
+  test("/login маягтаар нууц үгээ оруулаад /admin руу ороход ч /admin-ий нууц үгийн дэлгэц гарна (Tom-ийн туршсан зам)", async ({ page }) => {
+    // 2026-09-22, Tom after testing the first version: "zuwhun face unshij
+    // baina, password garj irehgui baina". The server log showed exactly
+    // this path twice: /login with the password, then /admin -> face only,
+    // because a sign-in used to count as the /admin password step.
+    const db = await getDb();
+    const phone = `7${Math.floor(1_000_000 + Math.random() * 8_999_999)}`;
+    const password = `${E2E_MARKER}-login-form-password`;
+    await db!.insert(users).values({ name: `${E2E_MARKER} login-form admin`, phone, email: `${E2E_MARKER}-login-form-${Date.now()}@example.invalid`, passwordHash: await hashPassword(password), role: "admin" });
+    const [created] = await db!.select().from(users).where(eq(users.phone, phone)).limit(1);
+    await db!.insert(faceEnrollments).values({ userId: created.id, descriptorJson: JSON.stringify(Array.from({ length: 128 }, () => 0.01)), sampleCount: 5, modelVersion: FACE_MODEL_VERSION, consentedAt: new Date() });
+    try {
+      await page.goto("/login?redirect=%2Fadmin");
+      await page.locator("#login-phone").fill(phone);
+      await page.locator("#login-password").fill(password);
+      await page.locator("button.auth-submit").first().click();
+      await expect(page).toHaveURL(/\/admin/, { timeout: 15_000 });
+      await expect(page.getByRole("heading", { level: 1, name: "Нууц үгээ оруулна уу" })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByRole("button", { name: /Энэ төхөөрөмжөөр баталгаажуулах/ })).toHaveCount(0);
+    } finally {
+      await db!.delete(faceEnrollments).where(eq(faceEnrollments.userId, created.id));
+      await db!.delete(loginAttempts).where(eq(loginAttempts.userId, created.id));
+      await db!.delete(adminAuditLogs).where(eq(adminAuditLogs.actorUserId, created.id));
+      await db!.delete(users).where(eq(users.id, created.id));
     }
   });
 
