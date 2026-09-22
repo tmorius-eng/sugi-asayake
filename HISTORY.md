@@ -152,6 +152,12 @@ Tom: *"Ali boloh hereglegchid taalamjtai medremj turuulhiin tuld chadah buhnee h
 - `e2e/hero-shell.spec.ts`: hero зургийг 2.5 с удаашруулж яг хүлээлтийн цонхонд (`#root`
   хоосныг шалгаад) Tab → skip link, утсанд хайлтын товч → талбар нээгдэнэ, компьютерт
   харанхуй загварын товч → загвар солигдоно. Компьютер + утас.
+- Бүтэн E2E **240 passed / 0 failed** (6 skip = царайны хаалганы spec, `E2E_FACE_GATE=1`-ээр
+  тусад нь 6/6). Deploy `6ddbbe9` — `DEPLOY-RESTART-OK`. Production хөтчөөр (hero-г
+  удаашруулж, `#root` хоосон үед): утсанд эрт товшилт хайлтыг нээв, компьютерт талбарт фокус
+  орсон, анхны Tab хоёуланд `skip-link`, JS алдаа 0; үйлчилж буй HTML-д `inert` байна.
+- Production Lighthouse утас (simulate, 3 удаа): **perf 88 / 87 / 88, a11y 100**, LCP
+  3.23–3.52 с, CLS 0.001 — 09-21-ний 89 / 3.3 с-тэй ижил түвшин, хурд алдагдаагүй.
 
 ---
 
