@@ -40,6 +40,27 @@ async function cf(method, path, body) {
 }
 const ok = (m) => console.log("OK  ", m);
 
+/**
+ * 2026-09-23: phase-ийн entrypoint руу PUT хийх нь тэр phase-ийн БҮХ дүрмийг
+ * солидог — dashboard-аас гараар нэмсэн дүрэм (жишээ нь uptime монитороор
+ * /health-ийг чөлөөлөх) энэ скриптийг дахин ажиллуулахад чимээгүй устдаг байв.
+ * Одоо байгаа дүрмүүдийг уншиж, ЭНЭ скриптийн удирддаг (description-оор
+ * танигдах) дүрмүүдийг л солино; бусдыг нь ЭХЭНД нь хадгална (кэшийн "Never
+ * cache" хаалт төгсгөлдөө үлдэнэ).
+ */
+async function putPhaseRules(phase, ours) {
+  const path = `/zones/${ZONE}/rulesets/phases/${phase}/entrypoint`;
+  let existing;
+  try { existing = (await cf("GET", path)).rules ?? []; } catch { existing = []; } // no entrypoint yet
+  const managed = new Set(ours.map(rule => rule.description));
+  const kept = existing
+    .filter(rule => !managed.has(rule.description))
+    .map(({ id, description, expression, action, action_parameters, ratelimit, enabled, logging }) =>
+      ({ id, description, expression, action, action_parameters, ratelimit, enabled, logging }));
+  if (kept.length) console.log(`     ${phase}: keeping ${kept.length} rule(s) not managed here: ${kept.map(rule => rule.description).join(" | ")}`);
+  return cf("PUT", path, { rules: [...kept, ...ours] });
+}
+
 // Zone settings ------------------------------------------------------------
 for (const [k, value] of [
   ["always_use_https", "on"],
@@ -59,21 +80,18 @@ for (const [k, value] of [
 // 150 req / 10 s per IP is well above a real browser (the home page is ~11
 // batched tRPC calls) but still caps a single-IP flood before it reaches the
 // app's own limiters. An office NAT shares one IP -- raise this if it bites.
-const rl = await cf("PUT", `/zones/${ZONE}/rulesets/phases/http_ratelimit/entrypoint`, {
-  rules: [
+const rl = await putPhaseRules("http_ratelimit", [
     {
       description: "API: max 150 req / 10s per IP, block 10s",
       expression: '(http.request.uri.path contains "/api/")',
       action: "block",
       ratelimit: { characteristics: ["ip.src", "cf.colo.id"], period: 10, requests_per_period: 150, mitigation_timeout: 10 },
     },
-  ],
-});
+]);
 ok(`rate limit rules = ${rl.rules.length}`);
 
 // WAF custom rules (Free plan: up to 5) ------------------------------------
-const waf = await cf("PUT", `/zones/${ZONE}/rulesets/phases/http_request_firewall_custom/entrypoint`, {
-  rules: [
+const waf = await putPhaseRules("http_request_firewall_custom", [
     {
       description: "Block scanner probes (no PHP/WordPress/dotfiles here)",
       expression:
@@ -87,11 +105,12 @@ const waf = await cf("PUT", `/zones/${ZONE}/rulesets/phases/http_request_firewal
     },
     {
       description: "Managed challenge for /admin from outside Mongolia/Japan",
-      expression: '(starts_with(http.request.uri.path, "/admin")) and not (ip.geoip.country in {"MN" "JP"})',
+      // 2026-09-23: admin-ий API ч мөн (tRPC batch дотор `admin.*` байвал) — өмнө нь зөвхөн
+      // /admin HTML хамгаалагдаж, хамгийн чухал API шууд нээлттэй байв.
+      expression: '(starts_with(http.request.uri.path, "/admin") or (starts_with(http.request.uri.path, "/api/trpc/") and http.request.uri.path contains "admin.")) and not (ip.geoip.country in {"MN" "JP"})',
       action: "managed_challenge",
     },
-  ],
-});
+]);
 ok(`WAF custom rules = ${waf.rules.length}`);
 
 // Cache rules (ачааллын бэлтгэл, 2026-09-16) --------------------------------
@@ -107,8 +126,7 @@ ok(`WAF custom rules = ${waf.rules.length}`);
 //   • /sitemap.xml, /robots.txt, /feeds/google-merchant.xml — crawler-ийн
 //     давтамжтай татдаг, origin дээр 10 мин / 1 цагийн TTL-тэй.
 // "respect_origin" гэдэг нь TTL-ийн шийдвэр кодод (нэг эх сурвалж) үлдэнэ гэсэн үг.
-const cache = await cf("PUT", `/zones/${ZONE}/rulesets/phases/http_request_cache_settings/entrypoint`, {
-  rules: [
+const cache = await putPhaseRules("http_request_cache_settings", [
     {
       description: "Cache generated-but-cacheable origin responses (respect origin TTL)",
       expression:
@@ -125,8 +143,7 @@ const cache = await cf("PUT", `/zones/${ZONE}/rulesets/phases/http_request_cache
       action: "set_cache_settings",
       action_parameters: { cache: false },
     },
-  ],
-});
+]);
 ok(`cache rules = ${cache.rules.length}`);
 
 // Optional Access gate on /admin -------------------------------------------

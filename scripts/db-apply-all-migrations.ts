@@ -19,8 +19,10 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import mysql from "mysql2/promise";
 import { planMysqlConnection } from "../server/_core/dbConnection";
+import { refuseProductionDatabase } from "./_refuse-production";
 
 const dir = join(process.cwd(), "drizzle");
+const STRICT = process.argv.includes("--strict");
 const files = readdirSync(dir).filter(name => /^\d{4}_.*\.sql$/.test(name)).sort();
 const SKIPPABLE = /Duplicate foreign key constraint|already exists|Duplicate column|Duplicate key name|Duplicate entry|check that column\/key exists|Can't DROP|doesn't exist|Multiple primary key/i;
 // The marker on a line of its own -- a comment that merely mentions the
@@ -48,6 +50,7 @@ const hasStatement = (chunk: string) => chunk.replace(/\/\*[\s\S]*?\*\//g, "").s
 
 async function main() {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required.");
+  refuseProductionDatabase("db-apply-all-migrations");
   const plan = planMysqlConnection(process.env.DATABASE_URL);
   const connection = await mysql.createConnection({ ...plan.options, multipleStatements: true, timezone: "Z" });
   let applied = 0, skipped = 0;
@@ -59,7 +62,11 @@ async function main() {
         applied += 1;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        if (SKIPPABLE.test(message)) { skipped += 1; console.log(`skip ${file}: ${message.split("\n")[0].slice(0, 120)}`); continue; }
+        // 2026-09-23: `--strict` (CI ба ci-local) — ХООСОН схем дээр ямар ч алдаа
+        // "давтан ажиллуулалт" биш, жинхэнэ гинжний алдаа (0 skip-тэй баталгаажсан);
+        // өргөн SKIPPABLE нь буруу бичсэн хүснэгтийн ALTER-ийг ч залгиж CI-г худал
+        // ногоон болгож болох байв. Хагас migration-той DB-д л strict-гүй ажиллуул.
+        if (!STRICT && SKIPPABLE.test(message)) { skipped += 1; console.log(`skip ${file}: ${message.split("\n")[0].slice(0, 120)}`); continue; }
         console.error(`FAILED ${file}:\n${chunk.slice(0, 300)}\n${message}`);
         await connection.end();
         process.exit(1);

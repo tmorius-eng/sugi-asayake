@@ -34,6 +34,33 @@
  */
 import "dotenv/config";
 
+// 0. БОДИТ ДЭЛГҮҮРИЙН СХЕМ РҮҮ БИЧИХГҮЙ (2026-09-23). `.env`-ийн DATABASE_URL нь
+//    `defaultdb` (production) тул integration suite бүр бараа, захиалга, хэрэглэгч,
+//    тохиргоог шууд амьд дэлгүүрт үүсгэдэг байв — тасарсан run бүр /shop дээр
+//    худалдан авагчдад харагдах "Idempotency test product" зэрэг үлдэгдэл, тайланд
+//    тоологдох тест захиалга үлдээдэг байсны ҮНДСЭН шалтгаан. E2E-тэй ижилээр
+//    (e2e/helpers/environment.ts) ижил HeatWave дээрх `sugi_staging` (prod-ын
+//    хуулбар) руу чиглүүлнэ. Өөр схем: `VITEST_DATABASE_URL`. Production дээр
+//    ухамсартайгаар ажиллуулах шаардлага гарвал `ALLOW_PROD_TESTS=1`.
+//    ⚠️ Шинэ migration-ийг staging-д ч ажиллуулсан байх ёстой (PROJECT-GUIDE).
+{
+  const PRODUCTION_SCHEMAS = new Set(["defaultdb", "mysql", "sys"]);
+  if (process.env.VITEST_DATABASE_URL) process.env.DATABASE_URL = process.env.VITEST_DATABASE_URL;
+  const source = process.env.DATABASE_URL;
+  if (source && process.env.ALLOW_PROD_TESTS !== "1") {
+    try {
+      const url = new URL(source);
+      const schema = url.pathname.replace(/^\//, "");
+      if (PRODUCTION_SCHEMAS.has(schema)) {
+        url.pathname = "/sugi_staging";
+        process.env.DATABASE_URL = url.toString();
+      }
+    } catch {
+      // Задлагдахгүй URL — апп өөрөө холбогдохдоо тодорхой алдаа өгнө.
+    }
+  }
+}
+
 // Guest checkout phone verification (2026-09-14) is a real SMS round trip
 // with verify.mn; no test can answer one. Off here, and the one suite that
 // exercises the guard (checkout-otp.integration.test.ts) switches it on for

@@ -19,7 +19,11 @@ export default tseslint.config(
   // тул `pnpm e2e` уналттай дуусмагц дараагийн `pnpm lint` тэр вендорын
   // bundle-уудаас 3,977 худал алдаа өгдөг байв (аудитын бүтэн E2E run дээр
   // илэрсэн). Гурвуулаа gitignore-д аль хэдийн бий.
-  { ignores: ["dist/**", "node_modules/**", "client/public/**", ".playwright-mcp/**", "scratchpad/**", "scripts/*.mjs", "scripts/load/**", "playwright-report/**", "test-results/**", "blob-report/**"] },
+  // 2026-09-23: `client/public/**` бүхэлдээ БИШ — сайтын өөрийн гараар бичсэн
+  // JS (sw.js, vendor/*-init.js, hero-shell.js) хуудас бүрт ажилладаг тул
+  // шалгагдах ёстой; зөвхөн гадны `silktide-consent-manager.js` болон
+  // `face-models/` (MediaPipe wasm loader) алгасна. `scripts/**/*.mjs` ч мөн.
+  { ignores: ["dist/**", "node_modules/**", "client/public/face-models/**", "client/public/vendor/silktide-consent-manager.js", ".playwright-mcp/**", "scratchpad/**", "scripts/load/**", "playwright-report/**", "test-results/**", "blob-report/**"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -34,8 +38,12 @@ export default tseslint.config(
     languageOptions: { globals: globals.browser },
   },
   {
-    files: ["server/**/*.ts", "scripts/**/*.ts", "shared/**/*.ts"],
+    files: ["server/**/*.ts", "scripts/**/*.ts", "shared/**/*.ts", "scripts/**/*.mjs"],
     languageOptions: { globals: globals.node },
+  },
+  {
+    files: ["client/public/**/*.js"],
+    languageOptions: { sourceType: "script", globals: { ...globals.browser, ...globals.serviceworker } },
   },
   {
     rules: {

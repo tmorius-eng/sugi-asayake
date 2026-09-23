@@ -31,7 +31,8 @@ import { check, group, sleep } from "k6";
 import { Trend } from "k6/metrics";
 
 const BASE = (__ENV.BASE_URL || "http://localhost:3000").replace(/\/$/, "");
-if (/(^|\/\/)sugi\.karkaron\.com/.test(BASE)) {
+// 2026-09-23: том/жижиг үсэг ба төгсгөлийн цэгийг ("SUGI.karkaron.com.") ч барина.
+if (/(^|\/\/|\.)sugi\.karkaron\.com\.?(:|\/|$)/i.test(BASE)) {
   throw new Error("BASE_URL нь production байна. Staging эсвэл localhost руу чиглүүл (толгойн тайлбарыг үз).");
 }
 

@@ -33,7 +33,7 @@
   a restart, so changing -Instances deletes and re-creates the pm2 app (a few
   seconds of 502 on that app, which is why it is opt-in rather than default).
 #>
-param([switch]$Staging, [int]$Instances = 1)
+param([switch]$Staging, [int]$Instances = 1, [switch]$AllowDirty)
 if ($Instances -lt 1) { throw "-Instances must be at least 1" }
 $ErrorActionPreference = "Stop"
 $app = if ($Staging) { "sugi-staging" } else { "sugi" }
@@ -42,6 +42,21 @@ $port = if ($Staging) { 3001 } else { 3000 }
 $publicHost = if ($Staging) { "sugi-staging.karkaron.com" } else { "sugi.karkaron.com" }
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location $root
+
+# 2026-09-23: хоёр лаптоп нэг production-д deploy хийдэг. Хоцорсон лаптоп
+# deploy хийвэл production-ийг ЧИМЭЭГҮЙ хуучин код руу буцаадаг (DB-д шинэ
+# migration аль хэдийн байхад 500), commit хийгээгүй засвар ч зөөгддөг байв.
+Write-Host "==> git preflight" -ForegroundColor Cyan
+git fetch -q origin
+if ($LASTEXITCODE -ne 0) { throw "git fetch failed -- cannot tell whether this checkout is current" }
+$behind = [int](git rev-list --count HEAD..origin/main)
+$dirty = git status --porcelain --untracked-files=no
+if (-not $AllowDirty) {
+  if ($behind -gt 0) { throw "This checkout is $behind commit(s) behind origin/main -- pull first (deploying would roll production back). Override: -AllowDirty" }
+  if ($dirty) { throw "Uncommitted changes would ship without being in git:`n$dirty`nCommit them first. Override: -AllowDirty" }
+}
+$sha = (git rev-parse --short HEAD).Trim()
+Write-Host "deploying $sha"
 
 Write-Host "==> build" -ForegroundColor Cyan
 pnpm build | Out-Null
@@ -62,13 +77,30 @@ set -eo pipefail
 cd ~/__DIR__
 old=$(md5sum pnpm-lock.yaml | cut -c1-32)
 rm -rf dist.new && mkdir dist.new && tar xzf ~/__BUNDLE__ -C dist.new && rm ~/__BUNDLE__
-rm -rf dist && mv dist.new/dist dist && mv -f dist.new/package.json dist.new/pnpm-lock.yaml dist.new/pnpm-workspace.yaml . && rm -rf dist.new
-new=$(md5sum pnpm-lock.yaml | cut -c1-32)
+new=$(md5sum dist.new/pnpm-lock.yaml | cut -c1-32)
+# 2026-09-23: dist-ийг install АМЖИЛТТАЙ болсны ДАРАА л солино. Өмнө нь dist
+# эхэлж солигддог тул install унахад хуучин сервер (index.html-ийг хүсэлт
+# бүрт дахин уншдаг) ШИНЭ клиентийг ХУУЧИН API-тай өгч, pm2-ийн дараагийн
+# автомат restart шинэ серверийг хуучин node_modules дээр асаадаг байв.
 # </dev/null (2026-09-21): this script arrives on bash's STDIN (`bash -s`). pnpm
 # read that stdin and swallowed the rest of the script, so bash hit EOF and exited 0
 # right after the install -- EVERY lockfile-changing deploy silently skipped
 # `pm2 restart` and left the previous build running. Never let a command here read stdin.
-if [ "$old" != "$new" ]; then echo "lockfile changed -> pnpm install --prod"; pnpm install --prod --frozen-lockfile </dev/null 2>&1 | tail -2; fi
+if [ "$old" != "$new" ]; then
+  echo "lockfile changed -> pnpm install --prod"
+  for f in package.json pnpm-lock.yaml pnpm-workspace.yaml; do cp -f "$f" "$f.prev"; done
+  cp -f dist.new/package.json dist.new/pnpm-lock.yaml dist.new/pnpm-workspace.yaml .
+  if ! pnpm install --prod --frozen-lockfile </dev/null 2>&1 | tail -2; then
+    for f in package.json pnpm-lock.yaml pnpm-workspace.yaml; do mv -f "$f.prev" "$f"; done
+    rm -rf dist.new
+    echo "DEPLOY-INSTALL-FAILED: dependencies not installed; the previous build keeps running unchanged"
+    exit 4
+  fi
+  rm -f package.json.prev pnpm-lock.yaml.prev pnpm-workspace.yaml.prev
+else
+  cp -f dist.new/package.json dist.new/pnpm-lock.yaml dist.new/pnpm-workspace.yaml .
+fi
+rm -rf dist.old && { [ ! -d dist ] || mv dist dist.old; } && mv dist.new/dist dist && rm -rf dist.new
 # `pm2 restart` only knows an app that has been started once; staging is
 # started here on first deploy (production was started by hand on 2026-09-13).
 # The running app's mode has to match the requested instance count; pm2 can
@@ -94,10 +126,11 @@ curl -s --max-time 20 http://localhost:__PORT__/health || echo "(local /health n
 echo
 up=$(pm2 jlist 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const a=JSON.parse(d||'[]').find(x=>x.name==='__APP__');console.log(a&&a.pm2_env.status==='online'?Math.round((Date.now()-a.pm2_env.pm_uptime)/1000):-1)})")
 if [ "$up" -lt 0 ] || [ "$up" -gt 120 ]; then echo "DEPLOY-RESTART-FAILED: __APP__ uptime=${up}s -- the previous build is still running"; exit 3; fi
-echo "DEPLOY-RESTART-OK: __APP__ restarted ${up}s ago"
+echo "DEPLOY-RESTART-OK: __APP__ restarted ${up}s ago (__SHA__)"
+rm -rf dist.old
 pm2 status __APP__ | grep __APP__ | cut -c1-100
 '@
-$remote = $remote.Replace("__BUNDLE__", $bundle).Replace("__DIR__", $dir).Replace("__APP__", $app).Replace("__PORT__", "$port").Replace("__INSTANCES__", "$Instances").Replace("`r`n", "`n")  # CRLF checkout -> LF for the remote bash
+$remote = $remote.Replace("__BUNDLE__", $bundle).Replace("__DIR__", $dir).Replace("__APP__", $app).Replace("__PORT__", "$port").Replace("__INSTANCES__", "$Instances").Replace("__SHA__", $sha).Replace("`r`n", "`n")  # CRLF checkout -> LF for the remote bash
 # Sent over stdin, not as an argument: passed as an argument the script is
 # re-split by the remote shell and its quotes are lost ("[: missing ]").
 # tr strips the CR that PowerShell appends to every line when it pipes a

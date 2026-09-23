@@ -34,7 +34,18 @@ import { getDb } from "../server/db";
  * manual path).
  */
 async function main() {
-  if (process.env.DATABASE_ADMIN_URL) process.env.DATABASE_URL = process.env.DATABASE_ADMIN_URL;
+  // 2026-09-23: admin URL нь ЗӨВХӨН ижил схем рүү заасан үед л DATABASE_URL-ийг
+  // орлоно. Өмнө нь `$env:DATABASE_URL=".../sugi_staging"` гэж эхлээд staging-д
+  // туршихаар тохируулсан ч .env-ийн DATABASE_ADMIN_URL (defaultdb) түүнийг
+  // чимээгүй дарж, migration PRODUCTION-д ажиллаж бүртгэгддэг байв.
+  const schemaOf = (value: string | undefined) => { try { return value ? new URL(value).pathname.replace(/^\//, "") : ""; } catch { return ""; } };
+  if (process.env.DATABASE_ADMIN_URL) {
+    if (process.env.DATABASE_URL && schemaOf(process.env.DATABASE_URL) !== schemaOf(process.env.DATABASE_ADMIN_URL)) {
+      console.error(`DATABASE_URL (${schemaOf(process.env.DATABASE_URL)}) ба DATABASE_ADMIN_URL (${schemaOf(process.env.DATABASE_ADMIN_URL)}) өөр схем рүү заасан — аль рүү ажиллуулахаа тодорхойгүй тул зогслоо. Staging-д бол --staging ашигла.`);
+      process.exit(2);
+    }
+    process.env.DATABASE_URL = process.env.DATABASE_ADMIN_URL;
+  }
   // 2026-09-20: `--staging` нь ижил HeatWave дээрх `sugi_staging` схемд ажиллуулна
   // (deploy.ps1 -Staging migration зөөдөггүй — PROJECT-GUIDE-ийн дүрэм). URL-ийн
   // схемийн нэрийг л солино; өөр хост руу хэзээ ч заахгүй.
@@ -52,6 +63,7 @@ async function main() {
     console.error("Usage: pnpm exec tsx scripts/db-apply-migration.ts <drizzle/NNNN_name.sql> [...more]");
     process.exit(2);
   }
+  { const target = new URL(process.env.DATABASE_URL ?? "mysql://-/-"); console.log(`[target] ${target.hostname}:${target.port || "3306"} / ${target.pathname.replace(/^\//, "")}`); }
   const db = await getDb();
   if (!db) {
     console.error("DATABASE_URL is not set (or the connection failed) -- nothing applied.");

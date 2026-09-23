@@ -52,6 +52,10 @@ if (-not $SkipBuild) {
   if ($LASTEXITCODE -ne 0) { throw "Build failed." }
 }
 
+# 2026-09-23: the previous values are restored in `finally` -- these used to stay
+# set in the calling window, so the next `pnpm dev`/`pnpm test` there silently
+# ran in production mode (stale dist, masked errors, secure-only cookies).
+$savedEnv = @{ NODE_ENV = $env:NODE_ENV; LOG_REQUESTS = $env:LOG_REQUESTS; PORT = $env:PORT }
 $env:NODE_ENV = "production"
 $env:LOG_REQUESTS = "1"     # an access-log line per request in this window
 if (-not $env:PORT) { $env:PORT = "3000" }
@@ -78,5 +82,8 @@ try {
   }
 } finally {
   if ($server -and -not $server.HasExited) { Stop-Process -Id $server.Id -Force }
+  foreach ($name in $savedEnv.Keys) {
+    if ($null -eq $savedEnv[$name]) { Remove-Item "Env:\$name" -ErrorAction SilentlyContinue } else { Set-Item "Env:\$name" $savedEnv[$name] }
+  }
   Write-Host "== Stopped." -ForegroundColor Cyan
 }

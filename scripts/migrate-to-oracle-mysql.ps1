@@ -106,7 +106,13 @@ if ($LASTEXITCODE -ne 0) { throw "mysqldump failed with exit code $LASTEXITCODE"
 # a DEFINER that doesn't exist on the target -- and 'avnadmin'@'%' will not
 # exist on OCI -- fails to import. Rewriting them to nothing makes the
 # importing user the definer, which is what we want.
-(Get-Content $sqlFile -Raw) -replace '/\*!5006[0-9] DEFINER=[^*]*\*/', '' -replace 'DEFINER=`[^`]+`@`[^`]+`\s*', '' | Set-Content $sqlFile -NoNewline
+# 2026-09-23: read/write as UTF-8 explicitly. Get-Content/Set-Content without
+# -Encoding use the ANSI code page on Windows PowerShell 5.1 (cp932 on a
+# Japanese-locale machine), which turned every Cyrillic character into "?" --
+# the same bug db-restore.ps1 fixed on 2026-09-21.
+$utf8 = New-Object System.Text.UTF8Encoding($false)
+$dumpText = [IO.File]::ReadAllText($sqlFile, $utf8) -replace '/\*!5006[0-9] DEFINER=[^*]*\*/', '' -replace 'DEFINER=`[^`]+`@`[^`]+`\s*', ''
+[IO.File]::WriteAllText($sqlFile, $dumpText, $utf8)
 $sizeKb = [math]::Round((Get-Item $sqlFile).Length / 1KB, 1)
 Write-Host "     Dump written: $sqlFile ($sizeKb KB)" -ForegroundColor Green
 
@@ -124,7 +130,10 @@ if ($dst.RequireSsl) { $restoreArgs += "--ssl-mode=REQUIRED" }
 if ($LASTEXITCODE -ne 0) { throw "Cannot reach the target server. Check the NLB listener, the subnet security list, and the credentials." }
 & $mysql @restoreArgs -e "CREATE DATABASE IF NOT EXISTS ``$($dst.Database)`` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci" | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Could not create the target schema $($dst.Database)." }
-Get-Content $sqlFile -Raw | & $mysql @restoreArgs $dst.Database
+# mysql reads the file ITSELF with utf8mb4 (2026-09-23; see db-restore.ps1):
+# piping the text through PowerShell re-encodes it with the console code page.
+$sourcePath = $sqlFile.Replace([string][char]92, '/')
+& $mysql @restoreArgs --default-character-set=utf8mb4 $dst.Database -e "source $sourcePath"
 if ($LASTEXITCODE -ne 0) { throw "Restore failed with exit code $LASTEXITCODE" }
 Write-Host "     Restore complete." -ForegroundColor Green
 

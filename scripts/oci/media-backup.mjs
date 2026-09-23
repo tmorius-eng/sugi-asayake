@@ -1,4 +1,3 @@
-/* global process, console, URL */
 // Copies the PUBLIC image bucket into the private backup bucket (2026-09-20).
 //
 // Why this exists: until now the only thing backed up was the database.

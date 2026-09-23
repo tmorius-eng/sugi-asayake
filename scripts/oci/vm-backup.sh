@@ -31,7 +31,10 @@ cd "$(dirname "$0")"
 
 # .env is KEY=VALUE lines (dotenv); export the ones we need without sourcing
 # the whole file (a value containing spaces or '#' would trip `source`).
-env_get() { grep -E "^$1=" .env | head -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'; }
+# `|| true` (2026-09-23): under `set -euo pipefail` a MISSING key made grep exit 1
+# and killed the whole backup before its first log line -- even for the optional
+# DATABASE_CA_CERT_PATH. Required keys are checked explicitly below.
+env_get() { { grep -E "^$1=" .env || true; } | head -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'; }
 DATABASE_ADMIN_URL="$(env_get DATABASE_ADMIN_URL)"
 BACKUP_PASSPHRASE="$(env_get BACKUP_PASSPHRASE)"
 CA_PATH="$(env_get DATABASE_CA_CERT_PATH)"
@@ -40,11 +43,15 @@ CA_PATH="$(env_get DATABASE_CA_CERT_PATH)"
 export BACKUP_PASSPHRASE
 
 # mysql://user:pass@host:port/db?... -- the password is percent-encoded in .env.
-urldecode() { printf '%b' "${1//%/\\x}"; }
+# node, not `printf '%b'` (2026-09-23): %b also interprets backslash escapes, so
+# a password containing a backslash sequence (e.g. "\c") was silently truncated.
+urldecode() { node -e 'process.stdout.write(decodeURIComponent(process.argv[1]))' "$1"; }
 DB_USER="$(urldecode "$(echo "$DATABASE_ADMIN_URL" | sed -E 's#^mysql://([^:]+):.*#\1#')")"
 DB_PASS="$(urldecode "$(echo "$DATABASE_ADMIN_URL" | sed -E 's#^mysql://[^:]+:([^@]*)@.*#\1#')")"
 DB_HOST="$(echo "$DATABASE_ADMIN_URL" | sed -E 's#^mysql://[^@]+@([^:/]+).*#\1#')"
-DB_PORT="$(echo "$DATABASE_ADMIN_URL" | sed -E 's#^mysql://[^@]+@[^:/]+:([0-9]+).*#\1#')"
+# A URL without ":port" used to leave the WHOLE URL in DB_PORT; default 3306.
+DB_PORT="$(echo "$DATABASE_ADMIN_URL" | sed -nE 's#^mysql://[^@]+@[^:/]+:([0-9]+).*#\1#p')"
+DB_PORT="${DB_PORT:-3306}"
 DB_NAME="$(echo "$DATABASE_ADMIN_URL" | sed -E 's#^mysql://[^/]+/([^?]+).*#\1#')"
 
 STAMP="$(date -u +%Y-%m-%d_%H%M%S)"

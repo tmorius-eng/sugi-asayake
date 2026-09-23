@@ -1,4 +1,3 @@
-/* global process, console, URL */
 // Uploads one encrypted dump to the private R2 backup bucket and prunes old
 // ones (2026-09-14). Runs on the VM with the app's own node_modules -- the
 // same @aws-sdk/client-s3 the storefront uses for images -- so no extra

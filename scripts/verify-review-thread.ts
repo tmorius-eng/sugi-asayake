@@ -13,6 +13,7 @@ import "dotenv/config";
 import { eq, like } from "drizzle-orm";
 import { appRouter } from "../server/routers";
 import { getDb } from "../server/db";
+import { refuseProductionDatabase } from "./_refuse-production";
 import { hashPassword } from "../server/_core/password";
 import { adminAuditLogs, orderItems, orders, productReviewLikes, productReviewReplies, productReviews, products, users } from "../drizzle/schema";
 import type { TrpcContext } from "../server/_core/context";
@@ -21,6 +22,7 @@ const PREFIX = "verify-thread-";
 const MARK = `${PREFIX}${Date.now()}`;
 const keep = process.argv.includes("--keep");
 const cleanupOnly = process.argv.includes("--cleanup");
+refuseProductionDatabase("verify-review-thread");
 const db = await getDb();
 if (!db) throw new Error("no db");
 

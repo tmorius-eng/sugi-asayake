@@ -23,7 +23,18 @@ import { getDb } from "../server/db";
  * зөвхөн бүртгэнэ). Тиймээс "дутуу" жагсаалтыг эхний удаад нүдээр шалга.
  */
 async function main() {
-  if (process.env.DATABASE_ADMIN_URL) process.env.DATABASE_URL = process.env.DATABASE_ADMIN_URL;
+  // 2026-09-23: admin URL нь ЗӨВХӨН ижил схем рүү заасан үед л DATABASE_URL-ийг
+  // орлоно. Өмнө нь `$env:DATABASE_URL=".../sugi_staging"` гэж эхлээд staging-д
+  // туршихаар тохируулсан ч .env-ийн DATABASE_ADMIN_URL (defaultdb) түүнийг
+  // чимээгүй дарж, migration PRODUCTION-д ажиллаж бүртгэгддэг байв.
+  const schemaOf = (value: string | undefined) => { try { return value ? new URL(value).pathname.replace(/^\//, "") : ""; } catch { return ""; } };
+  if (process.env.DATABASE_ADMIN_URL) {
+    if (process.env.DATABASE_URL && schemaOf(process.env.DATABASE_URL) !== schemaOf(process.env.DATABASE_ADMIN_URL)) {
+      console.error(`DATABASE_URL (${schemaOf(process.env.DATABASE_URL)}) ба DATABASE_ADMIN_URL (${schemaOf(process.env.DATABASE_ADMIN_URL)}) өөр схем рүү заасан — аль рүү ажиллуулахаа тодорхойгүй тул зогслоо. Staging-д бол --staging ашигла.`);
+      process.exit(2);
+    }
+    process.env.DATABASE_URL = process.env.DATABASE_ADMIN_URL;
+  }
   const staging = process.argv.includes("--staging");
   if (staging && process.env.DATABASE_URL) {
     const swapped = process.env.DATABASE_URL.replace(/\/defaultdb(\?|$)/, "/sugi_staging$1");

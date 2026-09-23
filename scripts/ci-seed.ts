@@ -6,6 +6,7 @@ import "dotenv/config";
 import { eq } from "drizzle-orm";
 import { branches, productCategories } from "../drizzle/schema";
 import { getDb } from "../server/db";
+import { refuseProductionDatabase } from "./_refuse-production";
 
 /**
  * 2026-09-16: барааны ангилал нь салбаруудтай ижил "лавлах мөр". Долоон
@@ -25,6 +26,7 @@ const STORES = [
 ];
 
 async function main() {
+  refuseProductionDatabase("ci-seed");
   const db = await getDb();
   if (!db) throw new Error("DATABASE_URL is required.");
   let created = 0;

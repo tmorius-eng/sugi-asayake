@@ -3,6 +3,16 @@ import { and, desc, eq, inArray, like, or, sql } from "drizzle-orm";
 import { getDb } from "../server/db";
 import { branchStock, carts, orderItems, orders, productCategories, productVariants, products, stockCountLines, stockCounts, stockMovements, users } from "../drizzle/schema";
 
+// `--staging` (2026-09-23): integration тестүүд одоо `sugi_staging` дээр
+// ажилладаг (server/_test-setup.ts) тул тасарсан run-ийн үлдэгдэл ТЭНД үлдэнэ.
+// Энэ туг (purge ч импортлодог) DATABASE_URL-ийн схемийг сольж тэнд хайна.
+if (process.argv.includes("--staging") && process.env.DATABASE_URL) {
+  const url = new URL(process.env.DATABASE_URL);
+  url.pathname = "/sugi_staging";
+  process.env.DATABASE_URL = url.toString();
+  console.log("[staging] sugi_staging схемд хайна.");
+}
+
 /**
  * Read-only inventory of throwaway rows earlier test runs left behind in the
  * live database (docs/PROJECT-GUIDE.md's open item, approved for deletion by Tom
@@ -10,7 +20,8 @@ import { branchStock, carts, orderItems, orders, productCategories, productVaria
  * orders that reference them, and the users those orders belong to -- so the
  * decision is made on the real numbers rather than a name guess.
  *
- *   pnpm exec tsx scripts/test-residue-report.ts
+ *   pnpm exec tsx scripts/test-residue-report.ts            # production (defaultdb)
+ *   pnpm exec tsx scripts/test-residue-report.ts --staging  # sugi_staging (тестүүд 2026-09-23-аас энд)
  *
  * The deleting counterpart is scripts/test-residue-purge.ts.
  */
@@ -100,7 +111,13 @@ export async function collectResidue() {
     const [{ total }] = await db.select({ total: sql<number>`COUNT(*)` }).from(orderItems).where(eq(orderItems.orderId, order.id));
     const [{ test }] = await db.select({ test: sql<number>`COUNT(*)` }).from(orderItems).where(and(eq(orderItems.orderId, order.id), productIds.length ? inArray(orderItems.productId, productIds) : sql`0 = 1`));
     const byName = TEST_ORDER_CUSTOMER_PATTERNS.some(pattern => new RegExp(`^${pattern.replace(/%/g, ".*")}$`, "i").test(order.customerName));
-    if (!byName && Number(total) !== Number(test) && !userIds.includes(order.userId ?? -1)) mixedOrders.push(order.id);
+    const byTestUser = userIds.includes(order.userId ?? -1);
+    // 2026-09-23: зөвхөн тест бараагаар бүрдсэн ч ЖИНХЭНЭ хүн (тест хэрэглэгч/
+    // тест нэр биш) ТӨЛСӨН захиалга бол үлдэгдэл БИШ — "Idempotency test
+    // product" /shop дээр худалдан авагчдад харагдаж байсан тул бодит хүн
+    // худалдаж авсан байж болно. Гараар шалгуулахаар тусад нь мэдээлнэ.
+    const realPaidBuyer = !byName && !byTestUser && order.paymentStatus === "paid";
+    if ((!byName && Number(total) !== Number(test) && !byTestUser) || realPaidBuyer) mixedOrders.push(order.id);
   }
 
   const categoryRows = await db.select({ id: productCategories.id, name: productCategories.name, slug: productCategories.slug })
@@ -150,6 +167,6 @@ if (process.argv[1]?.includes("test-residue-report")) {
   console.log(`\nАнгилал устгах боломжтой (${residue.categories.length}): ${residue.categories.map(category => category.name).join(", ") || "—"}`);
   console.log(`Ангилал бодит бараатай тул ҮЛДЭНЭ (${residue.categoriesInUse.length}): ${residue.categoriesInUse.map(category => category.name).join(", ") || "—"}`);
   console.log(`\nХолбоотой мөрүүд: variant ${residue.variantIds.length}, хөдөлгөөн ${residue.counts.movements}, тавиур ${residue.counts.shelves}, тооллогын мөр ${residue.counts.countLines}, сагс ${residue.counts.carts}, тооллого ${residue.counts.stockCounts}`);
-  console.log(`\nХолимог захиалга (бодит бараатай тул ҮЛДЭНЭ): ${residue.mixedOrders.join(", ") || "—"}`);
+  console.log(`\nХолимог эсвэл бодит хүний ТӨЛСӨН захиалга (гараар шалгана, ҮЛДЭНЭ): ${residue.mixedOrders.join(", ") || "—"}`);
   process.exit(0);
 }

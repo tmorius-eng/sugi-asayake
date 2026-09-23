@@ -269,6 +269,36 @@ Tom: *"ene buh codebase bas ene bichgdsen code line buriin bug olj zasah hurtles
   орчуулга ачаалалт нэг удаа унавал дахин оролддоггүй, popstate туг үлдэж дараагийн
   холбоосыг хуучин scroll-д нээдэг, эх сурвалжид сайтын өөрийн домэйн.
 
+### Үргэлжлэл — скрипт, тохиргоо, CI-ийн аудит (24 олдвор)
+
+- 🔴 **Integration тестүүд production-д бичдэг байв** (`.env` → `defaultdb`) — тасарсан run бүр /shop-д
+  харагдах тест бараа, тайланд тоологдох тест захиалга үлдээдэг байсны ҮНДСЭН шалтгаан.
+  `server/_test-setup.ts` одоо `defaultdb`-г `sugi_staging` болгоно (`VITEST_DATABASE_URL`,
+  `ALLOW_PROD_TESTS=1`). Residue report/purge-д `--staging`.
+- 🔴 **Uptime монитор утас руу ХЭЗЭЭ Ч мэдэгдэл илгээхгүй байв**: `NTFY_URL` алхмын өөрийн `env`-д
+  тул тэр алхмын `if`-д харагддаггүй. Мөн Cloudflare-ийн олон мөрт алдааны хуудас probe алхмыг өөрийг
+  нь унагадаг, хариуны бие bash-д шууд ордог байв.
+- 🔴 **Purge бодит ТӨЛСӨН захиалгыг устгаж болох байв** (тест бараа /shop-д харагдаж байсан тул), транзакцгүй
+  (дундуур унавал хагас цэвэрлэгдсэн DB), шинэхэн тест ангилал дээр FK-ээр унадаг, БҮХ `suppressed`
+  мэдэгдэл болон ажилтны "Sync test" гэсэн чөлөөт тэмдэглэлтэй тооллогыг устгадаг байв.
+- **VM-ийн backup**: сонголттой түлхүүр байхгүй бол `set -e`-ээр чимээгүй зогсдог, порт/нууц үгийн задлал.
+  ⚠️ VM дээрх хуулбар 09-20-ноос хуучин байсан — **долоо хоногийн зургийн backup хэзээ ч ажиллаагүй**.
+  Шинэ хувилбарыг суулгаж, анхны бүрэн зургийн backup-ийг гараар ажиллуулсан (3404 файл, ~146 MB).
+- Deploy: origin/main-ээс хоцорсон эсвэл commit хийгээгүй өөрчлөлттэй бол татгалзана; шинэ dist-ийг
+  `pnpm install` амжилттай болсны дараа л солино.
+- `db-apply-migration`/`db-migration-status`: .env-ийн admin URL сонгосон staging URL-ийг чимээгүй дардаг
+  байв (migration production-д очдог). Гинж, ci-seed, verify-review-thread `defaultdb`-д татгалзана
+  (`scripts/_refuse-production.ts`); гинжинд `--strict` (цэвэр схемд 0 skip-тэй баталгаажсан);
+  `ci-local` алхам бүрийн exit code-ийг шалгадаг болов. E2E_BASE_URL зөвхөн локал/staging.
+- `migrate-to-oracle-mysql.ps1` кирилл үсгийг `?` болгодог байв (db-restore-ийн 09-21-ний засвартай ижил).
+- `cloudflare-harden.mjs` dashboard-ын дүрмүүдийг арчдаг байв (одоо нэгтгэнэ); /admin-ий гадаад
+  шалгалт API-г хамардаггүй байв — ⚠️ скриптийг Tom token-оороо дахин ажиллуулах хүртэл Cloudflare-д үйлчлэхгүй.
+- Жижиг: `demo.ps1` NODE_ENV-ийг цонхонд үлдээдэг, dependency check өөрөө унасныг "none" гэдэг, 0.x
+  минор bump-ийг major гэж тооцдоггүй, `auto-tag --retype` admin-ий засварыг дарж бичдэг, k6-ийн
+  production хамгаалалт том үсгийг алгасдаг, `.gitignore`-д `.env.*`, ESLint `client/public`-ийн
+  өөрийн JS-ийг алгасдаг байв (1 олдвор засагдсан), CI-д `permissions`/`timeout` байгаагүй.
+- Гуравдагч `pnpm/action-setup` одоо ажиллаж буй v6-ийн commit SHA-гаар pin хийгдсэн (GitHub-ийн өөрийн `actions/*` tag-аар хэвээр).
+
 ### Баталгаажуулалт
 
 - `pnpm check` (апп + тест tsconfig) ба `pnpm lint` — НОГООН; `pnpm build` exit 0.

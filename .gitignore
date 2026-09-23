@@ -131,6 +131,13 @@ variant-price-backup-*.json
 # never commit env backups (2026-09-13: one slipped into a commit and was force-removed)
 .env.bak*
 .env.*.bak
+# 2026-09-23: ANY .env variant (.env.staging, .env.production, .env.vm, .env.old …)
+# holds real secrets; only the template is tracked.
+.env.*
+!.env.example
+# Encrypted VM dumps (scripts/oci/vm-backup.sh) and loose restored dumps.
+*.sql.gz.enc
+*.sql.enc
 
 # Local editor/assistant pointer to docs/PROJECT-GUIDE.md -- per machine, not shared
 /CLAUDE.md

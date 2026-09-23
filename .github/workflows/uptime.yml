@@ -24,6 +24,12 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # 2026-09-23: JOB түвшинд. Алхмын өөрийн `env` нь тэр алхмын `if`-д
+    # харагддаггүй тул `env.NTFY_URL != ''` үргэлж худал болж, сайт унасан ч
+    # утас руу мэдэгдэл ХЭЗЭЭ Ч явдаггүй байв.
+    env:
+      NTFY_URL: ${{ secrets.NTFY_URL }}
+      NTFY_TOKEN: ${{ secrets.NTFY_TOKEN }}
     steps:
       - name: Probe /health (3 attempts, 20 s apart)
         id: probe
@@ -55,19 +61,25 @@ jobs:
             # Сайт унасан гэсэн ҮГ БИШ: ирмэг дээр хаагдсан тул төлөв нь ҮЛ МЭДЭГДЭХ.
             echo "detail=Cloudflare challenge (HTTP $code) — мониторыг ирмэг дээр хаасан тул сайтын төлөв ҮЛ МЭДЭГДЭХ. Bot Fight Mode / WAF-ийн тохиргоо хэрэгтэй." >> "$GITHUB_OUTPUT"
           else
-            echo "detail=HTTP ${code:-none} ${json:-no body}" >> "$GITHUB_OUTPUT"
+            # 2026-09-23: НЭГ мөр, 200 тэмдэгт. Cloudflare-ийн 502/530 хуудас олон
+            # мөрт HTML тул мөр бүр буруу output команд болж алхам өөрөө унаж,
+            # мэдэгдэл ба "Fail" алхам хоёулаа алгасагддаг байв.
+            flat=$(printf '%s' "${json:-no body}" | tr -d '\r' | tr '\n' ' ' | cut -c1-200)
+            echo "detail=HTTP ${code:-none} ${flat}" >> "$GITHUB_OUTPUT"
           fi
       - name: Push alert to the phone
         if: steps.probe.outputs.ok == 'false' && env.NTFY_URL != ''
+        # Хариуны бие (гадны текст) скрипт рүү ШУУД орохгүй — env-ээр л
+        # (`$(`/backtick агуулсан бие token-той алхамд bash-аар ажиллахгүй).
         env:
-          NTFY_URL: ${{ secrets.NTFY_URL }}
-          NTFY_TOKEN: ${{ secrets.NTFY_TOKEN }}
+          DETAIL: ${{ steps.probe.outputs.detail }}
+          TITLE: ${{ steps.probe.outputs.blocked == '1' && 'sugi.karkaron.com: monitor blocked (status unknown)' || 'sugi.karkaron.com is DOWN' }}
         run: |
           curl -sS --max-time 20 \
             -H "Authorization: Bearer $NTFY_TOKEN" \
-            -H "Title: ${{ steps.probe.outputs.blocked == '1' && 'sugi.karkaron.com: monitor blocked (status unknown)' || 'sugi.karkaron.com is DOWN' }}" \
+            -H "Title: $TITLE" \
             -H "Priority: 5" -H "Tags: rotating_light" \
-            -d "3 удаа дараалан амжилтгүй: ${{ steps.probe.outputs.detail }} Шалгах: ssh sugi-oci 'pm2 logs sugi --lines 40'" \
+            -d "3 удаа дараалан амжилтгүй: $DETAIL Шалгах: ssh sugi-oci 'pm2 logs sugi --lines 40'" \
             "$NTFY_URL"
       - name: Fail the run when down
         if: steps.probe.outputs.ok == 'false'

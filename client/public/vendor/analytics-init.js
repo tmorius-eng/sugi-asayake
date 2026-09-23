@@ -55,7 +55,7 @@
     if (state.fbLoaded || !config.metaPixel) return;
     state.fbLoaded = true;
     if (!window.fbq) {
-      var n = window.fbq = function () { n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments); };
+      var n = window.fbq = function () { if (n.callMethod) n.callMethod.apply(n, arguments); else n.queue.push(arguments); };
       window._fbq = n; n.push = n; n.loaded = true; n.version = "2.0"; n.queue = [];
       loadScript("https://connect.facebook.net/en_US/fbevents.js");
     }

@@ -40,6 +40,17 @@ const PORT = Number(process.env.E2E_PORT ?? (GATE_ON ? 3101 : 3100));
 const baseURL = process.env.E2E_BASE_URL ?? `http://127.0.0.1:${PORT}`;
 // Гаднах хаяг өгсөн бол (жишээ нь staging тунель) сервер энд ачаалахгүй.
 const startsOwnServer = !process.env.E2E_BASE_URL;
+// 2026-09-23: DB-ийн хамгаалалт зөвхөн ТЕСТ ПРОЦЕССЫН бичилтийг хамардаг —
+// E2E_BASE_URL нь production байвал checkout/profile тестүүд амьд сайтаар
+// бодит захиалга үүсгэж, `signInAs` staging-ийн хэрэглэгчийн id-аар (prod-ын
+// өөр хүнтэй давхцаж болох) cookie гаргана. Зөвхөн локал ба staging.
+{
+  const allowedHosts = new Set(["127.0.0.1", "localhost", "sugi-staging.karkaron.com"]);
+  const host = new URL(baseURL).hostname.toLowerCase();
+  if (!allowedHosts.has(host)) {
+    throw new Error(`E2E_BASE_URL "${host}" зөвшөөрөгдөөгүй — E2E зөвхөн локал сервер эсвэл sugi-staging.karkaron.com дээр ажиллана (бодит сайтад тест захиалга/хэрэглэгч үүсгэнэ).`);
+  }
+}
 
 if (startsOwnServer && !existsSync("dist/index.js")) {
   throw new Error("dist/index.js байхгүй байна — эхлээд `pnpm build` ажиллуул (эсвэл E2E_BASE_URL өг).");

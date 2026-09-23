@@ -46,16 +46,30 @@ async function wipe(): Promise<number> {
 
 const baseEnv = { ...process.env, DATABASE_URL: target.toString(), DATABASE_ADMIN_URL: "" };
 
-function run(args: string[], env: NodeJS.ProcessEnv = baseEnv): string {
+// 2026-09-23: алхам бүрийн exit code-ийг ШАЛГАНА. Өмнө нь үл тоодог байсан тул
+// эвдэрсэн migration гинж юу ч хэвлэлгүй (шүүлтүүр "FAILED"-ийг барьдаггүй),
+// vitest хагас схем дээр ажиллаж, скрипт 0-ээр гардаг — "push-ээс өмнө
+// ci-local" дүрэм худал ногоон өгдөг байв.
+function run(args: string[], env: NodeJS.ProcessEnv = baseEnv): { status: number; text: string } {
   const result = spawnSync("pnpm", args, { env, encoding: "utf8", shell: true });
-  return ((result.stdout ?? "") + (result.stderr ?? "")).replace(ANSI, "");
+  return { status: result.status ?? 1, text: ((result.stdout ?? "") + (result.stderr ?? "")).replace(ANSI, "") };
+}
+function step(label: string, args: string[], pattern: RegExp) {
+  const result = run(args);
+  console.log(pick(result.text, pattern));
+  if (result.status !== 0) {
+    console.error(`
+${label} АМЖИЛТГҮЙ (exit ${result.status}):
+${result.text.slice(-3000)}`);
+    process.exit(result.status || 1);
+  }
 }
 
 const pick = (text: string, pattern: RegExp) => text.split("\n").filter(line => pattern.test(line)).join("\n");
 
 console.log(`wiped ${await wipe()} tables from ${SCHEMA}`);
-console.log(pick(run(["exec", "tsx", "scripts/db-apply-all-migrations.ts"]), /Applied|Error/));
-console.log(pick(run(["exec", "tsx", "scripts/ci-seed.ts"]), /branches:|categories:/));
+step("migration гинж", ["exec", "tsx", "scripts/db-apply-all-migrations.ts", "--strict"], /Applied|FAILED|error|^skip/i);
+step("ci-seed", ["exec", "tsx", "scripts/ci-seed.ts"], /branches:|categories:|error/i);
 
 const testEnv: NodeJS.ProcessEnv = {
   ...baseEnv,
@@ -67,7 +81,9 @@ const testEnv: NodeJS.ProcessEnv = {
   S3_BUCKET: "", S3_REGION: "", S3_ACCESS_KEY_ID: "", S3_SECRET_ACCESS_KEY: "", S3_PUBLIC_BASE_URL: "",
   VERIFY_MN_API_KEY: "",
 };
-const output = run(["exec", "vitest", "run", "--no-file-parallelism", ...process.argv.slice(2)], testEnv);
+const tests = run(["exec", "vitest", "run", "--no-file-parallelism", ...process.argv.slice(2)], testEnv);
+const output = tests.text;
 const failures = output.indexOf("Failed Tests");
 if (failures >= 0) console.log(output.slice(failures, failures + 4000));
 console.log(pick(output, /Test Files|Tests {2}/));
+process.exit(tests.status);

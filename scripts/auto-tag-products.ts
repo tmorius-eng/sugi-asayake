@@ -29,7 +29,7 @@
 import "dotenv/config";
 import { and, eq, isNull, or } from "drizzle-orm";
 import { getDb } from "../server/db";
-import { products, productCategories, type InsertProduct } from "../drizzle/schema";
+import { adminAuditLogs, products, productCategories, type InsertProduct } from "../drizzle/schema";
 import { suggestTagsForProduct, type SuggestedTags } from "../shared/product-tagging";
 
 const APPLY = process.argv.includes("--apply");
@@ -37,6 +37,12 @@ const APPLY = process.argv.includes("--apply");
 // (2026-09-20). Дүрэм сайжрахад хуучин буруу ангилал (жишээ нь "30-Pack" →
 // маск) өөрөө засагдахгүй байсан. Зөвхөн энэ нэг баганад үйлчилнэ.
 const RETYPE = process.argv.includes("--retype");
+// 2026-09-23: --retype нь admin-аас гараар засварласан барааг АЛГАСНА (толгойн
+// "admin тавьсан талбарыг хэзээ ч дарж бичихгүй" амлалт). productType-ийн эх
+// сурвалжийг хадгалдаггүй тул admin-ий маягтаар хадгалсан/үүсгэсэн (аудитын
+// `product.created` / `product.updated`, bulk нийтлэлтээс бусад) бараа бүр
+// "гараар тавьсан байж магадгүй" гэж тооцогдоно. Бүгдийг нь дахин ангилах бол --retype-all.
+const RETYPE_ALL = process.argv.includes("--retype-all");
 
 const COLUMNS = ["skinType", "skinTypes", "skinConcerns", "hairType", "hairConcerns", "fragrancePreference", "wellnessInterests", "productType", "bodySkinType", "bodyConcerns"] as const;
 type Column = (typeof COLUMNS)[number];
@@ -82,6 +88,13 @@ async function main() {
   let untyped = 0;
   const untypedSamples: string[] = [];
 
+  const adminEdited = new Set<number>();
+  if (RETYPE && !RETYPE_ALL) {
+    const edits = await db.select({ id: adminAuditLogs.entityId, metadataJson: adminAuditLogs.metadataJson }).from(adminAuditLogs)
+      .where(and(eq(adminAuditLogs.entityType, "product"), or(eq(adminAuditLogs.action, "product.updated"), eq(adminAuditLogs.action, "product.created"))));
+    for (const edit of edits) if (edit.id != null && !(edit.metadataJson ?? "").includes('"bulk":true')) adminEdited.add(edit.id);
+    console.log(`--retype: admin-аас засварласан ${adminEdited.size} барааг алгасна (--retype-all бол бүгд).`);
+  }
   for (const row of rows) {
     const suggestion: SuggestedTags = suggestTagsForProduct({
       name: row.name, brand: row.brand, categorySlug: row.categorySlug,
@@ -97,7 +110,7 @@ async function main() {
     if (row.fragrancePreference == null && suggestion.fragrancePreference) patch.fragrancePreference = suggestion.fragrancePreference;
     if (row.wellnessInterests == null && suggestion.wellnessInterests?.length) patch.wellnessInterests = suggestion.wellnessInterests.join(",");
     if (row.productType == null && suggestion.productType) patch.productType = suggestion.productType;
-    else if (RETYPE && suggestion.productType && suggestion.productType !== row.productType) retypes.push({ id: row.id, from: row.productType, to: suggestion.productType, name: row.name });
+    else if (RETYPE && !adminEdited.has(row.id) && suggestion.productType && suggestion.productType !== row.productType) retypes.push({ id: row.id, from: row.productType, to: suggestion.productType, name: row.name });
     if (row.bodySkinType == null && suggestion.bodySkinType) patch.bodySkinType = suggestion.bodySkinType;
     if (row.bodyConcerns == null && suggestion.bodyConcerns?.length) patch.bodyConcerns = suggestion.bodyConcerns.join(",");
 
