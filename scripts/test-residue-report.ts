@@ -39,6 +39,18 @@ export const TEST_PRODUCT_PATTERNS = [
   // тааруулна — бодит барааны нэрэнд тэр мөр хэзээ ч байхгүй.
   "Automation test product",
   "%search-test-%",
+  // 2026-09-23: suite-ийн бусад fixture — "Idempotency test product" нь
+  // тасарсан run-аас үлдэж production-ы /shop дээр худалдан авагчдад
+  // ХАРАГДАЖ байв. Эдгээр нь тестийн яг нэрс (grep "name: \"… test product")
+  // тул бодит бараатай давхцахгүй.
+  "Idempotency test product",
+  "Cancel test product",
+  "Notify test product",
+  "OTP test product",
+  "POS test product%",
+  "Refund test product",
+  "Unwind test product",
+  "Wishlist test product",
 ];
 
 export const TEST_USER_PATTERNS = ["%@example.invalid", "guest-checkout-test-%"];

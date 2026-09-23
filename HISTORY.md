@@ -205,6 +205,11 @@ Build хийсэн жинхэнэ CSS-ээр 1366 ба 390 өргөнд screensh
   baseline 1112 → +16 шинэ тест). Ганц уналт нь admin-order-edit тестийн өөрийн 45 с
   хязгаар (салбар зөөх нэмэлт асуулга × бүрэн suite-ийн ачаалал) — 90 с болгож
   тусад нь 3/3 ногоон. Run-ийн дараа тестийн үлдэгдэл 0.
+- Deploy: `2abe751` production-д, `[vm] DEPLOY-RESTART-OK`, нийтийн /health 200,
+  `/index.html` → 301, placeholder алга, буруу хаяг 404. Deploy-ийн дараа бодит
+  /shop хайлтад **"Idempotency test product"** худалдан авагчдад харагдаж байсныг
+  олж (тасарсан run-ын үлдэгдэл, purge дүрэмд байгаагүй) — suite-ийн бүх fixture
+  нэрийг `TEST_PRODUCT_PATTERNS`-д нэмж цэвэрлэв.
 - ⚠️ Windows дээр `TaskStop` зөвхөн shell-ийг алдаг, vitest-ийн node процесс
   үлддэг: хоёр suite нэг DB-г зэрэг дарж, hook timeout-ууд гарч байв. Бүрэн
   зогсоохдоо `taskkill //PID <pid> //T //F`.
