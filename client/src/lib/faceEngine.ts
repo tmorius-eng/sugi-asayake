@@ -45,6 +45,7 @@ import {
   FACE_MIN_DETECTION_SCORE,
   FACE_MODEL_URL,
 } from "@shared/face-auth";
+import { withTimeout } from "./withTimeout";
 
 /** Fixed on purpose — see the GPU-memory note in the file header. 320 is the
  *  a tinyFaceDetector size that keeps detection accurate on the 720p frames
@@ -82,6 +83,11 @@ function requireFaceApi(): typeof FaceApi {
 
 let modelsPromise: Promise<void> | null = null;
 
+/** TFJS-ийн backend эхлэх хугацаа — хэтэрвэл CPU backend (2026-09-23). */
+const BACKEND_TIMEOUT_MS = 10_000;
+/** Гурван загварын татах хязгаар (6.8 MB утасны сүлжээгээр). */
+const MODEL_DOWNLOAD_TIMEOUT_MS = 60_000;
+
 /**
  * Loads the three model files, once per page load.
  *
@@ -106,7 +112,9 @@ export function loadFaceModels(): Promise<void> {
         // Must come first. TFJS picks its backend asynchronously, and calling
         // a model before that resolves throws the "highest priority backend
         // has not yet been initialized" error people hit constantly.
-        await tfBackend.ready();
+        // 2026-09-23: хугацаатай — iOS Safari дээр WebGL backend-ийн эхлэл
+        // алдаа шидэхгүйгээр гацаж болдог (доорх CPU fallback-д шилжинэ).
+        await withTimeout(tfBackend.ready(), BACKEND_TIMEOUT_MS, "MODEL_BACKEND_TIMEOUT");
       } catch {
         // Non-fatal on its own — the loads below will fail with something
         // more specific if the backend is genuinely unusable.
@@ -118,24 +126,29 @@ export function loadFaceModels(): Promise<void> {
       // back to CPU rather than failing: slower per frame, still correct.
       if (tfBackend.getBackend() !== "webgl") {
         try {
-          await tfBackend.setBackend("webgl");
-          await tfBackend.ready();
+          await withTimeout(tfBackend.setBackend("webgl"), BACKEND_TIMEOUT_MS, "MODEL_BACKEND_TIMEOUT");
+          await withTimeout(tfBackend.ready(), BACKEND_TIMEOUT_MS, "MODEL_BACKEND_TIMEOUT");
         } catch {
           try {
-            await tfBackend.setBackend("cpu");
-            await tfBackend.ready();
+            await withTimeout(tfBackend.setBackend("cpu"), BACKEND_TIMEOUT_MS, "MODEL_BACKEND_TIMEOUT");
+            await withTimeout(tfBackend.ready(), BACKEND_TIMEOUT_MS, "MODEL_BACKEND_TIMEOUT");
           } catch {
+            // 2026-09-23: бусад алдааны замтай адил reset — эс бөгөөс
+            // "Дахин оролдох" хуудсыг сэргээх хүртэл ижил татгалзсан promise-ийг
+            // буцааж, дахин оролдох боломжгүй байв.
+            modelsPromise = null;
             throw new Error("MODEL_BACKEND");
           }
         }
       }
 
       try {
-        await Promise.all([
+        // 2026-09-23: хугацаатай (6.8 MB утасны сүлжээгээр) — мөнхийн спиннер биш.
+        await withTimeout(Promise.all([
           lib.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URL),
           lib.nets.faceLandmark68Net.loadFromUri(FACE_MODEL_URL),
           lib.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_URL),
-        ]);
+        ]), MODEL_DOWNLOAD_TIMEOUT_MS, "MODEL_LOAD");
       } catch {
         // Reset so a later retry can try again instead of being stuck with a
         // permanently rejected cached promise.

@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { useScrollToTopOnNavigate } from "./hooks/useScrollToTopOnNavigate";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Suspense, useEffect } from "react";
-import { lazyRetry, markChunksHealthy } from "./lib/lazyRetry";
+import { lazyRetry } from "./lib/lazyRetry";
 import { Route, Switch, useLocation } from "wouter";
 import AddedToCartToast from "./components/AddedToCartToast";
 import BackToTop from "./components/BackToTop";
@@ -121,7 +121,6 @@ function SkipLink() {
 function App() {
   // Render хийгдсэн хуудас нь энэ tab ажилладаг build-тэйн баталгаа тул дараагийн
   // deploy (хэдэн цагийн дараа ч бай) өөрийн нэг удаагийн reload-ыг авна.
-  useEffect(() => { markChunksHealthy(); }, []);
   useEffect(() => {
     const warm = () => {
       void import("./pages/Shop");

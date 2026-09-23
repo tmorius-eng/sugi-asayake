@@ -8,7 +8,7 @@ import { downloadCsv } from "@/lib/csv";
 import { arcPath, polarPoint } from "@/lib/svg-arc";
 import type { RouterOutputs } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
-import { buildDaySeries, rangeOptions, rangeToDates, type RangeKey } from "@/lib/analyticsRange";
+import { buildDaySeries, rangeOptions, rangeToDates, toDayInput, type RangeKey } from "@/lib/analyticsRange";
 import AdminCustomerSegmentsPanel from "./admin/AdminCustomerSegmentsPanel";
 
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Тайлан ачаалж чадсангүй.";
@@ -86,17 +86,24 @@ export default function AdminAnalyticsPanel() {
   if (!report) return null;
 
   const exportCsvTables = () => {
-    downloadCsv(`sugi-analytics-products-${new Date().toISOString().slice(0, 10)}.csv`, ["Бараа", "Зарагдсан тоо", "Орлого (MNT)"], report.topProducts.map(row => [row.productName, row.soldQuantity, row.revenueMnt]));
+    downloadCsv(`sugi-analytics-products-${toDayInput(new Date())}.csv`, ["Бараа", "Зарагдсан тоо", "Орлого (MNT)"], report.topProducts.map(row => [row.productName, row.soldQuantity, row.revenueMnt]));
   };
 
+  // 2026-09-23: тэнхлэгийг цонхны СҮҮЛИЙН өдрөөр бэхэлнэ (AdminSummaryChart-тай
+  // ижил). "7 хоног" нь now-7d → now тул dateFrom-оос урагш 7 өдөр тоолоход
+  // ӨНӨӨДӨР хасагдаж, KPI-д тоологдсон өнөөдрийн борлуулалт sparkline-д алга байв.
+  // Өмнөх үеийнх нь яг түүний өмнөх periodDays өдөр.
+  const lastDay = dates.dateTo ?? new Date();
+  const seriesStart = new Date(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate() - (periodDays - 1));
+  const previousSeriesStart = new Date(seriesStart.getFullYear(), seriesStart.getMonth(), seriesStart.getDate() - periodDays);
   const currentRevenueSeries = dates.dateFrom
-    ? buildDaySeries(report.revenueTimeseries, dates.dateFrom, periodDays, "revenueMnt")
+    ? buildDaySeries(report.revenueTimeseries, seriesStart, periodDays, "revenueMnt")
     : report.revenueTimeseries.slice(-periodDays).map(row => row.revenueMnt);
   const currentOrderSeries = dates.dateFrom
-    ? buildDaySeries(report.revenueTimeseries, dates.dateFrom, periodDays, "orderCount")
+    ? buildDaySeries(report.revenueTimeseries, seriesStart, periodDays, "orderCount")
     : report.revenueTimeseries.slice(-periodDays).map(row => row.orderCount);
-  const previousRevenueSeries = dates.dateFrom && previousPeriodFrom ? buildDaySeries(report.periodComparison.previousRevenueTimeseries, previousPeriodFrom, periodDays, "revenueMnt") : null;
-  const previousOrderSeries = dates.dateFrom && previousPeriodFrom ? buildDaySeries(report.periodComparison.previousRevenueTimeseries, previousPeriodFrom, periodDays, "orderCount") : null;
+  const previousRevenueSeries = dates.dateFrom && previousPeriodFrom ? buildDaySeries(report.periodComparison.previousRevenueTimeseries, previousSeriesStart, periodDays, "revenueMnt") : null;
+  const previousOrderSeries = dates.dateFrom && previousPeriodFrom ? buildDaySeries(report.periodComparison.previousRevenueTimeseries, previousSeriesStart, periodDays, "orderCount") : null;
   const previousAov = report.periodComparison.available ? report.periodComparison.previous!.aovMnt : null;
 
   return (

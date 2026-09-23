@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import AdminPasswordStep from "./admin/AdminPasswordStep";
 import FaceHandoffPanel from "./admin/FaceHandoffPanel";
 import FaceMethodChooser from "./admin/FaceMethodChooser";
+import { isPhoneDevice } from "@/lib/device";
 import { FACE_REQUIRED_ERR_MSG, REAUTH_REQUIRED_ERR_MSG } from "@shared/const";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
@@ -40,7 +41,7 @@ import {
   stopCamera,
   type CameraError,
 } from "@/lib/faceEngine";
-import { drawTrackedMesh, loadFaceTracker, overlaySize, snapshotFrame, trackFrame, trackerDelegate, warmMeshContours } from "@/lib/faceTracker";
+import { drawTrackedMesh, loadFaceTracker, overlaySize, releaseSnapshot, snapshotFrame, trackFrame, trackerDelegate, warmMeshContours } from "@/lib/faceTracker";
 import { faceBackendName, warmUpFaceModels } from "@/lib/faceEngine";
 
 /**
@@ -149,7 +150,11 @@ export default function AdminFaceGate({ children }: { children: React.ReactNode 
   // баталгаажуулах зам зөвхөн БҮРТГЭЛТЭЙ хүнд нээлттэй
   // (docs/FACE-HANDOFF-PLAN.md).
   const needsEnrollment = !status.enrolled || status.modelStale;
-  const canHandoff = !needsEnrollment;
+  // 2026-09-23: утсан дээр QR handoff санал болгохгүй — утас өөрөө камертай,
+  // "утсаараа баталгаажуулах" нь өөр утас шаардана, камерын дэлгэц дээрх
+  // "Энэ компьютерт камер алга" холбоос ч утсан дээр худал байв. Сонголтын
+  // дэлгэцийг алгасаж шууд камер руу орно (нэг товшилт бага).
+  const canHandoff = !needsEnrollment && !isPhoneDevice();
 
   if (canHandoff && method === null) {
     return <FaceMethodChooser tips={FACE_TIPS} onUseCamera={() => setMethod("camera")} onUsePhone={() => setMethod("phone")} />;
@@ -535,6 +540,7 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
       if (abortRef.current) throw new Error("ABORTED");
       setProcessing(`Боловсруулж байна ${done + 1}/${total}`);
       const result = await captureFace(frame);
+      releaseSnapshot(frame);
       if (result.ok) centerDescriptors.push(result.sample.descriptor);
       done += 1;
       setProgress(Math.round((done / total) * 100));
@@ -544,6 +550,7 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
       if (abortRef.current) throw new Error("ABORTED");
       setProcessing(`Боловсруулж байна ${done + 1}/${total}`);
       const result = await captureFace(frame, POSE_MIN_FACE_WIDTH_RATIO_TURNED);
+      releaseSnapshot(frame);
       if (result.ok) poses.push({ pose: SECTOR_KEYS[sector], descriptor: result.sample.descriptor });
       done += 1;
       setProgress(Math.round((done / total) * 100));
@@ -597,6 +604,7 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
         lostFrames = lost ? lostFrames + 1 : 0;
         if (lostFrames === LOST_FACE_RESET_FRAMES) {
           if (frames.length > 0 || blink.seen) restarts += 1;
+          frames.forEach(releaseSnapshot);
           frames = [];
           blink = new BlinkDetector();
           faceSince = null;
@@ -660,10 +668,33 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
       // Camera permission, the tracker runtime and the recogniser weights all
       // load at once: the person answers the camera prompt while the models
       // download, instead of waiting for one and then the other.
-      setHint("Загвар ачааллаж байна…");
+      // 2026-09-23: алхам бүрийг нэрлэнэ. Өмнө нь нэг л "Загвар ачааллаж
+      // байна…" мессеж байсан тул iPhone дээр аль хэсэг нь гацсан нь (камер,
+      // царай илрүүлэгч, таних загвар) огт мэдэгдэхгүй, мөнхөд эргэдэг байв.
+      // Алхам бүр одоо хугацаатай (faceTracker/faceEngine) — гацвал алдаа
+      // гарч "Дахин оролдох" товч харагдана.
+      const pending = new Set<"camera" | "tracker" | "models">(["camera", "tracker", "models"]);
+      const stageHint = () => pending.has("camera") ? "Камер асааж байна…"
+        : pending.has("tracker") ? "Царай илрүүлэгч ачааллаж байна… (эхний удаа 30 секунд хүртэл)"
+          : pending.has("models") ? "Таних загвар ачааллаж байна…"
+            : "Бэлэн боллоо…";
+      const stage = <T,>(key: "camera" | "tracker" | "models", promise: Promise<T>) => promise.then(value => {
+        pending.delete(key);
+        if (!abortRef.current) setHint(stageHint());
+        return value;
+      });
+      setHint(stageHint());
       warmMeshContours();
-      const [stream] = await Promise.all([startCamera(), loadFaceTracker(), loadFaceModels()]);
-      streamRef.current = stream;
+      // 2026-09-23: камер асмагц streamRef-д ШУУД тавина. Өмнө нь Promise.all
+      // дууссаны дараа л тавьдаг байсан тул загвар хугацаа хэтэрч унахад
+      // (камер аль хэдийн асаалттай) catch-ийн cleanup() урсгалыг олохгүй,
+      // камерын гэрэл асаалттай үлдэж, "Дахин оролдох" хоёр дахь урсгал нээдэг байв.
+      const camera = startCamera().then(opened => {
+        if (abortRef.current) { stopCamera(opened); throw new Error("ABORTED"); }
+        streamRef.current = opened;
+        return opened;
+      });
+      const [stream] = await Promise.all([stage("camera", camera), stage("tracker", loadFaceTracker()), stage("models", loadFaceModels())]);
       // Compile the recogniser's shaders now, while the person is still
       // lining up their face -- not later, under the spinner.
       void warmUpFaceModels();
@@ -737,6 +768,7 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
       const describeStartedAt = performance.now();
       for (const frame of capture.frames) {
         const result = await captureFace(frame);
+        releaseSnapshot(frame);
         if (result.ok) descriptors.push(result.sample.descriptor);
       }
       const describeMs = Math.round(performance.now() - describeStartedAt);
@@ -843,8 +875,11 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
   const showRing = needsEnrollment && (enrolling || processing !== null);
 
   return (
-    <div className="face-gate-shell face-gate-shell--dark">
-      <div className="face-gate-card face-gate-card--wide face-gate-card--scan">
+    // 2026-09-23 (Tom: "yg nuur tanidag hesgiin ungu image design solioogui"):
+    // нууц үг → сонголт → камер гурвуулаа НЭГ цагаан/улаан загвартай.
+    <div className="face-gate-shell">
+      <div className="face-gate-card face-gate-card--wide face-gate-card--consent face-gate-card--camera">
+        <div className="face-gate-brandstrip" aria-hidden="true" />
         <div className="face-gate-head">
           <ScanFace size={20} aria-hidden="true" />
           <div>
@@ -853,7 +888,7 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
           </div>
         </div>
 
-        {/* Circular scanner on a dark ground. During enrolment the rim is the
+        {/* Circular scanner. During enrolment the rim is the
             eight-segment coverage ring (Face ID's gesture); during login it
             is a plain progress ring. */}
         <div className={`face-gate-stage${faceLocked ? " is-locked" : ""}`}>

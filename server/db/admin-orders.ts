@@ -11,7 +11,7 @@ import { enqueueNotification } from "../notificationOutbox";
 import { applyBranchStockDelta, recomputeVariantStockTotal, recordStockMovement } from "../stockLedger";
 import { shouldRestoreStock } from "../commerce-lifecycle";
 import { LOW_STOCK_THRESHOLD as SHARED_LOW_STOCK_THRESHOLD } from "../../shared/catalog-filter";
-import { escapeLike, generateOrderNumber, getDb, isDuplicateKeyError, isDuplicateOrderNumberError, refundOwedSql, settledSaleSql } from "./connection";
+import { escapeLike, generateOrderNumber, getDb, isDuplicateKeyError, isDuplicateOrderNumberError, refundOwedSql, settledSaleSql, storeDayString, storeDaySql } from "./connection";
 import { IssuedGiftCard, announceIssuedGiftCards, issueGiftCardsForPaidOrder, voidGiftCardsForOrder } from "./gift-cards";
 import { getActiveBranches } from "./site";
 import { findOrderForClientRequest } from "./cart-orders";
@@ -144,7 +144,7 @@ export async function getAdminDashboardSummary() {
   // convention elsewhere (a sparkline needs a fixed length; a day with 0
   // orders is a real, meaningful zero, not a gap to omit).
   const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
-  const dailyOrderDateExpr = sql<string>`date(${orders.createdAt})`;
+  const dailyOrderDateExpr = storeDaySql(orders.createdAt);
 
   const [[orderCountRow], [revenueRow], [activeUserRow], recentOrders, lowStockProducts, failedPayments, dailyOrderRows, [refundOwedRow]] = await Promise.all([
     db.select({ count: sql<number>`count(*)` }).from(orders),
@@ -201,7 +201,7 @@ export async function getAdminDashboardSummary() {
   }));
 
   const countsByDate = new Map(dailyOrderRows.map(row => [row.date, Number(row.count)]));
-  const dayString = (daysAgo: number) => new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const dayString = (daysAgo: number) => storeDayString(new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000));
   const ordersDailySeries: { date: string; orderCount: number }[] = [];
   let ordersLast7d = 0;
   for (let daysAgo = 6; daysAgo >= 0; daysAgo--) {

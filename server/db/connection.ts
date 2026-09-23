@@ -2,7 +2,7 @@
 // 2026-09-21: server/db.ts (7 066 мөр) домэйнээр хуваагдав; server/db.ts нь одоо barrel
 // (export *) тул import зам өөрчлөгдөөгүй. Функц зөөхдөө энэ файлын import-ыг мөн шинэчил.
 
-import { sql } from "drizzle-orm";
+import { sql, type SQLWrapper } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { describeTransport, planMysqlConnection } from "../_core/dbConnection";
 import { orders } from "../../drizzle/schema";
@@ -50,6 +50,17 @@ export const refundOwedSql = sql`(${orders.paymentStatus} = 'paid' AND ${orders.
 export function escapeLike(term: string): string {
   return term.replace(/[\\%_]/g, "\\$&");
 }
+
+/**
+ * Дэлгүүрийн (Улаанбаатар, UTC+8, 2017-оос DST-гүй) календарын өдөр
+ * (2026-09-23). Session нь `time_zone='+00:00'` тул `date(createdAt)` нь UTC
+ * өдөр — 08:00-аас өмнөх захиалга график, sparkline дээр ӨМНӨХ өдөрт
+ * бүртгэгддэг байв (admin-ий хөтөч орон нутгийн өдрөөр тааруулдаг).
+ * Тоон offset-той `convert_tz` нь MySQL-ийн цагийн бүсийн хүснэгтгүйгээр ажиллана.
+ */
+export const storeDaySql = (column: SQLWrapper) => sql<string>`date(convert_tz(${column}, '+00:00', '+08:00'))`;
+/** JS талын хос нь: Date → дэлгүүрийн өдрийн "YYYY-MM-DD". */
+export const storeDayString = (value: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ulaanbaatar", year: "numeric", month: "2-digit", day: "2-digit" }).format(value);
 
 export function generateOrderNumber(): string {
   return `SA${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 8).toUpperCase()}`;

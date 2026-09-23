@@ -13,9 +13,29 @@
  * Bump CACHE_VERSION when changing this file; old caches are dropped on
  * activate.
  */
-const CACHE_VERSION = "sugi-v3";
+const CACHE_VERSION = "sugi-v4"; // v4 (2026-09-23): хуримтлагдсан хуучин chunk-уудыг нэг удаа цэвэрлэнэ
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [OFFLINE_URL, "/icons/icon-192.png"];
+// 2026-09-23: /assets/-ийн нэр deploy бүрт солигддог ч service worker өөрөө
+// солигддоггүй тул CACHE_VERSION ч солигдохгүй — хуучин chunk-ууд кэшэд
+// мөнхөд хуримтлагдаж (deploy бүрт ~1 MB) утасны хадгалах санг дүүргэдэг
+// байв. Бичлэг бүрийн дараа хамгийн хуучныг нь (Cache.keys() оруулалтын
+// дарааллаар буцаадаг) хасна; PRECACHE-ийг хэзээ ч хасахгүй.
+const MAX_CACHED_ENTRIES = 120;
+async function putAndTrim(request, response) {
+  const cache = await caches.open(CACHE_VERSION);
+  await cache.put(request, response);
+  const keys = await cache.keys();
+  let excess = keys.length - MAX_CACHED_ENTRIES;
+  if (excess <= 0) return;
+  const keep = new Set(PRECACHE.map(path => new URL(path, self.location.origin).href));
+  for (const key of keys) {
+    if (excess <= 0) break;
+    if (keep.has(key.url)) continue;
+    await cache.delete(key);
+    excess -= 1;
+  }
+}
 
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE_VERSION).then(cache => cache.addAll(PRECACHE)).then(() => self.skipWaiting()));
@@ -49,8 +69,15 @@ self.addEventListener("notificationclick", event => {
   const url = new URL(event.notification.data?.url || "/", self.location.origin).href;
   event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(list => {
     const open = list.find(client => client.url.startsWith(self.location.origin));
-    if (open) return open.focus().then(client => ("navigate" in client ? client.navigate(url) : client));
-    return self.clients.openWindow(url);
+    if (!open) return self.clients.openWindow(url);
+    // 2026-09-23: `navigate()` зөвхөн энэ service worker-ийн УДИРДДАГ цонхонд
+    // ажилладаг — `includeUncontrolled`-оор олдсон цонх (hard reload хийсэн
+    // таб) дээр reject болж мэдэгдэл дарахад юу ч болдоггүй байв. Бүтэлгүйтвэл
+    // (эсвэл null буцаавал) шинэ цонх нээнэ.
+    return open.focus()
+      .then(client => client.navigate(url))
+      .then(client => client || self.clients.openWindow(url))
+      .catch(() => self.clients.openWindow(url));
   }));
 });
 
@@ -61,17 +88,17 @@ self.addEventListener("fetch", event => {
   if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/cdn-cgi/")) return;
 
   if (request.mode === "navigate") {
-    event.respondWith(fetch(request).catch(() => caches.match(OFFLINE_URL)));
+    // 2026-09-23: offline.html кэшэд байхгүй бол (install тасалдсан, хөтөч
+    // хадгалах санг цэвэрлэсэн) `undefined` нь respondWith-ийг TypeError-оор
+    // унагадаг байв — тэгвэл сүлжээний алдааг ердийнхөөр нь буцаана.
+    event.respondWith(fetch(request).catch(async () => (await caches.match(OFFLINE_URL)) || Response.error()));
     return;
   }
 
   if (isImmutableAsset(url)) {
     event.respondWith(
       caches.match(request).then(cached => cached || fetch(request).then(response => {
-        if (response.ok) {
-          const copy = response.clone();
-          caches.open(CACHE_VERSION).then(cache => cache.put(request, copy));
-        }
+        if (response.ok) event.waitUntil(putAndTrim(request, response.clone()).catch(() => undefined));
         return response;
       })),
     );
@@ -82,10 +109,7 @@ self.addEventListener("fetch", event => {
     event.respondWith((async () => {
       const cached = await caches.match(request);
       const refresh = fetch(request).then(async response => {
-        if (response.ok) {
-          const cache = await caches.open(CACHE_VERSION);
-          await cache.put(request, response.clone());
-        }
+        if (response.ok) await putAndTrim(request, response.clone());
         return response;
       });
       if (!cached) return refresh; // Офлайн бөгөөд кэшгүй: сүлжээний алдаа ердийнхөөрөө гарна.

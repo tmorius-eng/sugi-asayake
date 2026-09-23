@@ -38,6 +38,7 @@ export const TEST_PRODUCT_PATTERNS = [
   // зөвхөн нэрийн төгсгөлийн өвөрмөц тэмдгээр (`search-test-<timestamp>`)
   // тааруулна — бодит барааны нэрэнд тэр мөр хэзээ ч байхгүй.
   "Automation test product",
+  "Delete guard test product%",
   "%search-test-%",
   // 2026-09-23: suite-ийн бусад fixture — "Idempotency test product" нь
   // тасарсан run-аас үлдэж production-ы /shop дээр худалдан авагчдад

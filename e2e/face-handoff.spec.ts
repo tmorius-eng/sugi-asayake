@@ -34,7 +34,11 @@ const gateOn = process.env.E2E_FACE_GATE === "1";
 test.describe("камергүй компьютерийн QR handoff", () => {
   test.skip(!gateOn, "E2E_FACE_GATE=1 шаардлагатай (хаалга асаалттай сервер, 3101 порт).");
 
-  test("QR гарч, баталгаажмагц компьютер өөрөө нээгдэнэ", async ({ page, context, baseURL }) => {
+  test("QR гарч, баталгаажмагц компьютер өөрөө нээгдэнэ", async ({ page, context, baseURL }, testInfo) => {
+    // 2026-09-23: QR handoff нь КАМЕРГҮЙ КОМПЬЮТЕРИЙН зам. Утсан дээр зориуд
+    // санал болгохгүй (утас өөрөө камертай; AdminFaceGate-ийн `isPhoneDevice`),
+    // тиймээс утасны project дээр энэ урсгал байхгүй.
+    test.skip(testInfo.project.name === "mobile", "QR handoff нь зөвхөн компьютер дээр санал болгогдоно.");
     test.setTimeout(120_000);
     const admin = await ensureE2EUser("admin");
     const db = await getDb();
@@ -70,10 +74,24 @@ test.describe("камергүй компьютерийн QR handoff", () => {
       expect(src.startsWith("data:image/png;base64,")).toBe(true);
       expect(src.length).toBeGreaterThan(500);
 
-      // 3) Тоо уншигдахаар харагдана (харанхуй дээр харанхуй байсан).
+      // 3) Тоо уншигдахаар харагдана. 2026-09-16-нд харанхуй карт дээр харанхуй
+      //    тоо байсан тул "тоо цайвар байх" гэж шалгадаг байв; 2026-09-23-нд карт
+      //    цагаан болсон (Tom) тул өнгийг биш, картын дэвсгэртэй КОНТРАСТЫГ
+      //    шалгана — ямар ч загварт зөв хэвээр үлдэх шалгуур (WCAG ≥ 4.5).
       const numberNode = page.locator(".face-handoff-number");
       expect(Number(await numberNode.textContent())).toBeGreaterThanOrEqual(10);
-      expect(await numberNode.evaluate(el => getComputedStyle(el).color), "тоо цайвар байх ёстой").not.toBe("rgb(23, 24, 27)");
+      const contrast = await numberNode.evaluate(el => {
+        const rgb = (value: string) => (value.match(/\d+(\.\d+)?/g) ?? []).slice(0, 3).map(Number);
+        const lum = (value: string) => {
+          const [r, g, b] = rgb(value).map(channel => { const c = channel / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+          return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        };
+        const card = el.closest(".face-gate-card") as HTMLElement;
+        const a = lum(getComputedStyle(el).color);
+        const b = lum(getComputedStyle(card).backgroundColor);
+        return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+      });
+      expect(contrast, "тоо картын дэвсгэр дээр уншигдах ёстой (контраст ≥ 4.5)").toBeGreaterThanOrEqual(4.5);
 
       // 4) Карт дэлгэцийн төвд (буланд биш).
       const box = (await page.locator(".face-gate-card").boundingBox())!;

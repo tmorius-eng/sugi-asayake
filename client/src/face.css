@@ -30,14 +30,14 @@
 /* Урт гарчигтай үед flex дүрсийг нарийн зураас болтол шахдаг байв (2026-09-23). */
 .face-gate-head > svg { flex: none; margin-top: 3px; }
 
-/* Circular scanner on a dark ground (Tom's chosen concept). Square box so
+/* Circular scanner (Tom's chosen concept; light card since 2026-09-23). Square box so
    the circle stays a circle at any width; the ring lives just outside the
    video's edge. */
 .face-gate-stage { position: relative; width: min(300px, 78vw); aspect-ratio: 1; margin: 0 auto; }
 /* Mirrored so turning left on screen matches turning left in reality -- the
    instructions say "left" and must mean the user's left. The mesh canvas
    mirrors itself in its own draw call, not here. */
-.face-gate-video { position: absolute; inset: 7%; width: 86%; height: 86%; object-fit: cover; border-radius: 50%; transform: scaleX(-1); background: #0b1220;
+.face-gate-video { position: absolute; inset: 7%; width: 86%; height: 86%; object-fit: cover; border-radius: 50%; transform: scaleX(-1); background: #eef1ee;
   /* iOS Safari paints its own play/pause button over an inline <video> and
      shows it on any tap (Tom, 2026-09-13: "ugly"). The preview is not a
      player -- nothing about it is tappable -- so the native controls are
@@ -47,7 +47,7 @@
      iOS paints its play/pause overlay INSIDE the video element, so the
      element itself has to be invisible; the preview canvas shows the feed. */
   opacity: 0; }
-.face-gate-preview { position: absolute; inset: 7%; width: 86%; height: 86%; object-fit: cover; border-radius: 50%; transform: scaleX(-1); background: #0b1220; pointer-events: none; }
+.face-gate-preview { position: absolute; inset: 7%; width: 86%; height: 86%; object-fit: cover; border-radius: 50%; transform: scaleX(-1); background: #eef1ee; box-shadow: inset 0 0 0 1px rgba(23,24,27,.06); pointer-events: none; }
 .face-gate-video::-webkit-media-controls,
 .face-gate-video::-webkit-media-controls-overlay-play-button,
 .face-gate-video::-webkit-media-controls-start-playback-button,
@@ -57,8 +57,8 @@
 
 /* Progress ring around the rim. */
 .face-gate-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); pointer-events: none; }
-.face-gate-ring-track { fill: none; stroke: rgba(255,255,255,.10); stroke-width: 3; }
-.face-gate-ring-value { fill: none; stroke: #6fd0ff; stroke-width: 3; stroke-linecap: round; filter: drop-shadow(0 0 5px rgba(111,208,255,.55));
+.face-gate-ring-track { fill: none; stroke: #e3e7e3; stroke-width: 3; }
+.face-gate-ring-value { fill: none; stroke: var(--primary, #df1f3d); stroke-width: 3; stroke-linecap: round; filter: drop-shadow(0 0 4px rgba(223,31,61,.35));
   /* Long, gently-decelerating transition: progress arrives in discrete jumps
      as each frame lands, and a fast linear tween makes those jumps visible.
      This eases them into a continuous sweep. */
@@ -66,12 +66,12 @@
 
 /* Gold rim + soft pulse once a face is actually being tracked -- immediate
    feedback that the system has locked on. */
-.face-gate-stage.is-locked .face-gate-ring-value { stroke: #ffd65c; filter: drop-shadow(0 0 6px rgba(255,214,92,.6)); }
+.face-gate-stage.is-locked .face-gate-ring-value { stroke: #1a7f4b; filter: drop-shadow(0 0 5px rgba(26,127,75,.35)); }
 .face-gate-stage.is-locked { animation: face-gate-lock 2.4s cubic-bezier(.37,0,.63,1) infinite; will-change: transform; }
 @keyframes face-gate-lock { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.008); } }
 
 /* Sweeping scan line, clipped to the circle. */
-.face-gate-scanline { position: absolute; left: 7%; right: 7%; height: 2px; pointer-events: none; background: linear-gradient(90deg, transparent, rgba(111,208,255,.9), transparent); will-change: transform, opacity; animation: face-gate-scan 3.2s cubic-bezier(.45,0,.55,1) infinite; }
+.face-gate-scanline { position: absolute; left: 7%; right: 7%; height: 2px; pointer-events: none; background: linear-gradient(90deg, transparent, rgba(223,31,61,.85), transparent); will-change: transform, opacity; animation: face-gate-scan 3.2s cubic-bezier(.45,0,.55,1) infinite; }
 /* Animating transform rather than `top` keeps this on the compositor -- an
    animated `top` relayouts every frame and visibly stutters next to a live
    video. */
@@ -87,7 +87,7 @@
 
 /* Instruction pill ("Нэг удаа анивчина уу", 2026-09-22): shown over the scan
    when a blink has not been seen yet. */
-.face-gate-instruction { margin-top: 14px; will-change: transform; padding: 13px 20px; border-radius: 999px; background: linear-gradient(93deg, #4338ca, #2563eb); color: #fff; font-size: 14px; font-weight: 700; letter-spacing: -.01em; text-align: center; box-shadow: 0 6px 18px rgba(37,99,235,.28); animation: face-gate-pill 3.4s cubic-bezier(.37,0,.63,1) infinite; transition: background .3s ease; }
+.face-gate-instruction { margin-top: 14px; will-change: transform; padding: 13px 20px; border-radius: 999px; background: var(--primary, #df1f3d); color: #fff; font-size: 14px; font-weight: 700; letter-spacing: -.01em; text-align: center; box-shadow: 0 6px 18px rgba(223,31,61,.24); animation: face-gate-pill 3.4s cubic-bezier(.37,0,.63,1) infinite; transition: background .3s ease; }
 @keyframes face-gate-pill { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
 
 .face-gate-progress { margin-top: 12px; height: 4px; border-radius: 999px; background: #ece7de; overflow: hidden; }
@@ -221,42 +221,20 @@
 }
 
 
-/* Dark scanning card. The consent screen deliberately stays light -- it is a
-   document to read, not a camera view -- while the scanner itself is dark so
-   the face is the brightest thing on screen and the colour flash reads
-   cleanly against it. */
-.face-gate-card--scan { background: #0d1526; color: #e8eef7; box-shadow: 0 18px 50px rgba(0,0,0,.4); }
-.face-gate-card--scan h2 { color: #f4f8ff; }
-.face-gate-card--scan .face-gate-muted { color: #93a3bb; }
-.face-gate-card--scan .face-gate-head { color: #6fd0ff; }
-.face-gate-card--scan .face-gate-hint { color: #cdd9ea; font-size: 14px; font-weight: 600; }
-.face-gate-card--scan .face-gate-progress { background: rgba(255,255,255,.10); }
-.face-gate-card--scan .face-gate-step { background: rgba(255,255,255,.05); color: #7f8ea6; }
-.face-gate-card--scan .face-gate-step-num { background: rgba(255,255,255,.10); color: #93a3bb; }
-.face-gate-card--scan .face-gate-step--active { background: rgba(111,208,255,.12); color: #6fd0ff; }
-.face-gate-card--scan .face-gate-step--active .face-gate-step-num { background: #6fd0ff; color: #0d1526; }
-.face-gate-card--scan .face-gate-step--done { color: #64d99a; }
-.face-gate-card--scan .face-gate-step--done .face-gate-step-num { background: rgba(100,217,154,.18); color: #64d99a; }
-.face-gate-card--scan .face-gate-tips { background: rgba(255,255,255,.05); }
-.face-gate-card--scan .face-gate-tips summary { color: #cdd9ea; }
-.face-gate-card--scan .face-gate-tips li,
-.face-gate-card--scan .face-gate-tips-note { color: #93a3bb; }
-.face-gate-card--scan .face-gate-alert { background: rgba(255,90,110,.12); color: #ff9fae; }
-.face-gate-card--scan .face-gate-instruction { box-shadow: none; }
-.face-gate-shell--dark { background: #070c16; }
+/* 2026-09-23: харанхуй сканнерын карт (`--scan`, `--dark`) УСТГАГДСАН. Tom
+   нууц үгийн цагаан/улаан дэлгэцийг лавлагаа болгож, сонголт, QR, камерын
+   дэлгэц гурвууланг нэг загвартай болгохыг хүссэн. Доорх сканнерын өнгөнүүд
+   одоо цагаан карт дээр зориулагдсан: брэндийн улаан = явц/идэвхтэй,
+   ногоон = дууссан, шар = "хөдөлгөөнгүй бай". */
 
 /* Аргаа сонгох дэлгэц (2026-09-16, Tom-ийн лавлагааны дагуу: хоёр мөр —
    энэ төхөөрөмж / утас).
    2026-09-23 (Tom): нууц үгийн дэлгэцтэй ИЖИЛ цагаан/улаан загвар руу
    шилжив — өмнө нь сканнерын харанхуй картын дотор байсан тул нууц үгийн
    цагаан дэлгэцийн дараа гэнэт хар хөх болж, нэг урсгал биш мэт харагддаг
-   байв. Үндсэн (light) хувилбар нь энд; сканнерын карт (`--scan`) өөрийн
-   харанхуй хувилбарыг доор хадгална. */
+   байв. */
 .face-gate-back { position: absolute; top: 22px; left: 18px; display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 10px; background: #eef1ee; color: #545958; cursor: pointer; transition: background .16s ease, color .16s ease; }
 .face-gate-back:hover { background: #fdf3f4; color: var(--primary-text, #c11a35); }
-.face-gate-card--scan .face-gate-back { background: rgba(255,255,255,.07); color: #cdd9ea; }
-.face-gate-card--scan .face-gate-back:hover { background: rgba(255,255,255,.14); color: #cdd9ea; }
-.face-gate-card--scan { position: relative; }
 
 .face-choice-list { display: grid; gap: 12px; margin-top: 4px; }
 /* 64px доод өндөр: хулгана болон хуруунд ижил тав тухтай, мөн хоёр сонголт
@@ -276,17 +254,11 @@
 /* Нууц үгийн алхам дууссан (сонголтын дэлгэцийн диаграм, 2026-09-23). */
 .face-gate-step--complete { color: #1a7f4b; }
 
-/* Харанхуй картан дээрх handoff-ийн бичвэрүүд (2026-09-16 screenshot-оор
-   баригдсан: тоо нь бараан дэвсгэр дээр бараан бичигдэж уншигдахгүй байв —
-   тэр тоо бол баталгаажуулалтын ГОЛ элемент, хамгийн тод байх ёстой). */
-.face-gate-card--scan .face-handoff-number { color: #f4f8ff; }
-.face-gate-card--scan .face-handoff-number-label { color: #93a3bb; }
-.face-gate-card--scan .face-handoff-qr { background: #fff; box-shadow: none; }
-.face-gate-card--scan .face-handoff-qr-loading { color: #93a3bb; }
-.face-gate-card--scan .face-gate-link { color: #6fd0ff; }
 /* Буцах сум гарчигтай давхцахгүй байх зай. */
 .face-gate-head--with-back { padding-left: 44px; text-align: left; }
 /* Цагаан картан дээрх гарчиг: нууц үгийн дэлгэцийн гарчигтай нэг жинтэй. */
+.face-gate-card--camera .face-gate-head { margin-top: 6px; text-align: left; }
+.face-gate-card--camera .face-gate-hint { font-size: 14px; font-weight: 600; color: #3f4443; }
 .face-gate-card--consent .face-gate-head h2 { font-family: var(--font-display); font-size: 20px; font-weight: 620; letter-spacing: -.035em; color: var(--foreground, #17181b); }
 
 @media (max-width: 520px) {
@@ -327,15 +299,15 @@
    the login flow, which has no directions to cover.
 --------------------------------------------------------------------------- */
 .face-gate-sectors { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.face-gate-sector { fill: none; stroke: rgba(255,255,255,.14); stroke-width: 4; stroke-linecap: round; transition: stroke .35s ease, filter .35s ease, stroke-width .25s ease; }
-.face-gate-sector--current { stroke: #ffd65c; stroke-width: 5; filter: drop-shadow(0 0 6px rgba(255,214,92,.65)); }
-.face-gate-sector--covered { stroke: #6fd0ff; filter: drop-shadow(0 0 5px rgba(111,208,255,.55)); }
-.face-gate-sector--target { stroke: rgba(255,214,92,.45); animation: face-gate-sector-pulse 1.1s ease-in-out infinite; }
+.face-gate-sector { fill: none; stroke: #e3e7e3; stroke-width: 4; stroke-linecap: round; transition: stroke .35s ease, filter .35s ease, stroke-width .25s ease; }
+.face-gate-sector--current { stroke: var(--primary, #df1f3d); stroke-width: 5; filter: drop-shadow(0 0 5px rgba(223,31,61,.4)); }
+.face-gate-sector--covered { stroke: #1a7f4b; filter: drop-shadow(0 0 4px rgba(26,127,75,.35)); }
+.face-gate-sector--target { stroke: rgba(223,31,61,.45); animation: face-gate-sector-pulse 1.1s ease-in-out infinite; }
 @keyframes face-gate-sector-pulse { 0%, 100% { stroke-opacity: .45; } 50% { stroke-opacity: 1; } }
 
 /* Centre marker: hollow until the frontal reference is captured. */
 .face-gate-center { position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); pointer-events: none; transition: background .3s ease, border-color .3s ease, transform .3s ease; }
-.face-gate-center--done { background: #6fd0ff; border-color: #6fd0ff; box-shadow: 0 0 10px rgba(111,208,255,.7); transform: scale(.7); }
+.face-gate-center--done { background: #1a7f4b; border-color: #1a7f4b; box-shadow: 0 0 8px rgba(26,127,75,.5); transform: scale(.7); }
 
 /* Direction arrow that points at the next uncovered sector -- the same cue
    Face ID gives with its text, made visual so it reads on a phone held at
@@ -345,7 +317,7 @@
 @keyframes face-gate-arrow-nudge { 0%, 100% { translate: 0 0; } 50% { translate: 4px 0; } }
 
 /* Small live counter under the ring during enrolment ("5/9"). */
-.face-gate-count { margin: 10px 0 0; text-align: center; font-size: 12px; font-weight: 700; letter-spacing: .08em; color: rgba(255,255,255,.7); }
+.face-gate-count { margin: 10px 0 0; text-align: center; font-size: 12px; font-weight: 700; letter-spacing: .08em; color: #545958; }
 
 /* Processing snapshots after the ring completes: the video dims and a
    determinate bar shows descriptors being computed one by one. */

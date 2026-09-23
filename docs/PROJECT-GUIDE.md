@@ -242,6 +242,8 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
 **Өгөгдлийн сан, мөнгө**
 - **`server/db.ts` нь barrel** (2026-09-21) — бодит код `server/db/<домэйн>.ts`-д (CODEBASE §3.1 хүснэгт). Шинэ функцийг тохирох файлд, шинэ файл үүсгэвэл barrel-д мөр нэм. Модулийн түвшинд (top-level const) хажуугийн модулийн утга ашиглахгүй (тойрог import).
 - Шинэ `sql.raw` БИЧИХГҮЙ — `server/_core/sqlSafe.ts`-ийн `sqlInt()` ашиглана.
+- **Өдрөөр бүлэглэх бол `storeDaySql(col)` / JS-д `storeDayString(date)`** (`server/db/connection.ts`, 2026-09-23) — `date(createdAt)` нь UTC өдөр (session `+00:00`) тул 08:00-аас өмнөх захиалга өмнөх өдөрт ордог. Клиентэд `toISOString().slice(0,10)` биш `toDayInput()`.
+- **Кэш цэвэрлэлтийг бичих ЗАМ БҮРТ** — нэг функц хэд хэдэн бичих салаатай бол (шинэ мөр / байгаа мөр шинэчлэх / id-аар) салаа бүрийн дараа. 2026-09-23: синонимын 3 салааны 1-д л байсан.
 - **Төлөв шилжүүлдэг UPDATE бүр `WHERE <хуучин төлөв>` + `affectedRows === 1`** — сагсны `active→converted` үүнгүй байснаас хоёр tab хоёр захиалга үүсгэж чадаж байв (2026-09-20).
 - **Гадагш `fetch` бүр `AbortSignal.timeout`-той** (2026-09-20) — timeout-гүй провайдер checkout-ийг хязгааргүй барина.
 - **Клиент рүү очих алдааны мессеж = хэрэглэгчид зориулсан монгол өгүүлбэр л** — production-д INTERNAL/driver-хэлбэртэй мессеж `INTERNAL_ERR_MSG` болно (`maskErrorShape`, `server/_core/trpc.ts`); `catch → BAD_REQUEST(error.message)` ороолтод driver алдаа дамжуулахгүй.
@@ -276,6 +278,9 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
 - **Шинэ storefront хуудас нэмбэл `server/_core/routeStatus.ts`-ийн `STATIC_ROUTES`-д МӨН нэм** — эс бөгөөс сервер тэр хуудсыг HTTP 404-өөр өгнө (`route-status.test.ts` App.tsx-тэй зөрөхөд унана).
 - **Толгойд `onCartOpen` дамжуулахгүй бол толгой сагсаа өөрөө удирдана** — сагсны тоо/drawer-ийг хуудас бүрт гараар бичих хэрэггүй.
 - **Брэнд лого (Facebook/Instagram/YouTube) `@/components/icons/BrandIcons`-оос**, `lucide-react`-аас биш (1.x-д байхгүй).
+- **Хэмжилт (GA4/Pixel) руу `location.href` БҮТНЭЭР нь явуулахгүй** — `analytics-init.js`-ийн `safeLocation()`; admin/царайны хуудас хэмжигдэхгүй (2026-09-23: /face-approve?token= Google руу явдаг байв). Шинэ нууц query параметр нэмбэл `SECRET_PARAMS`-д нэм.
+- **Хэрэглэгчийн текстийг CSV руу `downloadCsv`-оор л** (томьёоны injection-ий хамгаалалттай).
+- **Хугацаагаар хязгаарласан ачааллын хязгаар нь ЗӨВХӨН тэр алхмыг хэмжих ёстой** — царайны загварын татаалт (том файл) ба instance үүсгэлт тусдаа (`faceTracker.ts`). Хугацаа хэтэрсэн ч ард ажилласаар байгаа амлалтын үр дүнг суллах (`close()`).
 - **`window.confirm`/`window.prompt` БИЧИХГҮЙ** — `useConfirm()` (`components/ConfirmDialog.tsx`, async: `await confirm({ title, danger })`). E2E-д `acceptConfirm(page)`, `page.once("dialog")` биш (2026-09-21, 47 газар хөрвүүлсэн).
 - **Маягтын алдааг талбар дээр нь** — `hooks/useFieldErrors.tsx` (`fieldProps`/`FieldError`/`showErrors`); toast дангаараа хангалтгүй (WCAG 3.3.1). Талбарын `id` = алдааны түлхүүр.
 - **aria-label нь харагдах текстээ АГУУЛНА** (WCAG 2.5.3) — тоон badge-ийг `aria-hidden`, глиф/дүрсийг SVG. Lighthouse `label-content-name-mismatch` оноонд нөлөөлдөггүй ч дэлгэц уншигч/дуут удирдлагад бодит алдаа.

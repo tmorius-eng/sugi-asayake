@@ -20,10 +20,15 @@ import { scrollToNow } from "@/lib/scroll";
 export function useScrollToTopOnNavigate() {
   const [location] = useLocation();
   const previous = useRef(location);
-  const cameFromHistory = useRef(false);
+  /** popstate-ийн ОЧСОН зам. 2026-09-23: өмнө нь boolean туг байсан — зөвхөн
+   *  hash/query солисон back/forward нь зам өөрчилдөггүй тул туг
+   *  хэрэглэгдэлгүй үлдэж, ДАРААГИЙН энгийн холбоосын товшилтыг "түүхээс"
+   *  гэж андуурч шинэ хуудсыг хуучин scroll байрлалд нээдэг байв. Одоо
+   *  зөвхөн яг тэр зам руу шилжихэд л "түүхээс" гэж тооцно. */
+  const historyTarget = useRef<string | null>(null);
 
   useEffect(() => {
-    const onPop = () => { cameFromHistory.current = true; };
+    const onPop = () => { historyTarget.current = window.location.pathname; };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
@@ -31,8 +36,8 @@ export function useScrollToTopOnNavigate() {
   useEffect(() => {
     if (location === previous.current) return;
     previous.current = location;
-    const fromHistory = cameFromHistory.current;
-    cameFromHistory.current = false;
+    const fromHistory = historyTarget.current === window.location.pathname;
+    historyTarget.current = null;
     if (fromHistory || window.location.hash) return;
     scrollToNow(0);
   }, [location]);

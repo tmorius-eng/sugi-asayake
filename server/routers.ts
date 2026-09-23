@@ -220,7 +220,7 @@ import {
   getFaceAttempts,
   getFaceEnrollment,
   recordFaceAttempt,
-  upsertFaceEnrollment, getSiteName } from "./db";
+  upsertFaceEnrollment, getSiteName, storeDayString } from "./db";
 // Customer-content safety (2026-09-13): NSFW screen on avatar uploads and
 // a multilingual abuse screen on review text -- both server-side.
 import { classifyImageSafety, formatScores, IMAGE_SAFETY_REJECT_MESSAGE, REVIEW_IMAGE_SAFETY_REJECT_MESSAGE } from "./_core/imageSafety";
@@ -2993,7 +2993,7 @@ export const appRouter = router({
       const buffer = input.format === "xlsx" ? await exportAnalyticsExcel(report, range) : await exportAnalyticsPdf(report, range);
       await logAdminAction({ actorUserId: ctx.user.id, action: "analytics.exported", entityType: "analytics", metadata: { format: input.format } });
       const mimeType = input.format === "xlsx" ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "application/pdf";
-      return { filename: `sugi-analytics-${new Date().toISOString().slice(0, 10)}.${input.format}`, mimeType, dataBase64: buffer.toString("base64") };
+      return { filename: `sugi-analytics-${storeDayString(new Date())}.${input.format}`, mimeType, dataBase64: buffer.toString("base64") };
     }),
     // Tier F: CAC's one input, entered per calendar month. A financial
     // figure -- adminProcedure, same tier as analyticsReport.

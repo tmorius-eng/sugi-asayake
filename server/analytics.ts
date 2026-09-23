@@ -10,7 +10,7 @@ import { and, desc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import { carts, cartItems, orderItems, orders, productCategories, products, users, visitorSessions } from "../drizzle/schema";
-import { getDb, getLoyaltyTierTable, getMarketingSpendRows, settledSaleSql, getSiteName } from "./db";
+import { getDb, getLoyaltyTierTable, getMarketingSpendRows, settledSaleSql, getSiteName, storeDaySql } from "./db";
 import { getOrSetCached } from "./_core/ttlCache";
 import { ubDistrictLabels, type UbDistrict } from "../shared/districts";
 import { getLoyaltyTier } from "../shared/loyalty";
@@ -89,7 +89,7 @@ export async function getSalesOverview(input: DateRangeInput = {}) {
 export async function getRevenueTimeseries(input: DateRangeInput = {}) {
   const db = await getDb();
   if (!db) return [];
-  const dateExpr = sql<string>`date(${orders.createdAt})`;
+  const dateExpr = storeDaySql(orders.createdAt);
   const rows = await db
     .select({ date: dateExpr, revenueMnt: sql<number>`coalesce(sum(${orders.totalMnt}), 0)`, orderCount: sql<number>`count(*)` })
     .from(orders)
@@ -854,7 +854,7 @@ export async function getConversionOverview(input: DateRangeInput = {}): Promise
 export async function getVisitorSessionTimeseries(input: DateRangeInput = {}) {
   const db = await getDb();
   if (!db) return [];
-  const dateExpr = sql<string>`date(${visitorSessions.createdAt})`;
+  const dateExpr = storeDaySql(visitorSessions.createdAt);
   const conditions = [];
   if (input.dateFrom) conditions.push(gte(visitorSessions.createdAt, input.dateFrom));
   if (input.dateTo) conditions.push(lte(visitorSessions.createdAt, input.dateTo));

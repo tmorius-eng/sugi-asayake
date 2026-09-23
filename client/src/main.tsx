@@ -234,9 +234,7 @@ if (document.getElementById("hero-shell")) {
   window.addEventListener("pointerdown", onFirstPointer, true);
 }
 afterHeroShellImagePaint(() => mountApp(false));
-if (honeybadgerApiKey) {
-  void import("@honeybadger-io/react").then(({ Honeybadger }) => {
-    window.addEventListener("error", event => Honeybadger.notify(event.error ?? event.message));
-    window.addEventListener("unhandledrejection", event => Honeybadger.notify(event.reason));
-  });
-}
+// 2026-09-23: гараар `error`/`unhandledrejection` сонсогч НЭМЭХГҮЙ —
+// Honeybadger.configure() нь `enableUncaught`/`enableUnhandledRejection`
+// (анхдагчаар асаалттай)-аар өөрөө суулгадаг тул алдаа бүр ХОЁР удаа
+// бүртгэгдэж, квот хоёр дахин хурдан дуусдаг байв.

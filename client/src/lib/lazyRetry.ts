@@ -2,31 +2,34 @@ import { lazy, type ComponentType } from "react";
 import { CHUNK_RELOAD_FLAG, isChunkLoadError } from "@shared/chunk-error";
 
 /**
+ * 2026-09-23: хамгаалалт ХУГАЦААГААР. Өмнө нь "нэг удаа" тугийг App-ийн
+ * анхны commit (`markChunksHealthy`) арилгадаг байсан — харин Suspense App
+ * дотор тул тэр commit route-ийн chunk ачаалагдахаас ӨМНӨ болдог. Chunk
+ * байнга унадаг үед (сүлжээ, байхгүй файл) туг reload бүрийн дараа арилж,
+ * хуудас мөнхөд reload хийдэг байв. Одоо сүүлийн reload-оос хойш 60 с
+ * дотор дахин reload хийхгүй; хэдэн цагийн дараах дараагийн deploy өөрийн
+ * reload-оо авна.
+ */
+const RELOAD_WINDOW_MS = 60_000;
+
+/**
  * Reloads the page once when a code-split chunk cannot be loaded because the
  * site was redeployed under this tab (see shared/chunk-error.ts). Returns
- * true if a reload was triggered, false if this tab has already used its one
- * reload -- the caller then surfaces the error normally.
+ * true if a reload was triggered, false if this tab already reloaded for
+ * this reason within the last minute -- the caller then surfaces the error.
  */
 export function reloadOnceForStaleChunk(): boolean {
   try {
-    if (sessionStorage.getItem(CHUNK_RELOAD_FLAG)) return false;
+    const previous = Number(sessionStorage.getItem(CHUNK_RELOAD_FLAG) ?? 0);
+    if (previous && Date.now() - previous < RELOAD_WINDOW_MS) return false;
     sessionStorage.setItem(CHUNK_RELOAD_FLAG, String(Date.now()));
   } catch {
-    // Storage unavailable (private mode with storage blocked): reload anyway,
-    // a loop is still bounded by the user closing the tab.
+    // Storage unavailable (private mode with storage blocked): no way to
+    // remember a reload, so do not risk a loop -- show the error instead.
+    return false;
   }
   window.location.reload();
   return true;
-}
-
-/** Clears the one-reload guard once a page has actually rendered, so the
- *  next deploy (hours later) gets its own reload. Called from App. */
-export function markChunksHealthy(): void {
-  try {
-    sessionStorage.removeItem(CHUNK_RELOAD_FLAG);
-  } catch {
-    // ignore
-  }
 }
 
 /**

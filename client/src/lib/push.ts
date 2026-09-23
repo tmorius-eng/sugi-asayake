@@ -57,13 +57,40 @@ export async function currentPushSubscription(): Promise<PushSubscription | null
   return reg.pushManager.getSubscription();
 }
 
+function sameKey(existing: ArrayBuffer | null | undefined, expected: Uint8Array): boolean {
+  // Хөтөч түлхүүрийг ил гаргадаггүй бол (хуучин Safari) шалгах боломжгүй —
+  // бүртгэлийг хадгална (товшилт бүрт шинэ endpoint үүсгэхгүй).
+  if (!existing) return true;
+  const bytes = new Uint8Array(existing);
+  return bytes.length === expected.length && bytes.every((byte, index) => byte === expected[index]);
+}
+
 /** Asks permission (if needed) and subscribes; returns the JSON the server stores. */
 export async function subscribeToPush(vapidPublicKey: string): Promise<{ endpoint: string; keys: { p256dh: string; auth: string } } | null> {
-  const reg = await registration();
-  if (!reg) return null;
+  // 2026-09-23: зөвшөөрлийг ЭХЭНД асууна — Safari `requestPermission`-ийг
+  // хэрэглэгчийн товшилтын шууд үргэлжлэл дотор л зөвшөөрдөг; өмнө нь SW
+  // бүртгэлийг хүлээсний дараа асуудаг тул товшилтын идэвх алдагдаж болж байв.
   const permission = await Notification.requestPermission();
   if (permission !== "granted") return null;
-  const sub = (await reg.pushManager.getSubscription()) ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as BufferSource }));
+  const reg = await registration();
+  if (!reg) return null;
+  // Шинээр бүртгэсэн worker идэвхжээгүй байхад `subscribe` "no active
+  // Service Worker" гэж унадаг.
+  const active = reg.active ? reg : await Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise<null>(resolve => setTimeout(() => resolve(null), 10_000)),
+  ]);
+  if (!active) return null;
+  const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
+  let sub = await active.pushManager.getSubscription();
+  // VAPID түлхүүр солигдсон бол (эзэн солигдох, түлхүүр rotate) хуучин
+  // бүртгэлийг дахин ашиглавал push үйлчилгээ шинэ түлхүүрийн гарын үсгийг
+  // 403-оор татгалзаж, мэдэгдэл чимээгүй хэзээ ч ирэхгүй.
+  if (sub && !sameKey(sub.options?.applicationServerKey, applicationServerKey)) {
+    await sub.unsubscribe().catch(() => undefined);
+    sub = null;
+  }
+  sub ??= await active.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: applicationServerKey as BufferSource });
   const json = sub.toJSON();
   if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return null;
   return { endpoint: json.endpoint, keys: { p256dh: json.keys.p256dh, auth: json.keys.auth } };

@@ -3,6 +3,8 @@ import { Download, ExternalLink, ImageUp, LoaderCircle, PackagePlus, Pencil, QrC
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { downloadCsv } from "@/lib/csv";
+// 2026-09-23: огноо ОРОН НУТГИЙН өдрөөр (UTC+8) — toISOString нь 08:00-аас өмнөх захиалгыг өмнөх өдөрт тавьдаг байв.
+import { toDayInput } from "@/lib/analyticsRange";
 import { trpc } from "@/lib/trpc";
 import { useAdminTheme } from "@/lib/adminTheme";
 import { bodyConcernOptions, bodySkinTypeLabels, hairTypeLabels, hairConcernOptions, fragrancePreferenceLabels, wellnessInterestOptions, skinConcernOptions, skinTypeLabels, type SkinType } from "@shared/catalog-filter";
@@ -723,7 +725,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
       toast.error("Шүүлтэд тохирох бүтээгдэхүүн алга.");
       return;
     }
-    downloadCsv(`sugi-products-${new Date().toISOString().slice(0, 10)}.csv`, ["ID", "Нэр", "SKU", "Ангилал", "Үнэ (MNT)", "Үлдэгдэл", "Төлөв"], rows);
+    downloadCsv(`sugi-products-${toDayInput(new Date())}.csv`, ["ID", "Нэр", "SKU", "Ангилал", "Үнэ (MNT)", "Үлдэгдэл", "Төлөв"], rows);
   };
 
   const changeUserRole = async (userId: number, role: "user" | "staff" | "finance" | "marketing" | "warehouse" | "admin") => {

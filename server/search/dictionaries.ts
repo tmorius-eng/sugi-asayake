@@ -77,10 +77,17 @@ export async function upsertSearchSynonym(input: { id?: number; concept: string;
   const [existing] = await db.select({ id: searchSynonyms.id }).from(searchSynonyms).where(eq(searchSynonyms.concept, concept)).limit(1);
   if (existing) {
     await db.update(searchSynonyms).set({ terms: terms.join(", "), isActive: input.isActive ?? true, updatedAt: new Date() }).where(eq(searchSynonyms.id, existing.id));
+    invalidateSearchDictionaries();
     const [row] = await db.select().from(searchSynonyms).where(eq(searchSynonyms.id, existing.id)).limit(1);
     return row;
   }
   const inserted = await db.insert(searchSynonyms).values({ concept, terms: terms.join(", "), isActive: input.isActive ?? true });
+  // ⚠️ 2026-09-23: ГУРАВ дахь бичих зам. Цэвэрлэлтийг "бичсэний дараа" руу
+  // зөөхдөө эхлээд зөвхөн дээрх `input.id` замд тавьсан тул ШИНЭ синоним нэмэх
+  // (админы "+ синоним"-ийн гол зам) болон байгаа ойлголтыг шинэчлэх нь кэшийг
+  // огт цэвэрлэхгүй болж, 60 с хайлтад тусахгүй байв — `e2e/admin-search.spec.ts`
+  // барьсан. Функцийн бичих зам БҮР цэвэрлэлттэй байх ёстой.
+  invalidateSearchDictionaries();
   const [row] = await db.select().from(searchSynonyms).where(eq(searchSynonyms.id, Number(inserted[0].insertId))).limit(1);
   return row;
 }

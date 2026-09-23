@@ -5,6 +5,8 @@ import ManualOrderForm from "./admin/ManualOrderForm";
 import OrderEditForm from "./admin/OrderEditForm";
 import { toast } from "sonner";
 import { downloadCsv } from "@/lib/csv";
+// 2026-09-23: огноо ОРОН НУТГИЙН өдрөөр (UTC+8) — toISOString нь 08:00-аас өмнөх захиалгыг өмнөх өдөрт тавьдаг байв.
+import { toDayInput } from "@/lib/analyticsRange";
 import { trpc } from "@/lib/trpc";
 import AdminBulkActionBar from "./AdminBulkActionBar";
 import { GenericListView } from "./admin/GenericListView";
@@ -107,12 +109,12 @@ export default function AdminOperationsPanel({ preview = false, query = "", role
       .filter(order => exportStatusFilter === "all" || order.status === exportStatusFilter)
       .filter(order => !from || new Date(order.createdAt) >= from)
       .filter(order => !to || new Date(order.createdAt) <= to)
-      .map(order => [order.orderNumber, order.customerName, order.customerPhone, order.customerEmail ?? "", order.totalMnt, statusLabels[order.status] ?? order.status, order.paymentStatus, order.deliveryMethod, new Date(order.createdAt).toISOString().slice(0, 10)]);
+      .map(order => [order.orderNumber, order.customerName, order.customerPhone, order.customerEmail ?? "", order.totalMnt, statusLabels[order.status] ?? order.status, order.paymentStatus, order.deliveryMethod, toDayInput(new Date(order.createdAt))]);
     if (rows.length === 0) {
       toast.error("Шүүлтэд тохирох захиалга алга.");
       return;
     }
-    downloadCsv(`sugi-orders-${new Date().toISOString().slice(0, 10)}.csv`, ["Дугаар", "Хэрэглэгч", "Утас", "Имэйл", "Дүн (MNT)", "Төлөв", "Төлбөр", "Хүргэлт", "Огноо"], rows);
+    downloadCsv(`sugi-orders-${toDayInput(new Date())}.csv`, ["Дугаар", "Хэрэглэгч", "Утас", "Имэйл", "Дүн (MNT)", "Төлөв", "Төлбөр", "Хүргэлт", "Огноо"], rows);
   };
 
   return <div className="grid gap-4">

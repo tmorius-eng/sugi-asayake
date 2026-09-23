@@ -45,6 +45,8 @@ import { toast } from "sonner";
  * `busy` нь мөн энд: нэг дарсны дараа хоёр товч хоёулаа түгжигдэнэ.
  */
 let sharedSubscribed: boolean | null = null;
+/** Аль хэрэглэгчийн хувьд тооцсон бэ — нэвтэрч/гарахад дахин шалгана. */
+let sharedSubscribedFor: number | null | undefined;
 let sharedBusy = false;
 const stateListeners = new Set<() => void>();
 const emitState = () => { for (const listener of stateListeners) listener(); };
@@ -62,15 +64,35 @@ export default function NotificationOptIn({ variant = "footer", onAction }: { va
   const keyQuery = trpc.push.publicKey.useQuery(undefined, { staleTime: 10 * 60_000 });
   const subscribe = trpc.push.subscribe.useMutation();
   const test = trpc.push.test.useMutation();
+  const utils = trpc.useUtils();
 
   // `pushSupport()` нь navigator-оос уншдаг тул render дотор биш effect-д:
   // сервер талын render (байхгүй ч) болон hydration-ий зөрүүнээс сэргийлнэ.
   useEffect(() => {
     setSupport(pushSupport());
-    if (sharedSubscribed === null) {
-      void currentPushSubscription().then(sub => { sharedSubscribed = Boolean(sub); emitState(); });
-    }
   }, []);
+
+  // 2026-09-23: "хөтөчид бүртгэл байна" ≠ "серверт ЭНЭ хэрэглэгчид бүртгэлтэй".
+  // Өмнө нь хөтөчийн бүртгэл байхад л товч нуугддаг байсан тул нэг хөтөч дээр
+  // A асаагаад гарч, B нэвтэрвэл B хэзээ ч асааж чадахгүй (мэдэгдэл A руу
+  // явсаар), сервер 410-ийн дараа endpoint-ийг устгасан ч мөн адил.
+  // Profile.tsx аль хэдийн `push.status`-оор шалгадаг — энд ч мөн.
+  const userId = user?.id ?? null;
+  useEffect(() => {
+    if (sharedSubscribedFor === userId && sharedSubscribed !== null) return;
+    sharedSubscribedFor = userId;
+    void (async () => {
+      const sub = await currentPushSubscription().catch(() => null);
+      let registered = Boolean(sub);
+      if (sub && userId !== null) {
+        registered = await utils.push.status.fetch({ endpoint: sub.endpoint }).catch(() => false);
+      }
+      // Энэ хооронд өөр хэрэглэгч болсон бол хуучин хариуг хаяна (модулийн
+      // төлөв тул компонентын cleanup биш, хэрэглэгчийн id-аар шалгана).
+      if (sharedSubscribedFor !== userId) return;
+      sharedSubscribed = registered; emitState();
+    })();
+  }, [userId, utils]);
 
   const enable = useCallback(async () => {
     if (sharedBusy) return;

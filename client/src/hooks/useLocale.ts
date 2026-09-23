@@ -43,7 +43,7 @@ const ensureTranslations = () => {
   void loadTranslations().then(() => {
     translationsVersion += 1;
     notify();
-  });
+  }).catch(() => undefined); // дараагийн хэл солилт/render дахин оролдоно
 };
 
 export const setLocale = (locale: Locale) => {

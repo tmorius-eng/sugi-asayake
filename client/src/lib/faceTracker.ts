@@ -26,6 +26,28 @@
 
 import type { FaceLandmarker as FaceLandmarkerType, FaceLandmarkerResult } from "@mediapipe/tasks-vision";
 import { blendshapeMap, type Blendshapes, type MpLandmarks } from "@shared/face-pose";
+import { isAppleMobile } from "./device";
+import { withTimeout } from "./withTimeout";
+
+/**
+ * wasm runtime (~11 MB) + загвар (~3.7 MB) утасны сүлжээгээр ТАТАХ хугацаа.
+ * 2026-09-23 засвар: `forVisionTasks()` нь зөвхөн URL угсардаг — бодит татаалт
+ * `createFromOptions` дотор болдог байсан тул 12 с-ийн "GPU үүсгэх" хугацаа
+ * 15 MB татаалтыг ч хамарч, удаан сүлжээнд GPU → CPU хоёулаа унадаг байв.
+ * Одоо татаалтыг ЭХЛЭЭД, өөрийн хугацаатай хийж, үүсгэх хугацаа нь зөвхөн
+ * санах ойд байгаа файлаас instance үүсгэхийг хэмжинэ.
+ */
+const DOWNLOAD_TIMEOUT_MS = 120_000;
+/** GPU delegate-ийг (файл аль хэдийн татагдсан үед) үүсгэх хугацаа — хэтэрвэл CPU. */
+const GPU_CREATE_TIMEOUT_MS = 15_000;
+const CPU_CREATE_TIMEOUT_MS = 45_000;
+
+/** Файлыг бүтэн уншина — `ok` биш бол алдаа (SPA fallback-ийн HTML-ийг загвар гэж авахгүй). */
+async function fetchBytes(url: string): Promise<Uint8Array> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`TRACKER_LOAD ${response.status} ${url}`);
+  return new Uint8Array(await response.arrayBuffer());
+}
 
 const MP_BASE = "/face-models/mediapipe";
 
@@ -58,8 +80,20 @@ export function loadFaceTracker(): Promise<void> {
       try {
         const vision = await import("@mediapipe/tasks-vision");
         const fileset = await vision.FilesetResolver.forVisionTasks(`${MP_BASE}/wasm`);
+        // Татаалт НЭГ удаа: загварыг buffer-аар дамжуулна (GPU ба CPU оролдлого
+        // хоёулаа түүнийг хэрэглэнэ), wasm-ийг бүтэн уншиж HTTP кэшэд
+        // оруулна (сервер face-models-ийг 7 хоног кэшлэдэг) — тэгвэл
+        // createFromOptions дахин татахгүй, CPU руу шилжихэд ч 11 MB-ийг
+        // хоёр дахь удаа зэрэг татахгүй.
+        const [modelBytes] = await withTimeout(Promise.all([
+          fetchBytes(`${MP_BASE}/face_landmarker.task`),
+          fetchBytes(fileset.wasmBinaryPath),
+          fetchBytes(fileset.wasmLoaderPath),
+        ]), DOWNLOAD_TIMEOUT_MS, "TRACKER_LOAD");
         const base = {
-          baseOptions: { modelAssetPath: `${MP_BASE}/face_landmarker.task`, delegate: "GPU" as const },
+          // Оролдлого бүр өөрийн ХУУЛБАРТАЙ: MediaPipe buffer-ийг wasm руу
+          // шилжүүлэхдээ detach хийвэл CPU оролдлого хоосон загвар авах байсан.
+          baseOptions: { modelAssetBuffer: modelBytes.slice(), delegate: "GPU" as const },
           runningMode: "VIDEO" as const,
           numFaces: 2,
           outputFaceBlendshapes: true,
@@ -68,12 +102,33 @@ export function loadFaceTracker(): Promise<void> {
           minFacePresenceConfidence: 0.5,
           minTrackingConfidence: 0.5,
         };
-        try {
-          landmarker = await vision.FaceLandmarker.createFromOptions(fileset, base);
-          delegateUsed = "GPU";
-        } catch {
-          landmarker = await vision.FaceLandmarker.createFromOptions(fileset, { ...base, baseOptions: { ...base.baseOptions, delegate: "CPU" } });
+        const createCpu = () => withTimeout(
+          vision.FaceLandmarker.createFromOptions(fileset, { ...base, baseOptions: { modelAssetBuffer: modelBytes.slice(), delegate: "CPU" } }),
+          CPU_CREATE_TIMEOUT_MS,
+          "TRACKER_LOAD",
+        );
+        // 🔴 2026-09-23: iPhone/iPad дээр GPU delegate-ийг ОГТ оролдохгүй.
+        // Tom-ийн iPhone дээр хаалга "Загвар ачааллаж байна…" дээр мөнхөд
+        // гацсан: GPU (WebGL2/OffscreenCanvas) үүсгэлт iOS Safari дээр алдаа
+        // ШИДЭХГҮЙГЭЭР гацаж болдог тул доорх catch → CPU хэзээ ч
+        // ажилладаггүй байв. iPhone-ий CPU + wasm SIMD энэ загварт хангалттай.
+        // Бусад төхөөрөмж дээр GPU-г хугацаатай оролдож, хэтэрвэл CPU.
+        if (isAppleMobile()) {
+          landmarker = await createCpu();
           delegateUsed = "CPU";
+        } else {
+          const gpuAttempt = vision.FaceLandmarker.createFromOptions(fileset, base);
+          try {
+            landmarker = await withTimeout(gpuAttempt, GPU_CREATE_TIMEOUT_MS, "TRACKER_GPU_TIMEOUT");
+            delegateUsed = "GPU";
+          } catch {
+            // Хугацаа хэтэрсэн GPU оролдлого ард үргэлжилсээр байдаг — хожим
+            // амжилттай болбол WebGL context + wasm heap-ээ суллахгүй бол
+            // "Дахин оролдох" бүрт нэг instance алдагдана.
+            gpuAttempt.then(late => late.close()).catch(() => undefined);
+            landmarker = await createCpu();
+            delegateUsed = "CPU";
+          }
         }
       } catch {
         loadPromise = null;
@@ -225,4 +280,16 @@ export function snapshotFrame(video: HTMLVideoElement): HTMLCanvasElement {
   canvas.height = video.videoHeight;
   canvas.getContext("2d")?.drawImage(video, 0, 0);
   return canvas;
+}
+
+/**
+ * Snapshot-ийн canvas-ийн санах ойг ШУУД суллана (2026-09-23). iOS Safari нь
+ * бүх canvas-д нийт санах ойн дээд хязгаартай бөгөөд GC болтол суллахгүй —
+ * 1280×720 snapshot тус бүр ~3.7 MB тул хэдэн "Дахин оролдох"-ын дараа
+ * `getContext` null буцааж, snapshot хоосон болж "царай олдсонгүй" гэж
+ * андуурагддаг байв. Descriptor гаргасны дараа (эсвэл хаясан frame) дуудна.
+ */
+export function releaseSnapshot(canvas: HTMLCanvasElement): void {
+  canvas.width = 0;
+  canvas.height = 0;
 }

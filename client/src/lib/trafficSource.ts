@@ -24,7 +24,10 @@ export function captureTrafficSource(): void {
       source = utmMedium ? `${utmSource} / ${utmMedium}` : utmSource;
     } else if (document.referrer) {
       try {
-        source = new URL(document.referrer).hostname.replace(/^www\./, "");
+        const referrer = new URL(document.referrer);
+        // 2026-09-23: сайтын өөрийн хуудаснаас (target=_blank → шинэ
+        // sessionStorage) ирсэн бол эх сурвалж нь "sugi.karkaron.com" биш.
+        source = referrer.hostname === window.location.hostname ? "Шууд орсон" : referrer.hostname.replace(/^www\./, "");
       } catch {
         source = "Шууд орсон";
       }

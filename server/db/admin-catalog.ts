@@ -2,7 +2,7 @@
 // 2026-09-21: server/db.ts (7 066 мөр) домэйнээр хуваагдав; server/db.ts нь одоо barrel
 // (export *) тул import зам өөрчлөгдөөгүй. Функц зөөхдөө энэ файлын import-ыг мөн шинэчил.
 
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, notInArray, sql } from "drizzle-orm";
 import { branches, InsertProduct, InsertProductCategory, productCategories, productVariants, products, stockMovements, orderItems, orders } from "../../drizzle/schema";
 import { invalidateCached, invalidateCachedByPrefix } from "../_core/ttlCache";
 import { setBranchStockAbsolute } from "../stockLedger";
@@ -300,9 +300,17 @@ export async function deleteAdminProduct(id: number) {
   // арилдаг, `order_items.variantId` нь NULL болж захиалгын нөөцийг цуцлахад
   // сэргээх боломжгүй болдог байв. `deleteBranch` аль хэдийн ижил бодлоготой:
   // түүх байвал татгалзаж, нийтлэлтээс хасахыг зөвлөнө.
+  // Зөвхөн ҮЙЛ АЖИЛЛАГААНЫ хөдөлгөөн (борлуулалт, хүлээн авалт, шилжүүлэг,
+  // тооллого) түүх гэж тооцогдоно. Admin-ий гараар оруулсан эхний/засварын
+  // үлдэгдэл (`opening`, `variant_seed`, `admin_set`, `product_form_set`,
+  // `rebaseline`) бол түүх биш — эс бөгөөс үлдэгдэлтэй үүсгэсэн алдаатай шинэ
+  // барааг хэзээ ч устгаж чадахгүй болно (e2e/product-variants.spec.ts барьсан).
   const [ledgerRow] = await db.select({ id: stockMovements.id }).from(stockMovements)
     .innerJoin(productVariants, eq(productVariants.id, stockMovements.variantId))
-    .where(eq(productVariants.productId, id)).limit(1);
+    .where(and(
+      eq(productVariants.productId, id),
+      notInArray(stockMovements.type, ["opening", "variant_seed", "admin_set", "product_form_set", "rebaseline"]),
+    )).limit(1);
   if (ledgerRow) throw new Error("Энэ бараанд нөөцийн хөдөлгөөний түүх бүртгэгдсэн тул устгах боломжгүй. Оронд нь нийтлэлтээс хасна уу (Нийтлэгдсэн → Үгүй).");
   const [orderedRow] = await db.select({ id: orderItems.id }).from(orderItems)
     .innerJoin(orders, eq(orders.id, orderItems.orderId))

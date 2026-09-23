@@ -32,7 +32,11 @@ const gateOn = process.env.E2E_FACE_GATE === "1";
 test.describe("admin: нууц үг -> царай", () => {
   test.skip(!gateOn, "E2E_FACE_GATE=1 шаардлагатай (хаалга асаалттай сервер, 3101 порт).");
 
-  test("нэвтэрсэн admin /admin нээхэд эхлээд нууц үг асууна; буруу нь талбар дээр, зөв нь аргаа сонгох руу", async ({ page, context, baseURL }) => {
+  test("нэвтэрсэн admin /admin нээхэд эхлээд нууц үг асууна; буруу нь талбар дээр, зөв нь аргаа сонгох руу", async ({ page, context, baseURL }, testInfo) => {
+    // 2026-09-23: утсан дээр "утсаараа QR уншуулах" сонголт утгагүй тул
+    // сонголтын дэлгэц алгасагдаж шууд камер руу орно (AdminFaceGate-ийн
+    // `isPhoneDevice`). Pixel 7 (хуруу + нарийн дэлгэц) нь тэр зам.
+    const onPhone = testInfo.project.name === "mobile";
     const admin = await ensureE2EUser("admin");
     const db = await getDb();
     // The choice screen is only offered to someone already enrolled.
@@ -61,15 +65,25 @@ test.describe("admin: нууц үг -> царай", () => {
       await expect(page.locator("#admin-password-error")).toHaveText("Нууц үг буруу байна.");
       await expect(field).toHaveAttribute("aria-invalid", "true");
 
-      // 3) Right password -> the camera/phone choice.
+      // 3) Right password -> the camera/phone choice (desktop), or straight
+      //    to the camera on a phone -- with no phone-handoff offer at all.
       await field.fill(`${E2E_MARKER}-password-admin`);
       await page.getByRole("button", { name: "Үргэлжлүүлэх" }).click();
-      await expect(page.getByRole("button", { name: /Энэ төхөөрөмжөөр баталгаажуулах/ })).toBeVisible({ timeout: 15_000 });
+      const afterPassword = async () => {
+        if (onPhone) {
+          await expect(page.getByRole("heading", { name: "Царайгаар баталгаажуулах" })).toBeVisible({ timeout: 15_000 });
+          await expect(page.getByRole("button", { name: /Энэ төхөөрөмжөөр баталгаажуулах/ })).toHaveCount(0);
+          await expect(page.getByText(/утсаараа баталгаажуулах/i)).toHaveCount(0);
+        } else {
+          await expect(page.getByRole("button", { name: /Энэ төхөөрөмжөөр баталгаажуулах/ })).toBeVisible({ timeout: 15_000 });
+        }
+      };
+      await afterPassword();
 
       // A reload in the SAME tab before the face check keeps the step (it
       // lives 10 minutes, and is used up only by a PASSED face check).
       await page.reload();
-      await expect(page.getByRole("button", { name: /Энэ төхөөрөмжөөр баталгаажуулах/ })).toBeVisible({ timeout: 15_000 });
+      await afterPassword();
 
       // A NEW tab has a new tab id: password again.
       const second = await context.newPage();

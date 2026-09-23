@@ -67,11 +67,38 @@ export function useScanDraft(options: {
 
   useEffect(() => { if (!draftKey) loadedKey.current = null; }, [draftKey]);
 
+  // 2026-09-23: хадгалалт явж байх үед ирсэн скан алга болдог байв — хуучин
+  // хадгалалт дуусмагц `dirty=false` болгож localStorage-ийн хуулбарыг
+  // устгадаг тул шинэ скан серверт ч, localStorage-д ч үлдэхгүй, "Хадгалсан"
+  // гэж харагдаад тооллого сүүлийн сканыг алгасаж баталгаажна. Одоо өөрчлөлт
+  // бүр revision нэмэгдүүлж, хадгалалт зөвхөн өөрийн revision хэвээр байвал л
+  // "цэвэр" гэж тэмдэглэнэ. Хадгалалтууд дараалалтай (хуучин хүсэлт шинийн
+  // дараа ирж АБСОЛЮТ тоог хуучнаар дарж бичихгүй).
+  const revisionRef = useRef(0);
+  const stateRef = useRef(state);
+  useEffect(() => { stateRef.current = state; }, [state]);
+  const saveChainRef = useRef<Promise<unknown>>(Promise.resolve());
+
   const dispatch = useCallback((action: ScanAction) => {
     if (!editable) return;
+    revisionRef.current += 1;
     dispatchRaw(action);
     setDirty(true);
   }, [editable]);
+
+  /** Одоогийн мөрүүдийг дараалалд оруулж хадгална; энэ хооронд өөрчлөлт ороогүй бол цэвэр. */
+  const saveNow = useCallback(async (key: string) => {
+    const revision = revisionRef.current;
+    const lines = toSaveLines(stateRef.current);
+    const run = saveChainRef.current.catch(() => undefined).then(() => saveRef.current(lines));
+    saveChainRef.current = run;
+    await run;
+    if (revisionRef.current !== revision) return false; // шинэ скан ирсэн — дараагийн хадгалалт авна
+    setDirty(false);
+    setStatus("saved");
+    writeStored(key, null);
+    return true;
+  }, []);
 
   // Mirror + debounced save.
   useEffect(() => {
@@ -80,26 +107,24 @@ export function useScanDraft(options: {
     const timer = window.setTimeout(async () => {
       setStatus("saving");
       try {
-        await saveRef.current(toSaveLines(state));
-        setDirty(false);
-        setStatus("saved");
-        writeStored(draftKey, null);
+        await saveNow(draftKey);
       } catch {
         setStatus("error");
       }
     }, 700);
     return () => window.clearTimeout(timer);
-  }, [state, dirty, draftKey, editable]);
+  }, [state, dirty, draftKey, editable, saveNow]);
 
   /** Saves right now (before posting) and resolves when the server has it. */
   const flush = useCallback(async () => {
     if (!draftKey || !dirty) return;
     setStatus("saving");
-    await saveRef.current(toSaveLines(state));
-    setDirty(false);
-    setStatus("saved");
-    writeStored(draftKey, null);
-  }, [draftKey, dirty, state]);
+    // Хадгалалтын дундуур шинэ скан орвол тэр ч серверт хүртэл давтана.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      if (await saveNow(draftKey)) return;
+    }
+    throw new Error("Скан үргэлжилсээр байна — түр зогсоод дахин оролдоно уу.");
+  }, [draftKey, dirty, saveNow]);
 
   const discardLocal = useCallback(() => { if (draftKey) writeStored(draftKey, null); }, [draftKey]);
 

@@ -15,6 +15,22 @@
   try { config = JSON.parse((block && block.textContent) || "{}") || config; } catch (_) { /* leave defaults */ }
   var state = { analytics: false, marketing: false, gaLoaded: false, fbLoaded: false };
 
+  // 2026-09-23: хэмжилт рүү ЯМАР хаяг явахыг нэг газар шийднэ. Өмнө нь
+  // `location.href` бүтнээрээ явдаг байсан тул /face-approve?token=… (admin-ий
+  // царайны QR-ийн ИДЭВХТЭЙ токен) Google руу очдог байв. Admin/царайны
+  // хуудсууд огт хэмжигдэхгүй, бусад хаягаас нууц параметрүүд хасагдана.
+  var PRIVATE_PATH = /^\/(admin|face-approve)(\/|$)/;
+  var SECRET_PARAMS = ["token", "redirect", "code", "state"];
+  function isPrivatePage() { return PRIVATE_PATH.test(location.pathname); }
+  function safeLocation() {
+    try {
+      var url = new URL(location.href);
+      SECRET_PARAMS.forEach(function (name) { url.searchParams.delete(name); });
+      url.hash = "";
+      return url.toString();
+    } catch (_) { return location.origin + location.pathname; }
+  }
+
   function loadScript(src) {
     var s = document.createElement("script");
     s.async = true; s.src = src;
@@ -26,7 +42,13 @@
     window.dataLayer = window.dataLayer || [];
     window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
     window.gtag("js", new Date());
-    window.gtag("config", config.ga4, { anonymize_ip: true, send_page_view: true });
+    // Автомат page_view-г унтраана: тэр нь бүтэн `location.href`-ийг
+    // илгээдэг. Эхний хуудсыг доорх pageView() цэвэрлэсэн хаягаар илгээнэ.
+    // `set`: дараагийн БҮХ event (add_to_cart гэх мэт) цэвэрлэсэн хаягийг авна;
+    // pageView() зам солигдох бүрт шинэчилнэ.
+    window.gtag("set", { page_location: safeLocation() });
+    window.gtag("config", config.ga4, { anonymize_ip: true, send_page_view: false });
+    if (!isPrivatePage()) window.gtag("event", "page_view", { page_location: safeLocation(), page_path: location.pathname, page_title: document.title });
     loadScript("https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(config.ga4));
   }
   function loadFb() {
@@ -38,7 +60,7 @@
       loadScript("https://connect.facebook.net/en_US/fbevents.js");
     }
     window.fbq("init", config.metaPixel);
-    window.fbq("track", "PageView");
+    if (!isPrivatePage()) window.fbq("track", "PageView");
   }
   function clearCookies(prefixes) {
     document.cookie.split(";").forEach(function (c) {
@@ -54,12 +76,17 @@
   window.sugiConsent = function (type, granted) {
     if (type === "analytics") {
       state.analytics = !!granted;
-      if (granted) loadGa();
+      // 2026-09-23: татгалзаад дахин зөвшөөрөхөд `ga-disable-*` true хэвээр,
+      // loadGa нь gaLoaded-аар шууд буцдаг тул хэмжилт тэр айлчлалд дахин
+      // хэзээ ч сэргэдэггүй байв.
+      if (granted) { if (config.ga4) window["ga-disable-" + config.ga4] = false; loadGa(); }
       else if (state.gaLoaded) { window["ga-disable-" + config.ga4] = true; clearCookies(["_ga", "_gid", "_gat"]); }
     }
     if (type === "marketing") {
       state.marketing = !!granted;
-      if (granted) loadFb();
+      // 2026-09-23: "revoke"-ийн дараа дахин зөвшөөрөхөд "grant" илгээгээгүй
+      // тул Pixel тэр айлчлалд чимээгүй хэвээр байв.
+      if (granted) { if (state.fbLoaded && window.fbq) window.fbq("consent", "grant"); loadFb(); }
       else if (state.fbLoaded && window.fbq) { window.fbq("consent", "revoke"); clearCookies(["_fbp", "_fbc"]); }
     }
   };
@@ -82,8 +109,16 @@
     }
   };
 
+  // 2026-09-23: зөвхөн ЗАМ солигдоход page view. Өмнө нь replaceState бүр
+  // (Shop-ийн шүүлтүүр, хайлтын үг бичих бүр URL-ийг солидог) шинэ page view
+  // болж тоо хэд дахин хөөрдөг байв.
+  var lastPath = location.pathname;
   function pageView() {
-    if (state.analytics && state.gaLoaded && window.gtag) window.gtag("event", "page_view", { page_location: location.href, page_path: location.pathname + location.search, page_title: document.title });
+    if (location.pathname === lastPath) return;
+    lastPath = location.pathname;
+    if (state.gaLoaded && window.gtag) window.gtag("set", { page_location: safeLocation() });
+    if (isPrivatePage()) return;
+    if (state.analytics && state.gaLoaded && window.gtag) window.gtag("event", "page_view", { page_location: safeLocation(), page_path: location.pathname, page_title: document.title });
     if (state.marketing && state.fbLoaded && window.fbq) window.fbq("track", "PageView");
   }
   ["pushState", "replaceState"].forEach(function (method) {
