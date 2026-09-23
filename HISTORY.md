@@ -292,7 +292,9 @@ Tom: *"ene buh codebase bas ene bichgdsen code line buriin bug olj zasah hurtles
   `ci-local` алхам бүрийн exit code-ийг шалгадаг болов. E2E_BASE_URL зөвхөн локал/staging.
 - `migrate-to-oracle-mysql.ps1` кирилл үсгийг `?` болгодог байв (db-restore-ийн 09-21-ний засвартай ижил).
 - `cloudflare-harden.mjs` dashboard-ын дүрмүүдийг арчдаг байв (одоо нэгтгэнэ); /admin-ий гадаад
-  шалгалт API-г хамардаггүй байв — ⚠️ скриптийг Tom token-оороо дахин ажиллуулах хүртэл Cloudflare-д үйлчлэхгүй.
+  шалгалт API-г хамардаггүй байв. ✅ 2026-09-24-нд Cloudflare-д хэрэгжүүлсэн (8 тохиргоо OK, rate limit 1,
+  WAF 3 — хуучин нэртэй давхар гео дүрмийг солив, кэш 2; `/wp-login.php` 403, sitemap/robots кэшлэгдэж
+  HIT). ⚠️ `sugi-hard` token хугацаагүй бөгөөд чатад ил бичигдсэн — Tom устгана.
 - Жижиг: `demo.ps1` NODE_ENV-ийг цонхонд үлдээдэг, dependency check өөрөө унасныг "none" гэдэг, 0.x
   минор bump-ийг major гэж тооцдоггүй, `auto-tag --retype` admin-ий засварыг дарж бичдэг, k6-ийн
   production хамгаалалт том үсгийг алгасдаг, `.gitignore`-д `.env.*`, ESLint `client/public`-ийн

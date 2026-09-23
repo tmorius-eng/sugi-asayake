@@ -11,7 +11,8 @@
 //   Account · Access: Apps and Policies · Edit
 //   Account · Access: Organizations, Identity Providers, and Groups · Edit
 //   Zone · Zone Settings · Edit      Zone · Zone WAF · Edit
-//   Zone · Firewall Services · Edit  (Zone Resources: karkaron.com)
+//   Zone · Firewall Services · Edit  Zone · Cache Rules · Edit (2026-09-16-ийн кэшийн дүрэмд)
+//   (Zone Resources: karkaron.com). Access-ийн 2 эрх зөвхөн --access-д хэрэгтэй.
 // Bot Fight Mode энд БАЙХГҮЙ — "Bot Management: Edit" шаарддаг, token-д өгөөгүй;
 // dashboard-аас (Security > Bots) асаана.
 //
@@ -48,11 +49,14 @@ const ok = (m) => console.log("OK  ", m);
  * танигдах) дүрмүүдийг л солино; бусдыг нь ЭХЭНД нь хадгална (кэшийн "Never
  * cache" хаалт төгсгөлдөө үлдэнэ).
  */
+const LEGACY_DESCRIPTIONS = ["Managed challenge for /admin from outside Mongolia/Japan (Access still required)"];
 async function putPhaseRules(phase, ours) {
   const path = `/zones/${ZONE}/rulesets/phases/${phase}/entrypoint`;
   let existing;
   try { existing = (await cf("GET", path)).rules ?? []; } catch { existing = []; } // no entrypoint yet
-  const managed = new Set(ours.map(rule => rule.description));
+  // Энэ скриптийн өмнөх хувилбаруудын өөр нэртэй дүрэм (2026-09-23 ажиллуулалтад
+  // хуучин гео дүрэм шинэтэйгээ давхар үлдсэн) — тэднийг ч "өөрийнх" гэж солино.
+  const managed = new Set([...ours.map(rule => rule.description), ...LEGACY_DESCRIPTIONS]);
   const kept = existing
     .filter(rule => !managed.has(rule.description))
     .map(({ id, description, expression, action, action_parameters, ratelimit, enabled, logging }) =>
