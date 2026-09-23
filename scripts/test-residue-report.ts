@@ -32,6 +32,13 @@ export const TEST_PRODUCT_PATTERNS = [
   "Guest checkout test product",
   "Transfer test product%",
   "Alert test product%",
+  // 2026-09-23: тасалсан run-аас үлдэж, дараагийн run-уудыг унагаж байсан
+  // хоёр fixture (хайлтын тест "Gokujyun" гэж хайхад хуучин бараа гарч ирсэн).
+  // Хайлтын тестийн нэр бодит брэндтэй ("Hada Labo …") тул БРЭНДЭЭР биш,
+  // зөвхөн нэрийн төгсгөлийн өвөрмөц тэмдгээр (`search-test-<timestamp>`)
+  // тааруулна — бодит барааны нэрэнд тэр мөр хэзээ ч байхгүй.
+  "Automation test product",
+  "%search-test-%",
 ];
 
 export const TEST_USER_PATTERNS = ["%@example.invalid", "guest-checkout-test-%"];

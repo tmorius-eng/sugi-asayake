@@ -201,8 +201,13 @@ export class SmartSoftwareProvider implements InventorySyncProvider {
 
   async listLocations(): Promise<{ id: string; name: string }[]> {
     const raw = await this.getJson(this.inventoryBaseUrl, "/api/inventory/stock_locations", "Байршлын жагсаалт");
-    if (!Array.isArray(raw)) throw new SmartSoftwareError("Байршлын жагсаалт: массив хүлээж байсан.");
-    return raw
+    // 2026-09-23: `unwrapList` — `pullCatalogSnapshot` аль хэдийн үүгээр
+    // явдаг ("бидний анхдагч хост нь ЯГ Retail-ийнх тул зөвхөн нүцгэн массив
+    // хүлээх нь баримтжуулсан хариуны хэлбэрт унах байсан" гэж тэндхийн
+    // тайлбар хэлдэг). Энэ нь татгалздаг байсан тул хэрэв Retail
+    // `stock_locations`-ыг мөн `{ Success, Data }`-д ороовол "Холболт
+    // шалгах" товч алдаа өгөх атлаа 15 минутын sync ажиллаж байдаг байв.
+    return unwrapList(raw, "Байршлын жагсаалт")
       .filter((row): row is { id: unknown; name?: unknown } => typeof row === "object" && row !== null && "id" in row)
       .map(row => ({ id: String(row.id).trim(), name: typeof row.name === "string" && row.name.trim() ? row.name.trim() : String(row.id) }))
       .filter(row => row.id);
@@ -224,7 +229,11 @@ export class SmartSoftwareProvider implements InventorySyncProvider {
   async pullCatalogSnapshot(): Promise<CatalogSnapshot> {
     const raw = await this.getJson(this.inventoryBaseUrl, "/api/inventory/products", "Барааны жагсаалт");
     const rows = unwrapList(raw, "Барааны жагсаалт");
-    const today = new Date(this.now()).toISOString().slice(0, 10);
+    // 2026-09-23: Улаанбаатарын өдрөөр. `toISOString()` нь UTC тул 00:00–08:00
+    // (UB) хооронд өнөөдрөөс эхэлсэн хямдрал "ирээдүйн", өчигдөр дууссан нь
+    // "идэвхтэй" гэж ангилагдаж, зөрүүний дэлгэц дээрх (улмаар админы
+    // хэрэглэх) үнэ буруу болдог байв.
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ulaanbaatar", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(this.now()));
     const products: VendorProduct[] = [];
     const locationIds = new Set<string>();
     for (const row of rows) {

@@ -123,8 +123,13 @@ function AuditLogTab() {
   const query = trpc.admin.auditLogs.useQuery({
     action: action || undefined,
     actorEmail: actorEmail.trim() || undefined,
-    dateFrom: dateFrom || undefined,
-    dateTo: dateTo || undefined,
+    // 2026-09-23: "2026-09-22" гэсэн мөрийг `z.coerce.date()` нь UTC шөнө дунд
+    // (= Улаанбаатарын 08:00) гэж уншдаг бөгөөд сервер `lte(createdAt, dateTo)`
+    // хэрэглэдэг тул нэг өдөр сонгоход яг 00:00:00Z-д бичигдсэн мөр л таарч,
+    // "Тохирох лог олдсонгүй" гардаг байв. Орон нутгийн өдрийн эхлэл/төгсгөл
+    // болгож илгээнэ (`exportOrdersCsv` аль хэдийн ингэж хийдэг).
+    dateFrom: dateFrom ? new Date(`${dateFrom}T00:00:00`).toISOString() : undefined,
+    dateTo: dateTo ? new Date(`${dateTo}T23:59:59.999`).toISOString() : undefined,
   });
   const logs = query.data ?? [];
   type AuditLogRow = (typeof logs)[number];

@@ -22,7 +22,7 @@ import { fileURLToPath } from "node:url";
 import { eq } from "drizzle-orm";
 import { orderItems } from "../drizzle/schema";
 import { publicOrigin } from "./_core/publicUrl";
-import { getDb, getOrderById, getOrderForUser, getSiteName, getStoreSettingValue } from "./db";
+import { getDb, getOrderById, getOrderForUser, getSiteName, getSiteTextValue, getStoreSettingValue } from "./db";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 /** dist/index.js sits next to dist/assets; in dev the source tree has server/assets. */
@@ -125,7 +125,8 @@ async function renderInvoiceFor(order: OrderRow): Promise<InvoiceResult> {
   const items = await db.select({ productName: orderItems.productName, sku: orderItems.sku, unitPriceMnt: orderItems.unitPriceMnt, quantity: orderItems.quantity }).from(orderItems).where(eq(orderItems.orderId, orderId)).orderBy(orderItems.id);
   const [phone, email] = await Promise.all([getStoreSettingValue("contact-phone"), getStoreSettingValue("contact-email")]);
 
-  const siteName = await getSiteName();
+  // 2026-09-23: толгойн мөр тохиргооны slot-оос (`invoice-text-tagline`).
+  const [siteName, tagline] = await Promise.all([getSiteName(), getSiteTextValue("invoice-text-tagline")]);
   const doc = new PDFDocument({ size: "A4", margin: 48, info: { Title: `Захиалга ${order.orderNumber}`, Author: siteName } });
   const font = FONT_CANDIDATES.find(existsSync);
   if (font) { doc.registerFont("body", font); doc.font("body"); }
@@ -139,7 +140,7 @@ async function renderInvoiceFor(order: OrderRow): Promise<InvoiceResult> {
 
   // Header
   doc.fillColor(red).fontSize(20).text(siteName, left, 48);
-  doc.fillColor(muted).fontSize(9).text("Японы гоо сайхан, эрүүл мэнд, гэр ахуйн бараа · Улаанбаатар", left, 72);
+  doc.fillColor(muted).fontSize(9).text(tagline, left, 72);
   doc.fillColor(ink).fontSize(16).text("Захиалгын баримт", left, 100);
   doc.fontSize(10).fillColor(muted)
     .text(`Дугаар: ${order.orderNumber}`, left, 122)

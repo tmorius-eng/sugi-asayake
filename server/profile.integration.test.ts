@@ -83,11 +83,13 @@ describeWithDatabase("customer profile integration", () => {
     await expect(caller.profile.addresses.create({ label: "Гэр", recipientName: "Test", phone: "99001122", addressLine: "Test address line" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 
-  it("updates name and phone, leaving email/role untouched", async () => {
+  it("updates the name, leaving phone/email/role untouched (phone changes only via SMS verification, 2026-09-23)", async () => {
     const caller = makeCaller(sessionUser);
-    const updated = await caller.profile.update({ name: "Шинэ Нэр", phone: "99112233" });
+    // `phone` is not part of the input any more; an old client still sending it
+    // must not be able to overwrite the verified login identity.
+    const updated = await caller.profile.update({ name: "Шинэ Нэр", phone: "99112233" } as { name: string });
     expect(updated.name).toBe("Шинэ Нэр");
-    expect(updated.phone).toBe("99112233");
+    expect(updated.phone).toBe(sessionUser!.phone);
     expect(updated.email).toBe(sessionUser!.email);
     expect(updated.role).toBe("user");
     expect((updated as Record<string, unknown>).passwordHash).toBeUndefined();

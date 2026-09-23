@@ -74,6 +74,10 @@ export default function AdminBranchStockEditor({ variantId }: { variantId: numbe
       utils.admin.productVariants.invalidate();
       utils.admin.products.invalidate();
       setDrafts(current => { const next = { ...current }; delete next[branchId]; return next; });
+      // 2026-09-23: шалтгааны тайлбарыг цэвэрлэнэ. Өмнө нь үлддэг тул дараагийн
+      // салбарын огт хамаагүй нэмэлт дээр "гэмтэлтэй бараа хасав" гэсэн
+      // тайлбар дэвтэрт бичигддэг байв.
+      setNote("");
     } catch (error) {
       toast.error(messageFrom(error));
     } finally {
@@ -87,7 +91,19 @@ export default function AdminBranchStockEditor({ variantId }: { variantId: numbe
   const anyDirty = rows.some(row => drafts[row.branchId] !== undefined && drafts[row.branchId] !== String(row.stockQuantity));
 
   return (
-    <div className="mt-2 grid gap-1.5 rounded-xl bg-[var(--a-soft)] p-2.5">
+    /* 2026-09-23: Enter дарахад ГАДААД барааны маягт илгээгдэхгүй — эдгээр
+       талбар нь `submit` товчтой барааны <form>-ын дотор байдаг тул HTML-ийн
+       implicit submission үйлчилдэг (AdminProductVariantsPanel дээрх ижил
+       тайлбарыг үз). */
+    <div
+      className="mt-2 grid gap-1.5 rounded-xl bg-[var(--a-soft)] p-2.5"
+      onKeyDown={event => {
+        if (event.key !== "Enter") return;
+        const target = event.target as HTMLElement;
+        if (target.tagName !== "INPUT") return;
+        event.preventDefault();
+      }}
+    >
       <div className="flex items-center justify-between gap-2">
         <p className="flex items-center gap-1.5 text-[10px] font-extrabold tracking-[.08em] text-[var(--a-text-soft)]"><Store size={12} />САЛБАР ТУС БҮРИЙН ҮЛДЭГДЭЛ</p>
         <button type="button" onClick={() => setShowHistory(current => !current)} aria-expanded={showHistory} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-extrabold text-[var(--a-info)] hover:bg-[var(--a-card)]"><History size={11} />Хөдөлгөөн</button>

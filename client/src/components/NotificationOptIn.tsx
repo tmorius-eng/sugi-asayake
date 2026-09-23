@@ -94,7 +94,17 @@ export default function NotificationOptIn({ variant = "footer", onAction }: { va
       const sub = await subscribeToPush(key);
       // Зөвшөөрөл асуухад "Block" дарсан бол хөтөч дахин асуухгүй — тохиргооноос
       // нь буцааж нээхийг зааж өгөх нь ганц бодит гарц.
-      if (!sub) { setSupport(pushSupport()); setDialog("denied"); return; }
+      // 2026-09-23: "хориглосон" ба "өөр шалтгаанаар бүтсэнгүй" хоёрыг ялгана.
+      // Өмнө нь service worker бүртгэгдээгүй, эсвэл түлхүүр дутуу байсан ч
+      // "Энэ хөтөч дээр мэдэгдэл хаагдсан" гэж хэлдэг байсан — хүн юу ч
+      // хориглоогүй байхад.
+      if (!sub) {
+        const live = pushSupport();
+        setSupport(live);
+        if (live === "denied") setDialog("denied");
+        else toast.error(t("Мэдэгдлийг асааж чадсангүй. Хуудсыг сэргээгээд дахин оролдоно уу."));
+        return;
+      }
       await subscribe.mutateAsync(sub);
       sharedSubscribed = true; emitState();
       // Шууд нэг мэдэгдэл илгээж, хүн ажиллаж байгааг НҮДЭЭР хардаг байх —
@@ -103,6 +113,13 @@ export default function NotificationOptIn({ variant = "footer", onAction }: { va
       toast.success(delivered.delivered > 0
         ? t("Мэдэгдэл асаалаа — туршилтын мэдэгдэл илгээлээ.")
         : t("Мэдэгдэл асаалаа."));
+    } catch (error) {
+      // 2026-09-23: catch байхгүй байсан тул `subscribeToPush`-ийн уналт
+      // (Safari-ийн AbortError, буруу VAPID түлхүүр) эсвэл `subscribe`
+      // mutation-ийн 4xx/5xx (rate limit) нь зөвхөн глобал unhandledrejection
+      // руу ордог байв: хэрэглэгч ямар ч санал хүсэлт авахгүй, товч нь
+      // зүгээр л "busy"-гаа тайлна.
+      toast.error(error instanceof Error ? error.message : t("Мэдэгдлийг асааж чадсангүй."));
     } finally {
       sharedBusy = false; emitState();
     }

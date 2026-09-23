@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from "express";
-import { getActiveIntegrationConfig, getOrderById, getPaymentAttemptByInvoiceId, markQPayPaymentAttemptFailed, markQPayPaymentAttemptPaid, storeQPayPaymentAttemptResponse } from "./db";
+import { getActiveIntegrationConfig, getOrderById, getPaymentAttemptByInvoiceId, markQPayPaymentAttemptPaid, storeQPayPaymentAttemptResponse } from "./db";
 import { normaliseMongolianMobile } from "../shared/mobile";
 import { limitQPayCallbackTraffic } from "./_core/security";
 
@@ -169,18 +169,27 @@ export async function checkStorepayLoan(loanId: string): Promise<{ approved: boo
  * already-closed orders).
  */
 export async function verifyStorepayCallback(loanId: string) {
-  const attempt = await getPaymentAttemptByInvoiceId(loanId);
+  // 2026-09-23: провайдерийг МӨН тааруулна (qpay.ts-ийн ижил тайлбарыг үз).
+  const attempt = await getPaymentAttemptByInvoiceId(loanId, "storepay");
   if (!attempt) throw new StorepayError("Тодорхойгүй StorePay зээлийн дугаар.");
   const verification = await checkStorepayLoan(loanId);
-  await storeQPayPaymentAttemptResponse({ id: attempt.id, responseJson: JSON.stringify(verification.raw) });
   const order = await getOrderById(attempt.orderId);
   if (!order) throw new StorepayError("Захиалга олдсонгүй.");
   if (verification.approved) {
+    await storeQPayPaymentAttemptResponse({ id: attempt.id, responseJson: JSON.stringify(verification.raw) });
     await markQPayPaymentAttemptPaid({ id: attempt.id, orderId: attempt.orderId, providerPaymentId: loanId });
   } else {
-    // StorePay told us the customer has not approved it (declined, or the
-    // request expired). Recorded as a failed attempt, order left unpaid.
-    await markQPayPaymentAttemptFailed({ id: attempt.id, providerPaymentId: loanId });
+    // 2026-09-23: `approved === false` нь ТЕРМИНАЛ ТӨЛӨВ БИШ. StorePay-ийн
+    // `check` нь "хараахан зөвшөөрөөгүй" болон "татгалзсан/хугацаа дууссан"
+    // хоёрыг ялгадаггүй (файлын толгойд иш татсан SDK-ийн гэрээ нь зөвхөн
+    // true/false). Callback нь нэвтрэлтгүй GET тул худалдан авагч апп дээрээ
+    // зөвшөөрч байх зуур ирсэн дохио оролдлогыг `failed` болгож, улмаар
+    // `previous.status === "created"` цоож таарахаа больж, дараагийн товшилт
+    // ХОЁР ДАХЬ зээлийн хүсэлт нээдэг байв (самбарт хуурамч "амжилтгүй
+    // төлбөр" ч харагдана). Одоо `created` хэвээр үлдэж, дахин асуулгаар
+    // шийдэгдэнэ; хариуны биеийг ч дарж бичихгүй (нэхэмжлэл дахин
+    // ашиглах цоожийг хамгаална).
+    console.warn(`[StorePay] Loan ${loanId} for order ${attempt.orderId} is not approved yet -- attempt left as "created" so the shopper's own approval can still land.`);
   }
   return { approved: verification.approved, orderId: attempt.orderId };
 }

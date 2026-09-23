@@ -142,7 +142,10 @@ export const DEFAULT_SYNONYM_GROUPS: readonly (readonly string[])[] = [
   ["алоэ", "aloe"],
   ["сарнай", "сарнайн", "rose"],
   ["нимбэг", "нимбэгэн", "lemon", "citrus"],
-  ["гаа", "мята", "мятa", "mint", "menthol"],
+  // 2026-09-23: гурав дахь бичлэг нь латин "a"-гаар төгссөн холимог бичиг
+  // байсан — ямар ч гар дээрээс бичигдэхгүй, зөвхөн `search_synonyms`-ийг
+  // хогоор дүүргэнэ.
+  ["гаа", "мята", "mint", "menthol"],
   ["ногоон цай", "matcha", "green tea"],
   ["жимс", "жимсэн", "fruit", "berry"],
   ["лаванда", "lavender"],
@@ -353,6 +356,18 @@ export type SynonymDictionary = {
  * Building the union makes the dictionary order-independent, so a group can
  * be added anywhere in the list without silently changing another.
  */
+/**
+ * Хэллэг нь ҮГИЙН ХИЛЭЭР таарна (2026-09-23). Нормчлогдсон текст нь зайгаар
+ * тусгаарлагдсан тул хоёр талд нь зай нэмж шалгахад л хангалттай.
+ */
+function containsPhrase(text: string, phrase: string): boolean {
+  return ` ${text} `.includes(` ${phrase} `);
+}
+
+function replacePhrase(text: string, phrase: string): string {
+  return ` ${text} `.split(` ${phrase} `).join("  ").trim().replace(/\s+/g, " ");
+}
+
 export function buildSynonymDictionary(groups: readonly (readonly string[])[]): SynonymDictionary {
   const expansion = new Map<string, Set<string>>();
   for (const rawGroup of groups) {
@@ -362,9 +377,18 @@ export function buildSynonymDictionary(groups: readonly (readonly string[])[]): 
     // shopper typing "shampun" or "morinii tos" lands in the same concept as
     // one typing "шампунь" or "морины тос".
     const merged = new Set<string>(group);
-    for (const word of group) for (const variant of latinVariants(word)) merged.add(variant);
-    // Pull in everything already reachable from any of these words.
-    new Set(merged).forEach(word => expansion.get(word)?.forEach(other => merged.add(other)));
+    const generated = new Set<string>();
+    for (const word of group) for (const variant of latinVariants(word)) { if (!merged.has(variant)) generated.add(variant); merged.add(variant); }
+    // 🔴 2026-09-23: нэгдэх шийдвэрийг ЗӨВХӨН ЗАРЛАСАН үгээр гаргана,
+    // ҮҮСГЭСЭН латин хувилбараар БИШ.
+    //
+    // `latinVariants("үс")` ба `latinVariants("ус")` хоёулаа `"us"` өгдөг тул
+    // үсний бүлэг ба усны (aqua) бүлэг НЭГДЭЖ, "үс" гэж хайхад "Micellar
+    // Water"/"Aqua …", "ус" гэж хайхад шампунь гардаг байв. Үүсгэсэн
+    // хувилбарууд bucket-д хэвээр (галиг бичлэг ажиллана), гэхдээ өөр
+    // бүлгийг татаж оруулахгүй.
+    const declared = new Set<string>([...merged].filter(word => !generated.has(word)));
+    declared.forEach(word => expansion.get(word)?.forEach(other => merged.add(other)));
     // Point every member -- old and new -- at the one merged set.
     merged.forEach(word => expansion.set(word, merged));
   }
@@ -419,10 +443,13 @@ export function buildSynonymDictionary(groups: readonly (readonly string[])[]): 
     // Phrases first: "шүдний оо" must resolve to toothpaste rather than being
     // split into "шүдний" plus an unindexable "оо".
     for (const phrase of phrases) {
-      if (!remainder.includes(phrase)) continue;
+      // 2026-09-23: үгийн хилээр. `includes` нь "нүүрний маск"-ийг "нүүрний
+      // маскара" дотроос олж, үлдсэнийг нь "ара" гэсэн утгагүй үг болгодог
+      // байв — маскара хайсан хүнд нүүрний маск гардаг.
+      if (!containsPhrase(remainder, phrase)) continue;
       const bucket = expansion.get(phrase)!;
       concepts.push({ own: phrase, alternatives: Array.from(bucket), conceptId: conceptIdByBucket.get(bucket) ?? null });
-      remainder = remainder.replaceAll(phrase, " ");
+      remainder = replacePhrase(remainder, phrase);
     }
     for (const word of remainder.split(" ").filter(Boolean)) {
       const bucket = lookup(word);
@@ -458,7 +485,7 @@ export function buildSynonymDictionary(groups: readonly (readonly string[])[]): 
     if (!normalised) return [];
     const ids = new Set<string>();
     for (const phrase of phrases) {
-      if (normalised.includes(phrase)) { const id = conceptIdOf(phrase); if (id) ids.add(id); }
+      if (containsPhrase(normalised, phrase)) { const id = conceptIdOf(phrase); if (id) ids.add(id); }
     }
     for (const word of normalised.split(" ")) {
       // Зөвхөн яг таарсан үг (collapse-гүй): барааны текст дэх "oil" нь тос

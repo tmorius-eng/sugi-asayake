@@ -118,11 +118,21 @@ export default function AdminCampaignsPanel() {
   // Илгээхийн ӨМНӨ бодит хүрэх тоо. Push-д ялангуяа чухал: имэйл/утас бараг
   // бүх мөрөнд байдаг бол мэдэгдэл асаасан хүн эхэндээ цөөхөн байна — үүнгүйгээр
   // "500 хүнд илгээлээ" гэж харагдаад хэн ч хүлээж авахгүй байж болно.
-  const reachQuery = trpc.admin.campaignReach.useQuery(
-    { userIds: recipientIds, channel },
-    { enabled: recipientIds.length > 0 && recipientIds.length <= 2_000 },
-  );
-  const urlInvalid = channel === "push" && url.trim().length > 0 && !/^\/[^\s]*$/.test(url.trim());
+  // 2026-09-23: query (GET) биш mutation (POST) — 2 000 id нь URL-д ~16 KB
+  // болж Node/Cloudflare-ийн хязгаарыг давдаг тул хамгийн том илгээлт дээр
+  // энэ тоо чимээгүй алга болдог байв. Хүлээн авагч/суваг өөрчлөгдөх бүрт
+  // өөрөө дахин асууна.
+  const reachMutation = trpc.admin.campaignReach.useMutation();
+  const { mutate: fetchReach, reset: resetReach } = reachMutation;
+  const recipientIdsKey = recipientIds.join(",");
+  useEffect(() => {
+    if (!recipientIdsKey) { resetReach(); return; }
+    const ids = recipientIdsKey.split(",").map(Number);
+    if (ids.length > 2_000) { resetReach(); return; }
+    fetchReach({ userIds: ids, channel });
+  }, [recipientIdsKey, channel, fetchReach, resetReach]);
+  const reach = reachMutation.data;
+  const urlInvalid = channel === "push" && url.trim().length > 0 && !/^\/(?![/\\])[^\s]*$/.test(url.trim());
   const canSend = recipientIds.length > 0 && subject.trim().length > 0 && body.trim().length > 0
     && !(channel === "sms" && smsDisabled) && !(channel === "push" && pushDisabled) && !urlInvalid;
 
@@ -196,11 +206,11 @@ export default function AdminCampaignsPanel() {
               {/* Хүрэх тоо: сонгосон бүх хүнд биш, зөвхөн энэ сувгаар
                   бодитоор хүрэх хүнд очно. Push-д энэ зөрүү маш том байж
                   болно, тиймээс илгээхийн ӨМНӨ ил харуулна. */}
-              {recipientIds.length > 0 && reachQuery.data && (
-                <p className={`mt-3 text-[11px] font-bold ${reachQuery.data.reachable === 0 ? "text-[var(--a-neg)]" : "text-[var(--a-muted)]"}`}>
-                  {reachQuery.data.reachable === 0
-                    ? `Сонгосон ${reachQuery.data.selected} хүний ХЭН НЬ Ч энэ сувгаар хүлээж авахгүй — илгээх нь утгагүй.`
-                    : `Сонгосон ${reachQuery.data.selected} хүнээс ${reachQuery.data.reachable} нь энэ сувгаар хүлээж авна.`}
+              {recipientIds.length > 0 && reach && (
+                <p className={`mt-3 text-[11px] font-bold ${reach.reachable === 0 ? "text-[var(--a-neg)]" : "text-[var(--a-muted)]"}`}>
+                  {reach.reachable === 0
+                    ? `Сонгосон ${reach.selected} хүний ХЭН НЬ Ч энэ сувгаар хүлээж авахгүй — илгээх нь утгагүй.`
+                    : `Сонгосон ${reach.selected} хүнээс ${reach.reachable} нь энэ сувгаар хүлээж авна.`}
                   {channel === "push" && " Мэдэгдлээ асааж, зар хүлээн авахыг зөвшөөрсөн хүн."}
                 </p>
               )}

@@ -2,8 +2,8 @@
 // 2026-09-21: server/db.ts (7 066 мөр) домэйнээр хуваагдав; server/db.ts нь одоо barrel
 // (export *) тул import зам өөрчлөгдөөгүй. Функц зөөхдөө энэ файлын import-ыг мөн шинэчил.
 
-import { asc, eq } from "drizzle-orm";
-import { branches, InsertProduct, InsertProductCategory, productCategories, productVariants, products } from "../../drizzle/schema";
+import { and, asc, eq, sql } from "drizzle-orm";
+import { branches, InsertProduct, InsertProductCategory, productCategories, productVariants, products, stockMovements, orderItems, orders } from "../../drizzle/schema";
 import { invalidateCached, invalidateCachedByPrefix } from "../_core/ttlCache";
 import { setBranchStockAbsolute } from "../stockLedger";
 import { getDb } from "./connection";
@@ -295,6 +295,20 @@ export async function deleteAdminProduct(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
 
+  // 2026-09-23: устгал нь `product_variants` (cascade) → `branch_stock` +
+  // `stock_movements` (cascade) руу дамждаг тул нөөцийн ДЭВТЭР чимээгүй
+  // арилдаг, `order_items.variantId` нь NULL болж захиалгын нөөцийг цуцлахад
+  // сэргээх боломжгүй болдог байв. `deleteBranch` аль хэдийн ижил бодлоготой:
+  // түүх байвал татгалзаж, нийтлэлтээс хасахыг зөвлөнө.
+  const [ledgerRow] = await db.select({ id: stockMovements.id }).from(stockMovements)
+    .innerJoin(productVariants, eq(productVariants.id, stockMovements.variantId))
+    .where(eq(productVariants.productId, id)).limit(1);
+  if (ledgerRow) throw new Error("Энэ бараанд нөөцийн хөдөлгөөний түүх бүртгэгдсэн тул устгах боломжгүй. Оронд нь нийтлэлтээс хасна уу (Нийтлэгдсэн → Үгүй).");
+  const [orderedRow] = await db.select({ id: orderItems.id }).from(orderItems)
+    .innerJoin(orders, eq(orders.id, orderItems.orderId))
+    .innerJoin(productVariants, eq(productVariants.id, orderItems.variantId))
+    .where(and(eq(productVariants.productId, id), sql`${orders.status} <> 'cancelled'`)).limit(1);
+  if (orderedRow) throw new Error("Энэ бараа захиалгад бүртгэгдсэн тул устгах боломжгүй. Оронд нь нийтлэлтээс хасна уу (Нийтлэгдсэн → Үгүй).");
   await db.delete(products).where(eq(products.id, id));
   return { id };
 }

@@ -107,7 +107,13 @@ async function startServer() {
   // зүйл нь DB-ийн холболт.
   app.get("/health", async (_req, res) => {
     const db = await dbPing();
-    res.status(db.ok ? 200 : 503).json({ ok: db.ok, database: db.ok ? "up" : db.error, time: new Date().toISOString() });
+    // 2026-09-23: driver-ийн алдааны текстийг НИЙТЭД гаргахгүй. Өмнө нь
+    // `db.error` шууд буцдаг тул нэвтрэлтгүй хүсэлт "Access denied for user
+    // 'sugi'@'10.0.0.5'" эсвэл дотоод IP:порт харах боломжтой байсан — яг тэр
+    // хэлбэрийг `maskErrorShape` бусад бүх газарт нуудаг. Дэлгэрэнгүйг
+    // админын `systemHealth` procedure хэвээр үзүүлнэ.
+    if (!db.ok) console.error("[health] database ping failed:", db.error);
+    res.status(db.ok ? 200 : 503).json({ ok: db.ok, database: db.ok ? "up" : "down", time: new Date().toISOString() });
   });
   // Хүлээгдсэн, хэрэглэгчид харагдах үр дүн (буруу оролт, буруу нууц үг,
   // ашигласан купон, ...) — эдгээрийг Honeybadger-т мэдээлбэл үнэгүй tier-ийн
@@ -144,7 +150,11 @@ async function startServer() {
   // "Facebook-ээр үргэлжлүүлэх" (2026-09-13): энгийн OAuth redirect + callback,
   // FACEBOOK_APP_ID/SECRET тавигдтал 404. server/_core/facebookAuth.ts.
   app.get("/api/auth/facebook", startFacebookLogin);
-  app.get("/api/auth/facebook/callback", (req, res) => { void finishFacebookLogin(req, res); });
+  // 2026-09-23: `.catch(next)` — өмнө нь `void` байсан тул handler дотор
+  // баригдаагүй уналт (жишээ нь эвдэрсэн cookie дээрх URIError) глобал
+  // unhandledRejection руу орж, хүсэлтэд ХАРИУ ХЭЗЭЭ Ч бичигдэхгүй, хөтөч
+  // timeout хүртэл хүлээдэг байв.
+  app.get("/api/auth/facebook/callback", (req, res, next) => { finishFacebookLogin(req, res).catch(next); });
   app.get("/sitemap.xml", serveSitemap);
   app.get("/robots.txt", serveRobots);
   // Google Merchant Center-ийн scheduled-fetch URL (2026-09-14).
@@ -155,6 +165,12 @@ async function startServer() {
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
   } else {
+    // 2026-09-23: `express.static`-ийн `index: false` нь ЗӨВХӨН лавлахын
+    // индексийг хаадаг — `/index.html`-ийг шууд хүсвэл дискний файл хэвээр
+    // serve хийгддэг бөгөөд тэр файлд `%SEO_TITLE%`, `%SEO_CANONICAL%`,
+    // `%STOREFRONT_BOOTSTRAP_JSON%` зэрэг бөглөгдөөгүй placeholder-ууд байна.
+    // Crawler тэр холбоосыг олбол эвдэрсэн давхардсан хуудсыг индексжүүлнэ.
+    app.get("/index.html", (_req, res) => res.redirect(301, "/"));
     serveStatic(app);
   }
   // tRPC-ийн ГАДНАХ route-уудын алдааг барина (storage proxy, QPay webhook) —
@@ -229,4 +245,15 @@ process.on("uncaughtException", error => {
   notifyError(error, { source: "uncaughtException" });
 });
 
-startServer().catch(console.error);
+// 2026-09-23: эхлүүлэлт уначихвал ЗААВАЛ exit(1). Өмнө нь зөвхөн логлодог
+// байсан тул `assertProductionSecrets()` эсвэл `serveStatic()` шидэхэд процесс
+// код 0-оор гарах, эсвэл listener-гүйгээр "амьд" үлдэх боломжтой байв —
+// pm2 түүнийг "online" гэж харуулж, нийтийн `/health` нь ХУУЧИН процессоос
+// 200 буцаасаар байх тул юу ч улаан болдоггүй.
+startServer().catch(error => {
+  console.error("[startup] server failed to start:", error);
+  notifyError(error, { source: "startup" });
+  process.exitCode = 1;
+  // Honeybadger-т илгээх багахан хугацаа өгөөд гарна.
+  setTimeout(() => process.exit(1), 1_000).unref();
+});

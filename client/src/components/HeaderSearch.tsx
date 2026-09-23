@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Clock, Search, Tag, X } from "lucide-react";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
@@ -58,9 +58,29 @@ const rememberSearch = (query: string): string[] => {
   return next;
 };
 
+/**
+ * 2026-09-23: `term` нь ХУВААЛЦСАН төлөв.
+ *
+ * `CommerceHeader` нь хоёр HeaderSearch зурдаг (inline ба compact) бөгөөд
+ * ~460px дээр CSS аль нь харагдахыг л сольдог. Тус бүр өөрийн `term`-тэй
+ * байсан тул утсаа хөндлөн болгоход (эсвэл өргөн солигдоход) бичсэн үг алга
+ * болдог байв — PROJECT-GUIDE-ийн "нэг төлөвийг хоёр газар зурвал төлөв нь
+ * ХУВААЛЦСАН байна" гэсэн дүрмийн яг тэр тохиолдол. `open` нь ЗӨВХӨН харагдаж
+ * байгаа хувилбарт л хамаарах тул хувиараа хэвээр.
+ */
+let sharedTerm = "";
+const termListeners = new Set<() => void>();
+const subscribeTerm = (listener: () => void) => { termListeners.add(listener); return () => { termListeners.delete(listener); }; };
+const readSharedTerm = () => sharedTerm;
+const writeSharedTerm = (value: string) => { sharedTerm = value; for (const listener of termListeners) listener(); };
+// Модулийн түвшний утга тул SPA навигацийн дараа ч үлддэг. Өмнө нь толгой
+// хуудас бүрт дахин mount болж үг арилдаг байсан тул барааны үр дүн дээр
+// дарахад (SPA холбоос) ижил зан төлөвийг хадгалахын тулд цэвэрлэнэ.
+
 export default function HeaderSearch({ variant = "icon" }: { variant?: "icon" | "inline" } = {}) {
   const [open, setOpen] = useState(false);
-  const [term, setTerm] = useState("");
+  const term = useSyncExternalStore(subscribeTerm, readSharedTerm, readSharedTerm);
+  const setTerm = writeSharedTerm;
   const [debouncedTerm, setDebouncedTerm] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -134,7 +154,7 @@ export default function HeaderSearch({ variant = "icon" }: { variant?: "icon" | 
           </a>)}
           {matches.map(product => {
             const name = displayName(product);
-            return <Link key={product.id} href={`/product/${product.slug}`} onClick={() => setOpen(false)} className="header-search-result">
+            return <Link key={product.id} href={`/product/${product.slug}`} onClick={() => { setOpen(false); setTerm(""); }} className="header-search-result">
               <img src={product.imageUrl ?? fallbackImage} alt="" />
               <span><strong>{name.primary}</strong>{name.secondary ? <em className="header-search-secondary">{name.secondary}</em> : null}<small>{formatMnt(product.priceMnt)}</small></span>
             </Link>;

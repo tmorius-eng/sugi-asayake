@@ -197,6 +197,19 @@ export async function sendTransfer(actor: InventoryActor, id: number) {
     await db.transaction(async tx => {
       const flipped = await tx.update(stockTransfers).set({ status: "sent", sentByUserId: actor.id, sentAt: new Date() }).where(and(eq(stockTransfers.id, id), eq(stockTransfers.status, "draft")));
       if (Number(flipped[0].affectedRows ?? 0) !== 1) throw new InventoryError("Энэ шилжүүлгийг өөр хүн дөнгөж сая илгээсэн байна.", "CONFLICT");
+      // 2026-09-23: мөрүүдийг транзакцын ДОТОР дахин уншина. Дээрх уншилт
+      // транзакцаас ГАДНА байсан тул `saveTransferLines` (өөрөө транзакц)
+      // хооронд мөрийн багцыг бүхэлд нь сольж чадна: төлвийн guarded flip нь
+      // мөн адил амжилттай болж, дэвтэрт ХУУЧИН тоо, баримтад ШИНЭ тоо үлдэж,
+      // хоёр нь мөнхөд зөрдөг байв (нэг ажилтан мөр засаж, нөгөө нь "Илгээх"
+      // дарсан бол).
+      const committedLines = await tx.select().from(stockTransferLines).where(eq(stockTransferLines.transferId, id));
+      if (committedLines.length !== lines.length || committedLines.some(line => {
+        const before = lines.find(candidate => candidate.id === line.id);
+        return !before || before.qtySent !== line.qtySent || before.variantId !== line.variantId;
+      })) {
+        throw new InventoryError("Шилжүүлгийн мөрүүд дөнгөж сая өөрчлөгдсөн байна. Дахин шалгаад илгээнэ үү.", "CONFLICT");
+      }
       for (const line of lines) {
         await applyBranchStockDelta(tx, transfer.fromBranchId, line.variantId!, -line.qtySent, { type: "transfer_out", refType: "transfer", refId: id, actorUserId: actor.id, note: `→ ${toBranch?.name ?? transfer.toBranchId}` }, { itemLabel: line.productName ?? line.scannedCode });
       }

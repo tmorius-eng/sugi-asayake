@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, ExternalLink, LoaderCircle, ListPlus, Pencil, Search, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -37,9 +37,19 @@ export default function AdminRoutinesPanel() {
   const [productSearch, setProductSearch] = useState("");
 
   const detailQuery = trpc.admin.routineDetail.useQuery({ id: form.id ?? 0 }, { enabled: composerOpen && form.id !== null });
+  // 2026-09-23: НЭГ routine тутамд НЭГ удаа үрждэг. `detailQuery.data` нь
+  // `createdAt`/`updatedAt` (Date) агуулдаг тул дахин татах бүрт шинэ объект
+  // болж, энэ effect админы дарааллыг өөрчилсөн/нэмсэн алхмуудыг хадгалагдсан
+  // жагсаалтаар дардаг байв — дараа нь "Хадгалах" дарахад БУРУУ жагсаалт
+  // бичигдэнэ.
+  const seededRoutineIdRef = useRef<number | null>(null);
   useEffect(() => {
-    if (detailQuery.data) setSteps(detailQuery.data.steps.map(step => ({ productId: step.productId, productName: step.name, priceMnt: step.priceMnt, stepLabel: step.stepLabel })));
-  }, [detailQuery.data]);
+    if (!composerOpen) { seededRoutineIdRef.current = null; return; }
+    const detail = detailQuery.data;
+    if (!detail || seededRoutineIdRef.current === detail.id) return;
+    seededRoutineIdRef.current = detail.id;
+    setSteps(detail.steps.map(step => ({ productId: step.productId, productName: step.name, priceMnt: step.priceMnt, stepLabel: step.stepLabel })));
+  }, [composerOpen, detailQuery.data]);
 
   const createRoutine = trpc.admin.createRoutine.useMutation();
   const updateRoutine = trpc.admin.updateRoutine.useMutation();

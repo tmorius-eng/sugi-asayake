@@ -44,13 +44,19 @@ export type EnqueueOptions = {
   groups?: readonly NotificationGroup[];
 };
 
-export async function enqueueNotification<K extends NotificationEventType>(dbOrTx: DbOrTx, type: K, payload: NotificationPayloads[K], options: EnqueueOptions = {}): Promise<void> {
+/**
+ * Буцаах утга (2026-09-23): ШИНЭЭР бичигдсэн мөрийн тоо. `.ignore()` нь
+ * dedupeKey давхцвал 0 мөр бичдэг тул энэ тоо нь "энэ үйл явдлыг би эзэмшлээ"
+ * гэсэн АТОМ цоож болно — хоёр лаптоп + production нэг DB хуваалцдаг тул
+ * процесс доторх тэмдэглэгээ хүрэлцэхгүй (доорх low-stock digest-ийг үз).
+ */
+export async function enqueueNotification<K extends NotificationEventType>(dbOrTx: DbOrTx, type: K, payload: NotificationPayloads[K], options: EnqueueOptions = {}): Promise<number> {
   const spec = NOTIFICATION_EVENTS[type];
   const groups = options.groups ?? spec.groups;
-  if (!groups.length) return;
+  if (!groups.length) return 0;
   const { title, message } = buildNotificationMessage(type, payload);
   const status = ENV.notificationsSuppressed ? "suppressed" as const : "pending" as const;
-  await dbOrTx.insert(notificationOutbox).ignore().values(groups.map(group => ({
+  const inserted = await dbOrTx.insert(notificationOutbox).ignore().values(groups.map(group => ({
     eventType: type,
     groupKey: group,
     dedupeKey: options.dedupeKey ? outboxDedupeKey(type, options.dedupeKey) : null,
@@ -62,5 +68,7 @@ export async function enqueueNotification<K extends NotificationEventType>(dbOrT
     status,
     lastError: status === "suppressed" ? TEST_SUPPRESSED_MARKER : null,
   })));
-  if (status === "pending") onEnqueued?.();
+  const insertedRows = Number(inserted[0]?.affectedRows ?? 0);
+  if (status === "pending" && insertedRows > 0) onEnqueued?.();
+  return insertedRows;
 }

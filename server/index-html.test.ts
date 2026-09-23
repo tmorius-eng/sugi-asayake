@@ -47,18 +47,27 @@ describe("index.html escaping", () => {
       expect(escapeJsString("line1\nline2")).not.toContain("\n");
     });
 
-    it("neutralises a closing script tag that would end the inline block early", () => {
+    // 2026-09-23: escapeJsString нь одоо `<` тэмдэгт БҮГДИЙГ `\u003c` болгоно,
+    // зөвхөн `</script`-ийг биш. Шалтгаан: эдгээр утга JSON блок дотор буудаг
+    // ба HTML-ийн tokenizer `<!--<script>`-ийг харвал "double-escaped" төлөв
+    // рүү шилжиж, жинхэнэ `</script>` элементийг хаахаа болино.
+    it("neutralises every `<`, so no markup can end the inline block early", () => {
       const escaped = escapeJsString("</script><script>alert(1)</script>");
-      expect(escaped).not.toContain("</script");
-      expect(escaped).toContain("<\\/script");
+      expect(escaped).not.toContain("<");
+      expect(escaped).toContain("\\u003c/script");
     });
 
     it("neutralises a closing script tag whatever its casing", () => {
       expect(escapeJsString("</SCRIPT>")).not.toMatch(/<\/script/i);
+      expect(escapeJsString("</SCRIPT>")).not.toContain("<");
+    });
+
+    it("neutralises the `<!--<script>` sequence that flips the HTML tokenizer", () => {
+      expect(escapeJsString("<!--<script>")).not.toContain("<");
     });
 
     it("round-trips: what the browser parses back is exactly what the admin typed", () => {
-      for (const value of ['a "quoted" word', "back\\slash", "line\nbreak", "</script>", "Күкийн тохиргоо"]) {
+      for (const value of ['a "quoted" word', "back\\slash", "line\nbreak", "</script>", "<!--<script>", "Күкийн тохиргоо"]) {
         expect(JSON.parse(`"${escapeJsString(value)}"`)).toBe(value);
       }
     });

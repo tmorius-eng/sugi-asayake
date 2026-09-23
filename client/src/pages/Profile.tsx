@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import CartDrawer from "@/components/CartDrawer";
 import GiftCardCodes from "@/components/GiftCardCodes";
 import CommerceHeader from "@/components/CommerceHeader";
+import PhoneVerificationStep from "@/components/PhoneVerificationStep";
 import ProfileQuizWizard from "@/components/ProfileQuizWizard";
 import SiteFooter from "@/components/SiteFooter";
 import { LineSkeleton, Skeleton } from "@/components/Skeleton";
@@ -119,7 +120,28 @@ export default function Profile() {
 
   const initial = user?.name?.trim()?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? "?";
 
-  if (!loading && !isAuthenticated) {
+  // 2026-09-23: нэвтрэлт шалгагдтал ХАМГААЛАГДСАН асуулга явуулахгүй.
+  //
+  // Хаалт нь `!loading && !isAuthenticated` байсан тул `auth.me` замд байх
+  // зуур доорх табууд mount болж, `orders.mine` / `profile.wishlist.list` /
+  // `profile.addresses.list` гурав шууд явдаг. Тэд UNAUTHORIZED-оор унаж,
+  // react-query 3 удаа дахин оролддог тул unmount ч тэднийг зогсоохгүй, ~1
+  // секундын дараа глобал handler `startLogin()` дуудаж хуудсыг /login руу
+  // хаядаг: зочин "нэвтэрнэ үү" гэсэн хаалтыг харж байтал хуудас солигдоно.
+  // (`e2e/orders.spec.ts` үүнийг `toHaveURL(/\/login|\/profile/)` гэж
+  // хоёрдмолоор хүлээж байсан нь яг энэ тогтворгүй байдлын ул мөр.)
+  if (loading) {
+    return (
+      <div className="sugi-commerce" style={{ overflow: "visible" }}>
+        <CommerceHeader backLabel="" />
+        <main className="account-shell" aria-busy="true">
+          <LineSkeleton />
+        </main>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
     return (
       <div className="sugi-commerce" style={{ overflow: "visible" }}>
         {/* Tom, 2026-09-05 (explicit): backLabel="" suppresses the redundant
@@ -451,16 +473,24 @@ function PreferencesTab() {
   const { user } = useAuth();
   const utils = trpc.useUtils();
   const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
   const [wizardOpen, setWizardOpen] = useState(false);
+  // 2026-09-23: утас нь нэвтрэлтийн identity тул энгийн талбар байхаа больж,
+  // SMS-ээр баталгаажуулдаг тусдаа алхам болов (сервер талд profile.update
+  // `phone`-г хүлээн авахаа больсон). Өмнө нь энд бичсэн дугаар ямар ч
+  // баталгаажуулалтгүй хадгалагддаг тул (a) зочны checkout-ийн OTP алгасагдаж,
+  // (b) бусдын дугаарыг эзэмшиж тэр хүнийг бүртгүүлэхээс хаах боломжтой байв.
+  const [phoneStepOpen, setPhoneStepOpen] = useState(false);
 
   useEffect(() => {
     setName(user?.name ?? "");
-    setPhone(user?.phone ?? "");
-  }, [user?.name, user?.phone]);
+  }, [user?.name]);
 
   const updateProfile = trpc.profile.update.useMutation({
     onSuccess: () => { utils.auth.me.invalidate(); toast.success("Хувийн мэдээлэл шинэчлэгдлээ."); },
+    onError: error => toast.error(messageFrom(error)),
+  });
+  const attachPhone = trpc.auth.attachPhoneViaVerification.useMutation({
+    onSuccess: () => { utils.auth.me.invalidate(); setPhoneStepOpen(false); toast.success("Утасны дугаар баталгаажиж, шинэчлэгдлээ."); },
     onError: error => toast.error(messageFrom(error)),
   });
 
@@ -530,23 +560,37 @@ function PreferencesTab() {
     <div style={{ display: "grid", gap: "20px" }}>
       <section className="profile-section" data-reveal>
         <div className="profile-section-head"><div><h2>Хувийн мэдээлэл</h2><p>Нэр болон хүргэлтэд хэрэглэх утасны дугаар</p></div></div>
-        <form onSubmit={event => { event.preventDefault(); updateProfile.mutate({ name: name.trim() || null, phone: phone.trim() || null }); }} className="profile-form-grid">
+        <form onSubmit={event => { event.preventDefault(); updateProfile.mutate({ name: name.trim() || null }); }} className="profile-form-grid">
           <label className="auth-field">
             Нэр
             <div className="auth-field-shell"><UserIcon size={16} aria-hidden="true" /><input value={name} onChange={event => setName(event.target.value)} placeholder="Таны нэр" maxLength={160} /></div>
           </label>
-          <label className="auth-field">
+          <div className="auth-field">
             Утас
-            <div className="auth-field-shell"><Phone size={16} aria-hidden="true" /><input value={phone} onChange={event => setPhone(event.target.value)} placeholder="9911 2233" inputMode="tel" maxLength={40} /></div>
-          </label>
+            <div className="auth-field-shell" style={{ opacity: .6 }}><Phone size={16} aria-hidden="true" /><input value={user?.phone ?? "Бүртгэгдээгүй"} disabled readOnly /></div>
+          </div>
           <label className="auth-field" style={{ gridColumn: "1 / -1" }}>
             Имэйл
             <div className="auth-field-shell" style={{ opacity: .6 }}><Mail size={16} aria-hidden="true" /><input value={user?.email ?? ""} disabled readOnly /></div>
           </label>
-          <div style={{ gridColumn: "1 / -1" }}>
+          <div style={{ gridColumn: "1 / -1", display: "flex", flexWrap: "wrap", gap: "10px" }}>
             <button type="submit" disabled={updateProfile.isPending} className="button button-primary">{updateProfile.isPending && <LoaderCircle className="animate-spin" size={15} />} Хадгалах</button>
+            <button type="button" onClick={() => setPhoneStepOpen(current => !current)} className="button button-light">{phoneStepOpen ? "Болих" : "Утасны дугаар солих"}</button>
           </div>
         </form>
+        {phoneStepOpen ? (
+          <div style={{ marginTop: "16px" }}>
+            <p style={{ margin: "0 0 10px", fontSize: "12px", lineHeight: 1.6, color: "var(--ck-muted)" }}>
+              Утасны дугаар бол таны нэвтрэх нэр тул шинэ дугаараа SMS-ээр нэг удаа баталгаажуулна. Баталгаажсаны дараа шинэ дугаараар нэвтэрнэ.
+            </p>
+            <PhoneVerificationStep
+              purpose="register"
+              compact
+              initialPhone={user?.phone ?? ""}
+              onVerified={sessionId => attachPhone.mutate({ sessionId })}
+            />
+          </div>
+        ) : null}
       </section>
 
       <section className="profile-section" data-reveal>

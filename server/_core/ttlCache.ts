@@ -43,7 +43,38 @@ const invalidatedAt = new Map<string, number>();
  */
 const inFlight = new Map<string, { startedAt: number; promise: Promise<unknown> }>();
 
+/**
+ * 🔴 2026-09-23: `store` ба `invalidatedAt` хэзээ Ч хатдаггүй байв — зөвхөн
+ * дахин уншихад дарж бичигддэг. `routeStatus:<path>` / `routeMeta:<path>`
+ * түлхүүрүүд нь ХЭРЭГЛЭГЧИЙН оруулсан замаас бүтдэг тул crawler/бот
+ * `/a1`, `/a2`, … гэж шалгахад heap хязгааргүй өсөж (954 MB VM, pm2
+ * `--max-memory-restart 700M` нь хүсэлтийн дундуур restart хийнэ), шинэ зам
+ * тутам DB рүү нэг асуулга явдаг байв. `security.ts`-ийн `sweepExpired`
+ * загвараар цэвэрлэж, дээд хэмжээгээр хязгаарлана.
+ */
+const MAX_ENTRIES = 5_000;
+const SWEEP_INTERVAL_MS = 60_000;
+let lastSweepAt = 0;
+
+function sweepExpired(now: number): void {
+  for (const [key, entry] of store) if (entry.expiresAt <= now) store.delete(key);
+  // Хүчингүй болголтын тэмдэглэгээ нь зөвхөн явж байгаа тооцоололд хэрэгтэй;
+  // аль хэдийн хадгалагдаагүй, эргэлзээтэй биш болсон түлхүүрүүдийг мартана.
+  for (const [key, at] of invalidatedAt) if (at <= now - SWEEP_INTERVAL_MS && !store.has(key) && !inFlight.has(key)) invalidatedAt.delete(key);
+  // Дээд хэмжээ хэвээр хэтэрсэн бол (бүгд хүчинтэй) хамгийн эрт хугацаа
+  // дуусахуудыг хаяна — LRU биш, гэхдээ хязгааргүй өсөлтийг таслана.
+  if (store.size > MAX_ENTRIES) {
+    const oldestFirst = [...store.entries()].sort((a, b) => a[1].expiresAt - b[1].expiresAt);
+    for (const [key] of oldestFirst.slice(0, store.size - MAX_ENTRIES)) store.delete(key);
+  }
+}
+
 export async function getOrSetCached<T>(key: string, ttlMs: number, compute: () => Promise<T>): Promise<T> {
+  const nowForSweep = Date.now();
+  if (nowForSweep - lastSweepAt > SWEEP_INTERVAL_MS) {
+    lastSweepAt = nowForSweep;
+    sweepExpired(nowForSweep);
+  }
   const cached = store.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.value as T;
   const running = inFlight.get(key);

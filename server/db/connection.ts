@@ -41,6 +41,16 @@ export const refundOwedSql = sql`(${orders.paymentStatus} = 'paid' AND ${orders.
 // billion per same-millisecond pair, and createOrderFromActiveCart retries
 // with a fresh number on the remaining chance. Injectable for the test that
 // proves the retry (see order-unwind.integration.test.ts).
+/**
+ * LIKE-ийн орлуулагч тэмдэгтүүдийг хэрэглэгчийн хайлтын үгнээс салгана
+ * (2026-09-23). Параметр нь bound тул injection байхгүй боловч `%` нь БҮХ
+ * мөрийг, `_` нь дурын нэг тэмдэгтийг тааруулдаг тул хайлтын үр дүн эрс
+ * өөр болно. MySQL-ийн анхдагч escape тэмдэгт нь `\\`.
+ */
+export function escapeLike(term: string): string {
+  return term.replace(/[\\%_]/g, "\\$&");
+}
+
 export function generateOrderNumber(): string {
   return `SA${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 }

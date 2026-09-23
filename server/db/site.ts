@@ -10,6 +10,7 @@ import { sanitizePostContent } from "../_core/sanitizeHtml";
 import { getSiteTextSlot, type SiteTextSlotKey } from "../../shared/site-text";
 import { LOYALTY_TIERS, type LoyaltyTier } from "../../shared/loyalty";
 import { getDb } from "./connection";
+import { forgetSessionUser } from "./users";
 import { DbOrTx } from "./admin-orders";
 
 // NEWVISION.md §5 "Топ брэндүүд" -- same CRUD shape as posts above.
@@ -222,6 +223,11 @@ export async function updateAdminUserBranch(userId: number, branchId: number | n
   }
   const updated = await db.update(users).set({ branchId, updatedAt: new Date() }).where(eq(users.id, userId));
   if (Number(updated[0].affectedRows ?? 0) !== 1) throw new Error("Хэрэглэгч олдсонгүй.");
+  // 2026-09-23: сешн 5 секунд кэштэй (PROJECT-GUIDE: `users`-д бичдэг ЯМАР Ч
+  // зам `forgetSessionUser` дуудна). `actor.branchId` нь хүлээн авалт/тооллогыг
+  // хаалддаг тул A салбараас B руу шилжүүлсэн ажилтан тэр хугацаанд B дээр
+  // татгалзаж, A дээр бичсээр байв.
+  forgetSessionUser(userId);
   return { userId, branchId };
 }
 
@@ -557,7 +563,10 @@ export async function updateJobPosting(id: number, input: Partial<JobPostingWrit
   invalidateStorefront("jobPostings");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  await db.update(jobPostings).set({ ...input, updatedAt: new Date() }).where(eq(jobPostings.id, id));
+  // 2026-09-23: `affectedRows` шалгана — өмнө нь байхгүй зар дээр ч "хадгалагдлаа"
+  // гэж ногоон гарч, аудитын лог "шинэчилсэн" гэж бичдэг байв.
+  const updated = await db.update(jobPostings).set({ ...input, updatedAt: new Date() }).where(eq(jobPostings.id, id));
+  if (Number(updated[0].affectedRows ?? 0) !== 1) throw new Error("Зар олдсонгүй.");
   return { id };
 }
 

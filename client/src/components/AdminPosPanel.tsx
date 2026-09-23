@@ -32,8 +32,22 @@ export default function AdminPosPanel() {
   const recordSale = trpc.admin.recordInStoreSale.useMutation();
   // One key per basket: a resend after a timeout, or a double tap on
   // "Бүртгэх", comes back with the same sale instead of a second one.
+  //
+  // 2026-09-23: сагс ӨӨРЧЛӨГДӨХӨД түлхүүр шинэчлэгдэнэ. Түлхүүр зөвхөн
+  // амжилттай болоход эргэдэг байсан тул: эхний илгээлт бодитоор бичигдээд
+  // хариу нь алдагдвал сагс дэлгэцэнд үлдэнэ → кассчин сагсаа засаад дахин
+  // илгээхэд сервер ижил түлхүүрээр ХУУЧИН борлуулалтыг буцааж, шинэ сагс
+  // бүртгэгдээгүй атал дэлгэц "амжилттай" гэж харуулдаг байв.
   const saleRequestIdRef = useRef(newRequestId());
   const utils = trpc.useUtils();
+
+  // Сагс/салбар өөрчлөгдвөл өөр борлуулалт — өөр idempotency түлхүүр.
+  const basketSignature = `${branchId ?? "none"}|${lineItems.map(item => `${item.variantId}x${item.quantity}`).join(",")}`;
+  const lastBasketSignatureRef = useRef(basketSignature);
+  if (lastBasketSignatureRef.current !== basketSignature) {
+    lastBasketSignatureRef.current = basketSignature;
+    saleRequestIdRef.current = newRequestId();
+  }
 
   const branches = branchesQuery.data ?? [];
   const results = searchQuery.data ?? [];

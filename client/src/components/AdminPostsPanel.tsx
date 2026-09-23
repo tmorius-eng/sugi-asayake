@@ -244,6 +244,13 @@ export default function AdminPostsPanel({ preview = false }: { preview?: boolean
 
   const savePost = async (isPublished: boolean) => {
     if (preview) return toast.message("Preview горим", { description: "Бодит нийтлэл зөвхөн хамгаалагдсан admin хэсэгт хадгалагдана." });
+    // 2026-09-23: талбарууд `required`-тай ч <form>-ын ГАДНА байдаг тул
+    // хөтчийн шалгалт хэзээ ч ажилладаггүй байв: хоосон гарчигтай "Нийтлэх"
+    // дарахад zod-ийн англи мессеж ("String must contain at least 3
+    // character(s)") toast болж гардаг. Монголоор, хадгалахаас өмнө шалгана.
+    if (form.title.trim().length < 3) return toast.error("Гарчиг дор хаяж 3 тэмдэгт байх ёстой.");
+    if (!form.slug.trim()) return toast.error("Нийтлэлийн URL (slug) оруулна уу.");
+    if (form.content.trim().length < 10) return toast.error("Нийтлэлийн агуулга дор хаяж 10 тэмдэгт байх ёстой.");
     try {
       const payload = buildPayload(isPublished);
       if (editingPost) {

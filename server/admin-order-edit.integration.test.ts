@@ -108,7 +108,11 @@ describeWithDatabase("staff-created and staff-edited orders", () => {
     await expect(editAdminOrder({ id: paid.id, actorUserId: 1, items: [{ variantId: creamVariantId, quantity: 2 }] })).rejects.toThrow(/Төлбөр төлөгдсөн/);
     const contact = await editAdminOrder({ id: paid.id, actorUserId: 1, customerPhone: "99887766" });
     expect(contact.customerPhone).toBe("99887766");
-  }, 45_000);
+    // 2026-09-23: 45 → 90 с. Хүргэлтийн арга солигдож захиалгын салбар
+    // өөрчлөгдөхөд `editAdminOrder` одоо нөөцийг ЗӨӨДӨГ (хуучин салбарт буцааж,
+    // шинээс хасна) — Токио дахь DB руу тунелээр ~15 нэмэлт асуулга. Баталгаа
+    // нэг ч сулраагүй; бүрэн suite-ийн ачаалалд 45 с-ийн хязгаарт хүрч байв.
+  }, 90_000);
 
   it("an unknown variant or an empty line list is refused before anything is written", async () => {
     await expect(createManualOrder({ customerName: "X Y", customerPhone: "88000001", deliveryMethod: "store_pickup", pickupBranch: "Орос элчингийн салбар", paymentMethod: "cash_on_delivery", salesChannel: "phone", items: [{ variantId: 999_999_999, quantity: 1 }], actorUserId: 1 })).rejects.toThrow(/олдсонгүй/);

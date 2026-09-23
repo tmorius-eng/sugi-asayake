@@ -107,8 +107,15 @@ export async function renderHeroShell({ media, textFor, brandLogo, promo }: Hero
   if (promo && promo.displayMode === "banner") {
     const text = esc(promo.message ? `${promo.headline} — ${promo.message}` : promo.headline);
     const row = Array.from({ length: 6 }, () => `<span>${text}</span><i></i>`).join("");
-    const cta = promo.ctaLabel && promo.ctaUrl
-      ? `<a href="${esc(promo.ctaUrl)}" class="shrink-0 rounded-full bg-[#df1f3d] px-3 py-1 text-[11px] font-bold text-white transition hover:bg-[#bc1732]">${esc(promo.ctaLabel)}</a>`
+    // 2026-09-23: схемийг ЭНД ч шалгана (routers.ts-ийн promotionWriteSchema
+    // дээр нэмсний зэрэгцээ). Энэ нь сервер талд React-ээс ӨМНӨ зурагддаг
+    // markup тул өмнө хадгалагдсан `javascript:` утга хэвээр байж болно;
+    // attribute escape нь схемийг хориглодоггүй.
+    const internalPath = /^\/(?![/\\])/;
+    const httpsUrl = /^https:\/\//i;
+    const safeCtaUrl = promo.ctaUrl && (internalPath.test(promo.ctaUrl) || httpsUrl.test(promo.ctaUrl)) ? promo.ctaUrl : null;
+    const cta = promo.ctaLabel && safeCtaUrl
+      ? `<a href="${esc(safeCtaUrl)}" class="shrink-0 rounded-full bg-[#df1f3d] px-3 py-1 text-[11px] font-bold text-white transition hover:bg-[#bc1732]">${esc(promo.ctaLabel)}</a>`
       : "";
     promoBar = `<div class="site-promo-banner sticky top-0 z-[60] flex items-center gap-3 bg-[#17181b] px-4 py-2.5 text-white" data-promo-id="${promo.id}">`
       + `<div class="site-promo-ticker"><div>${row}</div><div aria-hidden="true">${row}</div></div>`

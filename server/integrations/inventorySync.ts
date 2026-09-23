@@ -192,16 +192,32 @@ export async function runPushMovements(provider: InventorySyncProvider, options:
     // A location the vendor does not know (the warehouse, if it is not in
     // Smart POS) has nothing to push; step over it.
     if (!branchExternalId) { if (!batch.length) cursor = row.id; continue; }
+    if (alreadyPushedMovementIds.has(row.id)) continue;
     batch.push({ movementId: row.id, branchExternalId, sku: row.sku, delta: row.delta, type: row.type, occurredAt: row.createdAt });
   }
   if (!batch.length) { await writeState("push", { cursor: String(cursor), ok: true }, namespace); return { pushed: 0 }; }
   const result = await provider.pushMovements(batch);
   const accepted = new Set(result.accepted);
+  // 2026-09-23: cursor эхний ТАТГАЛЗСАН мөр дээр зогсдог тул түүний ард
+  // байсан хүлээн авсан мөрүүд дараагийн ажиллалтад ДАХИН илгээгдэнэ —
+  // вендорын тал `movementId`-аар idempotent биш бол давхар нөөцийн
+  // хөдөлгөөн болно. Тэднийг тусад нь санаж, дахин илгээхгүй.
   for (const movement of batch) { if (!accepted.has(movement.movementId)) break; cursor = movement.movementId; }
+  const acknowledgedAhead = batch.filter(movement => movement.movementId > cursor && accepted.has(movement.movementId)).map(movement => movement.movementId);
+  if (acknowledgedAhead.length) {
+    for (const id of acknowledgedAhead) alreadyPushedMovementIds.add(id);
+  }
   const fatal = result.rejected.find(item => !item.retryable);
   await writeState("push", { cursor: String(cursor), ok: !result.rejected.length, error: fatal ? `movement ${fatal.movementId}: ${fatal.reason}` : result.rejected[0]?.reason ?? null }, namespace);
   return { pushed: accepted.size, cursor };
 }
+
+/**
+ * Вендор хүлээн авсан ч cursor-оос ЦААШ байсан хөдөлгөөнүүд (2026-09-23).
+ * Процессын хугацаанд л санагдана: сервер дахин ассан тохиолдолд хамгийн
+ * муудаа хуучин зан төлөв рүү буцна (дахин илгээх), шинэ алдаа нэмэхгүй.
+ */
+const alreadyPushedMovementIds = new Set<number>();
 
 /** Records the vendor's in-store sales on our ledger, each exactly once. */
 export async function runPullSales(provider: InventorySyncProvider, options: SyncOptions = {}) {
@@ -320,7 +336,13 @@ export async function runPullSnapshot(provider: InventorySyncProvider, options: 
     const [branchRow] = await db.select({ name: branches.name }).from(branches).where(eq(branches.id, branchId)).limit(1);
     if (!lines.length) { results.push({ branchId, branchName: branchRow?.name ?? String(branchId), locationId, countId: null, code: null, lines: 0 }); continue; }
     try {
-      const count = await createSnapshotCount({ branchId, sourceLabel: `${locationId} · ${stamp}`, lines, silent: willAutoApply });
+      // 2026-09-23: хамгаалалт ажилласан (autoApplySkipped) үед `silent: true`.
+      // Хамгаалалт нь одоо baseline-ыг хөлдөөдөг (доорх writeState) тул блок
+      // нь feed сэргэх хүртэл үргэлжилнэ; `silent: false` хэвээр байвал 15
+      // минут тутам ШИНЭ тооллого + "батлуулахаар ирлээ" push явж, өдөрт ~96
+      // мэдэгдэл болно. Тооллого өөрөө үүсч, админ түүнийг батлах боломжтой
+      // хэвээр — зөвхөн давтагдах мэдэгдэл дуугүй болно.
+      const count = await createSnapshotCount({ branchId, sourceLabel: `${locationId} · ${stamp}`, lines, silent: willAutoApply || (autoApplyWanted && sanityBlocked) });
       results.push({ branchId, branchName: count.branchName, locationId, countId: count.id, code: count.code, lines: lines.length });
     } catch (error) {
       problems.push(`${branchRow?.name ?? branchId}: ${error instanceof Error ? error.message : String(error)}`);
@@ -354,8 +376,17 @@ export async function runPullSnapshot(provider: InventorySyncProvider, options: 
     await enqueueNotification(db, "stock.vendor_sync_blocked", { previous: previousSize ?? 0, current: snapshot.products.length, dropPercent }, { dedupeKey: `vendor-sync-blocked:${namespace}:${snapshot.fetchedAt.toISOString().slice(0, 10)}` });
   }
 
+  // 🔴 2026-09-23: хаагдсан ажиллалтад ХУУЧИН тоог үлдээнэ.
+  //
+  // `previousSnapshotSize()` нь энэ cursor-ыг "сүүлийн АМЖИЛТТАЙ таталт" гэж
+  // уншдаг ч бичилт нь болзолгүй байсан: хамгаалалт ажилласан (sanityBlocked)
+  // ажиллалт ч багассан тоог бичдэг тул 15 минутын дараах дараагийн таталт
+  // "уналт 0%" гэж үзээд ЯГ ТЭР багассан жагсаалтыг АВТОМАТААР бичдэг байв.
+  // Өөрөөр хэлбэл "автоматаар бичсэнгүй, шалгаад батална уу" гэсэн амлалт
+  // 15 минутын дараа худал болдог (өдрийн dedupeKey тул хоёр дахь
+  // сэрэмжлүүлэг ч гарахгүй).
   await writeState("snapshot", {
-    cursor: JSON.stringify({ at: snapshot.fetchedAt.toISOString(), products: snapshot.products.length }),
+    cursor: JSON.stringify({ at: snapshot.fetchedAt.toISOString(), products: autoApplySkipped ? (previousSize ?? snapshot.products.length) : snapshot.products.length }),
     ok: !problems.length,
     error: problems.length ? problems.slice(0, 3).join("; ") : null,
   }, namespace);

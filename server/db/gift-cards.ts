@@ -5,7 +5,7 @@
 import { randomBytes } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { orderItems, orders, giftCards, products, storeCreditLedger, users } from "../../drizzle/schema";
-import { GIFT_CARD_VALIDITY_MONTHS } from "../../shared/gift-cards";
+import { GIFT_CARD_VALIDITY_MONTHS, addMonthsClamped } from "../../shared/gift-cards";
 import { getDb } from "./connection";
 import { OrderTx } from "./admin-orders";
 import { forgetSessionUser } from "./users";
@@ -69,8 +69,8 @@ export async function issueGiftCardsForPaidOrder(tx: GiftCardWriter, orderId: nu
   if (!lines.length) return [];
   const already = await tx.select({ id: giftCards.id }).from(giftCards).where(eq(giftCards.purchaseOrderId, orderId)).limit(1);
   if (already.length) return [];
-  const expiresAt = new Date();
-  expiresAt.setMonth(expiresAt.getMonth() + GIFT_CARD_VALIDITY_MONTHS);
+  // Сарын төгсгөл халихгүй (2026-09-23, `addMonthsClamped`).
+  const expiresAt = addMonthsClamped(new Date(), GIFT_CARD_VALIDITY_MONTHS);
   const issued: IssuedGiftCard[] = [];
   for (const line of lines) {
     for (let unit = 0; unit < line.quantity; unit++) {

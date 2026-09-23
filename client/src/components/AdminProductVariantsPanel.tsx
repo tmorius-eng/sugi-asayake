@@ -137,7 +137,22 @@ export default function AdminProductVariantsPanel({ productId }: { productId: nu
         {variants.length === 0 && <p className="py-3 text-center text-xs text-[var(--a-faint)]">Variant алга.</p>}
       </div>}
 
-      {formOpen && <div className="mt-3 rounded-xl border border-[#3970a7]/25 bg-[var(--a-card)] p-3">
+      {/* 2026-09-23: Enter дарахад ГАДААД барааны маягт илгээгдэхгүй.
+          2026-09-16-нд үүрлэсэн <form>-ыг арилгасан ч эдгээр талбар нь
+          `submit` товчтой барааны <form>-ын ДОТОР л байдаг тул HTML-ийн
+          "implicit submission" хэвээр үйлчилж, SKU бичээд Enter дарахад
+          variant үүсэхийн оронд БАРААНЫ маягт хадгалагдаж, editor хаагдаж,
+          бөглөж эхэлсэн variant алга болдог байв. */}
+      {formOpen && <div
+        className="mt-3 rounded-xl border border-[#3970a7]/25 bg-[var(--a-card)] p-3"
+        onKeyDown={event => {
+          if (event.key !== "Enter") return;
+          const target = event.target as HTMLElement;
+          if (target.tagName !== "INPUT") return;
+          event.preventDefault();
+          void save();
+        }}
+      >
         <div className="grid gap-2 sm:grid-cols-2">
           <label className="grid gap-1 text-xs font-bold">SKU/баркод<input required value={form.sku} onChange={event => setForm(current => ({ ...current, sku: event.target.value }))} className="h-10 rounded-lg border border-[var(--a-border)] px-2.5 text-xs outline-none focus:border-[#3970a7]" /></label>
           <label className="grid gap-1 text-xs font-bold">Үнэ (₮)<input required min="0" type="number" value={form.priceMnt} onChange={event => setForm(current => ({ ...current, priceMnt: event.target.value }))} className="h-10 rounded-lg border border-[var(--a-border)] px-2.5 text-xs outline-none focus:border-[#3970a7]" /></label>

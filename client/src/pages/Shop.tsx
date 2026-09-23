@@ -156,11 +156,15 @@ export default function Shop() {
   const addToCart = trpc.cart.addItem.useMutation({
     onError: error => toast.error(error instanceof Error ? error.message : "Сагсанд нэмж чадсангүй."),
   });
-  const addProductToCart = (product: { id: number; name: string; sku?: string; priceMnt?: number }) => addToCart.mutate({ productId: product.id, quantity: 1 }, {
+  // `displayName` нь монгол нэрийг буцаана; toast нь худалдан авагчийн дөнгөж
+  // уншсан гарчигтай ижил нэр дуудна (2026-09-23). `name` нь латин POS нэр тул
+  // зөвхөн analytics-д (`item_name`) хэвээр — тэр нь тайлангийн тогтвортой
+  // түлхүүр.
+  const addProductToCart = (product: { id: number; name: string; nameMn?: string | null; sku?: string; priceMnt?: number }) => addToCart.mutate({ productId: product.id, quantity: 1 }, {
     onSuccess: () => {
       utils.cart.current.invalidate();
       setCartOpen(true);
-      notifyAddedToCart(`${product.name} сагсанд нэмэгдлээ.`);
+      notifyAddedToCart(`${displayName(product).primary || product.name} сагсанд нэмэгдлээ.`);
       trackEvent("add_to_cart", { value: product.priceMnt ?? 0, items: [{ item_id: product.sku ?? String(product.id), item_name: product.name, price: product.priceMnt ?? 0, quantity: 1 }] });
     },
   });
@@ -198,7 +202,12 @@ export default function Shop() {
   // below instead, mirroring the blank-search-string behavior
   // filterCatalogProducts always got once isSearching took over.
   const catalog = trpc.catalog.list.useQuery({
-    search: isSearching ? undefined : (search.trim() || undefined),
+    // 2026-09-23: `debouncedSearch`, түүхий `search` БИШ. Өмнө нь товчлуур
+    // дарах бүрт шинэ query түлхүүр үүсч (`"к"`, `"ко"`, `"кок"` …) сүлжээний
+    // дуудлага явж, debounce дуусахад дахин нэг өөрчлөлт болдог байв — дээрх
+    // тайлбар "зөвхөн 2 тэмдэгтээс богино үед илгээнэ" гэж бичсэн ч код тэгж
+    // ажиллахгүй байсан.
+    search: isSearching ? undefined : (debouncedSearch.trim() || undefined),
     category,
     brand,
     skinType: skinTypeFilter,
@@ -301,7 +310,11 @@ export default function Shop() {
     try {
       const saved = JSON.parse(window.localStorage.getItem(RECENTLY_VIEWED_KEY) ?? "[]");
       if (Array.isArray(saved)) setRecentlyViewedIds(saved.filter((value): value is number => Number.isInteger(value)).slice(0, 6));
-    } catch { window.localStorage.removeItem(RECENTLY_VIEWED_KEY); }
+    } catch {
+      // 2026-09-23: цэвэрлэгээг ч хамгаална — хувийн цонх/блоклосон санах ойд
+      // `removeItem` өөрөө шиддэг тул catch дотроос дахин уналт гардаг байв.
+      try { window.localStorage.removeItem(RECENTLY_VIEWED_KEY); } catch { /* storage blocked */ }
+    }
   }, []);
 
   const resetControls = () => { setSearch(""); setCategory("all"); setBrand("all"); setMinPrice(""); setMaxPrice(""); setSkinTypeFilter("all"); setInStockOnly(false); setSort("featured"); };
@@ -321,9 +334,14 @@ export default function Shop() {
     minPrice || maxPrice ? { key: "price", label: `Үнэ: ${minPrice || "0"}–${maxPrice || "∞"}`, clear: () => { setMinPrice(""); setMaxPrice(""); } } : null,
     inStockOnly ? { key: "stock", label: "Бэлэн нөөцтэй", clear: () => setInStockOnly(false) } : null,
   ].filter((chip): chip is { key: string; label: string; clear: () => void } => chip !== null);
+  // 2026-09-23: localStorage-ийн бичилт setState-ийн updater-ээс ГАРСАН.
+  // (a) updater нь цэвэр байх ёстой (React StrictMode давхар дуудна),
+  // (b) хаалттай санах ойд `setItem` шиддэг тул барааны карт дээр дарахад
+  // тэр уналт нь навигацийг таслах, эсвэл render дунд гарвал бүхэл /shop
+  // хуудсыг ErrorBoundary руу оруулах эрсдэлтэй байв.
   const rememberProduct = (productId: number) => setRecentlyViewedIds(current => {
     const next = rememberRecentlyViewed(current, productId);
-    window.localStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify(next));
+    try { window.localStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify(next)); } catch { /* private-browsing/blocked storage */ }
     return next;
   });
   const openQuickView = (product: QuickViewProduct) => { rememberProduct(product.id); setQuickViewProduct(product); };
@@ -403,7 +421,11 @@ export default function Shop() {
           <span className="shop-brand-chip">{brandLabel}</span>
           {salePercent ? <span className="shop-sale-badge">-{salePercent}<i>%</i></span> : null}
           <Link href={`/product/${product.slug}`} onClick={() => rememberProduct(product.id)} className="shop-product-link" tabIndex={-1} aria-hidden="true"><ResponsivePicture src={product.imageUrl ?? getCategoryPlaceholderImage(product.categorySlug)} fullWidth={1600} sizes={SHOP_CARD_SIZES} alt="" loading="lazy" /></Link>
-          <button type="button" className={`shop-wishlist-toggle${wishlistIds.has(product.id) ? " active" : ""}`} onClick={() => onToggleWishlist(product.id)} aria-label={wishlistIds.has(product.id) ? `${product.name}-г хүслийн жагсаалтаас хасах` : `${product.name}-г хүслийн жагсаалтад нэмэх`}><Heart size={15} /></button>
+          {/* 2026-09-23: харагдах гарчигтай ИЖИЛ нэр (PROJECT-GUIDE: storefront
+              барааны нэрийг зөвхөн `useProductName()`-ээр). Өмнө нь латин
+              `product.name` байсан тул `mn` горимд хүртээмжийн нэр нь
+              харагдах нэрээ агуулахгүй байв (WCAG 2.5.3). */}
+          <button type="button" className={`shop-wishlist-toggle${wishlistIds.has(product.id) ? " active" : ""}`} onClick={() => onToggleWishlist(product.id)} aria-label={wishlistIds.has(product.id) ? `${displayName(product).primary}-г хүслийн жагсаалтаас хасах` : `${displayName(product).primary}-г хүслийн жагсаалтад нэмэх`}><Heart size={15} /></button>
           {outOfStock ? <span className="shop-stock-flag is-out">{t("Нөөц дууссан")}</span> : lowStock ? <span className="shop-stock-flag">{product.stockQuantity} ширхэг үлдсэн</span> : null}
           <button type="button" className="shop-quick-view" onClick={() => openQuickView(product)}><Eye size={13} /> Шуурхай</button>
         </div>
@@ -417,7 +439,7 @@ export default function Shop() {
               <s>{salePercent ? formatMnt(product.compareAtPriceMnt!) : ""}</s>
               <strong>{formatMnt(product.priceMnt)}</strong>
             </div>
-            <button type="button" className="shop-cart-button" disabled={outOfStock || addingThis} onClick={() => addProductToCart(product)} aria-label={outOfStock ? `${product.name} — нөөц дууссан` : `${product.name}-г сагсанд нэмэх`}>
+            <button type="button" className="shop-cart-button" disabled={outOfStock || addingThis} onClick={() => addProductToCart(product)} aria-label={outOfStock ? `${displayName(product).primary} — нөөц дууссан` : `${displayName(product).primary}-г сагсанд нэмэх`}>
               {addingThis ? <LoaderCircle className="animate-spin" size={20} /> : <ShoppingCart size={20} />}
             </button>
           </div>

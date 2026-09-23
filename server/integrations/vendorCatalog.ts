@@ -1,7 +1,8 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { products, productVariants } from "../../drizzle/schema";
 import { normaliseBarcode } from "../../shared/barcode";
-import { getDb } from "../db";
+import { getDb, invalidateCatalogSource } from "../db";
+import { invalidateCached, invalidateCachedByPrefix } from "../_core/ttlCache";
 import { resolveCodes } from "../inventory";
 import type { InventorySyncProvider, VendorProduct } from "./inventorySync";
 
@@ -183,6 +184,20 @@ export async function applyVendorCatalog(provider: InventorySyncProvider, input:
   const db = await requireDb();
   const changes: { sku: string; name: string; field: string; from: string | null; to: string }[] = [];
 
+  // 2026-09-23: барааны мөр бичдэг тул каталогийн кэшийг унагана
+  // (PROJECT-GUIDE: "Бараа/ангилал бичдэг шинэ зам `invalidateCatalogSource()`
+  // дуудна"). `server/db/admin-catalog.ts`-ийн бичигч бүр үүнийг хийдэг ч энэ
+  // зам хийдэггүй байсан тул /shop (10 с), хайлтын индекс (60 с), холбоотой/
+  // bestseller зурвасууд (60 с) хуучин үнийг харуулсаар байв (сагс нь variant
+  // мөрийг шууд уншдаг тул мөнгө зөв, харин харагдах үнэ зөрнө).
+  const invalidateCatalogCaches = () => {
+    invalidateCatalogSource();
+    invalidateCachedByPrefix("storefront:bestsellers:");
+    invalidateCachedByPrefix("storefront:related:");
+    invalidateCached("storefront:publishedCount");
+    invalidateCached("storefront:brandDirectory");
+  };
+
   if (input.kind === "price") {
     for (const row of diff.priceRows) {
       if (!wanted.has(normaliseBarcode(row.sku))) continue;
@@ -216,5 +231,6 @@ export async function applyVendorCatalog(provider: InventorySyncProvider, input:
     }
   }
 
+  if (changes.length) invalidateCatalogCaches();
   return { applied: changes.length, changes: changes.slice(0, 50) };
 }

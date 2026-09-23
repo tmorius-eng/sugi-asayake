@@ -11,11 +11,18 @@ import { enqueueNotification } from "../notificationOutbox";
 import { applyBranchStockDelta, recomputeVariantStockTotal, recordStockMovement } from "../stockLedger";
 import { shouldRestoreStock } from "../commerce-lifecycle";
 import { LOW_STOCK_THRESHOLD as SHARED_LOW_STOCK_THRESHOLD } from "../../shared/catalog-filter";
-import { generateOrderNumber, getDb, isDuplicateKeyError, isDuplicateOrderNumberError, refundOwedSql, settledSaleSql } from "./connection";
+import { escapeLike, generateOrderNumber, getDb, isDuplicateKeyError, isDuplicateOrderNumberError, refundOwedSql, settledSaleSql } from "./connection";
 import { IssuedGiftCard, announceIssuedGiftCards, issueGiftCardsForPaidOrder, voidGiftCardsForOrder } from "./gift-cards";
 import { getActiveBranches } from "./site";
 import { findOrderForClientRequest } from "./cart-orders";
 import { getStoreSettingNumber } from "./ops";
+
+/**
+ * Төлбөрөө ЗӨВХӨН провайдерийн callback-оор баталгаажуулдаг аргууд
+ * (2026-09-23). "Дууссан" болгох нь бэлэн/банк/картын цуглуулгыг батлах мөч
+ * боловч эдгээрт биш — тэдэнд webhook л шийднэ.
+ */
+const WEBHOOK_PAID_METHODS = ["qpay", "storepay"] as const;
 
 /** The editor's own load for ONE product -- carries the heavy columns
  *  (description, galleryJson) that getAdminProducts's list omits. */
@@ -86,7 +93,9 @@ export async function getAdminProducts() {
 export async function getAdminOrders(limit = 200) {
   const db = await getDb();
   if (!db) return [];
-  const orderRows = await db.select().from(orders).orderBy(desc(orders.createdAt)).limit(limit);
+  // 2026-09-23: `id` тэнцвэр — `timestamp` нь секундын нарийвчлалтай тул нэг
+  // секундэд орсон хоёр захиалгын дараалал MySQL-д баталгаагүй.
+  const orderRows = await db.select().from(orders).orderBy(desc(orders.createdAt), desc(orders.id)).limit(limit);
   if (!orderRows.length) return [];
   const orderIds = orderRows.map(order => order.id);
   const lineItems = await db.select({ orderId: orderItems.orderId, variantId: orderItems.variantId, productName: orderItems.productName, sku: orderItems.sku, quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt }).from(orderItems).where(inArray(orderItems.orderId, orderIds));
@@ -149,7 +158,7 @@ export async function getAdminDashboardSummary() {
       status: orders.status,
       paymentStatus: orders.paymentStatus,
       createdAt: orders.createdAt,
-    }).from(orders).orderBy(desc(orders.createdAt)).limit(10),
+    }).from(orders).orderBy(desc(orders.createdAt), desc(orders.id)).limit(10),
     getLowStockProducts(),
     db.select({
       id: paymentAttempts.id,
@@ -220,7 +229,9 @@ export async function getAdminDashboardSummary() {
 export async function adminGlobalSearch(queryText: string) {
   const db = await getDb();
   if (!db) return { products: [], orders: [], users: [], discountCodes: [], promotions: [], posts: [] };
-  const term = `%${queryText}%`;
+  // 2026-09-23: `%`/`_` нь LIKE-ийн орлуулагч тул хэрэглэгчийн үгнээс салгана —
+  // "%"-ээр хайхад БҮХ мөр буцдаг байв (injection биш, гэхдээ буруу үр дүн).
+  const term = `%${escapeLike(queryText)}%`;
 
   // discountCodes/promotions/posts added 2026-09-07 (Project "SUGI Desk") --
   // found live: the admin command palette/top-bar search only ever covered
@@ -358,10 +369,20 @@ export async function decrementBranchStock(tx: OrderTx, branchId: number, varian
 // never actually debited, inflating stock).
 async function restoreStockForOrder(tx: OrderTx, orderId: number, movement: { type: "order_restock" | "refund_restock"; actorUserId?: number | null }) {
   const [orderRow] = await tx.select({ fulfillingBranchId: orders.fulfillingBranchId }).from(orders).where(eq(orders.id, orderId)).limit(1);
-  const lineItems = await tx.select({ variantId: orderItems.variantId, quantity: orderItems.quantity }).from(orderItems).where(eq(orderItems.orderId, orderId));
+  // 2026-09-23: `products.kind`-ийг МӨН уншина. Бэлгийн картын мөр checkout
+  // (createOrderFromActiveCart) болон гар захиалгад нөөцөөс ХАСАГДДАГГҮЙ атлаа
+  // `order_items.variantId`-тай бичигддэг тул энд болзолгүй буцаагдаж, цуцлалт
+  // бүрт байхгүй нөөцийг "буцаан" өсгөж, дэвтэрт харгалзах борлуулалтгүй
+  // `order_restock` мөр бичдэг байв (editAdminOrder аль хэдийн хасдаг).
+  const lineItems = await tx.select({ variantId: orderItems.variantId, quantity: orderItems.quantity, kind: products.kind })
+    .from(orderItems)
+    .leftJoin(productVariants, eq(productVariants.id, orderItems.variantId))
+    .leftJoin(products, eq(products.id, productVariants.productId))
+    .where(eq(orderItems.orderId, orderId));
   const affectedVariantIds = new Set<number>();
   for (const item of lineItems) {
     if (item.variantId === null) continue;
+    if (item.kind === "gift_card") continue;
     const hasPerBranchTracking = (await tx.select({ id: branchStock.id }).from(branchStock).where(eq(branchStock.variantId, item.variantId)).limit(1)).length > 0;
     if (orderRow?.fulfillingBranchId && hasPerBranchTracking) {
       // Upserts (a branch created after this variant already had rows
@@ -424,6 +445,12 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
     }
   }
   let issuedGiftCards: IssuedGiftCard[] = [];
+  // 2026-09-23: роутер энэ тугаар л мэдэгдэл илгээнэ. Өмнө нь зөвхөн
+  // `input.status !== undefined`-ийг хардаг байсан бөгөөд ижил төлөвөөр
+  // шинэчлэхийг функц зөвшөөрдөг (rank шалгалт нь `<`, guarded flip нь
+  // одоогийн мөрд таарна) тул bulk-аар "shipped" тавихад аль хэдийн
+  // илгээгдсэн захиалгын эзэд хоёр дахь имэйл/push/SMS (төлбөртэй) авдаг байв.
+  const statusChanged = input.status !== undefined && input.status !== current[0].status;
   await db.transaction(async tx => {
     // Audit 2026-09-09: the ladder checks above are a plain read, not a
     // lock -- two concurrent cancels (a double-clicked button, or a customer
@@ -448,6 +475,22 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
       // бөгөөс хүн цуцалсан захиалгынхаа улмаас кодоо дахин ашиглаж чадахгүй
       // болно (2026-09-16, migration 0084).
       await tx.delete(discountCodeRedemptions).where(eq(discountCodeRedemptions.orderId, input.id));
+      // 2026-09-23: нэг хүний суудлыг чөлөөлөөд БҮХ хэрэглээний тоолуурыг
+      // чөлөөлдөггүй байсан тул хоёр хязгаар зөрдөг: maxUses=10 захиалга
+      // бүгд цуцлагдвал код "дууссан" гэж гарах атлаа тэр хүн бүрт "дахин
+      // ашиглаж болно" гэж харагддаг байв.
+      //
+      // ⚠️ Шалгуур нь устгагдсан `discount_code_redemptions` мөр БИШ:
+      // тэр мөр зөвхөн `maxUsesPerCustomer !== null` кодод бичигддэг
+      // (cart-orders.ts), харин `usesCount` нь купонтой захиалга БҮРТ
+      // өсдөг. Тиймээс купоны код байхад л чөлөөлнө — төлөв шилжүүлэх
+      // ладдер нэг захиалгыг зөвхөн НЭГ удаа цуцлуулдаг тул давхар
+      // хасалт гарахгүй.
+      if (current[0].couponCode) {
+        await tx.update(discountCodes)
+          .set({ usesCount: sql`GREATEST(${discountCodes.usesCount} - 1, 0)`, updatedAt: new Date() })
+          .where(eq(discountCodes.code, current[0].couponCode));
+      }
       await reverseStoreCreditForOrder(tx, input.id, "цуцлагдсан");
       // Cards this order paid for that nobody has redeemed yet die with it
       // (a redeemed one already became store credit; refundOrder's
@@ -465,7 +508,17 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
       // courier/bank/card charge is confirmed collected, so that's where
       // this fires -- QPay orders are unaffected (already paid earlier, by
       // the webhook, independent of fulfilment status).
-      ...(input.status === "completed" && current[0].paymentMethod !== "qpay" ? { paymentStatus: "paid" as const } : {}),
+      // 2026-09-23: StorePay-г МӨН хасна. Энэ дүрэм 2026-09-08-нд бичигдэхэд
+      // зөвхөн QPay webhook-оор баталгаажуулдаг байсан; StorePay (2026-09-12)
+      // ч мөн адил callback-оор л төлөгддөг тул зээл хэзээ ч батлагдаагүй
+      // байхад ажилтан "дууссан" болгоход захиалга "paid" болж, бэлгийн
+      // картын код хүртэл үүсдэг байв.
+      ...(input.status === "completed" && !WEBHOOK_PAID_METHODS.includes(current[0].paymentMethod as (typeof WEBHOOK_PAID_METHODS)[number]) ? { paymentStatus: "paid" as const } : {}),
+      // Буцаалтын хугацаа/сэтгэгдэл хүсэх ажил `updatedAt`-д найддаг байсан ч
+      // MySQL түүнийг БҮХ UPDATE дээр шинэчилдэг (`markReviewRequested`,
+      // админы тэмдэглэл г.м.) тул "дууссан" мөчийг тусдаа баганад бичнэ
+      // (2026-09-23, migration 0094).
+      ...(input.status === "completed" && !current[0].completedAt ? { completedAt: new Date() } : {}),
       ...(input.deliveryTrackingRef !== undefined ? { deliveryTrackingRef: input.deliveryTrackingRef } : {}),
       ...(input.adminNote !== undefined ? { adminNote: input.adminNote } : {}),
       updatedAt: new Date(),
@@ -477,7 +530,7 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
   });
   announceIssuedGiftCards(input.id, issuedGiftCards);
   const updated = await db.select().from(orders).where(eq(orders.id, input.id)).limit(1);
-  return updated[0];
+  return { ...updated[0], statusChanged };
 }
 
 // ---------------------------------------------------------------------------
@@ -486,8 +539,13 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
 
 /**
  * Completed orders of signed-in buyers that were completed at least `days`
- * ago (updatedAt is the last status flip for a completed order) and have
- * not been asked yet. Capped at 60 days old so switching the job on never
+ * ago and have not been asked yet.
+ *
+ * 2026-09-23: `completedAt`-аар (migration 0094), `updatedAt`-аар БИШ.
+ * `updatedAt` нь `.onUpdateNow()`-той тул `markReviewRequested` өөрөө, эсвэл
+ * админы тэмдэглэлийн засвар түүнийг өмнө татаж, тоолол дахин эхэлдэг байв.
+ * Хуучин мөрүүд (migration-ийн backfill-ээс өмнөх) байвал `updatedAt`-аар
+ * нөхнө — эс бөгөөс тэд хэзээ ч сонгогдохгүй. Capped at 60 days old so switching the job on never
  * mails the whole history. Carries what the job needs to deliver: the
  * buyer's name, the order's email, and whether a push subscription exists.
  */
@@ -500,14 +558,39 @@ export async function getOrdersNeedingReviewRequest(days: number) {
     orderId: orders.id, orderNumber: orders.orderNumber, userId: orders.userId, customerEmail: orders.customerEmail, customerName: orders.customerName,
     pushSubscriptions: sql<number>`(SELECT COUNT(*) FROM ${pushSubscriptions} WHERE ${pushSubscriptions.userId} = ${orders.userId})`,
   }).from(orders)
-    .where(and(eq(orders.status, "completed"), isNotNull(orders.userId), isNull(orders.reviewRequestedAt), lte(orders.updatedAt, cutoff), gte(orders.createdAt, floor)))
+    // ⚠️ 2026-09-23: sql template-ээр COALESCE бичиж `cutoff`-ыг дамжуулвал тэр
+    // ТҮҮХИЙ `Date` болж bind-лагддаг (баганы encoder дамжихгүй) бөгөөд pool-д
+    // mysql2-ийн `timezone` тохируулаагүй тул драйвер түүнийг процессын
+    // ОРОН НУТГИЙН цагаар сериалчилж, session нь `+00:00` — UTC+8 лаптоп дээр
+    // 8 цагийн зөрүү гарч сэтгэгдэл хүсэх имэйл эрт явна. Багана бүрээр
+    // харьцуулж, encoder-ыг ажиллуулна.
+    .where(and(eq(orders.status, "completed"), isNotNull(orders.userId), isNull(orders.reviewRequestedAt),
+      or(lte(orders.completedAt, cutoff), and(isNull(orders.completedAt), lte(orders.updatedAt, cutoff))),
+      gte(orders.createdAt, floor)))
     .orderBy(asc(orders.id)).limit(200);
 }
 
-export async function markReviewRequested(orderId: number) {
+/**
+ * Сэтгэгдэл хүсэх мэдэгдлийг ЭЗЭМШИНЭ (2026-09-23): хоёр лаптоп + production
+ * нэг DB хуваалцдаг бөгөөд тус бүр өөрийн scheduler-тэй тул хоёулаа ижил
+ * захиалгыг сонгож, хоёулаа илгээх боломжтой байв (`runningJobNames` нь
+ * зөвхөн процесс доторх цоож). Guarded UPDATE нь жинхэнэ цоож: хоёр дахь
+ * процесс `affectedRows === 0` авч илгээхгүй. `runBackInStockJob`-ийн
+ * `claimRestockAlert` аль хэдийн ийм загвартай.
+ */
+/** Эзэмшсэн сэтгэгдлийн хүсэлтийг суллана — ямар ч суваг хүрээгүй бол (2026-09-23). */
+export async function clearReviewRequested(orderId: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
-  await db.update(orders).set({ reviewRequestedAt: new Date() }).where(eq(orders.id, orderId));
+  await db.update(orders).set({ reviewRequestedAt: null }).where(eq(orders.id, orderId));
+}
+
+export async function markReviewRequested(orderId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const claimed = await db.update(orders).set({ reviewRequestedAt: new Date() })
+    .where(and(eq(orders.id, orderId), isNull(orders.reviewRequestedAt)));
+  return Number(claimed[0].affectedRows ?? 0) === 1;
 }
 
 /**
@@ -523,7 +606,11 @@ export async function requestOrderReturn(input: { orderId: number; userId: numbe
   if (!order) throw new Error("Захиалга олдсонгүй.");
   if (order.status !== "completed") throw new Error("Зөвхөн дууссан (хүлээн авсан) захиалгад буцаалтын хүсэлт илгээнэ.");
   if (order.returnRequestedAt) throw new Error("Энэ захиалгад буцаалтын хүсэлт аль хэдийн илгээгдсэн байна.");
-  if (order.updatedAt.getTime() < Date.now() - input.windowDays * 86_400_000) throw new Error(`Буцаалтын хүсэлтийг захиалга дууссанаас хойш ${input.windowDays} хоногийн дотор илгээнэ.`);
+  // 2026-09-23: `completedAt`-аар (migration 0094). `updatedAt` нь ямар ч
+  // бичилт дээр шинэчлэгддэг тул 14 хоногийн цонх чимээгүй уртсаж, 7 дахь
+  // өдөр сэтгэгдэл хүссэн ажил 20 дахь өдөр ч буцаалт зөвшөөрдөг байв.
+  const completedAtMs = (order.completedAt ?? order.updatedAt).getTime();
+  if (completedAtMs < Date.now() - input.windowDays * 86_400_000) throw new Error(`Буцаалтын хүсэлтийг захиалга дууссанаас хойш ${input.windowDays} хоногийн дотор илгээнэ.`);
   const flipped = await db.update(orders).set({ returnRequestedAt: new Date(), returnRequestReason: input.reason.trim().slice(0, 500), updatedAt: new Date() })
     .where(and(eq(orders.id, input.orderId), isNull(orders.returnRequestedAt)));
   if (Number(flipped[0].affectedRows ?? 0) !== 1) throw new Error("Энэ захиалгад буцаалтын хүсэлт аль хэдийн илгээгдсэн байна.");
@@ -706,7 +793,12 @@ export async function editAdminOrder(input: OrderEditInput) {
     if (!desired.size) throw new Error("Захиалгад дор хаяж нэг бараа үлдэх ёстой.");
   }
   const newVariantIds = wantsItemChange ? Array.from(desired.keys()).filter(id => !existingLines.some(line => line.variantId === id)) : [];
-  const allVariantIds = wantsItemChange ? Array.from(desired.keys()) : existingLines.map(line => line.variantId).filter((id): id is number => id !== null);
+  // 2026-09-23: ОДОО байгаа ба ХҮССЭН variant-уудын ЭВЛЭЛ. Өмнө нь
+  // `wantsItemChange` үед зөвхөн `desired`-ийг уншдаг тул УСТГАГДАЖ байгаа мөрийн
+  // `kind` олдохгүй, бэлгийн картын мөр "physical" гэж үзэгдэж нөөц хөндөх
+  // оролдлого болдог байв (0 үлдэгдэлтэй дижитал бараа → "хүрэлцэхгүй").
+  const existingVariantIds = existingLines.map(line => line.variantId).filter((id): id is number => id !== null);
+  const allVariantIds = wantsItemChange ? Array.from(new Set([...desired.keys(), ...existingVariantIds])) : existingVariantIds;
   const sources = await loadOrderLineSources(db, allVariantIds);
   for (const id of newVariantIds) if (!sources.get(id)) throw new Error(`Бараа олдсонгүй (variant ${id}).`);
 
@@ -727,10 +819,46 @@ export async function editAdminOrder(input: OrderEditInput) {
   if (deliveryMethod === "ub_delivery" && !deliveryAddress) throw new Error("Хүргэлтийн хаяг оруулна уу.");
   const subtotalMnt = finalLines.reduce((sum, line) => sum + line.unitPriceMnt * line.quantity, 0);
   const [deliveryFeeUbMnt, freeShippingThresholdMnt] = await Promise.all([getStoreSettingNumber("delivery-fee-ub-mnt"), getStoreSettingNumber("free-shipping-threshold-mnt")]);
-  const deliveryFeeMnt = computeDeliveryFeeMnt({ deliveryMethod, subtotalMnt, deliveryFeeUbMnt, freeShippingThresholdMnt, digitalOnly });
-  const totalMnt = Math.max(0, subtotalMnt + deliveryFeeMnt - current.discountMnt - current.couponDiscountMnt - current.loyaltyDiscountMnt - current.storeCreditAppliedMnt);
+  const computedDeliveryFeeMnt = computeDeliveryFeeMnt({ deliveryMethod, subtotalMnt, deliveryFeeUbMnt, freeShippingThresholdMnt, digitalOnly });
+  // 2026-09-23: ТӨЛӨГДСӨН захиалгын дүнг хэзээ ч дахин бодохгүй. Барааны мөр
+  // нь аль хэдийн хаалттай (дээрх шалгалт) ч хүргэлтийн арга/салбар солиход
+  // `deliveryFeeMnt`/`totalMnt` дахин бичигддэг байсан тул мөнгө хөдөлгөөгүй
+  // байхад 50 000₮ төлсөн захиалга 55 000₮ болж, борлуулалт/гишүүнчлэлийн
+  // зарцуулалт/буцаалтын хязгаар бүгд хөрдөг байв.
+  const isPaid = current.paymentStatus !== "unpaid";
+  // ⚠️ Шалгуурт `computedDeliveryFeeMnt`-ийг дангаараа хэрэглэж БОЛОХГҮЙ: тэр нь
+  // ӨНӨӨДРИЙН `delivery-fee-ub-mnt`/`free-shipping-threshold-mnt`-ээр бодогддог
+  // тул Tom хүргэлтийн үнээ нэг удаа өсгөхөд түүнээс ӨМНӨ орсон бүх төлөгдсөн
+  // захиалга бүхэлдээ засагдахаа болино — утасны буруу цифр ч зассагдахгүй
+  // (2026-09-23). Зөвхөн хүргэлтийн арга/салбарыг БОДИТООР сольсон үед л
+  // татгалзана; бусад тохиолдолд төлсөн дүн хэвээр (доорх `isPaid ? …`).
+  const deliveryShapeChanged = (input.deliveryMethod !== undefined && input.deliveryMethod !== current.deliveryMethod)
+    || (input.pickupBranch !== undefined && (input.pickupBranch || null) !== current.pickupBranch);
+  if (isPaid && deliveryShapeChanged && computedDeliveryFeeMnt !== current.deliveryFeeMnt) {
+    throw new Error("Төлбөр төлөгдсөн захиалгад хүргэлтийн төлбөр өөрчлөх сонголт хийх боломжгүй — буцаан олголт хийгээд шинэ захиалга үүсгэнэ үү.");
+  }
+  const deliveryFeeMnt = isPaid ? current.deliveryFeeMnt : computedDeliveryFeeMnt;
+  const totalMnt = isPaid ? current.totalMnt : Math.max(0, subtotalMnt + deliveryFeeMnt - current.discountMnt - current.couponDiscountMnt - current.loyaltyDiscountMnt - current.storeCreditAppliedMnt);
 
+  // 🔴 2026-09-23: хүргэлтийн арга/салбар солигдож `fulfillingBranchId`
+  // өөрчлөгдвөл нөөцийг ХОЁР САЛБАР ХООРОНД ЗӨӨНӨ.
+  //
+  // Өмнө нь захиалга шинэ салбарыг бичдэг атлаа нөөц нь хуучин салбар дээр
+  // хасагдсан хэвээр үлддэг байв — дараа нь цуцлахад `restoreStockForOrder`
+  // ШИНЭ салбарт буцаана: хуучин нь мөнхөд дутуу, шинэ нь хуурамч нөөцтэй,
+  // дэвтэр нь хоёр талдаа зөрүүтэй. Одоо хуучин салбарт буцааж, шинэ салбараас
+  // хасна; шинэ салбарт хүрэлцэхгүй бол засвар бүхэлдээ татгалзана (нөөц
+  // хуурамчаар үржихээс илүү тодорхой алдаа).
+  const branchChanged = branch.fulfillingBranchId !== current.fulfillingBranchId;
   await db.transaction(async tx => {
+    if (branchChanged) {
+      for (const line of existingLines) {
+        if (line.variantId === null) continue;
+        if ((sources.get(line.variantId)?.kind ?? "physical") === "gift_card") continue;
+        await adjustOrderLineStock(tx, current.fulfillingBranchId, line.variantId, line.quantity, { orderId: input.id, actorUserId: input.actorUserId, itemLabel: line.productName });
+        await adjustOrderLineStock(tx, branch.fulfillingBranchId, line.variantId, -line.quantity, { orderId: input.id, actorUserId: input.actorUserId, itemLabel: line.productName });
+      }
+    }
     if (wantsItemChange) {
       // Removed or reduced lines give stock back; added or increased lines take it.
       for (const line of existingLines) {
@@ -740,14 +868,16 @@ export async function editAdminOrder(input: OrderEditInput) {
         const next = desired.get(line.variantId) ?? 0;
         const delta = line.quantity - next; // positive = goods return
         const kind = sources.get(line.variantId)?.kind ?? "physical";
-        if (delta !== 0 && kind !== "gift_card") await adjustOrderLineStock(tx, current.fulfillingBranchId, line.variantId, delta, { orderId: input.id, actorUserId: input.actorUserId, itemLabel: line.productName });
+        // 2026-09-23: `branch.fulfillingBranchId` — салбар солигдсон бол
+        // мөрүүд дээрх блокт аль хэдийн ШИНЭ салбар руу зөөгдсөн байна.
+        if (delta !== 0 && kind !== "gift_card") await adjustOrderLineStock(tx, branch.fulfillingBranchId, line.variantId, delta, { orderId: input.id, actorUserId: input.actorUserId, itemLabel: line.productName });
         if (next === 0) await tx.delete(orderItems).where(eq(orderItems.id, line.id));
         else if (next !== line.quantity) await tx.update(orderItems).set({ quantity: next }).where(eq(orderItems.id, line.id));
       }
       for (const variantId of newVariantIds) {
         const source = sources.get(variantId)!;
         const quantity = desired.get(variantId)!;
-        if (source.kind !== "gift_card") await adjustOrderLineStock(tx, current.fulfillingBranchId, variantId, -quantity, { orderId: input.id, actorUserId: input.actorUserId, itemLabel: source.productName });
+        if (source.kind !== "gift_card") await adjustOrderLineStock(tx, branch.fulfillingBranchId, variantId, -quantity, { orderId: input.id, actorUserId: input.actorUserId, itemLabel: source.productName });
         await tx.insert(orderItems).values({ orderId: input.id, productId: source.productId, variantId, productName: source.productName, sku: source.sku, unitPriceMnt: source.priceMnt, quantity });
       }
     }
@@ -760,7 +890,8 @@ export async function editAdminOrder(input: OrderEditInput) {
       deliveryDistrict: deliveryMethod === "ub_delivery" ? (input.district !== undefined ? input.district : current.deliveryDistrict) : null,
       pickupBranch: deliveryMethod === "store_pickup" ? branch.pickupBranch : null,
       fulfillingBranchId: branch.fulfillingBranchId,
-      subtotalMnt, deliveryFeeMnt, totalMnt, updatedAt: new Date(),
+      ...(isPaid ? {} : { subtotalMnt, deliveryFeeMnt, totalMnt }),
+      updatedAt: new Date(),
     }).where(eq(orders.id, input.id));
   });
   invalidateCachedByPrefix("storefront:bestsellers:");

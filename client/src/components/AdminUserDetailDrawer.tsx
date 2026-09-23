@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CreditCard, LoaderCircle, LogOut, Phone, ScanFace, ShieldAlert, ShieldCheck, Store, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -82,11 +82,16 @@ export default function AdminUserDetailDrawer({ userId, role, onClose }: { userI
   const detail = detailQuery.data;
   const isBusy = suspendUser.isPending || unsuspendUser.isPending;
 
+  // 2026-09-23: НЭГ хэрэглэгч тутамд НЭГ удаа. `detail` нь Date талбартай тул
+  // дахин татах бүрт шинэ объект болж, админ утас бичиж байх зуур (30 с-ийн
+  // дараах фокусын refetch) бичсэн нь серверийн утгаар дардаг байв.
+  const seededUserIdRef = useRef<number | null>(null);
   useEffect(() => {
-    if (detail) {
-      setLoyaltyAdjustment(String(detail.loyalty.manualAdjustmentMnt));
-      setPhoneDraft(detail.phone ?? "");
-    }
+    if (!detail) { seededUserIdRef.current = null; return; }
+    if (seededUserIdRef.current === detail.id) return;
+    seededUserIdRef.current = detail.id;
+    setLoyaltyAdjustment(String(detail.loyalty.manualAdjustmentMnt));
+    setPhoneDraft(detail.phone ?? "");
   }, [detail]);
 
   const onSavePhone = async () => {

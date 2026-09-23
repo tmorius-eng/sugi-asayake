@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomInt } from "node:crypto";
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import type { Request, Response } from "express";
 import { TRPCError } from "@trpc/server";
 import { faceHandoffRequests } from "../drizzle/schema";
@@ -104,8 +104,16 @@ async function loadRequest(token: string): Promise<LoadedRequest | null> {
   if (!db) return null;
   const [row] = await db.select().from(faceHandoffRequests).where(eq(faceHandoffRequests.tokenHash, hashToken(token))).limit(1);
   if (!row) return null;
-  if (row.status === "pending" && row.expiresAt.getTime() <= Date.now()) {
-    await db.update(faceHandoffRequests).set({ status: "expired" }).where(eq(faceHandoffRequests.id, row.id));
+  // 2026-09-23: "approved" мөр ч хугацаа дуусна. Өмнө нь зөвхөн "pending"
+  // хугацаагаар хаагддаг тул батлагдсаны дараа мөр 24 цагийн цэвэрлэгээ
+  // хүртэл "approved" хэвээр үлдэж, ижил token + хэрэглэгч + sessionVersion +
+  // таб дээр ХЭД ЧАСЫН ДАРАА ч proof cookie мөнгөлдөг байв — "нэг QR 90
+  // секунд хүчинтэй" гэсэн загварын баталгаа зөвхөн батлахаас өмнө биелж байв.
+  // Батлахад цаг хэрэгтэй тул жижиг нөөц хугацаа (grace) нэмнэ.
+  const APPROVED_GRACE_MS = 60_000;
+  const deadline = row.expiresAt.getTime() + (row.status === "approved" ? APPROVED_GRACE_MS : 0);
+  if ((row.status === "pending" || row.status === "approved") && deadline <= Date.now()) {
+    await db.update(faceHandoffRequests).set({ status: "expired" }).where(and(eq(faceHandoffRequests.id, row.id), inArray(faceHandoffRequests.status, ["pending", "approved"])));
     return { ...row, status: "expired" };
   }
   return row;

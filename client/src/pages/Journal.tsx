@@ -38,6 +38,8 @@ export default function Journal() {
   const [, setLocation] = useLocation();
   const page = Math.max(1, Number(new URLSearchParams(search).get("page")) || 1);
   const postsQuery = trpc.content.allPosts.useQuery({ page, pageSize: 12 });
+  // Сервер хязгаараас хэтэрсэн хуудсыг хавчдаг — бодит хуудсыг түүнээс авна.
+  const currentPage = postsQuery.data?.page ?? page;
   const posts = postsQuery.data?.items ?? [];
   const pageCount = postsQuery.data?.pageCount ?? 1;
   const goTo = (next: number) => setLocation(next <= 1 ? "/journal" : `/journal?page=${next}`);
@@ -102,9 +104,13 @@ export default function Journal() {
 
         {pageCount > 1 && (
           <nav className="mt-12 flex items-center justify-center gap-3" aria-label="Нийтлэлийн хуудас">
-            <button type="button" className="journal-page-btn" disabled={page <= 1} onClick={() => goTo(page - 1)}>← Өмнөх</button>
-            <span className="text-sm text-[#67686c]">{`${page} / ${pageCount}`}</span>
-            <button type="button" className="journal-page-btn" disabled={page >= pageCount} onClick={() => goTo(page + 1)}>Дараах →</button>
+            {/* 2026-09-23: `?page=40` гэх мэт хязгаараас хэтэрсэн утгыг сервер
+                сүүлийн хуудас руу хавчдаг тул ХАРАГДАХ тоог серверийн буцаасан
+                хуудсаар авна. Өмнө нь "40 / 3" гэж бичигдээд "Өмнөх" нь 39 руу
+                (дахин сүүлийн хуудас руу) очдог байв. */}
+            <button type="button" className="journal-page-btn" disabled={currentPage <= 1} onClick={() => goTo(currentPage - 1)}>← Өмнөх</button>
+            <span className="text-sm text-[#67686c]">{`${currentPage} / ${pageCount}`}</span>
+            <button type="button" className="journal-page-btn" disabled={currentPage >= pageCount} onClick={() => goTo(currentPage + 1)}>Дараах →</button>
           </nav>
         )}
       </main>

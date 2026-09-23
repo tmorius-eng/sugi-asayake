@@ -212,7 +212,11 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
   // every OTHER section before that fix) a direct link or refresh to
   // ?adminSection=storeSettings or campaigns silently fell back to the
   // dashboard -- the exact bug class this array exists to prevent.
-  const adminSectionKeys: AdminSection[] = ["dashboard", "products", "orders", "posts", "reviews", "routines", "promotions", "calendar", "discountCodes", "brands", "branches", "pos", "media", "campaigns", "storeSettings", "measurement", "users", "analytics", "security", "integrations", "documents", "loyalty", "notifications", "receiving"];
+  // 2026-09-23: "search" нэмэгдэв. `AdminSection` төрөлд ба хажуугийн цэсэнд
+  // байсан ч энэ жагсаалтад БАЙХГҮЙ байсан тул `?adminSection=search` руу
+  // орсон/refresh хийсэн админыг чимээгүй хянах самбар руу буцаадаг байв —
+  // яг энэ жагсаалтын дээрх тайлбарт дурдсан алдааны төрөл.
+  const adminSectionKeys: AdminSection[] = ["dashboard", "products", "orders", "posts", "reviews", "routines", "promotions", "calendar", "discountCodes", "brands", "search", "branches", "pos", "media", "campaigns", "storeSettings", "measurement", "users", "analytics", "security", "integrations", "documents", "loyalty", "notifications", "receiving"];
   // 2026-09-04 (Tom, "does admin panel really work 100% functional?" audit):
   // section switching only ever lived in React state, never the URL --
   // only ?adminSection=media (the one pre-existing special case) survived a
@@ -259,6 +263,12 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
   // openProductComposer's own comment on why this must stay independent
   // from the editable productForm fields.
   const [liveProductRef, setLiveProductRef] = useState<{ slug: string; isPublished: boolean } | null>(null);
+  /**
+   * Маягт нээгдэх үеийн үлдэгдэл (2026-09-23). Харьцуулалт нь "админ энэ
+   * талбарыг бодитоор өөрчилсөн үү" гэдгийг хэлнэ — дэлгэрэнгүйг
+   * openProductComposer доторх тайлбараас үз.
+   */
+  const [openedStockQuantity, setOpenedStockQuantity] = useState<string>("");
   const [liveCategoryRef, setLiveCategoryRef] = useState<{ name: string; isActive: boolean } | null>(null);
   // 2026-09-06: the new Gentelella-style shell's mobile nav drawer -- see
   // AdminSidebar.tsx's own comment on why this is a plain toggle + the
@@ -407,6 +417,19 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
       // point at what's ACTUALLY live right now, never a not-yet-saved
       // candidate slug that would just 404.
       setLiveProductRef({ slug: product.slug, isPublished: product.isPublished });
+      // 🔴 2026-09-23: маягт нээгдэх үеийн үлдэгдлийг санана.
+      //
+      // `product.stockQuantity` нь БҮХ салбарын НИЙЛБЭР
+      // (`recomputeVariantStockTotal` = SUM(branch_stock) WHERE
+      // countsTowardOnlineStock), харин сервер энэ талбарыг
+      // `setFulfillmentBranchStock` = "үндсэн салбарт ЭНЭ ТООГ тавь" гэж
+      // ойлгодог. Өмнө нь `stockQuantity` нь ямагт payload-д багтдаг тул
+      // зөвхөн нэрийн алдаа зассан хадгалалт ч агуулахын үлдэгдлийг нийлбэр
+      // рүү үсэргэж (10 + дэлгүүрийн 15 = 25 → агуулах 25, нийт 40),
+      // дэвтэрт хуурамч `product_form_set +15` бичдэг байв. Засвар бүрд
+      // нэмэгдэн хуримтлагдана. Одоо админ БОДИТООР талбарыг өөрчилсөн үед л
+      // илгээнэ.
+      setOpenedStockQuantity(String(product.stockQuantity));
     } else {
       setProductForm({ ...emptyProduct(), categoryId: categories[0] ? String(categories[0].id) : "" });
       setLiveProductRef(null);
@@ -434,7 +457,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
     const categoryId = Number(productForm.categoryId);
     const priceMnt = Number(productForm.priceMnt);
     const stockQuantity = Number(productForm.stockQuantity);
-    if (!categoryId || Number.isNaN(priceMnt) || Number.isNaN(stockQuantity)) {
+    if (!categoryId || Number.isNaN(priceMnt) || Number.isNaN(stockQuantity) || productForm.stockQuantity.trim() === "") {
       toast.error("Ангилал, үнэ, үлдэгдлийг зөв оруулна уу.");
       return;
     }
@@ -473,7 +496,12 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
     };
     try {
       if (productForm.id) {
-        await updateProduct.mutateAsync({ id: productForm.id, ...payload });
+        // Үлдэгдлийг ЗӨВХӨН бодитоор өөрчилсөн үед илгээнэ (дээрх
+        // openProductComposer доторх тайлбар). `undefined` = серверт
+        // "хөндөхгүй" гэсэн утга — productUpdateSchema нь partial.
+        const { stockQuantity: _stock, ...rest } = payload;
+        const updatePayload = productForm.stockQuantity === openedStockQuantity ? rest : payload;
+        await updateProduct.mutateAsync({ id: productForm.id, ...updatePayload });
         toast.success("Бүтээгдэхүүнийг шинэчиллээ.");
       } else {
         await createProduct.mutateAsync(payload);
@@ -574,7 +602,18 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
         toast.success("Зураг SUGI сан руу хадгалагдлаа.");
       } catch (error) {
         toast.error(messageFrom(error));
+      } finally {
+        // 2026-09-23: талбарыг цэвэрлэнэ (ангиллын зурагтай ижил). Өмнө нь
+        // зөвхөн төрөл/хэмжээний алдааны замд цэвэрлэгддэг байсан тул
+        // байршуулалт уначихвал ИЖИЛ файлыг дахин сонгоход `onChange`
+        // ажилладаггүй — дахин оролдох гарц байхгүй.
+        event.target.value = "";
       }
+    };
+    // Уншилтын алдаанд ч талбарыг цэвэрлэж, шалтгааныг хэлнэ.
+    reader.onerror = () => {
+      toast.error("Файлыг уншиж чадсангүй. Өөр зураг сонгоно уу.");
+      event.target.value = "";
     };
     reader.readAsDataURL(file);
   };
@@ -789,7 +828,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
                   <AdminProductImportModal open={showProductImport} onOpenChange={setShowProductImport} />
                   <ProductQrModal product={qrProduct} onClose={() => setQrProduct(null)} />
                 </>}
-                {section !== "dashboard" && section !== "posts" && section !== "reviews" && section !== "routines" && section !== "promotions" && section !== "calendar" && section !== "discountCodes" && section !== "brands" && section !== "branches" && section !== "pos" && section !== "media" && section !== "campaigns" && section !== "storeSettings" && section !== "measurement" && section !== "security" && section !== "integrations" && section !== "notifications" && section !== "receiving" && section !== "documents" && section !== "loyalty" && <label className="flex h-10 items-center gap-2 rounded-full border border-[var(--a-border)] bg-[var(--a-card)] px-4"><Search size={15} className="text-[var(--a-faint)]" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={section === "users" ? "Нэр эсвэл имэйл хайх" : section === "orders" ? "Дугаар, хэрэглэгч, утас хайх" : "Нэр, SKU хайх"} className="w-full bg-transparent text-xs outline-none" /></label>}
+                {section !== "dashboard" && section !== "search" && section !== "posts" && section !== "reviews" && section !== "routines" && section !== "promotions" && section !== "calendar" && section !== "discountCodes" && section !== "brands" && section !== "branches" && section !== "pos" && section !== "media" && section !== "campaigns" && section !== "storeSettings" && section !== "measurement" && section !== "security" && section !== "integrations" && section !== "notifications" && section !== "receiving" && section !== "documents" && section !== "loyalty" && <label className="flex h-10 items-center gap-2 rounded-full border border-[var(--a-border)] bg-[var(--a-card)] px-4"><Search size={15} className="text-[var(--a-faint)]" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={section === "users" ? "Нэр эсвэл имэйл хайх" : section === "orders" ? "Дугаар, хэрэглэгч, утас хайх" : "Нэр, SKU хайх"} className="w-full bg-transparent text-xs outline-none" /></label>}
               </div>
             </div>
             {/* One "what is this screen for" panel per section (2026-09-12).

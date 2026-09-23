@@ -133,10 +133,12 @@ export default function FaceHandoffPanel({ onPassed, onBack }: { onPassed: () =>
     // (grid + place-items: center + дэвсгэр). Эхэндээ байхгүй класс
     // ("face-gate") бичсэнээс карт зүүн дээд буланд наалдаж байв — 2026-09-16,
     // Tom: "буланд байх юм".
-    // Сканнерын дэлгэцтэй ижил харанхуй карт — сонголтын дэлгэцээс шилжихэд
-    // нэг л зохиомжийн дотор явж байгаа мэт байх ёстой (2026-09-16).
-    <div className="face-gate-shell face-gate-shell--dark" role="dialog" aria-modal="true" aria-label="Утсаар баталгаажуулах">
-      <div className="face-gate-card face-gate-card--wide face-gate-card--scan">
+    // 2026-09-23 (Tom): нууц үгийн болон сонголтын дэлгэцтэй ИЖИЛ цагаан карт,
+    // брэндийн зурвастай — өмнө нь харанхуй хөх байсан тул нэг урсгалын
+    // алхмууд огт өөр загвартай харагдаж байв.
+    <div className="face-gate-shell" role="dialog" aria-modal="true" aria-label="Утсаар баталгаажуулах">
+      <div className="face-gate-card face-gate-card--wide face-gate-card--consent">
+        <div className="face-gate-brandstrip" aria-hidden="true" />
         <button type="button" className="face-gate-back" onClick={onBack} aria-label="Буцах"><ArrowLeft size={18} aria-hidden="true" /></button>
         <div className="face-gate-head face-gate-head--with-back">
           <Smartphone size={20} aria-hidden="true" />

@@ -55,12 +55,17 @@ export async function recomputeVariantStockTotal(db: DbOrTx, variantId: number) 
   if (previous?.isPublished && previous.stock > 0 && total <= 0) {
     await enqueueNotification(db, "stock.total_out", { productName: previous.productName, sku: previous.sku }, { dedupeKey: `${variantId}:${ubDateKey()}` });
   }
+  // 2026-09-23: ОЛОН variant-тай бараанд ч `products.stockQuantity`-г бичнэ.
+  // Өмнө нь зөвхөн `siblings.length === 1` үед л толилдог байсан тул 2+
+  // variant-тай бараанд тэр багана хөшиж үлддэг — "Ирэхээр мэдэгдэх" нь
+  // `gt(products.stockQuantity, 0)`, `rearmRestockAlerts` нь
+  // `lte(..., 0)`-аар л ажилладаг тул тэдгээр бараанд хэзээ ч ажиллахгүй
+  // (эсвэл хуучин тоогоор ажиллана), нөөцийн KPI-ууд ч буруу гарна.
   const [variantRow] = await db.select({ productId: productVariants.productId }).from(productVariants).where(eq(productVariants.id, variantId)).limit(1);
   if (variantRow) {
-    const siblings = await db.select({ id: productVariants.id }).from(productVariants).where(eq(productVariants.productId, variantRow.productId));
-    if (siblings.length === 1) {
-      await db.update(products).set({ stockQuantity: total, updatedAt: new Date() }).where(eq(products.id, variantRow.productId));
-    }
+    const siblings = await db.select({ id: productVariants.id, stockQuantity: productVariants.stockQuantity }).from(productVariants).where(eq(productVariants.productId, variantRow.productId));
+    const productTotal = siblings.reduce((sum, sibling) => sum + (sibling.id === variantId ? total : Number(sibling.stockQuantity ?? 0)), 0);
+    await db.update(products).set({ stockQuantity: productTotal, updatedAt: new Date() }).where(eq(products.id, variantRow.productId));
   }
   return total;
 }

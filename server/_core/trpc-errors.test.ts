@@ -45,3 +45,50 @@ describe("maskErrorShape", () => {
     expect(maskErrorShape(leaked, "INTERNAL_SERVER_ERROR", false)).toBe(leaked);
   });
 });
+
+/**
+ * 2026-09-23. zod схем унавал tRPC нь асуудлын жагсаалтыг JSON-оор `message`-д
+ * хийдэг бөгөөд клиент бүр түүнийг шууд toast болгодог тул худалдан авагч
+ * `[{"origin":"string",…}]` гэсэн хана хардаг байв (Checkout-ийн имэйл/хаяг,
+ * бүртгэлийн нууц үг). Одоо хүний уншихаар монгол өгүүлбэр болно.
+ */
+describe("validation message humanising", () => {
+  const zodJson = (issues: unknown[]) => JSON.stringify(issues, null, 2);
+
+  it("names the field in Mongolian and says what is wrong", () => {
+    const shape = { message: zodJson([{ code: "invalid_format", path: ["customerEmail"], message: "Invalid email" }]) };
+    const masked = maskErrorShape(shape, "BAD_REQUEST", true);
+    expect(masked.message).toContain("имэйл хаяг");
+    expect(masked.message).not.toContain("{");
+    expect(masked.message).not.toContain("invalid_format");
+  });
+
+  it("turns a minimum-length failure into a readable rule", () => {
+    const shape = { message: zodJson([{ code: "too_small", minimum: 8, path: ["password"], message: "Too small" }]) };
+    expect(maskErrorShape(shape, "BAD_REQUEST", true).message).toContain("нууц үг — хамгийн багадаа 8 тэмдэгт");
+  });
+
+  it("lists several fields and counts the rest", () => {
+    const shape = { message: zodJson([
+      { code: "invalid_type", path: ["customerName"] },
+      { code: "too_small", minimum: 8, path: ["deliveryAddress"] },
+      { code: "invalid_format", path: ["customerEmail"] },
+      { code: "invalid_format", path: ["customerPhone"] },
+      { code: "invalid_format", path: ["pickupBranch"] },
+    ]) };
+    const message = maskErrorShape(shape, "BAD_REQUEST", true).message;
+    expect(message).toContain("нэр — заавал бөглөнө");
+    expect(message).toContain("хүргэлтийн хаяг");
+    expect(message).toContain("болон өөр 1");
+  });
+
+  it("leaves an ordinary user-facing message alone", () => {
+    const shape = { message: "Энэ утасны дугаараар бүртгэл үүссэн байна." };
+    expect(maskErrorShape(shape, "BAD_REQUEST", true).message).toBe(shape.message);
+  });
+
+  it("does not mistake a non-JSON message that happens to start with a bracket", () => {
+    const shape = { message: "[SUGI] Захиалга олдсонгүй." };
+    expect(maskErrorShape(shape, "BAD_REQUEST", true).message).toBe(shape.message);
+  });
+});

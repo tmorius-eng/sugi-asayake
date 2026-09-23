@@ -98,7 +98,10 @@ export default function AdminOperationsPanel({ preview = false, query = "", role
   };
 
   const exportOrdersCsv = () => {
-    const from = exportDateFrom ? new Date(exportDateFrom) : null;
+    // 2026-09-23: `new Date("2026-09-01")` нь UTC шөнө дунд (= орон нутгийн
+    // 08:00) тул эхлэх өдрийн 00:00–08:00-д орсон захиалга хасагддаг байв.
+    // Төгсгөлийн огноо аль хэдийн орон нутгийн цагаар бичигдсэн.
+    const from = exportDateFrom ? new Date(`${exportDateFrom}T00:00:00`) : null;
     const to = exportDateTo ? new Date(`${exportDateTo}T23:59:59`) : null;
     const rows = allOrders
       .filter(order => exportStatusFilter === "all" || order.status === exportStatusFilter)

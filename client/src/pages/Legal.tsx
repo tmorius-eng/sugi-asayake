@@ -54,7 +54,12 @@ const ROUTE_TO_KEY: Record<string, SiteDocumentKey> = Object.fromEntries(
 export default function Legal() {
   const [location] = useLocation();
   const locale = useLocale();
-  const key: SiteDocumentKey = ROUTE_TO_KEY[location] ?? "privacy";
+  // 2026-09-23: төгсгөлийн зураасыг хасна. wouter-ийн `/terms` маршрут нь
+  // `/terms/`-ийг МӨН тааруулдаг атлаа энэ хүснэгт яг `/terms`-ээр
+  // түлхүүрлэгддэг тул хуваалцсан `…/returns/` холбоос Нууцлалын бодлогыг
+  // /returns хаяган дор үзүүлдэг байв.
+  const normalisedPath = location.replace(/\/+$/, "") || "/";
+  const key: SiteDocumentKey = ROUTE_TO_KEY[normalisedPath] ?? "privacy";
   const fallback = getSiteDocumentFallbackFor(key, locale);
 
   const documentsQuery = trpc.content.siteDocuments.useQuery();

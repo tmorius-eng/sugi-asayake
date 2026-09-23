@@ -24,9 +24,16 @@ export async function getApplicableRoutineDiscount(cartItems: { productId: numbe
     .where(and(eq(routines.isPublished, true), gte(routines.discountPercent, 1)));
   if (!routineRows.length) return null;
 
+  // 2026-09-23: НИЙТЛЭГДСЭН барааны алхмууд л. Routine-ийн хуудас
+  // (`loadRoutineWithSteps`) нийтлэгдээгүй алхмыг НУУДАГ атлаа хямдралын
+  // шалгалт бүх алхмыг сагсанд байхыг шаарддаг байсан бөгөөд `addCartItem` нь
+  // нийтлэгдээгүй барааг сагслуулдаггүй — өөрөөр хэлбэл 4 алхамт багцын нэг
+  // бараа нийтлэлтээс хасагдвал хуудас 3 алхам + "хэмнэнэ" гэж үзүүлэх
+  // атлаа хямдрал хэзээ ч хэрэгждэггүй байв.
   const stepRows = await db.select({ routineId: routineSteps.routineId, productId: routineSteps.productId })
     .from(routineSteps)
-    .where(inArray(routineSteps.routineId, routineRows.map(routine => routine.id)));
+    .innerJoin(products, eq(products.id, routineSteps.productId))
+    .where(and(inArray(routineSteps.routineId, routineRows.map(routine => routine.id)), eq(products.isPublished, true)));
 
   const cartProductIds = new Set(cartItems.map(item => item.productId));
   let best: { routineId: number; routineName: string; discountPercent: number; discountMnt: number } | null = null;

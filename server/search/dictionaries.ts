@@ -64,9 +64,13 @@ export async function upsertSearchSynonym(input: { id?: number; concept: string;
   const terms = parseSynonymTerms(input.terms);
   if (terms.length < 2) throw new Error("Нэг ойлголтод дор хаяж 2 үг хэрэгтэй (жишээ: батга, acne).");
   const concept = normaliseSearchText(input.concept) || terms[0];
-  invalidateSearchDictionaries();
+  // 2026-09-23: кэшийг БИЧСЭНИЙ ДАРАА л унагана. Өмнө нь бичихээс өмнө
+  // байсан тул дундуур ирсэн хайлт кэшийг ХУУЧИН мөрүүдээр дахин дүүргэж,
+  // админы "+ синоним" 60 секундын турш ажиллаагүй мэт харагддаг байв
+  // (`seedSearchDictionaries` аль хэдийн зөв дараалалтай).
   if (input.id) {
     await db.update(searchSynonyms).set({ concept, terms: terms.join(", "), isActive: input.isActive ?? true, updatedAt: new Date() }).where(eq(searchSynonyms.id, input.id));
+    invalidateSearchDictionaries();
     const [row] = await db.select().from(searchSynonyms).where(eq(searchSynonyms.id, input.id)).limit(1);
     return row;
   }
@@ -84,8 +88,8 @@ export async function upsertSearchSynonym(input: { id?: number; concept: string;
 export async function deleteSearchSynonym(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  invalidateSearchDictionaries();
   await db.delete(searchSynonyms).where(eq(searchSynonyms.id, id));
+  invalidateSearchDictionaries();
   return { id };
 }
 
@@ -102,8 +106,8 @@ export async function createBrandAlias(input: { canonicalBrand: string; alias: s
   const alias = input.alias.trim();
   if (!canonical || !alias) throw new Error("Брэнд ба alias хоёулаа хэрэгтэй.");
   if (canonical.toLowerCase() === alias.toLowerCase()) throw new Error("Alias нь брэндийн өөрийнх нь нэртэй ижил байж болохгүй.");
-  invalidateSearchDictionaries();
   const inserted = await db.insert(brandAliases).values({ canonicalBrand: canonical, alias }).onDuplicateKeyUpdate({ set: { canonicalBrand: canonical } });
+  invalidateSearchDictionaries();
   const [row] = await db.select().from(brandAliases).where(eq(brandAliases.alias, alias)).limit(1);
   return row ?? { id: Number(inserted[0].insertId), canonicalBrand: canonical, alias, createdAt: new Date() };
 }
@@ -111,8 +115,8 @@ export async function createBrandAlias(input: { canonicalBrand: string; alias: s
 export async function deleteBrandAlias(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  invalidateSearchDictionaries();
   await db.delete(brandAliases).where(eq(brandAliases.id, id));
+  invalidateSearchDictionaries();
   return { id };
 }
 

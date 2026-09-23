@@ -69,7 +69,14 @@ export const escapeAttribute = (value: string) =>
  */
 export const escapeJsString = (value: string) => {
   const quoted = JSON.stringify(value);
-  return quoted.slice(1, -1).replace(/<\/script/gi, "<\\/script");
+  // 2026-09-23: `<`-ийг БҮГДИЙГ escape-лэнэ, зөвхөн `</script`-ийг биш.
+  // Эдгээр утга нь `<script type="application/json" id="cookie-consent-config">`
+  // дотор буудаг ба HTML-ийн tokenizer нь `<!--<script>`-ийг харвал
+  // "double-escaped" төлөв рүү шилждэг тул жинхэнэ `</script>` элементийг
+  // хаахаа больж, толгойн үлдсэн хэсэг (analytics + bootstrap блок) нэг
+  // script дотор залгигддаг. Бусад гурван JSON блок аль хэдийн ингэж
+  // хийдэг (PROJECT-GUIDE-ийн "`<` тэмдэгтийг сервер escape-лэнэ" дүрэм).
+  return quoted.slice(1, -1).replace(/</g, "\\u003c");
 };
 
 async function resolveValues(): Promise<Map<string, string>> {

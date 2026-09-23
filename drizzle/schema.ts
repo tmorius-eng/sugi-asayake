@@ -903,6 +903,16 @@ export const orders = mysqlTable("orders", {
   // haven't had time to be returned yet).
   returnedAt: timestamp("returnedAt"),
   /**
+   * Захиалга "дууссан" болсон яг тэр мөч (2026-09-23, migration 0094).
+   *
+   * Буцаалтын хүсэлтийн цонх болон сэтгэгдэл хүсэх ажил өмнө нь `updatedAt`-ыг
+   * "дууссан хугацаа" гэж үздэг байсан ч тэр багана `.onUpdateNow()`-той тул
+   * ЯМАР Ч бичилт (сэтгэгдэл хүссэн тэмдэглэгээ, админы тэмдэглэл, хүргэлтийн
+   * дугаар) түүнийг өмнө татдаг байв — буцаалтын 14 хоног чимээгүй уртсана.
+   * `returnedAt`-ийн ижил хэв маягаар нэг терминал үйл явдал = нэг багана.
+   */
+  completedAt: timestamp("completedAt"),
+  /**
    * Admin overhaul (2026-09-08, Phase E): the refund/credit flow the
    * returnedAt comment above flagged as "separate, unscoped work" -- now
    * scoped. Single-column, matching returnedAt's own precedent (one
@@ -1535,6 +1545,30 @@ export const loginAttempts = mysqlTable("login_attempts", {
 export type LoginAttempt = typeof loginAttempts.$inferSelect;
 export type InsertLoginAttempt = typeof loginAttempts.$inferInsert;
 
+/**
+ * Кампанит ажлын давхар илгээлтийн АТОМ цоож (2026-09-23, migration 0095).
+ *
+ * Өмнөх хамгаалалт нь `admin_audit_logs`-оос хайж (SELECT) дараа нь бичдэг
+ * (INSERT) байсан тул атом биш: жинхэнэ давхар товшилт хоёулаа хайлтаа
+ * гүйцэтгээд хоёулаа илгээж, 2 000 хүнд 4 000 SMS явах боломжтой байв. Одоо
+ * цоож нь өвөрмөц индекс дээрх INSERT — хожигдсон тал давхардлын алдаа авна.
+ */
+export const campaignSendClaims = mysqlTable("campaign_send_claims", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Суваг + гарчиг + бие + эрэмбэлсэн хүлээн авагчдын sha256 (32 тэмдэгт). */
+  fingerprint: varchar("fingerprint", { length: 64 }).notNull(),
+  /** 10 минутын цонхны индекс — тэр хугацааны дараа дахин илгээх боломжтой. */
+  windowKey: varchar("windowKey", { length: 32 }).notNull(),
+  actorUserId: int("actorUserId").notNull(),
+  channel: varchar("channel", { length: 20 }).notNull(),
+  recipientCount: int("recipientCount").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  uniqueIndex("campaign_send_claims_unique").on(table.fingerprint, table.windowKey),
+  index("campaign_send_claims_created_idx").on(table.createdAt),
+]);
+export type CampaignSendClaim = typeof campaignSendClaims.$inferSelect;
+
 export const adminAuditLogs = mysqlTable("admin_audit_logs", {
   id: int("id").autoincrement().primaryKey(),
   // RESTRICT: the audit trail must not be able to vanish just because the
@@ -2125,5 +2159,16 @@ export const pushSubscriptions = mysqlTable("push_subscriptions", {
   userAgent: varchar("userAgent", { length: 300 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   lastUsedAt: timestamp("lastUsedAt"),
-}, table => [index("push_subscriptions_user_idx").on(table.userId)]);
+}, table => [
+  index("push_subscriptions_user_idx").on(table.userId),
+  // 2026-09-23: migration 0074 нь `UNIQUE(endpoint(255))`-ийг бодитоор
+  // үүсгэдэг атлаа схемд тунхаглагдаагүй байв. `server/db/notifications.ts`-ийн
+  // `onDuplicateKeyUpdate` зөвхөн тэр индекс байгаа учраас ажилладаг тул
+  // схемээс уншсан хүн "давхардлын хамгаалалт байхгүй" гэж дүгнэх эрсдэлтэй.
+  // ⚠️ Prefix уртыг (255) drizzle-ийн mysql builder илэрхийлж чаддаггүй тул
+  // энд бүтэн багана бичигдэв — бодит DB нь prefix-тэй. `drizzle-kit`-ийн
+  // generate/push-ыг энэ репод хэрэглэдэггүй (migration-ууд гараар
+  // ажилладаг, PROJECT-GUIDE-ийг үз) тул зөрүү нь зөвхөн баримтын шинжтэй.
+  uniqueIndex("push_subscriptions_endpoint_unique").on(table.endpoint),
+]);
 export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;

@@ -1,4 +1,4 @@
-import { getAbandonedCartsNeedingReminder, getLowStockProducts, getOrdersNeedingReviewRequest, getStockLedgerHealth, getStoreSettingNumber, markCartReminderSent, markReviewRequested, getStoreSettingValue, purgeNotificationOutbox, purgeStaleTelemetry, recordNotification, claimRestockAlert, getPendingRestockAlerts, rearmRestockAlerts } from "./db";
+import { clearReviewRequested, clearCartReminderSent, getAbandonedCartsNeedingReminder, getLowStockProducts, getOrdersNeedingReviewRequest, getStockLedgerHealth, getStoreSettingNumber, markCartReminderSent, markReviewRequested, getStoreSettingValue, purgeNotificationOutbox, purgeStaleTelemetry, recordNotification, claimRestockAlert, getPendingRestockAlerts, rearmRestockAlerts } from "./db";
 import { getStaleTransfers } from "./transfers";
 import { runInventorySync } from "./integrations/inventorySync";
 import { fillTemplate } from "../shared/store-settings";
@@ -31,6 +31,12 @@ export async function runAbandonedCartReminderJob(): Promise<void> {
   const emailBody = await getStoreSettingValue("email-body-abandoned-cart");
   const pushBody = await getStoreSettingValue("push-body-abandoned-cart");
   for (const cart of abandonedCarts) {
+    // 2026-09-23: илгээхийн ӨМНӨ эзэмшинэ. Хоёр лаптоп + production нэг DB
+    // хуваалцдаг тул хоёр scheduler ижил сагсыг сонгож, хоёулаа "сагсандаа
+    // бараа үлдсэн" имэйл/push илгээх боломжтой байв (тэмдэглэгээ нь илгээсний
+    // ДАРАА бичигддэг байсан). Хэрэв ямар ч суваг ажиллахгүй бол эзэмшилтийг
+    // буцааж суллана.
+    if (!(await markCartReminderSent(cart.cartId))) continue;
     const name = cart.name ?? "хүндэт харилцагч";
     let delivered = false;
     if (cart.email && cart.emailOptIn) {
@@ -50,7 +56,9 @@ export async function runAbandonedCartReminderJob(): Promise<void> {
       const sent = await sendPushToUser(cart.userId, { title: subject, body: fillTemplate(pushBody, { "{нэр}": name }), url: "/checkout", tag: "abandoned-cart" });
       if (sent > 0) delivered = true;
     }
-    if (delivered) await markCartReminderSent(cart.cartId);
+    // Ямар ч суваг хүрээгүй бол тэмдэглэгээг буцааж, дараагийн тик дахин
+    // оролдоно (хуучин логик ижил зорилготой байсан, зөвхөн дараалал өөр).
+    if (!delivered) await clearCartReminderSent(cart.cartId);
   }
 }
 
@@ -76,15 +84,30 @@ export async function runReviewRequestJob(): Promise<void> {
   ]);
   const rewardLine = rewardMnt > 0 ? ` Сэтгэгдэл бүрд ${new Intl.NumberFormat("mn-MN").format(rewardMnt)}₮ дэлгүүрийн зээл бэлэглэнэ.` : "";
   for (const order of candidates) {
+    // 2026-09-23: илгээхийн ӨМНӨ эзэмшинэ (markReviewRequested нь одоо guarded
+    // UPDATE). Өмнө нь тэмдэглэгээ илгээсний дараа байсан тул хоёр сервер нэг
+    // захиалгад хоёр "сэтгэгдэл бичээрэй" мэдэгдэл явуулах боломжтой байв.
+    if (!(await markReviewRequested(order.orderId))) continue;
     const name = order.customerName?.trim() || "хүндэт харилцагч";
     const values = { "{нэр}": name, "{захиалга}": order.orderNumber, "{урамшуулал}": rewardLine };
+    // 2026-09-23: сувгийн аль нэг хүрсэн эсэхийг ХЯНАНА (орхигдсон сагсны
+    // ажилтай ижил). Эзэмшилт илгээхийн өмнө болсон тул Brevo/push-ийн түр
+    // зуурын алдаа тэмдэглэгээг мөнхөд зарцуулж, тэр худалдан авагч хүсэлтийг
+    // ХЭЗЭЭ Ч авахгүй болох байсан. Ямар ч суваг байхгүй бол (имэйлгүй,
+    // бүртгэлгүй) дахин оролдох зүйл байхгүй тул тэмдэглэгээ хэвээр.
+    let delivered = false;
+    let hadChannel = false;
     if (order.customerEmail) {
-      await sendAccountEmail({ to: order.customerEmail, subject: fillTemplate(subject, values), content: fillTemplate(emailBody, values) }).catch(() => undefined);
+      hadChannel = true;
+      const sent = await sendAccountEmail({ to: order.customerEmail, subject: fillTemplate(subject, values), content: fillTemplate(emailBody, values) }).catch(() => false);
+      if (sent || !ENV.brevoApiKey) delivered = true;
     }
     if (order.userId && order.pushSubscriptions > 0) {
-      await sendPushToUser(order.userId, { title: fillTemplate(subject, values), body: fillTemplate(pushBody, values), url: "/profile?tab=orders", tag: `review-${order.orderId}` }).catch(() => undefined);
+      hadChannel = true;
+      const sent = await sendPushToUser(order.userId, { title: fillTemplate(subject, values), body: fillTemplate(pushBody, values), url: "/profile?tab=orders", tag: `review-${order.orderId}` }).catch(() => 0);
+      if (sent > 0) delivered = true;
     }
-    await markReviewRequested(order.orderId);
+    if (hadChannel && !delivered) await clearReviewRequested(order.orderId);
   }
 }
 
@@ -139,10 +162,6 @@ export async function runLowStockDigestJob(): Promise<void> {
   const lowStockProducts = await getLowStockProducts();
   if (lowStockProducts.length === 0) return;
   const lines = lowStockProducts.map(product => `- ${product.name} (SKU: ${product.sku}) — үлдэгдэл: ${product.stockQuantity}`).join("\n");
-  await notifyOwner({
-    title: fillTemplate(await getStoreSettingValue("email-subject-low-stock-digest"), { "{тоо}": String(lowStockProducts.length) }),
-    content: `Дараах бараануудын нөөц бага байна:\n\n${lines}\n\nАдмин самбарын Бүтээгдэхүүн хэсгээс шинэчилнэ үү.`,
-  });
   // 2026-09-11: the same digest as a phone push to the warehouse. Keyed by
   // the Ulaanbaatar date, so a restart that re-runs the job the same day
   // does not buzz everyone twice.
@@ -150,12 +169,25 @@ export async function runLowStockDigestJob(): Promise<void> {
     count: lowStockProducts.length,
     items: lowStockProducts.map(product => ({ sku: product.sku, name: product.name, quantity: product.stockQuantity })),
   }, `day:${ubDateKey()}`);
+  // 2026-09-23: имэйл нь push-ийн ӨДРИЙН түлхүүрээс ХАМААРАХГҮЙ. Хоёулаа нэг
+  // мөрөөр цоожлох гэсэн оролдлого нь илүү дор: push-ийн мөр аль хэдийн
+  // байвал эзэн нөөцийн бодит товчоог ХЭЗЭЭ Ч авахгүй болно (хоёр сувгийн
+  // хүлээн авагч өөр). Давхардлыг интервалаар шийдэв — доорх registerJob-ийг үз.
+  await notifyOwner({
+    title: fillTemplate(await getStoreSettingValue("email-subject-low-stock-digest"), { "{тоо}": String(lowStockProducts.length) }),
+    content: `Дараах бараануудын нөөц бага байна:\n\n${lines}\n\nАдмин самбарын Бүтээгдэхүүн хэсгээс шинэчилнэ үү.`,
+  });
 }
 
-// ~20h interval (not a literal 24h) so a slightly-early tick never lets a
-// full day pass with no digest at all.
+// 24h interval (2026-09-23: 20h байсан).
+//
+// Хуучин 20 цаг нь "бага зэрэг эрт тик өдрийг алгасуулахгүй" гэсэн санаатай
+// байсан ч бодит үр дүн нь 5 хоногт 6 ажиллалт, зарим өдөр ХОЁР эзний имэйл
+// байв. Товчоо нь тухайн өдрийн үйл явдлын тайлан БИШ, харин ОДООГИЙН нөөцийн
+// байдал тул 24 цагт нэг удаа хангалттай; due-ness нь DB-д (`scheduled_job_runs`)
+// хадгалагддаг тул restart ч өдрийг алгасуулахгүй.
 export function registerLowStockDigestJob() {
-  registerJob({ name: "low-stock-owner-digest", intervalMs: 20 * 60 * 60 * 1000, run: runLowStockDigestJob });
+  registerJob({ name: "low-stock-owner-digest", intervalMs: 24 * 60 * 60 * 1000, run: runLowStockDigestJob });
 }
 
 // Phase 5 (2026-09-11): the stock ledger should always add up to the

@@ -33,6 +33,18 @@ function originFor(req: Request): string {
   return `${req.protocol}://${req.get("host")}`;
 }
 
+/**
+ * Кэшийн түлхүүр (2026-09-23). `PUBLIC_BASE_URL` тавигдаагүй үед origin нь
+ * хүсэлтийн `Host` толгойгоос бүтдэг бөгөөд тэр нь клиентийн бичсэн дурын
+ * мөр байж болно. Өмнө нь тэр origin шууд түлхүүрт ордог байсан тул эргэлдэх
+ * `Host:`-той шууд хандалт бүр бүтэн каталогийн асуулга явуулж, ~1 000
+ * барааны XML-ийг 10 минут санах ойд хадгалдаг байв. Тохиргоотой үед нэг
+ * түлхүүр, тохиргоогүй үед л host-оор ялгана (staging/демо).
+ */
+function cacheKeyFor(origin: string): string {
+  return ENV.publicBaseUrl ? `${CACHE_KEY}:configured` : `${CACHE_KEY}:${origin.slice(0, 120)}`;
+}
+
 const absolute = (origin: string, url: string | null | undefined) => {
   if (!url) return "";
   if (/^https?:\/\//i.test(url)) return url;
@@ -101,7 +113,7 @@ export async function buildMerchantFeed(origin: string): Promise<string> {
 export async function serveMerchantFeed(req: Request, res: Response): Promise<void> {
   const origin = originFor(req);
   try {
-    const xml = await getOrSetCached(`${CACHE_KEY}:${origin}`, CACHE_TTL_MS, () => buildMerchantFeed(origin));
+    const xml = await getOrSetCached(cacheKeyFor(origin), CACHE_TTL_MS, () => buildMerchantFeed(origin));
     res.status(200).set({ "Content-Type": "application/xml; charset=utf-8", "Cache-Control": "public, max-age=600" }).send(xml);
   } catch (error) {
     console.error("[feed] Could not build the merchant feed", error);

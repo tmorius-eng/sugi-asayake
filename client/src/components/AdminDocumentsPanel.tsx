@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { LoaderCircle, RotateCcw, Save, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -95,9 +95,21 @@ export default function AdminDocumentsPanel({ preview = false }: { preview?: boo
   const fallback = useMemo(() => getSiteDocumentFallbackFor(activeKey, activeLocale), [activeKey, activeLocale]);
   const isCustom = Boolean(saved);
 
-  // Seed the form from whatever is live for the selected document, and
-  // re-seed whenever the selection or the server data changes.
+  // Seed the form from whatever is live for the selected document.
+  //
+  // 🔴 2026-09-23: хамаарлын жагсаалтаас `saved` ХАСАГДСАН. `saved` нь
+  // react-query-ийн мөр бөгөөд түүнд `updatedAt: Date` байдаг тул бүтцийн
+  // хуваалцалт хадгалагддаггүй: `admin.siteDocuments` дахин татагдах бүрт
+  // (анхдагчаар цонх фокус авахад, staleTime 30 с) ШИНЭ объект ирж, энэ effect
+  // дахин ажиллан TinyMCE-г серверийн хуучин HTML-ээр дахин mount хийдэг.
+  // Өөрөөр хэлбэл админ нууцлалын хуудсыг 30 секундээс удаан засаад өөр цонх
+  // руу орчихвол буцаж ирэхэд хадгалаагүй бүх засвар нь ЧИМЭЭГҮЙ устдаг байв.
+  // Одоо зөвхөн сонголт солигдоход (ба хадгалсны дараа гараар) үрждэг.
+  const seedKey = `${activeKey}:${activeLocale}`;
+  const seededRef = useRef<string | null>(null);
   useEffect(() => {
+    if (seededRef.current === seedKey) return;
+    seededRef.current = seedKey;
     setForm({
       title: saved?.title ?? fallback.title,
       lead: saved?.lead ?? fallback.lead,
@@ -105,7 +117,7 @@ export default function AdminDocumentsPanel({ preview = false }: { preview?: boo
       contentHtml: saved?.contentHtml ?? documentSectionsToHtml(fallback.sections),
     });
     setEditorKey(current => current + 1);
-  }, [activeKey, activeLocale, saved, fallback]);
+  }, [seedKey, saved, fallback]);
 
   const busy = updateDocument.isPending || clearDocument.isPending;
   const refresh = async () => {
@@ -138,6 +150,12 @@ export default function AdminDocumentsPanel({ preview = false }: { preview?: boo
     if (!await confirm({ title: "Энэ баримтыг SUGI-ийн анхны хувилбар руу буцаах уу? Таны бичсэн засвар устана." })) return;
     try {
       await clearDocument.mutateAsync({ documentKey: activeKey, locale: activeLocale });
+      // 2026-09-23: маягтыг ДАХИН үрэхийг зөвшөөрнө. Үрэлт нь одоо нэг
+      // сонголтод нэг удаа (хадгалаагүй засварыг refetch хаяхгүйн тулд) тул
+      // "анхны хувилбар руу буцаах" нь сервер дээр ажилласан ч дэлгэц дээр
+      // хуучин HTML хэвээр үлдэж, дараагийн Хадгалах дарахад устгасан
+      // хувилбарыг дахин үүсгэдэг байв.
+      seededRef.current = null;
       await refresh();
       toast.success("Анхны хувилбарыг сэргээлээ.");
     } catch (error) {

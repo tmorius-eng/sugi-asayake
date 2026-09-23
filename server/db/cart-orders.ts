@@ -11,7 +11,7 @@ import { invalidateCachedByPrefix } from "../_core/ttlCache";
 import { enqueueNotification } from "../notificationOutbox";
 import { recordStockMovement } from "../stockLedger";
 import { getInventoryReservationFailure } from "../commerce-lifecycle";
-import { generateOrderNumber, getDb, isDuplicateKeyError, isDuplicateOrderNumberError } from "./connection";
+import { escapeLike, generateOrderNumber, getDb, isDuplicateKeyError, isDuplicateOrderNumberError } from "./connection";
 import { DbOrTx, decrementBranchStock } from "./admin-orders";
 import { getActiveBranches } from "./site";
 import { getStoreSettingNumber } from "./ops";
@@ -188,10 +188,20 @@ export async function mergeGuestCartIntoUserCart(guestToken: string, userId: num
  * be handed somebody else's order. Items come from order_items because the
  * cart that produced them has already been converted.
  */
-export async function findOrderForClientRequest(db: DbOrTx, clientRequestId: string, expectedUserId: number | null | undefined) {
+export async function findOrderForClientRequest(db: DbOrTx, clientRequestId: string, expectedUserId: number | null | undefined, options: { guestOnly?: boolean } = {}) {
   const [existing] = await db.select().from(orders).where(eq(orders.clientRequestId, clientRequestId)).limit(1);
   if (!existing) return null;
   // `undefined` = no account to compare against (a guest, or a cashier).
+  //
+  // 2026-09-23: ЗОЧНЫ зам нь бүртгэлтэй хэрэглэгчийн захиалгыг буцаах ёсгүй
+  // (өмнө нь зөвхөн 8–64 тэмдэгтийн санамсаргүй id л нэр/утас/хаягийг
+  // хамгаалдаг байв). Гэхдээ энэ шалгалт `undefined`-д бүхэлдээ хамаарвал
+  // КАССЫГ (`recordInStoreSale`, мөн `undefined` дамжуулдаг) эвдэнэ:
+  // гишүүн харилцагчийн борлуулалт `userId`-тай бичигддэг тул давхар
+  // товшилтын replay олдохгүй, дараа нь UNIQUE зөрчилд унаж кассчинд
+  // "INTERNAL" алдаа харагдана. Тиймээс зочны хязгаарлалтыг ЗӨВХӨН checkout
+  // тодорхой хүсэх үед (`guestOnly`) хэрэглэнэ.
+  if (options.guestOnly && existing.userId !== null) return null;
   if (expectedUserId !== undefined && existing.userId !== expectedUserId) return null;
   const items = await db.select({ productName: orderItems.productName, quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt }).from(orderItems).where(eq(orderItems.orderId, existing.id));
   return {
@@ -200,6 +210,19 @@ export async function findOrderForClientRequest(db: DbOrTx, clientRequestId: str
     routineName: null as string | null,
     replayed: true as const,
   };
+}
+
+/**
+ * Роутерийн түвшний replay хайлт (2026-09-23): `createOrder` нь утасны
+ * баталгаажуулалтыг шалгахаасаа ӨМНӨ ижил `clientRequestId`-тай захиалга аль
+ * хэдийн үүссэн эсэхийг мэдэх ёстой (эс бөгөөс алдагдсан хариуны дахин
+ * илгээлт "сесс ашиглагдсан" гэж буцаагдана).
+ */
+export async function findExistingOrderForClientRequest(clientRequestId: string, owner: CartOwner) {
+  const db = await getDb();
+  if (!db) return null;
+  // Зочин (`owner.userId === undefined`) бол зөвхөн зочны захиалга.
+  return findOrderForClientRequest(db, clientRequestId, owner.userId, { guestOnly: owner.userId === undefined });
 }
 
 export async function createOrderFromActiveCart(input: {
@@ -233,7 +256,7 @@ export async function createOrderFromActiveCart(input: {
   // second tab -- returns the order that attempt produced instead of placing
   // the basket again (2026-09-12).
   if (input.clientRequestId) {
-    const replay = await findOrderForClientRequest(db, input.clientRequestId, input.owner.userId);
+    const replay = await findOrderForClientRequest(db, input.clientRequestId, input.owner.userId, { guestOnly: input.owner.userId === undefined });
     if (replay) return replay;
   }
   const cart = await getActiveCartForOwner(input.owner);
@@ -490,7 +513,7 @@ export async function createOrderFromActiveCart(input: {
       // Two submissions of the same attempt raced and the other one won:
       // hand back its order rather than an error.
       if (input.clientRequestId && isDuplicateKeyError(error, "orders_client_request_unique")) {
-        const replay = await findOrderForClientRequest(db, input.clientRequestId, input.owner.userId);
+        const replay = await findOrderForClientRequest(db, input.clientRequestId, input.owner.userId, { guestOnly: input.owner.userId === undefined });
         if (replay) return replay;
       }
       throw error;
@@ -559,6 +582,12 @@ export async function recordInStoreSale(input: InStoreSaleInput) {
   const variantRows = await db.select({
     id: productVariants.id, priceMnt: productVariants.priceMnt, sku: productVariants.sku,
     productId: productVariants.productId, productName: products.name,
+    // 2026-09-23: `kind`. POS-ийн зарах зам нь бэлгийн картын мөрөөс ч
+    // тавиурын нөөцийг хасаж, `sale_pos` дэвтрийн мөр бичдэг байсан —
+    // онлайн checkout болон гар захиалга хоёулаа тэднийг алгасдаг. Дижитал
+    // барааг 0 үлдэгдэлтэй хадгалдаг тул кассчинд "хүрэлцэхгүй" гэж
+    // татгалздаг байв.
+    kind: products.kind,
   }).from(productVariants).innerJoin(products, eq(products.id, productVariants.productId))
     .where(inArray(productVariants.id, variantIds));
   const variantsById = new Map(variantRows.map(row => [row.id, row]));
@@ -576,6 +605,8 @@ export async function recordInStoreSale(input: InStoreSaleInput) {
     const trackedItems: { variantId: number; quantity: number }[] = [];
     for (const item of input.items) {
       const variant = variantsById.get(item.variantId)!;
+      // Бэлгийн карт бол физик нөөц байхгүй — нөөц ч, дэвтэр ч хөндөхгүй.
+      if (variant.kind === "gift_card") continue;
       if (await decrementBranchStock(tx, input.branchId, item.variantId, item.quantity, { requirePublished: false, itemLabel: variant.productName })) {
         trackedItems.push({ variantId: item.variantId, quantity: item.quantity });
       }
@@ -649,7 +680,8 @@ export async function searchVariantsForBranch(branchId: number, search: string) 
   const db = await getDb();
   if (!db) return [];
   const trimmed = search.trim();
-  const term = `%${trimmed}%`;
+  // 2026-09-23: `%`/`_` нь LIKE-ийн орлуулагч тул хайлтын үгнээс салгана.
+  const term = `%${escapeLike(trimmed)}%`;
   return db.select({
     variantId: productVariants.id,
     productId: productVariants.productId,

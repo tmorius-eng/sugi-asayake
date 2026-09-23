@@ -343,12 +343,17 @@ export async function getRecommendationCoverage() {
     categoryName: productCategories.name,
     skinType: products.skinType, skinConcerns: products.skinConcerns, interiorStyle: products.interiorStyle,
     hairType: products.hairType, hairConcerns: products.hairConcerns, fragrancePreference: products.fragrancePreference, wellnessInterests: products.wellnessInterests,
+    // 2026-09-23: 2026-09-20-ны tagger v2 нь `skinTypes` (олон утга) ба
+    // `productType` руу бичдэг (PROJECT-GUIDE: "шинэ tag `skinTypes`-д") атлаа
+    // энэ хучилт зөвхөн хуучин `skinType`-ыг хардаг тул зөвхөн шинэ замаар
+    // тэмдэглэгдсэн бараа "тэмдэглээгүй" гэж тоологдож байв.
+    skinTypes: products.skinTypes, productType: products.productType,
   }).from(products).leftJoin(productCategories, eq(products.categoryId, productCategories.id)).where(eq(products.isPublished, true));
 
   const byCategory = new Map<string, { total: number; tagged: number }>();
   let taggedProductCount = 0;
   for (const row of rows) {
-    const isTagged = Boolean(row.skinType || row.skinConcerns || row.interiorStyle || row.hairType || row.hairConcerns || row.fragrancePreference || row.wellnessInterests);
+    const isTagged = Boolean(row.skinType || row.skinTypes || row.productType || row.skinConcerns || row.interiorStyle || row.hairType || row.hairConcerns || row.fragrancePreference || row.wellnessInterests);
     if (isTagged) taggedProductCount++;
     const key = row.categoryName ?? "(ангилалгүй)";
     const tally = byCategory.get(key) ?? { total: 0, tagged: 0 };
@@ -886,7 +891,16 @@ export async function getReturnRateOverview(input: DateRangeInput = {}): Promise
   const empty: ReturnRateOverview = { returnRatePercent: 0, returnedOrderCount: 0, completedOrReturnedOrderCount: 0, returnsProcessedInRangeCount: 0 };
   if (!db) return empty;
 
-  const conditions = [settledSaleSql, ...dateRangeConditions(input)];
+  // 🔴 2026-09-23: `settledSaleSql` (paymentStatus = 'paid') БИШ. `refundOrder`
+  // нь paymentStatus-ыг "refunded" болгодог тул буцаагдсан захиалга финанс
+  // мөнгийг буцаасан ТЭР МӨЧИД тоологчоос БОЛОН хуваарилагчаас хоёуланд нь
+  // хаягдаж, буцаалтын хувь бодит байдлын эсрэг 0% руу дөхдөг байв (тэгэхэд
+  // тэр нэг картын "энэ хугацаанд боловсруулсан буцаалт" тоо нь тэднийг
+  // тоолсоор — нэг дэлгэц дээрх хоёр тоо хоорондоо зөрнө).
+  const conditions = [
+    sql`(${orders.paymentStatus} IN ('paid', 'refunded') AND ${orders.status} <> 'cancelled')`,
+    ...dateRangeConditions(input),
+  ];
   const [row] = await db
     .select({
       completedOrReturnedOrderCount: sql<number>`coalesce(sum(case when ${orders.status} in ('completed','returned') then 1 else 0 end), 0)`,
@@ -950,9 +964,13 @@ async function computeAnalyticsReport(input: DateRangeInput) {
 
 type AnalyticsReport = Awaited<ReturnType<typeof getAnalyticsReport>>;
 
+// 2026-09-23: Улаанбаатарын өдрөөр. `toISOString()` нь UTC тул 2026-09-01
+// 00:00 (UB) = 2026-08-31T16:00Z бөгөөд Excel/PDF дээр "2026-08-31 — …" гэж
+// хэвлэгдэж, харилцагчийн нягтлан буруу хугацаа харж байв.
+const ubDayLabel = (value: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ulaanbaatar", year: "numeric", month: "2-digit", day: "2-digit" }).format(value);
 const rangeLabel = (input: DateRangeInput) => {
-  const from = input.dateFrom ? input.dateFrom.toISOString().slice(0, 10) : "эхнээс нь";
-  const to = input.dateTo ? input.dateTo.toISOString().slice(0, 10) : "өнөөдөр хүртэл";
+  const from = input.dateFrom ? ubDayLabel(input.dateFrom) : "эхнээс нь";
+  const to = input.dateTo ? ubDayLabel(input.dateTo) : "өнөөдөр хүртэл";
   return `${from} — ${to}`;
 };
 

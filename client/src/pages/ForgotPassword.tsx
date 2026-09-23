@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { Link, useLocation } from "wouter";
-import { CheckCircle2, Lock } from "lucide-react";
+import { CheckCircle2, LoaderCircle, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { FieldError, useFieldErrors } from "@/hooks/useFieldErrors";
 import CommerceHeader from "@/components/CommerceHeader";
@@ -79,7 +79,12 @@ export default function ForgotPassword() {
               </div>
               <FieldError field="reset-confirm" message={errorFor("reset-confirm")} />
             </label>
-            <button type="submit" className="auth-submit">Нууц үг шинэчлэх</button>
+            {/* 2026-09-23: илгээх явцад түгжинэ — хоёр дахь товшилт ижил нэг
+                удаагийн сессээр дахин илгээж, "аль хэдийн ашиглагдсан" алдааг
+                амжилтын картын хажууд гаргадаг байв. */}
+            <button type="submit" disabled={resetPasswordViaPhone.isPending} className="auth-submit">
+              {resetPasswordViaPhone.isPending ? <LoaderCircle className="animate-spin" size={15} /> : null} Нууц үг шинэчлэх
+            </button>
           </form>
         ) : (
           <PhoneVerificationStep purpose="password_reset" onVerified={setVerifiedPhoneSessionId} />

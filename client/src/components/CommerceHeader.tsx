@@ -194,7 +194,14 @@ export default function CommerceHeader({ cartCount: cartCountProp, onCartOpen: o
               : <Link href={item.href} key={item.slot}>{item.label}</Link>)}
           </nav>
         )}
-        <div className={`commerce-mobile-menu ${menuOpen ? "open" : ""}`}>
+        {/* 2026-09-23: хаалттай үед `inert`. ≤760px дээр drawer нь
+            `max-height: 0; overflow: hidden`-ээр хумигддаг ч `display` нь
+            `grid` хэвээр байдаг тул дотоод 15+ холбоос/товч харагдахгүй байж
+            байгаад Tab-ийн дараалалд үлддэг: гадаад клавиатур/switch-access
+            эсвэл дэлгэц уншигчтай хүн 0px өндөртэй "Арьс арчилгаа" дээр
+            бууж, Enter дарахад хуудас сольдог. BackToTop (`tabIndex`) ба
+            AddedToCartToast дээр аль хэдийн зассан ижил төрлийн алдаа. */}
+        <div className={`commerce-mobile-menu ${menuOpen ? "open" : ""}`} inert={!menuOpen}>
           {/* 2026-09-07 (bsb.mn mobile-UX pass): now that BottomNavBar.tsx
               handles primary nav (Home/Shop/Cart/Wishlist/Profile) on every
               page, this drawer's own job shifts to what bsb.mn's real

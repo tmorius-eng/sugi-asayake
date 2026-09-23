@@ -46,7 +46,10 @@ export default function StoreLocatorSection() {
     name: branch.name,
     detail: branch.address,
     phone: branch.phone ?? "",
-    mapUrl: branch.mapUrl ?? "#",
+    // 2026-09-23: `?? "#"` БИШ. Газрын зургийн холбоосгүй салбар дээр
+    // `href="#" target="_blank"` нь ХООСОН таб нээдэг байв — холбоосгүй бол
+    // холбоос БИШ элемент зурна (доор).
+    mapUrl: branch.mapUrl ?? null,
   }));
   const [headingLine1, headingLine2] = textFor("home-text-locator-heading", "Танд ойрхон\nсалбар дээр").split("\n");
   if (!locations.length) return null;
@@ -93,10 +96,17 @@ export default function StoreLocatorSection() {
             {locations.map((location) => {
               const pos = PIN_POSITIONS[location.number] ?? { x: 200, y: 150 };
               return (
-                <a key={location.number} href={location.mapUrl} target="_blank" rel="noreferrer" className="locator-pin" data-branch={location.number} aria-label={`${location.number} — ${location.name}, Google Maps дээр нээх`}>
-                  <circle className="locator-pin-dot" cx={pos.x} cy={pos.y} r="8" />
-                  <text x={pos.x} y={pos.y + 3} textAnchor="middle">{location.number}</text>
-                </a>
+                location.mapUrl ? (
+                  <a key={location.number} href={location.mapUrl} target="_blank" rel="noreferrer" className="locator-pin" data-branch={location.number} aria-label={`${location.number} — ${location.name}, Google Maps дээр нээх`}>
+                    <circle className="locator-pin-dot" cx={pos.x} cy={pos.y} r="8" />
+                    <text x={pos.x} y={pos.y + 3} textAnchor="middle">{location.number}</text>
+                  </a>
+                ) : (
+                  <g key={location.number} className="locator-pin" data-branch={location.number}>
+                    <circle className="locator-pin-dot" cx={pos.x} cy={pos.y} r="8" />
+                    <text x={pos.x} y={pos.y + 3} textAnchor="middle">{location.number}</text>
+                  </g>
+                )
               );
             })}
           </svg>
@@ -108,9 +118,7 @@ export default function StoreLocatorSection() {
               <a
                 className="location-row"
                 data-branch={location.number}
-                href={location.mapUrl}
-                target="_blank"
-                rel="noreferrer"
+                {...(location.mapUrl ? { href: location.mapUrl, target: "_blank", rel: "noreferrer" } : {})}
                 key={location.number}
               >
                 <span>{location.number}</span>

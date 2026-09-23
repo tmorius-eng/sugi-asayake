@@ -160,6 +160,14 @@ const existsCache = new Map<string, { value: boolean; at: number }>();
 const EXISTS_TTL_MS = 10 * 60 * 1000;
 
 export async function storageObjectExists(relKey: string): Promise<boolean> {
+  // 2026-09-23: `getClient()` нь тохиргоогүй үед ШИДДЭГ бөгөөд тэр дуудалт
+  // `.then(ok, fail)`-ийн ГАДНА байсан тул функцийн гэрээ ("алдаа гарвал
+  // байхгүй гэж үзнэ") зөрчигдөж, уналт нь `hasAvif` → `renderHeroShell` →
+  // `resolveValues` дамжин `renderIndexHtml`-ийн catch руу хүрдэг. Тэр catch
+  // нь БҮХ утгыг (site text, promo, bootstrap, structured data, hero shell)
+  // хаядаг тул S3-гүй орчинд нүүр хуудас чимээгүйгээр брэндийн анхдагчаар
+  // зурагдаж, кэш ч ажиллахгүй бүх DB асуулга хүсэлт тутам дахин явна.
+  if (!ENV.s3Bucket || !ENV.s3AccessKeyId || !ENV.s3SecretAccessKey) return false;
   const key = normalizeKey(relKey);
   const cached = existsCache.get(key);
   if (cached && Date.now() - cached.at < EXISTS_TTL_MS) return cached.value;

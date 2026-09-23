@@ -80,6 +80,24 @@ export async function cancelOwnOrder(orderId: number, userId: number) {
 }
 
 /**
+ * Сэтгэгдлийн урамшуулалд зориулсан шалгалт (2026-09-23): захиалга нь бодитоор
+ * ТӨЛӨГДСӨН ба цуцлагдаагүй эсэх. Сэтгэгдэл БИЧИХ эрх нь "захиалсан" дүрмээр
+ * (доорх findVerifyingOrderId) хэвээр, харин МӨНГӨ (store credit) зөвхөн
+ * төлбөр орсон захиалгад олгоно — өмнө нь төлөгдөөгүй COD захиалгаар 20 бараанд
+ * сэтгэгдэл бичээд захиалгаа цуцалж, урамшууллыг үлдээх боломжтой байв.
+ */
+export async function isOrderSettled(orderId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const rows = await db
+    .select({ id: orders.id })
+    .from(orders)
+    .where(and(eq(orders.id, orderId), eq(orders.paymentStatus, "paid"), sql`${orders.status} <> 'cancelled'`))
+    .limit(1);
+  return Boolean(rows[0]);
+}
+
+/**
  * PREMIUM-FEATURES.md TIER 2 verified-purchase gate: the shopper must have
  * at least one non-cancelled order that actually contains this product. Not
  * restricted to `completed` orders — the spec calls this "ordered" (захиалсан),
@@ -96,7 +114,12 @@ export async function findVerifyingOrderId(userId: number, productId: number) {
     .from(orderItems)
     .innerJoin(orders, eq(orders.id, orderItems.orderId))
     .where(and(eq(orders.userId, userId), eq(orderItems.productId, productId), sql`${orders.status} <> 'cancelled'`))
-    .orderBy(desc(orders.createdAt))
+    // 2026-09-23: ТӨЛӨГДСӨН захиалгыг ТЭРГҮҮН эрэмбээр. Урамшуулал
+    // `isOrderSettled(review.orderId)`-аар шалгагддаг тул зөвхөн хамгийн
+    // шинийг авбал хуучин төлсөн захиалга байхад шинэ COD захиалга сонгогдож,
+    // бодитоор худалдан авсан хүн урамшуулалгүй үлдэх байв. `id` нь
+    // секундын нарийвчлалтай timestamp-ийн тэнцвэр.
+    .orderBy(sql`${orders.paymentStatus} = 'paid' DESC`, desc(orders.createdAt), desc(orders.id))
     .limit(1);
   return rows[0]?.orderId ?? null;
 }

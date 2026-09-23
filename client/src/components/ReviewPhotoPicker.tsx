@@ -12,6 +12,8 @@ import { prepareImageUpload } from "@/lib/prepareImageUpload";
  * гарын үсэг, nudity screen, WebP/AVIF хувилбар хийж `/cdn/reviews/<хэрэглэгч>/…`
  * буцаана. Сэтгэгдэл илгээхэд тэр URL-ийг л дамжуулна (`value`).
  */
+/** Серверийн хүлээн авах дээд хэмжээтэй тохирсон клиентийн тааз (2026-09-23). */
+const MAX_UPLOAD_BYTES = 6 * 1024 * 1024;
 const ACCEPT = "image/jpeg,image/png,image/webp";
 
 const readAsDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
@@ -29,10 +31,29 @@ export default function ReviewPhotoPicker({ productId, value, onChange }: { prod
     onError: error => { toast.error(error.message); setNote(null); },
   });
 
+  // 2026-09-23: (a) try/catch — `prepareImageUpload`/`readAsDataUrl` нь
+  // уншилтын алдаанд шиддэг бөгөөд дуудагч нь `void pick(...)` тул уналт
+  // чимээгүй алга болж, хэрэглэгч юу ч харахгүй байв; (b) хэмжээний тааз —
+  // `prepareImageUpload` нь canvas-ийн үр дүн жижиг болоогүй бол ЭХ файлыг
+  // буцаадаг (PNG дээр байнга) тул 12 MB PNG нь ~16 MB base64 болж сервер
+  // татгалзаж, маскалагдсан ерөнхий алдаа гардаг байв.
   const pick = async (file: File | undefined) => {
     if (!file) return;
+    try {
+      await pickInner(file);
+    } catch (error) {
+      setNote(null);
+      toast.error(error instanceof Error ? error.message : "Зургийг уншиж чадсангүй. Өөр зураг сонгоно уу.");
+    }
+  };
+
+  const pickInner = async (file: File) => {
     const prepared = await prepareImageUpload(file);
     if (!ACCEPT.split(",").includes(prepared.file.type)) { toast.error("JPG, PNG эсвэл WebP зураг сонгоно уу."); return; }
+    if (prepared.file.size > MAX_UPLOAD_BYTES) {
+      toast.error(`Зураг хэт том байна (${Math.round(prepared.file.size / 1024 / 1024)} МБ). ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} МБ-аас бага зураг сонгоно уу.`);
+      return;
+    }
     setNote(prepared.note);
     upload.mutate({ productId, fileName: prepared.file.name, contentType: prepared.file.type as "image/jpeg" | "image/png" | "image/webp", dataBase64: await readAsDataUrl(prepared.file) });
   };

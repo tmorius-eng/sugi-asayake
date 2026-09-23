@@ -81,12 +81,20 @@ export default function AdminBrandsPanel() {
   };
   const closeComposer = () => { setComposerOpen(false); setForm(emptyForm()); };
 
+  // 2026-09-23: байрлалаар нь ДАХИН ДУГААРЛАНА, зүгээр сольдоггүй. Хоёр мөр
+  // ижил `sortOrder`-той байвал (устгалтын дараах шинэ мөр `brands.length`-ийг
+  // авдаг тул бодитоор тохиолддог) хуучин солилт нь ижил хоёр тоог буцааж
+  // бичдэг — товч дарагдана, юу ч хөдлөхгүй, ямар ч мессеж гарахгүй.
   const move = (brand: BrandRow, direction: -1 | 1) => {
     const index = brands.findIndex(row => row.id === brand.id);
-    const swapWith = brands[index + direction];
-    if (!swapWith) return;
-    reorderBrand.mutate({ id: brand.id, sortOrder: swapWith.sortOrder });
-    reorderBrand.mutate({ id: swapWith.id, sortOrder: brand.sortOrder });
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= brands.length) return;
+    const reordered = [...brands];
+    const [moved] = reordered.splice(index, 1);
+    reordered.splice(target, 0, moved);
+    reordered.forEach((row, position) => {
+      if (row.sortOrder !== position) reorderBrand.mutate({ id: row.id, sortOrder: position });
+    });
   };
 
   const onImageFileSelected = (field: "photoUrl" | "logoUrl") => async (event: ChangeEvent<HTMLInputElement>) => {
@@ -130,7 +138,9 @@ export default function AdminBrandsPanel() {
     };
     try {
       if (form.id) await updateBrand.mutateAsync({ id: form.id, ...payload });
-      else await createBrand.mutateAsync({ ...payload, sortOrder: brands.length });
+      // Шинэ мөр нь хамгийн том дугаарын дараа (2026-09-23) — `brands.length`
+      // нь дундаас нэг устгасны дараа одоо байгаа мөртэй давхцдаг.
+      else await createBrand.mutateAsync({ ...payload, sortOrder: brands.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1 });
       toast.success(form.id ? "Брэнд шинэчлэгдлээ." : "Брэнд нэмэгдлээ.");
       utils.admin.featuredBrands.invalidate();
       closeComposer();

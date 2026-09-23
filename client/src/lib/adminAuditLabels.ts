@@ -61,6 +61,12 @@ export const actionLabels: Record<string, string> = {
   "site_media.cleared": "Медиа цэвэрлэсэн",
   "site_text.updated": "Текст шинэчилсэн",
   "site_text.cleared": "Текст цэвэрлэсэн",
+  // Кампанит ажил (2026-09-23): "started" нь давхар илгээлтийн цоож —
+  // илгээх цикл эхлэхийн ӨМНӨ бичигддэг (server/routers.ts-ийн тайлбарыг үз),
+  // "sent" нь дууссаны дараа тоонуудтайгаа. Хоёулаа энд байхгүй бол
+  // аудитын лог дээр түүхий мөрөөрөө гарна.
+  "campaign.started": "Кампанит ажил эхлүүлсэн",
+  "campaign.sent": "Кампанит ажил илгээсэн",
 };
 
 export const actionLabel = (action: string) => actionLabels[action] ?? action;

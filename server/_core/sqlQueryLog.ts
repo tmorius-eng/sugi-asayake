@@ -51,9 +51,26 @@ function stringifyParam(value: unknown): string {
   return text.length > MAX_PARAM_LENGTH ? `${text.slice(0, MAX_PARAM_LENGTH)}…` : text;
 }
 
+/**
+ * Нууц утга агуулж БОЛЗОШГҮЙ хүснэгт/багана (2026-09-23).
+ *
+ * Bind параметрүүд нь өмнө нь бүтнээрээ (300 тэмдэгт хүртэл) ring buffer-т
+ * хадгалагдаж, /admin-ий "SQL лог" таб дээр ба `LOG_SQL=1` үед pm2-ийн
+ * лог файлд харагддаг байв: `users.passwordHash`, утасны баталгаажуулалтын
+ * код, нууц үг сэргээх/handoff token, царайны загварын шифр. Honeybadger нь
+ * `password|token|secret` талбаруудыг аль хэдийн шүүдэг — энд ч ижил
+ * хандлага. Утгыг бүхэлд нь маскална (аль параметр аль багана болохыг
+ * драйвер хэлдэггүй тул сонгож маскалах боломжгүй).
+ */
+// `token` дангаараа `guestToken`/`sessionToken`-ыг ч барьдаг тул сагс/зочны
+// сешний ердийн query бүхэлдээ нуугддаг байв (2026-09-23) — нууц нь ЗӨВХӨН
+// нэвтрэлт/сэргээлт/handoff-ийн токенууд тул тэднийг нэрлэж шалгана.
+const SENSITIVE_QUERY_PATTERN = /password|resetToken|tokenHash|secret|`?code`?\s*=|phone_verification_sessions|face_handoff_requests|face_templates|integration_settings/i;
+
 export const sqlQueryLogger: Logger = {
   logQuery(query: string, params: unknown[]) {
-    const entry = { id: nextId++, query, params: params.map(stringifyParam), loggedAt: new Date().toISOString() };
+    const redact = SENSITIVE_QUERY_PATTERN.test(query);
+    const entry = { id: nextId++, query, params: redact ? params.map(() => "[хасагдсан]") : params.map(stringifyParam), loggedAt: new Date().toISOString() };
     buffer.push(entry);
     if (buffer.length > MAX_ENTRIES) buffer.shift();
     // LOG_SQL=1 (2026-09-12): the same entry, in the terminal, as it fires.

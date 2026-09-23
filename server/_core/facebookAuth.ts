@@ -145,7 +145,16 @@ export async function finishFacebookLogin(req: Request, res: Response) {
 function parseCookie(header: string, name: string): string | undefined {
   for (const part of header.split(";")) {
     const [key, ...rest] = part.trim().split("=");
-    if (key === name) return decodeURIComponent(rest.join("="));
+    if (key === name) {
+      // 2026-09-23: `decodeURIComponent` нь эвдэрсэн хувь (`%E0%A4%A`) дээр
+      // URIError шиддэг. Энэ функц try/catch-ийн ГАДНА дуудагддаг тул тэр
+      // уналт нь хүсэлтийг хариугүй болгодог байв.
+      try {
+        return decodeURIComponent(rest.join("="));
+      } catch {
+        return undefined;
+      }
+    }
   }
   return undefined;
 }

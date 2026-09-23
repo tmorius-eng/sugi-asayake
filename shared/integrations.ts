@@ -207,7 +207,12 @@ const CLOUD_VENDOR_PROVIDERS = new Set<IntegrationProvider>(["smartsoftware", "s
 export function isPrivateHost(hostname: string): boolean {
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
-  if (host === "::1" || host.startsWith("fe80:") || host.startsWith("fc") || host.startsWith("fd")) return true;
+  // 2026-09-23: IPv6-ийн шалгалтыг ЗӨВХӨН IPv6 хаяг дээр. `fc00::/7` (ULA)
+  // шалгалт нь `startsWith("fc")`/`("fd")` байсан тул `fcstore.com`,
+  // `fdx.mn` зэрэг НИЙТИЙН домэйнийг "дотоод сүлжээ" гэж татгалзаж, админ
+  // тийм хостоор ирсэн API хаягийг хадгалж чаддаггүй байв.
+  if (host === "::1") return true;
+  if (host.includes(":") && (host.startsWith("fe80:") || host.startsWith("fc") || host.startsWith("fd"))) return true;
   const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (!v4) return !host.includes(".");
   const [a, b] = [Number(v4[1]), Number(v4[2])];

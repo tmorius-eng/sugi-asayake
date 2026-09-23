@@ -19,7 +19,7 @@
  * хүн нээдэг.
  */
 import { getProductBySlug, getPublishedPostBySlug } from "../db";
-import { getOrSetCached } from "./ttlCache";
+
 import { escapeAttribute } from "./indexHtml";
 import { absoluteUrl } from "./publicUrl";
 import { OG_HEIGHT, OG_WIDTH } from "./ogImage";
@@ -29,6 +29,13 @@ import { PRODUCT_FULL_WIDTH, PRODUCT_MAIN_IMAGE_SIZES } from "../../shared/image
 const CACHE_TTL_MS = 60_000;
 
 export type RouteMeta = Map<string, string>;
+/**
+ * Олдсон хуудсуудын мета (2026-09-23). Зөвхөн БОДИТ бараа/нийтлэлийг санана —
+ * түлхүүр нь хэрэглэгчийн оруулсан зам тул 404-ийг кэшлэвэл бот шалгах бүрт
+ * санах ой хязгааргүй өснө (routeStatus.ts дээрх ижил тайлбарыг үз).
+ */
+const MAX_CACHED_META = 2_000;
+const metaCache = new Map<string, { meta: RouteMeta | null; at: number }>();
 
 const stripHtml = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 const clip = (text: string, max = 200) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
@@ -157,9 +164,21 @@ export async function resolveRouteMeta(pathname: string, siteName: string): Prom
   if (!product && !post) return null;
   // /shop, /brands, /login... are single-segment too: PostDetail is the
   // catch-all route, but only a real published post has a preview.
+  // 2026-09-23: олдоогүй замыг КЭШЛЭХГҮЙ (routeStatus.ts-ийн ижил тайлбар):
+  // түлхүүр нь хэрэглэгчийн зам тул бот шалгах бүрт хязгааргүй өсдөг байв.
   try {
-    return await getOrSetCached(`routeMeta:${path}`, CACHE_TTL_MS, async () =>
-      product ? productMeta(product[1], siteName) : postMeta((post as RegExpMatchArray)[1], siteName));
+    const cached = metaCache.get(path);
+    if (cached && Date.now() - cached.at <= CACHE_TTL_MS) return cached.meta;
+    if (cached) metaCache.delete(path);
+    const meta = product ? await productMeta(product[1], siteName) : await postMeta((post as RegExpMatchArray)[1], siteName);
+    if (meta) {
+      if (metaCache.size >= MAX_CACHED_META) {
+        const oldest = metaCache.keys().next().value;
+        if (oldest !== undefined) metaCache.delete(oldest);
+      }
+      metaCache.set(path, { meta, at: Date.now() });
+    }
+    return meta;
   } catch (error) {
     console.error(`[seo] Could not resolve route meta for ${path}`, error);
     return null;

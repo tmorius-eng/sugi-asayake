@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, ListChecks, LoaderCircle, Minus, Plus, Search, ShieldCheck, ShoppingBag, Sparkles, Star, Truck } from "lucide-react";
 import { Link, useRoute } from "wouter";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
@@ -204,10 +204,14 @@ export default function ProductDetail() {
   const deliveryFeeUbMnt = Number(valueForSetting("delivery-fee-ub-mnt", String(UB_DELIVERY_FEE_MNT)));
   const [cartOpen, setCartOpen] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  // 2026-09-23: toast-д харагдах нэрийг `useProductName()`-ээр (PROJECT-GUIDE:
+  // storefront барааны нэрийг зөвхөн түүгээр харуулна). Түүний утга mutation-аас
+  // ХОЙШ тооцогддог тул ref-ээр дамжуулна.
+  const addedNameRef = useRef("");
   const utils = trpc.useUtils();
   const productQuery = trpc.catalog.bySlug.useQuery({ slug: params?.slug ?? "hada-labo-gokujyun-lotion" });
   const cartQuery = trpc.cart.current.useQuery();
-  const addItem = trpc.cart.addItem.useMutation({ onSuccess: () => { utils.cart.current.invalidate(); setCartOpen(true); notifyAddedToCart(`${product?.name ?? "Бараа"} сагсанд нэмэгдлээ.`); }, onError: error => toast.error(messageFrom(error)) });
+  const addItem = trpc.cart.addItem.useMutation({ onSuccess: () => { utils.cart.current.invalidate(); setCartOpen(true); notifyAddedToCart(`${addedNameRef.current || "Бараа"} сагсанд нэмэгдлээ.`); }, onError: error => toast.error(messageFrom(error)) });
   const product = productQuery.data;
   const cartCount = cartQuery.data?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   // PHASE 2 of product variants: only queried to find out whether this
@@ -216,7 +220,18 @@ export default function ProductDetail() {
   // existed. All of this must run on every render, same as `gallery` below.
   const variantsQuery = trpc.catalog.variants.useQuery({ productId: product?.id ?? 0 }, { enabled: Boolean(product) });
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
-  useEffect(() => { setSelectedVariantId(null); }, [product?.id]);
+  // 2026-09-23: галерей/lightbox/тоо ч мөн адил дахин эхэлнэ. Холбоотой
+  // бараа/"хамт авдаг"/routine-ийн холбоос зөвхөн замын параметрийг сольдог
+  // тул компонент unmount болдоггүй: 5 зурагтай бараа дээр 4-р зургийг
+  // сонгоод 2 зурагтай бараа руу орвол үндсэн зураг нь 2 дахийг харуулах
+  // (clamp) атлаа ямар ч thumbnail тодрохгүй, lightbox нь өөр индексээс
+  // нээгдэнэ.
+  useEffect(() => {
+    setSelectedVariantId(null);
+    setActiveImage(0);
+    setLightboxOpen(false);
+    setQuantity(1);
+  }, [product?.id]);
   useEffect(() => {
     if (product) trackEvent("view_item", { value: product.priceMnt, items: [{ item_id: product.sku, item_name: product.name, price: product.priceMnt, quantity: 1 }] });
   }, [product?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -251,6 +266,7 @@ export default function ProductDetail() {
   // Монгол нэр (2026-09-20): гарчиг, таб, share бүгд нэг дүрмээр (shared/product-name.ts).
   const displayName = useProductName();
   const names = product ? displayName(product) : { primary: "", secondary: null };
+  addedNameRef.current = names.primary;
   const metaSource = product?.shortDescription || product?.description || null;
   useDocumentMeta(product?.name ? `${names.primary} — SUGI ASAYAKE` : null, typeof metaSource === "string" ? metaSource.replace(/<[^>]+>/g, "").slice(0, 160) : null);
   if (productQuery.isLoading) {

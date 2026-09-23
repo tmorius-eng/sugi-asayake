@@ -355,6 +355,18 @@ export type FaceChallengeStart = () => Promise<{ challengeId: number }>;
  */
 export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVerification, startChallenge, onUseHandoff, onBack }: { needsEnrollment: boolean; modelStale: boolean; onPassed: () => void; submitVerification?: FaceVerificationSubmit; startChallenge?: FaceChallengeStart; onUseHandoff?: () => void; onBack?: () => void }) {
   const [phase, setPhase] = useState<Phase>(needsEnrollment ? "consent" : "camera");
+  /**
+   * 2026-09-23: бүртгэл ЭНЭ ажиллалтад аль хэдийн хийгдсэн эсэх.
+   *
+   * `needsEnrollment` нь `faceAuth.status`-аас ирдэг proп бөгөөд тэр асуулга
+   * 60 секундэд нэг л дахин татагддаг. Тиймээс бүртгэл АМЖИЛТТАЙ болоод
+   * дараагийн баталгаажуулалт "no_match" гарвал "Дахин оролдох" товч 90
+   * секундын бөгжин хөдөлгөөнийг ДАХИН гүйцэтгүүлэх бөгөөд сервер түүнийг
+   * (ажиллаж байгаа царайг дарж бичихийг нууц үгийн step-up-гүйгээр
+   * зөвшөөрдөггүй тул) татгалзаад алдааны мессеж нь бүр "нууц үгийн
+   * баталгаажуулалтын хугацаа дууссан" болдог байв.
+   */
+  const enrolledThisRunRef = useRef(false);
   const [hint, setHint] = useState<string>("Бэлтгэж байна…");
   const [fatalError, setFatalError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
@@ -687,7 +699,7 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
         paint();
       }
 
-      if (needsEnrollment) {
+      if (needsEnrollment && !enrolledThisRunRef.current) {
         const snapshots = await runRingEnrollment(video);
         const { centerDescriptors, poses } = await describeSnapshots(snapshots);
         setPhase("working");
@@ -703,6 +715,7 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
         // the same instant and always matched, proving nothing.
         setPhase("camera");
         setProgress(0);
+        enrolledThisRunRef.current = true;
         setHint("Бүртгэл амжилттай. Одоо баталгаажуулалт хийнэ — камер руу шууд харна уу.");
         await new Promise(resolve => setTimeout(resolve, 1500));
         if (abortRef.current) throw new Error("ABORTED");
@@ -786,7 +799,12 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
         setFatalError("Царайг тодорхойлж чадсангүй. Гэрэлтэй газар, камерт ойртож дахин оролдоно уу.");
       } else if (error instanceof Error && error.message === "NO_BLINK") {
         setFatalError("Анивчилт илэрсэнгүй. Камер руу харж, нэг удаа энгийнээр анивчина уу. Нүдний шил гэрэл ойлгож байвал түр авч үзээрэй.");
-      } else if (error instanceof Error && (error.message === REAUTH_REQUIRED_ERR_MSG || error.message === FACE_REQUIRED_ERR_MSG)) {
+      } else if (error instanceof Error && error.message === FACE_REQUIRED_ERR_MSG) {
+        // 2026-09-23: тусдаа мессеж. Өмнө нь REAUTH-тай нэг ангид байсан тул
+        // "царайгаа дахин уншуулна уу" гэсэн серверийн шалтгаан "нууц үгийн
+        // хугацаа дууссан" болж хувирдаг байв.
+        setFatalError("Царайн бүртгэлээ дахин уншуулах шаардлагатай. Хуудсыг сэргээгээд дахин оролдоно уу.");
+      } else if (error instanceof Error && error.message === REAUTH_REQUIRED_ERR_MSG) {
         // The gate refetches its status and swaps this screen for the password
         // step (client/src/main.tsx); this line only shows for that instant.
         setFatalError("Нууц үгийн баталгаажуулалтын хугацаа дууссан. Нууц үгээ дахин оруулна уу.");

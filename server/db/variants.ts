@@ -5,9 +5,49 @@
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { branches, branchStock, stockMovements, productVariants, products, users } from "../../drizzle/schema";
 import { getStockLedgerDrift, recomputeVariantStockTotal, recordStockMovement, setBranchStockAbsolute } from "../stockLedger";
+import { invalidateCached, invalidateCachedByPrefix } from "../_core/ttlCache";
+import { invalidateCatalogSource } from "./catalog";
 import { getDb } from "./connection";
 import { OrderTx } from "./admin-orders";
 import { setFulfillmentBranchStock } from "./admin-catalog";
+
+/**
+ * Барааны кэшийг цэвэрлэнэ (2026-09-23). `updateAdminProduct`-тай ижил багц —
+ * variant/нөөц бичдэг замууд үүнийг огт дуудахгүй байсан тул /shop, карт,
+ * хайлтын индекс 10–60 секунд хуучин үнэ/нөөцийг харуулдаг байв
+ * (PROJECT-GUIDE: "Бараа бичдэг шинэ зам invalidateCatalogSource() дуудна").
+ */
+function invalidateCatalogCaches(): void {
+  invalidateCachedByPrefix("storefront:bestsellers:");
+  invalidateCachedByPrefix("storefront:related:");
+  invalidateCached("storefront:publishedCount");
+  invalidateCached("storefront:brandDirectory");
+  invalidateCatalogSource();
+}
+
+/**
+ * Барааны ГАНЦ variant-ын үнэ/SKU/зургийг `products` руу буцааж тольдоно
+ * (2026-09-23). `admin-catalog.ts`-ийн `syncSoleVariantFromProduct` нь зөвхөн
+ * бараа → variant чиглэлд ажилладаг байсан тул variant-ын дэлгэцээс үнэ
+ * засахад storefront (`products.priceMnt`) хуучин үнийг харуулсаар, сагс/
+ * checkout (`product_variants.priceMnt`) шинэ үнээр тооцдог байв — өөрөөр
+ * хэлбэл харагдах үнэ ба төлөх үнэ хоёр зөрнө. Мөн 2 → 1 variant болоход
+ * (устгалт) нөөцийн нийлбэр дахин бодогдохгүй үлддэг байв.
+ */
+async function mirrorSoleVariantToProduct(tx: OrderTx, productId: number): Promise<void> {
+  const siblings = await tx.select({ id: productVariants.id, priceMnt: productVariants.priceMnt, compareAtPriceMnt: productVariants.compareAtPriceMnt, sku: productVariants.sku, imageUrl: productVariants.imageUrl })
+    .from(productVariants).where(eq(productVariants.productId, productId));
+  if (siblings.length !== 1) return;
+  const sole = siblings[0];
+  await tx.update(products).set({
+    priceMnt: sole.priceMnt,
+    compareAtPriceMnt: sole.compareAtPriceMnt,
+    sku: sole.sku,
+    ...(sole.imageUrl ? { imageUrl: sole.imageUrl } : {}),
+    updatedAt: new Date(),
+  }).where(eq(products.id, productId));
+  await recomputeVariantStockTotal(tx, sole.id);
+}
 
 /**
  * Product variants (see the long comment on productVariants in
@@ -96,6 +136,10 @@ export async function setBranchStock(branchId: number, variantId: number, quanti
   await db.transaction(async tx => {
     await setBranchStockAbsolute(tx, branchId, variantId, quantity, { type: "admin_set", refType: "manual", actorUserId: meta.actorUserId ?? null, note: meta.note ?? null });
   });
+  // 2026-09-23: нөөцийн засвар `products.stockQuantity`-г шинэчилдэг
+  // (recomputeVariantStockTotal) тул каталогийн кэшийг мөн цэвэрлэнэ — эс
+  // бөгөөс "дууссан" тэмдэг 10 секунд хуучин байна.
+  invalidateCatalogCaches();
   return getBranchStockForVariant(variantId);
 }
 
@@ -180,7 +224,12 @@ export async function createAdminProductVariant(input: ProductVariantWriteInput)
       isDefault: input.isDefault ?? false,
     });
     await seedBranchStockForNewVariant(tx, Number(inserted[0].insertId), input.stockQuantity);
+    // Шинэ variant нэмэгдсэнээр бараа "олон хувилбартай" болох ба толилт
+    // ажиллахаа болино (`mirrorSoleVariantToProduct` нь 1 байхад л бичнэ) —
+    // гэхдээ нөөцийн нийлбэрийг дахин бодуулах шаардлагатай.
+    await mirrorSoleVariantToProduct(tx, input.productId);
   });
+  invalidateCatalogCaches();
   return getAdminProductVariants(input.productId);
 }
 
@@ -203,7 +252,9 @@ export async function updateAdminProductVariant(input: { id: number } & Partial<
     // branch_stock via setFulfillmentBranchStock, not a direct field write).
     if (Object.keys(patch).length > 1) await tx.update(productVariants).set(patch).where(eq(productVariants.id, input.id));
     if (input.stockQuantity !== undefined) await setFulfillmentBranchStock(tx, input.id, input.stockQuantity);
+    await mirrorSoleVariantToProduct(tx, productId);
   });
+  invalidateCatalogCaches();
   return getAdminProductVariants(productId);
 }
 
@@ -216,10 +267,21 @@ export async function deleteAdminProductVariant(id: number) {
   if (!existing[0]) throw new Error("Variant not found.");
   const siblings = await db.select({ id: productVariants.id }).from(productVariants).where(eq(productVariants.productId, existing[0].productId));
   if (siblings.length <= 1) throw new Error("Барааны сүүлийн variant-ыг устгах боломжгүй — бараа наад зах нь нэг variant-тай байх ёстой.");
-  await db.delete(productVariants).where(eq(productVariants.id, id));
-  if (existing[0].isDefault) {
-    const [nextDefault] = await db.select({ id: productVariants.id }).from(productVariants).where(eq(productVariants.productId, existing[0].productId)).orderBy(asc(productVariants.id)).limit(1);
-    if (nextDefault) await db.update(productVariants).set({ isDefault: true }).where(eq(productVariants.id, nextDefault.id));
-  }
+  // 2026-09-23: транзакц бөгөөд ШИНЭ анхдагчийг ӨМНӨ нь тавина. Өмнө нь
+  // устгаад дараа нь сурталчилдаг байсан тул хооронд (эсвэл устгасны дараах
+  // уналт дээр) `addCartItem({ productId })` нь `isDefault` мөр олохгүй бөгөөд
+  // нийтлэгдсэн бараа "боломжгүй" болдог байв.
+  await db.transaction(async tx => {
+    if (existing[0].isDefault) {
+      const [nextDefault] = await tx.select({ id: productVariants.id }).from(productVariants)
+        .where(and(eq(productVariants.productId, existing[0].productId), sql`${productVariants.id} != ${id}`))
+        .orderBy(asc(productVariants.id)).limit(1);
+      if (nextDefault) await tx.update(productVariants).set({ isDefault: true }).where(eq(productVariants.id, nextDefault.id));
+    }
+    await tx.delete(productVariants).where(eq(productVariants.id, id));
+    // 2 → 1 болсон бол үнэ/SKU/нөөцийг бараа руу буцааж тольдоно.
+    await mirrorSoleVariantToProduct(tx, existing[0].productId);
+  });
+  invalidateCatalogCaches();
   return { id };
 }

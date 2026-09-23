@@ -250,6 +250,16 @@ export async function postReceipt(actor: InventoryActor, id: number, options: { 
       .set({ status: "posted", postedByUserId: actor.id, postedAt: new Date(), ...(unknown.length ? { note: `${receipt.note ? `${receipt.note}\n` : ""}Бүртгэлгүй, нөөцөд ороогүй: ${unknown.map(line => `${line.scannedCode}×${line.quantity}`).join(", ")}`.slice(0, 500) } : {}) })
       .where(and(eq(stockReceipts.id, id), eq(stockReceipts.status, "draft")));
     if (Number(flipped[0].affectedRows ?? 0) !== 1) throw new InventoryError("Энэ хүлээн авалтыг өөр хүн дөнгөж сая баталсан байна.", "CONFLICT");
+    // 2026-09-23: мөрүүдийг транзакцын ДОТОР дахин шалгана — дээрх уншилт
+    // транзакцаас гадна байсан тул `saveReceiptLines` (өөрөө транзакц) мөрийн
+    // багцыг хооронд нь сольж, нөөцөд ХУУЧИН тоо бичигдэх боломжтой байв.
+    const committedReceiptLines = await tx.select().from(stockReceiptLines).where(eq(stockReceiptLines.receiptId, id));
+    if (committedReceiptLines.length !== lines.length || committedReceiptLines.some(line => {
+      const before = lines.find(candidate => candidate.id === line.id);
+      return !before || before.quantity !== line.quantity || before.scannedCode !== line.scannedCode;
+    })) {
+      throw new InventoryError("Хүлээн авалтын мөрүүд дөнгөж сая өөрчлөгдсөн байна. Дахин шалгаад батлана уу.", "CONFLICT");
+    }
     for (const line of known) {
       const variantId = resolved.get(line.scannedCode)!;
       await tx.update(stockReceiptLines).set({ variantId }).where(eq(stockReceiptLines.id, line.id));
@@ -431,6 +441,16 @@ export async function postCount(actor: InventoryActor, id: number, options: { au
     const flipped = await tx.update(stockCounts).set({ status: "posted", postedByUserId: actorUserId, postedAt: new Date() })
       .where(and(eq(stockCounts.id, id), inArray(stockCounts.status, ["draft", "submitted"])));
     if (Number(flipped[0].affectedRows ?? 0) !== 1) throw new InventoryError("Тооллогыг өөр хүн дөнгөж сая баталсан байна.", "CONFLICT");
+    // 2026-09-23: мөрүүдийг транзакцын ДОТОР дахин шалгана (дээрх
+    // `getCount(actor, id)` транзакцаас гадна) — `saveCountLines` хооронд
+    // мөрийг сольсон бол тооллого хуучин тоогоор бичигдэнэ.
+    const committedCountLines = await tx.select({ id: stockCountLines.id, countedQty: stockCountLines.countedQty, variantId: stockCountLines.variantId }).from(stockCountLines).where(eq(stockCountLines.countId, id));
+    if (committedCountLines.length !== detail.lines.length || committedCountLines.some(line => {
+      const before = detail.lines.find(candidate => candidate.id === line.id);
+      return !before || before.countedQty !== line.countedQty || before.variantId !== line.variantId;
+    })) {
+      throw new InventoryError("Тооллогын мөрүүд дөнгөж сая өөрчлөгдсөн байна. Дахин шалгаад батлана уу.", "CONFLICT");
+    }
     for (const line of detail.lines) {
       if (line.variantId === null) continue;
       const [shelf] = await tx.select({ quantity: branchStock.stockQuantity }).from(branchStock).where(and(eq(branchStock.branchId, count.branchId), eq(branchStock.variantId, line.variantId))).for("update").limit(1);

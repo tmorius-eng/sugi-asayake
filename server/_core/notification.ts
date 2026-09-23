@@ -74,9 +74,18 @@ async function deliverEmail(input: { to: string; subject: string; content: strin
 export function normalizePhoneForSms(rawPhone: string): string | null {
   const digits = rawPhone.replace(/\D/g, "");
   if (!digits) return null;
-  const withCountryCode = digits.startsWith("976") ? digits : `976${digits}`;
+  // 🔴 2026-09-23: `startsWith("976")` дангаараа буруу. Монголын бодит 8
+  // оронтой дугаарын зарим нь "976"-аар ЭХЭЛДЭГ (жишээ нь G-Mobile-ийн
+  // `97612345`) — хуучин код түүнийг "улсын код аль хэдийн байна" гэж үзээд
+  // 8 орон буцаадаг тул доорх 11 оронтой шалгалтад унаж, SMS ХЭЗЭЭ Ч
+  // илгээгддэггүй байв (зөвхөн серверийн лог мөр үлдэнэ).
+  // `shared/mobile.ts` үүнийг аль хэдийн зөв хийдэг: улсын код гэж үзэхийн
+  // тулд БҮТЭН 11 орон байх ёстой.
+  const withCountryCode = digits.length === 11 && digits.startsWith("976")
+    ? digits
+    : digits.length === 8 ? `976${digits}` : null;
   // 976 + 8-digit Mongolian mobile number = 11 digits total.
-  if (withCountryCode.length !== 11) return null;
+  if (!withCountryCode || withCountryCode.length !== 11) return null;
   return withCountryCode;
 }
 

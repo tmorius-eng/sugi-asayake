@@ -21,12 +21,85 @@ import { assertFaceProofForPanelRole } from "./faceProof";
  */
 const INTERNAL_DETAIL_PATTERN = /\b(ER_[A-Z_]+|ECONN(REFUSED|RESET)|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|EPIPE|sqlMessage|sqlState|Duplicate entry|Unknown column|Table '[^']*' doesn't exist|SELECT |INSERT INTO|UPDATE [a-z_]+ SET|DELETE FROM|TypeError:|ReferenceError:|Cannot read propert|is not a function|undefined is not|null is not)|\bat .+:\d+:\d+\b/;
 
-export function maskErrorShape<T extends { message: string }>(shape: T, code: string, isProduction: boolean): T {
-  if (!isProduction) return shape;
-  if (code === "INTERNAL_SERVER_ERROR" || INTERNAL_DETAIL_PATTERN.test(shape.message)) {
-    return { ...shape, message: INTERNAL_ERR_MSG };
+/**
+ * Оролтын шалгалтын алдааг ХҮНИЙ уншихаар өгүүлбэр болгоно (2026-09-23).
+ *
+ * zod схем унавал tRPC нь `message`-д асуудлын жагсаалтыг JSON-оор хийж
+ * илгээдэг бөгөөд клиент бүр түүнийг шууд toast болгодог — худалдан авагч
+ * `[{"origin":"string","code":"invalid_format",…}]` гэсэн хана хардаг байв
+ * (Checkout-ийн имэйл/хаяг, бүртгэлийн 8 тэмдэгтийн нууц үг гэх мэт).
+ * Клиент нь серверээс БАГА шалгадаг тул энэ зам бодитоор хүрдэг.
+ *
+ * Талбарын нэрийг монголоор нэрлэж, zod-ийн нийтлэг кодуудыг монгол
+ * өгүүлбэр болгоно; танихгүй тохиолдолд zod-ийн өөрийн мессежийг үлдээнэ.
+ */
+const FIELD_LABELS_MN: Record<string, string> = {
+  customerName: "нэр",
+  customerPhone: "утасны дугаар",
+  customerEmail: "имэйл хаяг",
+  deliveryAddress: "хүргэлтийн хаяг",
+  pickupBranch: "авах салбар",
+  password: "нууц үг",
+  name: "нэр",
+  phone: "утасны дугаар",
+  email: "имэйл хаяг",
+  comment: "сэтгэгдэл",
+  rating: "үнэлгээ",
+  addressLine: "хаяг",
+  recipientName: "хүлээн авагчийн нэр",
+  label: "нэр",
+};
+
+type ZodIssueLike = { path?: unknown[]; message?: string; code?: string; minimum?: number; maximum?: number; origin?: string };
+
+export function humaniseValidationMessage(message: string): string | null {
+  const trimmed = message.trim();
+  if (!trimmed.startsWith("[")) return null;
+  let issues: ZodIssueLike[];
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (!Array.isArray(parsed) || !parsed.length) return null;
+    issues = parsed as ZodIssueLike[];
+  } catch {
+    return null;
   }
-  return shape;
+  const parts: string[] = [];
+  for (const issue of issues.slice(0, 4)) {
+    if (!issue || typeof issue !== "object") continue;
+    const rawPath = Array.isArray(issue.path) ? issue.path.filter(part => typeof part === "string") as string[] : [];
+    // 2026-09-23: тааруулаагүй замыг АНГЛИАР үзүүлэхгүй ("items.quantity"
+    // гэж худалдан авагчид гаргахгүй) — нэр нь толинд байхгүй бол зөвхөн
+    // тайлбарыг үзүүлнэ.
+    const field = rawPath.length ? FIELD_LABELS_MN[rawPath[rawPath.length - 1]] ?? null : null;
+    // zod 4-ийн `origin` нь шалгалт ямар төрөл дээр унасныг хэлнэ: "тэмдэгт"
+    // гэдэг нь зөвхөн мөрд зөв (өмнө нь `rating: min(1)` → "үнэлгээ —
+    // хамгийн багадаа 1 тэмдэгт" гэж гардаг байв).
+    const unit = issue.origin === "number" || issue.origin === "int" || issue.origin === "bigint" ? ""
+      : issue.origin === "array" || issue.origin === "set" ? " ширхэг"
+        : " тэмдэгт";
+    let detail: string;
+    if (issue.code === "invalid_type") detail = "заавал бөглөнө";
+    else if (issue.code === "too_small") detail = typeof issue.minimum === "number" ? `хамгийн багадаа ${issue.minimum}${unit}` : "хэт бага";
+    else if (issue.code === "too_big") detail = typeof issue.maximum === "number" ? `хамгийн ихдээ ${issue.maximum}${unit}` : "хэт их";
+    else if (issue.code === "invalid_format" || issue.code === "invalid_string") detail = "буруу байна";
+    else detail = typeof issue.message === "string" && issue.message.trim() ? issue.message.trim() : "буруу байна";
+    parts.push(field ? `${field} — ${detail}` : detail);
+  }
+  if (!parts.length) return null;
+  const more = issues.length > parts.length ? ` (болон өөр ${issues.length - parts.length})` : "";
+  return `Оруулсан мэдээлэл буруу байна: ${parts.join("; ")}${more}.`;
+}
+
+export function maskErrorShape<T extends { message: string }>(shape: T, code: string, isProduction: boolean): T {
+  // Шалгалтын JSON-г хэлбэржүүлэх нь dev-д Ч хэрэгтэй — тэр мессежийг
+  // хэрэглэгч биш, зөвхөн хөгжүүлэгч уншиж чаддаг байсан.
+  const humanised = code === "BAD_REQUEST" ? humaniseValidationMessage(shape.message) : null;
+  const withMessage = humanised ? { ...shape, message: humanised } : shape;
+  if (!isProduction) return withMessage;
+  if (code === "INTERNAL_SERVER_ERROR" || INTERNAL_DETAIL_PATTERN.test(withMessage.message)) {
+    return { ...withMessage, message: INTERNAL_ERR_MSG };
+  }
+  return withMessage;
 }
 
 const t = initTRPC.context<TrpcContext>().create({

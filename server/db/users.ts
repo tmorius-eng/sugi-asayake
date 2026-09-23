@@ -160,7 +160,14 @@ export async function updateUserAddress(userId: number, addressId: number, input
   if (input.isDefault === true) {
     await db.update(userAddresses).set({ isDefault: false }).where(eq(userAddresses.userId, userId));
   }
-  await db.update(userAddresses).set({ ...input, updatedAt: new Date() }).where(eq(userAddresses.id, addressId));
+  // 2026-09-23: `isDefault: false`-ыг ОДООГИЙН анхдагч дээр хэрэглэхгүй.
+  // `createUserAddress`/`deleteUserAddress` нь "хаяг байгаа цагт яг нэг
+  // анхдагч" гэсэн зүй тогтлыг барьдаг атал энэ зам анхдагчийг тугийг
+  // авчихаад өөрийг сурталчилдаггүй тул хэрэглэгч анхдагчгүй үлдэж,
+  // checkout юу ч урьдчилан бөглөхөө болино.
+  const patch = { ...input };
+  if (patch.isDefault === false) delete patch.isDefault;
+  await db.update(userAddresses).set({ ...patch, updatedAt: new Date() }).where(eq(userAddresses.id, addressId));
   const updated = await db.select().from(userAddresses).where(eq(userAddresses.id, addressId)).limit(1);
   return updated[0];
 }
@@ -473,6 +480,18 @@ export async function consumeCheckoutPhoneVerificationSession(id: number): Promi
   return Number(result[0].affectedRows ?? 0) === 1;
 }
 
+/**
+ * Эзэмшсэн checkout сессийг буцааж суллана (2026-09-23). Захиалга үүсгэх
+ * оролдлого уначихвал (сагс хоосон, нөөц хүрэлцэхгүй г.м.) худалдан авагчийг
+ * дахин 150₮ төлж баталгаажуулахад хүргэхгүйн тулд эзэмшилтийг буцаана.
+ */
+export async function releaseCheckoutPhoneVerificationSession(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(phoneVerificationSessions).set({ consumedAt: null })
+    .where(and(eq(phoneVerificationSessions.id, id), eq(phoneVerificationSessions.purpose, "checkout")));
+}
+
 export async function updatePhoneVerificationSessionStatus(id: number, status: "pending" | "verified" | "expired") {
   const db = await getDb();
   if (!db) return;
@@ -603,6 +622,9 @@ export async function attachPhoneFromVerifiedSession(input: { sessionId: number 
 
   try {
     await db.update(users).set({ phone: session.phone, updatedAt: new Date() }).where(eq(users.id, session.userId));
+    // 2026-09-23: сешний 5 секундын кэш — үүнгүйгээр шинэ утас тэр хугацаанд
+    // `ctx.user.phone`-д харагдахгүй (checkout-ийн зочны OTP шалгалт үүнээс хамаарна).
+    forgetSessionUser(session.userId);
   } catch (error) {
     await db.update(phoneVerificationSessions).set({ consumedAt: null }).where(eq(phoneVerificationSessions.id, session.id));
     throw error;

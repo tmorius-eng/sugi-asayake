@@ -139,5 +139,15 @@ export const inventoryRouter = router({
     return result;
   })),
   // "Замд" -- sent but not yet confirmed, for the per-branch stock editor.
-  inTransit: inventoryProcedure.input(z.object({ variantId: z.number().int().positive() })).query(({ input }) => getInTransitForVariant(input.variantId)),
+  // 2026-09-23: warehouse/admin эрхээр л. `getTransfer`/`listTransfers` нь
+  // сохор тооллогын үед ажилтнаас `qtySent`-ийг зориуд нуудаг атлаа энэ цэг
+  // variant тус бүрийн илгээсэн тоог хэн ч (variant id нь `skuIndex`-д
+  // байдаг) гаргаж авахыг зөвшөөрдөг байв — нуулт нь тойрогдоно.
+  inTransit: inventoryProcedure.input(z.object({ variantId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+    const actor = await loadInventoryActor(ctx.user);
+    if (actor.role !== "admin" && actor.role !== "warehouse") {
+      throw new TRPCError({ code: "FORBIDDEN", message: "Замд байгаа тоог зөвхөн агуулах/админ хардаг." });
+    }
+    return getInTransitForVariant(input.variantId);
+  }),
 });

@@ -32,8 +32,8 @@ export default function OrderConfirmation({ order, isAuthenticated }: { order: C
         <div className="order-confirm-number"><ClipboardList size={16} aria-hidden="true" /> {order.orderNumber}</div>
 
         <div className="order-confirm-summary">
-          {order.items.map(item => (
-            <div className="order-confirm-summary-row" key={`${item.name}-${item.quantity}`}>
+          {order.items.map((item, index) => (
+            <div className="order-confirm-summary-row" key={`${index}-${item.name}`}>
               <span>{item.name}{formatVariantAttributes(item.attributesJson) ? <span style={{ color: "#9a9ba0" }}> ({formatVariantAttributes(item.attributesJson)})</span> : null} <span style={{ color: "#9a9ba0" }}>× {item.quantity}</span></span>
               <strong>{formatMnt(item.priceMnt * item.quantity)}</strong>
             </div>

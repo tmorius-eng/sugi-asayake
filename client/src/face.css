@@ -27,6 +27,8 @@
 .face-gate-ok { color: #1a7f4b; }
 .face-gate-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 18px; color: var(--primary-text, #c11a35); }
 .face-gate-head h2 { margin: 0; }
+/* Урт гарчигтай үед flex дүрсийг нарийн зураас болтол шахдаг байв (2026-09-23). */
+.face-gate-head > svg { flex: none; margin-top: 3px; }
 
 /* Circular scanner on a dark ground (Tom's chosen concept). Square box so
    the circle stays a circle at any width; the ring lives just outside the
@@ -244,24 +246,35 @@
 .face-gate-shell--dark { background: #070c16; }
 
 /* Аргаа сонгох дэлгэц (2026-09-16, Tom-ийн лавлагааны дагуу: хоёр мөр —
-   энэ төхөөрөмж / утас). Сканнерын харанхуй картын дотор амьдардаг тул
-   өнгө нь тэндээсээ. */
-.face-gate-back { position: absolute; top: 18px; left: 18px; display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 10px; background: rgba(255,255,255,.07); color: #cdd9ea; cursor: pointer; transition: background .16s ease; }
-.face-gate-back:hover { background: rgba(255,255,255,.14); }
+   энэ төхөөрөмж / утас).
+   2026-09-23 (Tom): нууц үгийн дэлгэцтэй ИЖИЛ цагаан/улаан загвар руу
+   шилжив — өмнө нь сканнерын харанхуй картын дотор байсан тул нууц үгийн
+   цагаан дэлгэцийн дараа гэнэт хар хөх болж, нэг урсгал биш мэт харагддаг
+   байв. Үндсэн (light) хувилбар нь энд; сканнерын карт (`--scan`) өөрийн
+   харанхуй хувилбарыг доор хадгална. */
+.face-gate-back { position: absolute; top: 22px; left: 18px; display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 10px; background: #eef1ee; color: #545958; cursor: pointer; transition: background .16s ease, color .16s ease; }
+.face-gate-back:hover { background: #fdf3f4; color: var(--primary-text, #c11a35); }
+.face-gate-card--scan .face-gate-back { background: rgba(255,255,255,.07); color: #cdd9ea; }
+.face-gate-card--scan .face-gate-back:hover { background: rgba(255,255,255,.14); color: #cdd9ea; }
 .face-gate-card--scan { position: relative; }
 
-.face-choice-list { display: grid; gap: 12px; margin-top: 22px; }
+.face-choice-list { display: grid; gap: 12px; margin-top: 4px; }
 /* 64px доод өндөр: хулгана болон хуруунд ижил тав тухтай, мөн хоёр сонголт
    ижил жинтэй харагдах ёстой — аль нэгийг нь "гол зам" мэт харуулахгүй. */
-.face-choice { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; min-height: 64px; padding: 14px 16px; border: 1px solid rgba(255,255,255,.14); border-radius: 14px; background: rgba(255,255,255,.04); color: #e8eef7; text-align: left; cursor: pointer; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
-.face-choice:hover, .face-choice:focus-visible { border-color: rgba(111,208,255,.55); background: rgba(111,208,255,.10); transform: translateY(-1px); }
-.face-choice svg:first-child { color: #6fd0ff; }
-.face-choice svg:last-child { color: #7f8ea6; }
+.face-choice { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; min-height: 64px; padding: 14px 16px; border: 1px solid #c9cfc9; border-radius: 14px; background: #fff; color: var(--foreground, #17181b); text-align: left; cursor: pointer; transition: border-color .16s ease, background .16s ease, transform .16s ease, box-shadow .16s ease; }
+.face-choice:hover { border-color: var(--primary, #df1f3d); background: #fdf3f4; transform: translateY(-1px); }
+/* Цэнхэр фокус (нууц үгийн талбартай ижил): улаан цагираг алдаа мэт уншигдана. */
+.face-choice:focus-visible { outline: 2px solid var(--a-info, #2f6fb5); outline-offset: 2px; }
+.face-choice svg:first-child { color: var(--primary-text, #c11a35); }
+.face-choice svg:last-child { color: #939a94; }
 .face-choice strong { display: block; font-size: 14px; font-weight: 700; }
-.face-choice small { display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: #93a3bb; }
+.face-choice small { display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: #545958; }
 
-.face-choice-tips { list-style: disc; margin: 20px 0 0; padding: 14px 16px 14px 32px; border-radius: 14px; background: rgba(255,255,255,.04); color: #93a3bb; font-size: 12px; line-height: 1.7; }
+.face-choice-tips { list-style: disc; margin: 20px 0 0; padding: 14px 16px 14px 32px; border-radius: 14px; background: #eef1ee; color: #545958; font-size: 12px; line-height: 1.7; text-align: left; }
 .face-choice-tips li { margin: 0; }
+
+/* Нууц үгийн алхам дууссан (сонголтын дэлгэцийн диаграм, 2026-09-23). */
+.face-gate-step--complete { color: #1a7f4b; }
 
 /* Харанхуй картан дээрх handoff-ийн бичвэрүүд (2026-09-16 screenshot-оор
    баригдсан: тоо нь бараан дэвсгэр дээр бараан бичигдэж уншигдахгүй байв —
@@ -272,7 +285,9 @@
 .face-gate-card--scan .face-handoff-qr-loading { color: #93a3bb; }
 .face-gate-card--scan .face-gate-link { color: #6fd0ff; }
 /* Буцах сум гарчигтай давхцахгүй байх зай. */
-.face-gate-head--with-back { padding-left: 44px; }
+.face-gate-head--with-back { padding-left: 44px; text-align: left; }
+/* Цагаан картан дээрх гарчиг: нууц үгийн дэлгэцийн гарчигтай нэг жинтэй. */
+.face-gate-card--consent .face-gate-head h2 { font-family: var(--font-display); font-size: 20px; font-weight: 620; letter-spacing: -.035em; color: var(--foreground, #17181b); }
 
 @media (max-width: 520px) {
   .face-choice { grid-template-columns: auto 1fr; }

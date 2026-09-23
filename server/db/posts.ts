@@ -7,7 +7,7 @@ import { mediaLibrary, postCategories, postCategoryLinks, posts, postTagLinks, p
 import { slugify } from "../../shared/slugify";
 import { getOrSetCached } from "../_core/ttlCache";
 import { sanitizePostContent } from "../_core/sanitizeHtml";
-import { getDb } from "./connection";
+import { escapeLike, getDb } from "./connection";
 import { STOREFRONT_CACHE_KEYS, STOREFRONT_CACHE_TTL_MS, invalidateStorefront } from "./site";
 
 // 2026-09-07 (WordPress-parity admin editor rebuild): categoryIds/tagNames
@@ -113,7 +113,11 @@ export async function getPublishedPosts() {
       // query, so a scheduled post simply starts appearing the next time
       // anyone loads a page after its publish time.
       .where(and(eq(posts.isPublished, true), isNull(posts.deletedAt), lte(posts.publishedAt, new Date())))
-      .orderBy(desc(posts.publishedAt));
+      // 2026-09-23: `id` тэнцвэр — `getPublishedPostsPage` үүнийг хуудаслан
+      // хэрчдэг тул нэг секундэд нийтэлсэн (bulk publish) хоёр нийтлэлийн
+      // дараалал баталгаагүй бол хэрэглэгч нэг постыг хоёр хуудсанд харах
+      // эсвэл огт харахгүй өнгөрөх боломжтой.
+      .orderBy(desc(posts.publishedAt), desc(posts.id));
     const taxonomy = await getPostTaxonomyMap(rows.map(row => row.id));
     return rows.map(row => ({ ...row, ...(taxonomy.get(row.id) ?? emptyTaxonomy) }));
   });
@@ -299,7 +303,8 @@ export async function getAdminMediaLibrary(options: { search?: string; page?: nu
   if (!db) return { items: [], total: 0 };
   const pageSize = Math.min(Math.max(options.pageSize ?? 24, 1), 100);
   const page = Math.max(options.page ?? 1, 1);
-  const whereClause = options.search ? like(mediaLibrary.fileName, `%${options.search}%`) : undefined;
+  // 2026-09-23: LIKE-ийн орлуулагчийг салгана (escapeLike).
+  const whereClause = options.search ? like(mediaLibrary.fileName, `%${escapeLike(options.search)}%`) : undefined;
   const [items, countRows] = await Promise.all([
     db.select().from(mediaLibrary).where(whereClause).orderBy(desc(mediaLibrary.createdAt), desc(mediaLibrary.id)).limit(pageSize).offset((page - 1) * pageSize),
     db.select({ count: sql<number>`count(*)` }).from(mediaLibrary).where(whereClause),

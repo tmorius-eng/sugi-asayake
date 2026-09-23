@@ -224,7 +224,8 @@ export async function getFeaturedReviews(limit = 8) {
         gte(productReviews.rating, 4),
         sql`${productReviews.comment} IS NOT NULL AND ${productReviews.comment} <> ''`,
       ))
-      .orderBy(desc(productReviews.createdAt))
+      // 2026-09-23: `id` тэнцвэр (секундын нарийвчлалтай timestamp).
+      .orderBy(desc(productReviews.createdAt), desc(productReviews.id))
       .limit(limit);
   });
 }

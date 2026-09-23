@@ -1,4 +1,4 @@
-import { discountableSubtotalMnt } from "../shared/gift-cards";
+import { addMonthsClamped, discountableSubtotalMnt } from "../shared/gift-cards";
 import { COOKIE_NAME, FACE_REQUIRED_ERR_MSG, GUEST_CART_COOKIE_NAME, NOT_ADMIN_ERR_MSG, VISITOR_SESSION_COOKIE_NAME } from "@shared/const";
 import { formatVariantAttributes } from "@shared/catalog-filter";
 import { ubDistricts } from "@shared/districts";
@@ -162,6 +162,7 @@ import {
   getWishlistForUser,
   resolvePageviewSession,
   logAdminAction,
+  claimCampaignSend,
   findRecentCampaignSend,
   mergeGuestCartIntoUserCart,
   postSlugExists,
@@ -251,7 +252,7 @@ import { assertImageSignature, imageContentTypes, mediaContentTypes, processUplo
 import { INTEGRATION_PROVIDERS } from "../shared/integrations";
 import { buildNotificationMessage, NOTIFICATION_GROUP_LABELS, NOTIFICATION_GROUPS, NTFY_TOPIC_FIELD } from "../shared/notification-events";
 import { createNoOpVerificationSession, createVerificationSession, getSessionStatus, isNoOpSessionExpired, normalizePhoneForVerifyMn } from "./verifyMn";
-import { consumeCheckoutPhoneVerificationSession, createManualOrder, editAdminOrder, getAdminOrderWithItems, getStoreSettingNumber, recordNotification, requestOrderReturn } from "./db";
+import { consumeCheckoutPhoneVerificationSession, createManualOrder, editAdminOrder, findExistingOrderForClientRequest, getAdminOrderWithItems, getStoreSettingNumber, isOrderSettled, recordNotification, releaseCheckoutPhoneVerificationSession, requestOrderReturn } from "./db";
 import { getCategoryWriteViolation, getProductWriteViolation } from "./catalog-validation";
 import { getAnalyticsReport, exportAnalyticsExcel, exportAnalyticsPdf, getAllCustomersForCampaign, getDashboardHighlights, getPreferenceSegmentBreakdown, getRecommendationCoverage, getUsersByLoyaltyTier, getUsersBySegment, type PreferenceSegmentField } from "./analytics";
 import { siteMediaSlotKeys } from "../shared/site-media";
@@ -511,7 +512,15 @@ const promotionWriteSchema = z.object({
   message: nullableText(1_000),
   imageUrl: nullableText(1_000),
   ctaLabel: nullableText(60),
-  ctaUrl: nullableText(300),
+  // 2026-09-23: схем шалгана. `heroShell.ts` нь энэ утгыг React-ээс ӨМНӨ
+  // сервер талд `<a href="…">` болгон зурдаг тул `javascript:` зэрэг схем
+  // хадгалагдах боломжтой байсан (өнөөдөр зөвхөн shell-ийн `inert` ба React
+  // 19-ийн дотоод хамгаалалт л барьж байсан — хоёулаа валидац БИШ). Зөвхөн
+  // дотоод зам эсвэл https:// зөвшөөрнө.
+  ctaUrl: nullableText(300).refine(
+    value => value === null || value === undefined || /^\/(?![/\\])/.test(value) || /^https:\/\//i.test(value),
+    { message: "Холбоос \"/\"-ээр эхлэх дотоод зам эсвэл https:// хаяг байх ёстой." },
+  ),
   startsAt: z.coerce.date().nullable().optional(),
   endsAt: z.coerce.date().nullable().optional(),
 });
@@ -641,7 +650,12 @@ async function sendOrderConfirmationEmail(order: { orderNumber: string; customer
     const attributes = formatVariantAttributes(item.attributesJson);
     return `- ${item.name}${attributes ? ` (${attributes})` : ""} × ${item.quantity} (${formatMnt(item.priceMnt * item.quantity)})`;
   }).join("\n");
-  const deliveryLine = order.deliveryMethod === "store_pickup" ? `Хүргэлт: ${order.pickupBranch} салбараас өөрөө авах` : `Хүргэлт: ${order.deliveryAddress ?? "Улаанбаатар хот дотор"}`;
+  // 2026-09-23: бэлгийн карт зэрэг зөвхөн дижитал сагсанд `pickupBranch` нь
+  // зориуд null (салбар сонгох зүйл байхгүй) тул "null салбараас өөрөө авах"
+  // гэж имэйлд хэвлэгддэг байв.
+  const deliveryLine = order.deliveryMethod === "store_pickup"
+    ? (order.pickupBranch ? `Хүргэлт: ${order.pickupBranch} салбараас өөрөө авах` : "Хүргэлт: дижитал бараа — хүргэлт шаардлагагүй")
+    : `Хүргэлт: ${order.deliveryAddress ?? "Улаанбаатар хот дотор"}`;
   // PREMIUM-FEATURES.md TIER 4/5 + coupon codes: only mentioned when actually applied.
   const routineDiscountLine = order.discountMnt && order.discountMnt > 0 ? `\n"${order.routineName}" routine хямдрал: -${formatMnt(order.discountMnt)}` : "";
   const couponDiscountLine = order.couponDiscountMnt && order.couponDiscountMnt > 0 ? `\n"${order.couponCode}" хямдралын код: -${formatMnt(order.couponDiscountMnt)}` : "";
@@ -722,6 +736,24 @@ async function requireCheckoutPhoneVerification(ctx: TrpcContext, customerPhone:
   if (!verified) throw new TRPCError({ code: "BAD_REQUEST", message });
   return session;
 }
+
+/**
+ * Захиалгын төлөв өөрчлөгдсөнийг гурван сувгаар мэдэгдэнэ (2026-09-23).
+ * Суваг бүр ТУСДАА try/catch: өмнө нь гурвыг нэг try дотор дараалуулсан
+ * байсан тул Brevo имэйлийн нэг алдаа push болон SMS-ийг бүхэлд нь алгасдаг
+ * байв (SMS бол энд бүх худалдан авагчид байдаг цорын ганц суваг).
+ */
+async function notifyOrderStatusChange(order: OrderStatusNotifiable, context: string) {
+  for (const [channel, send] of [["email", sendOrderStatusUpdateEmail], ["push", sendOrderStatusPush], ["sms", sendOrderStatusSms]] as const) {
+    try {
+      await send(order);
+    } catch (error) {
+      console.error(`[${context}] Failed to send status update (${channel})`, error);
+    }
+  }
+}
+
+type OrderStatusNotifiable = { id: number; orderNumber: string; customerEmail: string | null; customerName: string; customerPhone: string; status: string; paymentStatus: string; deliveryTrackingRef: string | null; userId: number | null };
 
 async function sendOrderStatusUpdateEmail(order: { orderNumber: string; customerEmail: string | null; customerName: string; status: string; paymentStatus: string; deliveryTrackingRef: string | null }) {
   if (!order.customerEmail) return;
@@ -836,7 +868,11 @@ async function importProductsCsvRows(
         ...(categoryId !== undefined ? { categoryId } : {}),
         ...(nameCell ? { name: nameCell } : {}),
         sku,
-        slug: row.slug?.trim() || (nameCell ? slugify(nameCell) : undefined),
+        // 2026-09-23: slug-ийг ЗӨВХӨН шинэ бараанд нэрнээс үүсгэнэ. Өмнө нь
+        // "зөвхөн нэр шинэчлэх" import бүр барааны нийтийн URL-ийг сольж,
+        // индексжсэн холбоос/canonical-ийг эвддэг байв (бусад багана нь
+        // undefined = хөндөхгүй гэсэн утгатай атал энэ нь зөрчиж байв).
+        slug: row.slug?.trim() || (!existing && nameCell ? slugify(nameCell) : undefined),
         brand: csvCellToNullable(row.brand),
         shortDescription: csvCellToNullable(row.shortDescription),
         description: csvCellToNullable(row.description),
@@ -1056,7 +1092,14 @@ export const appRouter = router({
         try {
           return await createVerificationSession({ phone: input.phone, purpose: input.purpose, userId });
         } catch (error) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Баталгаажуулах SMS илгээж чадсангүй." });
+          // 2026-09-23: verify.mn-ий хариуны бие ("verify.mn request failed (500): …")
+          // болон "VERIFY_MN_API_KEY тохируулаагүй" нь INTERNAL_DETAIL_PATTERN-д
+          // тохирдоггүй тул maskErrorShape баридаггүй байв. Зөвхөн хэрэглэгчид
+          // зориулсан хоёр мессежийг дамжуулж, бусдыг нь сервер дээр л логлоно.
+          const message = error instanceof Error ? error.message : "";
+          if (message.startsWith("Утасны дугаар буруу")) throw new TRPCError({ code: "BAD_REQUEST", message });
+          console.error("[VerifyMn] startPhoneVerification failed", error);
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Баталгаажуулах SMS илгээж чадсангүй. Түр хүлээгээд дахин оролдоно уу." });
         }
       }),
     // publicProcedure, not rate-limit-tiered beyond the blanket API cap:
@@ -1125,7 +1168,13 @@ export const appRouter = router({
         try {
           user = await completeRegistrationViaPhoneSession({ sessionId: session.id, passwordHash, name: input.name ?? null });
         } catch (error) {
-          throw new TRPCError({ code: "CONFLICT", message: error instanceof Error ? error.message : "Бүртгэл үүсгэж чадсангүй." });
+          // 2026-09-23: өмнө нь БҮХ уналт (хугацаа дууссан сесс, буруу purpose,
+          // аль хэдийн ашиглагдсан) CONFLICT-оор гардаг байсан тул клиент
+          // "дугаар бүртгэлтэй" гэж андуурах боломжтой байв. Зөвхөн жинхэнэ
+          // давхцлыг л CONFLICT болгоно.
+          const message = error instanceof Error ? error.message : "Бүртгэл үүсгэж чадсангүй.";
+          const alreadyRegistered = message.includes("бүртгэл үүссэн");
+          throw new TRPCError({ code: alreadyRegistered ? "CONFLICT" : "BAD_REQUEST", message });
         }
         await touchUserLastSignedIn(user.id);
         const token = await signSessionToken(user.id, user.sessionVersion);
@@ -1138,9 +1187,16 @@ export const appRouter = router({
     // user (see startPhoneVerification's purpose:"register" branch above).
     attachPhoneViaVerification: strictRateLimitedProtectedProcedure
       .input(z.object({ sessionId: z.string().trim().min(1).max(80) }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
         const session = await getPhoneVerificationSessionByVerifyMnId(input.sessionId);
-        if (!session) throw new TRPCError({ code: "BAD_REQUEST", message: "Баталгаажуулалт олдсонгүй." });
+        // 2026-09-23: сессийг ЗӨВХӨН түүнийг эхлүүлсэн данс зарцуулна. Өмнө нь
+        // дуудагчтай огт холбоогүй байсан тул verify.mn-ий сессийн id-г мэдсэн
+        // хэн ч өөр хүний баталгаажуулалтаар утсаа бүртгүүлэх боломжтой байв.
+        if (!session || session.userId !== ctx.user.id) throw new TRPCError({ code: "BAD_REQUEST", message: "Баталгаажуулалт олдсонгүй." });
+        // Сесс эхэлснээс хойш өөр хэрэглэгч тэр дугаарыг эзэмшсэн бол UNIQUE
+        // индекс рүү унагахгүйгээр ойлгомжтой мессеж өгнө.
+        const phoneOwner = await findUserByPhone(session.phone);
+        if (phoneOwner && phoneOwner.id !== ctx.user.id) throw new TRPCError({ code: "CONFLICT", message: "Энэ утасны дугаарыг өөр хэрэглэгч ашиглаж байна." });
         try {
           const live = await getSessionStatus(session.verifyMnSessionId);
           await updatePhoneVerificationSessionStatus(session.id, live.sessionStatus === "VERIFIED" ? "verified" : live.sessionStatus === "EXPIRED" ? "expired" : "pending");
@@ -1419,8 +1475,16 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         // Сэтгэгдлийн зураг (2026-09-21, 0093): зөвхөн ӨӨРИЙН upload (reviews.uploadImage-ийн
         // `reviews/<userId>/` зам) — өөр хүний зураг эсвэл гадны URL хавсаргуулахгүй.
-        if (input.imageUrl && !storageKeyOf(input.imageUrl)?.startsWith(`reviews/${ctx.user.id}/`)) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Зургийг дахин оруулна уу." });
+        // 2026-09-23: `startsWith` дангаараа хангалтгүй байсан — `/cdn/reviews/<uid>/../../x`
+        // нь шалгалтыг давдаг атлаа хөтөч `..`-г нормчилдог тул bucket доторх өөр
+        // объектыг зурдаг. Мөн хоосон мөр ("") falsy тул шалгалтаас мултарч
+        // `imageUrl: ""` болж хадгалагддаг байв.
+        const reviewImageUrl = input.imageUrl?.trim() || null;
+        if (reviewImageUrl) {
+          const reviewImageKey = storageKeyOf(reviewImageUrl);
+          if (!reviewImageKey || !reviewImageKey.startsWith(`reviews/${ctx.user.id}/`) || reviewImageKey.includes("..") || reviewImageKey.includes("//")) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "Зургийг дахин оруулна уу." });
+          }
         }
         // Abuse screen (Tom, 2026-09-13): buyers may review, but not insult.
         // Lexical layer always; the Anthropic API layer when ANTHROPIC_API_KEY is set.
@@ -1433,7 +1497,7 @@ export const appRouter = router({
         }
         let review;
         try {
-          review = await createProductReview({ userId: ctx.user.id, productId: input.productId, rating: input.rating, comment: input.comment ?? null, imageUrl: input.imageUrl ?? null });
+          review = await createProductReview({ userId: ctx.user.id, productId: input.productId, rating: input.rating, comment: input.comment ?? null, imageUrl: reviewImageUrl });
         } catch (error) {
           throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Сэтгэгдэл бичиж чадсангүй." });
         }
@@ -1442,7 +1506,11 @@ export const appRouter = router({
         // Off unless the admin sets review-reward-mnt > 0.
         let rewardMnt = 0;
         const reward = await getStoreSettingNumber("review-reward-mnt");
-        if (reward > 0) {
+        // 2026-09-23: урамшуулал зөвхөн ТӨЛӨГДСӨН, цуцлагдаагүй захиалгад —
+        // өмнө нь төлөгдөөгүй COD захиалгаар сэтгэгдэл бичээд захиалгаа
+        // цуцалж, store credit-ээ үлдээх боломжтой байв.
+        const settled = reward > 0 && review.orderId ? await isOrderSettled(review.orderId) : false;
+        if (reward > 0 && settled) {
           try {
             await adjustStoreCredit({ userId: ctx.user.id, deltaMnt: reward, reason: `Сэтгэгдлийн урамшуулал (бараа #${input.productId})`, actorUserId: null });
             rewardMnt = reward;
@@ -1718,7 +1786,37 @@ export const appRouter = router({
       // 2026-09-14) and validates the name against the live branches table.
     })).mutation(async ({ ctx, input }) => {
       const { phoneVerificationSessionId, ...orderInput } = input;
+      // resolveCartOwnerForWrite нь зочинд cookie БИЧДЭГ тул нэг удаа дуудаж
+      // үр дүнг дахин ашиглана (2026-09-23) — хоёр дахь дуудалт шинэ token
+      // үүсгэж, replay хайлтыг өөр эзэн дээр хийх байсан.
+      const cartOwner = resolveCartOwnerForWrite(ctx);
+      // 2026-09-23: idempotency шалгалт утасны баталгаажуулалтаас ӨМНӨ. Өмнө нь
+      // эхний хүсэлт сессийг зарцуулаад хариу нь гар утасны сүлжээнд алдагдвал,
+      // ижил clientRequestId-тай дахин илгээлт "утсаа баталгаажуулна уу" гэж
+      // БУЦААГДАЖ, худалдан авагч дахин 150₮ төлж баталгаажуулаад хоёр дахь
+      // захиалгаа үүсгэдэг байв.
+      if (orderInput.clientRequestId) {
+        const replay = await findExistingOrderForClientRequest(orderInput.clientRequestId, cartOwner);
+        if (replay) return replay;
+      }
       const verifiedSession = await requireCheckoutPhoneVerification(ctx, input.customerPhone, phoneVerificationSessionId ?? null);
+      // Сессийг захиалга үүсгэхийн ӨМНӨ атомаар эзэмшинэ (2026-09-23). Өмнө нь
+      // эзэмшилт захиалгын ДАРАА явагдаж, буцаах утгыг нь хаядаг байсан тул нэг
+      // SMS-ээр зэрэг илгээсэн N захиалга бүгд давж гардаг байв (db-ийн guarded
+      // UPDATE "хоёр дахь захиалга татгалзана" гэж бичсэн ч роутер татгалздаггүй).
+      if (verifiedSession) {
+        const claimed = await consumeCheckoutPhoneVerificationSession(verifiedSession.id);
+        if (!claimed) {
+          // 2026-09-23: эзэмшилт хожигдсон нь "хоёр дахь товшилт" байж болно —
+          // тэр үед ижил `clientRequestId`-тай захиалга аль хэдийн үүссэн
+          // байдаг. Алдаа шидэхээсээ өмнө replay-г дахин хайна, эс бөгөөс
+          // захиалга бодитоор орсон байхад худалдан авагчид "дахин
+          // баталгаажуулна уу" гэж харагдана (дахин 150₮).
+          const raced = orderInput.clientRequestId ? await findExistingOrderForClientRequest(orderInput.clientRequestId, cartOwner) : null;
+          if (raced) return raced;
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ баталгаажуулалт аль хэдийн ашиглагдсан байна. Дахин баталгаажуулна уу." });
+        }
+      }
       let order;
       try {
         const deviceType = parseDeviceType(ctx.req.headers["user-agent"]);
@@ -1728,23 +1826,30 @@ export const appRouter = router({
         // discipline as everything else here.
         const visitorToken = parseCookieHeader(ctx.req.headers.cookie ?? "")[VISITOR_SESSION_COOKIE_NAME];
         const visitorSessionId = visitorToken ? await getVisitorSessionIdByToken(visitorToken) : null;
-        order = await createOrderFromActiveCart({ owner: resolveCartOwnerForWrite(ctx), ...orderInput, deviceType, visitorSessionId });
+        order = await createOrderFromActiveCart({ owner: cartOwner, ...orderInput, deviceType, visitorSessionId });
       } catch (error) {
+        // Захиалга үүсээгүй бол эзэмшсэн сессийг буцааж суллана (2026-09-23) —
+        // эс бөгөөс сагс хоосон/нөөц дууссан зэрэг засаж болох алдааны дараа
+        // худалдан авагч дахин 150₮ төлж баталгаажуулахад хүрнэ.
+        if (verifiedSession) await releaseCheckoutPhoneVerificationSession(verifiedSession.id).catch(() => undefined);
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to place this order." });
       }
-      // The session vouched for this order and no other. A replay (same
-      // clientRequestId) returns the order it already placed and spends
-      // nothing new.
-      if (verifiedSession && !order.replayed) await consumeCheckoutPhoneVerificationSession(verifiedSession.id).catch(() => undefined);
       // Best-effort: a failed confirmation email should never undo an
       // already-placed (and stock-decremented) order. A replayed attempt
       // already sent its email the first time.
+      // 2026-09-23: суваг бүр ТУСДАА try/catch — өмнө нь Brevo имэйлийн нэг
+      // алдаа SMS-ийг бүхэлд нь алгасдаг байсан (SMS бол энд бүх худалдан
+      // авагчид байдаг цорын ганц суваг).
       if (!order.replayed) {
         try {
           await sendOrderConfirmationEmail(order);
-          await sendOrderPlacedSms(order);
         } catch (error) {
           console.error("[checkout.createOrder] Failed to send order confirmation email", error);
+        }
+        try {
+          await sendOrderPlacedSms(order);
+        } catch (error) {
+          console.error("[checkout.createOrder] Failed to send order confirmation SMS", error);
         }
       }
       return order;
@@ -1824,13 +1929,8 @@ export const appRouter = router({
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to cancel order." });
       }
-      try {
-        await sendOrderStatusUpdateEmail(order);
-        await sendOrderStatusPush(order);
-        await sendOrderStatusSms(order);
-      } catch (error) {
-        console.error("[orders.cancel] Failed to send status update email", error);
-      }
+      // 2026-09-23: суваг бүр тусдаа — имэйлийн алдаа push/SMS-ийг тасалдаг байв.
+      await notifyOrderStatusChange(order, "orders.cancel");
       return order;
     }),
   }),
@@ -1844,21 +1944,16 @@ export const appRouter = router({
     // differently-formatted-but-identical numbers could collide invisibly,
     // or a shopper could accidentally hand their login phone to someone
     // else's account without any warning.
+    // 2026-09-23: утас ЭНД солигдохгүй. Утас нь нэвтрэлтийн identity бөгөөд
+    // бүртгэлд SMS-ээр баталгаажуулдаг (Tom, 2026-09-06) — өмнө нь энэ зам
+    // ямар ч баталгаажуулалтгүй дурын дугаар бичдэг байсан тул (a) Facebook-оор
+    // үүссэн данс дурын дугаар тавьж зочны checkout OTP-г алгасдаг, (b) хэн ч
+    // бусдын дугаарыг эзэмшиж, тэр хүнийг бүртгүүлэхээс хаадаг байв. Утас
+    // солих зам: auth.startPhoneVerification(register) → attachPhoneViaVerification.
     update: protectedProcedure
-      .input(z.object({ name: z.string().trim().min(1).max(160).nullable().optional(), phone: phoneSchema.nullable().optional() }))
+      .input(z.object({ name: z.string().trim().min(1).max(160).nullable().optional() }))
       .mutation(async ({ ctx, input }) => {
-        let normalizedPhone: string | null | undefined;
-        if (input.phone !== undefined) {
-          if (input.phone === null) {
-            normalizedPhone = null;
-          } else {
-            normalizedPhone = normalizePhoneForVerifyMn(input.phone);
-            if (!normalizedPhone) throw new TRPCError({ code: "BAD_REQUEST", message: "Утасны дугаараа зөв оруулна уу." });
-            const existing = await findUserByPhone(normalizedPhone);
-            if (existing && existing.id !== ctx.user.id) throw new TRPCError({ code: "CONFLICT", message: "Энэ утасны дугаарыг өөр хэрэглэгч ашиглаж байна." });
-          }
-        }
-        const updated = await updateUserProfile(ctx.user.id, { ...input, phone: normalizedPhone });
+        const updated = await updateUserProfile(ctx.user.id, { name: input.name });
         if (!updated) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Профайл шинэчилж чадсангүй." });
         const { passwordHash: _omit, ...safeUser } = updated;
         return safeUser;
@@ -2078,7 +2173,11 @@ export const appRouter = router({
     // What this shopper may borrow, asked before they commit to the option.
     // A phone number is personal data, so this is deliberately not public:
     // only a signed-in shopper can ask, and only about one number at a time.
-    storepayLimit: protectedProcedure.input(z.object({ mobileNumber: z.string().trim().min(6).max(20) })).mutation(async ({ input }) => {
+    // 2026-09-23: strict tier. Өмнө нь ердийн protectedProcedure байсан тул
+    // нэг данс 15 минутад ~1 200 дугаар шалгаж, гуравдагч хүмүүсийн StorePay
+    // зээлийн боломж/дүнг дэлгүүрийн merchant эрхээр тоолж мэдэх боломжтой
+    // байв (дугаар нь хувийн мэдээлэл гэдгийг кодын тайлбар өөрөө хэлдэг).
+    storepayLimit: strictRateLimitedProtectedProcedure.input(z.object({ mobileNumber: z.string().trim().min(6).max(20) })).mutation(async ({ input }) => {
       const mobileNumber = normaliseMobileNumber(input.mobileNumber);
       if (!mobileNumber) throw new TRPCError({ code: "BAD_REQUEST", message: "Утасны дугаараа зөв оруулна уу (8 орон)." });
       try {
@@ -2099,8 +2198,17 @@ export const appRouter = router({
       // Same rule as QPay above: one open loan request per order. StorePay
       // has already pushed it to the shopper's app; asking twice would leave
       // two requests open.
+      // 2026-09-23: дахин ашиглах цоожийг ХУГАЦААГААР хязгаарлав. StorePay-ийн
+      // `check` нь "хараахан зөвшөөрөөгүй" ба "татгалзсан"-ыг ялгадаггүй тул
+      // callback нь оролдлогыг `failed` болгохоо больсон (storepay.ts-ийн
+      // тайлбар) — ингэснээр худалдан авагч апп дээрээ ТАТГАЛЗсан бол
+      // оролдлого `created` хэвээр үлдэж, дараагийн товшилт бүр ижил үхсэн
+      // зээлийг буцаадаг байв. Зээлийн хүсэлт нь хэдэн минутын дотор
+      // шийдэгддэг тул тэр цонхны дараа шинэ хүсэлт зөвшөөрнө.
+      const STOREPAY_REUSE_WINDOW_MS = 15 * 60 * 1000;
       const previous = await getLatestQPayPaymentAttemptForOrder(order.id);
-      if (previous && previous.provider === "storepay" && previous.status === "created") {
+      const previousIsFresh = previous ? Date.now() - previous.createdAt.getTime() < STOREPAY_REUSE_WINDOW_MS : false;
+      if (previous && previous.provider === "storepay" && previous.status === "created" && previousIsFresh) {
         return { orderId: order.id, orderNumber: order.orderNumber, loanId: previous.providerInvoiceId };
       }
       let loan;
@@ -2565,10 +2673,14 @@ export const appRouter = router({
     }),
     // Audit 2026-09-09 (R4): one product's full row for the editor -- the
     // list (admin.products) no longer carries description/galleryJson.
-    productDetail: catalogReadProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ input }) => {
+    productDetail: catalogReadProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ ctx, input }) => {
       const product = await getAdminProductDetail(input.id);
       if (!product) throw new TRPCError({ code: "NOT_FOUND", message: "Бүтээгдэхүүн олдсонгүй." });
-      return product;
+      // 2026-09-23: `admin.products` нь `costMnt`-ыг admin бус эрхээс нуудаг
+      // (талбарын түвшний эрхийн эхний жишээ) атлаа энэ дэлгэрэнгүй нь
+      // бүтэн мөрийг буцаадаг байв — warehouse/marketing бараа нээх бүрт
+      // бодит өртгийг хардаг. Ижил нуулт энд ч хэрэгтэй.
+      return ctx.user.role === "admin" ? product : { ...product, costMnt: null };
     }),
     categories: catalogReadProcedure.query(() => getAdminCategories()),
     orders: ordersReadProcedure.query(() => getAdminOrders()),
@@ -2937,7 +3049,11 @@ export const appRouter = router({
       // Зөвхөн push: мэдэгдэл дээр дарахад нээгдэх хуудас. Гадаад холбоос
       // хориотой — мэдэгдлийг фишингийн тээвэр болгож болохгүй тул зөвхөн
       // энэ сайтын дотоод зам (2026-09-16).
-      url: z.string().trim().max(300).regex(/^\/[^\s]*$/, "Холбоос \"/\"-ээр эхлэх дотоод зам байх ёстой.").optional(),
+      // 2026-09-23: `^\/[^\s]*$` нь `//evil.example` болон `/\evil.example`-ийг
+      // ЗӨВШӨӨРДӨГ байв — хөтөч хоёуланг нь гадаад origin болгон задалдаг тул
+      // брэндийн мэдэгдэл фишинг хуудас нээх боломжтой байсан. Эхний зураасны
+      // дараа дахин `/` эсвэл `\` ирэхийг хориглоно.
+      url: z.string().trim().max(300).regex(/^\/(?![/\\])[^\s]*$/, "Холбоос \"/\"-ээр эхлэх дотоод зам байх ёстой.").optional(),
       sourceLabel: z.string().trim().max(120).optional(),
     })).mutation(async ({ ctx, input }) => {
       if (input.channel === "sms" && !ENV.smsCampaignsEnabled) {
@@ -2957,6 +3073,16 @@ export const appRouter = router({
       if (recent) {
         const minutesAgo = Math.max(1, Math.round((Date.now() - recent.createdAt.getTime()) / 60_000));
         throw new TRPCError({ code: "CONFLICT", message: `Яг энэ кампанит ажлыг ${minutesAgo} минутын өмнө аль хэдийн илгээсэн байна. Дахин илгээх бол 10 минутын дараа оролдоно уу.` });
+      }
+      // 2026-09-23: илгээх ЦИКЛЭЭС ӨМНӨ АТОМААР эзэмшинэ (migration 0095,
+      // `campaign_send_claims`-ийн өвөрмөц индекс). Дээрх аудитын хайлт
+      // зөвхөн 2 000 хүнд илгээж ДУУССАНЫ дараа бичигддэг мөрийг хардаг тул
+      // жинхэнэ давхар товшилт (яг үүнээс хамгаалах ёстой байсан) хоёулаа
+      // цоожийг давж, 4 000 SMS илгээх боломжтой байв. Хожигдсон хүсэлт
+      // давхардлын алдаа авч CONFLICT болно.
+      const claimed = await claimCampaignSend({ fingerprint, windowMinutes: 10, actorUserId: ctx.user.id, channel: input.channel, recipientCount: input.userIds.length });
+      if (!claimed) {
+        throw new TRPCError({ code: "CONFLICT", message: "Яг энэ кампанит ажил дөнгөж сая илгээгдсэн байна. Дахин илгээх бол 10 минутын дараа оролдоно уу." });
       }
       const recipients = await getUsersForCampaignSend(input.userIds);
       // Суваг бүр өөрийн зөвшөөрөл + өөрийн хүрэх хаягийг шаардана. Push-д
@@ -3010,10 +3136,16 @@ export const appRouter = router({
      * админ "500 хүнд илгээлээ" гэж харах атлаа хэн ч хүлээж авахгүй байж
      * болно — илгээхийн ӨМНӨ бодит тоог харуулна.
      */
+    // 2026-09-23: `.query` биш `.mutation`. tRPC-ийн query нь GET бөгөөд
+    // 2 000 id нь input-д ~16 KB болдог тул Node-ийн толгойн хязгаар ба
+    // Cloudflare-ийн URL хязгаарыг давж 431/414 өгдөг — өөрөөр хэлбэл
+    // хамгийн том илгээлт дээр яг энэ "хэдэн хүнд хүрэх вэ" шалгалт
+    // чимээгүй ажиллахаа больдог байв (`vendorCatalogDiff` ижил шалтгаанаар
+    // аль хэдийн mutation).
     campaignReach: marketingProcedure.input(z.object({
       userIds: z.array(z.number().int().positive()).min(1).max(2_000),
       channel: z.enum(["email", "sms", "push"]),
-    })).query(async ({ input }) => {
+    })).mutation(async ({ input }) => {
       const recipients = await getUsersForCampaignSend(input.userIds);
       const reachable = recipients.filter(user =>
         input.channel === "email" ? user.emailOptIn && Boolean(user.email)
@@ -3189,15 +3321,11 @@ export const appRouter = router({
       // Only notify when this call actually changed the status — editing
       // just the tracking ref/admin note shouldn't re-announce whatever
       // status the order already had.
-      if (input.status !== undefined) {
-        try {
-          await sendOrderStatusUpdateEmail(order);
-        await sendOrderStatusPush(order);
-        await sendOrderStatusSms(order);
-        } catch (error) {
-          console.error("[admin.updateOrder] Failed to send status update email", error);
-        }
-      }
+      // 2026-09-23: шалгуур нь `input.status !== undefined` БИШ, бодит зөрүү
+      // (`statusChanged`). `updateAdminOrder` ижил төлөвөөр шинэчлэхийг
+      // зөвшөөрдөг тул аль хэдийн "shipped" захиалгыг дахин "shipped" болгоход
+      // худалдан авагч хоёр дахь имэйл/push/SMS авдаг байв.
+      if (order.statusChanged) await notifyOrderStatusChange(order, "admin.updateOrder");
       return order;
     }),
     // TIER 5: bulk status change. Re-runs the exact same per-order rules as
@@ -3215,13 +3343,11 @@ export const appRouter = router({
           const order = await updateAdminOrder({ id, status: input.status, actorUserId: ctx.user.id });
           await logAdminAction({ actorUserId: ctx.user.id, action: "order.updated", entityType: "order", entityId: order.id, metadata: { status: order.status, bulk: true } });
           succeeded.push(id);
-          try {
-            await sendOrderStatusUpdateEmail(order);
-        await sendOrderStatusPush(order);
-        await sendOrderStatusSms(order);
-          } catch (notifyError) {
-            console.error("[admin.bulkUpdateOrderStatus] Failed to send status update email", notifyError);
-          }
+          // 2026-09-23: `statusChanged` (updateAdminOrder-ийн буцаалт) — өмнө нь
+          // "status дамжуулсан эсэх"-ийг хардаг байсан тул bulk-аар 30 захиалгад
+          // "shipped" тавихад аль хэдийн илгээгдсэн захиалгын эзэд хоёр дахь
+          // имэйл/push/SMS (төлбөртэй) авдаг байв.
+          if (order.statusChanged) await notifyOrderStatusChange(order, "admin.bulkUpdateOrderStatus");
         } catch (error) {
           failed.push({ id, message: error instanceof Error ? error.message : "Unable to update order." });
         }
@@ -3411,6 +3537,10 @@ export const appRouter = router({
       // while receiving, counts, transfers, vendor sync and cancellations also
       // raise stock. The job sees every path and adds push.
       const product = await updateAdminProduct(input);
+      // 2026-09-23: олдоогүй мөр `undefined` буцдаг тул дараагийн мөр
+      // TypeError шидэж, админд "INTERNAL" гэж харагддаг байв (хоёр админ,
+      // нэг нь барааг устгасан бол).
+      if (!product) throw new TRPCError({ code: "NOT_FOUND", message: "Бүтээгдэхүүн олдсонгүй." });
       await logAdminAction({ actorUserId: ctx.user.id, action: "product.updated", entityType: "product", entityId: product.id, metadata: { slug: product.slug, published: product.isPublished } });
       return product;
     }),
@@ -3512,7 +3642,12 @@ export const appRouter = router({
     issueGiftCards: financeProcedure
       .input(z.object({ amountMnt: z.number().int().min(1_000).max(10_000_000), count: z.number().int().min(1).max(100), recipientName: z.string().trim().max(120).nullable().optional(), note: z.string().trim().max(300).nullable().optional(), expiresInMonths: z.number().int().min(1).max(60).nullable().optional() }))
       .mutation(async ({ ctx, input }) => {
-        const expiresAt = input.expiresInMonths ? new Date(Date.now() + input.expiresInMonths * 30 * 24 * 3600 * 1000) : null;
+        // 2026-09-23: "сар" нь 30 хоног БИШ. 12 сар = 360 хоног болж карт
+        // худалдан авагчийн хүлээж байгаагаас 5 хоног эрт, 60 сар нь ~27
+        // хоног эрт хүчингүй болдог байв.
+        // `setMonth` нь сарын төгсгөлд халина (1-р сарын 31 + 1 сар = 3-р сарын
+        // 3) тул өдрийг зорилтот сарын урттай нь хязгаарлана (2026-09-23).
+        const expiresAt = input.expiresInMonths ? addMonthsClamped(new Date(), input.expiresInMonths) : null;
         const cards = await issueGiftCards({ amountMnt: input.amountMnt, count: input.count, issuedByUserId: ctx.user.id, recipientName: input.recipientName ?? null, note: input.note ?? null, expiresAt });
         await logAdminAction({ actorUserId: ctx.user.id, action: "gift_card.issued", entityType: "gift_card", entityId: cards[0]?.id ?? 0, metadata: { amountMnt: input.amountMnt, count: input.count } });
         return cards;
@@ -3586,17 +3721,23 @@ export const appRouter = router({
     promotions: contentReadProcedure.query(() => getAdminSitePromotions()),
     createPromotion: marketingProcedure.input(promotionWriteSchema).mutation(async ({ ctx, input }) => {
       const promotion = await createAdminSitePromotion({ ...input, message: input.message ?? null, imageUrl: input.imageUrl ?? null, ctaLabel: input.ctaLabel ?? null, ctaUrl: input.ctaUrl ?? null, startsAt: input.startsAt ?? null, endsAt: input.endsAt ?? null }, ctx.user.id);
+      // Промо нь `#storefront-bootstrap`-д шингэдэг тул index.html-ийн кэшийг
+      // мөн цэвэрлэнэ (2026-09-23) — эс бөгөөс идэвхгүй болгосон баннер 60
+      // секунд зурагдсаар байна.
+      invalidateIndexHtmlCache();
       await logAdminAction({ actorUserId: ctx.user.id, action: "promotion.created", entityType: "promotion", entityId: promotion.id, metadata: { headline: promotion.headline, isActive: promotion.isActive } });
       return promotion;
     }),
     updatePromotion: marketingProcedure.input(promotionUpdateSchema).mutation(async ({ ctx, input }) => {
       const { id, ...changes } = input;
       const promotion = await updateAdminSitePromotion({ id, ...changes }, ctx.user.id);
+      invalidateIndexHtmlCache();
       await logAdminAction({ actorUserId: ctx.user.id, action: "promotion.updated", entityType: "promotion", entityId: id, metadata: { isActive: promotion.isActive } });
       return promotion;
     }),
     deletePromotion: marketingProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const result = await deleteAdminSitePromotion(input.id);
+      invalidateIndexHtmlCache();
       await logAdminAction({ actorUserId: ctx.user.id, action: "promotion.deleted", entityType: "promotion", entityId: input.id });
       return result;
     }),
@@ -3694,11 +3835,18 @@ export const appRouter = router({
       altText: nullableText(240),
     })).mutation(async ({ ctx, input }) => {
       const media = await upsertSiteMedia({ ...input, updatedByUserId: ctx.user.id });
+      // 2026-09-23: `indexHtml.ts` нь hero-ийн preload URL, серверийн зурсан
+      // hero shell, брэндийн лого, `#storefront-bootstrap`-ийн siteMedia/promo-г
+      // 60 секунд кэшлэдэг. siteText/storeSetting нь кэшийг цэвэрлэдэг байсан
+      // ч зураг/промо нь цэвэрлэдэггүй тул Tom шинэ hero/лого оруулаад дахин
+      // ачаалахад сервер ХУУЧИН зургийг preload/shell-ээр зурсаар байв.
+      invalidateIndexHtmlCache();
       await logAdminAction({ actorUserId: ctx.user.id, action: "site_media.updated", entityType: "site_media", entityId: media.id, metadata: { slotKey: input.slotKey } });
       return media;
     }),
     clearSiteMedia: marketingProcedure.input(z.object({ slotKey: siteMediaSlotSchema })).mutation(async ({ ctx, input }) => {
       await deleteSiteMedia(input.slotKey);
+      invalidateIndexHtmlCache();
       await logAdminAction({ actorUserId: ctx.user.id, action: "site_media.cleared", entityType: "site_media", metadata: { slotKey: input.slotKey } });
       return { slotKey: input.slotKey };
     }),

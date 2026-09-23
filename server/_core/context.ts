@@ -33,7 +33,12 @@ export function assertProductionSecrets() {
   const warnings: string[] = [];
   if (!ENV.integrationsEncryptionKey || ENV.integrationsEncryptionKey.length !== 64) warnings.push("INTEGRATIONS_ENCRYPTION_KEY (64 hex) -- admin cannot save/read integration credentials (ntfy, StorePay, Smart Software), and no admin can enrol a face (templates are stored encrypted)");
   if (!ENV.s3Bucket || !ENV.s3AccessKeyId || !ENV.s3SecretAccessKey || !ENV.s3PublicBaseUrl) warnings.push("S3_BUCKET / S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY / S3_PUBLIC_BASE_URL -- image uploads and /cdn/* will fail");
-  if (!ENV.publicBaseUrl) warnings.push("PUBLIC_BASE_URL -- payment callback URLs, sitemap and OG images fall back to the request Host header");
+  // 2026-09-23: анхааруулгын текст БУРУУ байсан. sitemap/robots/merchant feed
+  // нь үнэхээр хүсэлтийн Host руу унадаг ч `server/_core/publicUrl.ts` нь
+  // ХАТУУ БИЧСЭН домэйн руу (FALLBACK_ORIGIN) унадаг — өөрөөр хэлбэл
+  // canonical, og:url, BreadcrumbList, /og/product/* бүгд сайтынхаа биш
+  // домэйн рүү заана. Шинэ эзэн/staging дээр энэ нь SEO-гийн бодит алдаа.
+  if (!ENV.publicBaseUrl) warnings.push("PUBLIC_BASE_URL -- canonical, og:url, BreadcrumbList болон OG зураг ХАТУУ БИЧСЭН домэйн руу заана (server/_core/publicUrl.ts); sitemap/robots/feed нь хүсэлтийн Host руу унана");
   if (!ENV.ownerEmail) warnings.push("OWNER_EMAIL -- no account is auto-promoted to admin on registration");
   for (const warning of warnings) console.warn(`[env] production is missing ${warning}`);
 }

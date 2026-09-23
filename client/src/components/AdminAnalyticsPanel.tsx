@@ -456,8 +456,11 @@ function RankedDollarCard({ title, icon: Icon, rows, emptyLabel }: { title: stri
         <p className="mt-3 text-sm text-white/35">{emptyLabel}</p>
       ) : (
         <ul className="mt-3 grid gap-2 text-sm">
-          {top.map(row => (
-            <li key={row.label} className="min-w-0 flex items-center justify-between gap-2 text-white/75">
+          {/* 2026-09-23: индексээр түлхүүрлэнэ — энэ каталогт ижил нэртэй хоёр
+              бараа бодитоор байдаг тул `row.label` нь React-ийн түлхүүр
+              давхцуулж, хугацааны цонх солиход мөрүүдийг буруу тааруулдаг. */}
+          {top.map((row, index) => (
+            <li key={`${index}-${row.label}`} className="min-w-0 flex items-center justify-between gap-2 text-white/75">
               <span className="min-w-0 truncate">{row.label}</span><strong className="shrink-0 text-white">{formatMnt(row.revenueMnt)}</strong>
             </li>
           ))}
@@ -501,7 +504,12 @@ function ChannelBarsCard({ title, icon: Icon, groups }: { title: string; icon: t
  *  separate settings page -- see the schema comment on marketingSpend. */
 function CacCard({ cac }: { cac: AnalyticsReport["cac"] }) {
   const utils = trpc.useUtils();
-  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  // 2026-09-23: орон нутгийн сараар. `toISOString()` нь UTC тул сарын 1-ний
+  // 00:00–08:00 (UB) хооронд ӨМНӨХ сарыг санал болгодог байв.
+  const [month, setMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
   const [spend, setSpend] = useState("");
   const updateSpend = trpc.admin.updateMarketingSpend.useMutation({
     onSuccess: () => { toast.success("Зар сурталчилгааны зардал хадгалагдлаа."); utils.admin.analyticsReport.invalidate(); setSpend(""); },
@@ -510,8 +518,11 @@ function CacCard({ cac }: { cac: AnalyticsReport["cac"] }) {
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    // 2026-09-23: хоосон талбар нь `Number("") === 0` тул шалгалтыг давж,
+    // тухайн сард 0₮-ийн мөр бичдэг байв — тэр нь CAC-ийг "зардал оруулаагүй"
+    // гэхийн оронд 0 гэж харуулдаг, өөрөөр хэлбэл худал тоо.
     const spendMnt = Number(spend);
-    if (!month || !/^\d{4}-\d{2}$/.test(month) || Number.isNaN(spendMnt) || spendMnt < 0) { toast.error("Сар, зардлын дүнг зөв оруулна уу."); return; }
+    if (!spend.trim() || !month || !/^\d{4}-\d{2}$/.test(month) || Number.isNaN(spendMnt) || spendMnt < 0) { toast.error("Сар, зардлын дүнг зөв оруулна уу."); return; }
     updateSpend.mutate({ monthKey: month, spendMnt });
   };
 
@@ -552,8 +563,8 @@ function RankedTable({ rows, emptyLabel }: { rows: { label: string; quantity: nu
           </tr>
         </thead>
         <tbody>
-          {rows.map(row => (
-            <tr key={row.label} className="text-sm">
+          {rows.map((row, index) => (
+            <tr key={`${index}-${row.label}`} className="text-sm">
               <td className="max-w-[220px] truncate border-b border-[var(--a-border)] py-2.5" title={row.label}>{row.label}</td>
               <td className="border-b border-[var(--a-border)] py-2.5 text-right font-bold">{row.quantity}</td>
               <td className="border-b border-[var(--a-border)] py-2.5 text-right text-[var(--a-muted)]">{formatMnt(row.revenueMnt)}</td>

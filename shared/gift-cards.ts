@@ -23,3 +23,21 @@ export function discountableSubtotalMnt(lines: readonly GiftCardAwareLine[]): nu
 
 /** A card bought online is valid this long. Shown on the card and on the profile. */
 export const GIFT_CARD_VALIDITY_MONTHS = 12;
+
+/**
+ * "N сарын дараа" — сарын төгсгөлийг халихгүйгээр (2026-09-23).
+ *
+ * `setMonth(getMonth() + n)` нь 1-р сарын 31-д 1 сар нэмэхэд 2-р сарын 31 →
+ * 3-р сарын 3 болгодог тул бэлгийн карт худалдан авагчийн хүлээж байгаагаас
+ * хожуу/эрт дуусдаг. Зорилтот сард тэр өдөр байхгүй бол тухайн сарын сүүлийн
+ * өдөр болгож хязгаарлана.
+ */
+export function addMonthsClamped(from: Date, months: number): Date {
+  const day = from.getDate();
+  const result = new Date(from.getTime());
+  result.setDate(1);
+  result.setMonth(result.getMonth() + months);
+  const daysInTargetMonth = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
+  result.setDate(Math.min(day, daysInTargetMonth));
+  return result;
+}

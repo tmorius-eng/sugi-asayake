@@ -122,9 +122,11 @@ describe("commerce router", () => {
     await expect(caller.profile.deleteAccount({ password: "whatever" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 
-  it("rejects a malformed delivery phone number on the profile and address book the same way checkout does", async () => {
+  it("rejects a malformed delivery phone number on the address book the same way checkout does, and an empty name on the profile", async () => {
     const caller = appRouter.createCaller(createContext("user"));
-    await expect(caller.profile.update({ phone: "abc" })).rejects.toThrow();
+    // 2026-09-23: profile.update no longer accepts `phone` at all (phone is the
+    // SMS-verified login identity; it changes only via attachPhoneViaVerification).
+    await expect(caller.profile.update({ name: "" })).rejects.toThrow();
     await expect(caller.profile.addresses.create({ label: "Гэр", recipientName: "Test", phone: "abc", addressLine: "Test address line" })).rejects.toThrow();
   });
 

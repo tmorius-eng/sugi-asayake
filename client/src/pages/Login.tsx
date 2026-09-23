@@ -59,7 +59,13 @@ export default function Login() {
     // Same-site paths only. "//evil.example" also starts with "/" and is a
     // protocol-relative URL to another host -- wouter would refuse it (a
     // cross-origin pushState throws), but the guard should not rely on that.
-    return target && target.startsWith("/") && !target.startsWith("//") ? target : "/";
+    // 2026-09-23: `\` БАС хаана. Хөтөч тусгай схемийн URL-д `\`-ийг `/` гэж
+    // задалдаг тул `/\evil.com` нь энэ шалгалтыг давж, `pushState` нь
+    // cross-origin болж SecurityError шиддэг — нэвтрэлт АМЖИЛТТАЙ болсон
+    // байхад хэрэглэгч англи алдааны toast хараад нэвтрэх маягт дээрээ
+    // үлддэг байв (server/_core/facebookAuth.ts-ийн `safeRedirect` аль
+    // хэдийн ижил хэв маягтай).
+    return target && /^\/(?![/\\])/.test(target) ? target : "/";
   })();
 
   const loginMutation = trpc.auth.login.useMutation();

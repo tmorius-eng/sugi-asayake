@@ -185,13 +185,28 @@ export function decideCallbackOutcome(verification: Pick<QPayPaymentCheck, "paid
 }
 
 export async function verifyQPayCallback(invoiceId: string) {
-  const attempt = await getPaymentAttemptByInvoiceId(invoiceId);
+  // 2026-09-23: провайдерийг МӨН тааруулна — өмнө нь зөвхөн invoiceId-аар
+  // хайдаг байсан тул StorePay-ийн callback QPay-ийн оролдлого дээр (эсвэл
+  // эсрэгээр) ажиллах боломж нээлттэй байв.
+  const attempt = await getPaymentAttemptByInvoiceId(invoiceId, "qpay");
   if (!attempt) throw new Error("Unknown QPay invoice callback.");
 
   const verification = await checkQPayPayment(invoiceId);
-  await storeQPayPaymentAttemptResponse({ id: attempt.id, responseJson: JSON.stringify(verification.raw) });
   const order = await getOrderById(attempt.orderId);
   const outcome = order ? decideCallbackOutcome(verification, order.totalMnt) : "unpaid";
+  // 🔴 2026-09-23: `responseJson`-ыг ТӨЛӨГДӨӨГҮЙ үед ДАРЖ БИЧИХГҮЙ.
+  //
+  // Тэр багана нь `payments.qpayCreateInvoice`-ийн "аль хэдийн байгаа
+  // нэхэмжлэлийг дахин өг" гэсэн цоож (parseQPayInvoicePayload → invoiceId).
+  // `/v2/payment/check`-ийн хариунд `invoice_id` байдаггүй тул төлбөр
+  // ороогүй байхад ирсэн ямар ч callback (QPay-ийн дахин оролдлого, QR-ийг
+  // харсан хэн ч, зам нь нэвтрэлтгүй GET) тэр цоожийг эвдэж, худалдан
+  // авагчид ХОЁР ДАХЬ, ижил төлөгдөх нэхэмжлэл үүсдэг байв. Хоёуланг төлбөл
+  // `markQPayPaymentAttemptPaid` нь ердөө console.warn бичдэг тул давхар
+  // төлбөр финансад харагдахгүй.
+  if (outcome !== "unpaid") {
+    await storeQPayPaymentAttemptResponse({ id: attempt.id, responseJson: JSON.stringify(verification.raw) });
+  }
   if (outcome === "confirm") {
     await markQPayPaymentAttemptPaid({ id: attempt.id, orderId: attempt.orderId, providerPaymentId: verification.paymentId });
   } else if (outcome === "underpaid") {

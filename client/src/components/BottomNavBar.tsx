@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Heart, Home, LayoutGrid, LogIn, ShoppingBag, User } from "lucide-react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import CartDrawer from "@/components/CartDrawer";
 import { trpc } from "@/lib/trpc";
@@ -26,6 +26,9 @@ import { trpc } from "@/lib/trpc";
  */
 export default function BottomNavBar() {
   const [location] = useLocation();
+  const search = useSearch();
+  const onProfile = location === "/profile" || location.startsWith("/profile/");
+  const onWishlist = onProfile && new URLSearchParams(search).get("tab") === "wishlist";
   const { user } = useAuth();
   const [cartOpen, setCartOpen] = useState(false);
   const cartQuery = trpc.cart.current.useQuery();
@@ -57,7 +60,11 @@ export default function BottomNavBar() {
           </span>
           <span>Сагс</span>
         </button>
-        <Link href="/profile?tab=wishlist" className={`bottom-nav-item${(location === "/profile" || location.startsWith("/profile/")) && location.includes("wishlist") ? " is-current" : ""}`}>
+        {/* 2026-09-23: wouter 3-ийн `useLocation()` нь зөвхөн pathname буцаадаг
+            (query нь `useSearch()`-д) тул `location.includes("wishlist")` ҮРГЭЛЖ
+            false байв — "Хадгалсан" таб хэзээ ч тодрохгүй, харин "Профайл" таб
+            wishlist хуудас дээр тодорч байсан. */}
+        <Link href="/profile?tab=wishlist" className={`bottom-nav-item${onWishlist ? " is-current" : ""}`}>
           <span className="bottom-nav-item-icon">
             <Heart size={20} aria-hidden="true" />
             {wishlistCount > 0 && <span className="bottom-nav-item-badge">{wishlistCount}</span>}
@@ -71,7 +78,7 @@ export default function BottomNavBar() {
             desktop-era "always says Профайл, gate lives inside the page"
             pattern, not an inconsistency with it. */}
         {user ? (
-          <Link href="/profile" className={`bottom-nav-item${(location === "/profile" || location.startsWith("/profile/")) && !location.includes("wishlist") ? " is-current" : ""}`}>
+          <Link href="/profile" className={`bottom-nav-item${onProfile && !onWishlist ? " is-current" : ""}`}>
             <User size={20} aria-hidden="true" /><span>Профайл</span>
           </Link>
         ) : (

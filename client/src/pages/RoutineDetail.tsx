@@ -34,8 +34,13 @@ export default function RoutineDetail() {
   }
 
   const originalTotalMnt = routine.steps.reduce((sum, step) => sum + step.priceMnt, 0);
-  const bundlePriceMnt = Math.round(originalTotalMnt * (100 - routine.discountPercent) / 100);
-  const savingsMnt = originalTotalMnt - bundlePriceMnt;
+  // 2026-09-23: серверийн ЯГ ижил илэрхийлэл. Сервер
+  // (`getApplicableRoutineDiscount`) нь ХЯМДРАЛЫГ дугуйруулж, төлөх дүнг
+  // хасалтаар гаргадаг бол энд төлөх дүнг дугуйруулдаг байсан тул
+  // `total*p/100` нь .5-аар төгсөх бүрт хоёр тоо 1₮-өөр зөрч, хуудас 905₮
+  // гэж бичих атлаа checkout 904₮ авдаг байв.
+  const savingsMnt = Math.round(originalTotalMnt * routine.discountPercent / 100);
+  const bundlePriceMnt = originalTotalMnt - savingsMnt;
   const heroImage = routine.steps.find(step => step.imageUrl)?.imageUrl ?? fallbackImage;
   const allOutOfStock = routine.steps.every(step => step.stockQuantity === 0);
 

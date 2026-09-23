@@ -6,7 +6,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { orders, paymentAttempts } from "../../drizzle/schema";
 import { invalidateCachedByPrefix } from "../_core/ttlCache";
 import { getDb } from "./connection";
-import { announceIssuedGiftCards, issueGiftCardsForPaidOrder } from "./gift-cards";
+import { announceIssuedGiftCards, issueGiftCardsForPaidOrder, type IssuedGiftCard } from "./gift-cards";
 import { recordNotification } from "./notifications";
 
 export async function createQPayPaymentAttempt(input: { orderId: number; providerInvoiceId: string; responseJson: string }) {
@@ -30,14 +30,30 @@ export async function createStorepayPaymentAttempt(input: { orderId: number; pro
 export async function getLatestQPayPaymentAttemptForOrder(orderId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  const attempts = await db.select().from(paymentAttempts).where(eq(paymentAttempts.orderId, orderId)).orderBy(desc(paymentAttempts.createdAt)).limit(1);
+  // 2026-09-23: `id` тэнцвэр. Энэ мөр нь "нэхэмжлэл дахин ашиглах эсэх"-ийг
+  // шийддэг тул нэг секундэд үүссэн хоёр оролдлого (амжилтгүй, дараа нь шинэ)
+  // дундаас амжилтгүйг буцаавал төлөх боломжтой нэхэмжлэл байхад шинийг
+  // үүсгэдэг байв.
+  const attempts = await db.select().from(paymentAttempts).where(eq(paymentAttempts.orderId, orderId)).orderBy(desc(paymentAttempts.createdAt), desc(paymentAttempts.id)).limit(1);
   return attempts[0];
 }
 
-export async function getPaymentAttemptByInvoiceId(providerInvoiceId: string) {
+/**
+ * 2026-09-23: `provider` нь одоо шалгагдана. Өмнө нь QPay болон StorePay-ийн
+ * callback хоёулаа providerInvoiceId-аар л хайж, дараа нь ӨӨРИЙН провайдераас
+ * тэр id-г асуудаг байсан — нөгөө провайдер танихгүй id дээр алдаа шидэж
+ * байгаа цагт л аюулгүй байв. StorePay хэзээ нэгэн цагт танихгүй id дээр
+ * `value:false` буцаавал QPay-ийн оролдлогыг "амжилтгүй" болгож, түүний
+ * `responseJson`-ыг дарж бичих байсан.
+ */
+export async function getPaymentAttemptByInvoiceId(providerInvoiceId: string, provider?: "qpay" | "storepay") {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  const attempts = await db.select().from(paymentAttempts).where(eq(paymentAttempts.providerInvoiceId, providerInvoiceId)).limit(1);
+  const attempts = await db.select().from(paymentAttempts)
+    .where(provider
+      ? and(eq(paymentAttempts.providerInvoiceId, providerInvoiceId), eq(paymentAttempts.provider, provider))
+      : eq(paymentAttempts.providerInvoiceId, providerInvoiceId))
+    .limit(1);
   return attempts[0];
 }
 
@@ -85,11 +101,24 @@ export async function markQPayPaymentAttemptPaid(input: { id: number; orderId: n
     .set({ paymentStatus: "paid", status: sql`IF(${orders.status} = 'pending', 'confirmed', ${orders.status})`, updatedAt: new Date() })
     .where(and(eq(orders.id, input.orderId), eq(orders.paymentStatus, "unpaid"), sql`${orders.status} NOT IN ('cancelled', 'returned')`));
   const orderUpdated = Number(updated[0].affectedRows ?? 0) === 1;
-  if (orderUpdated) {
-    // Exactly once per order: the guarded UPDATE above is what serialises
-    // QPay's at-least-once callbacks, and purchaseOrderId is the marker.
-    announceIssuedGiftCards(input.orderId, await issueGiftCardsForPaidOrder(db, input.orderId));
-  }
+  // 2026-09-23: карт үүсгэх нь `orderUpdated` дээр л явдаг байсан тул эхний
+  // callback дээр захиалга "paid" болоод карт үүсгэх нь уначихвал (DB-ийн
+  // түр зуурын алдаа) провайдерийн дахин илгээлт `orderUpdated=false` авч
+  // ХЭЗЭЭ Ч дахин үүсгэдэггүй байв — худалдан авагч кодоо мөнхөд хүлээнэ.
+  //
+  // ⚠️ Гэхдээ `issueGiftCardsForPaidOrder`-ийн idempotency нь "байгаа эсэхийг
+  // хараад дараа нь бичих" (check-then-insert) бөгөөд UNIQUE индексгүй. Өмнө нь
+  // зөвхөн guarded UPDATE-ийн НЭГ л дийлэгч дуудаж байсан тул зэрэгцээ ажиллах
+  // боломж байхгүй байв. Callback нь нэвтрэлтгүй GET тул одоо ХАМГИЙН БАГА
+  // цоожтой байх ёстой: мөрийг `FOR UPDATE`-ээр цоожилж, дараа нь л шалгаж
+  // бичнэ — эс бөгөөс хоёр зэрэгцээ callback хоёулаа шалгалтыг давж, 200 000₮-ийн
+  // картыг ХОЁР удаа үүсгэнэ (бодит мөнгөний гарз).
+  const issuedOnFallback = await db.transaction(async tx => {
+    const [locked] = await tx.select({ paymentStatus: orders.paymentStatus }).from(orders).where(eq(orders.id, input.orderId)).for("update").limit(1);
+    if (!locked || locked.paymentStatus !== "paid") return [] as IssuedGiftCard[];
+    return issueGiftCardsForPaidOrder(tx, input.orderId);
+  });
+  announceIssuedGiftCards(input.orderId, issuedOnFallback);
   if (!orderUpdated) {
     console.warn(`[QPay] Payment ${input.providerPaymentId ?? "(no id)"} confirmed for order ${input.orderId}, but the order is already paid or closed -- left unchanged; check payment_attempts for a refund.`);
   }

@@ -263,7 +263,8 @@ export async function getFaceAttempts(input: { limit?: number; userId?: number }
     .from(faceAttempts)
     .leftJoin(users, eq(faceAttempts.userId, users.id))
     .where(input.userId ? eq(faceAttempts.userId, input.userId) : undefined)
-    .orderBy(desc(faceAttempts.createdAt))
+    // 2026-09-23: `id` тэнцвэр (секундын нарийвчлалтай timestamp).
+    .orderBy(desc(faceAttempts.createdAt), desc(faceAttempts.id))
     .limit(limit);
   return rows;
 }

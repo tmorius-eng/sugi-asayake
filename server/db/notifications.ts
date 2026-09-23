@@ -11,13 +11,19 @@ import { getDb } from "./connection";
 /** Queues a notification outside any transaction -- for events that happen
  *  in code with no transaction of its own (a webhook, a scheduled job).
  *  Never throws: a notification must not fail the thing it reports on. */
-export async function recordNotification<K extends NotificationEventType>(type: K, payload: NotificationPayloads[K], dedupeKey?: string | null): Promise<void> {
+/**
+ * Буцаах утга (2026-09-23): мөр ШИНЭЭР бичигдсэн эсэх. `dedupeKey`-тэй
+ * үед энэ нь атом цоож болно (`INSERT … IGNORE`) — өдөрт нэг удаа явах
+ * ёстой имэйл/push-ыг хоёр процесс зэрэг илгээхээс сэргийлнэ.
+ */
+export async function recordNotification<K extends NotificationEventType>(type: K, payload: NotificationPayloads[K], dedupeKey?: string | null): Promise<boolean> {
   try {
     const db = await getDb();
-    if (!db) return;
-    await enqueueNotification(db, type, payload, { dedupeKey });
+    if (!db) return false;
+    return (await enqueueNotification(db, type, payload, { dedupeKey })) > 0;
   } catch (error) {
     console.error(`[notifications] could not queue ${type}`, error);
+    return false;
   }
 }
 

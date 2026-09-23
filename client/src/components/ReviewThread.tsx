@@ -140,11 +140,16 @@ export default function ReviewThread({ productId, reviews, canReply }: { product
                     type="button"
                     className={`review-action${review.likedByMe ? " is-active" : ""}`}
                     onClick={() => (isAuthenticated ? like.mutate({ reviewId: review.id }) : requireLogin())}
+                    /* 2026-09-23: `aria-label` хассан. Харагдах текст нь
+                       "Таалагдлаа · 3" атлаа тэмдэглэсэн үед хүртээмжийн нэр
+                       нь "Таалагдсанаа болих" болж, харагдах нэрээ АГУУЛАХАА
+                       больдог байв (WCAG 2.5.3, PROJECT-GUIDE-ийн дүрэм).
+                       Төлөвийг `aria-pressed` аль хэдийн зөв дамжуулна;
+                       тоон badge нь `aria-hidden`. */
                     aria-pressed={review.likedByMe}
-                    aria-label={review.likedByMe ? "Таалагдсанаа болих" : "Таалагдлаа"}
                   >
                     <Heart size={14} fill={review.likedByMe ? "currentColor" : "none"} aria-hidden="true" />
-                    Таалагдлаа{review.likeCount > 0 ? ` · ${review.likeCount}` : ""}
+                    Таалагдлаа{review.likeCount > 0 ? <span aria-hidden="true">{` · ${review.likeCount}`}</span> : null}
                   </button>
                   {canReply && (
                     <button type="button" className={`review-action${open ? " is-active" : ""}`} onClick={() => { setReplyingTo(open ? null : review.id); setDraft(""); }}>

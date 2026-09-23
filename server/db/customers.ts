@@ -2,10 +2,10 @@
 // 2026-09-21: server/db.ts (7 066 мөр) домэйнээр хуваагдав; server/db.ts нь одоо barrel
 // (export *) тул import зам өөрчлөгдөөгүй. Функц зөөхдөө энэ файлын import-ыг мөн шинэчил.
 
-import { and, desc, eq, inArray, like, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, like, or, sql } from "drizzle-orm";
 import { orders, pushSubscriptions, users } from "../../drizzle/schema";
 import { getLoyaltyTier, getNextLoyaltyTier } from "../../shared/loyalty";
-import { getDb, settledSaleSql } from "./connection";
+import { escapeLike, getDb, settledSaleSql } from "./connection";
 import { getLoyaltyTierTable } from "./site";
 import { findUserByPhone, forgetSessionUser } from "./users";
 
@@ -21,7 +21,8 @@ export async function getAdminUsers(input: { search?: string; page?: number; pag
   const page = Math.max(1, input.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, input.pageSize ?? 25));
   const search = input.search?.trim() ?? "";
-  const pattern = `%${search}%`;
+  // 2026-09-23: `%`/`_` нь LIKE-ийн орлуулагч тул хайлтын үгнээс салгана.
+  const pattern = `%${escapeLike(search)}%`;
   const where = search ? or(like(users.name, pattern), like(users.email, pattern), like(users.phone, pattern)) : undefined;
   const [rows, [countRow]] = await Promise.all([
     db.select({
@@ -65,7 +66,12 @@ export async function getUsersForCampaignSend(userIds: number[]) {
     emailOptIn: users.emailOptIn,
     smsOptIn: users.smsOptIn,
     pushOptIn: users.pushOptIn,
-  }).from(users).where(inArray(users.id, userIds));
+    // 2026-09-23: хаагдсан данс кампанит ажилд ОРОХГҮЙ. Back-in-stock ажил
+    // аль хэдийн `isNull(users.suspendedAt)`-аар шүүдэг байсан ч энэ зам
+    // зөвхөн opt-in тугуудыг хардаг тул зүй бус үйлдлийн улмаас хаагдсан
+    // данс төлбөртэй маркетингийн SMS/push авсаар байв.
+    suspendedAt: users.suspendedAt,
+  }).from(users).where(and(inArray(users.id, userIds), isNull(users.suspendedAt)));
 
   const subscriptionCounts = await db
     .select({ userId: pushSubscriptions.userId, total: sql<number>`count(*)` })
@@ -106,7 +112,9 @@ export async function getAdminUserDetail(userId: number) {
       paymentStatus: orders.paymentStatus,
       totalMnt: orders.totalMnt,
       createdAt: orders.createdAt,
-    }).from(orders).where(eq(orders.userId, userId)).orderBy(desc(orders.createdAt)),
+      // 2026-09-23: `id` тэнцвэр — секундын нарийвчлалтай timestamp-д нэг
+      // секундийн хоёр захиалгын дараалал MySQL-д баталгаагүй.
+    }).from(orders).where(eq(orders.userId, userId)).orderBy(desc(orders.createdAt), desc(orders.id)),
     db.select({ total: sql<number>`coalesce(sum(${orders.totalMnt}), 0)` }).from(orders).where(and(eq(orders.userId, userId), settledSaleSql)),
   ]);
 
@@ -130,6 +138,7 @@ export async function updateUserLoyaltyAdjustment(userId: number, adjustmentMnt:
   const current = await db.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1);
   if (!current[0]) throw new Error("User not found.");
   await db.update(users).set({ loyaltyManualAdjustmentMnt: adjustmentMnt, updatedAt: new Date() }).where(eq(users.id, userId));
+  forgetSessionUser(userId);
   return getAdminUserDetail(userId);
 }
 
@@ -260,5 +269,10 @@ export async function updateAdminUserPhone(input: { userId: number; phone: strin
     if (existing && existing.id !== input.userId) throw new Error("Энэ утасны дугаарыг өөр хэрэглэгч ашиглаж байна.");
   }
   await db.update(users).set({ phone: input.phone, updatedAt: new Date() }).where(eq(users.id, input.userId));
+  // 2026-09-23: сешн 5 секунд кэштэй (PROJECT-GUIDE-ийн дүрэм: `users`-д
+  // бичдэг ЯМАР Ч зам `forgetSessionUser` дуудна). Утас нь нэвтрэх нэр, /profile
+  // дээр харагдах ба checkout-д урьдчилан бөглөгддөг тул засварын дараа
+  // худалдан авагч тэр хугацаанд хуучин дугаараа хардаг байв.
+  forgetSessionUser(input.userId);
   return { ...user[0], phone: input.phone };
 }

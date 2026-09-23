@@ -67,6 +67,8 @@ type FacetDoc = { id: string; kind: "brand" | "category"; label: string; slug: s
 
 export type CatalogIndex = {
   products: MiniSearch<SearchDoc>;
+  /** "Та … гэж хайсан уу?"-д зөвшөөрөгдөх жинхэнэ үгс (2026-09-23). */
+  suggestableTerms: Set<string>;
   facets: MiniSearch<FacetDoc>;
   /** Индексийг барьсан толь — хайлтын query-г ЯГ ижил бүлгүүдээр өргөтгөнө. */
   dictionary: SynonymDictionary;
@@ -222,7 +224,24 @@ export function buildCatalogIndex(input: { rows: IndexableProduct[]; dictionary:
   const skuToId = new Map<string, number>();
   for (const doc of docs) if (doc.sku) skuToId.set(doc.sku, doc.id);
 
-  return { products, facets, dictionary, skuToId, brandCounts: facetInput.brandCounts, builtAt: Date.now(), documentCount: docs.length };
+  // 2026-09-23: "Та … гэж хайсан уу?"-д санал болгож БОЛОХ жинхэнэ үгс.
+  //
+  // `indexProcessTerm` нь үг бүрийг давхар үсэг нийлүүлсэн хэлбэрээр Ч
+  // индекслэдэг ба `nameTranslit`/`brandAliases` нь галиглалт агуулдаг тул
+  // `autoSuggest` нь хүн хэзээ ч бичихгүй хиймэл токен санал болгодог байв
+  // ("shampoo" → "shampo shampoo", "cocochi" → "cocochi kokochi"). Хүний
+  // уншдаг талбаруудын ЖИНХЭНЭ токенуудыг тусад нь цуглуулж, саналыг
+  // түүгээр шүүнэ.
+  const suggestableTerms = new Set<string>();
+  for (const doc of docs) {
+    for (const field of ["name", "nameMn", "brand", "category", "keywords"] as const) {
+      const value = doc[field];
+      if (typeof value !== "string") continue;
+      for (const token of tokenizeSearchText(value)) if (token.length >= 2) suggestableTerms.add(token);
+    }
+  }
+
+  return { products, facets, dictionary, skuToId, suggestableTerms, brandCounts: facetInput.brandCounts, builtAt: Date.now(), documentCount: docs.length };
 }
 
 /**
@@ -319,8 +338,25 @@ export function runCatalogSearch(index: CatalogIndex, rawQuery: string, options:
   // "Та … гэж хайсан уу?" — зөвхөн сул үр дүнтэй үед, хүний уншдаг талбараас.
   let didYouMean: string | null = null;
   if (mode !== "strict" || hits.length < 3) {
-    const suggestion = index.products.autoSuggest(normalised, { fields: HUMAN_FIELDS, fuzzy: 0.3, prefix: true, maxFuzzy: 3 })[0]?.suggestion ?? null;
-    if (suggestion && suggestion !== normalised && !suggestion.startsWith(CONCEPT_PREFIX)) didYouMean = suggestion;
+    // Зөвхөн ЖИНХЭНЭ үгээс бүрдсэн саналыг үзүүлнэ (`suggestableTerms`,
+    // 2026-09-23) — эс бөгөөс индексийн дотоод хиймэл токен ("shampo",
+    // "kokochi") хэрэглэгчид санал болгогдож, дээр нь дарахад ижил үр дүн
+    // гарна.
+    for (const candidate of index.products.autoSuggest(normalised, { fields: HUMAN_FIELDS, fuzzy: 0.3, prefix: true, maxFuzzy: 3 })) {
+      const suggestion = candidate.suggestion;
+      if (!suggestion || suggestion === normalised || suggestion.startsWith(CONCEPT_PREFIX)) continue;
+      const words = suggestion.split(" ").filter(Boolean);
+      if (!words.length || !words.every(word => index.suggestableTerms.has(word))) continue;
+      if (collapseDoubles(suggestion) === collapseDoubles(normalised)) continue;
+      // 2026-09-23: галиглалтын ДАВХЦАЛ бүхий саналыг үзүүлэхгүй. "үс" ба
+      // "ус" хоёр адилхан `us` болдог тул хайлтад "та ус гэж хайсан уу?"
+      // (эсрэгээр ч) гэсэн утгагүй санал гардаг байв — өөр үг биш, зөвхөн
+      // индексийн латин хэлбэр нь давхцаж байгаа өөр үг.
+      const queryVariants = new Set(normalised.split(" ").flatMap(word => latinVariants(word)));
+      if (words.some(word => latinVariants(word).some(variant => queryVariants.has(variant)))) continue;
+      didYouMean = suggestion;
+      break;
+    }
   }
 
   return { hits, mode, normalised, brandMatches, categoryMatches, didYouMean };

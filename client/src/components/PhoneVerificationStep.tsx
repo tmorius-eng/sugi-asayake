@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, LoaderCircle, MessageSquareText, RotateCcw, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -33,16 +33,26 @@ function formatCountdown(msRemaining: number): string {
  */
 export default function PhoneVerificationStep({ purpose, onVerified, initialPhone, compact }: { purpose: "register" | "password_reset" | "checkout"; onVerified: (sessionId: string, phone: string) => void; initialPhone?: string; compact?: boolean }) {
   const [phone, setPhone] = useState(initialPhone ?? "");
+  const [session, setSession] = useState<{ sessionId: string; smsUri: string; displayInstruction: string; expiresAt: string } | null>(null);
+  // Сесс эхэлсэн дугаар — `phone` нь сесс явж байхад өөрчлөгдвөл ч ҮҮГЭЭР
+  // л онVerified руу дамжуулна (2026-09-23).
+  const verifiedPhoneRef = useRef("");
   // Checkout (2026-09-14) passes the number typed on the order form so the
   // shopper does not type it twice; keep following it until a session starts.
-  useEffect(() => { if (initialPhone !== undefined) setPhone(initialPhone); }, [initialPhone]);
-  const [session, setSession] = useState<{ sessionId: string; smsUri: string; displayInstruction: string; expiresAt: string } | null>(null);
+  // 2026-09-23: сесс эхэлсний ДАРАА дагахаа болино. Өмнө нь Checkout-ийн
+  // "Утас" талбар SMS хүлээж байх зуур засагдвал `onVerified` шинэ дугаарыг
+  // буцаадаг тул "баталгаажсан" гэж харагдаад захиалга үүсгэхэд сервер
+  // "Баталгаажуулсан дугаар захиалгын дугаартай таарахгүй" гэж татгалздаг,
+  // алхам нь unmount болсон тул дахин баталгаажуулах ч боломжгүй байв.
+  useEffect(() => { if (initialPhone !== undefined && !session) setPhone(initialPhone); }, [initialPhone, session]);
   const [now, setNow] = useState(() => Date.now());
 
   const startVerification = trpc.auth.startPhoneVerification.useMutation();
   const statusQuery = trpc.auth.phoneVerificationStatus.useQuery(
     { sessionId: session?.sessionId ?? "" },
-    { enabled: Boolean(session), refetchInterval: query => (query.state.data?.status === "verified" ? false : 3_000) },
+    // 2026-09-23: "expired" бол ч зогсоно — өмнө нь хугацаа дууссан картыг
+    // харуулсаар 3 секунд тутам сервер рүү хүсэлт явуулсаар байв.
+    { enabled: Boolean(session), refetchInterval: query => (query.state.data?.status === "verified" || query.state.data?.status === "expired" ? false : 3_000) },
   );
   const status = statusQuery.data?.status;
 
@@ -59,7 +69,7 @@ export default function PhoneVerificationStep({ purpose, onVerified, initialPhon
   // rendering" React warning/error) means this runs exactly once per
   // session transitioning to verified, not on every re-render.
   useEffect(() => {
-    if (status === "verified" && session) onVerified(session.sessionId, phone);
+    if (status === "verified" && session) onVerified(session.sessionId, verifiedPhoneRef.current || phone);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, session?.sessionId]);
 
@@ -68,6 +78,7 @@ export default function PhoneVerificationStep({ purpose, onVerified, initialPhon
     try {
       const result = await startVerification.mutateAsync({ phone, purpose });
       setNow(Date.now());
+      verifiedPhoneRef.current = phone;
       setSession(result);
     } catch (error) {
       toast.error(messageFrom(error));

@@ -96,7 +96,12 @@ export default function ScanSession({ state, dispatch, lookup, editable, hint }:
   const setQuantity = async (code: string, current: number) => {
     const answer = await prompt({ title: "Тоо ширхэг", input: { initial: String(current) } });
     if (answer === null) return;
-    const quantity = Number(answer.trim());
+    // 2026-09-23: хоосон оролт нь `Number("")` → 0 бөгөөд reducer-д 0 нь
+    // "мөрийг устга" гэсэн үг — өөрөөр хэлбэл талбарыг цэвэрлээд Enter дарахад
+    // уншуулсан мөр хогийн товчны баталгаажуулалтгүйгээр алга болдог байв.
+    const trimmed = answer.trim();
+    if (!trimmed) return;
+    const quantity = Number(trimmed);
     if (!Number.isFinite(quantity) || quantity < 0) return;
     dispatch({ type: "set", code, quantity, at: Date.now() });
   };

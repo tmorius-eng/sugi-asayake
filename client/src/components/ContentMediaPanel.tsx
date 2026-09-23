@@ -59,6 +59,13 @@ export default function ContentMediaPanel({ preview = false }: { preview?: boole
         event.target.value = "";
       }
     };
+    // 2026-09-23: `onerror` — уншилт уначихвал `activeSlot` тэр чигээрээ
+    // үлдэж, карт мөнхөд "Байршуулж байна…" гэж харагддаг байв.
+    reader.onerror = () => {
+      toast.error("Файлыг уншиж чадсангүй. Өөр файл сонгоно уу.");
+      setActiveSlot(null);
+      event.target.value = "";
+    };
     reader.readAsDataURL(file);
   };
 

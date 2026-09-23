@@ -5,11 +5,11 @@
 import { randomBytes } from "node:crypto";
 import { sqlInt } from "../_core/sqlSafe";
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lt, lte, ne, or, sql } from "drizzle-orm";
-import { adminAuditLogs, cartItems, carts, loginAttempts, marketingSpend, productCategories, pushSubscriptions, products, scheduledJobRuns, storeCreditLedger, storeSettings, users, visitorSessions } from "../../drizzle/schema";
+import { adminAuditLogs, campaignSendClaims, cartItems, carts, loginAttempts, marketingSpend, productCategories, products, pushSubscriptions, scheduledJobRuns, storeCreditLedger, storeSettings, users, visitorSessions } from "../../drizzle/schema";
 import { getStoreSettingSlot, type StoreSettingKey } from "../../shared/store-settings";
 import { getOrSetCached } from "../_core/ttlCache";
 import { STOREFRONT_CACHE_KEYS, STOREFRONT_CACHE_TTL_MS, invalidateStorefront } from "./site";
-import { getDb } from "./connection";
+import { escapeLike, getDb, isDuplicateKeyError } from "./connection";
 
 /**
  * Active catalogue categories for the STOREFRONT (2026-09-12).
@@ -176,10 +176,27 @@ export async function getAbandonedCartsNeedingReminder() {
   return rows.map(row => ({ ...row, pushSubscriptions: Number(row.pushSubscriptions) }));
 }
 
-export async function markCartReminderSent(cartId: number): Promise<void> {
+/**
+ * Орхигдсон сагсны сануулгыг ЭЗЭМШИНЭ (2026-09-23). Хоёр лаптоп + production
+ * нэг DB хуваалцдаг бөгөөд тус бүр өөрийн scheduler ажиллуулдаг тул
+ * `runningJobNames` (процесс доторх цоож) хоёр серверийг зогсоож чадахгүй:
+ * хоёулаа ижил сагсыг сонгож, хоёулаа имэйл/push илгээх боломжтой байв.
+ * Guarded UPDATE нь жинхэнэ цоож — хоёр дахь процесс `affectedRows === 0`
+ * авна (`claimRestockAlert`-ийн ижил загвар).
+ */
+/** Эзэмшсэн сануулгыг буцааж суллана — ямар ч суваг хүрээгүй бол (2026-09-23). */
+export async function clearCartReminderSent(cartId: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
-  await db.update(carts).set({ reminderSentAt: new Date() }).where(eq(carts.id, cartId));
+  await db.update(carts).set({ reminderSentAt: null }).where(eq(carts.id, cartId));
+}
+
+export async function markCartReminderSent(cartId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const claimed = await db.update(carts).set({ reminderSentAt: new Date() })
+    .where(and(eq(carts.id, cartId), isNull(carts.reminderSentAt)));
+  return Number(claimed[0].affectedRows ?? 0) === 1;
 }
 
 /**
@@ -339,12 +356,45 @@ export async function getVisitorSessionIdByToken(sessionToken: string): Promise<
 
 /** The most recent campaign send with this fingerprint inside the window,
  *  or null -- see admin.sendCampaign's double-send guard. */
+/**
+ * Кампанит ажлыг АТОМААР эзэмшинэ (2026-09-23, migration 0095).
+ *
+ * `true` = энэ хүсэлт цоожийг авлаа, илгээж болно. `false` = ижил
+ * fingerprint-тэй илгээлт тэр цонхонд аль хэдийн эзэмшигдсэн (давхар
+ * товшилт, дахин илгээлт, хоёр дахь таб) — дуудагч CONFLICT буцаана.
+ *
+ * `windowKey` нь `windowMinutes`-ийн индекс тул тэр хугацааны дараа ижил
+ * кампанит ажлыг дахин илгээх боломжтой хэвээр.
+ */
+export async function claimCampaignSend(input: { fingerprint: string; windowMinutes: number; actorUserId: number; channel: string; recipientCount: number }): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const windowKey = String(Math.floor(Date.now() / (input.windowMinutes * 60_000)));
+  try {
+    await db.insert(campaignSendClaims).values({
+      fingerprint: input.fingerprint,
+      windowKey,
+      actorUserId: input.actorUserId,
+      channel: input.channel,
+      recipientCount: input.recipientCount,
+    });
+    return true;
+  } catch (error) {
+    if (isDuplicateKeyError(error, "campaign_send_claims_unique")) return false;
+    throw error;
+  }
+}
+
 export async function findRecentCampaignSend(fingerprint: string, windowMinutes: number) {
   const db = await getDb();
   if (!db) return null;
+  // 2026-09-23: "campaign.started"-ыг МӨН тоолно. Өмнө нь зөвхөн "campaign.sent"
+  // мөрийг хайдаг байсан бөгөөд тэр мөр 2 000 хүрэхийн ДАРАА бичигддэг тул хоёр
+  // давхар товшилт (яг тэр тохиолдлыг нь хамгаалах ёстой байсан) хоёулаа
+  // "мөр алга" гэж үзээд бүгдийг хоёр удаа илгээдэг байв.
   const [row] = await db.select({ id: adminAuditLogs.id, createdAt: adminAuditLogs.createdAt }).from(adminAuditLogs)
-    .where(and(eq(adminAuditLogs.action, "campaign.sent"), like(adminAuditLogs.metadataJson, `%"fingerprint":"${fingerprint}"%`), sql`${adminAuditLogs.createdAt} > NOW() - INTERVAL ${sqlInt(windowMinutes)} MINUTE`))
-    .orderBy(desc(adminAuditLogs.createdAt)).limit(1);
+    .where(and(inArray(adminAuditLogs.action, ["campaign.sent", "campaign.started"]), like(adminAuditLogs.metadataJson, `%"fingerprint":"${fingerprint}"%`), sql`${adminAuditLogs.createdAt} > NOW() - INTERVAL ${sqlInt(windowMinutes)} MINUTE`))
+    .orderBy(desc(adminAuditLogs.createdAt), desc(adminAuditLogs.id)).limit(1);
   return row ?? null;
 }
 
@@ -363,7 +413,7 @@ export async function getAdminAuditLogs(filters: { action?: string; actorEmail?:
   if (!db) return [];
   const conditions = [
     filters.action ? eq(adminAuditLogs.action, filters.action) : undefined,
-    filters.actorEmail ? like(users.email, `%${filters.actorEmail}%`) : undefined,
+    filters.actorEmail ? like(users.email, `%${escapeLike(filters.actorEmail)}%`) : undefined,
     filters.dateFrom ? gte(adminAuditLogs.createdAt, filters.dateFrom) : undefined,
     filters.dateTo ? lte(adminAuditLogs.createdAt, filters.dateTo) : undefined,
     filters.entityType ? eq(adminAuditLogs.entityType, filters.entityType) : undefined,
@@ -435,7 +485,7 @@ export async function getLoginHistory(filters: { email?: string; success?: boole
   const db = await getDb();
   if (!db) return { rows: [], totalCount: 0 };
   const conditions = [
-    filters.email ? like(loginAttempts.email, `%${filters.email}%`) : undefined,
+    filters.email ? like(loginAttempts.email, `%${escapeLike(filters.email)}%`) : undefined,
     filters.success !== undefined ? eq(loginAttempts.success, filters.success) : undefined,
   ].filter(condition => condition !== undefined);
   const where = conditions.length ? and(...conditions) : undefined;
