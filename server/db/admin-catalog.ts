@@ -301,15 +301,15 @@ export async function deleteAdminProduct(id: number) {
   // сэргээх боломжгүй болдог байв. `deleteBranch` аль хэдийн ижил бодлоготой:
   // түүх байвал татгалзаж, нийтлэлтээс хасахыг зөвлөнө.
   // Зөвхөн ҮЙЛ АЖИЛЛАГААНЫ хөдөлгөөн (борлуулалт, хүлээн авалт, шилжүүлэг,
-  // тооллого) түүх гэж тооцогдоно. Admin-ий гараар оруулсан эхний/засварын
-  // үлдэгдэл (`opening`, `variant_seed`, `admin_set`, `product_form_set`,
-  // `rebaseline`) бол түүх биш — эс бөгөөс үлдэгдэлтэй үүсгэсэн алдаатай шинэ
+  // тооллого, ажилтны баталсан НЭЭЛТИЙН тооллого `opening`) түүх гэж
+  // тооцогдоно. Admin-ий маягтаар оруулсан эхний/засварын үлдэгдэл
+  // (`variant_seed`, `admin_set`, `product_form_set`, `rebaseline`) бол түүх биш — эс бөгөөс үлдэгдэлтэй үүсгэсэн алдаатай шинэ
   // барааг хэзээ ч устгаж чадахгүй болно (e2e/product-variants.spec.ts барьсан).
   const [ledgerRow] = await db.select({ id: stockMovements.id }).from(stockMovements)
     .innerJoin(productVariants, eq(productVariants.id, stockMovements.variantId))
     .where(and(
       eq(productVariants.productId, id),
-      notInArray(stockMovements.type, ["opening", "variant_seed", "admin_set", "product_form_set", "rebaseline"]),
+      notInArray(stockMovements.type, ["variant_seed", "admin_set", "product_form_set", "rebaseline"]),
     )).limit(1);
   if (ledgerRow) throw new Error("Энэ бараанд нөөцийн хөдөлгөөний түүх бүртгэгдсэн тул устгах боломжгүй. Оронд нь нийтлэлтээс хасна уу (Нийтлэгдсэн → Үгүй).");
   const [orderedRow] = await db.select({ id: orderItems.id }).from(orderItems)

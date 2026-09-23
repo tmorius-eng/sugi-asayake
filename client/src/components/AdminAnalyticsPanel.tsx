@@ -60,7 +60,16 @@ export default function AdminAnalyticsPanel() {
   const periodDays = useMemo(() => {
     if (!dates.dateFrom) return 30;
     const to = dates.dateTo ?? new Date();
-    return Math.max(1, Math.min(90, Math.round((to.getTime() - dates.dateFrom.getTime()) / 86_400_000)));
+    // 2026-09-23: шөнө дундаас эхэлсэн цонх ("Энэ сар", огноогоор сонгосон) нь
+    // КАЛЕНДАРЫН өдрөөр (хоёр талыг оролцуулан) — Math.round нь "Энэ сар"-ын
+    // 23-ны үдээс өмнө 22.4 → 22 болгож сарын 1-нийг sparkline-аас хасдаг байв.
+    // "7 хоног" гэх мэт (now − N хоног) цонх N хэвээр.
+    const from = dates.dateFrom;
+    const startsAtMidnight = from.getHours() === 0 && from.getMinutes() === 0 && from.getSeconds() === 0;
+    const days = startsAtMidnight
+      ? Math.round((new Date(to.getFullYear(), to.getMonth(), to.getDate()).getTime() - new Date(from.getFullYear(), from.getMonth(), from.getDate()).getTime()) / 86_400_000) + 1
+      : Math.round((to.getTime() - from.getTime()) / 86_400_000);
+    return Math.max(1, Math.min(90, days));
   }, [dates]);
   const previousPeriodFrom = useMemo(() => {
     if (!dates.dateFrom) return null;

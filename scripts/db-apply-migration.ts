@@ -40,7 +40,8 @@ async function main() {
   // чимээгүй дарж, migration PRODUCTION-д ажиллаж бүртгэгддэг байв.
   const schemaOf = (value: string | undefined) => { try { return value ? new URL(value).pathname.replace(/^\//, "") : ""; } catch { return ""; } };
   if (process.env.DATABASE_ADMIN_URL) {
-    if (process.env.DATABASE_URL && schemaOf(process.env.DATABASE_URL) !== schemaOf(process.env.DATABASE_ADMIN_URL)) {
+    // `--staging` нь доор схемийг өөрөө сольдог тул тэр үед зөрүү асуудал биш.
+    if (!process.argv.includes("--staging") && process.env.DATABASE_URL && schemaOf(process.env.DATABASE_URL) !== schemaOf(process.env.DATABASE_ADMIN_URL)) {
       console.error(`DATABASE_URL (${schemaOf(process.env.DATABASE_URL)}) ба DATABASE_ADMIN_URL (${schemaOf(process.env.DATABASE_ADMIN_URL)}) өөр схем рүү заасан — аль рүү ажиллуулахаа тодорхойгүй тул зогслоо. Staging-д бол --staging ашигла.`);
       process.exit(2);
     }

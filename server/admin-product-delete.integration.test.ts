@@ -18,7 +18,7 @@ describeWithDatabase("deleteAdminProduct guard", () => {
   let categoryId = 0;
   const productIds: number[] = [];
 
-  async function productWithMovement(suffix: string, type: "variant_seed" | "admin_set" | "sale_online" | "receipt") {
+  async function productWithMovement(suffix: string, type: "variant_seed" | "admin_set" | "sale_online" | "receipt" | "opening") {
     const db = await getDb();
     if (!db) throw new Error("no db");
     const productId = Number((await db.insert(products).values({ categoryId, name: `Delete guard test product ${suffix}`, slug: `${marker}-${suffix}`, sku: `${marker}-${suffix}`, priceMnt: 1000, stockQuantity: 0, isPublished: false }))[0].insertId);
@@ -50,7 +50,7 @@ describeWithDatabase("deleteAdminProduct guard", () => {
     expect(await db!.select({ id: products.id }).from(products).where(eq(products.id, productId))).toHaveLength(0);
   });
 
-  it.each(["sale_online", "receipt"] as const)("үйл ажиллагааны түүхтэй (%s) барааг устгахаас татгалзана", async type => {
+  it.each(["sale_online", "receipt", "opening"] as const)("үйл ажиллагааны түүхтэй (%s) барааг устгахаас татгалзана", async type => {
     const productId = await productWithMovement(type, type);
     await expect(deleteAdminProduct(productId)).rejects.toThrow(/нөөцийн хөдөлгөөний түүх/);
     const db = await getDb();

@@ -402,6 +402,11 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
   // an async frame that resolves post-unmount calls setState on a dead
   // component and, worse, keeps the camera light on.
   const abortRef = useRef(false);
+  /** Run тус бүрийн дугаар (2026-09-23): abortRef нь дараагийн run-д false
+   *  болдог тул өмнөх run-ий хожуу ирсэн камер (зөвшөөрлийн цонх нээлттэй
+   *  байхад "Дахин оролдох" дарсан) шинэ run-д "хүчинтэй" мэт харагдаж,
+   *  streamRef-ийг эзэлж, хоёр дахь урсгал хэзээ ч зогсохгүй байв. */
+  const runGenRef = useRef(0);
 
   const enroll = trpc.faceAuth.enroll.useMutation();
   const startVerification = trpc.faceAuth.startVerification.useMutation();
@@ -662,6 +667,7 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
     setProcessing(null);
     setBlinkPrompt(false);
     abortRef.current = false;
+    const runGen = ++runGenRef.current;
     setPhase("camera");
 
     try {
@@ -690,7 +696,7 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
       // (камер аль хэдийн асаалттай) catch-ийн cleanup() урсгалыг олохгүй,
       // камерын гэрэл асаалттай үлдэж, "Дахин оролдох" хоёр дахь урсгал нээдэг байв.
       const camera = startCamera().then(opened => {
-        if (abortRef.current) { stopCamera(opened); throw new Error("ABORTED"); }
+        if (abortRef.current || runGen !== runGenRef.current) { stopCamera(opened); throw new Error("ABORTED"); }
         streamRef.current = opened;
         return opened;
       });

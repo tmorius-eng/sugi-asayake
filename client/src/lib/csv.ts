@@ -12,7 +12,10 @@ const GUARDED_FORMULA = /^'[=+\-@\t\r]/;
 
 function escapeCsvCell(value: string | number | boolean | null | undefined): string {
   if (value === null || value === undefined) return "";
-  const text = typeof value === "string" && FORMULA_START.test(value) ? `'${value}` : String(value);
+  // Цэвэр тоо/утасны дугаар ("+97699…", "-5000") болон ганц "-" томьёо болж
+  // чадахгүй — тэдэнд `'` нэмбэл Excel-д нүдэнд ил харагддаг.
+  const harmless = typeof value === "string" && /^[+-]?[\d\s().]*$/.test(value);
+  const text = typeof value === "string" && FORMULA_START.test(value) && !harmless ? `'${value}` : String(value);
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
