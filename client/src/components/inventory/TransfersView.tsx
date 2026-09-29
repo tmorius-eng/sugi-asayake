@@ -214,7 +214,12 @@ export default function TransfersView({ lookup, role, branches, myBranchId }: {
     <div className="grid gap-4">
       {isWarehouse && (
         <div className="flex flex-wrap items-end gap-2 rounded-2xl border border-dashed border-[var(--a-border)] p-4">
-          <label className="grid gap-1 text-[11px] font-bold">Хаанаас<select value={fromId ?? defaultFrom ?? ""} onChange={event => setFromId(event.target.value ? Number(event.target.value) : null)} className="h-10 rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-xs outline-none"><option value="">Сонгох</option>{choices.map(branch => <option key={branch.id} value={branch.id}>{branch.name}{branch.kind === "warehouse" ? " (агуулах)" : ""}</option>)}</select></label>
+          {/* 2026-09-27 (F-transfer): "Хаашаа"'s own <option> list filters out
+              the CURRENT from-value, but changing "Хаанаас" to whatever was
+              already picked as "Хаашаа" left toId===from untouched -- the
+              dropdown just silently showed the old choice missing from its
+              list while the state still equalled it. */}
+          <label className="grid gap-1 text-[11px] font-bold">Хаанаас<select value={fromId ?? defaultFrom ?? ""} onChange={event => { const next = event.target.value ? Number(event.target.value) : null; setFromId(next); setToId(current => current !== null && current === next ? null : current); }} className="h-10 rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-xs outline-none"><option value="">Сонгох</option>{choices.map(branch => <option key={branch.id} value={branch.id}>{branch.name}{branch.kind === "warehouse" ? " (агуулах)" : ""}</option>)}</select></label>
           <ArrowRight size={16} className="mb-3 text-[var(--a-muted)]" />
           <label className="grid gap-1 text-[11px] font-bold">Хаашаа<select value={toId ?? ""} onChange={event => setToId(event.target.value ? Number(event.target.value) : null)} className="h-10 rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-xs outline-none"><option value="">Сонгох</option>{choices.filter(branch => branch.id !== (fromId ?? defaultFrom)).map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
           <button type="button" onClick={start} disabled={create.isPending} className="inline-flex min-h-10 items-center gap-2 rounded-full bg-[#df1f3d] px-5 text-xs font-bold text-white disabled:opacity-50">{create.isPending ? <LoaderCircle size={14} className="animate-spin" /> : <Plus size={14} />}Шинэ шилжүүлэг</button>

@@ -213,7 +213,15 @@ export async function sendTransfer(actor: InventoryActor, id: number) {
       for (const line of lines) {
         await applyBranchStockDelta(tx, transfer.fromBranchId, line.variantId!, -line.qtySent, { type: "transfer_out", refType: "transfer", refId: id, actorUserId: actor.id, note: `→ ${toBranch?.name ?? transfer.toBranchId}` }, { itemLabel: line.productName ?? line.scannedCode });
       }
-      await enqueueNotification(tx, "transfer.sent", { code: transfer.code, fromBranchName: fromBranch?.name ?? "", toBranchName: toBranch?.name ?? "", lineCount: lines.length, pieces }, { dedupeKey: `transfer:${id}` });
+      // 2026-09-27 (I16): getTransfer/saveReceivedDraft already хийдэг "blind
+      // count" хамгаалалтыг энэ push мэдэгдэлд ч хэрэгжүүлнэ -- өмнө нь админ
+      // болон хүлээн авах дэлгүүр ХОЁУЛАА мөр/ширхэгийн ижил тоотой мессеж
+      // авдаг байсан тул хүлээн авагч дэлгэц уншихаас өмнө "хэдийг хүлээх"-ээ
+      // мэддэг болж, бодитоор скан уншуулахгүйгээр тоог батлах эрсдэлтэй байв.
+      // Ижил `dedupeKey`-тэй ч groupKey өөр тул (notification_outbox-ийн
+      // өвөрмөц индекс) хоёулаа тусдаа мөр болно.
+      await enqueueNotification(tx, "transfer.sent", { code: transfer.code, fromBranchName: fromBranch?.name ?? "", toBranchName: toBranch?.name ?? "", lineCount: lines.length, pieces }, { dedupeKey: `transfer:${id}`, groups: ["admin"] });
+      await enqueueNotification(tx, "transfer.sent", { code: transfer.code, fromBranchName: fromBranch?.name ?? "", toBranchName: toBranch?.name ?? "", lineCount: lines.length, pieces, blind: true }, { dedupeKey: `transfer:${id}`, groups: ["store"] });
     });
   } catch (error) {
     if (error instanceof StockShortageError) throw new InventoryError(`${error.message} Дахин шалгаад илгээнэ үү.`, "CONFLICT");
@@ -273,18 +281,24 @@ export async function confirmTransferReceipt(actor: InventoryActor, id: number, 
   assertCanOperateOnBranch(actor, transfer.toBranchId);
   if (transfer.status !== "sent") throw new InventoryError(transfer.status === "received" ? "Энэ шилжүүлгийг аль хэдийн хүлээн авсан." : "Шилжүүлэг хараахан илгээгдээгүй байна.", "CONFLICT");
   const db = await requireDb();
-  const lines = await db.select().from(stockTransferLines).where(eq(stockTransferLines.transferId, id));
-  const reconciliation = reconcileTransfer(lines.map(line => ({ code: line.scannedCode, qtySent: line.qtySent, received: line.receivedDraftQty ?? 0 })));
   const [toBranch] = await db.select({ name: branches.name }).from(branches).where(eq(branches.id, transfer.toBranchId)).limit(1);
   const [fromBranch] = await db.select({ name: branches.name }).from(branches).where(eq(branches.id, transfer.fromBranchId)).limit(1);
   let receivedPieces = 0;
   await db.transaction(async tx => {
     const flipped = await tx.update(stockTransfers).set({
       status: "received", receivedByUserId: actor.id, receivedAt: new Date(),
-      discrepancyStatus: reconciliation.hasDiscrepancy ? "open" : "none",
       ...(note?.trim() ? { note: `${transfer.note ? `${transfer.note}\n` : ""}Хүлээн авах үед: ${note.trim()}`.slice(0, 500) } : {}),
     }).where(and(eq(stockTransfers.id, id), eq(stockTransfers.status, "sent")));
     if (Number(flipped[0].affectedRows ?? 0) !== 1) throw new InventoryError("Энэ шилжүүлгийг өөр хүн дөнгөж сая хүлээн авсан байна.", "CONFLICT");
+    // 2026-09-27 (I6): мөрүүд (ба тэдгээрээс тооцох reconciliation) энэ
+    // транзакцын ДОТОР, flip-ийн ДАРАА дахин уншигдана -- sendTransfer-ийн
+    // адил хамгаалалт. Өмнө нь `lines`/`reconciliation` энэ tx-ээс ГАДНА нэг
+    // удаа уншигддаг байсан тул `saveReceivedDraft` (тусдаа транзакц) яг тэр
+    // мөчид ажилласан бол `receivedDraftQty`-гийн ХУУЧИН хувилбараар нөөцөд
+    // нэмэгдэж, шилжүүлгийн бодит хүлээн авалттай мөнхөд зөрдөг байв.
+    const lines = await tx.select().from(stockTransferLines).where(eq(stockTransferLines.transferId, id));
+    const reconciliation = reconcileTransfer(lines.map(line => ({ code: line.scannedCode, qtySent: line.qtySent, received: line.receivedDraftQty ?? 0 })));
+    await tx.update(stockTransfers).set({ discrepancyStatus: reconciliation.hasDiscrepancy ? "open" : "none" }).where(eq(stockTransfers.id, id));
     for (const line of lines) {
       const received = line.receivedDraftQty ?? 0;
       await tx.update(stockTransferLines).set({ qtyReceived: received }).where(eq(stockTransferLines.id, line.id));

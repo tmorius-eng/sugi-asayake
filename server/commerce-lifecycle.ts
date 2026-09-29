@@ -3,7 +3,7 @@ export type OrderLifecycleStatus = "pending" | "confirmed" | "packed" | "out_for
 
 export function getInventoryReservationFailure(items: InventoryLine[]) {
   const unavailable = items.find(item => item.quantity > item.stockQuantity);
-  return unavailable ? `${unavailable.name} is no longer available in the requested quantity. Please refresh your cart.` : null;
+  return unavailable ? `${unavailable.name} хүссэн тоогоор нөөцөд байхгүй болсон байна. Сагсаа шинэчилнэ үү.` : null;
 }
 
 export function shouldRestoreStock(currentStatus: OrderLifecycleStatus, nextStatus: OrderLifecycleStatus | undefined) {

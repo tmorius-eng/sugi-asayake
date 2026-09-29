@@ -26,6 +26,15 @@ export default function SitePromo() {
     ...(promoBootstrap ? { initialData: promoBootstrap.data, initialDataUpdatedAt: promoBootstrap.at } : {}),
   });
   const promo = promoQuery.data;
+  // 2026-09-27: hoisted above the early-return below so both the popup's new
+  // Escape-key handler (which must be wired in a hook, and hooks can't run
+  // after a conditional return) and the JSX further down can share it.
+  const dismiss = () => {
+    if (!promo) return;
+    setVisible(false);
+    setDismissed(true);
+    try { sessionStorage.setItem(dismissedKey(promo.id), "1"); } catch { /* ignore */ }
+  };
   // 2026-09-21: the banner's initial state is decided synchronously from the
   // bootstrap promo, so it is in React's very FIRST commit. Before, both flags
   // started false and the effect below flipped them a tick later -- the bar
@@ -40,6 +49,7 @@ export default function SitePromo() {
   const [visible, setVisible] = useState(Boolean(promoBootstrap?.data && promoBootstrap.data.displayMode === "banner" && !initiallyDismissed));
   const bannerRef = useRef<HTMLDivElement>(null);
   const tickerRef = useRef<HTMLDivElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
   // Real promo copy varies wildly in length (a short "50% хямдрал!" vs. a
   // full sentence) -- computed once, unconditionally, so both the duration
   // effect below and the JSX further down stay in sync with the same string.
@@ -103,13 +113,49 @@ export default function SitePromo() {
     el.style.setProperty("--promo-ticker-duration", `${seconds.toFixed(1)}s`);
   }, [showBanner, promoText]);
 
-  if (!promo || !eligiblePage || dismissed || !visible) return null;
+  // 2026-09-27: the popup is `role="dialog" aria-modal="true"` but had no
+  // Escape key, no focus trap, no scroll lock and no focus return -- a
+  // keyboard/screen-reader visitor could tab OUT into page content that a
+  // sighted mouse user can't reach (it's visually covered by the backdrop),
+  // and the page behind it kept scrolling. Purely behavioural (no new
+  // markup/classes), so the look is unchanged.
+  const showPopup = Boolean(promo && eligiblePage && !dismissed && visible && promo.displayMode !== "banner");
+  useEffect(() => {
+    if (!showPopup) return;
+    const dialog = popupRef.current;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusable = () => dialog
+      ? Array.from(dialog.querySelectorAll<HTMLElement>('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter(el => !el.hasAttribute("disabled"))
+      : [];
+    // 2026-09-27: focusing the close (X) button here drew a visible
+    // focus-visible ring around it the instant the popup opened, even though
+    // nobody pressed a key to get there -- a look-changing side effect of
+    // what was meant to be purely behavioural. The dialog container itself
+    // (tabIndex={-1} + no outline, below) is the WAI-ARIA-recommended initial
+    // focus target for a dialog with no obviously-primary field anyway.
+    dialog?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); dismiss(); return; }
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showPopup]);
 
-  const dismiss = () => {
-    setVisible(false);
-    setDismissed(true);
-    try { sessionStorage.setItem(dismissedKey(promo.id), "1"); } catch { /* ignore */ }
-  };
+  if (!promo || !eligiblePage || dismissed || !visible) return null;
 
   if (promo.displayMode === "banner") {
     // 2026-09-04 (Tom, explicit): a long headline+message used to wrap onto
@@ -164,7 +210,7 @@ export default function SitePromo() {
       pass, only <640px gets the new near-edge-to-edge/bigger-image/lighter-
       backdrop treatment. */}
   return <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4 max-sm:bg-black/35 max-sm:px-3.5" role="dialog" aria-modal="true" aria-label={promo.headline} onClick={dismiss}>
-    <div className="relative w-full max-w-md overflow-hidden rounded-[1.75rem] bg-[#f8f5ef] shadow-[0_30px_80px_rgba(0,0,0,.35)] max-sm:max-w-[calc(100vw-28px)]" onClick={event => event.stopPropagation()}>
+    <div ref={popupRef} tabIndex={-1} style={{ outline: "none" }} className="relative w-full max-w-md overflow-hidden rounded-[1.75rem] bg-[#f8f5ef] shadow-[0_30px_80px_rgba(0,0,0,.35)] max-sm:max-w-[calc(100vw-28px)]" onClick={event => event.stopPropagation()}>
       <button type="button" onClick={dismiss} aria-label="Хаах" className="absolute right-4 top-4 z-10 grid h-8 w-8 place-items-center rounded-full bg-white/85 text-[#17181b] transition hover:bg-white"><X size={16} /></button>
       {promo.imageUrl ? <img src={promo.imageUrl} alt="" className="h-44 w-full object-cover max-sm:aspect-[4/5] max-sm:h-auto" /> : null}
       <div className="p-7 text-center sm:p-8">

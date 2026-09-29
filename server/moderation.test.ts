@@ -72,4 +72,31 @@ describe("screenTextLexically — lets honest reviews through", () => {
     expect(rejected("")).toBeNull();
     expect(rejected("   ")).toBeNull();
   });
+  it("ordinary words that share a prefix with a rejected root (2026-09-27)", () => {
+    expect(rejected("Шаардлагатай зүйл болсон")).toBeNull();
+    expect(rejected("Хаягаар хүргэлт сайн")).toBeNull();
+    expect(rejected("Утасны бүрхүүл гоё")).toBeNull();
+    expect(rejected("Хогийн уут сайн байна")).toBeNull();
+    expect(rejected("Оймс зөөлөн байна")).toBeNull();
+    expect(rejected("гахайн мах")).toBeNull();
+    expect(rejected("Ялгасан ч гэсэн")).toBeNull();
+    expect(rejected("操作简单，很好用")).toBeNull();
+    expect(rejected("香りばかり強い")).toBeNull();
+    expect(rejected("Great trash bags")).toBeNull();
+    expect(rejected("Nice dumbbell set")).toBeNull();
+  });
+});
+
+describe("screenTextLexically — still rejects the real forms next to the fixed false positives", () => {
+  it("Mongolian conjugated/phrase forms", () => {
+    expect(rejected("чи шаах юм чинь")).toBe("profanity");
+    expect(rejected("чи тарган гахай")).toBe("insult");
+    expect(rejected("чи хог юм")).toBe("insult");
+  });
+  it("Japanese baka without the -ri continuation", () => {
+    expect(rejected("ばかだ")).toBe("profanity");
+  });
+  it("Chinese abusive compound still blocked without bare 操", () => {
+    expect(rejected("操你妈")).toBe("profanity");
+  });
 });

@@ -162,7 +162,12 @@ export default function ScanSession({ state, dispatch, lookup, editable, hint }:
                 </div>
                 {editable ? (
                   <div className="flex shrink-0 items-center gap-1">
-                    <button type="button" onClick={() => dispatch({ type: "set", code: line.code, quantity: line.quantity - 1, at: Date.now() })} className="grid size-8 place-items-center rounded-full bg-[var(--a-soft)] hover:bg-[var(--a-soft-hover)]" aria-label={`${line.code} нэгээр хасах`}><Minus size={13} /></button>
+                    {/* 2026-09-27 (F-scan): scanReducer's "set" removes the
+                        line outright at quantity 0 (shared/scan-session.ts)
+                        -- one accidental tap at quantity 1 silently deleted
+                        the whole line with no confirmation. Clamp at 1;
+                        removal only through the confirmed trash button. */}
+                    <button type="button" disabled={line.quantity <= 1} onClick={() => dispatch({ type: "set", code: line.code, quantity: line.quantity - 1, at: Date.now() })} className="grid size-8 place-items-center rounded-full bg-[var(--a-soft)] hover:bg-[var(--a-soft-hover)] disabled:cursor-not-allowed disabled:opacity-40" aria-label={`${line.code} нэгээр хасах`}><Minus size={13} /></button>
                     <button type="button" onClick={() => setQuantity(line.code, line.quantity)} className="min-w-10 rounded-lg px-1.5 py-1 text-center text-sm font-extrabold hover:bg-[var(--a-soft)]" title="Тоо оруулах">{line.quantity}</button>
                     <button type="button" onClick={() => dispatch({ type: "scan", code: line.code, variantId: line.variantId, at: Date.now() })} className="grid size-8 place-items-center rounded-full bg-[var(--a-soft)] hover:bg-[var(--a-soft-hover)]" aria-label={`${line.code} нэгээр нэмэх`}><Plus size={13} /></button>
                     <button type="button" onClick={async () => { if (await confirm({ title: `${entry?.productName ?? line.code} мөрийг хасах уу?`, danger: true })) dispatch({ type: "remove", code: line.code }); }} className="ml-1 grid size-8 place-items-center rounded-full text-[var(--a-muted)] hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${line.code} мөрийг хасах`}><Trash2 size={13} /></button>

@@ -31,6 +31,9 @@ export async function getProductQuestions(productId: number, page: { limit?: num
     })
     .from(productQuestions)
     .innerJoin(users, eq(users.id, productQuestions.userId))
+    // 2026-09-27 (D14): нийтийн уншилт зөвхөн нийтлэгдсэн бараанд -- эс бөгөөс
+    // нийтлэлтээс хассан/устгасан барааны асуулт хариултууд ил хэвээр үлддэг байв.
+    .innerJoin(products, and(eq(products.id, productQuestions.productId), eq(products.isPublished, true)))
     .where(and(eq(productQuestions.productId, productId), eq(productQuestions.isApproved, true), page.cursor ? lt(productQuestions.id, page.cursor) : undefined))
     .orderBy(desc(productQuestions.id))
     .limit(limit);
@@ -76,8 +79,11 @@ export async function getProductQuestions(productId: number, page: { limit?: num
 export async function countProductQuestions(productId: number): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
+  // 2026-09-27 (D14): see getProductQuestions above -- the count must agree
+  // with the list (unpublished-product questions don't count either).
   const [row] = await db.select({ count: sql<number>`count(*)` }).from(productQuestions)
-    .where(and(eq(productQuestions.productId, productId), eq(productQuestions.isApproved, true)));
+    .innerJoin(products, eq(products.id, productQuestions.productId))
+    .where(and(eq(productQuestions.productId, productId), eq(productQuestions.isApproved, true), eq(products.isPublished, true)));
   return Number(row?.count ?? 0);
 }
 
@@ -97,6 +103,11 @@ export async function canAnswerQuestion(userId: number, role: string | null, que
   if (!db) return { ok: false, reason: "Database is not available" };
   const [question] = await db.select({ id: productQuestions.id, productId: productQuestions.productId, userId: productQuestions.userId, isApproved: productQuestions.isApproved }).from(productQuestions).where(eq(productQuestions.id, questionId)).limit(1);
   if (!question || !question.isApproved) return { ok: false, reason: "Асуулт олдсонгүй." };
+  // 2026-09-27 (D16): баримтжуулсан дүрэм ("The asker may not answer their
+  // own question") кодод хэрэгждэггүй байсан -- асуусан хүн ямар нэг үед
+  // тухайн барааг захиалсан бол (findVerifyingOrderId) өөрийн асуултад ч
+  // хариулж чаддаг байв.
+  if (question.userId === userId) return { ok: false, reason: "Та өөрийн асуултад хариулах боломжгүй." };
   if (isAdminPanelRole(role)) return { ok: true, productId: question.productId };
   if (await findVerifyingOrderId(userId, question.productId)) return { ok: true, productId: question.productId };
   return { ok: false, reason: "Зөвхөн ажилтан эсвэл энэ барааг захиалсан хэрэглэгч хариулах боломжтой." };

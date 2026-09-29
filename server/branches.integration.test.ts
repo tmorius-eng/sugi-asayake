@@ -157,13 +157,13 @@ maybeDescribeCheckout("branches checkout wiring integration", () => {
   });
 
   it("rejects a pickup branch name that doesn't match any active branch", async () => {
-    await expect(placePickupOrder(productId, "Not A Real Branch")).rejects.toThrow(/valid SUGI branch/i);
+    await expect(placePickupOrder(productId, "Not A Real Branch")).rejects.toThrow(/Авах салбараа зөв сонгоно уу/);
   });
 
   it("rejects pickup at a branch that has since been deactivated", async () => {
     await adminCaller.admin.updateBranch({ id: branchId, isActive: false });
     try {
-      await expect(placePickupOrder(productId, `${marker} Pickup Branch`)).rejects.toThrow(/valid SUGI branch/i);
+      await expect(placePickupOrder(productId, `${marker} Pickup Branch`)).rejects.toThrow(/Авах салбараа зөв сонгоно уу/);
     } finally {
       await adminCaller.admin.updateBranch({ id: branchId, isActive: true });
     }

@@ -238,12 +238,31 @@ export async function unsuspendUser(userId: number) {
 // is left in place, unused -- same call as the old password/email-code
 // tables made during the Brevo removal (dropping a live table is a
 // separate, riskier migration with no functional upside here).
+/** Түр хаагдаагүй admin-ы тоо (2026-09-27, сүүлчийн admin-ы хамгаалалт). */
+export async function countActiveAdmins(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const [row] = await db.select({ count: sql<number>`count(*)` }).from(users).where(and(eq(users.role, "admin"), isNull(users.suspendedAt)));
+  return Number(row?.count ?? 0);
+}
+
 export async function updateAdminUserRole(input: { userId: number; role: "user" | "staff" | "finance" | "marketing" | "warehouse" | "admin" }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const user = await db.select({ id: users.id, name: users.name, email: users.email, role: users.role }).from(users).where(eq(users.id, input.userId)).limit(1);
-  if (!user[0]) throw new Error("User not found.");
-  await db.update(users).set({ role: input.role, updatedAt: new Date() }).where(eq(users.id, input.userId));
+  if (!user[0]) throw new Error("Хэрэглэгч олдсонгүй.");
+  // 2026-09-27: сүүлчийн идэвхтэй admin-ыг доошлуулахгүй. Admin мөрүүдийг FOR UPDATE-ээр
+  // цоожилсон транзакцад шалгана — зэрэгцээ хоёр admin бие биенээ доошлуулахад
+  // хоёр дахь нь эхнийхийн үр дүнг харж татгалзана (0 admin үлдэхгүй).
+  await db.transaction(async tx => {
+    if (input.role !== "admin") {
+      const admins = await tx.select({ id: users.id }).from(users).where(and(eq(users.role, "admin"), isNull(users.suspendedAt))).for("update");
+      if (admins.some(row => row.id === input.userId) && admins.length <= 1) {
+        throw new Error("Сүүлчийн admin-ы эрхийг бууруулах боломжгүй — эхлээд өөр хүнийг admin болгоно уу.");
+      }
+    }
+    await tx.update(users).set({ role: input.role, updatedAt: new Date() }).where(eq(users.id, input.userId));
+  });
   forgetSessionUser(input.userId);
   return { ...user[0], role: input.role };
 }

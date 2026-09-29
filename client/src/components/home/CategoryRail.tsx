@@ -134,6 +134,14 @@ export default function CategoryRail<T>({ items, keyOf, renderCard, ariaLabel }:
     }
     setDragging(false);
   };
+  // 2026-09-27: pointercancel (system interrupt -- e.g. a browser gesture
+  // stealing the pointer mid-drag) never fires the click event that would
+  // otherwise clear suppressClick, so it stayed true forever and silently
+  // ate the very next genuine click anywhere on the rail.
+  const onPointerCancel = () => {
+    endDrag();
+    setTimeout(() => { suppressClick.current = false; }, 0);
+  };
   const onClickCapture = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!suppressClick.current) return;
     suppressClick.current = false;
@@ -151,7 +159,7 @@ export default function CategoryRail<T>({ items, keyOf, renderCard, ariaLabel }:
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
-        onPointerCancel={endDrag}
+        onPointerCancel={onPointerCancel}
         onPointerLeave={endDrag}
         onClickCapture={onClickCapture}
       >

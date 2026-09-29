@@ -77,12 +77,21 @@ export default function AdminBranchesPanel() {
   };
   const closeComposer = () => { setComposerOpen(false); setForm(emptyForm()); };
 
+  // 2026-09-27 (F-branch): swapping two equal sortOrder values (which
+  // happens after a delete leaves a duplicate -- the new-row fix below stops
+  // future duplicates, but existing data can already have them) wrote back
+  // the SAME pair of numbers: the button visibly did nothing. Ported
+  // AdminBrandsPanel's re-number-by-position approach instead.
   const move = (branch: BranchRow, direction: -1 | 1) => {
     const index = branches.findIndex(row => row.id === branch.id);
-    const swapWith = branches[index + direction];
-    if (!swapWith) return;
-    reorderBranch.mutate({ id: branch.id, sortOrder: swapWith.sortOrder });
-    reorderBranch.mutate({ id: swapWith.id, sortOrder: branch.sortOrder });
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= branches.length) return;
+    const reordered = [...branches];
+    const [moved] = reordered.splice(index, 1);
+    reordered.splice(target, 0, moved);
+    reordered.forEach((row, position) => {
+      if (row.sortOrder !== position) reorderBranch.mutate({ id: row.id, sortOrder: position });
+    });
   };
 
   const onPhotoFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -139,7 +148,10 @@ export default function AdminBranchesPanel() {
     }
     try {
       if (form.id) await updateBranch.mutateAsync({ id: form.id, ...payload, ...stockFields });
-      else await createBranch.mutateAsync({ ...payload, ...stockFields, sortOrder: branches.length });
+      // 2026-09-27: branches.length collides with an existing sortOrder once
+      // a branch has been deleted (e.g. 3 branches left, but the survivor's
+      // sortOrder is already 3) -- max+1 always lands past every existing value.
+      else await createBranch.mutateAsync({ ...payload, ...stockFields, sortOrder: branches.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1 });
       toast.success(form.id ? "Салбар шинэчлэгдлээ." : "Салбар нэмэгдлээ.");
       utils.admin.branches.invalidate();
       utils.content.branches.invalidate();

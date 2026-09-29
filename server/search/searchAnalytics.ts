@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { searchQueries } from "../../drizzle/schema";
-import { getDb } from "../db";
+import { getDb, storeDaySql } from "../db";
 import { ENV } from "../_core/env";
 import { sqlInt } from "../_core/sqlSafe";
 import type { SearchMode } from "./catalogSearchIndex";
@@ -104,13 +104,16 @@ export async function getSearchInsights(days: number): Promise<SearchInsights> {
     db.select({
       normalised: searchQueries.normalised,
       count: sql<number>`COUNT(*)`.mapWith(Number),
-      lastSeenAt: sql<Date>`MAX(${searchQueries.createdAt})`.mapWith(value => new Date(value as string)),
+      lastSeenAt: sql<Date>`MAX(${searchQueries.createdAt})`.mapWith(value => (value instanceof Date ? value : new Date(`${String(value).replace(" ", "T")}Z`))), // 2026-09-27: session UTC мөр
     }).from(searchQueries).where(and(since, eq(searchQueries.resultCount, 0))).groupBy(searchQueries.normalised).orderBy(desc(sql`COUNT(*)`)).limit(50),
+    // 2026-09-27 (D9): `DATE(createdAt)` бол сессийн UTC өдөр (session
+    // time_zone='+00:00') -- Улаанбаатарын 08:00-аас өмнөх хайлт ӨМНӨХ өдрийн
+    // sparkline-д ордог байв. `storeDaySql` нь +08:00-руу хөрвүүлж бодно.
     db.select({
-      day: sql<string>`DATE(${searchQueries.createdAt})`.mapWith(String),
+      day: storeDaySql(searchQueries.createdAt).mapWith(String),
       searches: sql<number>`COUNT(*)`.mapWith(Number),
       zeroResult: sql<number>`SUM(CASE WHEN ${searchQueries.resultCount} = 0 THEN 1 ELSE 0 END)`.mapWith(Number),
-    }).from(searchQueries).where(since).groupBy(sql`DATE(${searchQueries.createdAt})`).orderBy(sql`DATE(${searchQueries.createdAt})`),
+    }).from(searchQueries).where(since).groupBy(storeDaySql(searchQueries.createdAt)).orderBy(storeDaySql(searchQueries.createdAt)),
   ]);
   return {
     days,

@@ -23,22 +23,27 @@ export function ThemeProvider({
 }: ThemeProviderProps) {
   const [theme, setTheme] = useState<Theme>(() => {
     if (switchable) {
-      const stored = localStorage.getItem("theme");
-      return (stored as Theme) || defaultTheme;
+      try {
+        const stored = localStorage.getItem("theme");
+        return (stored as Theme) || defaultTheme;
+      } catch {
+        return defaultTheme; // private-browsing/blocked storage
+      }
     }
     return defaultTheme;
   });
 
+  // 2026-09-27: storefront-ийн dark горим Tailwind-ийн `.dark` класс
+  // ХЭРЭГЛЭХГҮЙ (PROJECT-GUIDE) -- `html[data-storefront-theme="dark"]`-ийг
+  // өөр газар (index.css) шийддэг. Энд `.dark` нэмдэг байсан нь одоогийн ганц
+  // хэрэглээндээ (App.tsx, `switchable` өгөгдөөгүй) хэзээ ч "dark" болдоггүй
+  // тул чимээгүй үхсэн код байсан ч дүрмийг зөрчихгүйн тулд бүрмөсөн хасав.
   useEffect(() => {
-    const root = document.documentElement;
-    if (theme === "dark") {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
-    }
-
-    if (switchable) {
+    if (!switchable) return;
+    try {
       localStorage.setItem("theme", theme);
+    } catch {
+      // private-browsing/blocked storage -- theme still applies for this visit
     }
   }, [theme, switchable]);
 

@@ -111,8 +111,19 @@ export async function updateAdminDiscountCode(input: { id: number } & Partial<Di
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const { id, ...changes } = input;
-  const existing = await db.select({ id: discountCodes.id }).from(discountCodes).where(eq(discountCodes.id, id)).limit(1);
-  if (!existing[0]) throw new Error("Discount code not found.");
+  const existing = await db.select({ id: discountCodes.id, type: discountCodes.type, percentValue: discountCodes.percentValue, fixedAmountMnt: discountCodes.fixedAmountMnt }).from(discountCodes).where(eq(discountCodes.id, id)).limit(1);
+  if (!existing[0]) throw new Error("Хямдралын код олдсонгүй.");
+  // 2026-09-27: үүсгэхэд шалгадаг "percent → хувь, fixed → дүн" дүрмийг засварын
+  // ЭЦСИЙН төлөв дээр дахин шалгана. Өмнө нь төрлийг fixed болгоод дүн өгөхгүй,
+  // эсвэл хувийг null болгоход код бүх худалдан авагчид 0₮ хямдрал өгдөг байв.
+  const merged = {
+    type: changes.type ?? existing[0].type,
+    percentValue: changes.percentValue !== undefined ? changes.percentValue : existing[0].percentValue,
+    fixedAmountMnt: changes.fixedAmountMnt !== undefined ? changes.fixedAmountMnt : existing[0].fixedAmountMnt,
+  };
+  if (merged.type === "percent" ? !merged.percentValue : !merged.fixedAmountMnt) {
+    throw new Error(merged.type === "percent" ? "Хувийн хямдралд хувь (1–100) заавал оруулна." : "Тогтмол хямдралд дүн заавал оруулна.");
+  }
   const patch: Record<string, unknown> = { ...changes, updatedAt: new Date() };
   if (changes.code !== undefined) patch.code = changes.code.trim().toUpperCase();
   await db.update(discountCodes).set(patch).where(eq(discountCodes.id, id));

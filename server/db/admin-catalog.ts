@@ -118,8 +118,19 @@ export async function findProductBySku(sku: string) {
   return result[0] ?? null;
 }
 
+/** 2026-09-27 (D6/D7): бичсэний ДАРАА дуудагдана -- эхэнд дуудвал транзакцтай
+ *  зэрэгцэн ирсэн унших хүсэлт кэшийг хуучин мөрөөр дахин дүүргэнэ. Гурван
+ *  бараа бичигч (create/update/delete) бүгд ижил багц ашиглана. */
+function invalidateCatalogCaches(): void {
+  invalidateCachedByPrefix("storefront:bestsellers:");
+  invalidateCached("storefront:publishedCount");
+  invalidateCached("storefront:brandDirectory");
+  invalidateCachedByPrefix("storefront:related:");
+  invalidateCachedByPrefix("storefront:boughtTogether:");
+  invalidateCatalogSource();
+}
+
 export async function createAdminProduct(input: ProductWriteInput) {
-  invalidateCachedByPrefix("storefront:bestsellers:"); invalidateCached("storefront:publishedCount"); invalidateCached("storefront:brandDirectory"); invalidateCachedByPrefix("storefront:related:"); invalidateCatalogSource();
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
 
@@ -182,6 +193,7 @@ export async function createAdminProduct(input: ProductWriteInput) {
     }
     return row;
   });
+  invalidateCatalogCaches();
   return created[0];
 }
 
@@ -241,7 +253,6 @@ async function syncSoleVariantFromProduct(productId: number, changes: { priceMnt
 }
 
 export async function updateAdminProduct(input: { id: number } & Partial<ProductWriteInput>) {
-  invalidateCachedByPrefix("storefront:bestsellers:"); invalidateCached("storefront:publishedCount"); invalidateCached("storefront:brandDirectory"); invalidateCachedByPrefix("storefront:related:"); invalidateCatalogSource();
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
 
@@ -258,7 +269,13 @@ export async function updateAdminProduct(input: { id: number } & Partial<Product
   if (input.sku !== undefined) changes.sku = input.sku;
   if (input.imageUrl !== undefined) changes.imageUrl = input.imageUrl;
   if (input.galleryJson !== undefined) changes.galleryJson = input.galleryJson;
-  if (input.stockQuantity !== undefined) changes.stockQuantity = input.stockQuantity;
+  // 2026-09-27 (D5): products.stockQuantity is NEVER written directly here
+  // any more -- it's a cached mirror of the variant ledger
+  // (recomputeVariantStockTotal in stockLedger.ts). A direct write bypassed
+  // branch_stock/stock_movements entirely, so for a product with more than
+  // one variant it silently wrote a number no shelf actually holds (the
+  // very next stock movement then overwrote it again, erasing the admin's
+  // edit without any error). Handled below, after the guard.
   if (input.isPublished !== undefined) changes.isPublished = input.isPublished;
   if (input.kind !== undefined) changes.kind = input.kind;
   if (input.ingredients !== undefined) changes.ingredients = input.ingredients;
@@ -284,14 +301,27 @@ export async function updateAdminProduct(input: { id: number } & Partial<Product
   if (input.bodySkinType !== undefined) changes.bodySkinType = input.bodySkinType;
   if (input.bodyConcerns !== undefined) changes.bodyConcerns = input.bodyConcerns;
 
+  // 2026-09-27 (D5): a resend of the SAME number (the form always submits
+  // its current value) must not throw -- only a genuine change on a
+  // multi-variant product is rejected, and routed through
+  // updateAdminProductVariant/setBranchStock instead.
+  if (input.stockQuantity !== undefined) {
+    const [current] = await db.select({ stockQuantity: products.stockQuantity }).from(products).where(eq(products.id, input.id)).limit(1);
+    if (current && current.stockQuantity !== input.stockQuantity) {
+      const variantRows = await db.select({ id: productVariants.id }).from(productVariants).where(eq(productVariants.productId, input.id));
+      if (variantRows.length !== 1) throw new Error("Олон хувилбартай барааны үлдэгдлийг хувилбар тус бүрээр засна уу.");
+    }
+  }
+
   await db.update(products).set(changes).where(eq(products.id, input.id));
   await syncSoleVariantFromProduct(input.id, input);
+  // 2026-09-27 (D6): бичсэний ДАРАА цэвэрлэнэ -- дээрх тайлбарыг үз.
+  invalidateCatalogCaches();
   const updated = await db.select().from(products).where(eq(products.id, input.id)).limit(1);
   return updated[0];
 }
 
 export async function deleteAdminProduct(id: number) {
-  invalidateCachedByPrefix("storefront:bestsellers:"); invalidateCached("storefront:publishedCount"); invalidateCached("storefront:brandDirectory"); invalidateCachedByPrefix("storefront:related:"); invalidateCatalogSource();
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
 
@@ -312,12 +342,18 @@ export async function deleteAdminProduct(id: number) {
       notInArray(stockMovements.type, ["variant_seed", "admin_set", "product_form_set", "rebaseline"]),
     )).limit(1);
   if (ledgerRow) throw new Error("Энэ бараанд нөөцийн хөдөлгөөний түүх бүртгэгдсэн тул устгах боломжгүй. Оронд нь нийтлэлтээс хасна уу (Нийтлэгдсэн → Үгүй).");
+  // 2026-09-27 (D3): join on orderItems.productId directly, not via
+  // productVariants.id = orderItems.variantId -- a legacy order row (placed
+  // before variants existed) or one whose variant was already deleted has
+  // variantId NULL, which silently dropped it out of this INNER JOIN and let
+  // an ordered product be deleted anyway.
   const [orderedRow] = await db.select({ id: orderItems.id }).from(orderItems)
     .innerJoin(orders, eq(orders.id, orderItems.orderId))
-    .innerJoin(productVariants, eq(productVariants.id, orderItems.variantId))
-    .where(and(eq(productVariants.productId, id), sql`${orders.status} <> 'cancelled'`)).limit(1);
+    .where(and(eq(orderItems.productId, id), sql`${orders.status} <> 'cancelled'`)).limit(1);
   if (orderedRow) throw new Error("Энэ бараа захиалгад бүртгэгдсэн тул устгах боломжгүй. Оронд нь нийтлэлтээс хасна уу (Нийтлэгдсэн → Үгүй).");
   await db.delete(products).where(eq(products.id, id));
+  // 2026-09-27 (D6): бичсэний ДАРАА цэвэрлэнэ.
+  invalidateCatalogCaches();
   return { id };
 }
 
@@ -331,7 +367,6 @@ export type CategoryWriteInput = {
 };
 
 export async function createAdminCategory(input: CategoryWriteInput) {
-  invalidateStorefront("categories");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
 
@@ -343,14 +378,15 @@ export async function createAdminCategory(input: CategoryWriteInput) {
     sortOrder: input.sortOrder,
     isActive: input.isActive,
   });
+  // 2026-09-27 (D6): бичсэний ДАРАА цэвэрлэнэ -- эхэнд дуудвал транзакцтай
+  // зэрэгцэн ирсэн унших хүсэлт кэшийг хуучин мөрөөр дахин дүүргэнэ.
+  invalidateStorefront("categories");
 
   const created = await db.select().from(productCategories).where(eq(productCategories.slug, input.slug)).limit(1);
   return created[0];
 }
 
 export async function updateAdminCategory(input: { id: number } & Partial<CategoryWriteInput>) {
-  invalidateStorefront("categories");
-  invalidateCatalogSource(); // ангиллын нэр хайлтын индекст байдаг
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
 
@@ -363,6 +399,9 @@ export async function updateAdminCategory(input: { id: number } & Partial<Catego
   if (input.isActive !== undefined) changes.isActive = input.isActive;
 
   await db.update(productCategories).set(changes).where(eq(productCategories.id, input.id));
+  // 2026-09-27 (D6): бичсэний ДАРАА цэвэрлэнэ.
+  invalidateStorefront("categories");
+  invalidateCatalogSource(); // ангиллын нэр хайлтын индекст байдаг
   const updated = await db.select().from(productCategories).where(eq(productCategories.id, input.id)).limit(1);
   return updated[0];
 }

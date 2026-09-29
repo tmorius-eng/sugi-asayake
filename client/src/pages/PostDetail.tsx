@@ -19,7 +19,10 @@ export default function PostDetail() {
   // falls back to the post's own title/excerpt when no explicit SEO fields
   // were set in the admin editor, so a post always has SOMETHING reasonable
   // in the browser tab/search-result snippet, never a blank meta tag.
-  useDocumentMeta(post?.metaTitle || post?.title, post?.metaDescription || post?.excerpt);
+  // 2026-09-27: admin-ий гараар бичсэн metaTitle-ийг ЯГ ХЭВЭЭР нь (бүрэн SEO
+  // гарчиг гэж үзнэ); гэвч post.title рүү унавал бусад хуудсын адил сайтын
+  // нэрийг залгана -- өмнө нь энэ хуудас цорын ганц site suffix-гүй байсан.
+  useDocumentMeta(post?.metaTitle || (post?.title ? `${post.title} — SUGI ASAYAKE` : undefined), post?.metaDescription || post?.excerpt);
 
   if (postQuery.isLoading) {
     return (

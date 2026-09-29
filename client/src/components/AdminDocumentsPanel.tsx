@@ -108,6 +108,14 @@ export default function AdminDocumentsPanel({ preview = false }: { preview?: boo
   const seedKey = `${activeKey}:${activeLocale}`;
   const seededRef = useRef<string | null>(null);
   useEffect(() => {
+    // 2026-09-27 (F7): admin.siteDocuments is still loading on first mount,
+    // so `saved` was always undefined the moment this ran -- it seeded the
+    // form from the FALLBACK text, marked seedKey as done, and then never
+    // re-seeded once the real saved row arrived. A saved custom document
+    // looked (and edited) like the generic fallback, and "Хадгалах" quietly
+    // overwrote the real legal text with it. Preview mode never loads this
+    // query (`enabled: !preview`), so it seeds immediately as before.
+    if (!preview && documentsQuery.isLoading) return;
     if (seededRef.current === seedKey) return;
     seededRef.current = seedKey;
     setForm({
@@ -117,7 +125,7 @@ export default function AdminDocumentsPanel({ preview = false }: { preview?: boo
       contentHtml: saved?.contentHtml ?? documentSectionsToHtml(fallback.sections),
     });
     setEditorKey(current => current + 1);
-  }, [seedKey, saved, fallback]);
+  }, [seedKey, saved, fallback, preview, documentsQuery.isLoading]);
 
   const busy = updateDocument.isPending || clearDocument.isPending;
   const refresh = async () => {

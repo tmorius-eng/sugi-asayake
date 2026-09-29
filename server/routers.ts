@@ -108,7 +108,7 @@ import {
   getAdminUserDetail,
   getAdminUsers,
   getCategoryWriteConflicts,
-  getLatestQPayPaymentAttemptForOrder,
+  getLatestQPayPaymentAttemptForOrder, withOrderPaymentLock, PaymentRequestBusyError,
   getLoginHistory,
   getOrderForUser,
   getOrdersForUser,
@@ -168,7 +168,7 @@ import {
   postSlugExists,
   postCategoryNameExists,
   recordLoginAttempt,
-  countRecentFailedLoginAttempts,
+  countRecentFailedLoginAttempts, hasRecentSuccessfulLoginFromIp, hasStoreCreditLedgerReason, countRecentPhoneVerificationSessions,
   // verify.mn phone verification (2026-09-05) -- see server/verifyMn.ts
   findUserByPhone,
   getPhoneVerificationSessionByVerifyMnId,
@@ -192,7 +192,7 @@ import {
   upsertSiteText,
   upsertMarketingSpend,
   updateAdminCategory,
-  cancelOwnOrder,
+  cancelOwnOrder, toCustomerOrder, listPriceCampaigns, previewPriceCampaign, createPriceCampaign, updatePriceCampaign, stopPriceCampaign, deletePriceCampaign,
   getOrderForTracking,
   getUsersForCampaignSend,
   refundOrder,
@@ -236,8 +236,8 @@ import { assertReauthProof, clearReauthCookie, hasValidReauthProof, issueReauthP
 import { FaceTemplateKeyMissingError } from "./db/face";
 import { approveFaceHandoff, assertHandoffApprovable, claimFaceHandoff, denyFaceHandoff, getFaceHandoffContext, startFaceHandoff } from "./faceHandoff";
 import { FACE_DESCRIPTOR_LENGTH, FACE_DIAGNOSTIC_MAX, FACE_IDLE_TIMEOUT_MS, FACE_MODEL_VERSION, isAdminPanelRole, isValidFaceDescriptor } from "../shared/face-auth";
-import { adminProcedure, anyStaffProcedure, catalogReadProcedure, checkoutRateLimitedProcedure, contentReadProcedure, financeProcedure, lenientRateLimitedProcedure, loginRateLimitedProcedure, loginRateLimitedProtectedProcedure, marketingProcedure, moderateRateLimitedProcedure, ordersReadProcedure, phoneVerifyRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure, usersReadProcedure, warehouseProcedure } from "./_core/trpc";
-import { storageGetSignedUrl, storagePing, storagePut, storagePutImageVariants } from "./storage";
+import { adminProcedure, anyStaffProcedure, catalogReadProcedure, checkoutRateLimitedProcedure, contentReadProcedure, financeProcedure, lenientRateLimitedProcedure, loginRateLimitedProcedure, loginRateLimitedProtectedProcedure, marketingProcedure, moderateRateLimitedProcedure, moderateRateLimitedProtectedProcedure, ordersReadProcedure, phoneVerifyRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure, usersReadProcedure, warehouseProcedure, isInternalErrorText, userFacingMessage } from "./_core/trpc";
+import { storageDelete, storageGetSignedUrl, storagePing, storagePut, storagePutImageVariants } from "./storage";
 import { IMAGE_MAX_DIMENSION, processUploadedImageVariants } from "./_core/imageProcessing";
 import { createQPayInvoice, parseQPayInvoicePayload, getQPayAvailability } from "./qpay";
 import { sendNtfyTest } from "./notifications";
@@ -249,7 +249,7 @@ import { createStorepayLoan, getStorepayAvailability, normaliseMobileNumber, sto
 // Registers the Smart Software adapter on import (side effect).
 import { clearSmartSoftwareTokenCache } from "./integrations/smartSoftware";
 import { assertImageSignature, imageContentTypes, mediaContentTypes, processUploadedImageOrThrow } from "./_core/imageUpload";
-import { INTEGRATION_PROVIDERS } from "../shared/integrations";
+import { INTEGRATION_PROVIDERS, isPrivateHost } from "../shared/integrations";
 import { buildNotificationMessage, NOTIFICATION_GROUP_LABELS, NOTIFICATION_GROUPS, NTFY_TOPIC_FIELD } from "../shared/notification-events";
 import { createNoOpVerificationSession, createVerificationSession, getSessionStatus, isNoOpSessionExpired, normalizePhoneForVerifyMn } from "./verifyMn";
 import { consumeCheckoutPhoneVerificationSession, createManualOrder, editAdminOrder, findExistingOrderForClientRequest, getAdminOrderWithItems, getStoreSettingNumber, isOrderSettled, recordNotification, releaseCheckoutPhoneVerificationSession, requestOrderReturn } from "./db";
@@ -375,7 +375,8 @@ const productVariantBaseSchema = z.object({
   isDefault: z.boolean().optional(),
 });
 const productVariantWriteSchema = productVariantBaseSchema;
-const productVariantUpdateSchema = partialForUpdate(productVariantBaseSchema).extend({ id: z.number().int().positive() }).refine(
+// 2026-09-27: `productId` хасав — өөр барааны id илгээж тэр барааны default-ийг цэвэрлэх боломжтой байв.
+const productVariantUpdateSchema = partialForUpdate(productVariantBaseSchema).omit({ productId: true }).extend({ id: z.number().int().positive() }).refine(
   value => Object.keys(value).some(key => key !== "id"),
   { message: "Provide at least one variant field to update." },
 );
@@ -406,6 +407,9 @@ const categoryUpdateSchema = partialForUpdate(categoryWriteSchema).extend({ id: 
 // formats (stored for visual fidelity with the reference screenshot; no
 // template branches on it yet -- true of most real WP themes too).
 const postFormats = ["standard", "aside", "image", "video", "audio", "quote", "link", "gallery"] as const;
+// 2026-09-27: MySQL TIMESTAMP 2038-01-19-нд дуусдаг — "хэзээ ч дуусахгүй" гэж 2040 оруулахад
+// strict mode-д INTERNAL алдаа (эсвэл тэг огноо) болдог байв.
+const storedDateSchema = z.coerce.date().max(new Date("2037-12-31T23:59:59Z"), "Огноо 2037 оноос хэтрэхгүй байна.");
 const postWriteSchema = z.object({
   title: z.string().trim().min(3).max(220),
   slug: slugSchema,
@@ -430,7 +434,7 @@ const postWriteSchema = z.object({
   // publishing it immediately -- see getPublishedPosts/getPublishedPostBySlug's
   // `publishedAt <= NOW()` gate in server/db.ts for how this is enforced with
   // no cron/worker involved.
-  publishAt: z.coerce.date().nullable().optional(),
+  publishAt: storedDateSchema.nullable().optional(),
 });
 const postUpdateSchema = partialForUpdate(postWriteSchema).extend({ id: z.number().int().positive() }).refine(
   value => Object.keys(value).some(key => key !== "id"),
@@ -446,7 +450,7 @@ const featuredBrandWriteSchema = z.object({
   tagline: nullableText(300),
   photoUrl: nullableText(1_000),
   logoUrl: nullableText(1_000),
-  sortOrder: z.number().int().default(0),
+  sortOrder: z.number().int().min(0).max(10_000).default(0),
   isActive: z.boolean().default(true),
 });
 const featuredBrandUpdateSchema = partialForUpdate(featuredBrandWriteSchema).extend({ id: z.number().int().positive() }).refine(
@@ -464,7 +468,7 @@ const branchWriteSchema = z.object({
   phone: nullableText(40),
   mapUrl: nullableText(1_000),
   photoUrl: nullableText(1_000),
-  sortOrder: z.number().int().default(0),
+  sortOrder: z.number().int().min(0).max(10_000).default(0),
   isActive: z.boolean().default(true),
   isFulfillmentDefault: z.boolean().default(false),
   // 2026-09-11 (migration 0064) -- see the `branches` schema comment.
@@ -521,8 +525,8 @@ const promotionWriteSchema = z.object({
     value => value === null || value === undefined || /^\/(?![/\\])/.test(value) || /^https:\/\//i.test(value),
     { message: "Холбоос \"/\"-ээр эхлэх дотоод зам эсвэл https:// хаяг байх ёстой." },
   ),
-  startsAt: z.coerce.date().nullable().optional(),
-  endsAt: z.coerce.date().nullable().optional(),
+  startsAt: storedDateSchema.nullable().optional(),
+  endsAt: storedDateSchema.nullable().optional(),
 });
 const promotionUpdateSchema = partialForUpdate(promotionWriteSchema).extend({ id: z.number().int().positive() }).refine(
   value => Object.keys(value).some(key => key !== "id"),
@@ -533,13 +537,13 @@ const discountCodeBaseSchema = z.object({
   code: z.string().trim().min(3).max(40).regex(/^[A-Za-z0-9_-]+$/, "Зөвхөн үсэг, тоо, - _ ашиглана."),
   type: z.enum(["percent", "fixed"]),
   percentValue: z.number().int().min(1).max(100).nullable().optional(),
-  fixedAmountMnt: z.number().int().min(1).nullable().optional(),
-  minSubtotalMnt: z.number().int().min(0),
-  maxUses: z.number().int().min(1).nullable().optional(),
+  fixedAmountMnt: z.number().int().min(1).max(100_000_000).nullable().optional(),
+  minSubtotalMnt: z.number().int().min(0).max(100_000_000),
+  maxUses: z.number().int().min(1).max(1_000_000).nullable().optional(),
   // Audit 2026-09-09 (R1): per-customer cap; null = unlimited (see schema).
   maxUsesPerCustomer: z.number().int().min(1).max(1_000).nullable().optional(),
   isActive: z.boolean(),
-  expiresAt: z.coerce.date().nullable().optional(),
+  expiresAt: storedDateSchema.nullable().optional(),
 });
 const discountCodeWriteSchema = discountCodeBaseSchema.refine(
   value => (value.type === "percent" ? Boolean(value.percentValue) : Boolean(value.fixedAmountMnt)),
@@ -591,14 +595,20 @@ export async function mergeGuestCartAndClearCookie(ctx: TrpcContext, userId: num
   try {
     await mergeGuestCartIntoUserCart(guestToken, userId);
   } catch (error) {
+    // 2026-09-27: нэгтгэл унавал cookie-г ҮЛДЭЭНЭ — өмнө нь арилгадаг байсан тул
+    // зочны сагс өнчин болж, дахин оролдох зам үлддэггүй байв.
     console.error("[auth] Failed to merge guest cart into user cart", error);
+    return;
   }
   ctx.res.clearCookie(GUEST_CART_COOKIE_NAME, { ...getGuestCartCookieOptions(ctx.req), maxAge: -1 });
 }
 
 function currentGuestCartToken(ctx: TrpcContext): string | undefined {
   const cookies = parseCookieHeader(ctx.req.headers.cookie ?? "");
-  return cookies[GUEST_CART_COOKIE_NAME];
+  const token = cookies[GUEST_CART_COOKIE_NAME];
+  // 2026-09-27: `carts.guestToken` varchar(64) — өөрчилсөн/урт cookie INSERT-ийг
+  // "Data too long"-оор унагадаг байв. Бидний үүсгэдэг хэлбэр л хүлээн авна (эс бөгөөс шинээр).
+  return token && /^[A-Za-z0-9_-]{16,64}$/.test(token) ? token : undefined;
 }
 
 // Used by cart/checkout *queries*: never issues a new guest-cart cookie (a
@@ -707,13 +717,38 @@ async function sendOrderStatusSms(order: { orderNumber: string; customerPhone: s
  * what the callback route wrote. Returns the session so the caller can spend
  * it once the order exists.
  */
-async function guestPhoneVerificationRequired(ctx: TrpcContext): Promise<boolean> {
+/** Хэрэглэгчийн ӨӨРИЙН `avatars/<id>/` объектыг л устгана (2026-09-27) — Facebook-ийн зураг г.м. гадаад URL-д хүрэхгүй. */
+async function deleteOwnAvatarObject(userId: number, avatarUrl: string | null | undefined) {
+  if (!avatarUrl) return;
+  const key = storageKeyOf(avatarUrl);
+  if (!key || !key.startsWith(`avatars/${userId}/`)) return;
+  await storageDelete(key);
+}
+
+/** `withOrderPaymentLock`-ийн "завгүй" алдааг хэрэглэгчид ойлгомжтой CONFLICT болгоно (2026-09-27). */
+async function withPaymentRequestLock<T>(orderId: number, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await withOrderPaymentLock(orderId, fn);
+  } catch (error) {
+    if (error instanceof PaymentRequestBusyError) throw new TRPCError({ code: "CONFLICT", message: error.message });
+    throw error;
+  }
+}
+async function guestPhoneVerificationRequired(ctx: TrpcContext, customerPhone?: string): Promise<boolean> {
   if (process.env.GUEST_CHECKOUT_OTP === "0") return false;
-  if (ctx.user?.phone) return false;
+  // 2026-09-27: нэвтэрсэн хэрэглэгч зөвхөн ӨӨРИЙН баталгаажсан дугаараар захиалбал
+  // OTP-гүй. Өмнө нь дансанд ямар нэг дугаар байхад л чөлөөлдөг байсан тул дурын
+  // `customerPhone`-оор COD захиалга үүсгэж, тэр дугаар руу дэлгүүрийн нэрээр
+  // төлбөртэй SMS явуулж чаддаг байв. Дугаар өгөөгүй (хуучин клиент) бол өмнөх дүрэм.
+  if (ctx.user?.phone) {
+    if (customerPhone === undefined) return false;
+    // Хуучин мөрүүдийн `users.phone` бүгд 8 оронтой биш тул хоёр талыг нормчилно.
+    if (normalizePhoneForVerifyMn(customerPhone) === normalizePhoneForVerifyMn(ctx.user.phone)) return false;
+  }
   return (await getStoreSettingValue("checkout-guest-phone-verification")).trim() !== "0";
 }
 async function requireCheckoutPhoneVerification(ctx: TrpcContext, customerPhone: string, sessionId: string | null) {
-  if (!(await guestPhoneVerificationRequired(ctx))) return null;
+  if (!(await guestPhoneVerificationRequired(ctx, customerPhone))) return null;
   const message = "Захиалга батлахын өмнө утасны дугаараа баталгаажуулна уу.";
   if (!sessionId || sessionId.startsWith("noop:")) throw new TRPCError({ code: "BAD_REQUEST", message });
   const session = await getPhoneVerificationSessionByVerifyMnId(sessionId);
@@ -753,7 +788,7 @@ async function notifyOrderStatusChange(order: OrderStatusNotifiable, context: st
   }
 }
 
-type OrderStatusNotifiable = { id: number; orderNumber: string; customerEmail: string | null; customerName: string; customerPhone: string; status: string; paymentStatus: string; deliveryTrackingRef: string | null; userId: number | null };
+type OrderStatusNotifiable = { id: number; orderNumber: string; customerEmail: string | null; customerName: string; customerPhone: string; status: string; paymentStatus: string; deliveryTrackingRef: string | null; userId: number | null; deliveryMethod?: string | null };
 
 async function sendOrderStatusUpdateEmail(order: { orderNumber: string; customerEmail: string | null; customerName: string; status: string; paymentStatus: string; deliveryTrackingRef: string | null }) {
   if (!order.customerEmail) return;
@@ -919,7 +954,8 @@ async function importProductsCsvRows(
       const message = error instanceof z.ZodError
         ? error.issues.map(issue => `${issue.path.join(".")}: ${issue.message}`).join("; ")
         : error instanceof Error ? error.message : "Тодорхойгүй алдаа.";
-      results.push({ row: index, sku: sku || `${index + 1}-р мөр`, outcome: "error", message });
+      // 2026-09-27: deadlock / duplicate key зэрэг driver-ийн текст хариу болон алдааны CSV руу гардаг байв.
+      results.push({ row: index, sku: sku || `${index + 1}-р мөр`, outcome: "error", message: isInternalErrorText(message) ? "Мөрийг хадгалж чадсангүй (дотоод алдаа). Дахин оролдоно уу." : message });
     }
   }
   return results;
@@ -984,7 +1020,12 @@ export const appRouter = router({
         // үл хамааран сүүлийн 15 минутад энэ дансанд 10 буруу оролдлого байвал
         // зөв нууц үг ч нэвтрүүлэхгүй. Нууц үгийн шалгалтыг дээр аль хэдийн
         // ажиллуулсан тул хариу өгөх хугацаа "түгжигдсэн" ба "буруу"-д ижил.
-        if (user && (await countRecentFailedLoginAttempts(user.id, LOGIN_LOCKOUT_WINDOW_MS)) >= LOGIN_LOCKOUT_MAX_FAILURES) {
+        // 2026-09-27: түгжигдсэн ч зөв нууц үг + урьд нь амжилттай нэвтэрсэн IP бол
+        // нэвтрүүлнэ (эзнийг гадуур түгжих DoS). IP-ийн шалгалт нууц үг зөв эсэхээс
+        // ҮЛ ХАМААРАН ажиллана — эс бөгөөс хариуны хугацаа нууц үгийг задална.
+        const lockedOut = user ? (await countRecentFailedLoginAttempts(user.id, LOGIN_LOCKOUT_WINDOW_MS)) >= LOGIN_LOCKOUT_MAX_FAILURES : false;
+        const knownIp = lockedOut && user ? await hasRecentSuccessfulLoginFromIp(user.id, ipAddress) : false;
+        if (user && lockedOut && !(valid && knownIp)) {
           await logAttempt(false, "locked");
           throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Хэт олон буруу оролдлого хийгдсэн тул энэ данс түр түгжигдлээ. 15 минутын дараа дахин оролдоно уу." });
         }
@@ -1029,6 +1070,7 @@ export const appRouter = router({
     // already-issued token for the account, not just the current cookie.
     logoutAllDevices: protectedProcedure.mutation(async ({ ctx }) => {
       await bumpUserSessionVersion(ctx.user.id);
+      await recordLoginAttempt({ email: ctx.user.phone ?? `#${ctx.user.id}`, userId: ctx.user.id, success: true, reason: "logout_all", ipAddress: ctx.req.ip || null });
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
@@ -1050,6 +1092,16 @@ export const appRouter = router({
     startPhoneVerification: phoneVerifyRateLimitedProcedure
       .input(z.object({ phone: phoneSchema, purpose: z.enum(["register", "password_reset", "checkout"]) }))
       .mutation(async ({ ctx, input }) => {
+        // 2026-09-27: утас тус бүрийн хязгаар — IP-ийн 3/15мин хязгаарыг IP сольж
+        // тойрч, гуравдагч хүний дугаар руу дэлгүүрийн нэрээр төлбөртэй SMS
+        // хязгааргүй явуулах боломжтой байв. Нэг дугаарт цагт 5-аас их биш.
+        const normalizedForCap = normalizePhoneForVerifyMn(input.phone);
+        if (normalizedForCap && (await countRecentPhoneVerificationSessions(normalizedForCap, 60 * 60 * 1000)) >= 5) {
+          // Нууц үг сэргээхэд "хэт олон" гэж хариулбал дугаар бүртгэлтэй эсэхийг
+          // задална (бүртгэлгүй дугаарт мөр бичигддэггүй) — доорх noop-той ижил хариу.
+          if (input.purpose === "password_reset") return createNoOpVerificationSession(input.phone);
+          throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Энэ дугаарт хэт олон баталгаажуулах код илгээгдлээ. Нэг цагийн дараа дахин оролдоно уу." });
+        }
         let userId: number | null;
         if (input.purpose === "checkout") {
           // Guest checkout (2026-09-14): any number may be verified -- it is
@@ -1124,7 +1176,7 @@ export const appRouter = router({
       }),
     resetPasswordViaPhone: strictRateLimitedProcedure
       .input(z.object({ sessionId: z.string().trim().min(1).max(80), password: z.string().min(8).max(200) }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
         const session = await getPhoneVerificationSessionByVerifyMnId(input.sessionId);
         if (!session) throw new TRPCError({ code: "BAD_REQUEST", message: "Баталгаажуулалт олдсонгүй." });
         // Always re-check verify.mn's LIVE status right before spending the
@@ -1134,7 +1186,7 @@ export const appRouter = router({
           await updatePhoneVerificationSessionStatus(session.id, live.sessionStatus === "VERIFIED" ? "verified" : live.sessionStatus === "EXPIRED" ? "expired" : "pending");
           if (live.sessionStatus !== "VERIFIED") throw new Error("Утасны дугаараа эхлээд баталгаажуулна уу.");
         } catch (error) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Баталгаажуулж чадсангүй." });
+          throw new TRPCError({ code: "BAD_REQUEST", message: userFacingMessage(error, "Баталгаажуулж чадсангүй. Дахин оролдоно уу.") });
         }
         const passwordHash = await hashPassword(input.password);
         try {
@@ -1142,6 +1194,8 @@ export const appRouter = router({
         } catch (error) {
           throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Нууц үг сэргээж чадсангүй." });
         }
+        // 2026-09-27: admin дансны нууц үгийг SMS-ээр сэргээсэн нь Security Center-т харагдахгүй байв.
+        await recordLoginAttempt({ email: session.phone, userId: session.userId ?? null, success: true, reason: "password_reset", ipAddress: ctx.req.ip || null });
         return { success: true } as const;
       }),
     // 2026-09-06: the actual signup mutation now -- there is no more
@@ -1161,7 +1215,7 @@ export const appRouter = router({
           await updatePhoneVerificationSessionStatus(session.id, live.sessionStatus === "VERIFIED" ? "verified" : live.sessionStatus === "EXPIRED" ? "expired" : "pending");
           if (live.sessionStatus !== "VERIFIED") throw new Error("Утасны дугаараа эхлээд баталгаажуулна уу.");
         } catch (error) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Баталгаажуулж чадсангүй." });
+          throw new TRPCError({ code: "BAD_REQUEST", message: userFacingMessage(error, "Баталгаажуулж чадсангүй. Дахин оролдоно уу.") });
         }
         const passwordHash = await hashPassword(input.password);
         let user;
@@ -1202,7 +1256,7 @@ export const appRouter = router({
           await updatePhoneVerificationSessionStatus(session.id, live.sessionStatus === "VERIFIED" ? "verified" : live.sessionStatus === "EXPIRED" ? "expired" : "pending");
           if (live.sessionStatus !== "VERIFIED") throw new Error("Утасны дугаараа эхлээд баталгаажуулна уу.");
         } catch (error) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Баталгаажуулж чадсангүй." });
+          throw new TRPCError({ code: "BAD_REQUEST", message: userFacingMessage(error, "Баталгаажуулж чадсангүй. Дахин оролдоно уу.") });
         }
         try {
           await attachPhoneFromVerifiedSession({ sessionId: session.id });
@@ -1359,6 +1413,14 @@ export const appRouter = router({
       .input(z.object({ endpoint: z.string().url().max(1000), keys: z.object({ p256dh: z.string().min(10).max(200), auth: z.string().min(5).max(100) }) }))
       .mutation(async ({ ctx, input }) => {
         if (!webPushEnabled()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Push мэдэгдэл тохируулагдаагүй байна." });
+        // 2026-09-27: сервер энэ хаяг руу POST хийдэг тул хөтчийн push үйлчилгээний
+        // https нийтийн хаяг л байна — өмнө нь дотоод сүлжээний хаяг (blind SSRF) эсвэл
+        // хариу өгдөггүй хост бүртгэж админы төлөв солих хүсэлтийг гацааж болдог байв.
+        let endpointUrl: URL;
+        try { endpointUrl = new URL(input.endpoint); } catch { throw new TRPCError({ code: "BAD_REQUEST", message: "Push бүртгэлийн хаяг буруу байна." }); }
+        if (endpointUrl.protocol !== "https:" || isPrivateHost(endpointUrl.hostname)) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Push бүртгэлийн хаяг буруу байна." });
+        }
         await upsertPushSubscription({ userId: ctx.user.id, endpoint: input.endpoint, p256dh: input.keys.p256dh, auth: input.keys.auth, userAgent: (ctx.req.headers["user-agent"] ?? "").slice(0, 300) || null });
         return { ok: true };
       }),
@@ -1470,7 +1532,8 @@ export const appRouter = router({
         const stored = await storagePutImageVariants(`reviews/${ctx.user.id}/review-${input.productId}-${Date.now()}.webp`, variants);
         return { url: stored.url };
       }),
-    create: protectedProcedure
+    // 2026-09-27: rate limit нэмэв (moderate 30/15мин/IP) — текст шүүлт (AI API) ба урамшууллын замтай атлаа хязгааргүй байв.
+    create: moderateRateLimitedProtectedProcedure
       .input(z.object({ productId: z.number().int().positive(), rating: z.number().int().min(1).max(5), comment: nullableText(2_000), imageUrl: z.string().max(500).nullish() }))
       .mutation(async ({ ctx, input }) => {
         // Сэтгэгдлийн зураг (2026-09-21, 0093): зөвхөн ӨӨРИЙН upload (reviews.uploadImage-ийн
@@ -1510,9 +1573,13 @@ export const appRouter = router({
         // өмнө нь төлөгдөөгүй COD захиалгаар сэтгэгдэл бичээд захиалгаа
         // цуцалж, store credit-ээ үлдээх боломжтой байв.
         const settled = reward > 0 && review.orderId ? await isOrderSettled(review.orderId) : false;
-        if (reward > 0 && settled) {
+        // 2026-09-27: нэг бараанд НЭГ л урамшуулал. Admin сэтгэгдлийг устгахад "сэтгэгдэл
+        // байгаа" шалгалт арилж, хэрэглэгч дахин бичээд урамшууллыг дахин авдаг байв.
+        const rewardReason = `Сэтгэгдлийн урамшуулал (бараа #${input.productId})`;
+        const alreadyRewarded = reward > 0 && settled ? await hasStoreCreditLedgerReason(ctx.user.id, rewardReason) : false;
+        if (reward > 0 && settled && !alreadyRewarded) {
           try {
-            await adjustStoreCredit({ userId: ctx.user.id, deltaMnt: reward, reason: `Сэтгэгдлийн урамшуулал (бараа #${input.productId})`, actorUserId: null });
+            await adjustStoreCredit({ userId: ctx.user.id, deltaMnt: reward, reason: rewardReason, actorUserId: null });
             rewardMnt = reward;
           } catch (error) {
             console.warn("[reviews] reward failed", error instanceof Error ? error.message : error);
@@ -1534,7 +1601,7 @@ export const appRouter = router({
     submit: strictRateLimitedProcedure.input(z.object({
       jobPostingId: z.number().int().positive().nullable(),
       fullName: z.string().trim().min(2).max(120),
-      phone: z.string().trim().min(8).max(20).regex(/^\+?[\d\s-]{8,20}$/, "Утасны дугаар буруу байна."),
+      phone: z.string().trim().min(8).max(20).regex(/^\+?[\d\s-]{8,20}$/, "Утасны дугаар буруу байна.").refine(value => value.replace(/\D/g, "").length >= 8, "Утасны дугаар буруу байна."),
       email: z.string().trim().email().max(320).nullable(),
       message: nullableText(2_000),
       cv: z.object({
@@ -1602,7 +1669,8 @@ export const appRouter = router({
     // protected status (verified in server/_core/context.ts), so this can
     // branch on role without needing a second procedure.
     bySlug: publicProcedure.input(z.object({ slug: z.string().min(1).max(240) })).query(({ ctx, input }) => {
-      const bypassGate = ctx.user?.role === "staff" || ctx.user?.role === "admin";
+      // 2026-09-27: нийтлэл бичих эрхтэй бүх ажилтны эрх (marketing г.м.) ноорогоо харна.
+      const bypassGate = isAdminPanelRole(ctx.user?.role);
       return getPublishedPostBySlug(input.slug, { bypassGate });
     }),
     // 2026-09-21: storefront-д R2-ийн шууд хаяг (publicUrl.ts-ийн directStorageUrl) —
@@ -1750,6 +1818,8 @@ export const appRouter = router({
       // Idempotency key, one per checkout attempt (see orders.clientRequestId).
       // Optional so an older client keeps working; the browser always sends it.
       clientRequestId: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
+      // 2026-09-29: харуулсан нийт дүн — нийтийн хямдрал дуусах мөчид өндөр үнээр чимээгүй авахгүй.
+      expectedTotalMnt: z.number().int().min(0).max(1_000_000_000).optional(),
       customerName: z.string().trim().min(2).max(160),
       customerPhone: z.string().trim().min(6).max(40).regex(/^[0-9+()\-\s]{6,40}$/, "Утасны дугаараа зөв оруулна уу.").refine(value => value.replace(/\D/g, "").length >= 8, "Утасны дугаараа зөв оруулна уу."),
       customerEmail: z.string().trim().email().max(320).nullable().optional(),
@@ -1855,7 +1925,9 @@ export const appRouter = router({
       return order;
     }),
     /** Whether THIS visitor has to verify the phone on their order (see requireCheckoutPhoneVerification). */
-    guestPhoneVerificationRequired: publicProcedure.query(({ ctx }) => guestPhoneVerificationRequired(ctx)),
+    guestPhoneVerificationRequired: publicProcedure
+      .input(z.object({ customerPhone: z.string().trim().max(40).optional() }).optional())
+      .query(({ ctx, input }) => guestPhoneVerificationRequired(ctx, input?.customerPhone)),
   }),
   // Tier E analytics: best-effort, first-party pageview telemetry so
   // Conversion Rate can be a real number (orders ÷ sessions) instead of a
@@ -1920,18 +1992,18 @@ export const appRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Буцаалтын хүсэлт илгээж чадсангүй." });
       }
       await recordNotification("order.return_requested", { orderNumber: order.orderNumber, totalMnt: order.totalMnt }, `order:${order.id}`);
-      return order;
+      return toCustomerOrder(order);
     }),
     cancel: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       let order;
       try {
         order = await cancelOwnOrder(input.id, ctx.user.id);
       } catch (error) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Unable to cancel order." });
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Захиалгыг цуцалж чадсангүй." });
       }
       // 2026-09-23: суваг бүр тусдаа — имэйлийн алдаа push/SMS-ийг тасалдаг байв.
       await notifyOrderStatusChange(order, "orders.cancel");
-      return order;
+      return toCustomerOrder(order);
     }),
   }),
   // Customer account page: editable name/phone, an avatar photo, and a
@@ -1990,14 +2062,19 @@ export const appRouter = router({
           throw new TRPCError({ code: "BAD_REQUEST", message: IMAGE_SAFETY_REJECT_MESSAGE });
         }
         const stored = await storagePut(`avatars/${ctx.user.id}/avatar-${Date.now()}.${extension}`, processed, input.contentType);
+        const previousAvatarUrl = ctx.user.avatarUrl;
         const updated = await updateUserAvatar(ctx.user.id, stored.url);
         if (!updated) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Зураг хадгалж чадсангүй." });
+        // 2026-09-27: хуучин зургийг R2-оос (зөвхөн өөрийн avatars/<id>/ зам бол) устгана.
+        void deleteOwnAvatarObject(ctx.user.id, previousAvatarUrl);
         const { passwordHash: _omit, ...safeUser } = updated;
         return safeUser;
       }),
     removeAvatar: protectedProcedure.mutation(async ({ ctx }) => {
+      const previousAvatarUrl = ctx.user.avatarUrl;
       const updated = await updateUserAvatar(ctx.user.id, null);
       if (!updated) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Зураг хасаж чадсангүй." });
+      void deleteOwnAvatarObject(ctx.user.id, previousAvatarUrl);
       const { passwordHash: _omit, ...safeUser } = updated;
       return safeUser;
     }),
@@ -2005,7 +2082,7 @@ export const appRouter = router({
       list: protectedProcedure.query(({ ctx }) => getUserAddresses(ctx.user.id)),
       create: protectedProcedure.input(addressWriteSchema).mutation(({ ctx, input }) => createUserAddress(ctx.user.id, input)),
       update: protectedProcedure
-        .input(addressWriteSchema.partial().extend({ id: z.number().int().positive() }).refine(
+        .input(partialForUpdate(addressWriteSchema).extend({ id: z.number().int().positive() }).refine(
           value => Object.keys(value).some(key => key !== "id"),
           { message: "Provide at least one address field to update." },
         ))
@@ -2079,6 +2156,7 @@ export const appRouter = router({
         if (!valid) throw new TRPCError({ code: "UNAUTHORIZED", message: "Одоогийн нууц үг буруу байна." });
         const newHash = await hashPassword(input.newPassword);
         const updated = await changeUserPassword(ctx.user.id, newHash);
+        await recordLoginAttempt({ email: ctx.user.phone ?? `#${ctx.user.id}`, userId: ctx.user.id, success: true, reason: "password_changed", ipAddress: ctx.req.ip || null });
         const token = await signSessionToken(updated.id, updated.sessionVersion);
         ctx.res.cookie(COOKIE_NAME, token, getSessionCookieOptions(ctx.req));
         return { success: true } as const;
@@ -2125,18 +2203,20 @@ export const appRouter = router({
     qpayAvailability: publicProcedure.query(() => getQPayAvailability()),
     qpayCreateInvoice: protectedProcedure.input(z.object({ orderId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       if (!getQPayAvailability().configured) {
-        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "QPay merchant credentials are not configured yet." });
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "QPay-ийн мерчант тохиргоо хараахан ороогүй байна." });
       }
+      // 2026-09-27: захиалга тус бүрийн нэрлэсэн цоож — давхар товшилт/хоёр таб хоёр нэхэмжлэл үүсгэхгүй.
+      return withPaymentRequestLock(input.orderId, async () => {
       const order = await getOrderForUser(input.orderId, ctx.user.id);
-      if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found." });
-      if (order.paymentMethod !== "qpay") throw new TRPCError({ code: "BAD_REQUEST", message: "This order is not configured for QPay." });
-      if (order.paymentStatus === "paid") throw new TRPCError({ code: "BAD_REQUEST", message: "This order has already been paid." });
+      if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "Захиалга олдсонгүй." });
+      if (order.paymentMethod !== "qpay") throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ захиалга QPay-ээр төлөхөөр үүсээгүй байна." });
+      if (order.paymentStatus === "paid") throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ захиалга аль хэдийн төлөгдсөн." });
       // Audit 2026-09-09: a customer could cancel a pending QPay order (stock
       // restored), then still mint an invoice for it and pay -- the webhook
       // would then re-confirm an order whose goods were already released.
       // markQPayPaymentAttemptPaid now refuses to touch a closed order too;
       // this is the earlier, friendlier stop.
-      if (order.status === "cancelled" || order.status === "returned") throw new TRPCError({ code: "BAD_REQUEST", message: "This order is closed and can no longer be paid." });
+      if (order.status === "cancelled" || order.status === "returned") throw new TRPCError({ code: "BAD_REQUEST", message: "Хаагдсан захиалгыг төлөх боломжгүй." });
       // A second click, a retry, a reload: hand back the invoice this order
       // already has rather than minting another one that is just as payable
       // (2026-09-12 audit). Only an attempt still awaiting payment counts.
@@ -2159,10 +2239,11 @@ export const appRouter = router({
       });
       await createQPayPaymentAttempt({ orderId: order.id, providerInvoiceId: invoice.invoiceId, responseJson: JSON.stringify(invoice.raw) });
       return { orderId: order.id, orderNumber: order.orderNumber, invoiceId: invoice.invoiceId, qrText: invoice.qrText, urls: invoice.urls };
+      });
     }),
     qpayStatus: protectedProcedure.input(z.object({ orderId: z.number().int().positive() })).query(async ({ ctx, input }) => {
       const order = await getOrderForUser(input.orderId, ctx.user.id);
-      if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found." });
+      if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "Захиалга олдсонгүй." });
       const attempt = await getLatestQPayPaymentAttemptForOrder(order.id);
       return { orderId: order.id, paymentStatus: order.paymentStatus, orderStatus: order.status, invoiceId: attempt?.providerInvoiceId ?? null, attemptStatus: attempt?.status ?? null };
     }),
@@ -2190,9 +2271,17 @@ export const appRouter = router({
       if (!(await getStorepayAvailability()).configured) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "StorePay-ийн тохиргоо хараахан ороогүй байна." });
       const mobileNumber = normaliseMobileNumber(input.mobileNumber);
       if (!mobileNumber) throw new TRPCError({ code: "BAD_REQUEST", message: "Утасны дугаараа зөв оруулна уу (8 орон)." });
+      // 2026-09-27: QPay-тэй ижил нэрлэсэн цоож — хоёр зэрэгцээ хүсэлт хоёр зээл нээхгүй.
+      return withPaymentRequestLock(input.orderId, async () => {
       const order = await getOrderForUser(input.orderId, ctx.user.id);
-      if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found." });
+      if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "Захиалга олдсонгүй." });
       if (order.paymentMethod !== "storepay") throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ захиалга StorePay-ээр төлөхөөр үүсээгүй байна." });
+      // 2026-09-27: дугаар клиентээс ирдэг бөгөөд өмнө нь зөвхөн клиент тулгадаг байв —
+      // нэвтэрсэн хэн ч дурын хүний StorePay апп руу дэлгүүрийн нэрээр зээлийн хүсэлт
+      // явуулж чаддаг байсан. Захиалга дээрх дугаартай л таарах ёстой.
+      if (normaliseMobileNumber(order.customerPhone) !== mobileNumber) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "StorePay хүсэлтийг зөвхөн захиалга дээрх утасны дугаар руу илгээнэ." });
+      }
       if (order.paymentStatus === "paid") throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ захиалга аль хэдийн төлөгдсөн." });
       if (order.status === "cancelled" || order.status === "returned") throw new TRPCError({ code: "BAD_REQUEST", message: "Хаагдсан захиалгыг төлөх боломжгүй." });
       // Same rule as QPay above: one open loan request per order. StorePay
@@ -2224,6 +2313,7 @@ export const appRouter = router({
       }
       await createStorepayPaymentAttempt({ orderId: order.id, providerInvoiceId: loan.loanId, responseJson: JSON.stringify(loan.raw) });
       return { orderId: order.id, orderNumber: order.orderNumber, loanId: loan.loanId };
+      });
     }),
   }),
   /**
@@ -2300,6 +2390,9 @@ export const appRouter = router({
     /** Ends the face session now -- the browser's idle timer firing, or
      *  someone deliberately locking the screen before walking away. */
     lock: protectedProcedure.input(z.object({ reason: z.enum(["idle", "manual"]) })).mutation(async ({ ctx, input }) => {
+      // 2026-09-27: энгийн худалдан авагч face_attempts хүснэгтэд хязгааргүй мөр бичиж
+      // Security Center-ийг дүүргэж чаддаг байв — heartbeat-тэй ижил хаалт.
+      if (!isFaceGateEnabled() || !isAdminPanelRole(ctx.user.role)) return { ok: true as const };
       await lockFaceSession({ req: ctx.req, res: ctx.res, userId: ctx.user.id, reason: input.reason });
       return { ok: true as const };
     }),
@@ -2325,7 +2418,9 @@ export const appRouter = router({
         // The hash is checked BEFORE the lockout so "locked" and "wrong" take
         // the same time to answer, exactly like auth.login.
         const valid = await verifyPassword(input.password, user.passwordHash);
-        if ((await countRecentFailedLoginAttempts(user.id, LOGIN_LOCKOUT_WINDOW_MS)) >= LOGIN_LOCKOUT_MAX_FAILURES) {
+        const reauthLockedOut = (await countRecentFailedLoginAttempts(user.id, LOGIN_LOCKOUT_WINDOW_MS)) >= LOGIN_LOCKOUT_MAX_FAILURES;
+        const reauthKnownIp = reauthLockedOut ? await hasRecentSuccessfulLoginFromIp(user.id, ipAddress) : false;
+        if (reauthLockedOut && !(valid && reauthKnownIp)) {
           await recordLoginAttempt({ email: identifier, userId: user.id, success: false, reason: "reauth_locked", ipAddress });
           throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Хэт олон буруу оролдлого хийгдсэн тул энэ данс түр түгжигдлээ. 15 минутын дараа дахин оролдоно уу." });
         }
@@ -2376,7 +2471,7 @@ export const appRouter = router({
         // A first enrolment, a stale model or an unreadable template has no
         // current face to prove; an admin's reset (Users drawer) is the way
         // back for someone whose face no longer matches.
-        await assertReauthProof({ req: ctx.req, user: ctx.user });
+        await assertReauthProof({ req: ctx.req, user: ctx.user, evenWhenGateOff: true });
         const existing = await getFaceEnrollment(ctx.user.id);
         const replacingUsableFace = !!existing && existing.modelVersion === FACE_MODEL_VERSION && existing.templateReadable;
         if (replacingUsableFace && isFaceGateEnabled() && !(await hasValidFaceProof(ctx.req, ctx.user.id, ctx.user.sessionVersion))) {
@@ -2615,7 +2710,10 @@ export const appRouter = router({
     search: anyStaffProcedure.input(z.object({ query: z.string().trim().min(1).max(120) })).query(async ({ ctx, input }) => {
       const result = await adminGlobalSearch(input.query);
       if (ctx.user.role === "admin") return result;
-      return { ...result, users: [] };
+      // 2026-09-27: захиалгын жагсаалт (ordersReadProcedure) staff/marketing-д хаалттай
+      // атлаа энд харилцагчийн утас, дүнтэй захиалгын мөр буцаадаг байв.
+      const canReadOrders = ctx.user.role === "warehouse" || ctx.user.role === "finance";
+      return { ...result, users: [], orders: canReadOrders ? result.orders : [] };
     }),
     // ---- Хайлт v3 (2026-09-20): Admin → Хайлт — статистик, синонимын толь,
     // брэндийн alias. Бүгд marketingProcedure (featuredBrands-тай ижил жин:
@@ -2706,7 +2804,7 @@ export const appRouter = router({
     // existing registered user (already in the list below) and change their
     // role directly. See updateAdminUserRole's own comment in server/db.ts.
     updateUserRole: adminProcedure.input(z.object({ userId: z.number().int().positive(), role: staffRoleSchema })).mutation(async ({ ctx, input }) => {
-      if (ctx.user.id === input.userId) throw new TRPCError({ code: "BAD_REQUEST", message: "You cannot change your own administrator role here." });
+      if (ctx.user.id === input.userId) throw new TRPCError({ code: "BAD_REQUEST", message: "Өөрийнхөө эрхийг энд өөрчлөх боломжгүй." });
       // /admin now asks for the account PASSWORD before the face (2026-09-22).
       // An account made through Facebook has a random password and no phone,
       // so it could neither pass that step nor recover the password by SMS --
@@ -2752,7 +2850,7 @@ export const appRouter = router({
     }),
     userDetail: usersReadProcedure.input(z.object({ userId: z.number().int().positive() })).query(async ({ input }) => {
       const detail = await getAdminUserDetail(input.userId);
-      if (!detail) throw new TRPCError({ code: "NOT_FOUND", message: "User not found." });
+      if (!detail) throw new TRPCError({ code: "NOT_FOUND", message: "Хэрэглэгч олдсонгүй." });
       return detail;
     }),
     /**
@@ -2773,6 +2871,16 @@ export const appRouter = router({
      */
     resetUserFaceEnrollment: adminProcedure.input(z.object({ userId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       await deleteFaceEnrollment(input.userId);
+      // 2026-09-27: reset-ийн өмнөх царайны proof cookie 8 цаг хүчинтэй хэвээр
+      // үлддэг байв (proof нь sessionVersion-оор холбогддог) — reset нь тухайн
+      // хэрэглэгчийг бүх төхөөрөмжөөс гаргаж, дахин нууц үг + шинэ царай шаардана.
+      if (input.userId !== ctx.user.id) {
+        await bumpUserSessionVersion(input.userId);
+      } else {
+        // Өөрийгөө reset хийвэл сешнийг хэвээр үлдээж, царай/нууц үгийн proof-ийг л арилгана.
+        clearFaceProofCookie(ctx.req, ctx.res);
+        clearReauthCookie(ctx.req, ctx.res);
+      }
       await logAdminAction({ actorUserId: ctx.user.id, action: "user.face_enrollment_reset", entityType: "user", entityId: input.userId });
       return { ok: true as const };
     }),
@@ -2787,7 +2895,7 @@ export const appRouter = router({
     // a customer's known in-store lifetime spend onto their online total.
     updateUserLoyaltyAdjustment: adminProcedure.input(z.object({ userId: z.number().int().positive(), adjustmentMnt: z.number().int().min(0).max(1_000_000_000) })).mutation(async ({ ctx, input }) => {
       const detail = await updateUserLoyaltyAdjustment(input.userId, input.adjustmentMnt);
-      if (!detail) throw new TRPCError({ code: "NOT_FOUND", message: "User not found." });
+      if (!detail) throw new TRPCError({ code: "NOT_FOUND", message: "Хэрэглэгч олдсонгүй." });
       await logAdminAction({ actorUserId: ctx.user.id, action: "user.loyalty_adjustment_updated", entityType: "user", entityId: input.userId, metadata: { adjustmentMnt: input.adjustmentMnt } });
       return detail;
     }),
@@ -2951,12 +3059,14 @@ export const appRouter = router({
     applyVendorCatalog: adminProcedure.input(z.object({
       kind: z.enum(["price", "facts"]),
       skus: z.array(z.string().trim().min(1).max(80)).min(1).max(500),
+      // 2026-09-27: факт талбар тус бүрийн сонголт — өмнө нь SKU-ийн БҮХ ялгаатай талбар бичигддэг байв.
+      fields: z.array(z.object({ sku: z.string().trim().min(1).max(80), field: z.enum(["ingredients", "usageInstructions", "warnings"]) })).max(1_500).optional(),
     })).mutation(async ({ ctx, input }) => {
       const provider = await getInventorySyncProvider({ requireActive: false });
       if (!provider) throw new TRPCError({ code: "BAD_REQUEST", message: "Smart Software-ийн нэвтрэх нэр, нууц үгээ оруулаад хадгална уу." });
       let result;
       try {
-        result = await applyVendorCatalog(provider, { kind: input.kind, skus: input.skus, actorUserId: ctx.user.id });
+        result = await applyVendorCatalog(provider, { kind: input.kind, skus: input.skus, fields: input.fields, actorUserId: ctx.user.id });
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Хэрэглэж чадсангүй." });
       }
@@ -3001,7 +3111,7 @@ export const appRouter = router({
       monthKeys: z.array(z.string().regex(/^\d{4}-\d{2}$/)).min(1).max(24),
     })).query(({ input }) => getMarketingSpendRows(input.monthKeys)),
     updateMarketingSpend: financeProcedure.input(z.object({
-      monthKey: z.string().regex(/^\d{4}-\d{2}$/),
+      monthKey: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
       spendMnt: z.number().int().min(0).max(1_000_000_000),
     })).mutation(async ({ ctx, input }) => {
       const result = await upsertMarketingSpend({ ...input, updatedByUserId: ctx.user.id });
@@ -3055,7 +3165,7 @@ export const appRouter = router({
       // дараа дахин `/` эсвэл `\` ирэхийг хориглоно.
       url: z.string().trim().max(300).regex(/^\/(?![/\\])[^\s]*$/, "Холбоос \"/\"-ээр эхлэх дотоод зам байх ёстой.").optional(),
       sourceLabel: z.string().trim().max(120).optional(),
-    })).mutation(async ({ ctx, input }) => {
+    }).refine(value => value.channel !== "sms" || value.body.length <= 300, { message: "SMS-ийн бие 300 тэмдэгтээс хэтрэхгүй (кирилл SMS 70 тэмдэгт тутамд нэг төлбөртэй сегмент).", path: ["body"] })).mutation(async ({ ctx, input }) => {
       if (input.channel === "sms" && !ENV.smsCampaignsEnabled) {
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "SMS кампанит ажил идэвхжээгүй байна. Тохиргоог админтай холбогдоно уу." });
       }
@@ -3084,6 +3194,9 @@ export const appRouter = router({
       if (!claimed) {
         throw new TRPCError({ code: "CONFLICT", message: "Яг энэ кампанит ажил дөнгөж сая илгээгдсэн байна. Дахин илгээх бол 10 минутын дараа оролдоно уу." });
       }
+      // 2026-09-27: `findRecentCampaignSend` "campaign.started"-ыг хайдаг ч хэн ч
+      // бичдэггүй байв — цоож авсан даруйд аудитын мөрийг fingerprint-тэй нь үлдээнэ.
+      await logAdminAction({ actorUserId: ctx.user.id, action: "campaign.started", entityType: "campaign", metadata: { fingerprint, channel: input.channel, recipientCount: input.userIds.length } });
       const recipients = await getUsersForCampaignSend(input.userIds);
       // Суваг бүр өөрийн зөвшөөрөл + өөрийн хүрэх хаягийг шаардана. Push-д
       // "хаяг" нь бүртгүүлсэн хөтөч: тугтай ч бүртгэлгүй хүн рүү юу ч
@@ -3154,7 +3267,7 @@ export const appRouter = router({
       return { selected: input.userIds.length, reachable };
     }),
     suspendUser: adminProcedure.input(z.object({ userId: z.number().int().positive(), reason: z.string().trim().max(300).optional() })).mutation(async ({ ctx, input }) => {
-      if (ctx.user.id === input.userId) throw new TRPCError({ code: "BAD_REQUEST", message: "You cannot suspend your own account." });
+      if (ctx.user.id === input.userId) throw new TRPCError({ code: "BAD_REQUEST", message: "Өөрийн дансыг түр хаах боломжгүй." });
       try {
         const updated = await suspendUser(input);
         await logAdminAction({ actorUserId: ctx.user.id, action: "user.suspended", entityType: "user", entityId: input.userId, metadata: { reason: input.reason ?? null } });
@@ -3253,7 +3366,10 @@ export const appRouter = router({
       deliveryAddress: z.string().trim().max(2_000).nullable().optional(),
       district: districtSchema,
       pickupBranch: z.string().trim().max(160).nullable().optional(),
-      paymentMethod: z.enum(["qpay", "storepay", "bank_transfer", "card", "cash_on_delivery"]),
+      // 2026-09-27: qpay/storepay хасав — гар захиалга `userId: null` тул нэхэмжлэл/зээл
+      // үүсгэх procedure-ууд (өөрийн захиалга шаарддаг) хэзээ ч дуудагдахгүй, "дууссан"
+      // ч `unpaid` хэвээр (WEBHOOK_PAID_METHODS) — захиалга мөнхөд төлөгдөхгүй байв.
+      paymentMethod: z.enum(["bank_transfer", "card", "cash_on_delivery"]),
       salesChannel: z.enum(["phone", "messenger", "in_store"]),
       items: z.array(z.object({ variantId: z.number().int().positive(), quantity: z.number().int().min(1).max(999) })).min(1).max(100),
       adminNote: nullableText(5_000),
@@ -3349,7 +3465,7 @@ export const appRouter = router({
           // имэйл/push/SMS (төлбөртэй) авдаг байв.
           if (order.statusChanged) await notifyOrderStatusChange(order, "admin.bulkUpdateOrderStatus");
         } catch (error) {
-          failed.push({ id, message: error instanceof Error ? error.message : "Unable to update order." });
+          failed.push({ id, message: userFacingMessage(error, "Захиалгыг шинэчилж чадсангүй.") });
         }
       }
       return { succeeded, failed };
@@ -3582,7 +3698,7 @@ export const appRouter = router({
     branchStock: warehouseProcedure.input(z.object({ variantId: z.number().int().positive() })).query(({ input }) => getBranchStockForVariant(input.variantId)),
     // 2026-09-11: `note` (why the count changed) goes onto the stock ledger
     // movement next to the before/after numbers.
-    setBranchStock: warehouseProcedure.input(z.object({ branchId: z.number().int().positive(), variantId: z.number().int().positive(), quantity: z.number().int().min(0), note: z.string().trim().max(300).optional() })).mutation(async ({ ctx, input }) => {
+    setBranchStock: warehouseProcedure.input(z.object({ branchId: z.number().int().positive(), variantId: z.number().int().positive(), quantity: z.number().int().min(0).max(1_000_000), note: z.string().trim().max(300).optional() })).mutation(async ({ ctx, input }) => {
       const result = await setBranchStock(input.branchId, input.variantId, input.quantity, { actorUserId: ctx.user.id, note: input.note || null });
       await logAdminAction({ actorUserId: ctx.user.id, action: "branchStock.updated", entityType: "product_variant", entityId: input.variantId, metadata: { branchId: input.branchId, quantity: input.quantity, note: input.note ?? null } });
       return result;
@@ -3616,7 +3732,11 @@ export const appRouter = router({
     // PREMIUM-FEATURES.md TIER 2: lightweight moderation — a flat list an
     // admin/staff can filter through, not a pre-publish approval queue
     // (reviews are already gated by verified purchase before this).
-    reviews: marketingProcedure.query(() => getAdminReviews()),
+    // 2026-09-27: сэтгэгдэл бичигчийн имэйл (PII) зөвхөн admin-д.
+    reviews: marketingProcedure.query(async ({ ctx }) => {
+      const rows = await getAdminReviews();
+      return ctx.user.role === "admin" ? rows : rows.map(row => ({ ...row, reviewerEmail: null }));
+    }),
     updateReviewApproval: marketingProcedure.input(z.object({ id: z.number().int().positive(), isApproved: z.boolean() })).mutation(async ({ ctx, input }) => {
       const result = await setReviewApproval(input.id, input.isApproved);
       await logAdminAction({ actorUserId: ctx.user.id, action: input.isApproved ? "review.approved" : "review.hidden", entityType: "review", entityId: input.id });
@@ -3764,6 +3884,45 @@ export const appRouter = router({
     // TIER 5: bulk publish/unpublish. Only touches isPublished, so none of
     // the slug/sku/category conflict checks in validateProductWrite apply —
     // this can't collide with another product the way a full edit could.
+    // ---- Бүх барааны нийтийн хямдрал (2026-09-29, docs/SITEWIDE-SALE-PLAN.md) ----
+    // Tom: "зөвхөн admin асааж, унтрааж, засна". Үнэ DB-д хөндөгдөхгүй.
+    priceCampaigns: adminProcedure.query(() => listPriceCampaigns()),
+    previewPriceCampaign: adminProcedure.input(z.object({ percentOff: z.number().int().min(1).max(90) })).query(({ input }) => previewPriceCampaign(input.percentOff)),
+    savePriceCampaign: adminProcedure.input(z.object({
+      id: z.number().int().positive().optional(),
+      name: z.string().trim().min(2).max(120),
+      percentOff: z.number().int().min(1).max(90),
+      startsAt: storedDateSchema,
+      endsAt: storedDateSchema,
+    })).mutation(async ({ ctx, input }) => {
+      try {
+        const saved = input.id
+          ? await updatePriceCampaign({ id: input.id, name: input.name, percentOff: input.percentOff, startsAt: input.startsAt, endsAt: input.endsAt, actorUserId: ctx.user.id })
+          : await createPriceCampaign({ name: input.name, percentOff: input.percentOff, startsAt: input.startsAt, endsAt: input.endsAt, actorUserId: ctx.user.id });
+        await logAdminAction({ actorUserId: ctx.user.id, action: input.id ? "price_campaign.updated" : "price_campaign.created", entityType: "price_campaign", entityId: saved?.id ?? input.id ?? null, metadata: { percentOff: input.percentOff, startsAt: input.startsAt.toISOString(), endsAt: input.endsAt.toISOString() } });
+        return saved;
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: userFacingMessage(error, "Хямдрал хадгалж чадсангүй.") });
+      }
+    }),
+    stopPriceCampaign: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      try {
+        const result = await stopPriceCampaign({ id: input.id, actorUserId: ctx.user.id });
+        await logAdminAction({ actorUserId: ctx.user.id, action: "price_campaign.stopped", entityType: "price_campaign", entityId: input.id });
+        return result;
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: userFacingMessage(error, "Хямдрал зогсоож чадсангүй.") });
+      }
+    }),
+    deletePriceCampaign: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      try {
+        const result = await deletePriceCampaign(input.id);
+        await logAdminAction({ actorUserId: ctx.user.id, action: "price_campaign.deleted", entityType: "price_campaign", entityId: input.id });
+        return result;
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: userFacingMessage(error, "Хямдрал устгаж чадсангүй.") });
+      }
+    }),
     bulkUpdateProductPublishStatus: warehouseProcedure.input(z.object({
       ids: z.array(z.number().int().positive()).min(1).max(200),
       isPublished: z.boolean(),
@@ -3777,7 +3936,7 @@ export const appRouter = router({
           await logAdminAction({ actorUserId: ctx.user.id, action: "product.updated", entityType: "product", entityId: product.id, metadata: { isPublished: input.isPublished, bulk: true } });
           succeeded.push(id);
         } catch (error) {
-          failed.push({ id, message: error instanceof Error ? error.message : "Unable to update product." });
+          failed.push({ id, message: userFacingMessage(error, "Барааг шинэчилж чадсангүй.") });
         }
       }
       return { succeeded, failed };
@@ -3831,7 +3990,8 @@ export const appRouter = router({
     }),
     updateSiteMedia: marketingProcedure.input(z.object({
       slotKey: siteMediaSlotSchema,
-      imageUrl: z.string().trim().min(1).max(1_000),
+      // 2026-09-27: зөвхөн өөрийн хадгалалт/статик зам эсвэл https — `data:`/дурын схем hero-г хоосон болгодог байв.
+      imageUrl: z.string().trim().min(1).max(1_000).regex(/^(\/cdn\/|\/images\/|https:\/\/)/, "Зургийн хаяг буруу байна."),
       altText: nullableText(240),
     })).mutation(async ({ ctx, input }) => {
       const media = await upsertSiteMedia({ ...input, updatedByUserId: ctx.user.id });
@@ -3880,6 +4040,24 @@ export const appRouter = router({
       const slot = getStoreSettingSlot(input.settingKey);
       if (slot.type === "number" && !Number.isFinite(Number(input.settingValue))) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Энэ тохиргоо зөвхөн тоо байх ёстой." });
+      }
+      // 2026-09-27: `Number.isFinite` нь -1, 12.5 (₮ INT багана руу), 1e9, 0x10-ийг ч
+      // зөвшөөрдөг байв. Бүх тоо сөрөг биш; ₮/хоног/тоо ширхэг бүхэл, хязгаартай.
+      if (slot.type === "number") {
+        const value = Number(input.settingValue);
+        const wholeOnly = /-mnt$|-days$|^reco-max-/.test(input.settingKey);
+        if (!/^\d+(\.\d+)?$/.test(input.settingValue) || (wholeOnly && !Number.isInteger(value))) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: wholeOnly ? "Энэ тохиргоо 0 эсвэл түүнээс их бүхэл тоо байх ёстой." : "Энэ тохиргоо 0 эсвэл түүнээс их тоо байх ёстой." });
+        }
+        const max = /-mnt$/.test(input.settingKey) ? 100_000_000 : /-days$/.test(input.settingKey) ? 365 : 1_000;
+        if (value > max) throw new TRPCError({ code: "BAD_REQUEST", message: `Энэ тохиргооны дээд хэмжээ ${max.toLocaleString("en-US")}.` });
+      }
+      // 2026-09-27: сэтгэгдлийн урамшуулал нь дэлгүүрийн ЗЭЭЛ (мөнгө) үүсгэдэг —
+      // зээл гаргах бусад зам зөвхөн finance/admin. Marketing үүнийг 5 000 000₮ болгож
+      // өөрийн худалдан авагчийн дансаар мөнгө гаргаж чаддаг байв.
+      if (input.settingKey === "review-reward-mnt") {
+        if (ctx.user.role !== "admin" && ctx.user.role !== "finance") throw new TRPCError({ code: "FORBIDDEN", message: "Урамшууллын дүнг зөвхөн admin эсвэл санхүү өөрчилнө." });
+        if (Number(input.settingValue) > 100_000) throw new TRPCError({ code: "BAD_REQUEST", message: "Сэтгэгдлийн урамшуулал 100 000₮-өөс ихгүй байна." });
       }
       // An email template declares which {tokens} it understands. A token
       // this slot doesn't fill would be sent to a real customer as literal
@@ -3950,7 +4128,7 @@ export const appRouter = router({
       salaryRange: z.string().trim().max(80).default(""),
       description: nullableText(4_000),
       applyEmail: z.string().trim().email().max(320).nullable().optional(),
-      applyUrl: z.string().trim().url().max(300).nullable().optional(),
+      applyUrl: z.string().trim().url().max(300).regex(/^https?:\/\//i, "Холбоос http(s)://-ээр эхлэх ёстой.").nullable().optional(),
       isPublished: z.boolean().default(false),
       sortOrder: z.number().int().min(0).max(9_999).default(0),
     })).mutation(async ({ ctx, input }) => {
@@ -3992,7 +4170,9 @@ export const appRouter = router({
       return { id: input.id };
     }),
     deleteJobApplication: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
-      await deleteJobApplication(input.id);
+      const deleted = await deleteJobApplication(input.id);
+      // 2026-09-27: анкетыг устгахад CV (хувь хүний мэдээлэл) R2-д үлддэг байв.
+      if (deleted.cvKey) await storageDelete(deleted.cvKey);
       await logAdminAction({ actorUserId: ctx.user.id, action: "job_application.deleted", entityType: "job_application", entityId: input.id, metadata: {} });
       return { id: input.id };
     }),

@@ -16,7 +16,7 @@
  */
 import type { Request, Response } from "express";
 import { and, asc, eq } from "drizzle-orm";
-import { getDb, getSiteName } from "../db";
+import { withLiveCampaign, getDb, getSiteName } from "../db";
 import { productCategories, products } from "../../drizzle/schema";
 import { getOrSetCached } from "./ttlCache";
 import { ENV } from "./env";
@@ -56,7 +56,7 @@ export async function buildMerchantFeed(origin: string): Promise<string> {
   if (!db) throw new Error("Database is not available");
   // Own query rather than the storefront's catalogRowColumns: the feed
   // needs `sku` (the barcode) and none of the review aggregates.
-  const rows = await db
+  const rawRows = await db
     .select({
       id: products.id, name: products.name, slug: products.slug, brand: products.brand, sku: products.sku,
       shortDescription: products.shortDescription, priceMnt: products.priceMnt, compareAtPriceMnt: products.compareAtPriceMnt,
@@ -68,6 +68,8 @@ export async function buildMerchantFeed(origin: string): Promise<string> {
     // for them and they carry no GTIN, brand or photo of a real item.
     .where(and(eq(products.isPublished, true), eq(products.kind, "physical")))
     .orderBy(asc(products.id));
+  // 2026-09-29: нийтийн хямдрал идэвхтэй бол Google-д sale_price болж гарна (доорх compareAt > price салаа).
+  const rows = await withLiveCampaign(rawRows);
   // 2026-09-20: энэ мөр `fallbackValue`-г уншдаг байсан нь алдаа байв — эзэн
   // /admin-аас дэлгүүрийн нэрээ сольсон ч Google Merchant feed хуучин нэрээр
   // гарсаар байв. Бусад бүх газартай ижил "DB override, код fallback".

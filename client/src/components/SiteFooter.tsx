@@ -91,7 +91,14 @@ export default function SiteFooter({ ctaBanner }: { ctaBanner?: FooterCtaBanner 
         </div>
         <div className="footer-column">
           <span>{textFor("footer-text-column-branches", "Салбарууд")}</span>
-          {branches.map(branch => <a href={branch.mapUrl ?? "#"} target="_blank" rel="noreferrer" key={branch.id}>{branch.name}</a>)}
+          {/* 2026-09-27: mapUrl байхгүй үед href="#" + target="_blank" хоосон
+              таб нээдэг байв -- StoreLocatorSection-ий адил span болгоно.
+              `.footer-plain` (index.css): `.footer-column > span` анхдагчаар
+              баганын гарчгийн загвартай тул энэ span-ийг холбоосуудтай ЯГ
+              адил харагдуулна. */}
+          {branches.map(branch => branch.mapUrl
+            ? <a href={branch.mapUrl} target="_blank" rel="noreferrer" key={branch.id}>{branch.name}</a>
+            : <span className="footer-plain" key={branch.id}>{branch.name}</span>)}
         </div>
         <div className="footer-column">
           <span>{textFor("footer-text-column-legal", "Нөхцөл ба бодлого")}</span>

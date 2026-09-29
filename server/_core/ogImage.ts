@@ -13,6 +13,7 @@
  * карт авна, өөрчлөгдөөгүй нь нэг л удаа угсрагдана. Долоо хоногийн cache-тэй.
  * Бараа байхгүй -> 404; зураг татагдахгүй -> 503, эвдэрсэн карт хэзээ ч биш.
  */
+import { isPrivateHost } from "../../shared/integrations";
 import type { Request, Response } from "express";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -20,15 +21,45 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
 import { getProductBySlug } from "../db";
-import { absoluteUrl } from "./publicUrl";
+import { absoluteUrl, storageKeyOf } from "./publicUrl";
 
 export const OG_WIDTH = 1200;
 export const OG_HEIGHT = 630;
 const PADDING = 40;
 const CACHE_DIR = join(tmpdir(), "sugi-og-cache");
 
+/**
+ * 2026-09-27: `product.imageUrl` is CSV-importable, so an admin (or a
+ * careless import file) can set it to ANY URL -- `absoluteUrl()` passes an
+ * already-absolute one straight through, and `composeProductCard` below then
+ * did an unauthenticated server-side `fetch()` against it with no
+ * restriction: a blind SSRF against the VM's own network (metadata
+ * endpoints, internal services) plus a 10s worker hang per request for an
+ * unreachable host. Only our own storage (R2 via `/cdn/`, or the site's own
+ * bundled `/images/...` assets) is ever fetched; anything else is treated
+ * the same as "no image".
+ */
+export function isComposableImageSource(url: string): boolean {
+  if (storageKeyOf(url) !== null || url.startsWith("/images/")) return true;
+  // 2026-09-27 (засварын засвар): вендор/Zochil-оос ирсэн гадаад https зурагтай бараа
+  // share картгүй болохгүйн тулд НИЙТИЙН https хостыг зөвшөөрнө (дотоод/metadata хаяг биш).
+  return isPublicHttpsUrl(url);
+}
+
+function isPublicHttpsUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && !isPrivateHost(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 export async function composeProductCard(sourceUrl: string): Promise<Buffer> {
-  const response = await fetch(absoluteUrl(sourceUrl), { redirect: "follow", signal: AbortSignal.timeout(10_000) });
+  // Гадаад эх сурвалжид redirect хориглоно — нийтийн хост дотоод хаяг руу 302 хийж SSRF болгохгүй.
+  // Өөрийн /cdn/ нь R2 руу 302 хийдэг тул тэнд л дагана.
+  const external = isPublicHttpsUrl(sourceUrl) && storageKeyOf(sourceUrl) === null;
+  const response = await fetch(absoluteUrl(sourceUrl), { redirect: external ? "error" : "follow", signal: AbortSignal.timeout(10_000) });
   if (!response.ok) throw new Error(`source image ${response.status}`);
   const source = Buffer.from(await response.arrayBuffer());
   const packshot = await sharp(source)
@@ -46,7 +77,7 @@ export async function serveProductOgImage(req: Request, res: Response): Promise<
   if (!/^[A-Za-z0-9._~-]+$/.test(slug)) { res.status(404).type("text/plain").send("not found"); return; }
   try {
     const product = await getProductBySlug(slug);
-    if (!product?.imageUrl) { res.status(404).type("text/plain").send("not found"); return; }
+    if (!product?.imageUrl || !isComposableImageSource(product.imageUrl)) { res.status(404).type("text/plain").send("not found"); return; }
     const key = createHash("sha1").update(product.imageUrl).digest("hex").slice(0, 12);
     const file = join(CACHE_DIR, `${slug}-${key}.jpg`);
     let jpeg: Buffer;

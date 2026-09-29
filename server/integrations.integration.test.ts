@@ -35,7 +35,8 @@ describe("integration config encryption (unit)", () => {
   it("throws on a tampered blob rather than silently returning garbage", () => {
     const blob = encryptJson({ apiKey: "sk_live_abc123" });
     const [iv, authTag, ciphertext] = blob.split(":");
-    const tampered = `${iv}:${authTag}:${ciphertext.slice(0, -2)}00`;
+    // 2026-09-29: сүүлийн байт аль хэдийн "00" байвал (1/256) хуучин хувилбар юу ч өөрчилдөггүй байсан — flaky.
+    const tampered = `${iv}:${authTag}:${ciphertext.slice(0, -2)}${ciphertext.endsWith("00") ? "ff" : "00"}`;
     expect(() => decryptJson(tampered)).toThrow();
   });
 });

@@ -22,3 +22,15 @@ export function classifyStockCrossing(before: number, after: number, threshold: 
 /** Movements that mean goods left the shelf for real (not a recount or an
  *  admin typing a new number -- those are corrections, not events). */
 export const ALERTING_MOVEMENT_TYPES: ReadonlySet<string> = new Set(["sale_online", "sale_pos", "transfer_out"]);
+
+/**
+ * 2026-09-27 (I4): an AUTOMATIC vendor-snapshot count_adjust (Smart Software
+ * sync) is not a correction -- it reports real sales that already happened
+ * at the store's own POS, outside `sale_pos`. Excluding it from
+ * ALERTING_MOVEMENT_TYPES the same way a human re-counting a shelf is
+ * excluded meant those real depletions never fired stock.low/out at all.
+ * `server/stockLedger.ts`'s `recordStockMovement` checks this flag on top of
+ * (not instead of) `ALERTING_MOVEMENT_TYPES`, so a manual count still never
+ * alerts -- only `postCount({ automatic: true })` sets it.
+ */
+export type StockMovementAlertMeta = { forceAlert?: boolean };

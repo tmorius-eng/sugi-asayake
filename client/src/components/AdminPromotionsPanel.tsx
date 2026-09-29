@@ -7,6 +7,8 @@ import { PROMO_SHAPE, IMAGE_UPLOAD_ACCEPT, MAX_UPLOAD_BYTES, isUploadableImageTy
 import UploadTips from "@/components/admin/UploadTips";
 
 import { useConfirm } from "@/components/ConfirmDialog";
+import { useAuth } from "@/_core/hooks/useAuth";
+import AdminPriceCampaignCard from "./admin/AdminPriceCampaignCard";
 // Admin-controlled site-wide marketing popup/banner (new-arrival announcement,
 // seasonal sale, store event). Whatever is entered here is exactly what
 // shoppers see, in exactly the scheduled window -- no auto-generated urgency
@@ -52,6 +54,7 @@ const toLocalInputValue = (value: string | Date | null) => {
 
 export default function AdminPromotionsPanel() {
   const { confirm } = useConfirm();
+  const { user } = useAuth();
   const utils = trpc.useUtils();
   const promotionsQuery = trpc.admin.promotions.useQuery();
   const uploadImage = trpc.admin.uploadProductImage.useMutation();
@@ -96,7 +99,14 @@ export default function AdminPromotionsPanel() {
     }
     if (prepared.note) toast.message("Зургийг илгээхээс өмнө жижгэрүүлэв", { description: prepared.note });
     if (prepared.warning) toast.warning(prepared.warning);
+    const inputEl = event.target;
     const reader = new FileReader();
+    // 2026-09-27 (F-promo): no reader.onerror at all (a read failure just
+    // hung silently), and the input's value was never reset after a
+    // successful upload -- re-picking the exact same file did not fire
+    // onChange, so a retry after fixing the image elsewhere looked like
+    // nothing happened.
+    reader.onerror = () => { toast.error("Зургийг уншиж чадсангүй. Дахин оролдоно уу."); inputEl.value = ""; };
     reader.onload = async () => {
       try {
         const stored = await uploadImage.mutateAsync({ fileName: file.name, contentType: file.type as UploadImageType, dataBase64: String(reader.result) });
@@ -104,6 +114,8 @@ export default function AdminPromotionsPanel() {
         toast.success("Зураг хадгалагдлаа.");
       } catch (error) {
         toast.error(messageFrom(error));
+      } finally {
+        inputEl.value = "";
       }
     };
     reader.readAsDataURL(file);
@@ -163,6 +175,8 @@ export default function AdminPromotionsPanel() {
 
   return (
     <div>
+      {user?.role === "admin" && <AdminPriceCampaignCard />}
+
       {!composerOpen && <button type="button" onClick={() => openComposer()} className="inline-flex items-center gap-2 rounded-full bg-[#df1f3d] px-5 py-3 text-xs font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97]"><Megaphone size={15} /> Шинэ урамшуулал үүсгэх</button>}
 
       {promotionsQuery.isLoading && <p className="mt-5 flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>}

@@ -1,10 +1,12 @@
 import { ArrowUpRight, LoaderCircle, Newspaper } from "lucide-react";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
+import { useEffect, useRef } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import CommerceHeader from "@/components/CommerceHeader";
 import SiteFooter from "@/components/SiteFooter";
 import { trpc } from "@/lib/trpc";
 import { useSiteText } from "@/hooks/useSiteText";
+import { scrollElementToTopNow } from "@/lib/scroll";
 
 // Two lines; the second is the emphasised half. Kept as a constant so the
 // escape lives in exactly one place.
@@ -43,6 +45,15 @@ export default function Journal() {
   const posts = postsQuery.data?.items ?? [];
   const pageCount = postsQuery.data?.pageCount ?? 1;
   const goTo = (next: number) => setLocation(next <= 1 ? "/journal" : `/journal?page=${next}`);
+  // 2026-09-27: pager дарахад grid-ийг дэлгэц дундаас яг эхлэлд нь харуулна
+  // (Shop.tsx-ийн pagerJump-тэй ижил зарчим) — эс бөгөөс дараагийн хуудас
+  // толгойн дор ачаалагдаж, худалдан авагч дээшээ гараар гүйлгэх шаардлагатай.
+  const gridRef = useRef<HTMLDivElement>(null);
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) { mounted.current = true; return; }
+    if (gridRef.current) scrollElementToTopNow(gridRef.current);
+  }, [currentPage]);
 
   return (
     <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]">
@@ -59,13 +70,24 @@ export default function Journal() {
           {textFor("journal-text-lede", "SUGI ASAYAKE-ийн арчилгаа, гоо сайхан, өдөр тутмын зөвлөгөөнүүд.")}
         </p>
 
+        <div ref={gridRef} />
+
         {postsQuery.isLoading && (
           <div className="mt-16 grid place-items-center py-16">
             <LoaderCircle className="animate-spin text-[#df1f3d]" size={28} aria-label="Нийтлэлүүдийг ачаалж байна" />
           </div>
         )}
 
-        {!postsQuery.isLoading && posts.length === 0 && (
+        {/* 2026-09-27: алдааны төлөв өмнө нь байгаагүй тул сүлжээ тасрахад
+            хуудас нам чимээгүй "Одоогоор нийтлэл алга" харуулж, худалдан
+            авагчийг үнэхээр нийтлэл байхгүй мэт төөрөгдүүлдэг байв. */}
+        {postsQuery.isError && (
+          <div className="mt-12 rounded-[2rem] border border-black/8 bg-white p-10 text-center shadow-[0_18px_55px_rgba(44,39,32,.08)]">
+            <p className="text-sm text-[#67686c]">Нийтлэлүүдийг ачаалж чадсангүй. Интернэт холболтоо шалгаад дахин оролдоно уу.</p>
+          </div>
+        )}
+
+        {!postsQuery.isLoading && !postsQuery.isError && posts.length === 0 && (
           <div className="mt-12 rounded-[2rem] border border-black/8 bg-white p-10 text-center shadow-[0_18px_55px_rgba(44,39,32,.08)]">
             <p className="text-sm text-[#67686c]">Одоогоор нийтлэл алга.</p>
           </div>

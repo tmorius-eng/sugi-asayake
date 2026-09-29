@@ -44,7 +44,14 @@ export default function TranslateSurface() {
 
     const ATTRS = ["placeholder", "title", "aria-label", "alt"] as const;
 
+    // 2026-09-27: user-generated content (a review body, a customer's own
+    // name, a reply draft the shopper is mid-typing) opts out via
+    // translate="no" -- see ReviewThread.tsx/ProductDetail.tsx. `closest()`
+    // finds an ancestor with the attribute, not just the node itself.
+    const isOptedOut = (node: Node) => (node instanceof Element ? node : node.parentElement)?.closest('[translate="no"]') != null;
+
     const translateText = (text: Text) => {
+      if (isOptedOut(text)) return;
       const current = text.nodeValue ?? "";
       const trimmed = current.trim();
       if (!trimmed) return;
@@ -55,6 +62,7 @@ export default function TranslateSurface() {
     };
 
     const translateElement = (element: Element) => {
+      if (isOptedOut(element)) return;
       for (const attr of ATTRS) {
         const current = element.getAttribute(attr);
         if (!current) continue;
@@ -70,9 +78,11 @@ export default function TranslateSurface() {
         translateText(root as Text);
         return;
       }
-      if (!(root instanceof Element)) return;
+      if (!(root instanceof Element) || isOptedOut(root)) return;
       translateElement(root);
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode: node => isOptedOut(node) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+      });
       const pending: Text[] = [];
       let node = walker.nextNode();
       while (node) {
@@ -101,13 +111,54 @@ export default function TranslateSurface() {
     };
 
     run();
+    // 2026-09-27: once the visitor is back on mn, the initial run() above
+    // already reverted any stale en/ja text -- everything React renders from
+    // here on is already Mongolian (the app's native language), so there is
+    // nothing left to watch for. Before this, the observer ran forever
+    // (walking the ENTIRE document.body on every single DOM mutation across
+    // the whole site) even after switching back to mn.
+    if (locale === "mn") return;
+
     // A timer, not requestAnimationFrame: rAF is throttled to nothing in a
     // background tab, which left everything that arrived after the first
     // pass -- a shelf fetched over the network, a dialog -- in Mongolian.
     let pending: ReturnType<typeof setTimeout> | 0 = 0;
-    const observer = new MutationObserver(() => {
+    // 2026-09-27: queued mutation records, processed (and only THEIR
+    // subtrees re-walked) on flush -- run() previously re-walked the whole
+    // document.body on every burst, which grew with total page size instead
+    // of with what actually changed and got slower the longer a visit ran.
+    let queued: MutationRecord[] = [];
+    const flush = () => {
+      pending = 0;
+      const mutations = queued;
+      queued = [];
+      const seenNodes = new Set<Node>();
+      for (const mutation of mutations) {
+        if (mutation.type === "childList") {
+          mutation.addedNodes.forEach(node => {
+            if (seenNodes.has(node)) return;
+            seenNodes.add(node);
+            translateTree(node);
+          });
+        } else if (mutation.type === "characterData") {
+          if (mutation.target.nodeType === Node.TEXT_NODE) translateText(mutation.target as Text);
+        } else if (mutation.type === "attributes" && mutation.target instanceof Element) {
+          translateElement(mutation.target);
+        }
+      }
+      // 2026-09-27: the tab title lives outside <body> (the MutationObserver
+      // below only watches document.body), so an SPA route change --
+      // useDocumentMeta setting a new document.title -- was never retranslated
+      // after the initial run() above, even though the childList mutations a
+      // navigation also produces keep flush() running. run() used to catch
+      // this every time; the mutation-scoped rewrite lost it.
+      const title = translate(document.title, locale);
+      if (title !== document.title) { document.title = title; everTranslated = true; }
+    };
+    const observer = new MutationObserver(mutations => {
+      queued.push(...mutations);
       if (pending) return;
-      pending = setTimeout(() => { pending = 0; run(); }, 16);
+      pending = setTimeout(flush, 16);
     });
     // `attributes` too: a placeholder React re-renders in Mongolian has to be
     // caught, and nothing else notices an attribute changing on its own.

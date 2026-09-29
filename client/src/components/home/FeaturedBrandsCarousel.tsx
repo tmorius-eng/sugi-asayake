@@ -216,6 +216,16 @@ export default function FeaturedBrandsCarousel({ brands, heading }: { brands: Fe
     setDragDx(0);
   };
 
+  // 2026-09-27: if the pointer leaves the viewport (or otherwise loses
+  // capture) BEFORE the 8px threshold is crossed, no pointerup ever lands on
+  // this element -- isDragging stayed true forever and the autoplay effect
+  // above ("|| isDragging return") froze the carousel for the rest of the
+  // visit. Only resets when the gesture never actually captured the pointer;
+  // a real drag that's mid-swipe still gets its pointerup/pointercancel.
+  const onPointerLeave = () => {
+    if (!dragCaptured.current) { setIsDragging(false); setDragDx(0); }
+  };
+
   // A drag that ends over a slide would otherwise fire that slide's link.
   const onClickCapture = (event: React.MouseEvent<HTMLDivElement>) => {
     if (dragTravel.current > DRAG_CLICK_SUPPRESS_PX) {
@@ -308,6 +318,8 @@ export default function FeaturedBrandsCarousel({ brands, heading }: { brands: Fe
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
+        onPointerLeave={onPointerLeave}
+        onLostPointerCapture={onPointerLeave}
         onClickCapture={onClickCapture}
         onFocusCapture={() => setPaused(true)}
         onBlurCapture={() => setPaused(false)}

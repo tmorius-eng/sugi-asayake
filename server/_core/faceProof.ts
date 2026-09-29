@@ -247,7 +247,7 @@ export function clearFaceProofCookie(req: Request, res: Response) {
  * real browser always sends the header (client/src/main.tsx), so only scripts
  * and tests ever hit this.
  */
-function requireRealTab(req: Request): string {
+export function requireRealTab(req: Request): string {
   const tab = tabIdFrom(req);
   if (tab === NO_TAB) throw new TRPCError({ code: "BAD_REQUEST", message: "Хөтчийн таб тодорхойгүй байна. Хуудсаа дахин ачаална уу." });
   return tab;
@@ -328,8 +328,11 @@ export async function hasValidReauthProof(req: Request, userId: number, sessionV
  * (client/src/main.tsx). A no-op with the gate off: the escape hatch switches
  * off the whole second-factor flow, password step included.
  */
-export async function assertReauthProof(input: { req: Request; user: { id: number; sessionVersion: number } }): Promise<void> {
-  if (!isFaceGateEnabled()) return;
+export async function assertReauthProof(input: { req: Request; user: { id: number; sessionVersion: number }; evenWhenGateOff?: boolean }): Promise<void> {
+  // 2026-09-27: `evenWhenGateOff` — царай БҮРТГЭХ нь хаалга унтраалттай үед ч нууц
+  // үг шаардана: эс бөгөөс засвар үйлчилгээний үед хулгайлсан session дангаараа
+  // эзний царайг өөрийнхөөрөө сольж, хаалга дахин асахад шууд нэвтэрнэ.
+  if (!isFaceGateEnabled() && !input.evenWhenGateOff) return;
   if (await hasValidReauthProof(input.req, input.user.id, input.user.sessionVersion)) return;
   throw new TRPCError({ code: "FORBIDDEN", message: REAUTH_REQUIRED_ERR_MSG });
 }

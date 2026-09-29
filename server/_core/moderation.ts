@@ -86,9 +86,16 @@ const rx = (source: string, flags = "u") => new RegExp(source, flags);
 
 const LEXICON: LexEntry[] = [
   // --- Mongolian (Cyrillic) -------------------------------------------------
-  { pattern: rx("(^|\\s)(хуй|хүй|хуйс|пизд|пизад|бөгс|бөөс|новш|новшт|шаа|шаах|шаачих|шаагаад|шаагаа|мангар|тэнэг|гичий|гичии|янхан|хаяг|пись|аль(?:н|д)(?=\\s|$)|бүрх|ааль|мөн[ий]й?х)", "u"), category: "profanity", lang: "mn" },
+  // 2026-09-27: "шаа"/"хаяг"/"бүрх" removed as bare roots -- they matched as
+  // unanchored prefixes of ordinary words ("шаардлагатай", "хаягаар" (address),
+  // "бүрхүүл" (case/cover)). "шаах" etc. keep the actual vulgar conjugations.
+  { pattern: rx("(^|\\s)(хуй|хүй|хуйс|пизд|пизад|бөгс|бөөс|новш|новшт|шаах|шаачих|шаагаад|шаагаа|мангар|тэнэг|гичий|гичии|янхан|пись|аль(?:н|д)(?=\\s|$)|ааль|мөн[ий]й?х)", "u"), category: "profanity", lang: "mn" },
   { pattern: rx("(^|\\s)(муухай амьтан|муу амьтан|амьтан минь|үхсэн ч|үх(?:ээрэй|ээд| )|алчих|алъя|алах гэж)", "u"), category: "threat", lang: "mn" },
-  { pattern: rx("(^|\\s)(тэнэг|мангар|дэмий|мулгуу|солиотой|галзуу|дүлий|хог|новш|бузар|ялгасан|оймс|мөлхөө|царай муутай|тарган гахай|гахай)(?:\\S*)?(?=\\s|$)", "u"), category: "insult", lang: "mn" },
+  // 2026-09-27: "хог" excludes the genitive "хогийн" (as in "хогийн уут",
+  // trash bag) via negative lookahead; "ялгасан"/"оймс"/bare "гахай" removed
+  // -- ordinary words ("differentiated", "socks", "pork") with no abusive
+  // sense on their own ("тарган гахай" = "fat pig" stays).
+  { pattern: rx("(^|\\s)(тэнэг|мангар|дэмий|мулгуу|солиотой|галзуу|дүлий|хог(?!ийн)|новш|бузар|мөлхөө|царай муутай|тарган гахай)(?:\\S*)?(?=\\s|$)", "u"), category: "insult", lang: "mn" },
   // --- Mongolian (Latin transliteration) ------------------------------------
   { pattern: rx("(^|\\s)(huy|hui|huiy|pizd|piz d|bogs|bugs|novsh|shaa|shaach|shaag|mangar|teneg|gichii|gichi|yanhan|pis|bvrh|burh|mvnii|aali)(?:\\S*)?(?=\\s|$)", "u"), category: "profanity", lang: "mn-latin" },
   { pattern: rx("(^|\\s)(teneg|mangar|demii|mulguu|soliotoi|galzuu|hog|novsh|buzar|gahai|tarhi gui|tarhigui)(?:\\S*)?(?=\\s|$)", "u"), category: "insult", lang: "mn-latin" },
@@ -98,13 +105,19 @@ const LEXICON: LexEntry[] = [
   { pattern: rx("(^|\\s)(убью|убить тебя|сдохни|сдохн|зарежу|найду тебя)", "u"), category: "threat", lang: "ru" },
   // --- English ----------------------------------------------------------------
   { pattern: rx("(^|\\s)(fuck|fuk|fck|shit|shyt|bitch|biatch|cunt|dick|cock|pussy|asshole|arsehole|motherf|mofo|bastard|whore|slut|wank|jerkoff|bullshit|bs(?=\\s|$)|dumbass|jackass|prick(?=\\s|$)|twat|douche|piss(?:ed)?(?=\\s|$)|crap(?=\\s|$))(?:\\S*)?(?=\\s|$)", "u"), category: "profanity", lang: "en" },
-  { pattern: rx("(^|\\s)(idiot|moron|retard|stupid|dumb|loser|scum|trash(?=\\s|$)|garbage(?=\\s|$)|ugly|fat pig|pig(?=\\s|$)|clown(?=\\s|$)|worthless|pathetic|disgusting)(?:\\S*)?(?=\\s|$)", "u"), category: "insult", lang: "en" },
+  // 2026-09-27: "dumb"/"trash"/"garbage" exclude "dumbbell" and "trash/garbage
+  // bag(s)" -- real product nouns, not the insult sense.
+  { pattern: rx("(^|\\s)(idiot|moron|retard|stupid|dumb(?!bell)|loser|scum|trash(?!\\s*bags?)(?=\\s|$)|garbage(?!\\s*bags?)(?=\\s|$)|ugly|fat pig|pig(?=\\s|$)|clown(?=\\s|$)|worthless|pathetic|disgusting)(?:\\S*)?(?=\\s|$)", "u"), category: "insult", lang: "en" },
   { pattern: rx("(^|\\s)(nigg|chink|gook|kike|spic(?=\\s|$)|wetback|faggot|fag(?=\\s|$)|tranny|raghead|towelhead)", "u"), category: "hate", lang: "en" },
   { pattern: rx("(^|\\s)(kill you|i will kill|gonna kill|kill yourself|kys(?=\\s|$)|die(?=\\s|$)|go die|hunt you down|find you and)", "u"), category: "threat", lang: "en" },
   // --- Chinese (no word breaks; matched on the joined form) -----------------
-  { pattern: rx("(操你|草你|肏|傻逼|傻屄|沙比|煞笔|他妈的|他媽的|妈的|媽的|去死|滚开|滾開|狗屎|贱人|賤人|婊子|妓女|王八蛋|混蛋|白痴|脑残|腦殘|废物|廢物|垃圾人|畜生|尼玛|你妈|你媽|艹|靠北|干你|幹你|操|屌你|仆街|扑街)", "u"), category: "profanity", lang: "zh" },
+  // 2026-09-27: bare "操" removed -- matched inside "操作" (operate); the
+  // abusive compounds ("操你" etc.) are still listed explicitly.
+  { pattern: rx("(操你|草你|肏|傻逼|傻屄|沙比|煞笔|他妈的|他媽的|妈的|媽的|去死|滚开|滾開|狗屎|贱人|賤人|婊子|妓女|王八蛋|混蛋|白痴|脑残|腦殘|废物|廢物|垃圾人|畜生|尼玛|你妈|你媽|艹|靠北|干你|幹你|屌你|仆街|扑街)", "u"), category: "profanity", lang: "zh" },
   // --- Japanese ---------------------------------------------------------------
-  { pattern: rx("(死ね|しね|殺す|ころす|くたばれ|クソ|糞|ばか|バカ|馬鹿|あほ|アホ|阿呆|きもい|キモい|うざい|ウザい|ブス|デブ|くず|クズ|ゴミ|ちんこ|まんこ|セックス|やりまん|変態)", "u"), category: "profanity", lang: "ja" },
+  // 2026-09-27: "ばか"/"バカ" exclude the "-り" continuation ("ばかり" = "only",
+  // a common grammar particle, not "baka").
+  { pattern: rx("(死ね|しね|殺す|ころす|くたばれ|クソ|糞|ばか(?!り)|バカ(?!リ)|馬鹿|あほ|アホ|阿呆|きもい|キモい|うざい|ウザい|ブス|デブ|くず|クズ|ゴミ|ちんこ|まんこ|セックス|やりまん|変態)", "u"), category: "profanity", lang: "ja" },
   // --- Korean -----------------------------------------------------------------
   { pattern: rx("(씨발|시발|씨팔|ㅅㅂ|ㅆㅂ|개새끼|개새|병신|븅신|ㅂㅅ|지랄|미친|미틴|꺼져|닥쳐|죽어|뒤져|년(?=\\s|$)|놈(?=\\s|$)|보지|자지|좆|섹스|걸레)", "u"), category: "profanity", lang: "ko" },
 ];

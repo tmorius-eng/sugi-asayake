@@ -65,7 +65,10 @@ export async function issueGiftCardsForPaidOrder(tx: GiftCardWriter, orderId: nu
     .from(orderItems)
     .innerJoin(products, eq(orderItems.productId, products.id))
     .innerJoin(orders, eq(orders.id, orderItems.orderId))
-    .where(and(eq(orderItems.orderId, orderId), eq(products.kind, "gift_card")));
+    // 2026-09-27: хоёр дахь хамгаалалт — нэр нь "ForPaidOrder" боловч өмнө нь
+    // төлбөрийг өөрөө шалгадаггүй байсан тул дуудагчийн алдаа (админ
+    // төлөгдөөгүй QPay захиалгыг "дууссан" болгох) шууд мөнгөгүй карт болдог байв.
+    .where(and(eq(orderItems.orderId, orderId), eq(products.kind, "gift_card"), eq(orders.paymentStatus, "paid")));
   if (!lines.length) return [];
   const already = await tx.select({ id: giftCards.id }).from(giftCards).where(eq(giftCards.purchaseOrderId, orderId)).limit(1);
   if (already.length) return [];
@@ -77,7 +80,7 @@ export async function issueGiftCardsForPaidOrder(tx: GiftCardWriter, orderId: nu
       for (let attempt = 0; attempt < 3; attempt++) {
         const code = generateGiftCode();
         try {
-          const inserted = await tx.insert(giftCards).values({ code, amountMnt: line.unitPriceMnt, purchaseOrderId: orderId, issuedByUserId: null, recipientName: line.customerName, note: `Захиалга ${line.orderNumber}`, expiresAt });
+          const inserted = await tx.insert(giftCards).values({ code, amountMnt: line.unitPriceMnt, purchaseOrderId: orderId, issuedByUserId: null, recipientName: line.customerName.slice(0, 120) /* 2026-09-27: баганa 120, захиалгын нэр 160 хүртэл — урт нэр карт гаргалтыг унагадаг байв */, note: `Захиалга ${line.orderNumber}`, expiresAt });
           issued.push({ id: Number(inserted[0].insertId), code, amountMnt: line.unitPriceMnt, expiresAt });
           break;
         } catch (error) {
@@ -90,6 +93,26 @@ export async function issueGiftCardsForPaidOrder(tx: GiftCardWriter, orderId: nu
 }
 export type IssuedGiftCard = { id: number; code: string; amountMnt: number; expiresAt: Date };
 type GiftCardWriter = Pick<OrderTx, "select" | "insert" | "update">;
+
+/**
+ * Захиалгаар авсан картуудыг `FOR UPDATE`-ээр цоожилж, аль хэдийн ашиглагдсан
+ * (дэлгүүрийн зээл болсон) картуудын нийт дүнг буцаана (2026-09-27). Буцаан
+ * олголт/цуцлалт энэ дүнг бэлнээр дахин өгөхгүйн тулд транзакцынхаа эхэнд дуудна.
+ */
+export async function lockGiftCardsAndSumRedeemed(tx: GiftCardWriter, orderId: number): Promise<number> {
+  const rows = await tx.select({ amountMnt: giftCards.amountMnt, status: giftCards.status }).from(giftCards)
+    .where(eq(giftCards.purchaseOrderId, orderId)).for("update");
+  return rows.filter(row => row.status === "redeemed").reduce((sum, row) => sum + row.amountMnt, 0);
+}
+
+/** Ашиглагдсан карт байгаа эсэх — цоожгүй уншилт (харилцагчийн өөрийн цуцлалтын урьдчилсан шалгалт). */
+export async function orderHasRedeemedGiftCards(orderId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const [row] = await db.select({ id: giftCards.id }).from(giftCards)
+    .where(and(eq(giftCards.purchaseOrderId, orderId), eq(giftCards.status, "redeemed"))).limit(1);
+  return Boolean(row);
+}
 
 /** The cards an order bought that nobody has redeemed yet become void with the order (cancel / refund). */
 export async function voidGiftCardsForOrder(tx: GiftCardWriter, orderId: number): Promise<number> {
@@ -134,7 +157,7 @@ export async function redeemGiftCard(rawCode: string, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const code = normalizeGiftCode(rawCode);
-  return db.transaction(async tx => {
+  const result = await db.transaction(async tx => {
     const [card] = await tx.select().from(giftCards).where(eq(giftCards.code, code)).limit(1);
     if (!card) throw new Error("Ийм бэлгийн карт олдсонгүй. Кодоо шалгана уу.");
     if (card.status === "redeemed") throw new Error("Энэ бэлгийн карт аль хэдийн ашиглагдсан байна.");
@@ -147,7 +170,10 @@ export async function redeemGiftCard(rawCode: string, userId: number) {
     await tx.update(users).set({ storeCreditMnt: sql`${users.storeCreditMnt} + ${card.amountMnt}`, updatedAt: new Date() }).where(eq(users.id, userId));
     await tx.insert(storeCreditLedger).values({ userId, deltaMnt: card.amountMnt, reason: `Бэлгийн карт ${code}`, actorUserId: null, orderId: null });
     const [updated] = await tx.select({ storeCreditMnt: users.storeCreditMnt }).from(users).where(eq(users.id, userId)).limit(1);
-    forgetSessionUser(userId);
     return { amountMnt: card.amountMnt, storeCreditMnt: updated?.storeCreditMnt ?? 0 };
   });
+  // 2026-09-27: commit-ын ДАРАА — өмнө нь транзакц дотор дуудагддаг байсан тул
+  // хооронд ирсэн хүсэлт хуучин үлдэгдлийг 5 секунд дахин кэшлэж болох байв.
+  forgetSessionUser(userId);
+  return result;
 }

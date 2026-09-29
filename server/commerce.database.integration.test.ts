@@ -217,7 +217,7 @@ describeWithDatabase("commerce database integration", () => {
         deliveryMethod: "ub_delivery",
         deliveryAddress: "Integration test address 1",
         paymentMethod: "cash_on_delivery",
-      })).rejects.toThrow("no longer available");
+      })).rejects.toThrow(/байхгүй болсон/);
 
       const afterAttempt = await db.select({ stockQuantity: productVariants.stockQuantity }).from(productVariants).where(eq(productVariants.id, variantId)).limit(1);
       expect(afterAttempt[0]?.stockQuantity).toBe(4);

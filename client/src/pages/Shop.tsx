@@ -3,7 +3,7 @@ import { X, ArrowDownUp, ArrowUpRight, ChevronLeft, ChevronRight, Eye, Grid3x3, 
 import { keepPreviousData } from "@tanstack/react-query";
 import { scrollElementToTopNow } from "@/lib/scroll";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
 import QuickViewDialog, { type QuickViewProduct } from "@/components/QuickViewDialog";
@@ -18,7 +18,7 @@ import { startLogin } from "@/const";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { notifyAddedToCart } from "@/lib/addedToCartToast";
-import { filterCatalogBrand, filterCatalogPriceRange, filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCategoryPlaceholderImage, getSalePercent, LOW_STOCK_THRESHOLD, skinTypeLabels, sortCatalogProducts, type CatalogSortOption, type SkinType } from "@shared/catalog-filter";
+import { filterCatalogBrand, filterCatalogPriceRange, filterCatalogProducts, filterCatalogSkinType, getCategoryPlaceholderImage, getSalePercent, LOW_STOCK_THRESHOLD, skinTypeLabels, sortCatalogProducts, type CatalogSortOption, type SkinType } from "@shared/catalog-filter";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { rememberRecentlyViewed, resolveRecentlyViewed } from "@shared/recently-viewed";
 import { UB_DELIVERY_FEE_MNT } from "@shared/const";
@@ -123,8 +123,16 @@ export default function Shop() {
   // coercion, since "" -> 0 would wrongly mean "only free products".
   const [minPrice, setMinPrice] = useState(() => initialParams.get("minPrice") ?? "");
   const [maxPrice, setMaxPrice] = useState(() => initialParams.get("maxPrice") ?? "");
-  const parsedMinPrice = minPrice.trim() ? Number(minPrice) : undefined;
-  const parsedMaxPrice = maxPrice.trim() ? Number(maxPrice) : undefined;
+  // 2026-09-27: сервер `z.number().int().nonnegative()` шаарддаг тул сөрөг/
+  // бутархай/NaN утга явбал zod татгалздаг байв (бүх каталог сүлжээний алдаа
+  // карт болж унадаг) — эндээс өгвөл ЗААВАЛ бүхэл, ≥0.
+  const sanitizePriceInput = (value: string): number | undefined => {
+    if (!value.trim()) return undefined;
+    const parsed = Math.floor(Number(value));
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+  };
+  const parsedMinPrice = sanitizePriceInput(minPrice);
+  const parsedMaxPrice = sanitizePriceInput(maxPrice);
   // 2026-09-16: эдгээр гурав нь URL-д БИЧИГДДЭГГҮЙ байсан цорын ганц шүүлтүүрүүд
   // байв — q/category/brand/minPrice/maxPrice/page бүгд хадгалагддаг атлаа
   // "Эрэмбэ", "Арьсны төрөл", "Бэлэн нөөцтэй" гурав нь refresh хийхэд, бараа
@@ -176,7 +184,13 @@ export default function Shop() {
   // endless scroll — page it like any real catalog. 24 divides evenly into
   // the 4/3/2-column grid breakpoints (see .shop-product-grid in index.css).
   const SHOP_PAGE_SIZE = 24;
-  const [page, setPage] = useState(() => Math.max(1, Number(initialParams.get("page")) || 1));
+  // 2026-09-27: сервер `page: z.number().int().positive()` -- "2.5" мэт
+  // бутархай эсвэл NaN утга явбал татгалзана, тиймээс энд заавал бүхэлд нь.
+  const sanitizePage = (raw: string | null): number => {
+    const parsed = Math.floor(Number(raw));
+    return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+  };
+  const [page, setPage] = useState(() => sanitizePage(initialParams.get("page")));
   // Server-side search (ROADMAP.md TIER 2): a debounced 2+ character query
   // hits catalog.search (FULLTEXT index) instead of running a JS substring
   // filter over the whole published catalog on every keystroke.
@@ -255,7 +269,10 @@ export default function Shop() {
   // same logic.
   const searchFiltered = useMemo(() => {
     const matching = filterCatalogPriceRange(filterCatalogSkinType(filterCatalogBrand(filterCatalogProducts(searchResults.data ?? [], "", category), brand), skinTypeFilter), parsedMinPrice, parsedMaxPrice);
-    return sortCatalogProducts(filterCatalogStock(matching, inStockOnly), sort);
+    // 2026-09-27: shared filterCatalogStock() doesn't know about gift cards
+    // (server never checks their stock) -- keep them through "Бэлэн нөөцтэй".
+    const stockFiltered = inStockOnly ? matching.filter(product => product.kind === "gift_card" || product.stockQuantity > 0) : matching;
+    return sortCatalogProducts(stockFiltered, sort);
   }, [searchResults.data, category, brand, skinTypeFilter, parsedMinPrice, parsedMaxPrice, inStockOnly, sort]);
   const pagedProducts = isSearching ? searchFiltered.slice((page - 1) * SHOP_PAGE_SIZE, page * SHOP_PAGE_SIZE) : (catalog.data?.items ?? []);
   // "X илэрц" (matches after filters) vs "Y бүтээгдэхүүн" (raw source size
@@ -264,6 +281,48 @@ export default function Shop() {
   const resultCount = isSearching ? searchFiltered.length : (catalog.data?.totalCount ?? 0);
   const sourceCount = isSearching ? (searchResults.data?.length ?? 0) : (catalog.data?.totalPublishedCount ?? 0);
   const totalPages = Math.max(1, Math.ceil(resultCount / SHOP_PAGE_SIZE));
+  // 2026-09-27: дотоод холбоосоор (толгойн цэс, footer) /shop дээр АЛЬ
+  // ХЭДИЙН байхдаа шинэ query-тэй /shop руу шилжихэд wouter зөвхөн URL-ыг
+  // солидог -- state нь өөрчлөгдөхгүй тул шүүлтүүр юу ч хийгээгүй хэвээр
+  // үлддэг байв (дараагийн шүүлтүүрийн товшилт URL-ыг хуучин руу нь буцаадаг
+  // байсан ч мөн үүнээс). wouter-ийн useSearch() location.search-ийг бодит
+  // цагт ажигладаг тул үүнийг эх сурвалж болгож state-ээ дахин уншина.
+  const urlSearch = useSearch();
+  const lastSyncedUrlSearch = useRef(urlSearch);
+  // 2026-09-27: both write-effects below normalise as they write (e.g.
+  // `search.trim()`) -- that normalised URL then bounces back through
+  // useSearch() and used to be re-parsed here as if it came from OUTSIDE,
+  // so e.g. `setSearch("cocochi ")` (still typing, trailing space) wrote
+  // "?q=cocochi" and this effect immediately clobbered the input back to
+  // the trimmed value mid-keystroke. Skip reconciling a URL this component
+  // just wrote itself.
+  const selfWrittenSearchRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (urlSearch === lastSyncedUrlSearch.current) return;
+    lastSyncedUrlSearch.current = urlSearch;
+    if (urlSearch === selfWrittenSearchRef.current) return;
+    const params = new URLSearchParams(urlSearch);
+    const nextSearch = params.get("q") ?? "";
+    const nextCategory = params.get("category") ?? "all";
+    const nextBrand = params.get("brand") ?? "all";
+    const nextMinPrice = params.get("minPrice") ?? "";
+    const nextMaxPrice = params.get("maxPrice") ?? "";
+    const skinValue = params.get("skinType");
+    const nextSkinType: SkinType | "all" = skinValue && ["dry", "oily", "combination", "sensitive", "normal"].includes(skinValue) ? skinValue as SkinType : "all";
+    const nextInStock = params.get("inStock") === "1";
+    const sortValue = params.get("sort");
+    const nextSort: CatalogSortOption = sortValue === "price-low" || sortValue === "price-high" || sortValue === "name-asc" ? sortValue : "featured";
+    const nextPage = sanitizePage(params.get("page"));
+    setSearch(current => current === nextSearch ? current : nextSearch);
+    setCategory(current => current === nextCategory ? current : nextCategory);
+    setBrand(current => current === nextBrand ? current : nextBrand);
+    setMinPrice(current => current === nextMinPrice ? current : nextMinPrice);
+    setMaxPrice(current => current === nextMaxPrice ? current : nextMaxPrice);
+    setSkinTypeFilter(current => current === nextSkinType ? current : nextSkinType);
+    setInStockOnly(current => current === nextInStock ? current : nextInStock);
+    setSort(current => current === nextSort ? current : nextSort);
+    setPage(current => current === nextPage ? current : nextPage);
+  }, [urlSearch]);
   const controlsMounted = useRef(false);
   useEffect(() => {
     if (controlsMounted.current) setPage(1);
@@ -278,7 +337,9 @@ export default function Shop() {
     if (skinTypeFilter !== "all") params.set("skinType", skinTypeFilter); else params.delete("skinType");
     if (inStockOnly) params.set("inStock", "1"); else params.delete("inStock");
     if (sort !== "featured") params.set("sort", sort); else params.delete("sort");
-    window.history.replaceState(null, "", `${window.location.pathname}${params.toString() ? `?${params}` : ""}`);
+    const nextSearchString = params.toString() ? `?${params}` : "";
+    selfWrittenSearchRef.current = nextSearchString;
+    window.history.replaceState(null, "", `${window.location.pathname}${nextSearchString}`);
   }, [search, category, brand, minPrice, maxPrice, skinTypeFilter, inStockOnly, sort]);
   useEffect(() => { if (!catalogLoading && page > totalPages) setPage(totalPages); }, [catalogLoading, totalPages, page]);
   // Scroll to the grid AFTER the new page has rendered, instantly (the
@@ -295,7 +356,9 @@ export default function Shop() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (page > 1) params.set("page", String(page)); else params.delete("page");
-    window.history.replaceState(null, "", `${window.location.pathname}${params.toString() ? `?${params}` : ""}`);
+    const nextSearchString = params.toString() ? `?${params}` : "";
+    selfWrittenSearchRef.current = nextSearchString;
+    window.history.replaceState(null, "", `${window.location.pathname}${nextSearchString}`);
   }, [page]);
   const effectiveRecentIds = useMemo(() => qaHistoryMode === "unavailable" ? [999_999] : recentlyViewedIds, [qaHistoryMode, recentlyViewedIds]);
   const forceZeroResults = qaHistoryMode === "zero-filter";
@@ -330,7 +393,7 @@ export default function Shop() {
     search.trim() ? { key: "q", label: `Хайлт: ${search.trim()}`, clear: () => setSearch("") } : null,
     category !== "all" ? { key: "category", label: category, clear: () => setCategory("all") } : null,
     brand !== "all" ? { key: "brand", label: brand, clear: () => setBrand("all") } : null,
-    skinTypeFilter !== "all" ? { key: "skin", label: `Арьсны төрөл: ${skinTypeFilter}`, clear: () => setSkinTypeFilter("all") } : null,
+    skinTypeFilter !== "all" ? { key: "skin", label: `Арьсны төрөл: ${skinTypeLabels[skinTypeFilter]}`, clear: () => setSkinTypeFilter("all") } : null,
     minPrice || maxPrice ? { key: "price", label: `Үнэ: ${minPrice || "0"}–${maxPrice || "∞"}`, clear: () => { setMinPrice(""); setMaxPrice(""); } } : null,
     inStockOnly ? { key: "stock", label: "Бэлэн нөөцтэй", clear: () => setInStockOnly(false) } : null,
   ].filter((chip): chip is { key: string; label: string; clear: () => void } => chip !== null);
@@ -400,7 +463,10 @@ export default function Shop() {
         <div className="shop-discovery-cta" id="shop-contact"><div><MapPin size={20} /><span><strong>{textFor("shop-text-contact-cta-title", "{N} салбар, нэг өдөр тутмын сонголт.").replace("{N}", String(branchCount))}</strong><small>{textFor("shop-text-contact-cta-subtitle", "Таны хайж буй бүтээгдэхүүнийг ойр салбараас асуугаарай.")}</small></span></div><div><Link href="/#stores">Салбар олох <ArrowUpRight size={16} /></Link><a href={`tel:${contact.phoneHref}`}>{contact.phone} <Phone size={15} /></a></div></div>
       </section> : resultCount ? <><div className="shop-grid-toolbar"><button type="button" className={density === "comfortable" ? "active" : ""} onClick={() => setDensity("comfortable")} aria-pressed={density === "comfortable"} aria-label="Том grid харагдац"><LayoutGrid size={15} /></button><button type="button" className={density === "compact" ? "active" : ""} onClick={() => setDensity("compact")} aria-pressed={density === "compact"} aria-label="Жижиг grid харагдац"><Grid3x3 size={15} /></button></div><section className={`shop-product-grid${density === "compact" ? " is-compact" : ""}`} id="shop-product-grid">{pagedProducts.map((product, index) => {
         const salePercent = getSalePercent(product.priceMnt, product.compareAtPriceMnt);
-        const lowStock = product.stockQuantity > 0 && product.stockQuantity <= LOW_STOCK_THRESHOLD;
+        // 2026-09-27: бэлгийн карт мөр нөөц хөндөхгүй (PROJECT-GUIDE) --
+        // storefront дээр ч үргэлж худалдаж авах боломжтой байх ёстой.
+        const isGiftCard = product.kind === "gift_card";
+        const lowStock = !isGiftCard && product.stockQuantity > 0 && product.stockQuantity <= LOW_STOCK_THRESHOLD;
         // Frontend performance audit (2026-09-02): grid cards render at
         // ~180-330 CSS px, but the stored photo is up to 1600px
         // (IMAGE_MAX_DIMENSION.product) -- the single heaviest thing a
@@ -409,7 +475,7 @@ export default function Shop() {
         // (see shared/image-variants.ts).
         // (2026-09-21: srcset/AVIF-ийг ResponsivePicture өөрөө угсарна.)
         const brandLabel = product.brand?.trim() || product.categoryName || "SUGI ASAYAKE";
-        const outOfStock = product.stockQuantity <= 0;
+        const outOfStock = !isGiftCard && product.stockQuantity <= 0;
         const addingThis = addToCart.isPending && addToCart.variables?.productId === product.id;
         return <article key={product.id} className="shop-product-card" data-reveal style={{ transitionDelay: `${Math.min(index * 55, 300)}ms` }}>
         <div className="shop-product-media">

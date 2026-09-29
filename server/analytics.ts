@@ -10,7 +10,7 @@ import { and, desc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import { carts, cartItems, orderItems, orders, productCategories, products, users, visitorSessions } from "../drizzle/schema";
-import { getDb, getLoyaltyTierTable, getMarketingSpendRows, settledSaleSql, getSiteName, storeDaySql } from "./db";
+import { getDb, getLoyaltyTierTable, getMarketingSpendRows, settledSaleSql, getSiteName, storeDaySql, storeDayString } from "./db";
 import { getOrSetCached } from "./_core/ttlCache";
 import { ubDistrictLabels, type UbDistrict } from "../shared/districts";
 import { getLoyaltyTier } from "../shared/loyalty";
@@ -29,6 +29,19 @@ const FONT_REGULAR = path.resolve(import.meta.dirname, "assets", "fonts", "DejaV
 const FONT_BOLD = path.resolve(import.meta.dirname, "assets", "fonts", "DejaVuSans-Bold.ttf");
 
 export type DateRangeInput = { dateFrom?: Date; dateTo?: Date };
+
+/**
+ * Raw `sql<string>` aggregates (min/max(createdAt) etc.) skip drizzle's
+ * `timestamp` column type -- which is what appends "+0000" to the wire
+ * value (see server/db/connection.ts) -- so mysql2 hands back a bare
+ * "YYYY-MM-DD HH:MM:SS" string, UTC per `SET time_zone='+00:00'`. Plain
+ * `new Date(thatString)` parses it in the VM's LOCAL zone (Asia/Ulaanbaatar,
+ * UTC+8) instead, an 8h skew that silently miscounted new-vs-returning
+ * customers and mislabeled when tracking started (2026-09-27).
+ */
+function parseDbUtcTimestamp(value: string | Date): Date {
+  return value instanceof Date ? value : new Date(`${value.replace(" ", "T")}Z`);
+}
 
 function dateRangeConditions(input: DateRangeInput) {
   const conditions = [];
@@ -72,7 +85,7 @@ export async function getSalesOverview(input: DateRangeInput = {}) {
         .where(and(settledSaleSql, inArray(orders.userId, userIds)))
         .groupBy(orders.userId);
       for (const row of firstPaidOrderRows) {
-        if (new Date(row.firstPaidAt) >= input.dateFrom) newCustomerCount++;
+        if (parseDbUtcTimestamp(row.firstPaidAt) >= input.dateFrom) newCustomerCount++;
         else returningCustomerCount++;
       }
     }
@@ -842,7 +855,7 @@ export async function getConversionOverview(input: DateRangeInput = {}): Promise
     sessionsCount,
     convertedSessionsCount,
     conversionRatePercent: sessionsCount > 0 ? Math.round((convertedSessionsCount / sessionsCount) * 100) : null,
-    trackingStartedAt: earliestRow?.earliest ? new Date(earliestRow.earliest).toISOString() : null,
+    trackingStartedAt: earliestRow?.earliest ? parseDbUtcTimestamp(earliestRow.earliest).toISOString() : null,
     totalPageViews: Number(sessionsRow?.totalPageViews ?? 0),
     avgSessionDurationSec: sessionsCount > 0 && sessionsRow?.avgSessionDurationSec != null ? Math.round(Number(sessionsRow.avgSessionDurationSec)) : null,
   };
@@ -1015,7 +1028,7 @@ export async function exportAnalyticsExcel(report: AnalyticsReport, input: DateR
     overviewSheet.addRow(["Хөрвүүлэлтийн хувь (%)", report.conversion.conversionRatePercent]);
     overviewSheet.addRow(["Захиалга болсон / нийт сесс", `${report.conversion.convertedSessionsCount} / ${report.conversion.sessionsCount}`]);
   } else {
-    overviewSheet.addRow([report.conversion.trackingStartedAt ? `Хөрвүүлэлтийн хувь: энэ хугацаанд сесс бүртгэгдээгүй (${report.conversion.trackingStartedAt.slice(0, 10)}-с хойш хэмжигдэж эхэлсэн)` : "Хөрвүүлэлтийн хувь: хараахан хэмжиж эхлээгүй байна"]);
+    overviewSheet.addRow([report.conversion.trackingStartedAt ? `Хөрвүүлэлтийн хувь: энэ хугацаанд сесс бүртгэгдээгүй (${storeDayString(new Date(report.conversion.trackingStartedAt))}-с хойш хэмжигдэж эхэлсэн)` : "Хөрвүүлэлтийн хувь: хараахан хэмжиж эхлээгүй байна"]);
   }
   overviewSheet.addRow([]);
   overviewSheet.addRow(["Буцаалтын хувь (%)", report.returnRate.returnRatePercent]);
@@ -1167,7 +1180,7 @@ export async function exportAnalyticsPdf(report: AnalyticsReport, input: DateRan
     if (report.conversion.sessionsCount > 0) {
       doc.text(`Хөрвүүлэлтийн хувь: ${report.conversion.conversionRatePercent}% (${report.conversion.convertedSessionsCount} / ${report.conversion.sessionsCount} сесс)`);
     } else if (report.conversion.trackingStartedAt) {
-      doc.text(`Энэ хугацаанд сесс бүртгэгдээгүй (${report.conversion.trackingStartedAt.slice(0, 10)}-с хойш хэмжигдэж эхэлсэн).`);
+      doc.text(`Энэ хугацаанд сесс бүртгэгдээгүй (${storeDayString(new Date(report.conversion.trackingStartedAt))}-с хойш хэмжигдэж эхэлсэн).`);
     } else {
       doc.text("Тодорхойгүй — хараахан хэмжиж эхлээгүй байна.");
     }

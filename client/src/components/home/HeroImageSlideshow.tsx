@@ -216,7 +216,24 @@ export default function HeroImageSlideshow({ slides, imageAlt }: { slides: HeroS
               data-slot={slide.key}
               aria-hidden={clone || undefined}
             >
-              <Link href={slide.href} className="hero-rail-link" draggable={false} aria-label={slide.label} tabIndex={clone ? -1 : undefined}>
+              {/* 2026-09-27: "#..." зам wouter Link-ээр pushState хийхэд
+                  React аль хэдийн mount хийсэн байвал scroll хийхгүй (сервер
+                  shell-д ердийн <a>-тай ижил зан гаргах ёстой) -- харин
+                  CommerceHeader-ийн зарчмыг л давтав. */}
+              {slide.href.startsWith("#")
+                ? <a href={slide.href} className="hero-rail-link" draggable={false} aria-label={slide.label} tabIndex={clone ? -1 : undefined}>
+                    <ResponsivePicture
+                      src={slide.imageUrl}
+                      fullWidth={HERO_FULL_WIDTH}
+                      sizes={HERO_SIZES}
+                      alt=""
+                      draggable={false}
+                      {...(!clone && index === 0
+                        ? { fetchPriority: "high" as const, loading: "eager" as const }
+                        : { loading: "lazy" as const })}
+                    />
+                  </a>
+                : <Link href={slide.href} className="hero-rail-link" draggable={false} aria-label={slide.label} tabIndex={clone ? -1 : undefined}>
                 <ResponsivePicture
                   src={slide.imageUrl}
                   fullWidth={HERO_FULL_WIDTH}
@@ -241,7 +258,7 @@ export default function HeroImageSlideshow({ slides, imageAlt }: { slides: HeroS
                     ? { fetchPriority: "high" as const, loading: "eager" as const }
                     : { loading: "lazy" as const })}
                 />
-              </Link>
+              </Link>}
             </figure>
           );
         }))}

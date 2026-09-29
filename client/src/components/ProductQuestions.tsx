@@ -77,7 +77,10 @@ export default function ProductQuestions({ productId, canAnswer }: { productId: 
         >
           <span className="review-avatar review-avatar--initials" style={{ width: 40, height: 40 }} aria-hidden="true">{initials(user?.name ?? null)}</span>
           <div className="review-main">
-            <textarea value={askDraft} onChange={event => setAskDraft(event.target.value)} maxLength={1000} rows={3} autoFocus placeholder="Жишээ: Хуурай, мэдрэмтгий арьсанд тохирох уу?" className="review-reply-input" aria-label="Асуулт" />
+            {/* translate="no" (2026-09-27): TranslateSurface-ийн дунд байрладаг
+                тул худалдан авагчийн бичиж буй текстийг дундаас нь
+                орчуулж эхэлдэггүй байх ёстой (ReviewThread.tsx-тэй ижил). */}
+            <textarea translate="no" value={askDraft} onChange={event => setAskDraft(event.target.value)} maxLength={1000} rows={3} autoFocus placeholder="Жишээ: Хуурай, мэдрэмтгий арьсанд тохирох уу?" className="review-reply-input" aria-label="Асуулт" />
             <div className="review-actions">
               <button type="submit" className="review-action review-action--primary" disabled={ask.isPending || askDraft.trim().length < 5}>
                 {ask.isPending ? <LoaderCircle className="animate-spin" size={14} aria-hidden="true" /> : null} Илгээх
@@ -104,10 +107,10 @@ export default function ProductQuestions({ productId, canAnswer }: { productId: 
                   <div className="review-main">
                     <div className="review-bubble">
                       <div className="review-bubble-head">
-                        <strong className="review-author">{question.authorName}</strong>
+                        <strong className="review-author" translate="no">{question.authorName}</strong>
                         <span className="product-question-tag">Асуулт</span>
                       </div>
-                      <p className="review-text">{question.body}</p>
+                      <p className="review-text" translate="no">{question.body}</p>
                     </div>
                     <div className="review-actions">
                       {canAnswer && (
@@ -130,10 +133,10 @@ export default function ProductQuestions({ productId, canAnswer }: { productId: 
                           <div className="review-main">
                             <div className="review-bubble">
                               <div className="review-bubble-head">
-                                <strong className="review-author">{item.authorName}</strong>
+                                <strong className="review-author" translate="no">{item.authorName}</strong>
                                 {item.authorIsStaff ? <span className="review-staff-badge">SUGI ASAYAKE</span> : <span className="product-question-tag">Худалдан авагч</span>}
                               </div>
-                              <p className="review-text">{item.body}</p>
+                              <p className="review-text" translate="no">{item.body}</p>
                             </div>
                             <div className="review-actions">
                               <time className="review-time" dateTime={new Date(item.createdAt).toISOString()} title={new Date(item.createdAt).toLocaleString("mn-MN")}>{relativeTime(item.createdAt)}</time>
@@ -147,7 +150,7 @@ export default function ProductQuestions({ productId, canAnswer }: { productId: 
                         <form className="review-row" onSubmit={event => { event.preventDefault(); if (answerDraft.trim()) answer.mutate({ questionId: question.id, body: answerDraft.trim() }); }}>
                           <span className="review-avatar review-avatar--initials" style={{ width: 32, height: 32 }} aria-hidden="true">Та</span>
                           <div className="review-main">
-                            <textarea value={answerDraft} onChange={event => setAnswerDraft(event.target.value)} maxLength={2000} rows={2} autoFocus placeholder="Хариулт бичих…" className="review-reply-input" aria-label="Хариулт" />
+                            <textarea translate="no" value={answerDraft} onChange={event => setAnswerDraft(event.target.value)} maxLength={2000} rows={2} autoFocus placeholder="Хариулт бичих…" className="review-reply-input" aria-label="Хариулт" />
                             <div className="review-actions">
                               <button type="submit" className="review-action review-action--primary" disabled={answer.isPending || !answerDraft.trim()}>
                                 {answer.isPending ? <LoaderCircle className="animate-spin" size={14} aria-hidden="true" /> : null} Илгээх

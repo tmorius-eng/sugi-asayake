@@ -55,7 +55,7 @@ describeWithDatabase("order status push is admin-configurable", () => {
     if (adminId) await db.delete(users).where(eq(users.id, adminId));
   });
 
-  const order = { id: 987_654, userId: 0, orderNumber: "SAMUTEST123", status: "shipped" };
+  const order = { id: 987_654, userId: 0, orderNumber: "SAMUTEST123", status: "out_for_delivery", deliveryMethod: "ub_delivery" };
 
   it("анхдагчаар кодын текстээр илгээнэ", async () => {
     if (!webPushEnabled()) return; // VAPID тохируулаагүй орчинд утгагүй
@@ -86,7 +86,7 @@ describeWithDatabase("order status push is admin-configurable", () => {
     expect(sendNotification).not.toHaveBeenCalled();
 
     // Өөр төлөв хэвээрээ ажиллана — хоосон бие нь дэлхий дахиныг унтраахгүй.
-    await sendOrderStatusPush({ ...order, userId, status: "delivered" });
+    await sendOrderStatusPush({ ...order, userId, status: "completed" });
     expect(sendNotification).toHaveBeenCalledTimes(1);
   });
 
@@ -96,7 +96,7 @@ describeWithDatabase("order status push is admin-configurable", () => {
     await upsertStoreSetting({ settingKey: "push-order-notifications", settingValue: "0", updatedByUserId: adminId });
     sendNotification.mockClear();
     await sendOrderStatusPush({ ...order, userId });
-    await sendOrderStatusPush({ ...order, userId, status: "delivered" });
+    await sendOrderStatusPush({ ...order, userId, status: "completed" });
     expect(sendNotification).not.toHaveBeenCalled();
   });
 });

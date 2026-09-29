@@ -477,7 +477,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
   }
 }
 
-.footer-column a, .footer-column-button { color: rgba(255,255,255,.92); font-size: 14px; font-weight: 700; transition: color .18s var(--ease-out); }
+.footer-column a, .footer-column-button, .footer-column .footer-plain { color: rgba(255,255,255,.92); font-size: 14px; font-weight: 700; transition: color .18s var(--ease-out); }
 .footer-column a:hover, .footer-column-button:hover { color: #ffd27a; }
 /* Resets default <button> chrome so "Күкийн тохиргоо" reads identically to
    the <a> links beside it in the same column -- it's a button (triggers
@@ -2856,7 +2856,7 @@ body:has(.sugi-site) { background: var(--ck-page); }
 .footer-notify { background: transparent; color: var(--ck-ink); border-color: var(--ck-line); margin-top: 10px; }
 .footer-notify:hover { background: var(--ck-chip); border-color: var(--ck-ink); }
 .footer-column > span { color: var(--ck-muted); font-size: 13px; font-weight: 700; letter-spacing: .14em; }
-.footer-column a, .footer-column-button { color: var(--ck-ink); font-size: 15px; font-weight: 700; }
+.footer-column a, .footer-column-button, .footer-column .footer-plain { color: var(--ck-ink); font-size: 15px; font-weight: 700; }
 .footer-column a:hover, .footer-column-button:hover { color: var(--ck-muted); }
 .footer-column small { color: var(--ck-muted); }
 .footer-bottom { width: min(var(--ck-container), calc(100% - 40px)); margin: 0 auto; padding: 18px 0 26px; border-top-color: var(--ck-line); color: var(--ck-muted); font-size: 13px; }
@@ -3293,6 +3293,7 @@ html[data-storefront-theme="dark"] .site-footer,
 html[data-storefront-theme="dark"] .footer-cta-banner { background: var(--ck-cream); color: var(--ck-ink); border-color: var(--ck-line); }
 html[data-storefront-theme="dark"] .footer-column a,
 html[data-storefront-theme="dark"] .footer-column-button,
+html[data-storefront-theme="dark"] .footer-column .footer-plain,
 html[data-storefront-theme="dark"] .footer-bottom span { color: var(--ck-ink); }
 html[data-storefront-theme="dark"] .footer-grid > div:first-child p,
 html[data-storefront-theme="dark"] .footer-column > span,

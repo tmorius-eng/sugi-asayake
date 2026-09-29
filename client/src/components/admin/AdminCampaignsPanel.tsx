@@ -125,16 +125,27 @@ export default function AdminCampaignsPanel() {
   const reachMutation = trpc.admin.campaignReach.useMutation();
   const { mutate: fetchReach, reset: resetReach } = reachMutation;
   const recipientIdsKey = recipientIds.join(",");
+  // 2026-09-27 (F14): the >2000 branch used to just call resetReach() and
+  // stop -- the reach line below simply vanished with no indication the
+  // count was ever skipped rather than zero-reachable. Track it explicitly.
+  const [reachSkipped, setReachSkipped] = useState(false);
   useEffect(() => {
-    if (!recipientIdsKey) { resetReach(); return; }
+    if (!recipientIdsKey) { resetReach(); setReachSkipped(false); return; }
     const ids = recipientIdsKey.split(",").map(Number);
-    if (ids.length > 2_000) { resetReach(); return; }
+    if (ids.length > 2_000) { resetReach(); setReachSkipped(true); return; }
+    setReachSkipped(false);
     fetchReach({ userIds: ids, channel });
   }, [recipientIdsKey, channel, fetchReach, resetReach]);
   const reach = reachMutation.data;
   const urlInvalid = channel === "push" && url.trim().length > 0 && !/^\/(?![/\\])[^\s]*$/.test(url.trim());
+  // 2026-09-27 (F5): once a send succeeds, sendCampaign.data stays set and
+  // onConfirmSend already flips confirming back to false -- without this,
+  // "Урьдчилан харах" was clickable again with the SAME composer state and
+  // resent the identical campaign. Must be reset ("Шинэ кампанит ажил
+  // эхлүүлэх") before sending again.
   const canSend = recipientIds.length > 0 && subject.trim().length > 0 && body.trim().length > 0
-    && !(channel === "sms" && smsDisabled) && !(channel === "push" && pushDisabled) && !urlInvalid;
+    && !(channel === "sms" && smsDisabled) && !(channel === "push" && pushDisabled) && !urlInvalid
+    && !sendCampaign.data;
 
   const resetComposer = () => {
     setRecipientSource(null); setSegmentRecipients(null); setChannel("email"); setSubject(""); setBody(""); setUrl(""); setConfirming(false); sendCampaign.reset();
@@ -214,12 +225,15 @@ export default function AdminCampaignsPanel() {
                   {channel === "push" && " Мэдэгдлээ асааж, зар хүлээн авахыг зөвшөөрсөн хүн."}
                 </p>
               )}
+              {recipientIds.length > 0 && reachSkipped && (
+                <p className="mt-3 text-[11px] font-bold text-[var(--a-warn)]">Хүлээн авагч 2000-с олон тул хүрэх тоо тоологдоогүй.</p>
+              )}
             </section>
 
             <section className="rounded-3xl border border-[var(--a-border)] p-5">
               <h3 className="font-[var(--font-display)] text-lg font-semibold tracking-[-.04em]">3. Мессеж</h3>
               <label className="mt-3 grid gap-1.5 text-xs font-bold">Гарчиг<input value={subject} onChange={event => setSubject(event.target.value)} maxLength={200} placeholder="Жишээ: Намрын хямдрал эхэллээ" className="h-10 rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" /></label>
-              <label className="mt-3 grid gap-1.5 text-xs font-bold">Агуулга<textarea value={body} onChange={event => setBody(event.target.value)} maxLength={5000} rows={7} placeholder="Мессежийн бүтэн текст…" className="rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] p-3 text-xs font-normal leading-5 outline-none focus:border-[#df1f3d]" /></label>
+              <label className="mt-3 grid gap-1.5 text-xs font-bold">Агуулга<textarea value={body} onChange={event => setBody(event.target.value)} maxLength={channel === "sms" ? 300 : 5000} rows={7} placeholder="Мессежийн бүтэн текст…" className="rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] p-3 text-xs font-normal leading-5 outline-none focus:border-[#df1f3d]" /></label>
               {channel === "push" && (
                 <>
                   <label className="mt-3 grid gap-1.5 text-xs font-bold">Дарахад нээгдэх хуудас (сонголттой)

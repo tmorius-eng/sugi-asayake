@@ -99,8 +99,11 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
               </label>
             )}
             <DialogFooter className="confirm-dialog-actions">
-              <button type="button" className="confirm-dialog-cancel" onClick={() => settle(null)}>{options.cancelLabel ?? "Болих"}</button>
-              <button type="button" className={`confirm-dialog-ok${options.danger ? " is-danger" : ""}`} disabled={!canSubmit} onClick={submit} autoFocus={!input}>
+              {/* 2026-09-27: устгах мэт буцаагдахгүй үйлдэлд анхны фокус
+                  "Тийм" дээр байх ёстойгүй -- санамсаргүй Enter/space дарахад
+                  шууд баталчихдаг. Устгах биш үед л батлах товч фокустой эхэлнэ. */}
+              <button type="button" className="confirm-dialog-cancel" onClick={() => settle(null)} autoFocus={!input && Boolean(options.danger)}>{options.cancelLabel ?? "Болих"}</button>
+              <button type="button" className={`confirm-dialog-ok${options.danger ? " is-danger" : ""}`} disabled={!canSubmit} onClick={submit} autoFocus={!input && !options.danger}>
                 {options.confirmLabel ?? (options.danger ? "Тийм, үргэлжлүүлэх" : "Тийм")}
               </button>
             </DialogFooter>

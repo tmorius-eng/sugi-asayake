@@ -6,9 +6,10 @@ import { isAdminPanelRole } from "../../shared/face-auth";
 import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { productReviews, productReviewReplies, productReviewLikes, products, users } from "../../drizzle/schema";
 import { getOrSetCached, invalidateCachedByPrefix } from "../_core/ttlCache";
-import { getDb } from "./connection";
+import { getDb, isDuplicateKeyError } from "./connection";
 import { findVerifyingOrderId } from "./customer-orders";
 import { STOREFRONT_CACHE_TTL_MS } from "./site";
+import { invalidateCatalogSource } from "./catalog";
 
 export async function createProductReview(input: { userId: number; productId: number; rating: number; comment: string | null; imageUrl?: string | null }) {
   const db = await getDb();
@@ -20,15 +21,29 @@ export async function createProductReview(input: { userId: number; productId: nu
   const existing = await db.select({ id: productReviews.id }).from(productReviews).where(and(eq(productReviews.userId, input.userId), eq(productReviews.productId, input.productId))).limit(1);
   if (existing[0]) throw new Error("Та энэ бүтээгдэхүүнд сэтгэгдэл өмнө нь бичсэн байна.");
 
-  const inserted = await db.insert(productReviews).values({
-    productId: input.productId,
-    userId: input.userId,
-    orderId: verifyingOrderId,
-    rating: input.rating,
-    comment: input.comment,
-    imageUrl: input.imageUrl ?? null,
-  });
-  const created = await db.select().from(productReviews).where(eq(productReviews.id, Number(inserted[0].insertId))).limit(1);
+  let insertedId: number;
+  try {
+    const inserted = await db.insert(productReviews).values({
+      productId: input.productId,
+      userId: input.userId,
+      orderId: verifyingOrderId,
+      rating: input.rating,
+      comment: input.comment,
+      imageUrl: input.imageUrl ?? null,
+    });
+    insertedId = Number(inserted[0].insertId);
+  } catch (error) {
+    // 2026-09-27 (C5): check-then-insert -- two concurrent submits from the
+    // same buyer/product race past the SELECT above and both attempt the
+    // INSERT; the loser used to surface a raw driver error (INTERNAL) instead
+    // of the same, already-translated Mongolian message the winner's SELECT
+    // check produces.
+    if (isDuplicateKeyError(error, "product_reviews_user_product_idx")) {
+      throw new Error("Та энэ бүтээгдэхүүнд сэтгэгдэл өмнө нь бичсэн байна.", { cause: error });
+    }
+    throw error;
+  }
+  const created = await db.select().from(productReviews).where(eq(productReviews.id, insertedId)).limit(1);
   invalidateCachedByPrefix("storefront:featuredReviews:");
   return created[0];
 }
@@ -63,6 +78,11 @@ export async function getProductReviews(productId: number, viewerUserId: number 
     })
     .from(productReviews)
     .innerJoin(users, eq(users.id, productReviews.userId))
+    // 2026-09-27 (D14): нийтлэгдээгүй/устгагдсан бараа руу нийтийн route-оор
+    // хандвал сэтгэгдлүүд ил гардаг байсан (жишээ нь barааны slug-ыг
+    // хэн нэгэн шинэхэн барааны id-ээр таамаглах). Нийтийн уншилт зөвхөн
+    // нийтлэгдсэн бараанд.
+    .innerJoin(products, and(eq(products.id, productReviews.productId), eq(products.isPublished, true)))
     .where(and(eq(productReviews.productId, productId), eq(productReviews.isApproved, true), page.cursor ? lt(productReviews.id, page.cursor) : undefined))
     .orderBy(desc(productReviews.id))
     .limit(limit);
@@ -136,10 +156,23 @@ export async function toggleReviewLike(reviewId: number, userId: number) {
   const [review] = await db.select({ id: productReviews.id }).from(productReviews).where(and(eq(productReviews.id, reviewId), eq(productReviews.isApproved, true))).limit(1);
   if (!review) throw new Error("Сэтгэгдэл олдсонгүй.");
   const [existing] = await db.select({ reviewId: productReviewLikes.reviewId }).from(productReviewLikes).where(and(eq(productReviewLikes.reviewId, reviewId), eq(productReviewLikes.userId, userId))).limit(1);
-  if (existing) await db.delete(productReviewLikes).where(and(eq(productReviewLikes.reviewId, reviewId), eq(productReviewLikes.userId, userId)));
-  else await db.insert(productReviewLikes).values({ reviewId, userId });
+  let liked = !existing;
+  if (existing) {
+    await db.delete(productReviewLikes).where(and(eq(productReviewLikes.reviewId, reviewId), eq(productReviewLikes.userId, userId)));
+  } else {
+    try {
+      await db.insert(productReviewLikes).values({ reviewId, userId });
+    } catch (error) {
+      // 2026-09-27 (C5): check-then-insert on a composite PK -- two rapid
+      // double-taps (or two tabs) race past the SELECT above; the losing
+      // request used to surface a raw duplicate-key error instead of simply
+      // landing on "already liked", which is what actually happened.
+      if (isDuplicateKeyError(error, "PRIMARY")) liked = true;
+      else throw error;
+    }
+  }
   const [count] = await db.select({ n: sql<number>`count(*)` }).from(productReviewLikes).where(eq(productReviewLikes.reviewId, reviewId));
-  return { liked: !existing, likeCount: Number(count?.n ?? 0) };
+  return { liked, likeCount: Number(count?.n ?? 0) };
 }
 
 /** Admin edit of a review's own text/rating (Tom, 2026-09-13: manage
@@ -154,6 +187,10 @@ export async function updateAdminReview(input: { id: number; rating?: number; co
   if (input.imageUrl === null) patch.imageUrl = null;
   await db.update(productReviews).set(patch).where(eq(productReviews.id, input.id));
   invalidateCachedByPrefix("storefront:featuredReviews:");
+  // 2026-09-27 (D19): a rating edit moves the product's average -- that
+  // average is read from the catalog source cache (catalog.ts's
+  // avgRatingExpr), not from here.
+  invalidateCatalogSource();
   const [row] = await db.select().from(productReviews).where(eq(productReviews.id, input.id)).limit(1);
   return row ?? null;
 }
@@ -277,6 +314,10 @@ export async function setReviewApproval(id: number, isApproved: boolean) {
   if (!db) throw new Error("Database is not available");
   await db.update(productReviews).set({ isApproved, updatedAt: new Date() }).where(eq(productReviews.id, id));
   invalidateCachedByPrefix("storefront:featuredReviews:");
+  // 2026-09-27 (D19): approving/hiding a review changes which reviews count
+  // toward the product's average rating (avgRatingExpr only counts
+  // isApproved=true) -- that average lives in the catalog source cache.
+  invalidateCatalogSource();
   return { id, isApproved };
 }
 
@@ -285,5 +326,8 @@ export async function deleteAdminReview(id: number) {
   if (!db) throw new Error("Database is not available");
   await db.delete(productReviews).where(eq(productReviews.id, id));
   invalidateCachedByPrefix("storefront:featuredReviews:");
+  // 2026-09-27 (D19): see setReviewApproval above -- deleting a review also
+  // moves the product's average rating.
+  invalidateCatalogSource();
   return { id };
 }

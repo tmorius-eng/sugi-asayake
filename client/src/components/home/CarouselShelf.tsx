@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { Link } from "wouter";
 import { ProductCardSkeleton } from "@/components/Skeleton";
 
 // NEWVISION.md Tier 1: SUGI has never had a horizontally-scrolling
@@ -119,7 +120,7 @@ export default function CarouselShelf({
       {/* 2026-09-12: the "see all" link sits UNDER the rail as a bordered
           pill, where the reference puts it -- above the rail it competed
           with the heading for the eye. */}
-      {viewAllHref ? <div className="carousel-shelf-footer"><a className="carousel-shelf-all-link" href={viewAllHref}>{viewAllLabel} <ChevronRight size={16} /></a></div> : null}
+      {viewAllHref ? <div className="carousel-shelf-footer"><Link className="carousel-shelf-all-link" href={viewAllHref}>{viewAllLabel} <ChevronRight size={16} /></Link></div> : null}
     </section>
   );
 }

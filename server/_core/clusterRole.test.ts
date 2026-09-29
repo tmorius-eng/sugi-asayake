@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { describeClusterRole, isBackgroundJobRunner } from "./clusterRole";
 
-const KEYS = ["RUN_BACKGROUND_JOBS", "NODE_APP_INSTANCE"] as const;
+// 2026-09-27: DATABASE_URL нэмэв -- server/_test-setup.ts бүх тестийн орчинд
+// үүнийг sugi_staging рүү дахин бичдэг тул isBackgroundJobRunner()-ийн шинэ
+// staging-унтраах дүрмийг тест бүрт УХАМСАРТАЙГААР тохируулж/цэвэрлэх
+// шаардлагатай -- эс бөгөөс энэ файлын хуучин тестүүд (DATABASE_URL-гүй
+// тохиолдол хүлээдэг) sugi_staging-ийг "унтраах шалтгаан" гэж андуурна.
+const KEYS = ["RUN_BACKGROUND_JOBS", "NODE_APP_INSTANCE", "DATABASE_URL"] as const;
 const original = Object.fromEntries(KEYS.map(key => [key, process.env[key]]));
 
 afterEach(() => {
@@ -53,5 +58,23 @@ describe("isBackgroundJobRunner", () => {
   it("тайлбарын мөр аль instance болохыг нэрлэнэ", () => {
     setEnv({ NODE_APP_INSTANCE: "2" });
     expect(describeClusterRole()).toBe("pm2 instance 2: ард ажиллах ажлууд ӨӨР instance дээр");
+  });
+
+  // 2026-09-27: staging (sugi_staging схем, prod-ын бодит харилцагчийн
+  // мэдээлэлтэй хуулбар) анхдагчаар ард ажиллах ажлуудыг унтраана.
+  it("DATABASE_URL нь sugi_staging схем бол унтраана (хувьсагчгүй ч)", () => {
+    setEnv({ DATABASE_URL: "mysql://user:pass@host:3306/sugi_staging?ssl-mode=REQUIRED" });
+    expect(isBackgroundJobRunner()).toBe(false);
+    expect(describeClusterRole()).toContain("sugi_staging");
+  });
+
+  it("staging схем дээр ч RUN_BACKGROUND_JOBS=1 нь дарж асаана", () => {
+    setEnv({ DATABASE_URL: "mysql://user:pass@host:3306/sugi_staging", RUN_BACKGROUND_JOBS: "1" });
+    expect(isBackgroundJobRunner()).toBe(true);
+  });
+
+  it("бусад схем (production, локал) staging дүрмээр унтардаггүй", () => {
+    setEnv({ DATABASE_URL: "mysql://user:pass@host:3306/defaultdb" });
+    expect(isBackgroundJobRunner()).toBe(true);
   });
 });

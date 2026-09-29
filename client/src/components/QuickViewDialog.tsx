@@ -75,7 +75,15 @@ export default function QuickViewDialog({ open, product, onOpenChange, onAdded }
     if (selectedVariantId !== null) return;
     const variants = variantsQuery.data;
     if (!variants?.length) return;
-    setSelectedVariantId((variants.find(variant => variant.isDefault) ?? variants[0]).id);
+    // 2026-09-27: default variant дууссан нөөцтэй байвал шууд "Нөөц дууссан"
+    // харуулахын оронд эхлээд нөөцтэй default, дараа нь нөөцтэй ямар ч
+    // variant сонгоно (ProductDetail.tsx-тэй ижил дараалал).
+    const defaultVariant = variants.find(variant => variant.isDefault);
+    const preferred = (defaultVariant && defaultVariant.stockQuantity > 0 ? defaultVariant : null)
+      ?? variants.find(variant => variant.stockQuantity > 0)
+      ?? defaultVariant
+      ?? variants[0];
+    setSelectedVariantId(preferred.id);
   }, [variantsQuery.data, selectedVariantId]);
 
   const variants = variantsQuery.data ?? [];

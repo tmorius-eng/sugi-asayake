@@ -434,8 +434,19 @@ export function translateProductText(
   const brand = product?.brand?.trim();
   const name = product?.name?.trim();
   let masked = text;
-  if (brand) masked = masked.split(brand).join("{BRAND}");
-  if (name) masked = masked.split(name).join("{NAME}");
+  // 2026-09-27: mask the LONGER string first. A product name that starts
+  // with its own brand ("Diane" / "Diane Botanical Shampoo") used to have
+  // the brand masked first, turning the source text into "{BRAND} Botanical
+  // Shampoo" -- the name's own mask then searched for the original, now-gone
+  // "Diane Botanical Shampoo" substring and never matched, so {NAME} was
+  // never masked and the raw name leaked into the translated sentence
+  // untouched. Restore order does not have the same problem: {BRAND} and
+  // {NAME} are disjoint placeholder tokens, not substrings of each other.
+  const maskOrder = brand && name && brand.length > name.length ? (["brand", "name"] as const) : (["name", "brand"] as const);
+  for (const which of maskOrder) {
+    if (which === "brand" && brand) masked = masked.split(brand).join("{BRAND}");
+    if (which === "name" && name) masked = masked.split(name).join("{NAME}");
+  }
 
   const translated = masked.split(SENTENCE_SPLIT).map(sentence => {
     const trimmed = sentence.trim();

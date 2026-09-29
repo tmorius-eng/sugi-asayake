@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowLeftRight, Camera, CheckCircle2, ClipboardList, CloudOf
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useScanDraft } from "@/hooks/useScanDraft";
+import { MAX_UPLOAD_BYTES, isUploadableImageType, prepareImageUpload } from "@/lib/prepareImageUpload";
 import ScanSession, { buildSkuLookup } from "./inventory/ScanSession";
 import TransfersView from "./inventory/TransfersView";
 
@@ -84,10 +85,21 @@ function ReceiptView({ id, lookup, onBack }: { id: number; lookup: ReturnType<ty
     } catch (error) { toast.error(messageFrom(error)); }
   };
 
-  const onPhoto = async (file: File | undefined) => {
-    if (!file) return;
-    const contentType = file.type === "image/png" ? "image/png" : file.type === "image/webp" ? "image/webp" : "image/jpeg";
+  const onPhoto = async (picked: File | undefined) => {
+    if (!picked) return;
+    // 2026-09-27 (F-receipt): this upload skipped prepareImageUpload
+    // entirely -- a HEIC photo (the default on iPhone) went up mislabelled
+    // as whatever the crude type guess below picked, and a large phone
+    // photo went over the wire (and past the server's 8 MB limit) un-shrunk.
+    const prepared = await prepareImageUpload(picked, undefined);
+    const file = prepared.file;
+    if (!isUploadableImageType(file.type) || file.size > MAX_UPLOAD_BYTES) {
+      toast.error("JPG, PNG, WEBP эсвэл GIF зураг сонгоно уу (8 MB хүртэл).");
+      return;
+    }
+    if (prepared.note) toast.message("Зургийг илгээхээс өмнө жижгэрүүлэв", { description: prepared.note });
     try {
+      const contentType = file.type === "image/png" ? "image/png" : file.type === "image/webp" ? "image/webp" : "image/jpeg";
       await uploadPhoto.mutateAsync({ id, contentType, dataBase64: await fileToBase64(file) });
       await refresh();
       toast.success("Нэхэмжлэхийн зураг хадгалагдлаа.");
@@ -186,11 +198,26 @@ function CountView({ id, lookup, canPost, onBack }: { id: number; lookup: Return
     try { await draft.flush(); await submit.mutateAsync({ id }); draft.discardLocal(); await refresh(); toast.success("Илгээлээ — батлагдмагц нөөц засагдана."); } catch (error) { toast.error(messageFrom(error)); }
   };
   const doPost = async () => {
-    const zeroed = count.scope === "full" ? count.unscanned.length : 0;
-    const message = `${count.branchName}-ийн нөөцийг тооллогоор засна: ${variances.length} бараа зөрүүтэй${zeroed ? `, уншуулаагүй ${zeroed} бараа 0 болно` : ""}.${count.isOpening ? "\n\nЭнэ бол ЭХНИЙ ҮЛДЭГДЭЛ тооллого." : ""}\n\nҮргэлжлүүлэх үү?`;
-    if (!await confirm({ title: message })) return;
+    // 2026-09-27 (F-receipt): the confirm text used to read straight off
+    // `count`/`variances` -- the last REACT-QUERY snapshot -- while any
+    // scans still sitting unsaved in the local draft (autosave debounce, or
+    // a scan made seconds ago) were invisible to it. Flush first and fetch
+    // the just-saved row directly so the numbers shown match what actually
+    // gets posted.
+    // 2026-09-27: both calls were outside this function's try/catch below --
+    // a flush/fetch failure (e.g. a dropped connection mid-scan) threw an
+    // unhandled rejection with no toast instead of telling the admin why the
+    // confirm dialog never appeared.
+    let fresh: Awaited<ReturnType<typeof utils.inventory.count.fetch>>;
     try {
       await draft.flush();
+      fresh = await utils.inventory.count.fetch({ id });
+    } catch (error) { toast.error(messageFrom(error)); return; }
+    const freshVariances = fresh.lines.filter(line => line.variance);
+    const zeroed = fresh.scope === "full" ? fresh.unscanned.length : 0;
+    const message = `${fresh.branchName}-ийн нөөцийг тооллогоор засна: ${freshVariances.length} бараа зөрүүтэй${zeroed ? `, уншуулаагүй ${zeroed} бараа 0 болно` : ""}.${fresh.isOpening ? "\n\nЭнэ бол ЭХНИЙ ҮЛДЭГДЭЛ тооллого." : ""}\n\nҮргэлжлүүлэх үү?`;
+    if (!await confirm({ title: message })) return;
+    try {
       const result = await post.mutateAsync({ id });
       draft.discardLocal();
       await refresh();

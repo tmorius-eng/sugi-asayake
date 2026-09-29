@@ -30,6 +30,20 @@ async function senderName(): Promise<string> {
   }
 }
 
+/**
+ * 2026-09-27 (I23): callers outside this file (server/automation.ts's
+ * abandoned-cart and review-request jobs) used to check `!ENV.brevoApiKey`
+ * alone to decide "email delivery is switched off entirely, so a false
+ * return from deliverEmail still counts as delivered rather than retried" --
+ * but `deliverEmail` ALSO refuses to send (same false-with-a-log-line
+ * fallback) when `BREVO_SENDER_EMAIL` is missing even though a real API key
+ * is set. That half-configured state made both jobs mark every reminder as
+ * "delivered" when nothing was ever sent, with no retry.
+ */
+export function emailConfigured(): boolean {
+  return Boolean(ENV.brevoApiKey && ENV.brevoSenderEmail);
+}
+
 async function deliverEmail(input: { to: string; subject: string; content: string }): Promise<boolean> {
   if (!ENV.brevoApiKey || !ENV.brevoSenderEmail) {
     console.log(`[Email] To: ${input.to}\n${input.subject}\n${input.content}`);

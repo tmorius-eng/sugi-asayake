@@ -2,7 +2,7 @@ import { and, eq, gte, sql } from "drizzle-orm";
 import { sqlInt } from "./_core/sqlSafe";
 import { branches, branchStock, products, productVariants, stockMovements, type StockMovementType } from "../drizzle/schema";
 import { ubDateKey, type NotificationGroup } from "../shared/notification-events";
-import { ALERTING_MOVEMENT_TYPES, classifyStockCrossing } from "../shared/stock-alerts";
+import { ALERTING_MOVEMENT_TYPES, classifyStockCrossing, type StockMovementAlertMeta } from "../shared/stock-alerts";
 import { enqueueNotification } from "./notificationOutbox";
 import type { DbOrTx } from "./db";
 
@@ -23,13 +23,16 @@ import type { DbOrTx } from "./db";
 // "external": came from the POS vendor's sync -- never pushed back to it.
 export type MovementRefType = "order" | "transfer" | "receipt" | "count" | "manual" | "external";
 
+// 2026-09-27 (I4): `& StockMovementAlertMeta` adds `forceAlert` (shared/
+// stock-alerts.ts has the full reasoning -- an automatic vendor-snapshot
+// count needs to alert even though count_adjust is normally excluded).
 export type MovementMeta = {
   type: StockMovementType;
   refType?: MovementRefType | null;
   refId?: number | null;
   actorUserId?: number | null;
   note?: string | null;
-};
+} & StockMovementAlertMeta;
 
 /**
  * productVariants.stockQuantity is a cached SUM of the variant's branch_stock
@@ -44,28 +47,35 @@ export type MovementMeta = {
 // their shelves in this system only ever grow; once they are switched off,
 // what the website offers is exactly what the warehouse holds.
 export async function recomputeVariantStockTotal(db: DbOrTx, variantId: number) {
+  // 2026-09-27 (I10/D22): a closed branch (isActive=false) must not still
+  // count toward what the website can sell -- countsTowardOnlineStock alone
+  // was checked here (and in recomputeVariantTotalsForBranch's set-based
+  // twin below, now fixed the same way).
   const [totalRow] = await db.select({ total: sql<number>`COALESCE(SUM(${branchStock.stockQuantity}), 0)` }).from(branchStock)
     .innerJoin(branches, eq(branches.id, branchStock.branchId))
-    .where(and(eq(branchStock.variantId, variantId), eq(branches.countsTowardOnlineStock, true)));
+    .where(and(eq(branchStock.variantId, variantId), eq(branches.countsTowardOnlineStock, true), eq(branches.isActive, true)));
   const total = Number(totalRow?.total ?? 0);
-  const [previous] = await db.select({ stock: productVariants.stockQuantity, sku: productVariants.sku, productName: products.name, isPublished: products.isPublished })
+  const [previous] = await db.select({ stock: productVariants.stockQuantity, sku: productVariants.sku, productName: products.name, isPublished: products.isPublished, productId: productVariants.productId })
     .from(productVariants).innerJoin(products, eq(products.id, productVariants.productId)).where(eq(productVariants.id, variantId)).limit(1);
   await db.update(productVariants).set({ stockQuantity: total, updatedAt: new Date() }).where(eq(productVariants.id, variantId));
-  // Phase 5: a published product the website can no longer sell at all.
-  if (previous?.isPublished && previous.stock > 0 && total <= 0) {
-    await enqueueNotification(db, "stock.total_out", { productName: previous.productName, sku: previous.sku }, { dedupeKey: `${variantId}:${ubDateKey()}` });
-  }
   // 2026-09-23: ОЛОН variant-тай бараанд ч `products.stockQuantity`-г бичнэ.
   // Өмнө нь зөвхөн `siblings.length === 1` үед л толилдог байсан тул 2+
   // variant-тай бараанд тэр багана хөшиж үлддэг — "Ирэхээр мэдэгдэх" нь
   // `gt(products.stockQuantity, 0)`, `rearmRestockAlerts` нь
   // `lte(..., 0)`-аар л ажилладаг тул тэдгээр бараанд хэзээ ч ажиллахгүй
   // (эсвэл хуучин тоогоор ажиллана), нөөцийн KPI-ууд ч буруу гарна.
-  const [variantRow] = await db.select({ productId: productVariants.productId }).from(productVariants).where(eq(productVariants.id, variantId)).limit(1);
-  if (variantRow) {
-    const siblings = await db.select({ id: productVariants.id, stockQuantity: productVariants.stockQuantity }).from(productVariants).where(eq(productVariants.productId, variantRow.productId));
+  if (previous) {
+    const siblings = await db.select({ id: productVariants.id, stockQuantity: productVariants.stockQuantity }).from(productVariants).where(eq(productVariants.productId, previous.productId));
     const productTotal = siblings.reduce((sum, sibling) => sum + (sibling.id === variantId ? total : Number(sibling.stockQuantity ?? 0)), 0);
-    await db.update(products).set({ stockQuantity: productTotal, updatedAt: new Date() }).where(eq(products.id, variantRow.productId));
+    // 2026-09-27 (I28): "барааны нөөц ДУУСАВ" зөвхөн БАРААНЫ нийт (бүх
+    // variant) 0 болоход л мэдэгдэнэ. Өмнө нь ЭНЭ variant-ийн шинэ тоог л
+    // хардаг байсан тул 2+ variant-тай (жишээ өнгө) бараанд нэг variant
+    // дуусахад бусад нь худалдаанд байсан ч "дуусав" гэж мэдэгддэг байв.
+    const previousProductTotal = siblings.reduce((sum, sibling) => sum + (sibling.id === variantId ? previous.stock : Number(sibling.stockQuantity ?? 0)), 0);
+    if (previous.isPublished && previousProductTotal > 0 && productTotal <= 0) {
+      await enqueueNotification(db, "stock.total_out", { productName: previous.productName, sku: previous.sku }, { dedupeKey: `${previous.productId}:${ubDateKey()}` });
+    }
+    await db.update(products).set({ stockQuantity: productTotal, updatedAt: new Date() }).where(eq(products.id, previous.productId));
   }
   return total;
 }
@@ -77,20 +87,38 @@ export async function recomputeVariantStockTotal(db: DbOrTx, variantId: number) 
  * countsTowardOnlineStock flag flips.
  */
 export async function recomputeVariantTotalsForBranch(db: DbOrTx, branchId: number) {
+  // 2026-09-27 (I10/D22): `b.isActive = 1` added -- a closed branch left
+  // flagged countsTowardOnlineStock=1 (the flag a manager forgets to also
+  // clear) was still counted here, letting a closed store's shelf keep
+  // selling online. Matches recomputeVariantStockTotal's per-variant twin.
   await db.execute(sql`
     UPDATE product_variants pv
     SET pv.stockQuantity = (
       SELECT COALESCE(SUM(bs.stockQuantity), 0) FROM branch_stock bs JOIN branches b ON b.id = bs.branchId
-      WHERE bs.variantId = pv.id AND b.countsTowardOnlineStock = 1
+      WHERE bs.variantId = pv.id AND b.countsTowardOnlineStock = 1 AND b.isActive = 1
     ), pv.updatedAt = NOW()
     WHERE pv.id IN (SELECT x.variantId FROM branch_stock x WHERE x.branchId = ${branchId})
   `);
+  // 2026-09-27 (I10/D22): `products.stockQuantity` мирроридог байсан нь
+  // ЗӨВХӨН нэг variant-тай бараанд (vc.n = 1) байсан -- recomputeVariantStockTotal
+  // (дээрх, нэг variant тус бүрийн зам) аль хэдийн БҮХ бараанд бичдэг байсан
+  // тул 2+ variant-тай бараа зөвхөн энэ (branch-ийн багц) замаар шинэчлэгдэх
+  // үед л тэр баганаа хуучин утгаараа үлдээдэг байв. Одоо хамрагдсан
+  // (touched) бараа БҮРТ (variant тоог үл харгалзан) SUM(variant)-ийг бичнэ;
+  // дээрх UPDATE аль хэдийн шинэ variant тоог бичсэн тул энд түүнийг л уншина.
   await db.execute(sql`
     UPDATE products p
-    JOIN product_variants pv ON pv.productId = p.id
-    JOIN (SELECT productId, COUNT(*) AS n FROM product_variants GROUP BY productId) vc ON vc.productId = p.id AND vc.n = 1
-    JOIN (SELECT DISTINCT variantId FROM branch_stock WHERE branchId = ${branchId}) touched ON touched.variantId = pv.id
-    SET p.stockQuantity = pv.stockQuantity, p.updatedAt = NOW()
+    JOIN (
+      SELECT pv.productId AS productId, SUM(pv.stockQuantity) AS total
+      FROM product_variants pv
+      WHERE pv.productId IN (
+        SELECT DISTINCT pv2.productId FROM product_variants pv2
+        JOIN branch_stock x ON x.variantId = pv2.id
+        WHERE x.branchId = ${branchId}
+      )
+      GROUP BY pv.productId
+    ) totals ON totals.productId = p.id
+    SET p.stockQuantity = totals.total, p.updatedAt = NOW()
   `);
 }
 
@@ -118,7 +146,7 @@ export async function recordStockMovement(db: DbOrTx, branchId: number, variantI
   // Phase 5 (2026-09-11): a sale or transfer that takes this shelf over its
   // low-stock line pushes once, to the location's own group plus admin.
   // Same transaction as the movement, so a rolled-back sale never alerts.
-  if (delta < 0 && ALERTING_MOVEMENT_TYPES.has(meta.type)) {
+  if (delta < 0 && (ALERTING_MOVEMENT_TYPES.has(meta.type) || meta.forceAlert)) {
     const [branch] = await db.select({ name: branches.name, kind: branches.kind, threshold: branches.lowStockThreshold }).from(branches).where(eq(branches.id, branchId)).limit(1);
     const level = branch ? classifyStockCrossing(balanceAfter - delta, balanceAfter, branch.threshold) : null;
     if (branch && level) {
@@ -218,9 +246,26 @@ export async function getStockLedgerDrift(db: DbOrTx, limit = 20) {
     WHERE s.shelf <> s.ledger
     LIMIT ${sqlInt(Math.max(1, limit))}
   `) as unknown as [{ branchId: number; variantId: number; shelf: number; ledger: string | number }[]];
+  // 2026-09-27 (I18): counted only branch_stock rows -- a (branchId, variantId)
+  // with stock_movements rows but NO branch_stock row at all (an older bug
+  // that deleted/never created the shelf row while still recording
+  // movements) has a real ledger balance but was invisible to this count,
+  // even though `examples` above already surfaces exactly such rows via its
+  // second UNION branch. Same UNION here, so the count and the examples can
+  // never disagree about how many rows are drifted.
   const [countRows] = await db.execute(sql`
-    SELECT COUNT(*) AS n FROM branch_stock bs
-    WHERE bs.stockQuantity <> COALESCE((SELECT SUM(sm.delta) FROM stock_movements sm WHERE sm.branchId = bs.branchId AND sm.variantId = bs.variantId), 0)
+    SELECT COUNT(*) AS n FROM (
+      SELECT bs.branchId, bs.variantId, bs.stockQuantity AS shelf,
+             COALESCE((SELECT SUM(sm.delta) FROM stock_movements sm WHERE sm.branchId = bs.branchId AND sm.variantId = bs.variantId), 0) AS ledger
+      FROM branch_stock bs
+      UNION ALL
+      SELECT sm.branchId, sm.variantId, 0 AS shelf, SUM(sm.delta) AS ledger
+      FROM stock_movements sm
+      LEFT JOIN branch_stock bs ON bs.branchId = sm.branchId AND bs.variantId = sm.variantId
+      WHERE bs.id IS NULL
+      GROUP BY sm.branchId, sm.variantId
+    ) s
+    WHERE s.shelf <> s.ledger
   `) as unknown as [{ n: number | string }[]];
   return {
     driftCount: Number(countRows[0]?.n ?? 0),

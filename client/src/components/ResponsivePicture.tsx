@@ -34,11 +34,18 @@ type Props = Omit<ImgHTMLAttributes<HTMLImageElement>, "src" | "srcSet"> & {
   avif?: boolean;
 };
 
+// 2026-09-27: адил зураг (жишээ нь нэг бараа Shop grid + QuickView хоёуланд)
+// хэд хэдэн ResponsivePicture instance-д зурагддаг тул AVIF-ийн алдааны
+// санах ой instance тус бүрдээ биш модулийн түвшинд байх ёстой -- эс бөгөөс
+// instance бүр ижил 404 AVIF хүсэлтийг дахин дахин оролддог.
+const avifUnsupportedSrcs = new Set<string>();
+
 export default function ResponsivePicture({ src, fullWidth, sizes, avif = true, onError, ...img }: Props) {
-  // src солигдвол (өөр бараа) AVIF-ийг дахин оролдоно.
-  const [avifFailedFor, setAvifFailedFor] = useState<string | null>(null);
+  // src солигдвол (өөр бараа) AVIF-ийг дахин оролдоно (модулийн санах ойд
+  // өмнө нь бүтэлгүйтээгүй л бол).
+  const [avifFailedFor, setAvifFailedFor] = useState<string | null>(() => avifUnsupportedSrcs.has(src) ? src : null);
   const webp = imageSrcSet(src, fullWidth);
-  const avifSet = avif && avifFailedFor !== src ? avifSrcSet(src, fullWidth) : null;
+  const avifSet = avif && avifFailedFor !== src && !avifUnsupportedSrcs.has(src) ? avifSrcSet(src, fullWidth) : null;
 
   const element = (
     <img
@@ -46,7 +53,7 @@ export default function ResponsivePicture({ src, fullWidth, sizes, avif = true, 
       src={src}
       {...(webp ? { srcSet: webp, sizes } : {})}
       onError={event => {
-        if (avifSet) { setAvifFailedFor(src); return; }
+        if (avifSet) { avifUnsupportedSrcs.add(src); setAvifFailedFor(src); return; }
         onError?.(event);
       }}
     />

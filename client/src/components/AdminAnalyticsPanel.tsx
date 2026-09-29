@@ -178,8 +178,11 @@ export default function AdminAnalyticsPanel() {
               : report.conversion.trackingStartedAt ? `${report.conversion.trackingStartedAt.slice(0, 10)}-с хойш хэмжигдэж эхэлсэн` : "Хараахан хэмжиж эхлээгүй."}
             accent="#3970a7" />
           <DarkStatTile icon={UsersRound} label="Шинэ / Давтан харилцагч" value={range === "all" ? "—" : `${report.overview.newCustomerCount} / ${report.overview.returningCustomerCount}`} accent="#f0b52d" />
-          <DarkStatTile icon={ShoppingCart} label="Сагс орхилтын хувь" value={`${report.cartAbandonment.abandonmentRatePercent}%`}
-            caption={`${report.cartAbandonment.abandonedCount} орхигдсон / ${report.cartAbandonment.cartsWithItems} бараатай сагс`} accent="#df1f3d" />
+          {/* 2026-09-27 (F-analytics): 0 carts with items -> 0/0 -> "0%",
+              indistinguishable from "measured, nobody abandoned" -- the
+              range picker or a fresh install can genuinely have zero. */}
+          <DarkStatTile icon={ShoppingCart} label="Сагс орхилтын хувь" value={report.cartAbandonment.cartsWithItems > 0 ? `${report.cartAbandonment.abandonmentRatePercent}%` : "—"}
+            caption={report.cartAbandonment.cartsWithItems > 0 ? `${report.cartAbandonment.abandonedCount} орхигдсон / ${report.cartAbandonment.cartsWithItems} бараатай сагс` : "Энэ хугацаанд бараатай сагс алга."} accent="#df1f3d" />
           <DarkStatTile icon={Package} label="Нөөцийн үнэ цэн" value={formatMnt(report.inventory.stockValueMnt)}
             caption={`${report.inventory.outOfStockCount} дууссан, ${report.inventory.lowStockCount} бага үлдэгдэлтэй / ${report.inventory.publishedProductCount} бараа`} accent="#3970a7" />
           <DarkStatTile icon={Undo2} label="Буцаалтын хувь" value={report.returnRate.completedOrReturnedOrderCount > 0 ? `${report.returnRate.returnRatePercent}%` : "—"}

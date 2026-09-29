@@ -66,12 +66,24 @@ export default function VendorCatalogPanel() {
   };
 
   const runApply = async () => {
-    // The key carries the field for a fact row; the server takes barcodes.
+    // 2026-09-27 (F6): the checkbox is already per (sku, field) for the
+    // facts tab -- ticking only "Найрлага" must apply only that field, not
+    // every differing field on that product. `skus` stays (server input
+    // schema today only accepts barcodes; server/integrations/vendorCatalog.ts's
+    // applyVendorCatalog already accepts an optional `fields` list and falls
+    // back to the old sku-level behaviour when it is absent; the router accepts
+    // `fields` since 2026-09-27).
     const skus = Array.from(chosen).map(key => key.split(":")[0]);
+    const fields = tab === "facts"
+      ? Array.from(chosen).flatMap(key => {
+          const [sku, field] = key.split(":");
+          return field === "ingredients" || field === "usageInstructions" || field === "warnings" ? [{ sku, field } as const] : [];
+        })
+      : undefined;
     if (!skus.length) return toast.message("Нэг ч мөр сонгоогүй байна.");
     if (tab === "price" && !await confirm({ title: `${skus.length} барааны үнийг вендорын үнээр солих уу? Энэ нь харилцагчийн төлөх үнэ.`, danger: true })) return;
     try {
-      const result = await apply.mutateAsync({ kind: tab, skus: Array.from(new Set(skus)) });
+      const result = await apply.mutateAsync({ kind: tab, skus: Array.from(new Set(skus)), ...(fields ? { fields } : {}) });
       toast.success(`${result.applied} мөр шинэчлэгдлээ.`);
       await Promise.all([utils.admin.products.invalidate(), utils.catalog.invalidate()]);
       await runCompare();

@@ -1,5 +1,6 @@
 import { getActiveSitePromotion, getSiteMedia, getSiteText, getStoreSettingValue, getStorefrontBranches } from "../db";
 import { renderHeroShell } from "./heroShell";
+import { getOrSetCached, invalidateCached } from "./ttlCache";
 import { getSiteTextSlot, type SiteTextSlotKey } from "../../shared/site-text";
 import { checkStoreSettingFormat } from "../../shared/store-settings";
 import { getSiteMediaSlot } from "../../shared/site-media";
@@ -52,7 +53,13 @@ function cdnPreconnectTag(): string {
 
 /** Values are read per request, so cache briefly rather than hit MySQL on every page load. */
 const CACHE_TTL_MS = 60_000;
-let cache: { renderedAt: number; values: Map<string, string> } | null = null;
+// 2026-09-27: was a bare module-level `cache` object with a manual TTL
+// check -- no single-flight, so every concurrent request that landed while
+// the entry was expired ran its own full Promise.all of DB reads (thundering
+// herd on every page view, worst right after the entry expires). Routed
+// through the shared TTL cache (server/_core/ttlCache.ts), which collapses
+// concurrent computes into one in-flight promise.
+const VALUES_CACHE_KEY = "indexHtml:values";
 
 /** Escapes a value for an HTML attribute (every placeholder lands in one, except the JSON-LD block). */
 export const escapeAttribute = (value: string) =>
@@ -80,9 +87,10 @@ export const escapeJsString = (value: string) => {
 };
 
 async function resolveValues(): Promise<Map<string, string>> {
-  const now = Date.now();
-  if (cache && now - cache.renderedAt < CACHE_TTL_MS) return cache.values;
+  return getOrSetCached(VALUES_CACHE_KEY, CACHE_TTL_MS, computeValues);
+}
 
+async function computeValues(): Promise<Map<string, string>> {
   const [rows, branches, phoneDigits, facebookUrl, instagramUrl, mediaRows, googleVerification, facebookVerification, promo] = await Promise.all([
     getSiteText(),
     getStorefrontBranches(),
@@ -173,6 +181,11 @@ async function resolveValues(): Promise<Map<string, string>> {
     ["SEO_TITLE", escapeAttribute(textFor("seo-text-home-title"))],
     ["SEO_DESCRIPTION", escapeAttribute(textFor("seo-text-home-description"))],
     ["SEO_SITE_NAME", escapeAttribute(siteName)],
+    // 2026-09-27: unescaped copy for renderIndexHtml to hand to
+    // resolveRouteMeta (which escapes its own title/description once) --
+    // never rendered into the template itself (no %SEO_SITE_NAME_RAW%
+    // placeholder exists), so leaving it unescaped here is safe.
+    ["SEO_SITE_NAME_RAW", siteName],
     ["SEO_OG_DESCRIPTION", escapeAttribute(textFor("seo-text-og-description"))],
     ["SEO_TWITTER_DESCRIPTION", escapeAttribute(textFor("seo-text-twitter-description"))],
     ["SEO_CANONICAL", escapeAttribute(publicOrigin())],
@@ -215,7 +228,6 @@ async function resolveValues(): Promise<Map<string, string>> {
     })],
   ]);
 
-  cache = { renderedAt: now, values };
   return values;
 }
 
@@ -227,16 +239,24 @@ async function resolveValues(): Promise<Map<string, string>> {
 export async function renderIndexHtml(template: string, pathname = "/"): Promise<string> {
   let values: Map<string, string>;
   try {
-    values = await resolveValues();
+    // 2026-09-27: resolveValues() returns the SAME cached Map to every
+    // caller for the whole 60s TTL window -- the per-request `.set()` below
+    // (SEO_CANONICAL) used to write straight into it, so one request's
+    // canonical could leak into another request's page for a different
+    // path until the entry expired. Copy before mutating.
+    values = new Map(await resolveValues());
   } catch (error) {
     console.error("[seo] Could not read site SEO values; serving the fallback document.", error);
     values = new Map();
   }
   // A product or journal post carries its own title, description, image
   // and structured data (server/_core/routeMeta.ts); everything else keeps
-  // the site-wide values.
-  const siteName = values.get("SEO_SITE_NAME") ?? getSiteTextSlot("seo-text-site-name").fallbackValue;
-  const routeMeta = await resolveRouteMeta(pathname, siteName.replace(/&quot;/g, '"').replace(/&amp;/g, "&"));
+  // the site-wide values. SEO_SITE_NAME_RAW (2026-09-27) is the un-escaped
+  // value -- resolveRouteMeta does its own single escapeAttribute() pass, so
+  // feeding it the already-escaped SEO_SITE_NAME here used to double-escape
+  // "&"/"<"/">" in every product/post <title> and description.
+  const siteName = values.get("SEO_SITE_NAME_RAW") ?? getSiteTextSlot("seo-text-site-name").fallbackValue;
+  const routeMeta = await resolveRouteMeta(pathname, siteName);
   // Хуудас бүрийн canonical нь ӨӨРИЙНХӨӨ хаяг (2026-09-20).
   //
   // Өмнө нь бараа/нийтлэлээс бусад БҮХ хуудас canonical-аа нүүр хуудас гэж
@@ -314,5 +334,5 @@ function fallbackFor(key: string): string | undefined {
 
 /** Called after an admin saves an SEO slot or a contact setting, so the change is visible immediately. */
 export function invalidateIndexHtmlCache() {
-  cache = null;
+  invalidateCached(VALUES_CACHE_KEY);
 }

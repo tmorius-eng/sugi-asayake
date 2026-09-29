@@ -88,10 +88,14 @@ function ProviderCard({ row }: { row: IntegrationRow }) {
     }
   };
 
+  // 2026-09-27 (F-integr): the emptiness check trimmed, but the value
+  // actually STORED did not -- a trailing space/newline pasted from a
+  // vendor's dashboard (very common with API keys) saved untrimmed and then
+  // silently failed auth, with nothing here to suggest why.
   const dirtySet = (): Record<string, string> => {
     const set: Record<string, string> = {};
-    for (const [key, value] of Object.entries(drafts)) if (value.trim()) set[key] = value;
-    for (const extra of extraRows) if (extra.key.trim() && extra.value.trim()) set[extra.key.trim()] = extra.value;
+    for (const [key, value] of Object.entries(drafts)) if (value.trim()) set[key] = value.trim();
+    for (const extra of extraRows) if (extra.key.trim() && extra.value.trim()) set[extra.key.trim()] = extra.value.trim();
     return set;
   };
 
@@ -200,7 +204,12 @@ function ProviderCard({ row }: { row: IntegrationRow }) {
                     {topicGroup && <button type="button" disabled={busyKey !== null} onClick={async () => { if (state?.isSet && !await confirm({ title: `"${NOTIFICATION_GROUP_LABELS[topicGroup]}" бүлгийн сэдвийг шинэчлэх үү? Одоо бүртгүүлсэн хүмүүс QR кодыг дахин уншуулах шаардлагатай болно.` })) return; void run(`topic:${field.key}`, () => generateTopic.mutateAsync({ group: topicGroup }), "Сэдэв үүслээ."); }} className="inline-flex items-center gap-1 rounded-full border border-[var(--a-border)] bg-[var(--a-card)] px-2.5 py-1 text-[10px] font-extrabold text-[var(--a-text-soft)] hover:border-[var(--a-info)] hover:text-[var(--a-info)]">
                       {busyKey === `topic:${field.key}` ? <LoaderCircle className="animate-spin" size={11} /> : <RefreshCw size={11} />}{state?.isSet ? "Шинэчлэх" : "Сэдэв үүсгэх"}
                     </button>}
-                    {topicGroup && meta.testable && state?.isSet && <button type="button" disabled={busyKey !== null} onClick={() => run(`test:${field.key}`, async () => { const result = await testIntegration.mutateAsync({ provider: "ntfy", group: topicGroup }); if (!result.ok) throw new Error(result.error ?? "Илгээж чадсангүй."); }, "Туршилт илгээлээ — утсаа шалгана уу.")} className="inline-flex items-center gap-1 rounded-full bg-[var(--a-info)] px-2.5 py-1 text-[10px] font-extrabold text-white disabled:opacity-60">
+                    {/* 2026-09-27 (F-integr): disabled while a draft sits
+                        unsaved -- otherwise this always tested the last
+                        SAVED credentials, so a wrong result told nothing
+                        about the just-typed value still sitting in the
+                        field. */}
+                    {topicGroup && meta.testable && state?.isSet && <button type="button" disabled={busyKey !== null || hasDirty} title={hasDirty ? "Эхлээд хадгална уу" : undefined} onClick={() => run(`test:${field.key}`, async () => { const result = await testIntegration.mutateAsync({ provider: "ntfy", group: topicGroup }); if (!result.ok) throw new Error(result.error ?? "Илгээж чадсангүй."); }, "Туршилт илгээлээ — утсаа шалгана уу.")} className="inline-flex items-center gap-1 rounded-full bg-[var(--a-info)] px-2.5 py-1 text-[10px] font-extrabold text-white disabled:opacity-60">
                       {busyKey === `test:${field.key}` ? <LoaderCircle className="animate-spin" size={11} /> : <Send size={11} />}Туршилт
                     </button>}
                     {state?.isSet && <button type="button" disabled={busyKey !== null} onClick={() => clearKey(field.key)} className="grid size-6 place-items-center rounded-full text-[var(--a-muted)] hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${field.label} устгах`}><X size={12} /></button>}

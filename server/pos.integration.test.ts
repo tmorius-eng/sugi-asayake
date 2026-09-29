@@ -121,7 +121,7 @@ maybeDescribe("POS in-person sale integration", () => {
     await expect(warehouseCaller.admin.recordInStoreSale({
       branchId,
       items: [{ variantId: publishedVariantId, quantity: 999 }],
-    })).rejects.toThrow(/no longer available/i);
+    })).rejects.toThrow(/байхгүй болсон/);
   });
 
   it("keeps recording sales warehouse/admin-only -- marketing and finance are forbidden", async () => {

@@ -43,6 +43,7 @@ import {
 } from "@/lib/faceEngine";
 import { drawTrackedMesh, loadFaceTracker, overlaySize, releaseSnapshot, snapshotFrame, trackFrame, trackerDelegate, warmMeshContours } from "@/lib/faceTracker";
 import { faceBackendName, warmUpFaceModels } from "@/lib/faceEngine";
+import { withTimeout } from "@/lib/withTimeout";
 
 /**
  * Admin face gate (2026-09-08; tracking rebuilt 2026-09-13) — stands between
@@ -97,6 +98,13 @@ export default function AdminFaceGate({ children }: { children: React.ReactNode 
    * камергүй компьютер дээр олж чадаагүй.
    */
   const [method, setMethod] = useState<"camera" | "phone" | null>(null);
+  // 2026-09-27: once the flow (camera or phone) has actually started, a
+  // background status refetch (60s interval / window focus) that flips
+  // needsEnrollment -> false mid-capture must not unmount FaceGateFlow /
+  // FaceHandoffPanel in favour of the method chooser -- that killed the
+  // camera (or the QR handoff) mid-run. Reset only once the flow reports it
+  // finished (onPassed) or the person explicitly backs out.
+  const flowStartedRef = useRef(false);
   const statusQuery = trpc.faceAuth.status.useQuery(undefined, {
     // The gate decides whether the admin panel renders at all, so a stale
     // cached "verified" must never be what lets someone in.
@@ -120,12 +128,16 @@ export default function AdminFaceGate({ children }: { children: React.ReactNode 
     );
   }
 
-  // Fail OPEN on a status error, deliberately. A network blip or a DB hiccup
-  // must not brick the admin panel: the password login already happened, and
-  // this is the second factor, not the first. Failing closed here would mean
-  // one transient error locks every staff member out of the tool they would
-  // need to fix it.
-  if (statusQuery.isError) return <>{children}</>;
+  // Fail OPEN on a status error, deliberately -- but only when there is no
+  // cached status to fall back on. A background refetch (the 60s interval,
+  // or a window-focus check) that fails transiently must not throw away a
+  // last-known-good "verified" and unmount IdleLockWatcher: that reset its
+  // idle timer on every blip and, worse, dropped the second factor for a
+  // network hiccup rather than for an actual expiry (2026-09-27). Only the
+  // very first load (no data at all) still fails open, matching the intent
+  // below: the password login already happened, and this is the second
+  // factor, not the first.
+  if (statusQuery.isError && statusQuery.data === undefined) return <>{children}</>;
 
   const status = statusQuery.data;
   if (!status || !status.gateEnabled) return <>{children}</>;
@@ -156,19 +168,33 @@ export default function AdminFaceGate({ children }: { children: React.ReactNode 
   // дэлгэцийг алгасаж шууд камер руу орно (нэг товшилт бага).
   const canHandoff = !needsEnrollment && !isPhoneDevice();
 
-  if (canHandoff && method === null) {
+  if (canHandoff && method === null && !flowStartedRef.current) {
     return <FaceMethodChooser tips={FACE_TIPS} onUseCamera={() => setMethod("camera")} onUsePhone={() => setMethod("phone")} />;
   }
+  // Latched once either flow below is actually rendered -- see the ref's
+  // declaration above.
+  flowStartedRef.current = true;
+  // 2026-09-27 (F13): reset method/flowStarted only AFTER the refetch
+  // resolves. Resetting them first re-rendered this component with the
+  // STALE status (still unverified) and method===null, so the chooser
+  // flashed on screen for one frame before the fresh "verified" data
+  // arrived -- status.verified short-circuits above regardless, so this
+  // ordering costs nothing and only removes the flash.
+  const finishFlow = async () => {
+    await statusQuery.refetch();
+    flowStartedRef.current = false;
+    setMethod(null);
+  };
   if (method === "phone") {
-    return <FaceHandoffPanel onPassed={() => { setMethod(null); void statusQuery.refetch(); }} onBack={() => setMethod(null)} />;
+    return <FaceHandoffPanel onPassed={() => void finishFlow()} onBack={() => { flowStartedRef.current = false; setMethod(null); }} />;
   }
   return (
     <FaceGateFlow
       needsEnrollment={needsEnrollment}
       modelStale={status.modelStale}
-      onPassed={() => statusQuery.refetch()}
+      onPassed={() => void finishFlow()}
       onUseHandoff={canHandoff ? () => setMethod("phone") : undefined}
-      onBack={canHandoff ? () => setMethod(null) : undefined}
+      onBack={canHandoff ? () => { flowStartedRef.current = false; setMethod(null); } : undefined}
     />
   );
 }
@@ -226,6 +252,11 @@ function IdleLockWatcher({ idleTimeoutMs, onLocked }: { idleTimeoutMs: number; o
     } catch {
       // Even if the call fails, fall through to onLocked: the proof has
       // expired on its own by now, so the refetched status will say so.
+    } finally {
+      // 2026-09-27: without this, a single failed lock call (network blip)
+      // left the guard stuck at true forever -- every later idle timeout,
+      // on this tab or broadcast from another, silently did nothing.
+      lockingRef.current = false;
     }
     onLockedRef.current();
   }, []);
@@ -324,6 +355,11 @@ const TRACK_INTERVAL_MS = 40;
 const ENROLL_DEADLINE_MS = 90_000;
 /** Login gives up after this long without three usable snapshots. */
 const LOGIN_DEADLINE_MS = 30_000;
+/** A single descriptor pass (captureFace) can stall without ever throwing on
+ *  some devices, the same WebGL/wasm-compile hang described in
+ *  client/src/lib/withTimeout.ts -- wrapped everywhere captureFace runs so a
+ *  stuck run always reaches the "Дахин оролдох" screen (2026-09-27). */
+const DESCRIBE_TIMEOUT_MS = 8_000;
 
 /** How long a face may be in view without a natural blink before the screen
  *  asks for one ("Нэг удаа анивчина уу"). People blink every 3-4 s on average,
@@ -485,49 +521,61 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
     setTargetSector(null);
     setHint("Эхлээд камер руу шууд харна уу");
 
-    while (!coverage.complete && Date.now() < deadline) {
-      const frame = await track(video, lastAt);
-      const framing = checkFraming(frame.faces, frame.landmarks, coverage.current !== null);
-      if (framing || !frame.landmarks) {
-        setHint(FRAMING_COPY[framing ?? "NO_FACE"]);
-        continue;
+    try {
+      while (!coverage.complete && Date.now() < deadline) {
+        const frame = await track(video, lastAt);
+        const framing = checkFraming(frame.faces, frame.landmarks, coverage.current !== null);
+        if (framing || !frame.landmarks) {
+          setHint(FRAMING_COPY[framing ?? "NO_FACE"]);
+          continue;
+        }
+
+        const pose = getHeadPose(frame.landmarks);
+        const event = coverage.observe(pose);
+        setCurrentSector(coverage.current);
+        setProgress(Math.round(coverage.progress * 100));
+
+        if (event?.type === "center") {
+          center.push(snapshotFrame(video));
+          setCenterDone(true);
+        } else if (event?.type === "sector") {
+          // Store a reference only from a MODERATE turn: past ENROLL_TURN_MAX
+          // the recogniser starts losing the face and the descriptor quality
+          // collapses, so the segment still lights up but no view is kept.
+          const strength = Math.hypot(pose.yaw, pose.pitch);
+          if (strength <= ENROLL_TURN_MAX) sectors.push({ sector: event.sector, frame: snapshotFrame(video), pose });
+          setCovered(new Set(coverage.coveredSectors));
+        } else if (coverage.hasCenter && coverage.current === null && centerExtras < 3
+          && Math.abs(pose.yaw) < 0.05 && Math.abs(pose.pitch) < 0.05 && center.length > 0) {
+          // A few more frontal frames while the person passes through the
+          // centre between directions, for a better-averaged frontal vector.
+          centerExtras += 1;
+          center.push(snapshotFrame(video));
+        }
+
+        const target = coverage.hasCenter ? coverage.nextTarget() : null;
+        setTargetSector(target);
+        if (!coverage.hasCenter) setHint("Камер руу шууд харна уу — хөдөлгөөнгүй");
+        else if (target !== null) setHint(`Толгойгоо аажуу тойруулан эргүүлнэ үү → ${SECTOR_LABELS[target]}`);
+        else setHint("Сайн байна");
       }
 
-      const pose = getHeadPose(frame.landmarks);
-      const event = coverage.observe(pose);
-      setCurrentSector(coverage.current);
-      setProgress(Math.round(coverage.progress * 100));
-
-      if (event?.type === "center") {
-        center.push(snapshotFrame(video));
-        setCenterDone(true);
-      } else if (event?.type === "sector") {
-        // Store a reference only from a MODERATE turn: past ENROLL_TURN_MAX
-        // the recogniser starts losing the face and the descriptor quality
-        // collapses, so the segment still lights up but no view is kept.
-        const strength = Math.hypot(pose.yaw, pose.pitch);
-        if (strength <= ENROLL_TURN_MAX) sectors.push({ sector: event.sector, frame: snapshotFrame(video), pose });
-        setCovered(new Set(coverage.coveredSectors));
-      } else if (coverage.hasCenter && coverage.current === null && centerExtras < 3
-        && Math.abs(pose.yaw) < 0.05 && Math.abs(pose.pitch) < 0.05 && center.length > 0) {
-        // A few more frontal frames while the person passes through the
-        // centre between directions, for a better-averaged frontal vector.
-        centerExtras += 1;
-        center.push(snapshotFrame(video));
-      }
-
-      const target = coverage.hasCenter ? coverage.nextTarget() : null;
-      setTargetSector(target);
-      if (!coverage.hasCenter) setHint("Камер руу шууд харна уу — хөдөлгөөнгүй");
-      else if (target !== null) setHint(`Толгойгоо аажуу тойруулан эргүүлнэ үү → ${SECTOR_LABELS[target]}`);
-      else setHint("Сайн байна");
+      setEnrolling(false);
+      setTargetSector(null);
+      if (!coverage.complete) throw new Error("RING_TIMEOUT");
+      if (center.length === 0) throw new Error("CAPTURE_TIMEOUT");
+      return { center, sectors };
+    } catch (error) {
+      // 2026-09-27: a timed-out or aborted enrolment must not leak the
+      // offscreen canvases already captured for the directions covered so
+      // far -- releaseSnapshot is idempotent, so releasing every collected
+      // frame here is safe even though the happy path releases them again
+      // later in describeSnapshots.
+      center.forEach(releaseSnapshot);
+      sectors.forEach(s => releaseSnapshot(s.frame));
+      setEnrolling(false);
+      throw error;
     }
-
-    setEnrolling(false);
-    setTargetSector(null);
-    if (!coverage.complete) throw new Error("RING_TIMEOUT");
-    if (center.length === 0) throw new Error("CAPTURE_TIMEOUT");
-    return { center, sectors };
   }, [track]);
 
   /**
@@ -541,28 +589,38 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
     const total = input.center.length + input.sectors.length;
     let done = 0;
     const centerDescriptors: number[][] = [];
-    for (const frame of input.center) {
-      if (abortRef.current) throw new Error("ABORTED");
-      setProcessing(`Боловсруулж байна ${done + 1}/${total}`);
-      const result = await captureFace(frame);
-      releaseSnapshot(frame);
-      if (result.ok) centerDescriptors.push(result.sample.descriptor);
-      done += 1;
-      setProgress(Math.round((done / total) * 100));
-    }
     const poses: { pose: string; descriptor: number[] }[] = [];
-    for (const { sector, frame } of input.sectors) {
-      if (abortRef.current) throw new Error("ABORTED");
-      setProcessing(`Боловсруулж байна ${done + 1}/${total}`);
-      const result = await captureFace(frame, POSE_MIN_FACE_WIDTH_RATIO_TURNED);
-      releaseSnapshot(frame);
-      if (result.ok) poses.push({ pose: SECTOR_KEYS[sector], descriptor: result.sample.descriptor });
-      done += 1;
-      setProgress(Math.round((done / total) * 100));
+    try {
+      for (const frame of input.center) {
+        if (abortRef.current) throw new Error("ABORTED");
+        setProcessing(`Боловсруулж байна ${done + 1}/${total}`);
+        const result = await withTimeout(captureFace(frame), DESCRIBE_TIMEOUT_MS, "CAPTURE_TIMEOUT");
+        releaseSnapshot(frame);
+        if (result.ok) centerDescriptors.push(result.sample.descriptor);
+        done += 1;
+        setProgress(Math.round((done / total) * 100));
+      }
+      for (const { sector, frame } of input.sectors) {
+        if (abortRef.current) throw new Error("ABORTED");
+        setProcessing(`Боловсруулж байна ${done + 1}/${total}`);
+        const result = await withTimeout(captureFace(frame, POSE_MIN_FACE_WIDTH_RATIO_TURNED), DESCRIBE_TIMEOUT_MS, "CAPTURE_TIMEOUT");
+        releaseSnapshot(frame);
+        if (result.ok) poses.push({ pose: SECTOR_KEYS[sector], descriptor: result.sample.descriptor });
+        done += 1;
+        setProgress(Math.round((done / total) * 100));
+      }
+      setProcessing(null);
+      if (centerDescriptors.length < 2) throw new Error("CAPTURE_TIMEOUT");
+      return { centerDescriptors, poses };
+    } catch (error) {
+      // 2026-09-27: an abort, a timeout, or the CAPTURE_TIMEOUT thrown above
+      // can each leave some snapshots un-reached in the loops -- release
+      // every one of them (already-released frames are a safe no-op).
+      input.center.forEach(releaseSnapshot);
+      input.sectors.forEach(s => releaseSnapshot(s.frame));
+      setProcessing(null);
+      throw error;
     }
-    setProcessing(null);
-    if (centerDescriptors.length < 2) throw new Error("CAPTURE_TIMEOUT");
-    return { centerDescriptors, poses };
   }, []);
 
   /**
@@ -594,68 +652,78 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
     setBlinkPrompt(false);
     let trackMsTotal = 0;
     let trackCount = 0;
-    while ((frames.length < LOGIN_SNAPSHOTS || !blink.seen) && Date.now() < deadline) {
-      const t0 = performance.now();
-      const frame = await track(video, lastAt);
-      trackMsTotal += performance.now() - t0;
-      trackCount += 1;
-      const framing = checkFraming(frame.faces, frame.landmarks);
-      if (framing || !frame.landmarks) {
-        setHint(FRAMING_COPY[framing ?? "NO_FACE"]);
-        still.reset();
-        // The person left, or someone else joined: start over (see above) --
-        // once it has lasted a few frames, not on a single tracker dropout.
-        const lost = !frame.landmarks || framing === "NO_FACE" || framing === "MULTIPLE_FACES";
-        lostFrames = lost ? lostFrames + 1 : 0;
-        if (lostFrames === LOST_FACE_RESET_FRAMES) {
-          if (frames.length > 0 || blink.seen) restarts += 1;
-          frames.forEach(releaseSnapshot);
-          frames = [];
-          blink = new BlinkDetector();
-          faceSince = null;
-          setBlinkPrompt(false);
-          showProgress();
+    try {
+      while ((frames.length < LOGIN_SNAPSHOTS || !blink.seen) && Date.now() < deadline) {
+        const t0 = performance.now();
+        const frame = await track(video, lastAt);
+        trackMsTotal += performance.now() - t0;
+        trackCount += 1;
+        const framing = checkFraming(frame.faces, frame.landmarks);
+        if (framing || !frame.landmarks) {
+          setHint(FRAMING_COPY[framing ?? "NO_FACE"]);
+          still.reset();
+          // The person left, or someone else joined: start over (see above) --
+          // once it has lasted a few frames, not on a single tracker dropout.
+          const lost = !frame.landmarks || framing === "NO_FACE" || framing === "MULTIPLE_FACES";
+          lostFrames = lost ? lostFrames + 1 : 0;
+          if (lostFrames === LOST_FACE_RESET_FRAMES) {
+            if (frames.length > 0 || blink.seen) restarts += 1;
+            frames.forEach(releaseSnapshot);
+            frames = [];
+            blink = new BlinkDetector();
+            faceSince = null;
+            setBlinkPrompt(false);
+            showProgress();
+          }
+          continue;
         }
-        continue;
-      }
-      lostFrames = 0;
-      faceSince ??= performance.now();
-      blink.observe(frame.blendshapes);
-      const needPrompt = !blink.seen && (frames.length >= LOGIN_SNAPSHOTS || performance.now() - faceSince >= BLINK_PROMPT_AFTER_MS);
-      setBlinkPrompt(needPrompt);
-      showProgress();
-      if (frames.length >= LOGIN_SNAPSHOTS) {
-        // Snapshots done; only the blink is missing.
-        setHint("Нэг удаа анивчина уу");
-        continue;
-      }
-      const pose = getHeadPose(frame.landmarks);
-      const frontal = Math.abs(pose.yaw) < LOGIN_FRONTAL_TOLERANCE && Math.abs(pose.pitch) < LOGIN_FRONTAL_TOLERANCE;
-      const isStill = still.observe(frame.landmarks);
-      if (!frontal) {
-        setHint("Камер руу шууд харна уу");
-        continue;
-      }
-      frontalFrames += 1;
-      if (!isStill) {
-        setHint("Хөдөлгөөнгүй байна уу…");
-        continue;
-      }
-      const eyesClosing = Math.min(frame.blendshapes.get("eyeBlinkLeft") ?? 0, frame.blendshapes.get("eyeBlinkRight") ?? 0) > BLINK_OPEN;
-      if (!eyesClosing && performance.now() - lastSnapshotAt >= LOGIN_SNAPSHOT_SPACING_MS) {
-        frames.push(snapshotFrame(video));
-        lastSnapshotAt = performance.now();
+        lostFrames = 0;
+        faceSince ??= performance.now();
+        blink.observe(frame.blendshapes);
+        const needPrompt = !blink.seen && (frames.length >= LOGIN_SNAPSHOTS || performance.now() - faceSince >= BLINK_PROMPT_AFTER_MS);
+        setBlinkPrompt(needPrompt);
         showProgress();
-        setHint(frames.length < LOGIN_SNAPSHOTS ? "Царай уншиж байна…" : blink.seen ? "Боловсруулж байна…" : "Нэг удаа анивчина уу");
+        if (frames.length >= LOGIN_SNAPSHOTS) {
+          // Snapshots done; only the blink is missing.
+          setHint("Нэг удаа анивчина уу");
+          continue;
+        }
+        const pose = getHeadPose(frame.landmarks);
+        const frontal = Math.abs(pose.yaw) < LOGIN_FRONTAL_TOLERANCE && Math.abs(pose.pitch) < LOGIN_FRONTAL_TOLERANCE;
+        const isStill = still.observe(frame.landmarks);
+        if (!frontal) {
+          setHint("Камер руу шууд харна уу");
+          continue;
+        }
+        frontalFrames += 1;
+        if (!isStill) {
+          setHint("Хөдөлгөөнгүй байна уу…");
+          continue;
+        }
+        const eyesClosing = Math.min(frame.blendshapes.get("eyeBlinkLeft") ?? 0, frame.blendshapes.get("eyeBlinkRight") ?? 0) > BLINK_OPEN;
+        if (!eyesClosing && performance.now() - lastSnapshotAt >= LOGIN_SNAPSHOT_SPACING_MS) {
+          frames.push(snapshotFrame(video));
+          lastSnapshotAt = performance.now();
+          showProgress();
+          setHint(frames.length < LOGIN_SNAPSHOTS ? "Царай уншиж байна…" : blink.seen ? "Боловсруулж байна…" : "Нэг удаа анивчина уу");
+        }
       }
+      setBlinkPrompt(false);
+      if (frames.length === 0) throw new Error("CAPTURE_TIMEOUT");
+      // Nothing is submitted without a blink: the server would refuse it anyway
+      // (ADMIN_FACE_LIVENESS_ENFORCED), and not sending it keeps an honest miss
+      // from counting towards the account lockout.
+      if (!blink.seen) throw new Error("NO_BLINK");
+      return { frames, blinks: blink.count, frontal: frontalFrames, trackMsAvg: trackCount ? trackMsTotal / trackCount : 0, restarts };
+    } catch (error) {
+      // 2026-09-27: NO_BLINK in particular used to leak every already-taken
+      // snapshot -- the loop only released frames on an in-progress restart,
+      // never on the final failure. Any thrown path here (abort, timeout, no
+      // blink) now releases what is left.
+      frames.forEach(releaseSnapshot);
+      setBlinkPrompt(false);
+      throw error;
     }
-    setBlinkPrompt(false);
-    if (frames.length === 0) throw new Error("CAPTURE_TIMEOUT");
-    // Nothing is submitted without a blink: the server would refuse it anyway
-    // (ADMIN_FACE_LIVENESS_ENFORCED), and not sending it keeps an honest miss
-    // from counting towards the account lockout.
-    if (!blink.seen) throw new Error("NO_BLINK");
-    return { frames, blinks: blink.count, frontal: frontalFrames, trackMsAvg: trackCount ? trackMsTotal / trackCount : 0, restarts };
   }, [track]);
 
   const run = useCallback(async () => {
@@ -772,13 +840,25 @@ export function FaceGateFlow({ needsEnrollment, modelStale, onPassed, submitVeri
       setPhase("working");
       const descriptors: number[][] = [];
       const describeStartedAt = performance.now();
-      for (const frame of capture.frames) {
-        const result = await captureFace(frame);
+      // 2026-09-27: a retry ("Дахин оролдох") increments runGenRef and resets
+      // abortRef.current to false again (see the comment on runGenRef above),
+      // so this OLD run must keep checking runGen against the ref, not just
+      // abortRef, or a stale retry can keep describing frames and submit a
+      // challenge from a run the person already walked away from.
+      const stale = () => abortRef.current || runGen !== runGenRef.current;
+      for (let i = 0; i < capture.frames.length; i++) {
+        if (stale()) {
+          for (let j = i; j < capture.frames.length; j++) releaseSnapshot(capture.frames[j]);
+          throw new Error("ABORTED");
+        }
+        const frame = capture.frames[i];
+        const result = await withTimeout(captureFace(frame), DESCRIBE_TIMEOUT_MS, "CAPTURE_TIMEOUT");
         releaseSnapshot(frame);
         if (result.ok) descriptors.push(result.sample.descriptor);
       }
       const describeMs = Math.round(performance.now() - describeStartedAt);
       if (descriptors.length === 0) throw new Error("CAPTURE_TIMEOUT");
+      if (stale()) throw new Error("ABORTED");
       setProgress(90);
 
       const submit: FaceVerificationSubmit = submitVerification ?? (payload => completeVerification.mutateAsync(payload));

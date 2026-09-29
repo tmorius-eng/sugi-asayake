@@ -40,6 +40,22 @@ const metaCache = new Map<string, { meta: RouteMeta | null; at: number }>();
 const stripHtml = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 const clip = (text: string, max = 200) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
 
+// 2026-09-27: post content/excerpt is stored already HTML-entity-escaped
+// (rich text editor output); stripHtml only removes tags, it leaves
+// "&amp;"/"&#39;" as literal text. escapeAttribute() then re-escaped the "&"
+// in those, printing "&amp;amp;"/mangled apostrophes in <meta> tags instead
+// of the real character. Decode once here so escapeAttribute only ever
+// escapes real "&"/"<"/">"/'"' characters, never someone else's escaping.
+const NAMED_ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", "#39": "'", "#x27": "'" };
+const decodeHtmlEntities = (text: string) =>
+  text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, entity: string) => {
+    const key = entity.toLowerCase();
+    if (key in NAMED_ENTITIES) return NAMED_ENTITIES[key];
+    if (key.startsWith("#x")) return String.fromCodePoint(Number.parseInt(key.slice(2), 16));
+    if (key.startsWith("#")) return String.fromCodePoint(Number.parseInt(key.slice(1), 10));
+    return match;
+  });
+
 const jsonLd = (data: unknown) => JSON.stringify(data).replace(/</g, "\\u003c");
 
 /** Site-relative image URLs on /cdn/ are redirected to R2; crawlers follow that fine, but an absolute URL is required. */
@@ -86,8 +102,11 @@ async function productMeta(slug: string, siteName: string): Promise<RouteMeta | 
   const crumbs = [
     { name: "Нүүр", item: absoluteUrl("/") },
     { name: "Дэлгүүр", item: absoluteUrl("/shop") },
+    // 2026-09-27: every real /shop link filters by category NAME
+    // (?category=<name>, shared/catalog-filter.ts), never the slug -- this
+    // used to point crawlers at a filter value nothing on the site sets.
     ...(product.categoryName && product.categorySlug
-      ? [{ name: product.categoryName, item: absoluteUrl(`/shop?category=${encodeURIComponent(product.categorySlug)}`) }]
+      ? [{ name: product.categoryName, item: absoluteUrl(`/shop?category=${encodeURIComponent(product.categoryName)}`) }]
       : []),
     { name: product.name, item: url },
   ];
@@ -124,7 +143,7 @@ async function productMeta(slug: string, siteName: string): Promise<RouteMeta | 
 async function postMeta(slug: string, siteName: string): Promise<RouteMeta | null> {
   const post = await getPublishedPostBySlug(slug);
   if (!post) return null;
-  const description = clip(stripHtml(post.metaDescription || post.excerpt || post.content || ""));
+  const description = clip(decodeHtmlEntities(stripHtml(post.metaDescription || post.excerpt || post.content || "")));
   const image = absoluteUrl(post.coverImageUrl);
   const url = absoluteUrl(`/${post.slug}`);
   const title = `${post.metaTitle || post.title} — ${siteName}`;

@@ -22,6 +22,27 @@ import { assertFaceProofForPanelRole } from "./faceProof";
 const INTERNAL_DETAIL_PATTERN = /\b(ER_[A-Z_]+|ECONN(REFUSED|RESET)|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|EPIPE|sqlMessage|sqlState|Duplicate entry|Unknown column|Table '[^']*' doesn't exist|SELECT |INSERT INTO|UPDATE [a-z_]+ SET|DELETE FROM|TypeError:|ReferenceError:|Cannot read propert|is not a function|undefined is not|null is not)|\bat .+:\d+:\d+\b/;
 
 /**
+ * `catch → error.message` ороолтод зориулсан (2026-09-27): мессеж нь хэрэглэгчид
+ * зориулсан МОНГОЛ өгүүлбэр бол түүнийг, эс бөгөөс (провайдерийн англи алдаа
+ * "verify.mn request failed (500): …", env нэр "VERIFY_MN_API_KEY …", driver
+ * алдаа) `fallback`-ийг буцаана. `maskErrorShape` зөвхөн хэлбэрээр таньдаг тул
+ * эдгээр нь өмнө нь клиент/админ руу шууд гардаг байв.
+ */
+/** Driver/stack хэлбэрийн дотоод текст эсэх (2026-09-27). */
+export function isInternalErrorText(message: string): boolean {
+  return INTERNAL_DETAIL_PATTERN.test(message);
+}
+
+export function userFacingMessage(error: unknown, fallback: string): string {
+  const message = error instanceof Error ? error.message : "";
+  if (!message) return fallback;
+  if (INTERNAL_DETAIL_PATTERN.test(message)) return fallback;
+  if (/\b[A-Z][A-Z0-9]*_[A-Z0-9_]{2,}\b/.test(message)) return fallback;
+  if (!/[Ѐ-ӿ]/.test(message)) return fallback;
+  return message;
+}
+
+/**
  * Оролтын шалгалтын алдааг ХҮНИЙ уншихаар өгүүлбэр болгоно (2026-09-23).
  *
  * zod схем унавал tRPC нь `message`-д асуудлын жагсаалтыг JSON-оор хийж
@@ -329,6 +350,7 @@ export const checkoutRateLimitedProcedure = publicProcedure.use(checkoutRateLimi
 // the strict tier gives.
 const moderateRateLimit = rateLimitMiddleware("moderate", 30, 15 * 60 * 1000);
 export const moderateRateLimitedProcedure = publicProcedure.use(moderateRateLimit);
+export const moderateRateLimitedProtectedProcedure = protectedProcedure.use(moderateRateLimit);
 
 // Lenient tier (600 attempts/15min/IP): best-effort pageview telemetry
 // (Tier E analytics), fired on every route change. Deliberately its own

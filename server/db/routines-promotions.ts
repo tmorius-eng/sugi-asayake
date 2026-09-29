@@ -4,6 +4,7 @@
 
 import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { products, routines, routineSteps, sitePromotions } from "../../drizzle/schema";
+import { withLiveCampaign } from "./price-campaigns";
 import { getDb } from "./connection";
 
 /**
@@ -62,11 +63,14 @@ async function loadRoutineWithSteps(routine: typeof routines.$inferSelect) {
     nameMn: products.nameMn,
     slug: products.slug,
     priceMnt: products.priceMnt,
+    compareAtPriceMnt: products.compareAtPriceMnt,
+    kind: products.kind,
     imageUrl: products.imageUrl,
     stockQuantity: products.stockQuantity,
     isPublished: products.isPublished,
   }).from(routineSteps).innerJoin(products, eq(products.id, routineSteps.productId)).where(eq(routineSteps.routineId, routine.id)).orderBy(asc(routineSteps.stepNumber));
-  return { ...routine, steps: steps.filter(step => step.isPublished) };
+  // 2026-09-29: нийтийн хямдрал — багцын хуудас сагстай ижил (хямдарсан) үнээр тооцно.
+  return { ...routine, steps: await withLiveCampaign(steps.filter(step => step.isPublished)) };
 }
 
 export async function getPublishedRoutineBySlug(slug: string) {
@@ -85,6 +89,11 @@ export async function getRoutineForProduct(productId: number) {
   const rows = await db.select({ routine: routines }).from(routineSteps)
     .innerJoin(routines, eq(routines.id, routineSteps.routineId))
     .where(and(eq(routineSteps.productId, productId), eq(routines.isPublished, true)))
+    // 2026-09-27 (D13): `.limit(1)`-тэй query ЗААВАЛ `ORDER BY` хэрэгтэй --
+    // үгүй бол MySQL хамгийн бага зардалтай гэж үзсэн ямар ч мөрийг буцааж
+    // болно, өөрөөр хэлбэл нэг бараа хуудас ачаалах бүрт өөр routine харуулах
+    // эрсдэлтэй байв.
+    .orderBy(asc(routines.id))
     .limit(1);
   if (!rows[0]) return null;
   return loadRoutineWithSteps(rows[0].routine);

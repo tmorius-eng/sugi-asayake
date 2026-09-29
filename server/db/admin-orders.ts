@@ -12,10 +12,12 @@ import { applyBranchStockDelta, recomputeVariantStockTotal, recordStockMovement 
 import { shouldRestoreStock } from "../commerce-lifecycle";
 import { LOW_STOCK_THRESHOLD as SHARED_LOW_STOCK_THRESHOLD } from "../../shared/catalog-filter";
 import { escapeLike, generateOrderNumber, getDb, isDuplicateKeyError, isDuplicateOrderNumberError, refundOwedSql, settledSaleSql, storeDayString, storeDaySql } from "./connection";
-import { IssuedGiftCard, announceIssuedGiftCards, issueGiftCardsForPaidOrder, voidGiftCardsForOrder } from "./gift-cards";
+import { IssuedGiftCard, announceIssuedGiftCards, issueGiftCardsForPaidOrder, lockGiftCardsAndSumRedeemed, voidGiftCardsForOrder } from "./gift-cards";
 import { getActiveBranches } from "./site";
 import { findOrderForClientRequest } from "./cart-orders";
 import { getStoreSettingNumber } from "./ops";
+import { forgetSessionUser } from "./users";
+import { getLivePriceCampaign, priceLinesForOrder } from "./price-campaigns";
 
 /**
  * Төлбөрөө ЗӨВХӨН провайдерийн callback-оор баталгаажуулдаг аргууд
@@ -337,8 +339,8 @@ export async function decrementBranchStock(tx: OrderTx, branchId: number, varian
       ));
   if (Number(update[0].affectedRows ?? 0) !== 1) {
     throw new Error(hasPerBranchTracking
-      ? `${options.itemLabel} is no longer available in the requested quantity at the selected branch. Please refresh your cart or choose a different branch.`
-      : `${options.itemLabel} is no longer available in the requested quantity. Please refresh your cart.`);
+      ? `${options.itemLabel} сонгосон салбарт хүссэн тоогоор байхгүй болсон байна. Сагсаа шинэчлэх эсвэл өөр салбар сонгоно уу.`
+      : `${options.itemLabel} хүссэн тоогоор нөөцөд байхгүй болсон байна. Сагсаа шинэчилнэ үү.`);
   }
   if (hasPerBranchTracking) await recomputeVariantStockTotal(tx, variantId);
   return hasPerBranchTracking;
@@ -425,14 +427,20 @@ async function reverseStoreCreditForOrder(tx: OrderTx, orderId: number, reason: 
   return orderRow.storeCreditAppliedMnt;
 }
 
-export async function updateAdminOrder(input: { id: number; status?: FulfilmentStatus; deliveryTrackingRef?: string | null; adminNote?: string | null; actorUserId?: number | null }) {
+export async function updateAdminOrder(input: { id: number; status?: FulfilmentStatus; deliveryTrackingRef?: string | null; adminNote?: string | null; actorUserId?: number | null; allowedFromStatuses?: readonly FulfilmentStatus[] }) {
   invalidateCachedByPrefix("storefront:bestsellers:");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const current = await db.select().from(orders).where(eq(orders.id, input.id)).limit(1);
-  if (!current[0]) throw new Error("Order not found.");
+  if (!current[0]) throw new Error("Захиалга олдсонгүй.");
   if (input.status) {
     const currentStatus = current[0].status;
+    // 2026-09-27: дуудагч (харилцагчийн өөрийн цуцлалт) зөвхөн тодорхой
+    // төлөвөөс шилжихийг зөвшөөрдөг бол ЭНД, доорх guarded flip-ийн ижил
+    // уншилт дээр шалгана — тэгвэл хооронд нь төлөв солигдвол flip 0 мөр авна.
+    if (input.allowedFromStatuses && !input.allowedFromStatuses.includes(currentStatus as FulfilmentStatus)) {
+      throw new Error("Энэ захиалгыг цуцлах боломжгүй — аль хэдийн савлагдсан эсвэл хаагдсан байна.");
+    }
     // "returned" only ever moves out of "completed" -- everything else that
     // already left the forward-progress track ("cancelled"/"returned"
     // itself) is closed for good. A completed order can ONLY become
@@ -464,7 +472,7 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
     if (input.status) {
       const flipped = await tx.update(orders).set({ status: input.status, ...(input.status === "returned" ? { returnedAt: new Date() } : {}), updatedAt: new Date() })
         .where(and(eq(orders.id, input.id), eq(orders.status, current[0].status)));
-      if (Number(flipped[0].affectedRows ?? 0) !== 1) throw new Error("This order was changed by someone else just now. Refresh and try again.");
+      if (Number(flipped[0].affectedRows ?? 0) !== 1) throw new Error("Энэ захиалга яг одоо өөр хэн нэгний үйлдлээр өөрчлөгдлөө. Хуудсаа шинэчлээд дахин оролдоно уу.");
     }
     if (shouldRestoreStock(current[0].status as FulfilmentStatus, input.status)) {
       await restoreStockForOrder(tx, input.id, { type: "order_restock", actorUserId: input.actorUserId ?? null });
@@ -526,9 +534,17 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
     // "Completed" is the moment a cash/bank order counts as paid (above), so
     // it is also the moment its gift cards exist. Idempotent: an order the
     // QPay webhook already paid (and issued for) gets nothing twice.
-    if (input.status === "completed") issuedGiftCards = await issueGiftCardsForPaidOrder(tx, input.id);
+    // 2026-09-27: зөвхөн БОДИТООР төлөгдсөн үед. QPay/StorePay захиалгыг
+    // төлөөгүй байхад "дууссан" болгоход дээрх мөр `paid` тавихгүй ч карт
+    // үүсэж, код харилцагчид очдог байв (мөнгөгүйгээр 200 000₮-ийн карт).
+    if (input.status === "completed") {
+      const [paidRow] = await tx.select({ paymentStatus: orders.paymentStatus }).from(orders).where(eq(orders.id, input.id)).limit(1);
+      if (paidRow?.paymentStatus === "paid") issuedGiftCards = await issueGiftCardsForPaidOrder(tx, input.id);
+    }
   });
   announceIssuedGiftCards(input.id, issuedGiftCards);
+  // 2026-09-27: цуцлалт зээлийг буцаасан бол сешний кэшийг commit-ын дараа цэвэрлэнэ.
+  if (input.status === "cancelled" && current[0].userId && current[0].storeCreditAppliedMnt > 0) forgetSessionUser(current[0].userId);
   const updated = await db.select().from(orders).where(eq(orders.id, input.id)).limit(1);
   return { ...updated[0], statusChanged };
 }
@@ -640,13 +656,15 @@ export type ManualOrderInput = {
   clientRequestId?: string | null;
 };
 
-type OrderLineSource = { variantId: number; productId: number; productName: string; sku: string; priceMnt: number; kind: "physical" | "gift_card" };
+type OrderLineSource = { variantId: number; productId: number; productName: string; sku: string; priceMnt: number; compareAtPriceMnt: number | null; listPriceMnt: number | null; kind: "physical" | "gift_card" };
 
 async function loadOrderLineSources(db: DbOrTx, variantIds: number[]): Promise<Map<number, OrderLineSource>> {
   if (!variantIds.length) return new Map();
-  const rows = await db.select({ variantId: productVariants.id, productId: products.id, productName: products.name, sku: productVariants.sku, priceMnt: productVariants.priceMnt, kind: products.kind })
+  const rows = await db.select({ variantId: productVariants.id, productId: products.id, productName: products.name, sku: productVariants.sku, priceMnt: productVariants.priceMnt, compareAtPriceMnt: productVariants.compareAtPriceMnt, kind: products.kind })
     .from(productVariants).innerJoin(products, eq(products.id, productVariants.productId)).where(inArray(productVariants.id, variantIds));
-  return new Map(rows.map(row => [row.variantId, row]));
+  // 2026-09-29: нийтийн хямдрал гар (утас/Messenger) захиалгад ч хэрэглэгдэнэ (Tom-ийн шийдвэр).
+  const priced = await priceLinesForOrder(rows);
+  return new Map(priced.lines.map(row => [row.variantId, row]));
 }
 
 /** Same branch resolution as checkout: pickup at a STORE, delivery from the fulfilment default. */
@@ -711,9 +729,11 @@ export async function createManualOrder(input: ManualOrderInput) {
   const [deliveryFeeUbMnt, freeShippingThresholdMnt] = await Promise.all([getStoreSettingNumber("delivery-fee-ub-mnt"), getStoreSettingNumber("free-shipping-threshold-mnt")]);
   const deliveryFeeMnt = computeDeliveryFeeMnt({ deliveryMethod: input.deliveryMethod, subtotalMnt, deliveryFeeUbMnt, freeShippingThresholdMnt, digitalOnly });
   const totalMnt = subtotalMnt + deliveryFeeMnt;
+  const manualCampaignId = lines.some(line => line.listPriceMnt !== null) ? (await getLivePriceCampaign())?.id ?? null : null;
   let orderId = 0;
   const place = (orderNumber: string) => db.transaction(async tx => {
     const inserted = await tx.insert(orders).values({
+      ...(manualCampaignId ? { priceCampaignId: manualCampaignId } : {}),
       userId: null, orderNumber, paymentMethod: input.paymentMethod, deliveryMethod: input.deliveryMethod,
       deliveryAddress: input.deliveryMethod === "ub_delivery" ? input.deliveryAddress?.trim() ?? null : null,
       deliveryDistrict: input.deliveryMethod === "ub_delivery" ? input.district ?? null : null,
@@ -725,7 +745,7 @@ export async function createManualOrder(input: ManualOrderInput) {
       subtotalMnt, deliveryFeeMnt, discountMnt: 0, couponDiscountMnt: 0, loyaltyDiscountMnt: 0, storeCreditAppliedMnt: 0, totalMnt,
     });
     orderId = Number(inserted[0].insertId);
-    await tx.insert(orderItems).values(lines.map(line => ({ orderId, productId: line.productId, variantId: line.variantId, productName: line.productName, sku: line.sku, unitPriceMnt: line.priceMnt, quantity: line.quantity })));
+    await tx.insert(orderItems).values(lines.map(line => ({ orderId, productId: line.productId, variantId: line.variantId, productName: line.productName, sku: line.sku, unitPriceMnt: line.priceMnt, listPriceMnt: line.listPriceMnt, quantity: line.quantity })));
     for (const line of lines) {
       if (line.kind === "gift_card") continue;
       await adjustOrderLineStock(tx, branch.fulfillingBranchId, line.variantId, -line.quantity, { orderId, actorUserId: input.actorUserId, itemLabel: line.productName });
@@ -838,7 +858,22 @@ export async function editAdminOrder(input: OrderEditInput) {
     throw new Error("Төлбөр төлөгдсөн захиалгад хүргэлтийн төлбөр өөрчлөх сонголт хийх боломжгүй — буцаан олголт хийгээд шинэ захиалга үүсгэнэ үү.");
   }
   const deliveryFeeMnt = isPaid ? current.deliveryFeeMnt : computedDeliveryFeeMnt;
-  const totalMnt = isPaid ? current.totalMnt : Math.max(0, subtotalMnt + deliveryFeeMnt - current.discountMnt - current.couponDiscountMnt - current.loyaltyDiscountMnt - current.storeCreditAppliedMnt);
+  // 2026-09-27: хямдрал нь ХУУЧИН сагсаар бодогдсон. Бараа хасч дүн буурахад
+  // хямдралыг хэвээр үлдээвэл 100 000₮-ийн захиалгын 50 000₮-ийн купон 20 000₮-ийн
+  // сагсыг 0₮ болгож, харилцагч барааг үнэгүй авдаг байв (`Math.max(0, …)` нуудаг).
+  // Одоо дүн буурвал хямдрал бүрийг ижил харьцаагаар багасгана (доош бөөрөнхийлж,
+  // дэлгүүрт ашигтай); дүн өсвөл хуучин хямдрал хэвээр. Дэлгүүрийн зээл аль хэдийн
+  // хасагдсан мөнгө тул төлөх дүн түүнээс доош унах засварыг татгалзана.
+  const shrinkRatio = !isPaid && wantsItemChange && current.subtotalMnt > 0 && subtotalMnt < current.subtotalMnt ? subtotalMnt / current.subtotalMnt : 1;
+  const scaleDiscount = (value: number) => (shrinkRatio === 1 ? value : Math.floor(value * shrinkRatio));
+  const discountMnt = scaleDiscount(current.discountMnt);
+  const couponDiscountMnt = scaleDiscount(current.couponDiscountMnt);
+  const loyaltyDiscountMnt = scaleDiscount(current.loyaltyDiscountMnt);
+  const payableBeforeCreditMnt = subtotalMnt + deliveryFeeMnt - discountMnt - couponDiscountMnt - loyaltyDiscountMnt;
+  if (!isPaid && payableBeforeCreditMnt < current.storeCreditAppliedMnt) {
+    throw new Error("Энэ засвараар төлөх дүн харилцагчийн зарцуулсан дэлгүүрийн зээлээс бага болно — захиалгыг цуцлаад (зээл буцна) шинээр үүсгэнэ үү.");
+  }
+  const totalMnt = isPaid ? current.totalMnt : payableBeforeCreditMnt - current.storeCreditAppliedMnt;
 
   // 🔴 2026-09-23: хүргэлтийн арга/салбар солигдож `fulfillingBranchId`
   // өөрчлөгдвөл нөөцийг ХОЁР САЛБАР ХООРОНД ЗӨӨНӨ.
@@ -878,7 +913,7 @@ export async function editAdminOrder(input: OrderEditInput) {
         const source = sources.get(variantId)!;
         const quantity = desired.get(variantId)!;
         if (source.kind !== "gift_card") await adjustOrderLineStock(tx, branch.fulfillingBranchId, variantId, -quantity, { orderId: input.id, actorUserId: input.actorUserId, itemLabel: source.productName });
-        await tx.insert(orderItems).values({ orderId: input.id, productId: source.productId, variantId, productName: source.productName, sku: source.sku, unitPriceMnt: source.priceMnt, quantity });
+        await tx.insert(orderItems).values({ orderId: input.id, productId: source.productId, variantId, productName: source.productName, sku: source.sku, unitPriceMnt: source.priceMnt, listPriceMnt: source.listPriceMnt, quantity });
       }
     }
     await tx.update(orders).set({
@@ -890,7 +925,7 @@ export async function editAdminOrder(input: OrderEditInput) {
       deliveryDistrict: deliveryMethod === "ub_delivery" ? (input.district !== undefined ? input.district : current.deliveryDistrict) : null,
       pickupBranch: deliveryMethod === "store_pickup" ? branch.pickupBranch : null,
       fulfillingBranchId: branch.fulfillingBranchId,
-      ...(isPaid ? {} : { subtotalMnt, deliveryFeeMnt, totalMnt }),
+      ...(isPaid ? {} : { subtotalMnt, deliveryFeeMnt, discountMnt, couponDiscountMnt, loyaltyDiscountMnt, totalMnt }),
       updatedAt: new Date(),
     }).where(eq(orders.id, input.id));
   });
@@ -940,7 +975,17 @@ export async function refundOrder(input: { id: number; refundAmountMnt: number; 
   // store-credit portion is returned as credit by reverseStoreCreditForOrder
   // below, so this cap and that reversal never overlap.
   if (input.refundAmountMnt > current[0].totalMnt) throw new Error("Refund amount cannot exceed the order total.");
+  // 2026-09-27: 0₮ "буцаан олголт" захиалгыг `refunded` болгож борлуулалт,
+  // гишүүнчлэлийн зарцуулалт, bestseller-ээс хасдаг атлаа мөнгө хөдөлдөггүй байв.
+  // 0₮ (бүхэлдээ дэлгүүрийн зээлээр төлсөн) захиалгад л 0-ийг зөвшөөрнө — зээлийг буцаах зам.
+  if (input.refundAmountMnt <= 0 && current[0].totalMnt > 0) throw new Error("Буцаан олгох дүн 0₮-өөс их байх ёстой.");
   await db.transaction(async tx => {
+    // 2026-09-27: энэ захиалгаар авсан бэлгийн карт аль хэдийн ашиглагдсан
+    // (дэлгүүрийн зээл болсон) бол тэр дүнг бэлнээр ДАХИН буцааж болохгүй —
+    // өмнө нь карт авч → ашиглаж → цуцлуулж → бүтэн дүнгээ буцааж авах замаар
+    // нэг төлбөрөөр карт + бэлэн мөнгө хоёуланг авдаг байв. Картын мөрүүдийг
+    // цоожилно: зэрэгцээ `redeemGiftCard` (guarded active→redeemed) нэг бол
+    // өмнө нь дуусч энд тоологдоно, эсвэл доорх void-ийн дараа "void" харна.
     const flipped = await tx.update(orders).set({
       paymentStatus: "refunded",
       refundAmountMnt: input.refundAmountMnt,
@@ -949,13 +994,22 @@ export async function refundOrder(input: { id: number; refundAmountMnt: number; 
       updatedAt: new Date(),
     }).where(and(eq(orders.id, input.id), eq(orders.paymentStatus, "paid")));
     if (Number(flipped[0].affectedRows ?? 0) !== 1) throw new Error("This order has already been refunded.");
-    if (input.restockItems) {
+    // Захиалгын мөрийг (guarded flip) ЭХЛЭЭД, картуудыг дараа нь цоожилно — цуцлалт
+    // (updateAdminOrder) ижил дарааллаар цоожилдог тул deadlock үүсэхгүй; шидвэл бүгд буцна.
+    const redeemedMnt = await lockGiftCardsAndSumRedeemed(tx, input.id);
+    if (redeemedMnt > 0 && input.refundAmountMnt > current[0].totalMnt - redeemedMnt) {
+      throw new Error(`Энэ захиалгын ${redeemedMnt.toLocaleString("en-US")}₮-ийн бэлгийн карт аль хэдийн ашиглагдсан тул буцаан олголт ${Math.max(0, current[0].totalMnt - redeemedMnt).toLocaleString("en-US")}₮-өөс их байж болохгүй.`);
+    }
+    // 2026-09-27: ЦУЦЛАГДСАН захиалгын нөөц цуцлах үед аль хэдийн буцсан
+    // (`shouldRestoreStock`) — энд дахин буцаавал тавиур 2 дахин өсч, дэвтэр зөрнө.
+    if (input.restockItems && current[0].status !== "cancelled") {
       await restoreStockForOrder(tx, input.id, { type: "refund_restock", actorUserId: input.actorUserId ?? null });
     }
     await reverseStoreCreditForOrder(tx, input.id, "буцаагдсан");
     await voidGiftCardsForOrder(tx, input.id);
     await enqueueNotification(tx, "refund.recorded", { orderNumber: current[0].orderNumber, refundMnt: input.refundAmountMnt, restocked: input.restockItems }, { dedupeKey: `order:${input.id}` });
   });
+  if (current[0].userId && current[0].storeCreditAppliedMnt > 0) forgetSessionUser(current[0].userId);
   const updated = await db.select().from(orders).where(eq(orders.id, input.id)).limit(1);
   return updated[0];
 }
@@ -990,6 +1044,12 @@ export async function deleteAdminOrder(input: { id: number }) {
     throw new Error(`Төлбөрийн төлөв "${order.paymentStatus}" — мөнгө хөдөлсөн захиалга нь санхүүгийн бичлэг тул устгахгүй.`);
   }
 
+  // 2026-09-27: цуцалсны ДАРАА мөнгө орж ирвэл оролдлого `paid` болдог ч
+  // захиалга `cancelled/unpaid` хэвээр үлддэг (payment.paid_on_closed_order).
+  // Тэр мөр бол мөнгө авсны цорын ганц бичлэг — устгавал буцаан олгох ул мөр алга болно.
+  const [paidAttempt] = await db.select({ id: paymentAttempts.id }).from(paymentAttempts)
+    .where(and(eq(paymentAttempts.orderId, order.id), eq(paymentAttempts.status, "paid"))).limit(1);
+  if (paidAttempt) throw new Error("Энэ захиалгад төлөгдсөн төлбөрийн оролдлого бүртгэгдсэн байна (цуцалсны дараа мөнгө орсон) — эхлээд буцаан олголтоо шийдээд, устгахгүй.");
   const [giftCard] = await db.select({ id: giftCards.id }).from(giftCards).where(eq(giftCards.purchaseOrderId, order.id)).limit(1);
   if (giftCard) throw new Error("Энэ захиалга бэлгийн карт гаргасан байна — устгахгүй (код хэрэглэгчийн гарт байж болно).");
   const [credit] = await db.select({ id: storeCreditLedger.id }).from(storeCreditLedger).where(eq(storeCreditLedger.orderId, order.id)).limit(1);

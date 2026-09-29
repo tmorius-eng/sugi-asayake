@@ -7,10 +7,12 @@
  * pm2-ийг cluster горимд (`pm2 start dist/index.js -i 2`) ажиллуулбал ижил
  * файл N удаа ачаалагдана — ямар ч хамгаалалтгүй бол орхигдсон сагсны сануулга,
  * вендорын үлдэгдлийн таталт, өгөгдлийн цэвэрлэгээ бүр N дахин ажиллана.
- * Scheduler-ийн due-ness шалгалт нь процессын доторх `runningJobNames`-ээр л
- * хамгаалагддаг (server/_core/scheduler.ts) — DB түвшний claim/lock БАЙХГҮЙ тул
- * хоёр процесс ижил job-ыг ижил секундэд due гэж уншаад хоёулаа ажиллуулж
- * чадна.
+ * 2026-09-27-аас scheduler.ts дээр ЖИНХЭНЭ DB түвшний claim нэмэгдсэн
+ * (migration 0097, `scheduledJobRuns.claimedAt`) — хоёр процесс ижил job-ыг
+ * ижил тик дээр due гэж уншсан ч зөвхөн нэг нь claim авна. Энэ файлын
+ * `isBackgroundJobRunner()` тэр claim-ыг орлохгүй, харин НЭМЭЛТ давхар
+ * хамгаалалт: pm2 cluster-ийн worker бүр 15 минут тутам хоосон claim
+ * оролдлого хийхээс сэргийлж, мөн staging схемийг (доор) бүрмөсөн унтраадаг.
  *
  * pm2 нь cluster горимд worker бүрд `NODE_APP_INSTANCE`-ийг 0,1,2… гэж өгдөг
  * (fork горимд ч "0" гэж өгдөг), тиймээс "instance 0 эзэмшинэ" гэсэн дүрэм
@@ -21,6 +23,14 @@
  * `RUN_BACKGROUND_JOBS=0/1` нь эцсийн шийдэгч: тусад нь зөвхөн ажил гүйцэтгэх
  * процесс (web траффик хүлээж авахгүй) гаргах болон staging дээр ард ажиллах
  * ажлуудыг бүрэн унтраах хоёуланд нь хэрэгтэй.
+ *
+ * 2026-09-27: staging (`sugi_staging` схем, prod-ын бодит харилцагчийн
+ * имэйл/push бүхий хуулбар) `RUN_BACKGROUND_JOBS` хувьсагчгүйгээр pm2 дор
+ * production горимд ажилладаг тул анхдагчаар ЭНЭ дүрмээр ард ажиллах ажлууд
+ * (мэдэгдэл, вендорын таталт) АСАЖ, бодит харилцагчид туршилтын мэдэгдэл
+ * давхар илгээх эрсдэлтэй байв. `RUN_BACKGROUND_JOBS`-ийг ил тодорхойлоогүй
+ * үед `DATABASE_URL`-ийн схем `sugi_staging` бол унтардаг болгов — заавал
+ * асаах бол `RUN_BACKGROUND_JOBS=1`.
  *
  * ⚠️ Cluster горимд шилжихийн ӨМНӨ мэдэж байх ёстой (2026-09-16-нд хэмжсэн):
  * бодит VM нь 2 vCPU / 954 MB RAM бөгөөд production + staging хоёулаа тэнд
@@ -38,11 +48,24 @@
  *     тухайн хүсэлтийг үйлчилсэн worker-ийн мөрийг харуулна.
  */
 
+/** `DATABASE_URL`-ийн зам `sugi_staging` схемийг заасан эсэх — тухайн схем
+ *  бол prod-ын хуулбар боловч бодит харилцагчийн мэдээлэлтэй (2026-09-27). */
+function pointsAtStagingSchema(): boolean {
+  const url = process.env.DATABASE_URL;
+  if (!url) return false;
+  try {
+    return new URL(url).pathname.replace(/^\//, "") === "sugi_staging";
+  } catch {
+    return false; // буруу форматтай URL -- эндээс шийдэхгүй, DB холболт өөрөө алдаа өгнө
+  }
+}
+
 /** Энэ процесс scheduler/dispatcher-ийг эзэмших үү. */
 export function isBackgroundJobRunner(): boolean {
   const explicit = process.env.RUN_BACKGROUND_JOBS;
   if (explicit === "1") return true;
   if (explicit === "0") return false;
+  if (pointsAtStagingSchema()) return false;
   const instance = process.env.NODE_APP_INSTANCE;
   return instance === undefined || instance.trim() === "" || instance.trim() === "0";
 }
@@ -52,5 +75,9 @@ export function isBackgroundJobRunner(): boolean {
 export function describeClusterRole(): string {
   const instance = process.env.NODE_APP_INSTANCE?.trim();
   const who = instance === undefined || instance === "" ? "single process" : `pm2 instance ${instance}`;
-  return isBackgroundJobRunner() ? `${who}: ард ажиллах ажлууд ЭНД ажиллана` : `${who}: ард ажиллах ажлууд ӨӨР instance дээр`;
+  if (isBackgroundJobRunner()) return `${who}: ард ажиллах ажлууд ЭНД ажиллана`;
+  if (process.env.RUN_BACKGROUND_JOBS !== "0" && pointsAtStagingSchema()) {
+    return `${who}: ард ажиллах ажлууд УНТАРСАН (DATABASE_URL нь sugi_staging схем — бодит харилцагч руу давхар мэдэгдэл илгээхээс сэргийлнэ; заавал асаах бол RUN_BACKGROUND_JOBS=1)`;
+  }
+  return `${who}: ард ажиллах ажлууд ӨӨР instance дээр`;
 }

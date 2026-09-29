@@ -6,9 +6,23 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // and retry-on-failure logic in isolation, the same style as
 // server/_core/ttlCache.test.ts.
 const state = new Map<string, Date>();
+// 2026-09-27: claimJob/releaseJobClaim (scheduler.ts) go through getDb() too
+// -- faked here so these stay unit tests (no real DB) and every claim
+// trivially succeeds, matching the pre-claim behaviour this file already
+// tested. The DB-level guarded-UPDATE semantics themselves need a real
+// MySQL connection to verify meaningfully and are exercised there instead
+// (see docs/PROJECT-GUIDE.md on integration tests staying off vitest here).
 vi.mock("../db", () => ({
   getScheduledJobLastRun: vi.fn(async (jobName: string) => state.get(jobName) ?? null),
   markScheduledJobRun: vi.fn(async (jobName: string) => { state.set(jobName, new Date()); }),
+  getDb: vi.fn(async () => ({
+    execute: vi.fn(async () => [[]]),
+    update: vi.fn(() => ({
+      set: vi.fn(() => ({
+        where: vi.fn(async () => [{ affectedRows: 1 }]),
+      })),
+    })),
+  })),
 }));
 
 describe("scheduler", () => {

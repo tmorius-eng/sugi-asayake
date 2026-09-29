@@ -21,7 +21,44 @@
   // хуудсууд огт хэмжигдэхгүй, бусад хаягаас нууц параметрүүд хасагдана.
   var PRIVATE_PATH = /^\/(admin|face-approve)(\/|$)/;
   var SECRET_PARAMS = ["token", "redirect", "code", "state"];
-  function isPrivatePage() { return PRIVATE_PATH.test(location.pathname); }
+  // 2026-09-27: "redirect" itself is a completely ordinary, non-secret param
+  // (e.g. /login?redirect=/shop) -- only its DECODED CONTENTS can carry a
+  // secret (another page's own token/code/state), so it must not be in the
+  // top-level list or every /login?redirect=... view (most of them) went
+  // untracked for nothing.
+  var TOP_LEVEL_SECRET_PARAMS = ["token", "code", "state"];
+  // safeLocation() (below) only sanitises what we hand GA ourselves -- Meta
+  // Pixel's fbq("track", "PageView") auto-collects the RAW location.href
+  // internally, bypassing it entirely. So /login?redirect=
+  // %2Fface-approve%3Ftoken%3D... (a real admin QR handoff link) leaked the
+  // token to Facebook even though /login itself isn't a private path.
+  // Checks the top-level params (token/code/state only) AND decodes
+  // "redirect" one level to check ITS params against the full list, since
+  // its whole point is to carry another page's (possibly secret-bearing) URL.
+  function hasSecretParam(search) {
+    var params;
+    try { params = new URLSearchParams(search); } catch (_) { return false; }
+    for (var i = 0; i < TOP_LEVEL_SECRET_PARAMS.length; i++) {
+      var value = params.get(TOP_LEVEL_SECRET_PARAMS[i]);
+      if (value != null && value !== "") return true;
+    }
+    var redirect = params.get("redirect");
+    if (redirect) {
+      try {
+        var decoded = decodeURIComponent(redirect);
+        var qIndex = decoded.indexOf("?");
+        if (qIndex >= 0) {
+          var innerParams = new URLSearchParams(decoded.slice(qIndex + 1));
+          for (var j = 0; j < SECRET_PARAMS.length; j++) {
+            var innerValue = innerParams.get(SECRET_PARAMS[j]);
+            if (innerValue != null && innerValue !== "") return true;
+          }
+        }
+      } catch (_) { /* malformed -- nothing decodable, fall through */ }
+    }
+    return false;
+  }
+  function isPrivatePage() { return PRIVATE_PATH.test(location.pathname) || hasSecretParam(location.search); }
   function safeLocation() {
     try {
       var url = new URL(location.href);

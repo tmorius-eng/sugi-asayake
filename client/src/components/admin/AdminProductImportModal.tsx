@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import { AlertTriangle, CheckCircle2, Download, FileUp, LoaderCircle, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -76,8 +76,14 @@ export default function AdminProductImportModal({ open, onOpenChange }: { open: 
   const [previewResults, setPreviewResults] = useState<ImportResult[]>([]);
   const [finalResults, setFinalResults] = useState<ImportResult[]>([]);
   const importCsv = trpc.admin.importProductsCsv.useMutation();
+  // 2026-09-27 (F15): closing the dialog mid-commit (or mid-preview) then
+  // reopening it used to show the PREVIOUS run's result -- reset() cleared
+  // the visible state, but a commit()/runPreview() already in flight still
+  // resolved later and wrote its (now stale) results into the fresh state.
+  const generationRef = useRef(0);
 
   const reset = () => {
+    generationRef.current += 1;
     setStep("pick"); setHeaders([]); setRawRows([]); setMapping({}); setAllowUpdateExisting(false); setPreviewResults([]); setFinalResults([]);
   };
 
@@ -122,22 +128,28 @@ export default function AdminProductImportModal({ open, onOpenChange }: { open: 
       toast.error("SKU багана заавал холбогдсон байх ёстой.");
       return;
     }
+    const generation = generationRef.current;
     try {
       const { results } = await importCsv.mutateAsync({ rows: mappedRows(), allowUpdateExisting, dryRun: true });
+      if (generation !== generationRef.current) return;
       setPreviewResults(results);
       setStep("preview");
     } catch (error) {
+      if (generation !== generationRef.current) return;
       toast.error(messageFrom(error));
     }
   };
 
   const commit = async () => {
+    const generation = generationRef.current;
     try {
       const { results } = await importCsv.mutateAsync({ rows: mappedRows(), allowUpdateExisting, dryRun: false });
+      if (generation !== generationRef.current) return;
       setFinalResults(results);
       setStep("done");
       await Promise.all([utils.admin.products.invalidate(), utils.admin.categories.invalidate()]);
     } catch (error) {
+      if (generation !== generationRef.current) return;
       toast.error(messageFrom(error));
     }
   };

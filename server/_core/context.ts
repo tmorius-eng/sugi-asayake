@@ -31,6 +31,12 @@ export function assertProductionSecrets() {
     throw new Error("DATABASE_URL must be set in production -- every request needs the database.");
   }
   const warnings: string[] = [];
+  // 2026-09-27: session, царайны proof, нууц үгийн step-up гурвуулаа ЭНЭ түлхүүрээр
+  // HS256 гарын үсэг зурдаг. Богино эсвэл баримтад бичигдсэн жишээ утга
+  // ("local-test-secret-12345") бол cookie-г offline таах/хуурамчаар үүсгэж admin
+  // болох боломжтой. Сайтыг зогсоохгүй (prod ийм утгатай бол deploy сайтыг унагана),
+  // харин хамгийн эхний, тод анхааруулга.
+  if (isWeakJwtSecret(ENV.cookieSecret)) warnings.unshift("a STRONG JWT_SECRET (current value is short or a documented placeholder -- anyone who knows it can forge an admin session). Rotate it: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\" (everyone is signed out once)");
   if (!ENV.integrationsEncryptionKey || ENV.integrationsEncryptionKey.length !== 64) warnings.push("INTEGRATIONS_ENCRYPTION_KEY (64 hex) -- admin cannot save/read integration credentials (ntfy, StorePay, Smart Software), and no admin can enrol a face (templates are stored encrypted)");
   if (!ENV.s3Bucket || !ENV.s3AccessKeyId || !ENV.s3SecretAccessKey || !ENV.s3PublicBaseUrl) warnings.push("S3_BUCKET / S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY / S3_PUBLIC_BASE_URL -- image uploads and /cdn/* will fail");
   // 2026-09-23: анхааруулгын текст БУРУУ байсан. sitemap/robots/merchant feed
@@ -39,8 +45,15 @@ export function assertProductionSecrets() {
   // canonical, og:url, BreadcrumbList, /og/product/* бүгд сайтынхаа биш
   // домэйн рүү заана. Шинэ эзэн/staging дээр энэ нь SEO-гийн бодит алдаа.
   if (!ENV.publicBaseUrl) warnings.push("PUBLIC_BASE_URL -- canonical, og:url, BreadcrumbList болон OG зураг ХАТУУ БИЧСЭН домэйн руу заана (server/_core/publicUrl.ts); sitemap/robots/feed нь хүсэлтийн Host руу унана");
-  if (!ENV.ownerEmail) warnings.push("OWNER_EMAIL -- no account is auto-promoted to admin on registration");
+  if (!ENV.ownerEmail) warnings.push("OWNER_EMAIL -- owner alert emails (notifyOwner) and the default VAPID subject have no address (it no longer promotes anyone to admin; only the very first account does)");
   for (const warning of warnings) console.warn(`[env] production is missing ${warning}`);
+}
+
+/** 32 байтаас богино эсвэл нийтэд ил жишээ утга (2026-09-27). */
+export function isWeakJwtSecret(secret: string | undefined | null): boolean {
+  if (!secret) return true;
+  if (/local-test-secret|change-?me|insecure|example|placeholder/i.test(secret)) return true;
+  return secret.length < 32;
 }
 
 export type SessionUser = Omit<User, "passwordHash">;

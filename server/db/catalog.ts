@@ -12,6 +12,7 @@ import { getStoreSettingSlot, type StoreSettingKey } from "../../shared/store-se
 import { getOrSetCached, invalidateCached } from "../_core/ttlCache";
 import { CATALOG_INDEX_CACHE_KEY } from "../search/cacheKeys";
 import { applyDiversityCap, computeCategoryAffinity, DEFAULT_RECO_WEIGHTS, explainPreferenceMatch, filterCatalogBrand, filterCatalogPriceRange, filterCatalogProducts, filterCatalogSkinType, filterCatalogStock, getCatalogCategories, getCatalogSkinTypes, isEligibleForPreferenceRecommendation, scorePreferenceMatch, scorePriceBandAffinity, sortCatalogProducts, type CatalogSortOption, type PreferenceProfile, type RecoWeights, type SkinType } from "../../shared/catalog-filter";
+import { withLiveCampaign, withLiveCampaignOne } from "./price-campaigns";
 import { getDb, settledSaleSql } from "./connection";
 import { STOREFRONT_CACHE_TTL_MS } from "./site";
 import { getStoreSettings } from "./ops";
@@ -33,6 +34,8 @@ const reviewCountExpr = sql<number>`COUNT(CASE WHEN ${productReviews.isApproved}
 // and getPublishedProductsByIds) so the row shape can't drift between them.
 const catalogRowColumns = {
   id: products.id,
+  // 2026-09-27: storefront бэлгийн картыг нөөцөөр хаахгүйн тулд (сервер түүний нөөцийг хэзээ ч шалгадаггүй).
+  kind: products.kind,
   name: products.name,
   slug: products.slug,
   brand: products.brand,
@@ -149,7 +152,10 @@ const CATALOG_PAGE_CACHE_TTL_MS = 10_000;
 const CATALOG_SOURCE_CACHE_KEY = "storefront:catalogSource";
 
 export async function getPublishedCatalogCached() {
-  return getOrSetCached(CATALOG_SOURCE_CACHE_KEY, CATALOG_PAGE_CACHE_TTL_MS, () => getPublishedCatalog());
+  // 2026-09-29: кэш ТҮҮХИЙ үнэ хадгална; нийтийн хямдрал уншилт бүрт хэрэглэгдэнэ
+  // (эхлэх/дуусах мөч кэшийн TTL-ээс үл хамааран яг тэр хүсэлт дээр).
+  const rows = await getOrSetCached(CATALOG_SOURCE_CACHE_KEY, CATALOG_PAGE_CACHE_TTL_MS, () => getPublishedCatalog());
+  return withLiveCampaign(rows);
 }
 
 /**
@@ -224,6 +230,11 @@ export async function getPublishedCatalogPage(params: CatalogPageParams) {
  * never become an unbounded fetch itself.
  */
 export async function getPublishedProductsByIds(ids: number[]) {
+  return withLiveCampaign(await getPublishedProductsByIdsRaw(ids));
+}
+
+/** Кэшийн дотор ашиглана — хямдралыг кэшээс гадна (уншилт бүрт) хэрэглэхийн тулд. */
+async function getPublishedProductsByIdsRaw(ids: number[]) {
   const db = await getDb();
   if (!db || !ids.length) return [];
 
@@ -255,7 +266,7 @@ export async function getPublishedProductsByIds(ids: number[]) {
  * (getBestsellingProducts-ийн ижил тайлбарыг үз).
  */
 export async function getFrequentlyBoughtTogether(productId: number, limit = 4) {
-  return getOrSetCached(`storefront:boughtTogether:${productId}:${limit}`, STOREFRONT_CACHE_TTL_MS, async () => {
+  const rows = await getOrSetCached(`storefront:boughtTogether:${productId}:${limit}`, STOREFRONT_CACHE_TTL_MS, async () => {
     const db = await getDb();
     if (!db) return [];
 
@@ -274,11 +285,12 @@ export async function getFrequentlyBoughtTogether(productId: number, limit = 4) 
     const ids = rows.map(row => row.productId).filter((id): id is number => id != null);
     if (!ids.length) return [];
     const togetherById = new Map(rows.map(row => [row.productId, Number(row.together)]));
-    const published = await getPublishedProductsByIds(ids);
+    const published = await getPublishedProductsByIdsRaw(ids);
     return published
       .sort((a, b) => (togetherById.get(b.id) ?? 0) - (togetherById.get(a.id) ?? 0) || a.id - b.id)
       .slice(0, limit);
   });
+  return withLiveCampaign(rows);
 }
 
 /**
@@ -298,7 +310,7 @@ export async function getFrequentlyBoughtTogether(productId: number, limit = 4) 
  */
 export async function getBestsellingProducts(limit = 8) {
   // 2026-09-14: cached like the other storefront reads (see STOREFRONT_CACHE_TTL_MS).
-  return getOrSetCached(`storefront:bestsellers:${limit}`, STOREFRONT_CACHE_TTL_MS, async () => {
+  const rows = await getOrSetCached(`storefront:bestsellers:${limit}`, STOREFRONT_CACHE_TTL_MS, async () => {
     const db = await getDb();
     if (!db) return [];
 
@@ -309,7 +321,11 @@ export async function getBestsellingProducts(limit = 8) {
       .innerJoin(orders, eq(orderItems.orderId, orders.id))
       .where(settledSaleSql)
       .groupBy(orderItems.productId)
-      .orderBy(desc(soldQtyExpr))
+      // 2026-09-27 (D12): `id` тэнцвэр -- тэнцүү зарагдсан тоотой мөрүүдийн
+      // дараалал тогтворгүй бол `.limit(limit * 3)`-ийн хайчлалт бүр өөр
+      // бараа тасалж, getRecommendedProducts-ийн "хоёр дахь хуудас" алгоритм
+      // (энэ жагсаалтын тогтвортой урьтгаас хамаардаг) уначих боломжтой.
+      .orderBy(desc(soldQtyExpr), asc(orderItems.productId))
       .limit(limit * 3); // headroom: some winners may since have gone unpublished
 
     const productIds = soldRows.map(row => row.productId).filter((id): id is number => id != null);
@@ -317,6 +333,7 @@ export async function getBestsellingProducts(limit = 8) {
 
     const catalogColumns = {
       id: products.id,
+      kind: products.kind,
       name: products.name,
       nameMn: products.nameMn,
       slug: products.slug,
@@ -340,7 +357,10 @@ export async function getBestsellingProducts(limit = 8) {
 
     const picked = catalogRows
       .map(row => ({ ...row, soldQuantity: soldQuantityByProduct.get(row.id) ?? 0 }))
-      .sort((a, b) => b.soldQuantity - a.soldQuantity)
+      // 2026-09-27 (D12): `id` тэнцвэр -- үгүй бол ижил тооны зарагдсан барааны
+      // дараалал шаталсан хуудаслалт бүрд өөр гарч болно (getRecommendedProducts-ийн
+      // хоёр дахь хуудас энэ жагсаалтын тогтвортой урьтгаас хамаардаг).
+      .sort((a, b) => b.soldQuantity - a.soldQuantity || a.id - b.id)
       .slice(0, limit);
 
     if (picked.length >= limit) return picked;
@@ -412,6 +432,7 @@ export async function getBestsellingProducts(limit = 8) {
 
     return picked.slice(0, limit);
   });
+  return withLiveCampaign(rows);
 }
 
 /* 2026-09-11: getCategoryShelfProducts + getHomeCategoryShelves removed here.
@@ -568,6 +589,7 @@ export async function searchPublishedCatalogFulltext(query: string) {
   const rowsFor = (rankExpr: SQL<unknown>) => db
     .select({
       id: products.id,
+      kind: products.kind,
       name: products.name,
       slug: products.slug,
       brand: products.brand,
@@ -603,8 +625,8 @@ export async function searchPublishedCatalogFulltext(query: string) {
   // Strict first. Only when requiring every concept finds nothing at all do
   // we widen — an empty shelf is the one outcome worse than a loose one.
   const strictRows = await rowsFor(strictExpr);
-  if (strictRows.length) return strictRows;
-  return rowsFor(broadExpr);
+  if (strictRows.length) return withLiveCampaign(strictRows);
+  return withLiveCampaign(await rowsFor(broadExpr));
 }
 
 // Preference Profile v2 (2026-09-01): "recommended for you" v2. A real read
@@ -810,7 +832,7 @@ export async function getRecommendedProducts(userId: number | null, limit = 8, p
   // once. Rather than a genuinely empty rail, fill remaining slots with
   // any other in-stock published candidates (no scoring claim attached).
   const anyFillers = candidates.filter(product => !alreadyIncluded.has(product.id)).slice(0, limit - combined.length);
-  return [...combined, ...anyFillers].slice(0, limit);
+  return withLiveCampaign([...combined, ...anyFillers].slice(0, limit));
 }
 
 // Preference Profile v2 (2026-09-01): ProductDetail's related-products rail
@@ -822,7 +844,7 @@ export async function getRecommendedProducts(userId: number | null, limit = 8, p
 // maintain. Public (no auth needed).
 export async function getRelatedProducts(productId: number, limit = 6) {
   // 2026-09-14: cached like the other storefront reads (see STOREFRONT_CACHE_TTL_MS).
-  return getOrSetCached(`storefront:related:${productId}:${limit}`, STOREFRONT_CACHE_TTL_MS, async () => {
+  const rows = await getOrSetCached(`storefront:related:${productId}:${limit}`, STOREFRONT_CACHE_TTL_MS, async () => {
     const db = await getDb();
     if (!db) return [];
 
@@ -842,6 +864,7 @@ export async function getRelatedProducts(productId: number, limit = 6) {
 
     const candidates = await db.select({
       id: products.id,
+      kind: products.kind,
       categoryId: products.categoryId,
       name: products.name,
       nameMn: products.nameMn,
@@ -893,6 +916,7 @@ export async function getRelatedProducts(productId: number, limit = 6) {
       .slice(0, limit - scored.length);
     return [...scored.map(entry => entry.product), ...sameCategoryFillers].slice(0, limit);
   });
+  return withLiveCampaign(rows);
 }
 
 // Deterministic, per-viewed-product tiebreak for candidates that score
@@ -954,7 +978,7 @@ export async function getProductBySlug(slug: string) {
     .groupBy(products.id, productCategories.id)
     .limit(1);
 
-  return result[0] ?? null;
+  return withLiveCampaignOne(result[0] ?? null);
 }
 
 /**
@@ -979,6 +1003,7 @@ export async function getPublishedProductBySku(sku: string) {
   const result = await db
     .select({
       id: products.id,
+      kind: products.kind,
       name: products.name,
       nameMn: products.nameMn,
       slug: products.slug,
@@ -992,5 +1017,5 @@ export async function getPublishedProductBySku(sku: string) {
     .where(and(eq(products.sku, sku), eq(products.isPublished, true)))
     .limit(1);
 
-  return result[0] ?? null;
+  return withLiveCampaignOne(result[0] ?? null);
 }

@@ -87,8 +87,38 @@ export default function AdminOperationsPanel({ preview = false, query = "", role
   const orders = refundOwedOnly ? searchedOrders.filter(isRefundOwed) : searchedOrders;
   type OrderRow = (typeof orders)[number];
 
+  // 2026-09-27 (F-status): cancelled/returned used to apply the instant a
+  // status <select> changed, from the board, the list row, or the bulk bar
+  // -- each one reverses stock/money (see the rules on cancelling), so all
+  // three now confirm first, the same way the delete button already does.
+  const changeOrderStatus = async (id: number, status: OrderStatus) => {
+    if ((status === "cancelled" || status === "returned")
+      && !(await confirm({ title: `Захиалгыг "${statusLabels[status]}" болгох уу? Нөөц/мөнгөний урсгалд нөлөөлнө.`, danger: true }))) return;
+    updateOrder.mutate({ id, status });
+  };
+
+  // 2026-09-27 (F-refund): `Number(refundForm.amountMnt) || 0` turned an
+  // empty/invalid field into a silent 0₮ refund (or NaN, coerced the same
+  // way) instead of rejecting it -- a real money action deserves the same
+  // client-side guard as everywhere else this pattern was fixed.
+  const submitRefund = () => {
+    if (!refundForm) return;
+    const order = orders.find(row => row.id === refundForm.orderId);
+    if (!Number.isInteger(Number(refundForm.amountMnt)) || refundForm.amountMnt.trim() === "") {
+      toast.error("Буцаах дүнг зөв бөглөнө үү."); return;
+    }
+    const amountMnt = Number(refundForm.amountMnt);
+    const max = order?.totalMnt ?? Number.MAX_SAFE_INTEGER;
+    if (amountMnt < 1 || amountMnt > max) {
+      toast.error(`Буцаах дүн 1–${max} хооронд байх ёстой.`); return;
+    }
+    refundOrder.mutate({ id: refundForm.orderId, refundAmountMnt: amountMnt, refundNote: refundForm.note || undefined, restockItems: refundForm.restock });
+  };
+
   const applyBulkStatus = async () => {
     if (preview) return toast.message("Preview горим", { description: "Багц үйлдэл зөвхөн хамгаалагдсан admin хэсэгт ажиллана." });
+    if ((bulkStatus === "cancelled" || bulkStatus === "returned")
+      && !(await confirm({ title: `Сонгосон ${selectedOrderIds.size} захиалгыг "${statusLabels[bulkStatus]}" болгох уу? Нөөц/мөнгөний урсгалд нөлөөлнө.`, danger: true }))) return;
     try {
       const result = await bulkUpdateOrderStatus.mutateAsync({ ids: Array.from(selectedOrderIds), status: bulkStatus });
       if (result.failed.length > 0) toast.error(`${result.succeeded.length} шинэчлэгдлээ, ${result.failed.length} амжилтгүй (төлөв буцаах боломжгүй эсвэл хаагдсан захиалга байж болзошгүй).`);
@@ -154,7 +184,7 @@ export default function AdminOperationsPanel({ preview = false, query = "", role
     {!ordersQuery.isLoading && viewMode === "board" && (
       <OrdersKanbanBoard
         orders={orders}
-        onStatusChange={(id, status) => updateOrder.mutate({ id, status })}
+        onStatusChange={(id, status) => void changeOrderStatus(id, status)}
         disabled={preview || !canManageFulfilment || updateOrder.isPending}
         emptyMessage={<div className="rounded-3xl bg-[var(--a-soft)] p-8 text-center text-sm text-[var(--a-muted)]"><PackageCheck className="mx-auto mb-3 text-[#df1f3d]" size={28} />Одоогоор бодит захиалга алга.</div>}
       />
@@ -184,7 +214,7 @@ export default function AdminOperationsPanel({ preview = false, query = "", role
             <p className="mt-4 text-xs text-[var(--a-text-soft)]">{order.items.map(item => `${item.productName} × ${item.quantity}`).join(" · ")}</p>
             {order.returnRequestedAt && order.status !== "returned" && <p className="mt-2 rounded-xl bg-[#fff5dd] px-3 py-2 text-xs text-[#6c531f]"><strong>Буцаалтын хүсэлт</strong> ({new Date(order.returnRequestedAt).toLocaleDateString("mn-MN")}): {order.returnRequestReason ?? "—"} — шийдвэл төлөвийг "Буцаагдсан" болгож, буцаан олголт бүртгэнэ.</p>}
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-              <select value={order.status} disabled={preview || !canManageFulfilment || updateOrder.isPending} onChange={event => updateOrder.mutate({ id: order.id, status: event.target.value as OrderStatus })} className="h-10 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-xs font-bold disabled:opacity-60">{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+              <select value={order.status} disabled={preview || !canManageFulfilment || updateOrder.isPending} onChange={event => { const next = event.target.value as OrderStatus; void changeOrderStatus(order.id, next); }} className="h-10 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-xs font-bold disabled:opacity-60">{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
               <input defaultValue={order.deliveryTrackingRef ?? ""} disabled={preview || !canManageFulfilment} onBlur={event => { if (!preview && event.target.value !== (order.deliveryTrackingRef ?? "")) updateOrder.mutate({ id: order.id, deliveryTrackingRef: event.target.value || null }); }} placeholder="Хүргэлтийн дугаар" className="h-10 flex-1 rounded-xl border border-[var(--a-border)] px-3 text-xs outline-none focus:border-[#df1f3d] disabled:opacity-60" />
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -204,12 +234,15 @@ export default function AdminOperationsPanel({ preview = false, query = "", role
               refundForm?.orderId === order.id ? (
                 <div className="mt-3 grid gap-2 rounded-2xl bg-[var(--a-neg-soft)] p-4">
                   <div className="flex flex-wrap gap-2">
-                    <label className="grid gap-1 text-xs font-bold">Буцаах дүн (₮)<input type="number" min="0" max={order.totalMnt} value={refundForm.amountMnt} onChange={event => setRefundForm(current => current && { ...current, amountMnt: event.target.value })} className="h-10 w-36 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" /></label>
+                    <label className="grid gap-1 text-xs font-bold">Буцаах дүн (₮)<input type="number" min="1" max={order.totalMnt} value={refundForm.amountMnt} onChange={event => setRefundForm(current => current && { ...current, amountMnt: event.target.value })} className="h-10 w-36 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" /></label>
                     <label className="grid gap-1 text-xs font-bold">Тэмдэглэл (сонголтоор)<input value={refundForm.note} onChange={event => setRefundForm(current => current && { ...current, note: event.target.value })} className="h-10 w-56 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" /></label>
                   </div>
-                  <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={refundForm.restock} onChange={event => setRefundForm(current => current && { ...current, restock: event.target.checked })} className="size-4 accent-[#df1f3d]" />Барааг нөөцөд буцаах</label>
+                  {/* 2026-09-27: цуцлагдсан захиалгын бараа цуцлах үед аль хэдийн нөөцөд буцсан — сервер ч дахин буцаахгүй. */}
+                  {order.status === "cancelled"
+                    ? <p className="text-xs text-[var(--a-muted)]">Цуцлагдсан захиалгын бараа нөөцөд аль хэдийн буцсан.</p>
+                    : <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={refundForm.restock} onChange={event => setRefundForm(current => current && { ...current, restock: event.target.checked })} className="size-4 accent-[#df1f3d]" />Барааг нөөцөд буцаах</label>}
                   <div className="flex gap-2">
-                    <button type="button" disabled={refundOrder.isPending} onClick={() => refundOrder.mutate({ id: order.id, refundAmountMnt: Number(refundForm.amountMnt) || 0, refundNote: refundForm.note || undefined, restockItems: refundForm.restock })} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#df1f3d] px-4 text-xs font-bold text-white disabled:opacity-60">{refundOrder.isPending && <LoaderCircle className="animate-spin" size={13} />}Баталгаажуулах</button>
+                    <button type="button" disabled={refundOrder.isPending} onClick={submitRefund} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#df1f3d] px-4 text-xs font-bold text-white disabled:opacity-60">{refundOrder.isPending && <LoaderCircle className="animate-spin" size={13} />}Баталгаажуулах</button>
                     <button type="button" onClick={() => setRefundForm(null)} className="h-9 rounded-full border border-[var(--a-border)] px-4 text-xs font-bold text-[var(--a-text-soft)]">Цуцлах</button>
                   </div>
                 </div>

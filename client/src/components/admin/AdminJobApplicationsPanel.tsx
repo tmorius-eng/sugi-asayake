@@ -45,10 +45,21 @@ export default function AdminJobApplicationsPanel({ preview = false }: { preview
 
   const openCv = async (id: number) => {
     setCvLoadingId(id);
+    // 2026-09-27 (F12): window.open AFTER an awaited fetch is a background
+    // tab open, not a user gesture, as far as popup blockers are concerned
+    // -- most browsers silently blocked it. Open the tab synchronously on
+    // the click and only point it at the real URL once it resolves.
+    // `noopener` would make window.open return null (no reference left to
+    // navigate later), so sever window.opener by hand instead -- same
+    // reverse-tabnabbing protection, kept until after we set .location.
+    const tab = window.open("", "_blank");
+    if (tab) tab.opener = null;
     try {
       const { url } = await utils.admin.jobApplicationCvUrl.fetch({ id });
-      window.open(url, "_blank", "noopener,noreferrer");
+      if (tab) tab.location.href = url;
+      else window.open(url, "_blank", "noopener,noreferrer");
     } catch (error) {
+      tab?.close();
       toast.error(error instanceof Error ? error.message : "CV нээж чадсангүй.");
     } finally {
       setCvLoadingId(null);

@@ -186,7 +186,10 @@ function ReviewsSection({ productId }: { productId: number }) {
       : eligibility?.canReview ? <form onSubmit={event => { event.preventDefault(); createReview.mutate({ productId, rating, comment: comment.trim() || null, imageUrl: photoUrl }); }} className="mt-8 max-w-lg rounded-2xl border border-border bg-muted p-6">
         <p className="text-sm font-bold text-foreground">Сэтгэгдэл үлдээх</p>{reviewRewardMnt > 0 ? <p className="mt-1 text-xs font-bold text-[#2c7650]">{`Сэтгэгдэл бичвэл ${formatMnt(reviewRewardMnt)} дэлгүүрийн зээл бэлэглэнэ.`}</p> : null}
         <div className="mt-3 flex items-center gap-1">{[1, 2, 3, 4, 5].map(n => <button type="button" key={n} onClick={() => setRating(n)} aria-label={`${n} од өгөх`} aria-pressed={rating === n}><Star size={24} fill={n <= rating ? "#f0b52d" : "none"} stroke={n <= rating ? "#f0b52d" : "#c7c8cc"} /></button>)}</div>
-        <textarea value={comment} onChange={event => setComment(event.target.value)} maxLength={2000} rows={3} placeholder="Бүтээгдэхүүний талаарх сэтгэгдлээ бичнэ үү (заавал биш)" className="mt-3 w-full rounded-xl border border-border bg-white p-3 text-sm outline-none focus:border-[#df1f3d]" />
+        {/* translate="no" (2026-09-27): TranslateSurface л дэлгэрэнгүй
+            байрладаг тул худалдан авагч гадаад хэлээр бичиж байхад тэдний
+            бичсэн текстийг дунд нь орчуулж эхэлдэггүй байх ёстой. */}
+        <textarea translate="no" value={comment} onChange={event => setComment(event.target.value)} maxLength={2000} rows={3} placeholder="Бүтээгдэхүүний талаарх сэтгэгдлээ бичнэ үү (заавал биш)" className="mt-3 w-full rounded-xl border border-border bg-white p-3 text-sm outline-none focus:border-[#df1f3d]" />
         <ReviewPhotoPicker productId={productId} value={photoUrl} onChange={setPhotoUrl} />
         <button type="submit" disabled={createReview.isPending} className="mt-3 min-h-11 rounded-full bg-[#df1f3d] px-6 text-xs font-bold text-white transition hover:bg-[#bc1732] disabled:cursor-not-allowed disabled:opacity-55">{createReview.isPending ? <LoaderCircle className="mx-auto animate-spin" size={15} /> : "Нийтлэх"}</button>
       </form>
@@ -239,7 +242,16 @@ export default function ProductDetail() {
     if (selectedVariantId !== null) return;
     const variants = variantsQuery.data;
     if (!variants?.length) return;
-    setSelectedVariantId((variants.find(variant => variant.isDefault) ?? variants[0]).id);
+    // 2026-09-27: сая нэвтэрсэн худалдан авагч default variant-аа сонгосон
+    // байтал тэр яг сарнинал дууссан бол "Нөөц дууссан" дэлгэц шууд харна --
+    // default-ыг эхлээд л ЗӨВХӨН нөөцтэй бол сонго, дараа нь нөөцтэй ямар ч
+    // variant, эцэст нь (бүгд дууссан бол) хуучин зан төлөв.
+    const defaultVariant = variants.find(variant => variant.isDefault);
+    const preferred = (defaultVariant && defaultVariant.stockQuantity > 0 ? defaultVariant : null)
+      ?? variants.find(variant => variant.stockQuantity > 0)
+      ?? defaultVariant
+      ?? variants[0];
+    setSelectedVariantId(preferred.id);
   }, [variantsQuery.data, selectedVariantId]);
   // A quantity chosen against one variant's stock isn't necessarily valid
   // for another (e.g. 5 units of a 170ml option, then switching to a
@@ -290,6 +302,11 @@ export default function ProductDetail() {
   const activeStockQuantity = hasVariantChoice && selectedVariant ? selectedVariant.stockQuantity : display.stockQuantity;
   const salePercent = getSalePercent(activePriceMnt, activeCompareAtPriceMnt);
   const stockStatus = getStockStatusLabel(activeStockQuantity);
+  // 2026-09-27: бэлгийн карт мөр checkout/POS/гар захиалгад нөөц хөндөхгүй
+  // (PROJECT-GUIDE) тул storefront-д ч үргэлж худалдаж авах боломжтой байх ёстой.
+  const isGiftCard = display.kind === "gift_card";
+  const stockExhausted = !isGiftCard && activeStockQuantity <= 0;
+  const canIncreaseQuantity = isGiftCard || quantity < activeStockQuantity;
 
   const addToCart = () => {
     trackEvent("add_to_cart", { value: activePriceMnt * quantity, items: [{ item_id: product.sku, item_name: product.name, price: activePriceMnt, quantity }] });
@@ -301,7 +318,7 @@ export default function ProductDetail() {
     sticky bar below (live-confirmed on bsb.mn: they never show both an
     inline add-to-cart row AND a sticky one on the same screen) -- desktop/
     tablet keeps this exact row unchanged. */}
-<div className="hidden items-center gap-4 min-[761px]:flex"><div className="inline-flex items-center rounded-full border border-border bg-white"><button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="grid size-11 place-items-center" aria-label="Тоо хасах"><Minus size={16} /></button><span className="grid min-w-10 place-items-center font-bold">{quantity}</span><button type="button" disabled={quantity >= activeStockQuantity} onClick={() => setQuantity(quantity + 1)} className="grid size-11 place-items-center disabled:opacity-40" aria-label="Тоо нэмэх"><Plus size={16} /></button></div><button type="button" disabled={addItem.isPending || activeStockQuantity === 0} onClick={addToCart} className="min-h-12 flex-1 rounded-full bg-[#df1f3d] px-6 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-55">{addItem.isPending ? <LoaderCircle className="mx-auto animate-spin" size={17} /> : activeStockQuantity === 0 ? "Нөөц дууссан" : `Сагсанд нэмэх — ${formatMnt(activePriceMnt * quantity)}`}</button></div><div className="mt-8 grid gap-3 sm:grid-cols-2"><div className="flex gap-3 rounded-2xl bg-white p-4"><Truck className="shrink-0 text-[#df1f3d]" size={19} /><p className="text-xs leading-5"><strong className="block text-foreground">УБ хүргэлт — {formatMnt(deliveryFeeUbMnt)}</strong><span className="text-muted-foreground">24–48 цагийн дотор · Салбараас үнэгүй авах</span></p></div><div className="flex gap-3 rounded-2xl bg-white p-4"><ShieldCheck className="shrink-0 text-[#df1f3d]" size={19} /><p className="text-xs leading-5"><strong className="block text-foreground">Албан ёсны баталгаа</strong><span className="text-muted-foreground">SUGI Drug Store Japan</span></p></div></div></section></div><RoutineCrossSell productId={product.id} onAdded={() => setCartOpen(true)} /><BoughtTogether productId={product.id} /><RelatedProducts productId={product.id} /><ReviewsSection productId={product.id} /><QuestionsSection productId={product.id} /></main>
+<div className="hidden items-center gap-4 min-[761px]:flex"><div className="inline-flex items-center rounded-full border border-border bg-white"><button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="grid size-11 place-items-center" aria-label="Тоо хасах"><Minus size={16} /></button><span className="grid min-w-10 place-items-center font-bold">{quantity}</span><button type="button" disabled={!canIncreaseQuantity} onClick={() => setQuantity(quantity + 1)} className="grid size-11 place-items-center disabled:opacity-40" aria-label="Тоо нэмэх"><Plus size={16} /></button></div><button type="button" disabled={addItem.isPending || stockExhausted} onClick={addToCart} className="min-h-12 flex-1 rounded-full bg-[#df1f3d] px-6 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-55">{addItem.isPending ? <LoaderCircle className="mx-auto animate-spin" size={17} /> : stockExhausted ? "Нөөц дууссан" : `Сагсанд нэмэх — ${formatMnt(activePriceMnt * quantity)}`}</button></div><div className="mt-8 grid gap-3 sm:grid-cols-2"><div className="flex gap-3 rounded-2xl bg-white p-4"><Truck className="shrink-0 text-[#df1f3d]" size={19} /><p className="text-xs leading-5"><strong className="block text-foreground">УБ хүргэлт — {formatMnt(deliveryFeeUbMnt)}</strong><span className="text-muted-foreground">24–48 цагийн дотор · Салбараас үнэгүй авах</span></p></div><div className="flex gap-3 rounded-2xl bg-white p-4"><ShieldCheck className="shrink-0 text-[#df1f3d]" size={19} /><p className="text-xs leading-5"><strong className="block text-foreground">Албан ёсны баталгаа</strong><span className="text-muted-foreground">SUGI Drug Store Japan</span></p></div></div></section></div><RoutineCrossSell productId={product.id} onAdded={() => setCartOpen(true)} /><BoughtTogether productId={product.id} /><RelatedProducts productId={product.id} /><ReviewsSection productId={product.id} /><QuestionsSection productId={product.id} /></main>
 {/* 2026-09-07 (bsb.mn mobile-UX pass): mobile-only sticky "quantity + Add to
     cart" bar, replacing BottomNavBar.tsx here (see that component's own
     `hidden` check for /product/*) -- live-confirmed on bsb.mn's real product
@@ -310,8 +327,8 @@ export default function ProductDetail() {
     quantity/addToCart state and JSX already above (no new state), just
     rendered a second time for the mobile-only bar. */}
 <div className="mobile-sticky-bar pd-sticky-cart">
-  <div className="inline-flex items-center rounded-full border border-border bg-white"><button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="grid size-11 place-items-center" aria-label="Тоо хасах"><Minus size={16} /></button><span className="grid min-w-10 place-items-center font-bold">{quantity}</span><button type="button" disabled={quantity >= activeStockQuantity} onClick={() => setQuantity(quantity + 1)} className="grid size-11 place-items-center disabled:opacity-40" aria-label="Тоо нэмэх"><Plus size={16} /></button></div>
-  <button type="button" disabled={addItem.isPending || activeStockQuantity === 0} onClick={addToCart} className="min-h-12 flex-1 rounded-full bg-[#df1f3d] px-6 text-sm font-bold text-white transition active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-55">{addItem.isPending ? <LoaderCircle className="mx-auto animate-spin" size={17} /> : activeStockQuantity === 0 ? "Нөөц дууссан" : `Сагсанд нэмэх — ${formatMnt(activePriceMnt * quantity)}`}</button>
+  <div className="inline-flex items-center rounded-full border border-border bg-white"><button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="grid size-11 place-items-center" aria-label="Тоо хасах"><Minus size={16} /></button><span className="grid min-w-10 place-items-center font-bold">{quantity}</span><button type="button" disabled={!canIncreaseQuantity} onClick={() => setQuantity(quantity + 1)} className="grid size-11 place-items-center disabled:opacity-40" aria-label="Тоо нэмэх"><Plus size={16} /></button></div>
+  <button type="button" disabled={addItem.isPending || stockExhausted} onClick={addToCart} className="min-h-12 flex-1 rounded-full bg-[#df1f3d] px-6 text-sm font-bold text-white transition active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-55">{addItem.isPending ? <LoaderCircle className="mx-auto animate-spin" size={17} /> : stockExhausted ? "Нөөц дууссан" : `Сагсанд нэмэх — ${formatMnt(activePriceMnt * quantity)}`}</button>
 </div>
 <SiteFooter /><CartDrawer open={cartOpen} onOpenChange={setCartOpen} /></div>;
 }

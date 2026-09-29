@@ -3,10 +3,11 @@
 // (export *) тул import зам өөрчлөгдөөгүй. Функц зөөхдөө энэ файлын import-ыг мөн шинэчил.
 
 import { randomBytes } from "node:crypto";
-import { and, desc, eq, gt, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
-import { phoneVerificationSessions, products, userAddresses, users, wishlistItems } from "../../drizzle/schema";
+import { and, desc, eq, gt, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import { phoneVerificationSessions, products, pushSubscriptions, userAddresses, users, wishlistItems } from "../../drizzle/schema";
 import { type UbDistrict } from "../../shared/districts";
 import { getOrSetCached, invalidateCached } from "../_core/ttlCache";
+import { withLiveCampaign } from "./price-campaigns";
 import { getDb } from "./connection";
 
 export async function getUserByEmail(email: string) {
@@ -100,12 +101,13 @@ export async function touchUserLastSignedIn(id: number) {
 
 /** Profile page (name/phone) update — email and password have their own
  *  dedicated flows (registration, forgot-password) and aren't touched here. */
-export async function updateUserProfile(userId: number, input: { name?: string | null; phone?: string | null }) {
+// 2026-09-27: `phone` параметрийг хасав — утас нь нэвтрэлтийн identity тул зөвхөн
+// SMS-ээр баталгаажсан замаар (`attachPhoneFromVerifiedSession`) бичигдэнэ.
+export async function updateUserProfile(userId: number, input: { name?: string | null }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.update(users).set({
     ...(input.name !== undefined ? { name: input.name } : {}),
-    ...(input.phone !== undefined ? { phone: input.phone } : {}),
     updatedAt: new Date(),
   }).where(eq(users.id, userId));
   forgetSessionUser(userId);
@@ -259,8 +261,12 @@ export async function deleteUserAccount(userId: number) {
   try {
     await db.delete(users).where(eq(users.id, userId));
     forgetSessionUser(userId);
-  } catch {
-    throw new Error("Энэ акаунт агуулга (пост, лог г.м.) үүсгэсэн байгаа тул автоматаар устгах боломжгүй. Дэлгүүрийн админтай холбогдоно уу.");
+  } catch (error) {
+    // 2026-09-27: зөвхөн FK-ийн (холбогдсон мөр) алдааг "агуулга үүсгэсэн" гэж
+    // тайлбарлана — deadlock/холболтын алдааг байнгын татгалзал мэт харуулдаг байв.
+    const code = (error as { code?: string; cause?: { code?: string } })?.code ?? (error as { cause?: { code?: string } })?.cause?.code;
+    if (code !== "ER_ROW_IS_REFERENCED_2" && code !== "ER_ROW_IS_REFERENCED") throw error;
+    throw new Error("Энэ акаунт агуулга (пост, лог г.м.) үүсгэсэн байгаа тул автоматаар устгах боломжгүй. Дэлгүүрийн админтай холбогдоно уу.", { cause: error });
   }
   return { success: true } as const;
 }
@@ -270,7 +276,8 @@ export async function deleteUserAccount(userId: number) {
 export async function getWishlistForUser(userId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select({
+  // 2026-09-29: нийтийн хямдрал — /shop-той ижил үнэ.
+  return withLiveCampaign(await db.select({
     id: wishlistItems.id,
     productId: wishlistItems.productId,
     notifyOnRestock: wishlistItems.notifyOnRestock,
@@ -279,10 +286,12 @@ export async function getWishlistForUser(userId: number) {
     nameMn: products.nameMn,
     slug: products.slug,
     priceMnt: products.priceMnt,
+    compareAtPriceMnt: products.compareAtPriceMnt,
+    kind: products.kind,
     imageUrl: products.imageUrl,
     stockQuantity: products.stockQuantity,
     isPublished: products.isPublished,
-  }).from(wishlistItems).innerJoin(products, eq(products.id, wishlistItems.productId)).where(eq(wishlistItems.userId, userId)).orderBy(desc(wishlistItems.createdAt));
+  }).from(wishlistItems).innerJoin(products, eq(products.id, wishlistItems.productId)).where(eq(wishlistItems.userId, userId)).orderBy(desc(wishlistItems.createdAt)));
 }
 
 export async function addWishlistItem(userId: number, productId: number, notifyOnRestock: boolean) {
@@ -316,6 +325,15 @@ export async function removeWishlistItem(userId: number, productId: number) {
 export async function getPendingRestockAlerts(limit = 200, productIds?: number[]) {
   const db = await getDb();
   if (!db) return [];
+  // 2026-09-27 (I12): a row with NO deliverable channel (email notifications
+  // off or no email on file, AND no push subscription) used to still be
+  // returned here, then claimed by runBackInStockJob and counted as
+  // "notified" with nothing actually sent -- claimRestockAlert is a
+  // guarded, at-most-once UPDATE, so that wishlist entry would never hear
+  // about the restock again (short of the product selling out and coming
+  // back, which re-arms it). Filtered out here instead, the same
+  // channel-existence check getAbandonedCartsNeedingReminder already uses.
+  const pushSubscriptionCount = sql<number>`(SELECT COUNT(*) FROM ${pushSubscriptions} WHERE ${pushSubscriptions.userId} = ${users.id})`;
   return db.select({
     id: wishlistItems.id,
     userId: wishlistItems.userId,
@@ -334,6 +352,7 @@ export async function getPendingRestockAlerts(limit = 200, productIds?: number[]
       gt(products.stockQuantity, 0),
       isNull(users.suspendedAt),
       productIds ? inArray(wishlistItems.productId, productIds) : undefined,
+      or(and(eq(users.emailOptIn, true), isNotNull(users.email)), sql`${pushSubscriptionCount} > 0`),
     ))
     .orderBy(wishlistItems.id)
     .limit(limit);
@@ -429,6 +448,16 @@ export async function findUserByPhone(localEightDigitPhone: string) {
 // id, so we can't have the real id yet). verifyMnSessionId is NOT NULL
 // UNIQUE, so a random local placeholder fills that column until
 // attachVerifyMnSessionId overwrites it.
+/** Энэ дугаарт сүүлийн `windowMs`-д үүссэн баталгаажуулах сесс (2026-09-27, SMS-ийн утас тус бүрийн хязгаар). */
+export async function countRecentPhoneVerificationSessions(phone: string, windowMs: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const since = new Date(Date.now() - windowMs);
+  const [row] = await db.select({ count: sql<number>`count(*)` }).from(phoneVerificationSessions)
+    .where(and(eq(phoneVerificationSessions.phone, phone), gte(phoneVerificationSessions.createdAt, since)));
+  return Number(row?.count ?? 0);
+}
+
 export async function createPendingPhoneVerificationSession(input: { userId: number | null; purpose: "register" | "password_reset" | "checkout"; phone: string; code: string; expiresAt: Date }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
@@ -676,6 +705,10 @@ export async function linkFacebookIdToUser(userId: number, facebookId: string) {
   if (!db) throw new Error("Database is not available");
   const other = await findUserByFacebookId(facebookId);
   if (other && other.id !== userId) throw new Error("Энэ Facebook данс өөр бүртгэлтэй холбогдсон байна.");
+  // 2026-09-27: аль хэдийн ӨӨР Facebook холбогдсон бол чимээгүй солихгүй — хулгайлсан
+  // session нууц үггүйгээр дансны сошиал нэвтрэлтийг өөрийн Facebook руу чиглүүлж чаддаг байв.
+  const [self] = await db.select({ facebookId: users.facebookId }).from(users).where(eq(users.id, userId)).limit(1);
+  if (self?.facebookId && self.facebookId !== facebookId) throw new Error("Энэ дансанд өөр Facebook аль хэдийн тохируулагдсан байна. Солих бол дэлгүүрийн админтай ярина уу.");
   await db.update(users).set({ facebookId }).where(eq(users.id, userId));
   forgetSessionUser(userId);
 }

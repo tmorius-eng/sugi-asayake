@@ -10,6 +10,7 @@ import SiteFooter from "@/components/SiteFooter";
 import { trpc } from "@/lib/trpc";
 import { useSiteText } from "@/hooks/useSiteText";
 import { formatMnt } from "@shared/format";
+import { isValidPhoneInput } from "@/lib/clientValidation";
 
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Хайлт амжилтгүй боллоо. Дахин оролдоно уу.";
 
@@ -35,9 +36,12 @@ export default function TrackOrder() {
   const lookup = trpc.orders.lookup.useMutation();
 
   const submit = async () => {
+    // 2026-09-27: сервер `orders.lookup`-д утасны дугаар `phoneSchema`-г
+    // мөрддөг -- зөвхөн хоосон эсэхийг шалгахаас гадна форматыг нь ч энд.
     const nextErrors: Record<string, string> = {};
     if (!orderNumber.trim()) nextErrors["track-order-number"] = "Захиалгын дугаараа оруулна уу.";
     if (!phone.trim()) nextErrors["track-phone"] = "Утасны дугаараа оруулна уу.";
+    else if (!isValidPhoneInput(phone)) nextErrors["track-phone"] = "Утасны дугаараа зөв оруулна уу.";
     if (showErrors(nextErrors)) return;
     try {
       await lookup.mutateAsync({ orderNumber: orderNumber.trim(), phone: phone.trim() });

@@ -66,8 +66,13 @@ type DeliveryMethod = "ub_delivery" | "store_pickup";
 /** Payload per event. Deliberately NO name / phone / address / email fields. */
 export type NotificationPayloads = {
   "order.placed": { orderNumber: string; totalMnt: number; itemCount: number; deliveryMethod: DeliveryMethod; paymentMethod: string; pickupBranchName: string | null };
-  "order.paid": { orderNumber: string; totalMnt: number };
+  // 2026-09-27: `paymentMethod` нэмэв -- зурвас өмнө нь "QPay-аар" гэж
+  // ХАТУУ бичсэн байсан ч StorePay-ийн төлбөр ч энэ л event-ээр ирдэг байв.
+  // Хуучин дуудагч (payload-д provider дамжуулаагүй) эвдрэхгүйн тулд optional.
+  "order.paid": { orderNumber: string; totalMnt: number; paymentMethod?: string };
   "payment.paid_on_closed_order": { orderNumber: string; orderStatus: string; paymentStatus: string };
+  /** 2026-09-27: аль хэдийн төлөгдсөн захиалгад ӨӨР нэхэмжлэл/зээлээр дахин мөнгө орсон — давхар төлбөр, буцаан олгох ёстой. */
+  "payment.duplicate": { orderNumber: string; provider: string; totalMnt: number };
   "payment.underpaid": { orderNumber: string; paidMnt: number | null; totalMnt: number };
   "order.cancelled_by_customer": { orderNumber: string; totalMnt: number; itemCount: number };
   "refund.recorded": { orderNumber: string; refundMnt: number; restocked: boolean };
@@ -79,7 +84,12 @@ export type NotificationPayloads = {
   "receipt.posted": { code: string; branchName: string; supplierName: string | null; lineCount: number; pieces: number; unknownCount: number };
   "count.submitted": { code: string; branchName: string; lineCount: number; varianceLines: number };
   "count.posted": { code: string; branchName: string; adjustedLines: number; netDelta: number; isOpening: boolean };
-  "transfer.sent": { code: string; fromBranchName: string; toBranchName: string; lineCount: number; pieces: number };
+  // 2026-09-27 (I16): `blind` -- the receiving store's own copy of this push
+  // must not reveal what to expect (same reasoning as getTransfer's `blind`
+  // flag: a consultant must count what is really in the box, not tick off a
+  // list). `lineCount`/`pieces` are still required so the admin/warehouse
+  // copy (sent with `blind` unset) keeps showing them.
+  "transfer.sent": { code: string; fromBranchName: string; toBranchName: string; lineCount: number; pieces: number; blind?: boolean };
   "transfer.received": { code: string; toBranchName: string; receivedPieces: number; sentPieces: number };
   "transfer.discrepancy": { code: string; toBranchName: string; shortLines: number; overLines: number; unexpectedLines: number; missingPieces: number; extraPieces: number; examples: string[] };
   "stock.low": { branchName: string; productName: string; sku: string; quantity: number; threshold: number };
@@ -115,6 +125,7 @@ export const NOTIFICATION_EVENTS: Record<NotificationEventType, EventSpec> = {
   "order.placed": { label: "Шинэ онлайн захиалга", groups: ["warehouse", "admin"], priority: 4, tags: ["package"], clickSection: "orders" },
   "order.paid": { label: "Захиалгын төлбөр төлөгдсөн", groups: ["warehouse", "finance", "admin"], priority: 4, tags: ["white_check_mark"], clickSection: "orders" },
   "payment.paid_on_closed_order": { label: "Хаагдсан захиалгад төлбөр орсон", groups: ["finance", "admin"], priority: 5, tags: ["warning"], clickSection: "orders" },
+  "payment.duplicate": { label: "Давхар төлбөр орсон", groups: ["finance", "admin"], priority: 5, tags: ["warning"], clickSection: "orders" },
   "payment.underpaid": { label: "Дутуу төлбөр", groups: ["finance", "admin"], priority: 5, tags: ["warning"], clickSection: "orders" },
   "order.cancelled_by_customer": { label: "Харилцагч захиалгаа цуцалсан", groups: ["warehouse", "admin"], priority: 4, tags: ["x"], clickSection: "orders" },
   "refund.recorded": { label: "Буцаан олголт бүртгэгдсэн", groups: ["finance", "admin"], priority: 3, tags: ["money_with_wings"], clickSection: "orders" },
@@ -145,7 +156,7 @@ const deliveryLabel = (method: DeliveryMethod, pickupBranchName: string | null) 
   method === "store_pickup" ? `Очиж авах${pickupBranchName ? ` · ${pickupBranchName}` : ""}` : "УБ хүргэлт";
 
 const paymentLabel = (method: string) =>
-  method === "qpay" ? "QPay" : method === "storepay" ? "StorePay" : method === "bank_transfer" ? "Дансаар" : method === "card" ? "Карт" : method === "cash_on_delivery" ? "Хүргэлтээр бэлнээр" : method;
+  method === "qpay" ? "QPay" : method === "storepay" ? "StorePay" : method === "bank_transfer" ? "Дансаар" : method === "card" ? "Карт" : method === "cash_on_delivery" ? "Хүргэлтээр бэлнээр" : method === "store_credit" ? "Дэлгүүрийн зээл" : method;
 
 const pieces = (count: number) => `${count} ширхэг`;
 
@@ -161,11 +172,16 @@ export function buildNotificationMessage<K extends NotificationEventType>(type: 
     }
     case "order.paid": {
       const p = payload as NotificationPayloads["order.paid"];
-      return { title: `Төлбөр төлөгдлөө ${p.orderNumber}`, message: `${formatMnt(p.totalMnt)} QPay-аар төлөгдсөн. Захиалгыг баглаж болно.` };
+      const via = p.paymentMethod ? `${paymentLabel(p.paymentMethod)}-аар ` : "";
+      return { title: `Төлбөр төлөгдлөө ${p.orderNumber}`, message: `${formatMnt(p.totalMnt)} ${via}төлөгдсөн. Захиалгыг баглаж болно.` };
     }
     case "payment.paid_on_closed_order": {
       const p = payload as NotificationPayloads["payment.paid_on_closed_order"];
       return { title: `Хаагдсан захиалгад төлбөр орлоо ${p.orderNumber}`, message: `Захиалгын төлөв: ${p.orderStatus}, төлбөр: ${p.paymentStatus}. QPay мөнгө хүлээн авсан тул буцаан олголт шаардлагатай эсэхийг шалгана уу.` };
+    }
+    case "payment.duplicate": {
+      const p = payload as NotificationPayloads["payment.duplicate"];
+      return { title: `Давхар төлбөр ${p.orderNumber}`, message: `Аль хэдийн төлөгдсөн захиалгад ${p.provider === "storepay" ? "StorePay" : "QPay"}-аар дахин ${formatMnt(p.totalMnt)} орлоо. Нэг төлбөрийг буцаан олгоно уу.` };
     }
     case "payment.underpaid": {
       const p = payload as NotificationPayloads["payment.underpaid"];
@@ -211,7 +227,8 @@ export function buildNotificationMessage<K extends NotificationEventType>(type: 
     }
     case "transfer.sent": {
       const p = payload as NotificationPayloads["transfer.sent"];
-      return { title: `Шилжүүлэг замд ${p.code}`, message: `${p.fromBranchName} → ${p.toBranchName}: ${p.lineCount} төрөл · ${pieces(p.pieces)}. Ирэхэд "Бараа хүлээн авах → Шилжүүлэг"-ээс уншуулж хүлээн авна уу.` };
+      const detail = p.blind ? "" : `: ${p.lineCount} төрөл · ${pieces(p.pieces)}`;
+      return { title: `Шилжүүлэг замд ${p.code}`, message: `${p.fromBranchName} → ${p.toBranchName}${detail}. Ирэхэд "Бараа хүлээн авах → Шилжүүлэг"-ээс уншуулж хүлээн авна уу.` };
     }
     case "transfer.received": {
       const p = payload as NotificationPayloads["transfer.received"];

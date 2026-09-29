@@ -7,7 +7,7 @@
 // провайдерт).
 
 import { randomUUID } from "node:crypto";
-import { S3Client, PutObjectCommand, HeadBucketCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, HeadBucketCommand, HeadObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { ENV } from "./_core/env";
@@ -177,4 +177,22 @@ export async function storageObjectExists(relKey: string): Promise<boolean> {
   if (existsCache.size > 500) existsCache.clear();
   existsCache.set(key, { value, at: Date.now() });
   return value;
+}
+
+/**
+ * Объектыг устгана — best-effort, хэзээ ч шидэхгүй (2026-09-27). Хуучин avatar,
+ * устгасан анкетын CV (хувь хүний мэдээлэл) өмнө нь R2-д мөнхөд үлддэг байв.
+ */
+export async function storageDelete(relKey: string): Promise<boolean> {
+  if (!ENV.s3Bucket || !ENV.s3AccessKeyId || !ENV.s3SecretAccessKey) return false;
+  const key = normalizeKey(relKey);
+  if (!key) return false;
+  try {
+    await getClient().send(new DeleteObjectCommand({ Bucket: ENV.s3Bucket, Key: key }), { abortSignal: AbortSignal.timeout(10_000) });
+    existsCache.delete(key);
+    return true;
+  } catch (error) {
+    console.warn(`[storage] delete failed for ${key}:`, error instanceof Error ? error.message : error);
+    return false;
+  }
 }

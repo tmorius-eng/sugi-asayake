@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { useShopContact } from "@/hooks/useShopContact";
 import { useSiteText } from "@/hooks/useSiteText";
+import { FieldError, useFieldErrors } from "@/hooks/useFieldErrors";
+import { isValidPhoneInput, MIN_ADDRESS_LENGTH, MIN_LABEL_LENGTH, MIN_RECIPIENT_NAME_LENGTH } from "@/lib/clientValidation";
 import { paymentBadgeFor } from "@shared/orders";
 import { ubDistricts, ubDistrictLabels, type UbDistrict } from "@shared/districts";
 import {
@@ -282,7 +284,10 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: TabKey) => void }) {
 /* ---------------------------------------------------------------------- */
 
 function OrderTimeline({ status }: { status: string }) {
-  if (status === "cancelled") return null;
+  // 2026-09-27: "буцаагдсан" захиалга бэлтгэх/хүргэх шатнуудыг АЛХАЖ ирсэн
+  // мэт бүх алхмыг саарал бус идэвхтэй өнгөөр зурдаг байв (тухайн захиалга
+  // хэзээ ч хүргэгдээгүй байж болно) -- цуцлагдсантай адил нуух.
+  if (status === "cancelled" || status === "returned") return null;
   const currentIndex = ORDER_STEPS.findIndex(step => step.key === status);
   return (
     <div className="order-timeline">
@@ -344,7 +349,11 @@ function OrdersTab({ onCartOpen }: { onCartOpen: () => void }) {
     let added = 0;
     for (const item of available) {
       try {
-        await addItem.mutateAsync({ productId: item.productId, quantity: item.quantity });
+        // 2026-09-27: variantId байвал яг тэр variant-аар (өнгө/хэмжээ)
+        // дахин захиална -- productId-той хамт явуулбал сервер `refine`
+        // татгалздаг тул НЭГ л талбар явуулна.
+        if (item.variantId != null) await addItem.mutateAsync({ variantId: item.variantId, quantity: item.quantity });
+        else await addItem.mutateAsync({ productId: item.productId, quantity: item.quantity });
         added += 1;
       } catch {
         // Out of stock or otherwise unavailable — skip and keep going with the rest.
@@ -706,38 +715,53 @@ function AddressForm({ initial, onCancel, onSubmit, isSubmitting }: {
   isSubmitting: boolean;
 }) {
   const [form, setForm] = useState(initial);
+  const { errorFor, fieldProps, clearError, showErrors } = useFieldErrors();
   return (
     <form
       className="address-form"
       onSubmit={event => {
         event.preventDefault();
-        if (!form.label.trim() || !form.recipientName.trim() || !form.phone.trim() || !form.addressLine.trim()) {
-          toast.error("Бүх талбарыг бөглөнө үү.");
-          return;
-        }
+        // 2026-09-27: сервер `addressWriteSchema`-г мөрддөг (label ≥1,
+        // recipientName ≥2, phone `phoneSchema`, addressLine ≥8) -- өмнө нь
+        // зөвхөн хоосон эсэхийг л шалгаж, "Бүх талбарыг бөглөнө үү" гэсэн
+        // ерөнхий toast-оор л мэдэгддэг байв (WCAG 3.3.1-ийг ч зөрчинэ).
+        const nextErrors: Record<string, string> = {};
+        if (!form.label.trim()) nextErrors["address-label"] = "Хаягийн нэрээ оруулна уу.";
+        else if (form.label.trim().length < MIN_LABEL_LENGTH) nextErrors["address-label"] = "Хаягийн нэрээ оруулна уу.";
+        if (!form.recipientName.trim()) nextErrors["address-recipient"] = "Хүлээн авагчийн нэрээ оруулна уу.";
+        else if (form.recipientName.trim().length < MIN_RECIPIENT_NAME_LENGTH) nextErrors["address-recipient"] = "Нэр хэт богино байна.";
+        if (!form.phone.trim()) nextErrors["address-phone"] = "Утасны дугаараа оруулна уу.";
+        else if (!isValidPhoneInput(form.phone)) nextErrors["address-phone"] = "Утасны дугаараа зөв оруулна уу.";
+        if (!form.addressLine.trim()) nextErrors["address-line"] = "Дэлгэрэнгүй хаягаа бичнэ үү.";
+        else if (form.addressLine.trim().length < MIN_ADDRESS_LENGTH) nextErrors["address-line"] = "Хаягаа дэлгэрэнгүй бичнэ үү (дор хаяж 8 тэмдэгт).";
+        if (showErrors(nextErrors)) return;
         onSubmit(form);
       }}
     >
       <div className="profile-form-grid">
-        <label className="auth-field">
+        <label className="auth-field" htmlFor="address-label">
           Хаягийн нэр (жишээ: Гэр, Ажил)
-          <div className="auth-field-shell"><Home size={16} aria-hidden="true" /><input value={form.label} onChange={event => setForm(current => ({ ...current, label: event.target.value }))} placeholder="Гэр" maxLength={60} /></div>
+          <div className="auth-field-shell"><Home size={16} aria-hidden="true" /><input value={form.label} onChange={event => { setForm(current => ({ ...current, label: event.target.value })); clearError("address-label"); }} placeholder="Гэр" maxLength={60} {...fieldProps("address-label")} /></div>
+          <FieldError field="address-label" message={errorFor("address-label")} />
         </label>
-        <label className="auth-field">
+        <label className="auth-field" htmlFor="address-recipient">
           Хүлээн авагчийн нэр
-          <div className="auth-field-shell"><UserIcon size={16} aria-hidden="true" /><input value={form.recipientName} onChange={event => setForm(current => ({ ...current, recipientName: event.target.value }))} placeholder="Таны нэр" maxLength={160} /></div>
+          <div className="auth-field-shell"><UserIcon size={16} aria-hidden="true" /><input value={form.recipientName} onChange={event => { setForm(current => ({ ...current, recipientName: event.target.value })); clearError("address-recipient"); }} placeholder="Таны нэр" maxLength={160} {...fieldProps("address-recipient")} /></div>
+          <FieldError field="address-recipient" message={errorFor("address-recipient")} />
         </label>
-        <label className="auth-field">
+        <label className="auth-field" htmlFor="address-phone">
           Утас
-          <div className="auth-field-shell"><Phone size={16} aria-hidden="true" /><input value={form.phone} onChange={event => setForm(current => ({ ...current, phone: event.target.value }))} placeholder="9911 2233" inputMode="tel" maxLength={40} /></div>
+          <div className="auth-field-shell"><Phone size={16} aria-hidden="true" /><input value={form.phone} onChange={event => { setForm(current => ({ ...current, phone: event.target.value })); clearError("address-phone"); }} placeholder="9911 2233" inputMode="tel" maxLength={40} {...fieldProps("address-phone")} /></div>
+          <FieldError field="address-phone" message={errorFor("address-phone")} />
         </label>
         <label className="auth-field">
           Дүүрэг (сонголтоор)
           <div className="auth-field-shell"><MapPin size={16} aria-hidden="true" /><select value={form.district} onChange={event => setForm(current => ({ ...current, district: event.target.value as UbDistrict | "" }))}><option value="">Сонгох</option>{ubDistricts.map(key => <option key={key} value={key}>{ubDistrictLabels[key]}</option>)}</select></div>
         </label>
-        <label className="auth-field" style={{ gridColumn: "1 / -1" }}>
+        <label className="auth-field" style={{ gridColumn: "1 / -1" }} htmlFor="address-line">
           Дэлгэрэнгүй хаяг
-          <div className="auth-field-shell"><textarea value={form.addressLine} onChange={event => setForm(current => ({ ...current, addressLine: event.target.value }))} placeholder="Дүүрэг, хороо, байр, орц, тоот" style={{ minHeight: "70px", padding: "10px 0" }} maxLength={2000} /></div>
+          <div className="auth-field-shell"><textarea value={form.addressLine} onChange={event => { setForm(current => ({ ...current, addressLine: event.target.value })); clearError("address-line"); }} placeholder="Дүүрэг, хороо, байр, орц, тоот" style={{ minHeight: "70px", padding: "10px 0" }} maxLength={2000} {...fieldProps("address-line")} /></div>
+          <FieldError field="address-line" message={errorFor("address-line")} />
         </label>
       </div>
       <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", fontWeight: 700 }}>
@@ -894,17 +918,31 @@ function PushToggleRow() {
   const enabled = checked || (Boolean(endpoint) && status.data === true);
   const busy = subscribe.isPending || unsubscribe.isPending || status.isLoading;
   const toggle = async (on: boolean) => {
-    if (on) {
-      const sub = await subscribeToPush(keyQuery.data!.key!);
-      if (!sub) { toast.error("Хөтөч мэдэгдэл илгээхийг зөвшөөрсөнгүй."); return; }
-      await subscribe.mutateAsync(sub);
-      setEndpoint(sub.endpoint); setChecked(true);
-      toast.success("Push мэдэгдэл асаалаа.");
-    } else {
-      const old = await unsubscribeFromPush();
-      if (old) await unsubscribe.mutateAsync({ endpoint: old });
-      setEndpoint(null); setChecked(false);
-      toast.success("Push мэдэгдэл унтраалаа.");
+    // 2026-09-27: `void toggle(...)`-оор дуудагддаг тул алдаа энд барьж
+    // авахгүй бол unhandled rejection болно -- мутацийн `onError` аль хэдийн
+    // toast харуулдаг тул энд зөвхөн барих ажил хийнэ, давхар toast биш.
+    try {
+      if (on) {
+        const sub = await subscribeToPush(keyQuery.data!.key!);
+        if (!sub) { toast.error("Хөтөч мэдэгдэл илгээхийг зөвшөөрсөнгүй."); return; }
+        try {
+          await subscribe.mutateAsync(sub);
+        } catch (error) {
+          // Серверт бүртгэгдээгүй бол хөтчийг ч буцааж завсарлана -- эс бөгөөс
+          // хөтөч "бүртгэлтэй" хэвээр үлдэж, дараагийн асаалт юу ч хийхгүй.
+          await unsubscribeFromPush().catch(() => undefined);
+          throw error;
+        }
+        setEndpoint(sub.endpoint); setChecked(true);
+        toast.success("Push мэдэгдэл асаалаа.");
+      } else {
+        const old = await unsubscribeFromPush();
+        if (old) await unsubscribe.mutateAsync({ endpoint: old });
+        setEndpoint(null); setChecked(false);
+        toast.success("Push мэдэгдэл унтраалаа.");
+      }
+    } catch {
+      // Toast аль хэдийн харагдсан (мутацийн onError, эсвэл дээрх).
     }
   };
   return (

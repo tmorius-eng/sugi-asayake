@@ -10,6 +10,7 @@ import { getStoreSettingSlot, type StoreSettingKey } from "../../shared/store-se
 import { getOrSetCached } from "../_core/ttlCache";
 import { STOREFRONT_CACHE_KEYS, STOREFRONT_CACHE_TTL_MS, invalidateStorefront } from "./site";
 import { escapeLike, getDb, isDuplicateKeyError } from "./connection";
+import { forgetSessionUser } from "./users";
 
 /**
  * Active catalogue categories for the STOREFRONT (2026-09-12).
@@ -217,7 +218,7 @@ export async function adjustStoreCredit(input: { userId: number; deltaMnt: numbe
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   if (input.deltaMnt === 0) throw new Error("Adjustment amount must not be zero.");
-  return db.transaction(async tx => {
+  const result = await db.transaction(async tx => {
     const update = await tx.update(users)
       .set({ storeCreditMnt: sql`${users.storeCreditMnt} + ${input.deltaMnt}`, updatedAt: new Date() })
       .where(and(eq(users.id, input.userId), gte(users.storeCreditMnt, -input.deltaMnt)));
@@ -231,6 +232,9 @@ export async function adjustStoreCredit(input: { userId: number; deltaMnt: numbe
     const [updatedUser] = await tx.select({ storeCreditMnt: users.storeCreditMnt }).from(users).where(eq(users.id, input.userId)).limit(1);
     return { userId: input.userId, storeCreditMnt: updatedUser?.storeCreditMnt ?? 0 };
   });
+  // 2026-09-27: `users`-д бичсэн тул сешний 5 с кэш (commit-ын дараа).
+  forgetSessionUser(input.userId);
+  return result;
 }
 
 /** Checkout's own "apply my store credit" toggle -- the customer-facing
@@ -378,11 +382,20 @@ export async function claimCampaignSend(input: { fingerprint: string; windowMinu
       channel: input.channel,
       recipientCount: input.recipientCount,
     });
-    return true;
   } catch (error) {
     if (isDuplicateKeyError(error, "campaign_send_claims_unique")) return false;
     throw error;
   }
+  // 2026-09-27: цонхны ЗААГ. 10:09:58 (цонх N) ба 10:10:02 (цонх N+1) дээрх хоёр
+  // товшилт өөр `windowKey`-тэй тул хоёулаа өвөрмөц индексийг давж, 2 000 хүнд
+  // хоёр удаа илгээдэг байв. Өмнөх цонхонд ижил fingerprint `windowMinutes`-ийн
+  // дотор эзэмшигдсэн бол энэ хүсэлт хожигдоно (өөрийн мөр нь дараагийнхыг бас хаана).
+  const [earlier] = await db.select({ id: campaignSendClaims.id }).from(campaignSendClaims)
+    .where(and(eq(campaignSendClaims.fingerprint, input.fingerprint), ne(campaignSendClaims.windowKey, windowKey), sql`${campaignSendClaims.createdAt} > NOW() - INTERVAL ${sqlInt(input.windowMinutes)} MINUTE`))
+    .limit(1);
+  // Хожигдсон бол өөрийн мөрийг арилгана — эс бөгөөс болоогүй илгээлт аудитад үлдэж, блокыг сунгана.
+  if (earlier) await db.delete(campaignSendClaims).where(and(eq(campaignSendClaims.fingerprint, input.fingerprint), eq(campaignSendClaims.windowKey, windowKey)));
+  return !earlier;
 }
 
 export async function findRecentCampaignSend(fingerprint: string, windowMinutes: number) {
@@ -470,9 +483,42 @@ export async function countRecentFailedLoginAttempts(userId: number, windowMs: n
   const db = await getDb();
   if (!db) return 0;
   const since = new Date(Date.now() - windowMs);
+  // 2026-09-27: зөвхөн БОДИТ буруу нууц үг тоологдоно. Өмнө нь түгжигдсэн үеийн
+  // оролдлого ("locked"/"reauth_locked") ч `success=false` тул тоологдож, эзний
+  // зөв нууц үг бүр 15 минутын цонхыг урагш түлхдэг байв — утасны дугаарыг мэдсэн
+  // хэн ч 14 минут тутам нэг хүсэлтээр admin-ийг мөнхөд гадуур үлдээж чадна.
   const [row] = await db.select({ count: sql<number>`count(*)` }).from(loginAttempts)
-    .where(and(eq(loginAttempts.userId, userId), eq(loginAttempts.success, false), gte(loginAttempts.createdAt, since)));
+    .where(and(eq(loginAttempts.userId, userId), eq(loginAttempts.success, false), inArray(loginAttempts.reason, [...COUNTED_LOGIN_FAILURE_REASONS]), gte(loginAttempts.createdAt, since)));
   return Number(row?.count ?? 0);
+}
+
+/** Энэ хэрэглэгчид ижил шалтгаантай дэлгүүрийн зээлийн мөр аль хэдийн бий эсэх (2026-09-27, урамшуулал давхардуулахгүй). */
+export async function hasStoreCreditLedgerReason(userId: number, reason: string): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const [row] = await db.select({ id: storeCreditLedger.id }).from(storeCreditLedger)
+    .where(and(eq(storeCreditLedger.userId, userId), eq(storeCreditLedger.reason, reason), sql`${storeCreditLedger.deltaMnt} > 0`)).limit(1);
+  return Boolean(row);
+}
+
+/** Lockout-д тоологдох шалтгаанууд — зөвхөн буруу нууц үг. */
+export const COUNTED_LOGIN_FAILURE_REASONS = ["invalid_credentials", "reauth_invalid"] as const;
+
+/**
+ * Энэ IP-ээс энэ данс сүүлийн `days` хоногт амжилттай нэвтэрсэн эсэх (2026-09-27).
+ * Түгжигдсэн үед ЗӨВ нууц үгтэй, танил IP-ээс ирсэн хүсэлтийг нэвтрүүлнэ — халдагч
+ * 15 минут тутам 10 буруу оролдлогоор түгжээг хадгалсаар байсан ч эзэн өөрийн
+ * төхөөрөмжөөсөө орж чадна. Түгжээ нь тархсан таамаглалаас хамгаалахаар хэвээр.
+ */
+export async function hasRecentSuccessfulLoginFromIp(userId: number, ipAddress: string | null, days = 30): Promise<boolean> {
+  if (!ipAddress) return false;
+  const db = await getDb();
+  if (!db) return false;
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const [row] = await db.select({ id: loginAttempts.id }).from(loginAttempts)
+    // Зөвхөн жинхэнэ нэвтрэлт (reason NULL = нууц үгээр, reauth, facebook) — logout/нууц үг солих мөр биш.
+    .where(and(eq(loginAttempts.userId, userId), eq(loginAttempts.success, true), eq(loginAttempts.ipAddress, ipAddress), gte(loginAttempts.createdAt, since), or(isNull(loginAttempts.reason), inArray(loginAttempts.reason, ["reauth", "facebook"])))).limit(1);
+  return Boolean(row);
 }
 
 // TIER 4: admin-only Login History viewer.

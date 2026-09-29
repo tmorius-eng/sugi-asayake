@@ -54,8 +54,17 @@ export default function ProductQrModal({ product, onClose }: { product: QrProduc
         <img src="${dataUrl}" alt="">
         <h1>${escape(product.name)}</h1>
         <p>${escape(product.sku)}</p>
-      </div><script>window.onload = function () { window.print(); };</script></body></html>`);
+      </div></body></html>`);
     win.document.close();
+    // 2026-09-27: an inline <script> here is blocked by the production CSP
+    // (script-src 'self') -- the popup opened, but never auto-printed. This
+    // is a same-origin about:blank window, so calling win.print() from the
+    // opener's own (allowed) script works the same way once the QR <img> has
+    // actually painted.
+    const img = win.document.querySelector("img");
+    const doPrint = () => win.print();
+    if (img instanceof HTMLImageElement && !img.complete) img.addEventListener("load", doPrint, { once: true });
+    else doPrint();
   };
 
   return (

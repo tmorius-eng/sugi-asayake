@@ -88,14 +88,32 @@ async function resolveTagIdsByName(names: string[]): Promise<number[]> {
   const uniqueNames = Array.from(new Set(names.map(name => name.trim()).filter(Boolean)));
   if (uniqueNames.length === 0) return [];
   const existing = await db.select().from(postTags).where(inArray(postTags.name, uniqueNames));
-  const existingByName = new Map(existing.map(tag => [tag.name, tag]));
+  // 2026-09-27 (D10): the DB column's collation is case-insensitive, so the
+  // WHERE above already matches "Skincare" against a typed "skincare" -- but
+  // this map used to be keyed by the exact-case name from the row, so the
+  // lookup below (by the exact-case TYPED name) missed it, tried to INSERT
+  // "skincare" again, and hit the unique index -> INTERNAL error. Keying by
+  // slug makes both sides agree regardless of case.
+  // 2026-09-27 (засварын засвар): slug-аар түлхүүрлэвэл кирилл нэр бүр `""` болж
+  // ("Арьс", "Үс" нэг түлхүүр) олон tag-тай пост хадгалагдахаа больдог байв. DB-ийн
+  // case-insensitive collation-той ижил семантик: жижиг үсгээр.
+  const tagKey = (name: string) => name.trim().toLocaleLowerCase();
+  const existingBySlug = new Map<string, { id: number; name: string; slug: string }>(
+    existing.map(tag => [tagKey(tag.name), tag]),
+  );
   const ids: number[] = [];
   for (const name of uniqueNames) {
-    const found = existingByName.get(name);
-    if (found) { ids.push(found.id); continue; }
-    const slug = slugify(name) || `tag-${Date.now()}`;
+    const key = tagKey(name);
+    const found = existingBySlug.get(key);
+    if (found) { if (!ids.includes(found.id)) ids.push(found.id); continue; }
+    // Кирилл нэрийн slug хоосон — нэг мөчид хоёр tag үүсэхэд `Date.now()` давхцахгүйн тулд санамсаргүй дагавар.
+    const slug = slugify(name) || `tag-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const inserted = await db.insert(postTags).values({ name, slug });
-    ids.push(Number(inserted[0].insertId));
+    const id = Number(inserted[0].insertId);
+    ids.push(id);
+    // Prevents a second differently-cased name in the SAME call (e.g.
+    // ["Skincare", "skincare"]) from also inserting twice.
+    existingBySlug.set(key, { id, name, slug });
   }
   return ids;
 }
@@ -175,7 +193,6 @@ export async function postSlugExists(slug: string, excludeId?: number) {
 }
 
 export async function createAdminPost(input: PostWriteInput & { createdByUserId: number }) {
-  invalidateStorefront("posts");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const { categoryIds, tagNames, publishAt, ...postFields } = input;
@@ -191,12 +208,13 @@ export async function createAdminPost(input: PostWriteInput & { createdByUserId:
   });
   const postId = Number(inserted[0].insertId);
   await attachPostTaxonomy(postId, categoryIds, tagNames);
+  // 2026-09-27 (D6): бичсэний ДАРАА цэвэрлэнэ.
+  invalidateStorefront("posts");
   const created = await db.select().from(posts).where(eq(posts.id, postId)).limit(1);
   return { ...created[0], ...((await getPostTaxonomyMap([postId])).get(postId) ?? emptyTaxonomy) };
 }
 
 export async function updateAdminPost(input: { id: number } & Partial<PostWriteInput>) {
-  invalidateStorefront("posts");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const existing = await db.select().from(posts).where(eq(posts.id, input.id)).limit(1);
@@ -218,36 +236,38 @@ export async function updateAdminPost(input: { id: number } & Partial<PostWriteI
     updatedAt: new Date(),
   }).where(eq(posts.id, id));
   await attachPostTaxonomy(id, categoryIds, tagNames);
+  // 2026-09-27 (D6): бичсэний ДАРАА цэвэрлэнэ.
+  invalidateStorefront("posts");
   const updated = await db.select().from(posts).where(eq(posts.id, id)).limit(1);
   return { ...updated[0], ...((await getPostTaxonomyMap([id])).get(id) ?? emptyTaxonomy) };
 }
 
 /** Soft-delete (WordPress "Move to Trash") -- restorable via restoreAdminPost, not visible in getPublishedPosts/getAdminPosts's public-facing queries. */
 export async function trashAdminPost(id: number) {
-  invalidateStorefront("posts");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.update(posts).set({ deletedAt: new Date() }).where(eq(posts.id, id));
+  invalidateStorefront("posts");
   return { id };
 }
 
 export async function restoreAdminPost(id: number) {
-  invalidateStorefront("posts");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.update(posts).set({ deletedAt: null }).where(eq(posts.id, id));
+  invalidateStorefront("posts");
   return { id };
 }
 
 /** WordPress's "Delete Permanently" -- only allowed on a post already in Trash, matching WP's own 2-step flow (no one-click permanent delete from the main list). */
 export async function permanentlyDeleteAdminPost(id: number) {
-  invalidateStorefront("posts");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const existing = await db.select({ deletedAt: posts.deletedAt }).from(posts).where(eq(posts.id, id)).limit(1);
   if (!existing[0]) throw new Error("Пост олдсонгүй.");
   if (!existing[0].deletedAt) throw new Error("Эхлээд постыг хогийн санд шилжүүлнэ үү.");
   await db.delete(posts).where(eq(posts.id, id));
+  invalidateStorefront("posts");
   return { id };
 }
 

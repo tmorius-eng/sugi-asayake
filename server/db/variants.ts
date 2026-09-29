@@ -2,11 +2,12 @@
 // 2026-09-21: server/db.ts (7 066 мөр) домэйнээр хуваагдав; server/db.ts нь одоо barrel
 // (export *) тул import зам өөрчлөгдөөгүй. Функц зөөхдөө энэ файлын import-ыг мөн шинэчил.
 
-import { and, asc, desc, eq, sql } from "drizzle-orm";
-import { branches, branchStock, stockMovements, productVariants, products, users } from "../../drizzle/schema";
+import { and, asc, desc, eq, notInArray, sql } from "drizzle-orm";
+import { branches, branchStock, orderItems, orders, stockMovements, productVariants, products, users } from "../../drizzle/schema";
 import { getStockLedgerDrift, recomputeVariantStockTotal, recordStockMovement, setBranchStockAbsolute } from "../stockLedger";
 import { invalidateCached, invalidateCachedByPrefix } from "../_core/ttlCache";
 import { invalidateCatalogSource } from "./catalog";
+import { withLiveCampaign } from "./price-campaigns";
 import { getDb } from "./connection";
 import { OrderTx } from "./admin-orders";
 import { setFulfillmentBranchStock } from "./admin-catalog";
@@ -20,6 +21,9 @@ import { setFulfillmentBranchStock } from "./admin-catalog";
 function invalidateCatalogCaches(): void {
   invalidateCachedByPrefix("storefront:bestsellers:");
   invalidateCachedByPrefix("storefront:related:");
+  // 2026-09-27 (D7): "Хамт авдаг" rail нь variant-ийн үнэ/нөөц бичигдэх бүрт
+  // хуучин мөрөөрөө үлддэг байсан — энд огт унтардаггүй байв.
+  invalidateCachedByPrefix("storefront:boughtTogether:");
   invalidateCached("storefront:publishedCount");
   invalidateCached("storefront:brandDirectory");
   invalidateCatalogSource();
@@ -72,9 +76,9 @@ export async function getAdminProductVariants(productId: number) {
 export async function getPublicProductVariants(productId: number) {
   const db = await getDb();
   if (!db) return [];
-  const product = await db.select({ id: products.id }).from(products).where(and(eq(products.id, productId), eq(products.isPublished, true))).limit(1);
+  const product = await db.select({ id: products.id, kind: products.kind }).from(products).where(and(eq(products.id, productId), eq(products.isPublished, true))).limit(1);
   if (!product[0]) return [];
-  return db
+  const rows = await db
     .select({
       id: productVariants.id,
       sku: productVariants.sku,
@@ -88,6 +92,10 @@ export async function getPublicProductVariants(productId: number) {
     .from(productVariants)
     .where(eq(productVariants.productId, productId))
     .orderBy(desc(productVariants.isDefault), asc(productVariants.id));
+  // 2026-09-29: нийтийн хямдрал — сонгогч сагс/checkout-тэй ижил үнэ харуулна (бэлгийн карт хасагдана).
+  const kind = product[0].kind;
+  const priced = await withLiveCampaign(rows.map(row => ({ ...row, kind })));
+  return priced.map(({ kind: _kind, ...row }) => row);
 }
 
 /** A variant SKU must be globally unique across the whole catalog (real
@@ -97,7 +105,18 @@ export async function variantSkuExists(sku: string, excludeVariantId?: number) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const productConflict = await db.select({ id: products.id }).from(products).where(eq(products.sku, sku)).limit(1);
-  if (productConflict[0]) return true;
+  if (productConflict[0]) {
+    // 2026-09-27 (D1): every default variant carries its OWN product's sku
+    // (mirrorSoleVariantToProduct keeps them equal), so saving a default
+    // variant from the Variants panel resends the same sku the product
+    // already owns — that must not read as a conflict. Only a match on a
+    // DIFFERENT product is a real conflict; unwind to the sibling-variant
+    // check below when the match is this variant's own product.
+    const ownProduct = excludeVariantId != null
+      ? (await db.select({ productId: productVariants.productId }).from(productVariants).where(eq(productVariants.id, excludeVariantId)).limit(1))[0]
+      : undefined;
+    if (!ownProduct || ownProduct.productId !== productConflict[0].id) return true;
+  }
   const variantConflict = await db.select({ id: productVariants.id }).from(productVariants).where(eq(productVariants.sku, sku)).limit(1);
   return Boolean(variantConflict[0] && variantConflict[0].id !== excludeVariantId);
 }
@@ -238,7 +257,19 @@ export async function updateAdminProductVariant(input: { id: number } & Partial<
   if (!db) throw new Error("Database is not available");
   const existing = await db.select().from(productVariants).where(eq(productVariants.id, input.id)).limit(1);
   if (!existing[0]) throw new Error("Variant not found.");
-  const productId = input.productId ?? existing[0].productId;
+  // 2026-09-27 (D2): unsetting the ONLY default variant leaves the product
+  // with zero defaults -- addCartItem({productId}) (WHERE isDefault) then
+  // finds nothing and a published product silently becomes unbuyable. An
+  // admin who wants a different default should make THAT variant the
+  // default instead (which already clears this one, below).
+  if (existing[0].isDefault && input.isDefault === false) {
+    throw new Error("Үндсэн хувилбарыг унтраахын оронд өөр хувилбарыг үндсэн болгоно уу.");
+  }
+  // 2026-09-27 (D8): ALWAYS use the variant's own productId, never a
+  // client-supplied one -- this write clears every OTHER variant's
+  // isDefault and mirrors price/sku/stock onto "productId"; a stale/spoofed
+  // input.productId would silently act on a different product.
+  const productId = existing[0].productId;
   await db.transaction(async tx => {
     if (input.isDefault) await tx.update(productVariants).set({ isDefault: false }).where(and(eq(productVariants.productId, productId), sql`${productVariants.id} != ${input.id}`));
     const patch: Record<string, unknown> = { updatedAt: new Date() };
@@ -267,6 +298,22 @@ export async function deleteAdminProductVariant(id: number) {
   if (!existing[0]) throw new Error("Variant not found.");
   const siblings = await db.select({ id: productVariants.id }).from(productVariants).where(eq(productVariants.productId, existing[0].productId));
   if (siblings.length <= 1) throw new Error("Барааны сүүлийн variant-ыг устгах боломжгүй — бараа наад зах нь нэг variant-тай байх ёстой.");
+  // 2026-09-27 (D3): branch_stock/stock_movements cascade (onDelete:
+  // "cascade") on variant delete, and order_items.variantId becomes NULL
+  // (onDelete: "set null") -- a later cancel of that order could no longer
+  // restore stock to the variant it actually came from. Mirrors
+  // deleteAdminProduct's guard in admin-catalog.ts (same "operational
+  // history vs. admin-entered baseline" distinction -- see that comment).
+  const [ledgerRow] = await db.select({ id: stockMovements.id }).from(stockMovements)
+    .where(and(
+      eq(stockMovements.variantId, id),
+      notInArray(stockMovements.type, ["variant_seed", "admin_set", "product_form_set", "rebaseline"]),
+    )).limit(1);
+  if (ledgerRow) throw new Error("Энэ variant-д нөөцийн хөдөлгөөний түүх бүртгэгдсэн тул устгах боломжгүй. Оронд нь үлдэгдлийг 0 болгож зарахгүй болгоно уу (эсвэл барааг бүхэлд нь нийтлэлээс хасна).");
+  const [orderedRow] = await db.select({ id: orderItems.id }).from(orderItems)
+    .innerJoin(orders, eq(orders.id, orderItems.orderId))
+    .where(and(eq(orderItems.variantId, id), sql`${orders.status} <> 'cancelled'`)).limit(1);
+  if (orderedRow) throw new Error("Энэ variant захиалгад бүртгэгдсэн тул устгах боломжгүй. Оронд нь үлдэгдлийг 0 болгож зарахгүй болгоно уу (эсвэл барааг бүхэлд нь нийтлэлээс хасна).");
   // 2026-09-23: транзакц бөгөөд ШИНЭ анхдагчийг ӨМНӨ нь тавина. Өмнө нь
   // устгаад дараа нь сурталчилдаг байсан тул хооронд (эсвэл устгасны дараах
   // уналт дээр) `addCartItem({ productId })` нь `isDefault` мөр олохгүй бөгөөд

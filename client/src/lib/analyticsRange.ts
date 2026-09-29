@@ -58,6 +58,14 @@ export function resolveRange(range: AdminDateRange): { dateFrom?: Date; dateTo?:
 /** Number of whole days the window covers, or null when it's unbounded
  *  ("all time", or a custom range with no start) -- charts that need a
  *  fixed-length day axis use this to decide whether they can render at all. */
+/** Calendar days between two local dates, inclusive of both ends (the 1st to
+ *  the 1st is 1 day, the 1st to the 2nd is 2). */
+function calendarDayCount(from: Date, to: Date): number {
+  const fromYmd = new Date(from.getFullYear(), from.getMonth(), from.getDate()).getTime();
+  const toYmd = new Date(to.getFullYear(), to.getMonth(), to.getDate()).getTime();
+  return Math.round((toYmd - fromYmd) / 86_400_000) + 1;
+}
+
 export function rangeDayCount(range: AdminDateRange): number | null {
   if (range.key === "all") return null;
   const preset = PRESET_DAYS[range.key];
@@ -65,7 +73,11 @@ export function rangeDayCount(range: AdminDateRange): number | null {
   const { dateFrom, dateTo } = resolveRange(range);
   if (!dateFrom) return null;
   const end = dateTo ?? new Date();
-  return Math.max(1, Math.round((end.getTime() - dateFrom.getTime()) / 86_400_000));
+  // 2026-09-27 (F7b): raw ms/86_400_000 rounds a PARTIAL day away -- viewed
+  // "Энэ сар" before noon on (say) the 2nd, dateFrom..now is 1.x days,
+  // rounding to 1 and dropping a calendar day (the 1st) from the chart axis
+  // below. Count actual calendar dates instead.
+  return Math.max(1, calendarDayCount(dateFrom, end));
 }
 
 export function rangeToDates(range: RangeKey): { dateFrom?: Date; dateTo?: Date } {

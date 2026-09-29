@@ -1,11 +1,12 @@
-import { createHash, randomBytes, randomInt } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomInt } from "node:crypto";
 import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import type { Request, Response } from "express";
 import { TRPCError } from "@trpc/server";
 import { faceHandoffRequests } from "../drizzle/schema";
 import { getDb } from "./db";
 import { logAdminAction } from "./db";
-import { issueFaceProof, tabIdFrom } from "./_core/faceProof";
+import { issueFaceProof, requireRealTab, tabIdFrom } from "./_core/faceProof";
+import { ENV } from "./_core/env";
 import { enqueueNotification } from "./notificationOutbox";
 import {
   FACE_HANDOFF_IDLE_TIMEOUT_MS,
@@ -73,7 +74,10 @@ export async function startFaceHandoff(input: { userId: number; sessionVersion: 
   const db = await getDb();
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Өгөгдлийн сан бэлэн биш байна." });
 
-  const tabId = tabIdFrom(input.req);
+  // 2026-09-27: tab id-гүй хүсэлтийг ЭНД татгалзана — өмнө нь "-" гэж хадгалаад,
+  // утсаар баталсны дараа claim дээр `used` болгосны ДАРАА л proof үүсгэхэд унадаг
+  // тул handoff дэмий шатдаг байв.
+  const tabId = requireRealTab(input.req);
   await db.update(faceHandoffRequests).set({ status: "expired" })
     .where(and(eq(faceHandoffRequests.userId, input.userId), eq(faceHandoffRequests.status, "pending")));
 
@@ -145,13 +149,21 @@ export async function getFaceHandoffContext(input: { token: string; userId: numb
   if (row.sessionVersion !== input.sessionVersion) throw new TRPCError({ code: "FORBIDDEN", message: "Нэвтрэлт шинэчлэгдсэн тул энэ код хүчингүй боллоо." });
   if (row.status !== "pending") throw new TRPCError({ code: "BAD_REQUEST", message: row.status === "expired" ? "Энэ кодны хугацаа дууссан. Компьютер дээрээ шинэ код гаргана уу." : "Энэ кодыг аль хэдийн ашигласан байна." });
 
+  // 2026-09-27: хуурамч тоонууд хүсэлт бүрт ИЖИЛ (мөрөөс + серверийн нууцаас
+  // тодорхойлогдоно). Өмнө нь дуудалт бүрт шинээр сонгогддог тул хоёр хариуны
+  // огтлолцол нь жинхэнэ тоог шууд хэлдэг байв ("1/3 таамаг" баталгаа худал).
+  let draw = 0;
+  const stableInt = (min: number, max: number) => {
+    const digest = createHmac("sha256", ENV.cookieSecret || "face-handoff").update(`${row.id}:${row.createdAt.getTime()}:${draw++}`).digest();
+    return min + (digest.readUInt32BE(0) % (max - min));
+  };
   const choices = new Set<number>([row.matchNumber]);
-  while (choices.size < FACE_HANDOFF_NUMBER_CHOICES) choices.add(randomInt(10, 100));
+  while (choices.size < FACE_HANDOFF_NUMBER_CHOICES) choices.add(stableInt(10, 100));
   // Fisher–Yates: `sort(() => Math.random() - 0.5)` нь хазайлттай — зөв тоо
   // эхний байранд илүү олон удаа гардаг байсан (таахад тус болно).
   const shuffled = [...choices];
   for (let i = shuffled.length - 1; i > 0; i -= 1) {
-    const j = randomInt(0, i + 1);
+    const j = stableInt(0, i + 1);
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
   return {

@@ -25,3 +25,4 @@ export * from "./db/variants"; // Барааны хувилбар (variant) ба
 export * from "./db/face"; // Admin царайны бүртгэл/challenge/оролдлого
 export * from "./db/questions"; // Асуулт, хариулт
 export * from "./db/gift-cards"; // Бэлгийн карт
+export * from "./db/price-campaigns"; // Бүх барааны нийтийн хямдрал (2026-09-29)

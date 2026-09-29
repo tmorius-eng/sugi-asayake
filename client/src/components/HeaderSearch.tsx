@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Clock, Search, Tag, X } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
 import { useProductName } from "@/hooks/useProductName";
@@ -85,6 +85,10 @@ export default function HeaderSearch({ variant = "icon" }: { variant?: "icon" | 
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const displayName = useProductName();
+  // 2026-09-27: full-reload navigation used to blow away the whole SPA (and
+  // any in-app state, e.g. a filled cart drawer) for what should be a plain
+  // client-side route change -- wouter's navigate keeps the app mounted.
+  const [, navigate] = useLocation();
   const trimmed = term.trim();
   const [recent, setRecent] = useState<string[]>([]);
   useEffect(() => { if (open) setRecent(readRecentSearches()); }, [open]);
@@ -116,15 +120,15 @@ export default function HeaderSearch({ variant = "icon" }: { variant?: "icon" | 
   const goToShop = (query = trimmed) => {
     setOpen(false);
     if (query) setRecent(rememberSearch(query));
-    window.location.assign(`/shop?q=${encodeURIComponent(query)}`);
+    navigate(`/shop?q=${encodeURIComponent(query)}`);
   };
   const goToBrand = (brand: string) => {
     setOpen(false);
-    window.location.assign(`/shop?brand=${encodeURIComponent(brand)}`);
+    navigate(`/shop?brand=${encodeURIComponent(brand)}`);
   };
   const goToCategory = (name: string) => {
     setOpen(false);
-    window.location.assign(`/shop?category=${encodeURIComponent(name)}`);
+    navigate(`/shop?category=${encodeURIComponent(name)}`);
   };
 
   const recentPanel = !trimmed && recent.length > 0 ? <div className="header-search-results">

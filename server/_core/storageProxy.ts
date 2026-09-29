@@ -21,10 +21,25 @@ import { ENV } from "./env";
  * this migration missed (an external bookmark, a cached page), not because
  * anything in this app still writes or reads it going forward.
  */
+// 2026-09-27: this route redirected ANY key in the bucket to R2's public URL
+// -- including `applications/<random>/<name>.pdf` (server/routers.ts, the
+// careers page's CV upload), which is not meant to be public: an admin-only
+// download, not something to hand out to anyone who happens to have or guess
+// the key. Every other prefix in this bucket (product images, site media,
+// avatars) is genuinely public content.
+const NON_PUBLIC_KEY_PREFIXES = ["applications/"];
+
+export function isPublicStorageKey(key: string): boolean {
+  return !NON_PUBLIC_KEY_PREFIXES.some(prefix => key.startsWith(prefix));
+}
+
 export function registerStorageProxy(app: Express) {
   const redirectToR2: RequestHandler = (req, res) => {
     const key = (req.params as Record<string, string>)[0];
     if (!key) return res.status(400).send("Missing storage key.");
+    if (!isPublicStorageKey(key)) {
+      return res.status(404).type("text/plain").send("not found");
+    }
     if (!ENV.s3PublicBaseUrl) {
       return res.status(503).send("Storage is not configured yet. Set S3_PUBLIC_BASE_URL.");
     }

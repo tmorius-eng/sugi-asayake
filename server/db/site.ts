@@ -2,9 +2,9 @@
 // 2026-09-21: server/db.ts (7 066 мөр) домэйнээр хуваагдав; server/db.ts нь одоо barrel
 // (export *) тул import зам өөрчлөгдөөгүй. Функц зөөхдөө энэ файлын import-ыг мөн шинэчил.
 
-import { and, asc, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
-import { branches, branchStock, featuredBrands, jobApplications, jobPostings, stockMovements, loyaltyTiers, products, siteDocuments, siteMedia, siteText, users } from "../../drizzle/schema";
-import { getOrSetCached, invalidateCached } from "../_core/ttlCache";
+import { and, asc, desc, eq, inArray, isNotNull, ne, or, sql } from "drizzle-orm";
+import { branches, branchStock, featuredBrands, jobApplications, jobPostings, stockMovements, stockReceipts, stockCounts, stockTransfers, loyaltyTiers, products, siteDocuments, siteMedia, siteText, users } from "../../drizzle/schema";
+import { getOrSetCached, invalidateCached, invalidateCachedByPrefix } from "../_core/ttlCache";
 import { recomputeVariantTotalsForBranch } from "../stockLedger";
 import { sanitizePostContent } from "../_core/sanitizeHtml";
 import { getSiteTextSlot, type SiteTextSlotKey } from "../../shared/site-text";
@@ -125,32 +125,44 @@ export async function getBrandDirectory() {
   });
 }
 
+/**
+ * 2026-09-27 (D6/D21): бичсэний ДАРАА дуудагдана. Bestseller round-robin
+ * filler нь `featured_brands.isActive`-аар join хийдэг (catalog.ts's
+ * getBestsellingProducts) тул нэг брэндийг идэвхгүй болгосон ч рэйл кэш
+ * 30 секунд хуучин брэндийг үргэлжлүүлэн харуулж байв.
+ */
+function invalidateFeaturedBrandCaches(): void {
+  invalidateCached("storefront:featuredBrands");
+  invalidateCached("storefront:brandDirectory");
+  invalidateCachedByPrefix("storefront:bestsellers:");
+}
+
 export async function createFeaturedBrand(input: FeaturedBrandWriteInput) {
-  invalidateCached("storefront:featuredBrands"); invalidateCached("storefront:brandDirectory");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const inserted = await db.insert(featuredBrands).values({ ...input, tagline: input.tagline ?? null, photoUrl: input.photoUrl ?? null, logoUrl: input.logoUrl ?? null, sortOrder: input.sortOrder ?? 0, isActive: input.isActive ?? true });
+  invalidateFeaturedBrandCaches();
   const created = await db.select().from(featuredBrands).where(eq(featuredBrands.id, Number(inserted[0].insertId))).limit(1);
   return created[0];
 }
 
 export async function updateFeaturedBrand(input: { id: number } & Partial<FeaturedBrandWriteInput>) {
-  invalidateCached("storefront:featuredBrands"); invalidateCached("storefront:brandDirectory");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const existing = await db.select().from(featuredBrands).where(eq(featuredBrands.id, input.id)).limit(1);
   if (!existing[0]) throw new Error("Brand not found.");
   const { id, ...changes } = input;
   await db.update(featuredBrands).set({ ...changes, updatedAt: new Date() }).where(eq(featuredBrands.id, id));
+  invalidateFeaturedBrandCaches();
   const updated = await db.select().from(featuredBrands).where(eq(featuredBrands.id, id)).limit(1);
   return updated[0];
 }
 
 export async function deleteFeaturedBrand(id: number) {
-  invalidateCached("storefront:featuredBrands"); invalidateCached("storefront:brandDirectory");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.delete(featuredBrands).where(eq(featuredBrands.id, id));
+  invalidateFeaturedBrandCaches();
   return { id };
 }
 
@@ -271,7 +283,6 @@ async function clearOtherFulfillmentDefaults(db: DbOrTx, exceptId?: number) {
 }
 
 export async function createBranch(input: BranchWriteInput) {
-  invalidateStorefront("branches");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   assertValidFulfillmentBranch({ isFulfillmentDefault: input.isFulfillmentDefault ?? false, isActive: input.isActive ?? true, countsTowardOnlineStock: input.countsTowardOnlineStock ?? true });
@@ -289,12 +300,13 @@ export async function createBranch(input: BranchWriteInput) {
     id = Number(inserted[0].insertId);
     if (input.isFulfillmentDefault) await clearOtherFulfillmentDefaults(tx, id);
   });
+  // 2026-09-27 (D6): бичсэний ДАРАА цэвэрлэнэ.
+  invalidateStorefront("branches");
   const created = await db.select().from(branches).where(eq(branches.id, id)).limit(1);
   return created[0];
 }
 
 export async function updateBranch(input: { id: number } & Partial<BranchWriteInput>) {
-  invalidateStorefront("branches");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const existing = await db.select().from(branches).where(eq(branches.id, input.id)).limit(1);
@@ -305,7 +317,11 @@ export async function updateBranch(input: { id: number } & Partial<BranchWriteIn
   if (existing[0].isFulfillmentDefault && changes.isFulfillmentDefault === false) {
     throw new Error("Онлайн захиалгын үндсэн салбарыг шууд унтраах боломжгүй — өөр салбарыг үндсэн болгоход энэ нь автоматаар солигдоно.");
   }
-  const countingChanged = changes.countsTowardOnlineStock !== undefined && changes.countsTowardOnlineStock !== existing[0].countsTowardOnlineStock;
+  // 2026-09-27: онлайн нөөцийн нийлбэр одоо `isActive`-ийг ч хардаг (stockLedger) —
+  // салбарыг хаах/нээхэд ч дахин тооцно, эс бөгөөс хаагдсан салбарын нөөц
+  // дараагийн хөдөлгөөн хүртэл онлайнаар зарагдсаар байна.
+  const countingChanged = (changes.countsTowardOnlineStock !== undefined && changes.countsTowardOnlineStock !== existing[0].countsTowardOnlineStock)
+    || (changes.isActive !== undefined && changes.isActive !== existing[0].isActive);
   await db.transaction(async tx => {
     await tx.update(branches).set({ ...changes, updatedAt: new Date() }).where(eq(branches.id, id));
     if (changes.isFulfillmentDefault) await clearOtherFulfillmentDefaults(tx, id);
@@ -313,6 +329,8 @@ export async function updateBranch(input: { id: number } & Partial<BranchWriteIn
   // Whether this shelf counts as online stock changes every cached variant
   // total that includes it -- recompute them, so the storefront reflects it now.
   if (countingChanged) await recomputeVariantTotalsForBranch(db, id);
+  // 2026-09-27 (D6): бичсэний ДАРАА цэвэрлэнэ.
+  invalidateStorefront("branches");
   const updated = await db.select().from(branches).where(eq(branches.id, id)).limit(1);
   return updated[0];
 }
@@ -325,7 +343,6 @@ export async function updateBranch(input: { id: number } & Partial<BranchWriteIn
  * ever held stock is deactivated instead, which keeps both.
  */
 export async function deleteBranch(id: number) {
-  invalidateStorefront("branches");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const [branch] = await db.select({ isFulfillmentDefault: branches.isFulfillmentDefault }).from(branches).where(eq(branches.id, id)).limit(1);
@@ -334,7 +351,21 @@ export async function deleteBranch(id: number) {
   const [stock] = await db.select({ total: sql<number>`COALESCE(SUM(ABS(${branchStock.stockQuantity})), 0)` }).from(branchStock).where(eq(branchStock.branchId, id));
   const [history] = await db.select({ id: stockMovements.id }).from(stockMovements).where(eq(stockMovements.branchId, id)).limit(1);
   if (Number(stock?.total ?? 0) > 0 || history) throw new Error("Энэ салбарт нөөц эсвэл нөөцийн түүх байгаа тул устгах боломжгүй. Оронд нь идэвхгүй болгоно уу.");
+  // 2026-09-27 (E6): branch_stock/stock_movements-ээс гадна энэ салбарыг
+  // ЗААДАГ хүлээн авалт/тооллого/шилжүүлэг (cancelled биш) байвал устгал
+  // тэднийг cascade-аар чимээгүй арчина — тайлан/аудитаас алга болно.
+  const [openReceipt] = await db.select({ id: stockReceipts.id }).from(stockReceipts)
+    .where(and(eq(stockReceipts.branchId, id), ne(stockReceipts.status, "cancelled"))).limit(1);
+  if (openReceipt) throw new Error("Энэ салбарт хүлээн авалтын бичлэг байгаа тул устгах боломжгүй. Оронд нь идэвхгүй болгоно уу.");
+  const [openCount] = await db.select({ id: stockCounts.id }).from(stockCounts)
+    .where(and(eq(stockCounts.branchId, id), ne(stockCounts.status, "cancelled"))).limit(1);
+  if (openCount) throw new Error("Энэ салбарт тооллогын бичлэг байгаа тул устгах боломжгүй. Оронд нь идэвхгүй болгоно уу.");
+  const [openTransfer] = await db.select({ id: stockTransfers.id }).from(stockTransfers)
+    .where(and(or(eq(stockTransfers.fromBranchId, id), eq(stockTransfers.toBranchId, id)), ne(stockTransfers.status, "cancelled"))).limit(1);
+  if (openTransfer) throw new Error("Энэ салбарт шилжүүлгийн бичлэг байгаа тул устгах боломжгүй. Оронд нь идэвхгүй болгоно уу.");
   await db.delete(branches).where(eq(branches.id, id));
+  // 2026-09-27 (D6): бичсэний ДАРАА цэвэрлэнэ.
+  invalidateStorefront("branches");
   return { id };
 }
 
@@ -350,7 +381,6 @@ export async function getSiteMedia() {
 }
 
 export async function upsertSiteMedia(input: { slotKey: string; imageUrl: string; altText?: string | null; updatedByUserId: number }) {
-  invalidateStorefront("siteMedia");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const normalizedAltText = input.altText?.trim() || null;
@@ -362,15 +392,17 @@ export async function upsertSiteMedia(input: { slotKey: string; imageUrl: string
   }).onDuplicateKeyUpdate({
     set: { imageUrl: input.imageUrl, altText: normalizedAltText, updatedByUserId: input.updatedByUserId, updatedAt: new Date() },
   });
+  // 2026-09-27 (D6): бичсэний ДАРАА цэвэрлэнэ.
+  invalidateStorefront("siteMedia");
   const updated = await db.select().from(siteMedia).where(eq(siteMedia.slotKey, input.slotKey)).limit(1);
   return updated[0];
 }
 
 export async function deleteSiteMedia(slotKey: string) {
-  invalidateStorefront("siteMedia");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.delete(siteMedia).where(eq(siteMedia.slotKey, slotKey));
+  invalidateStorefront("siteMedia");
   return { slotKey };
 }
 
@@ -411,7 +443,6 @@ export async function getSiteName(): Promise<string> {
 }
 
 export async function upsertSiteText(input: { slotKey: string; textValue: string; updatedByUserId: number }) {
-  invalidateStorefront("siteText");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.insert(siteText).values({
@@ -421,15 +452,17 @@ export async function upsertSiteText(input: { slotKey: string; textValue: string
   }).onDuplicateKeyUpdate({
     set: { textValue: input.textValue, updatedByUserId: input.updatedByUserId, updatedAt: new Date() },
   });
+  // 2026-09-27 (D6): бичсэний ДАРАА цэвэрлэнэ.
+  invalidateStorefront("siteText");
   const updated = await db.select().from(siteText).where(eq(siteText.slotKey, input.slotKey)).limit(1);
   return updated[0];
 }
 
 export async function deleteSiteText(slotKey: string) {
-  invalidateStorefront("siteText");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.delete(siteText).where(eq(siteText.slotKey, slotKey));
+  invalidateStorefront("siteText");
   return { slotKey };
 }
 
@@ -467,7 +500,6 @@ export async function upsertSiteDocument(input: {
   updatedLabel: string | null;
   updatedByUserId: number;
 }) {
-  invalidateStorefront("siteDocuments");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   // Same trust boundary as posts.content: the admin editor's "Text" tab can
@@ -492,16 +524,18 @@ export async function upsertSiteDocument(input: {
       updatedAt: new Date(),
     },
   });
+  // 2026-09-27 (D6): бичсэний ДАРАА цэвэрлэнэ.
+  invalidateStorefront("siteDocuments");
   const updated = await db.select().from(siteDocuments)
     .where(and(eq(siteDocuments.documentKey, input.documentKey), eq(siteDocuments.locale, input.locale))).limit(1);
   return updated[0];
 }
 
 export async function deleteSiteDocument(documentKey: string, locale: string) {
-  invalidateStorefront("siteDocuments");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.delete(siteDocuments).where(and(eq(siteDocuments.documentKey, documentKey), eq(siteDocuments.locale, locale)));
+  invalidateStorefront("siteDocuments");
   return { documentKey, locale };
 }
 
@@ -552,29 +586,31 @@ export type JobPostingWriteInput = {
 };
 
 export async function createJobPosting(input: JobPostingWriteInput, actorUserId: number) {
-  invalidateStorefront("jobPostings");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const [result] = await db.insert(jobPostings).values({ ...input, createdByUserId: actorUserId });
+  // 2026-09-27 (D6): бичсэний ДАРАА цэвэрлэнэ.
+  invalidateStorefront("jobPostings");
   return { id: Number(result.insertId) };
 }
 
 export async function updateJobPosting(id: number, input: Partial<JobPostingWriteInput>) {
-  invalidateStorefront("jobPostings");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   // 2026-09-23: `affectedRows` шалгана — өмнө нь байхгүй зар дээр ч "хадгалагдлаа"
   // гэж ногоон гарч, аудитын лог "шинэчилсэн" гэж бичдэг байв.
   const updated = await db.update(jobPostings).set({ ...input, updatedAt: new Date() }).where(eq(jobPostings.id, id));
   if (Number(updated[0].affectedRows ?? 0) !== 1) throw new Error("Зар олдсонгүй.");
+  // 2026-09-27 (D6): бичсэний ДАРАА цэвэрлэнэ.
+  invalidateStorefront("jobPostings");
   return { id };
 }
 
 export async function deleteJobPosting(id: number) {
-  invalidateStorefront("jobPostings");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.delete(jobPostings).where(eq(jobPostings.id, id));
+  invalidateStorefront("jobPostings");
   return { id };
 }
 
@@ -668,11 +704,10 @@ export async function upsertLoyaltyTier(input: {
   sortOrder: number;
   updatedByUserId: number;
 }) {
-  invalidateStorefront("loyaltyTiers");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   if (input.id) {
-    await db.update(loyaltyTiers).set({
+    const updated = await db.update(loyaltyTiers).set({
       name: input.name,
       discountPercent: input.discountPercent,
       minSpendMnt: input.minSpendMnt,
@@ -680,8 +715,13 @@ export async function upsertLoyaltyTier(input: {
       updatedByUserId: input.updatedByUserId,
       updatedAt: new Date(),
     }).where(eq(loyaltyTiers.id, input.id));
-    const updated = await db.select().from(loyaltyTiers).where(eq(loyaltyTiers.id, input.id)).limit(1);
-    return updated[0];
+    // 2026-09-27 (D23): stale/deleted id-аар дуудвал `affectedRows` 0 -- дараа
+    // нь select-ээр `undefined` буцаж, дуудагч тал `.id` уншихад INTERNAL алдаа
+    // болдог байв. Одоо ойлгомжтой монгол мессежээр татгалзана.
+    if (Number(updated[0].affectedRows ?? 0) !== 1) throw new Error("Зэрэглэл олдсонгүй.");
+    invalidateStorefront("loyaltyTiers");
+    const row = await db.select().from(loyaltyTiers).where(eq(loyaltyTiers.id, input.id)).limit(1);
+    return row[0];
   }
   const inserted = await db.insert(loyaltyTiers).values({
     name: input.name,
@@ -690,6 +730,8 @@ export async function upsertLoyaltyTier(input: {
     sortOrder: input.sortOrder,
     updatedByUserId: input.updatedByUserId,
   });
+  // 2026-09-27 (D6): бичсэний ДАРАА цэвэрлэнэ.
+  invalidateStorefront("loyaltyTiers");
   const created = await db.select().from(loyaltyTiers).where(eq(loyaltyTiers.id, Number(inserted[0].insertId))).limit(1);
   return created[0];
 }
@@ -701,11 +743,11 @@ export async function upsertLoyaltyTier(input: {
  * original tiers on the storefront -- the most confusing possible outcome.
  */
 export async function deleteLoyaltyTier(id: number) {
-  invalidateStorefront("loyaltyTiers");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const remaining = await db.select({ id: loyaltyTiers.id }).from(loyaltyTiers);
   if (remaining.length <= 1) throw new Error("Хамгийн багадаа нэг зэрэглэл үлдэх ёстой.");
   await db.delete(loyaltyTiers).where(eq(loyaltyTiers.id, id));
+  invalidateStorefront("loyaltyTiers");
   return { id };
 }

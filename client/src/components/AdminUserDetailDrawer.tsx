@@ -3,6 +3,7 @@ import { CreditCard, LoaderCircle, LogOut, Phone, ScanFace, ShieldAlert, ShieldC
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { roleBadgeClass, roleLabel } from "@/lib/adminRoles";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { formatMnt } from "@shared/format";
 
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -19,6 +20,11 @@ const messageFrom = (error: unknown) => error instanceof Error ? error.message :
 // this overhaul).
 export default function AdminUserDetailDrawer({ userId, role, onClose }: { userId: number; role: string; onClose: () => void }) {
   const { confirm } = useConfirm();
+  const { user: viewer } = useAuth();
+  // 2026-09-27 (F-credit): the session cookie authenticates by cookie, not
+  // by request body -- "force logout everyone" on the admin's OWN row logs
+  // THEM out mid-task with no warning at all.
+  const isOwnUser = viewer?.id === userId;
   const isAdmin = role === "admin";
   const utils = trpc.useUtils();
   const detailQuery = trpc.admin.userDetail.useQuery({ userId });
@@ -138,6 +144,10 @@ export default function AdminUserDetailDrawer({ userId, role, onClose }: { userI
     const amount = Number(creditAmount);
     if (!Number.isInteger(amount) || amount <= 0) { toast.error("Эерэг бүхэл тоо оруулна уу."); return; }
     if (!creditReason.trim()) { toast.error("Шалтгаанаа оруулна уу."); return; }
+    // 2026-09-27 (F-credit): a direct money move with no confirmation at
+    // all -- a mis-typed amount or a mis-clicked +/- посted immediately.
+    const verb = sign === 1 ? "нэмэх" : "хасах";
+    if (!await confirm({ title: `${formatMnt(amount)} зээлийг ${verb} үү? Шалтгаан: ${creditReason.trim()}`, danger: sign === -1 })) return;
     try {
       await adjustStoreCredit.mutateAsync({ userId, deltaMnt: amount * sign, reason: creditReason.trim() });
       setCreditAmount("");
@@ -260,7 +270,7 @@ export default function AdminUserDetailDrawer({ userId, role, onClose }: { userI
               {detail.suspendedAt
                 ? <button type="button" disabled={isBusy} onClick={onUnsuspend} className="inline-flex items-center gap-1.5 rounded-full bg-[#2c7650] px-3 py-2 text-xs font-bold text-white disabled:opacity-60">{unsuspendUser.isPending ? <LoaderCircle className="animate-spin" size={14} /> : <ShieldCheck size={14} />}Хандалт сэргээх</button>
                 : <button type="button" disabled={isBusy} onClick={onSuspend} className="inline-flex items-center gap-1.5 rounded-full bg-[#df1f3d] px-3 py-2 text-xs font-bold text-white disabled:opacity-60">{suspendUser.isPending ? <LoaderCircle className="animate-spin" size={14} /> : <ShieldAlert size={14} />}Түр хаах</button>}
-              <button type="button" disabled={forceLogoutUser.isPending} onClick={onForceLogout} className="inline-flex items-center gap-1.5 rounded-full border border-[var(--a-border)] px-3 py-2 text-xs font-bold text-[var(--a-text-soft)] disabled:opacity-60">{forceLogoutUser.isPending ? <LoaderCircle className="animate-spin" size={14} /> : <LogOut size={14} />}Бүх төхөөрөмжөөс гаргах</button>
+              <button type="button" disabled={forceLogoutUser.isPending || isOwnUser} title={isOwnUser ? "Өөрийгөө гаргах боломжгүй" : undefined} onClick={onForceLogout} className="inline-flex items-center gap-1.5 rounded-full border border-[var(--a-border)] px-3 py-2 text-xs font-bold text-[var(--a-text-soft)] disabled:opacity-60">{forceLogoutUser.isPending ? <LoaderCircle className="animate-spin" size={14} /> : <LogOut size={14} />}Бүх төхөөрөмжөөс гаргах</button>
             </div>
             {!detail.suspendedAt && <label className="mt-3 grid gap-1.5 text-xs font-bold">Түр хаах шалтгаан (сонголтоор)<input value={reason} onChange={event => setReason(event.target.value)} placeholder="ж: төлбөрийн маргаан" className="h-10 rounded-xl border border-[var(--a-border)] px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" /></label>}
           </div>}

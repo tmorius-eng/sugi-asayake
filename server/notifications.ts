@@ -39,6 +39,20 @@ function clickUrl(clickPath: string | null): string | undefined {
   return `${ENV.publicBaseUrl}${clickPath}`;
 }
 
+/**
+ * 2026-09-27 (I22): 401/403 used to be treated the same as a permanently
+ * broken topic (400/404) and marked `failed` on the FIRST attempt -- but an
+ * ntfy access token can be rotated (admin pastes a new one in Integrations)
+ * or momentarily reject a request that a moment later succeeds; giving up
+ * immediately meant a token typo or a mid-rotation window silently dropped
+ * every push queued in that window with no retry at all. Left to the normal
+ * retry ladder instead (still bounded by MAX_ATTEMPTS / EXPIRE_AFTER_MINUTES
+ * below, so a genuinely dead token does not retry forever).
+ */
+function isPermanentNtfyFailure(status: number | null): boolean {
+  return status !== null && status >= 400 && status < 500 && status !== 429 && status !== 401 && status !== 403;
+}
+
 function parseTags(tagsJson: string | null): string[] {
   if (!tagsJson) return [];
   try {
@@ -120,8 +134,8 @@ export async function dispatchPendingNotifications(): Promise<DispatchSummary> {
     if (result.ok) {
       await db.update(notificationOutbox).set({ status: "sent", sentAt: sql`NOW()`, lastError: null }).where(eq(notificationOutbox.id, row.id));
       summary.sent++;
-    } else if (attempts >= MAX_ATTEMPTS || (result.status !== null && result.status >= 400 && result.status < 500 && result.status !== 429)) {
-      // 4xx other than 429 (bad topic, bad token) will not fix itself by retrying.
+    } else if (attempts >= MAX_ATTEMPTS || isPermanentNtfyFailure(result.status)) {
+      // 4xx other than 429/401/403 (bad topic shape) will not fix itself by retrying.
       await db.update(notificationOutbox).set({ status: "failed", lastError: (result.error ?? "unknown error").slice(0, 300) }).where(eq(notificationOutbox.id, row.id));
       summary.failed++;
     } else {

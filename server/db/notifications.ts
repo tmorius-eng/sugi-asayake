@@ -6,7 +6,17 @@ import { and, desc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { loginAttempts, notificationOutbox, pushSubscriptions, users, visitorSessions } from "../../drizzle/schema";
 import { enqueueNotification, TEST_SUPPRESSED_MARKER } from "../notificationOutbox";
 import type { NotificationEventType, NotificationPayloads } from "../../shared/notification-events";
+import { sqlInt } from "../_core/sqlSafe";
 import { getDb } from "./connection";
+
+// 2026-09-27 (I9): server/notifications.ts's dispatchPendingNotifications()
+// keeps its own copy of this same threshold (must stay in sync) -- that
+// function's pending->expired sweep only runs on whichever single machine
+// has NOTIFICATIONS_DISPATCH=1 (today: nowhere), so pending rows that never
+// got a chance to send (ntfy never configured, disabled event, etc.) grew
+// without bound. purgeNotificationOutbox below runs from the scheduler on
+// EVERY machine, so the same sweep belongs here too.
+const OUTBOX_EXPIRE_AFTER_MINUTES = 120;
 
 /** Queues a notification outside any transaction -- for events that happen
  *  in code with no transaction of its own (a webhook, a scheduled job).
@@ -67,12 +77,18 @@ export async function purgeStaleTelemetry() {
   return { visitorSessions: Number(sessions[0].affectedRows ?? 0), loginAttempts: Number(logins[0].affectedRows ?? 0) };
 }
 
-export async function purgeNotificationOutbox(): Promise<{ testRows: number; oldRows: number }> {
+export async function purgeNotificationOutbox(): Promise<{ testRows: number; oldRows: number; expiredRows: number }> {
   const db = await getDb();
-  if (!db) return { testRows: 0, oldRows: 0 };
+  if (!db) return { testRows: 0, oldRows: 0, expiredRows: 0 };
+  // I9: see OUTBOX_EXPIRE_AFTER_MINUTES above -- this used to only happen on
+  // the dispatch machine, which is nowhere today, so pending rows piled up
+  // forever instead of expiring after 2 hours undelivered.
+  const expired = await db.update(notificationOutbox)
+    .set({ status: "expired", lastError: `not delivered within ${OUTBOX_EXPIRE_AFTER_MINUTES} minutes` })
+    .where(and(eq(notificationOutbox.status, "pending"), sql`${notificationOutbox.createdAt} < NOW() - INTERVAL ${sqlInt(OUTBOX_EXPIRE_AFTER_MINUTES)} MINUTE`));
   const test = await db.delete(notificationOutbox).where(and(eq(notificationOutbox.status, "suppressed"), eq(notificationOutbox.lastError, TEST_SUPPRESSED_MARKER), sql`${notificationOutbox.createdAt} < NOW() - INTERVAL 1 DAY`));
   const old = await db.delete(notificationOutbox).where(and(inArray(notificationOutbox.status, ["sent", "failed", "expired", "suppressed"]), sql`${notificationOutbox.createdAt} < NOW() - INTERVAL 90 DAY`));
-  return { testRows: Number(test[0].affectedRows ?? 0), oldRows: Number(old[0].affectedRows ?? 0) };
+  return { testRows: Number(test[0].affectedRows ?? 0), oldRows: Number(old[0].affectedRows ?? 0), expiredRows: Number(expired[0].affectedRows ?? 0) };
 }
 
 /**

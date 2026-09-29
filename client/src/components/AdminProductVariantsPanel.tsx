@@ -50,6 +50,14 @@ export default function AdminProductVariantsPanel({ productId }: { productId: nu
 
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<VariantForm>(emptyForm());
+  // 2026-09-27 (D4): what stockQuantity looked like when the form opened, to
+  // tell "the admin actually edited this" from "seeded from the aggregate,
+  // never touched" -- mirrors AdminWorkspace's product-form
+  // openedStockQuantity. variant.stockQuantity here is the fulfilment-branch
+  // absolute already (not a cross-branch sum, unlike the product row), but
+  // an unchanged field must still not resend the same value and risk racing
+  // a per-branch edit made via AdminBranchStockEditor in the meantime.
+  const [openedStockQuantity, setOpenedStockQuantity] = useState<string | null>(null);
   const [expandedBranchStockId, setExpandedBranchStockId] = useState<number | null>(null);
   const isSaving = createVariant.isPending || updateVariant.isPending;
 
@@ -63,9 +71,10 @@ export default function AdminProductVariantsPanel({ productId }: { productId: nu
       isDefault: variant.isDefault,
       attributes: parseAttributes(variant.attributesJson).length ? parseAttributes(variant.attributesJson) : [{ key: "", value: "" }],
     } : emptyForm());
+    setOpenedStockQuantity(variant ? String(variant.stockQuantity) : null);
     setFormOpen(true);
   };
-  const closeForm = () => { setFormOpen(false); setForm(emptyForm()); };
+  const closeForm = () => { setFormOpen(false); setForm(emptyForm()); setOpenedStockQuantity(null); };
 
   /**
    * ⚠️ 2026-09-16 (E2E-ийн явцад олдсон бодит алдаа): энэ хэсэг нь барааны
@@ -82,20 +91,48 @@ export default function AdminProductVariantsPanel({ productId }: { productId: nu
    */
   const save = async () => {
     if (!form.sku.trim()) { toast.error("SKU/баркод оруулна уу."); return; }
+    // 2026-09-27 (D4): this editor is a <div>, not a <form> (see the comment
+    // above), so the inputs' `required`/`min="0"` attributes are inert --
+    // nothing browser-side ever stopped an empty or negative value reaching
+    // `Number(...) || 0`, which itself silently turned "" and NaN into a
+    // valid-looking 0.
+    if (form.priceMnt.trim() === "") { toast.error("Үнийг бөглөнө үү."); return; }
+    const priceMnt = Number(form.priceMnt);
+    // 2026-09-27: `< 0` -- сервер (variantWriteSchema) болон барааны маягт
+    // (productWriteSchema) хоёулаа 0₮-ийг зөвшөөрдөг (үнэгүй дээж, промо
+    // мэт) атал энд `<= 0` тул 0-ийг татгалздаг байв.
+    if (!Number.isInteger(priceMnt) || priceMnt < 0) { toast.error("Үнэ бүхэл, сөрөг бус тоо байх ёстой."); return; }
+    if (form.stockQuantity.trim() === "") { toast.error("Үлдэгдлийг бөглөнө үү."); return; }
+    const stockQuantity = Number(form.stockQuantity);
+    if (!Number.isInteger(stockQuantity) || stockQuantity < 0) { toast.error("Үлдэгдэл сөрөг бус бүхэл тоо байх ёстой."); return; }
+    let compareAtPriceMnt: number | null = null;
+    if (form.compareAtPriceMnt.trim() !== "") {
+      compareAtPriceMnt = Number(form.compareAtPriceMnt);
+      if (!Number.isInteger(compareAtPriceMnt) || compareAtPriceMnt < 0) { toast.error("Хуучин үнэ сөрөг бус бүхэл тоо байх ёстой."); return; }
+    }
     const attributes: Record<string, string> = {};
     for (const row of form.attributes) { const key = row.key.trim(); if (key) attributes[key] = row.value.trim(); }
     const payload = {
       productId,
       sku: form.sku.trim(),
       attributes: Object.keys(attributes).length > 0 ? attributes : null,
-      priceMnt: Number(form.priceMnt) || 0,
-      compareAtPriceMnt: form.compareAtPriceMnt ? Number(form.compareAtPriceMnt) : null,
-      stockQuantity: Number(form.stockQuantity) || 0,
+      priceMnt,
+      compareAtPriceMnt,
+      stockQuantity,
       isDefault: form.isDefault,
     };
     try {
-      if (form.id) await updateVariant.mutateAsync({ id: form.id, ...payload });
-      else await createVariant.mutateAsync(payload);
+      if (form.id) {
+        // Only resend stockQuantity when it actually changed in this form --
+        // otherwise every plain price/SKU edit re-applied the seeded value
+        // as the fulfilment branch's ABSOLUTE stock, clobbering whatever
+        // AdminBranchStockEditor had set for that branch in the meantime.
+        const { stockQuantity: _stock, ...rest } = payload;
+        const updatePayload = form.stockQuantity === openedStockQuantity ? rest : payload;
+        await updateVariant.mutateAsync({ id: form.id, ...updatePayload });
+      } else {
+        await createVariant.mutateAsync(payload);
+      }
       toast.success(form.id ? "Variant шинэчлэгдлээ." : "Variant үүслээ.");
       utils.admin.productVariants.invalidate({ productId });
       closeForm();

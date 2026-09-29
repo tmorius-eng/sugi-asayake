@@ -14,12 +14,15 @@ import { formatMnt } from "@shared/format";
 const fallbackImage = "/product-placeholder.svg";
 
 export default function RoutineDetail() {
-  useDocumentMeta("Арчилгааны багц — SUGI ASAYAKE", null);
   const [, params] = useRoute("/routine/:slug");
   const [cartOpen, setCartOpen] = useState(false);
   const [isAddingAll, setIsAddingAll] = useState(false);
   const utils = trpc.useUtils();
   const routineQuery = trpc.routines.bySlug.useQuery({ slug: params?.slug ?? "" }, { enabled: Boolean(params?.slug) });
+  // 2026-09-23-ий ProductDetail/PostDetail-тэй ижил хэв маяг: тухайн
+  // routine-ийн НЭРЭЭР tab-ийн гарчиг (2026-09-27 хүртэл routine-ээс үл
+  // хамааран нэг л ерөнхий "Арчилгааны багц" гарчиг харагддаг байв).
+  useDocumentMeta(routineQuery.data ? `${routineQuery.data.name} — SUGI ASAYAKE` : "Арчилгааны багц — SUGI ASAYAKE", null);
   const cartQuery = trpc.cart.current.useQuery();
   const addItem = trpc.cart.addItem.useMutation();
   const cartCount = cartQuery.data?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;

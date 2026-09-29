@@ -150,6 +150,26 @@ export function GenericListView<T>({
     if (!serverPagination) setPage(1);
   }, [searchQuery, serverPagination]);
 
+  // 2026-09-27: selection used to survive a search/filter change untouched,
+  // so a bulk action (delete, status change, export) could silently act on
+  // rows that were no longer even on screen. Prune down to whatever is still
+  // in `filtered` whenever the visible set changes. `setSelectedIds` may be a
+  // controlled parent setter that expects the actual next value (not a
+  // functional updater), so this reads `selectedIds` directly rather than
+  // using the updater form.
+  useEffect(() => {
+    if (selectedIds.size === 0) return;
+    const visible = new Set(filtered.map(getRowId));
+    let changed = false;
+    const next = new Set<number | string>();
+    selectedIds.forEach(id => {
+      if (visible.has(id)) next.add(id);
+      else changed = true;
+    });
+    if (changed) setSelectedIds(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered]);
+
   const totalPages = serverPagination
     ? Math.max(1, Math.ceil(serverPagination.total / serverPagination.pageSize))
     : pageSize ? Math.max(1, Math.ceil(filtered.length / pageSize)) : 1;
@@ -173,7 +193,8 @@ export function GenericListView<T>({
   };
 
   const toggleSelectAll = () => {
-    setSelectedIds(selectedIds.size > 0 && selectedIds.size === filtered.length ? new Set() : new Set(filtered.map(getRowId)));
+    const allSelected = filtered.length > 0 && filtered.every(row => selectedIds.has(getRowId(row)));
+    setSelectedIds(allSelected ? new Set() : new Set(filtered.map(getRowId)));
   };
 
   const clearSelection = () => setSelectedIds(new Set());
@@ -222,7 +243,11 @@ export function GenericListView<T>({
                 <th className="w-8 border-b border-[var(--a-border)] pb-3">
                   <input
                     type="checkbox"
-                    checked={selectedIds.size > 0 && selectedIds.size === filtered.length}
+                    // 2026-09-27: comparing sizes alone was wrong the moment
+                    // the filter changed underneath a stale selection (e.g.
+                    // before the prune effect above runs) -- an unrelated
+                    // set of the same SIZE showed as fully checked.
+                    checked={filtered.length > 0 && filtered.every(row => selectedIds.has(getRowId(row)))}
                     onChange={toggleSelectAll}
                     aria-label="Бүгдийг сонгох"
                     className="size-4 accent-[#df1f3d]"

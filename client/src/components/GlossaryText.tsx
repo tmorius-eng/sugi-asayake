@@ -12,6 +12,13 @@ const sortedTerms = [...INGREDIENT_GLOSSARY].sort((a, b) => b.term.length - a.te
 const glossaryPattern = sortedTerms.length ? new RegExp(`(${sortedTerms.map(entry => escapeRegExp(entry.term)).join("|")})`, "gi") : null;
 const definitionFor = (matched: string) => sortedTerms.find(entry => entry.term.toLowerCase() === matched.toLowerCase())?.definition;
 
+// 2026-09-27: a fine (mouse) pointer already opens/closes on hover; a click
+// on top of that used to TOGGLE, so clicking a term a hover had already
+// opened instantly closed it again. Coarse (touch) pointers get no hover at
+// all, so click there has to do the opening -- and toggling is the only way
+// to close it again without a hover-leave event.
+const isCoarsePointer = () => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
+
 function GlossaryTerm({ text, definition }: { text: string; definition: string }) {
   const [open, setOpen] = useState(false);
   return (
@@ -19,9 +26,9 @@ function GlossaryTerm({ text, definition }: { text: string; definition: string }
       <PopoverTrigger asChild>
         <button
           type="button"
-          onMouseEnter={() => setOpen(true)}
-          onMouseLeave={() => setOpen(false)}
-          onClick={() => setOpen(current => !current)}
+          onMouseEnter={() => { if (!isCoarsePointer()) setOpen(true); }}
+          onMouseLeave={() => { if (!isCoarsePointer()) setOpen(false); }}
+          onClick={() => { if (isCoarsePointer()) setOpen(current => !current); else setOpen(true); }}
           className="inline cursor-help border-0 border-b border-dotted border-[#df1f3d] bg-transparent p-0 text-inherit align-baseline"
           style={{ font: "inherit" }}
         >

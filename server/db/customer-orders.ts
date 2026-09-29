@@ -6,7 +6,24 @@ import { and, asc, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import { orderItems, orders, giftCards, products } from "../../drizzle/schema";
 import { getDb } from "./connection";
 import { updateAdminOrder } from "./admin-orders";
+import { orderHasRedeemedGiftCards } from "./gift-cards";
 import { recordNotification } from "./notifications";
+
+/**
+ * Харилцагчид буцаах захиалгын мөр (2026-09-27): ажилтны дотоод талбаруудыг
+ * хасна. Өмнө нь `orders.mine` / `orders.cancel` / `orders.requestReturn` бүтэн
+ * мөр буцаадаг байсан тул "агуулахад харагдана" гэсэн admin тэмдэглэл,
+ * idempotency түлхүүр, visitor session, санхүүгийн буцаалтын тэмдэглэл
+ * харилцагчийн хөтчийн DevTools-д ил байв.
+ */
+export function toCustomerOrder<T extends Record<string, unknown>>(order: T) {
+  const {
+    adminNote: _adminNote, clientRequestId: _clientRequestId, visitorSessionId: _visitorSessionId,
+    trafficSource: _trafficSource, deviceType: _deviceType, fulfillingBranchId: _fulfillingBranchId,
+    refundNote: _refundNote, ...rest
+  } = order;
+  return rest;
+}
 
 export async function getOrderForUser(orderId: number, userId: number) {
   const db = await getDb();
@@ -40,15 +57,17 @@ export async function getOrdersForUser(userId: number, input: { cursor?: number 
   const orderIds = pageRows.map(order => order.id);
   const [lineItems, cardRows] = await Promise.all([
     // `kind` (LEFT JOIN: the product may be gone) tells the profile a line
-    // is a gift card whose code is still to come (2026-09-14).
-    db.select({ orderId: orderItems.orderId, productId: orderItems.productId, productName: orderItems.productName, sku: orderItems.sku, quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt, kind: products.kind })
+    // is a gift card whose code is still to come (2026-09-14). `variantId`
+    // (2026-09-27) lets "Дахин захиалах" re-add the exact variant bought,
+    // instead of always guessing the product's default one.
+    db.select({ orderId: orderItems.orderId, productId: orderItems.productId, variantId: orderItems.variantId, productName: orderItems.productName, sku: orderItems.sku, quantity: orderItems.quantity, unitPriceMnt: orderItems.unitPriceMnt, kind: products.kind })
       .from(orderItems).leftJoin(products, eq(orderItems.productId, products.id)).where(inArray(orderItems.orderId, orderIds)),
     db.select({ orderId: giftCards.purchaseOrderId, code: giftCards.code, amountMnt: giftCards.amountMnt, status: giftCards.status, expiresAt: giftCards.expiresAt })
       .from(giftCards).where(inArray(giftCards.purchaseOrderId, orderIds)).orderBy(asc(giftCards.id)),
   ]);
   return {
     orders: pageRows.map(order => ({
-      ...order,
+      ...toCustomerOrder(order),
       items: lineItems.filter(item => item.orderId === order.id),
       giftCards: cardRows.filter(card => card.orderId === order.id).map(({ orderId: _orderId, ...card }) => card),
     })),
@@ -70,9 +89,18 @@ export async function cancelOwnOrder(orderId: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const current = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
-  if (!current[0] || current[0].userId !== userId) throw new Error("Order not found.");
-  if (current[0].status !== "pending" && current[0].status !== "confirmed") throw new Error("This order can no longer be cancelled -- it has already been packed or closed.");
-  const result = await updateAdminOrder({ id: orderId, status: "cancelled" });
+  if (!current[0] || current[0].userId !== userId) throw new Error("Захиалга олдсонгүй.");
+  if (current[0].status !== "pending" && current[0].status !== "confirmed") throw new Error("Энэ захиалгыг цуцлах боломжгүй — аль хэдийн савлагдсан эсвэл хаагдсан байна.");
+  // 2026-09-27: энэ захиалгаар авсан бэлгийн карт аль хэдийн ашиглагдсан бол
+  // өөрөө цуцлахыг хаана — эс бөгөөс карт (дэлгүүрийн зээл) + буцаан олголт
+  // хоёуланг авах зам нээгддэг. Дэлгүүр admin-аас шийднэ (буцаан олголт нь
+  // ашиглагдсан дүнгээр хязгаарлагдсан).
+  if (await orderHasRedeemedGiftCards(orderId)) {
+    throw new Error("Энэ захиалгын бэлгийн карт аль хэдийн ашиглагдсан тул цуцлахын тулд дэлгүүртэй холбогдоно уу.");
+  }
+  // `allowedFromStatuses`: дээрх уншилт ба төлөв солих хоёрын хооронд агуулах
+  // "савласан" болговол цуцлалт давж, савласан илгээмжийн нөөц буцаж ордог байв.
+  const result = await updateAdminOrder({ id: orderId, status: "cancelled", allowedFromStatuses: ["pending", "confirmed"] });
   // The warehouse may already be picking this order -- tell them (2026-09-11).
   const [itemCount] = await db.select({ total: sql<number>`COALESCE(SUM(${orderItems.quantity}), 0)` }).from(orderItems).where(eq(orderItems.orderId, orderId));
   await recordNotification("order.cancelled_by_customer", { orderNumber: current[0].orderNumber, totalMnt: current[0].totalMnt, itemCount: Number(itemCount?.total ?? 0) }, `order:${orderId}`);
@@ -92,7 +120,8 @@ export async function isOrderSettled(orderId: number): Promise<boolean> {
   const rows = await db
     .select({ id: orders.id })
     .from(orders)
-    .where(and(eq(orders.id, orderId), eq(orders.paymentStatus, "paid"), sql`${orders.status} <> 'cancelled'`))
+    // 2026-09-27: `returned` мөн хасна — буцаагдсан (мөнгө буцаах хүлээгдэж буй) захиалга урамшуулал өгөхгүй.
+    .where(and(eq(orders.id, orderId), eq(orders.paymentStatus, "paid"), sql`${orders.status} NOT IN ('cancelled', 'returned')`))
     .limit(1);
   return Boolean(rows[0]);
 }

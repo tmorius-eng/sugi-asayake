@@ -11,6 +11,20 @@ const defaultTitle = document.title;
 const defaultDescriptionEl = document.querySelector('meta[name="description"]');
 const defaultDescription = defaultDescriptionEl?.getAttribute("content") ?? "";
 
+// 2026-09-27: without this, a page that never calls useDocumentMeta kept
+// whatever <title> the PREVIOUS page had set (e.g. leaving /post/some-title
+// for /login left the tab reading the post's title) -- rendered as a sibling
+// BEFORE <Switch> in App.tsx's Router so its reset effect (child-before-
+// parent, sibling-order) fires before the matched route's own useDocumentMeta
+// effect on the same navigation, not after it.
+export function DocumentTitleRouteReset({ location }: { location: string }) {
+  useEffect(() => {
+    document.title = defaultTitle;
+    document.querySelector('meta[name="description"]')?.setAttribute("content", defaultDescription);
+  }, [location]);
+  return null;
+}
+
 export function useDocumentMeta(title: string | null | undefined, description: string | null | undefined) {
   useEffect(() => {
     if (title) document.title = title;

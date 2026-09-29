@@ -60,6 +60,9 @@ export default function AdminBranchStockEditor({ variantId }: { variantId: numbe
 
   const save = async (branchId: number) => {
     const raw = drafts[branchId];
+    // 2026-09-27: Number("") === 0, so clearing the field and clicking
+    // Хадгалах used to silently save 0 instead of rejecting the empty input.
+    if (raw !== undefined && raw.trim() === "") { toast.error("Тоо хоосон байна."); return; }
     const quantity = raw === undefined ? undefined : Number(raw);
     if (quantity === undefined || Number.isNaN(quantity) || quantity < 0) { toast.error("Тоо буруу байна."); return; }
     setSavingBranchId(branchId);

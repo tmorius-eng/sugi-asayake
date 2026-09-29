@@ -16,6 +16,7 @@ import { ConfirmProvider } from "@/components/ConfirmDialog";
 import TranslateSurface from "@/components/TranslateSurface";
 import Home from "./pages/Home";
 import { PageviewTracker } from "./lib/pageviewTracking";
+import { DocumentTitleRouteReset } from "./lib/useDocumentMeta";
 import { useConsentIconAutoHide } from "./lib/consentIconAutoHide";
 import { useScrollReveal } from "./hooks/useScrollReveal";
 
@@ -45,10 +46,13 @@ const Shop = lazyRetry(() => import("./pages/Shop"));
 const TrackOrder = lazyRetry(() => import("./pages/TrackOrder"));
 
 function RouteLoadingFallback() {
-  return <main className="min-h-screen bg-[#f6f3ee] grid place-items-center px-6 text-center">
+  // 2026-09-27: хатуу бичсэн цайвар өнгө (`#f6f3ee`/`#1f2525`) storefront-ийн
+  // dark горимд (`html[data-storefront-theme="dark"]`) флаш харагдуулдаг байв
+  // -- theme-aware Tailwind токен ашиглана.
+  return <main className="min-h-screen bg-background grid place-items-center px-6 text-center">
     <div>
-      <p className="font-display text-2xl text-[#1f2525]">SUGI ASAYAKE</p>
-      <p className="mt-2 text-sm text-[#6f7473]">Түр хүлээнэ үү…</p>
+      <p className="font-display text-2xl text-foreground">SUGI ASAYAKE</p>
+      <p className="mt-2 text-sm text-muted-foreground">Түр хүлээнэ үү…</p>
     </div>
   </main>;
 }
@@ -74,6 +78,7 @@ function Router() {
   // токенуудаа хөндөгдөөгүй хэвээр хадгална.
   const storefront = !location.startsWith("/admin");
   return <div className={storefront ? "sugi-site" : undefined}>
+    <DocumentTitleRouteReset location={location} />
     <div id="main-content" tabIndex={-1}><Suspense fallback={<RouteLoadingFallback />}><Switch>
     <Route path={"/"} component={Home} />
     <Route path={"/product/:slug"} component={ProductDetail} />

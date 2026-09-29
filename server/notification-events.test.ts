@@ -18,6 +18,7 @@ const samples: { [K in NotificationEventType]: NotificationPayloads[K] } = {
   "order.placed": { orderNumber: "SG-ABC123", totalMnt: 125000, itemCount: 3, deliveryMethod: "store_pickup", paymentMethod: "qpay", pickupBranchName: "Их наяд плаза" },
   "order.paid": { orderNumber: "SG-ABC123", totalMnt: 125000 },
   "payment.paid_on_closed_order": { orderNumber: "SG-ABC123", orderStatus: "cancelled", paymentStatus: "paid" },
+  "payment.duplicate": { orderNumber: "SG-ABC123", provider: "storepay", totalMnt: 125000 },
   "payment.underpaid": { orderNumber: "SG-ABC123", paidMnt: 1000, totalMnt: 125000 },
   "order.cancelled_by_customer": { orderNumber: "SG-ABC123", totalMnt: 125000, itemCount: 3 },
   "refund.recorded": { orderNumber: "SG-ABC123", refundMnt: 50000, restocked: true },

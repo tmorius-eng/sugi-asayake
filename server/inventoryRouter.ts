@@ -46,7 +46,7 @@ export const inventoryRouter = router({
     await logAdminAction({ actorUserId: ctx.user.id, action: "inventory.receipt_created", entityType: "stock_receipt", entityId: receipt.id, metadata: { code: receipt.code, branchId: receipt.branchId } });
     return receipt;
   })),
-  updateReceipt: inventoryProcedure.input(z.object({ id: z.number().int().positive(), supplierName: text(160), supplierInvoiceNo: text(80), note: text(500), invoicePhotoUrl: z.string().trim().max(500).nullable().optional() })).mutation(async ({ ctx, input }) => run(async () => {
+  updateReceipt: inventoryProcedure.input(z.object({ id: z.number().int().positive(), supplierName: text(160), supplierInvoiceNo: text(80), note: text(500) })).mutation(async ({ ctx, input }) => run(async () => {
     const { id, ...fields } = input;
     return updateReceiptDetails(await loadInventoryActor(ctx.user), id, fields);
   })),
@@ -62,7 +62,10 @@ export const inventoryRouter = router({
   // "unlisted", not private.
   uploadReceiptPhoto: inventoryProcedure.input(z.object({ id: z.number().int().positive(), contentType: z.enum(imageContentTypes), dataBase64: z.string().min(16).max(14_000_000) })).mutation(async ({ ctx, input }) => run(async () => {
     const actor = await loadInventoryActor(ctx.user);
-    await getReceipt(actor, input.id); // existence + branch permission
+    const receipt = await getReceipt(actor, input.id); // existence + branch permission
+    // 2026-09-27: draft шалгалт upload-оос ӨМНӨ — өмнө нь батлагдсан/цуцлагдсан
+    // баримтад зураг R2-д бичигдээд дараа нь татгалзаж, өнчин объект үлддэг байв.
+    if (receipt.status !== "draft") throw new TRPCError({ code: "BAD_REQUEST", message: "Зөвхөн ноорог баримтад зураг хавсаргана." });
     const buffer = decodeBase64Upload(input.dataBase64);
     if (buffer.length === 0 || buffer.length > 10 * 1024 * 1024) throw new TRPCError({ code: "BAD_REQUEST", message: "Зураг 10 МБ-аас бага байх ёстой." });
     assertImageSignature(buffer, input.contentType);

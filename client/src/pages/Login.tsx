@@ -9,6 +9,8 @@ import PhoneVerificationStep from "@/components/PhoneVerificationStep";
 import SiteFooter from "@/components/SiteFooter";
 import { trpc } from "@/lib/trpc";
 import { useSiteText } from "@/hooks/useSiteText";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { isValidPhoneInput } from "@/lib/clientValidation";
 
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Хүсэлт амжилтгүй боллоо. Дахин оролдоно уу.";
 
@@ -68,13 +70,28 @@ export default function Login() {
     return target && /^\/(?![/\\])/.test(target) ? target : "/";
   })();
 
+  // 2026-09-27: аль хэдийн нэвтэрсэн хэрэглэгч /login дээр (жишээ нь товч
+  // хойшоо дарж эсвэл хуучин холбоосоор) орвол дахин маягт харах шаардлагагүй
+  // -- шууд redirectTarget-руу нь явуулна (sanitised, дээрх шалгалттай ижил).
+  const { isAuthenticated } = useAuth();
+  useEffect(() => {
+    // `replace: true` (2026-09-27): a pushState here would leave /login
+    // itself in history -- Back from redirectTarget would bounce straight
+    // back to this auto-redirect and instantly forward again.
+    if (isAuthenticated) setLocation(redirectTarget, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
+
   const loginMutation = trpc.auth.login.useMutation();
   const completeRegistration = trpc.auth.completeRegistration.useMutation();
   const isSubmitting = loginMutation.isPending || completeRegistration.isPending;
 
   const submitLogin = async () => {
+    // 2026-09-27: сервер `phoneSchema`-ийг мөрддөг (auth.login) -- зөвхөн
+    // хоосон эсэхийг шалгахаас гадна форматыг нь ч client дээр урьдчилан шалгана.
     const nextErrors: Record<string, string> = {};
     if (!phone.trim()) nextErrors["login-phone"] = "Утасны дугаараа оруулна уу.";
+    else if (!isValidPhoneInput(phone)) nextErrors["login-phone"] = "Утасны дугаараа зөв оруулна уу.";
     if (!password) nextErrors["login-password"] = "Нууц үгээ оруулна уу.";
     if (showErrors(nextErrors)) return;
     try {
@@ -88,7 +105,10 @@ export default function Login() {
 
   const submitRegistration = async () => {
     if (!verifiedSessionId) return;
-    if (showErrors(password ? {} : { "register-password": "Нууц үгээ оруулна уу." })) return;
+    // 2026-09-27: сервер `auth.completeRegistration`-д нууц үг ≥8 тэмдэгт
+    // шаарддаг (min(8)) -- энд зөвхөн хоосон эсэхийг шалгадаг байсан тул
+    // 5 тэмдэгттэй нууц үг серверт очиход л татгалздаг байв.
+    if (showErrors(!password ? { "register-password": "Нууц үгээ оруулна уу." } : password.length < 8 ? { "register-password": "Нууц үг дор хаяж 8 тэмдэгт байх ёстой." } : {})) return;
     try {
       await completeRegistration.mutateAsync({ sessionId: verifiedSessionId, password, name: name.trim() || undefined });
       await utils.auth.me.invalidate();

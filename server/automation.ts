@@ -3,10 +3,9 @@ import { getStaleTransfers } from "./transfers";
 import { runInventorySync } from "./integrations/inventorySync";
 import { fillTemplate } from "../shared/store-settings";
 import { ubDateKey } from "../shared/notification-events";
-import { sendAccountEmail, notifyOwner } from "./_core/notification";
+import { emailConfigured, sendAccountEmail, notifyOwner } from "./_core/notification";
 import { sendPushToUser } from "./_core/webPush";
 import { registerJob } from "./_core/scheduler";
-import { ENV } from "./_core/env";
 import { purgeExpiredFaceHandoffs } from "./faceHandoff";
 import { purgeExpiredFaceChallenges } from "./db";
 import { purgeSearchQueries } from "./search/searchAnalytics";
@@ -46,14 +45,19 @@ export async function runAbandonedCartReminderJob(): Promise<void> {
       // nothing will ever send in that environment, and retrying hourly would
       // only spam the log.
       const sent = await sendAccountEmail({ to: cart.email, subject, content: fillTemplate(emailBody, { "{нэр}": name }) });
-      if (sent || !ENV.brevoApiKey) delivered = true;
+      if (sent || !emailConfigured()) delivered = true;
     }
     // 2026-09-14: the phone-only customer's channel. Counted as delivered
     // only when a subscription actually accepted it, so a cart whose only
     // subscription has died (404/410, dropped by sendPushToUser) is retried
     // by a later tick instead of being silently marked.
     if (cart.pushSubscriptions > 0) {
-      const sent = await sendPushToUser(cart.userId, { title: subject, body: fillTemplate(pushBody, { "{нэр}": name }), url: "/checkout", tag: "abandoned-cart" });
+      // I13: unlike the review-request job's push a few lines below (and
+      // every other sendPushToUser call in this file), this one had no
+      // .catch -- an unexpected rejection (not the ordinary "subscription
+      // gone" case sendPushToUser already swallows itself) would throw out
+      // of the loop and skip every cart still left to remind this tick.
+      const sent = await sendPushToUser(cart.userId, { title: subject, body: fillTemplate(pushBody, { "{нэр}": name }), url: "/checkout", tag: "abandoned-cart" }).catch(() => 0);
       if (sent > 0) delivered = true;
     }
     // Ямар ч суваг хүрээгүй бол тэмдэглэгээг буцааж, дараагийн тик дахин
@@ -100,7 +104,7 @@ export async function runReviewRequestJob(): Promise<void> {
     if (order.customerEmail) {
       hadChannel = true;
       const sent = await sendAccountEmail({ to: order.customerEmail, subject: fillTemplate(subject, values), content: fillTemplate(emailBody, values) }).catch(() => false);
-      if (sent || !ENV.brevoApiKey) delivered = true;
+      if (sent || !emailConfigured()) delivered = true;
     }
     if (order.userId && order.pushSubscriptions > 0) {
       hadChannel = true;
@@ -222,8 +226,8 @@ export function registerInventorySyncJob() {
 
 // 2026-09-11: keeps notification_outbox small -- see purgeNotificationOutbox.
 export async function runNotificationOutboxPurgeJob(): Promise<void> {
-  const { testRows, oldRows } = await purgeNotificationOutbox();
-  if (testRows || oldRows) console.log(`[notifications] outbox purge: ${testRows} test row(s), ${oldRows} row(s) older than 90 days`);
+  const { testRows, oldRows, expiredRows } = await purgeNotificationOutbox();
+  if (testRows || oldRows || expiredRows) console.log(`[notifications] outbox purge: ${testRows} test row(s), ${oldRows} row(s) older than 90 days, ${expiredRows} pending row(s) expired undelivered`);
 }
 
 // 2026-09-12: bounded growth for the two tables that had none -- see

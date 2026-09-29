@@ -19,7 +19,7 @@ MySQL руу БИШ** (2026-09-01 бодит incident-ээр баталгааж�
 
 ```
 DATABASE_URL=mysql://avnadmin:<Aiven password>@sugi-asayake-db-project-4b75.h.aivencloud.com:25861/defaultdb?ssl-mode=REQUIRED
-JWT_SECRET=local-test-secret-12345
+JWT_SECRET=<64 тэмдэгт санамсаргүй hex — node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"; баримтад бичигдсэн жишээ утгыг ХЭЗЭЭ Ч бүү ашигла>
 OWNER_EMAIL=t.morius@gmail.com
 S3_REGION=auto
 S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
@@ -136,6 +136,8 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
 Өдөр бүрийн бүрэн тэмдэглэл HISTORY.md-д байна — тодорхой bug/шийдвэрийн
 шалтгааныг мэдэх хэрэгтэй үед л тэнд гарчгаар хайна.
 
+- (09-29) **Бүх барааны нийтийн хямдрал** — /admin → Урамшуулал (зөвхөн admin). DB-ийн үнэ хөндөгдөхгүй, `withLiveCampaign()` үнэ уншдаг газар бүрт. ⛔ Migration **0098** заавал кодоос өмнө. [SITEWIDE-SALE-PLAN.md](SITEWIDE-SALE-PLAN.md).
+- (09-24→29) **Сүүлчийн бүтэн-стек аудит** — ~200 олдвор (4 P0 мөнгө), бүгд засагдсан + бие даасан шалгалтын 27 регресс. [docs/AUDIT-2026-09-27-final.md](AUDIT-2026-09-27-final.md). ⛔ Migration **0096, 0097 ажиллуулаагүй** (энэ лаптопоос DB TLS алдаа) — prod + staging-д ажиллуулаад л deploy. Хямдралын төлөвлөгөө: [docs/SITEWIDE-SALE-PLAN.md](SITEWIDE-SALE-PLAN.md) (6 шийдвэр хүлээж буй). HISTORY 2026-09-29.
 - (09-22) **/admin: нууц үг → царай → admin (step-up) + царайны системийн аудит** (Tom: *"эхлээд нууц үг, дараа нь царай гэж ярьсан — одоо нууц үг асуухгүй шууд царай"*). Шалтгаан: сешн cookie 365 хоног тул нууц үг зөвхөн анх нэг удаа асуугддаг байв. Одоо `sugi_admin_pw` step-up cookie (таб тус бүр, **нэг удаагийн**, 10 мин) — царай асуух БҮРТ /admin-ий нууц үгийн дэлгэц түрүүлнэ (Tom туршаад "зөвхөн царай уншиж байна" гэснээр `/login` тооцогдохоо больж, амжилттай царай алхмыг зарцуулдаг болсон). Аудитаар засав: сешн cookie-оор л **бусдын царайг өөрийнхөөрөө солих** боломж (`enroll` дарж бичдэг байв; одоо нууц үг + одоогийн царай, `resetOwnEnrollment` устгасан), `distance` oracle, данс тус бүрийн царайны lockout (5/15 мин), токен төөрөгдөл (`typ` claim), загвар **шифрлэгдсэн** (`enc1:`), **анивчилт заавал** (liveness анхдагчаар блоклоно), `/face-approve` утасны хуудас CSS-гүй байсан (`face.css`), handoff-ийн тоог камераас өмнө шалгана, CSPRNG, challenge retention, IdleLockWatcher-ийн effect, камер цэвэрлэгээ, flash/LivenessTracker хог код. HISTORY.md 2026-09-22.
 - (09-21, шөнө) **Толгой бүх хуудсанд + сагс хуудас бүрд ажилладаг** (7 хуудсанд сагсны дүрс "үхсэн" байв), **буруу хаяг → брэндийн 404 + HTTP 404** (`routeStatus.ts`, soft 404 арилав), **Dependabot-ийн 6 PR бүгд** (40 bump: React 19.3, tRPC 11.19, zod 4.6, Tailwind 4.3, `lucide-react` 1.x — брэнд лого `icons/BrandIcons.tsx`, `cookie` 2 — `parseCookie`, Actions v7). main chunk 152 → 165 KB gzip (React 19.3 `react-dom`); Lighthouse-ийн дараах хэмжилт машин сул үед. HISTORY 6m.
 - (09-21, орой) **Төлөвлөгөөний 2–7-р хэсэг бүгд**: хүртээмж **Lighthouse 100** (6 хуудас, `useFieldErrors`), staging prod-ын 09-21-ний хуулбар (+ `db-restore.ps1`-ийн 2 бодит алдаа: нууц үг decode, кирилл `?` болдог), `window.confirm` 47 → **`useConfirm()` dialog**, reviews/questions/posts хуудаслалт + analytics 60 с кэш, **`server/db.ts` → `server/db/` 21 модуль** (barrel), 8 шинэ E2E spec + **coverage** (`pnpm test:coverage`), **"Ирэхээр мэдэгдэх" жинхэнэ** (0092, `back-in-stock` job, push + имэйл, бүх нөөцийн замаар), **сэтгэгдэлд зураг** (0093, nudity screen, admin "Зураг хасах"). Замдаа E2E олсон алдаа: карьерын анкетын талбарын алдаа хэзээ ч гардаггүй (`required` → `noValidate`), сагсны товчны aria-label латин нэр, хуучин үнэ 2.81:1. Дэлгэрэнгүй HISTORY 6f–6l.
@@ -166,7 +168,7 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
 - (09-11) **Linen палитр**, **ntfy push + нөөцийн ledger + сканнер + шилжүүлэг**
 
 ## ⚠️ Admin эрх хэн авдаг вэ — bootstrap логик (`server/db.ts`-ийн `createUserWithPassword`)
-Шинээр бүртгүүлж буй хэрэглэгч **admin** эрхтэй болдог ЗӨВХӨН: (1) `users` хүснэгт хоосон үеийн хамгийн ЭХНИЙ хэрэглэгч, эсвэл (2) имэйл нь `.env`-ийн `OWNER_EMAIL`-тэй яг таарвал. Бусад бүх шинэ бүртгэл энгийн `"user"` эрхтэй. `staff`/`admin` эрхийг зөвхөн одоо байгаа admin гараар л оноож болно.
+Шинээр бүртгүүлж буй хэрэглэгч **admin** эрхтэй болдог ЗӨВХӨН `users` хүснэгт хоосон үеийн хамгийн ЭХНИЙ хэрэглэгч (утсаар бүртгүүлсэн; Facebook-оор үүссэн данс хэзээ ч admin болдоггүй). ⚠️ (2026-09-27-нд кодоос шалгав) `OWNER_EMAIL`-ээр admin болгох зам кодод БАЙХГҮЙ — утсаар нэвтрэх болсноос хойш хасагдсан (`server/db/users.ts`-ийн тайлбар); `OWNER_EMAIL` нь зөвхөн эзэнд очих имэйл мэдэгдэл ба VAPID subject. Бусад бүх шинэ бүртгэл энгийн `"user"` эрхтэй. `staff`/`admin` эрхийг зөвхөн одоо байгаа admin гараар л оноож болно.
 
 ⚠️ **Production/deploy хийхээсээ өмнө заавал шалгах:** `.env`-ийн `OWNER_EMAIL=t.morius@gmail.com` байх ёстой (placeholder-оор биш).
 
@@ -241,6 +243,7 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
 - **Бүрэн suite-ийг ДУНДУУР нь зогсоовол** `afterAll` ажиллахгүй → (2026-09-23-аас) `sugi_staging`-д fixture үлдэнэ. Зогсоосон бол заавал `test-residue-report.ts --staging` ажиллуул; шинэ integration тест бичвэл fixture-ынхаа нэрийг `TEST_PRODUCT_PATTERNS`-д нэм.
 
 **Өгөгдлийн сан, мөнгө**
+- **Хэрэглэгчид үнэ харуулдаг / захиалгын мөр бичдэг ШИНЭ зам бүр `withLiveCampaign()` эсвэл `priceLinesForOrder()`-оор** (`server/db/price-campaigns.ts`, 2026-09-29) — эс бөгөөс нийтийн хямдралын үеэр тэр газар хуучин үнэ харуулна/авна. Мөрөнд `kind` сонго (бэлгийн карт хасагдах ёстой).
 - **`server/db.ts` нь barrel** (2026-09-21) — бодит код `server/db/<домэйн>.ts`-д (CODEBASE §3.1 хүснэгт). Шинэ функцийг тохирох файлд, шинэ файл үүсгэвэл barrel-д мөр нэм. Модулийн түвшинд (top-level const) хажуугийн модулийн утга ашиглахгүй (тойрог import).
 - Шинэ `sql.raw` БИЧИХГҮЙ — `server/_core/sqlSafe.ts`-ийн `sqlInt()` ашиглана.
 - **Өдрөөр бүлэглэх бол `storeDaySql(col)` / JS-д `storeDayString(date)`** (`server/db/connection.ts`, 2026-09-23) — `date(createdAt)` нь UTC өдөр (session `+00:00`) тул 08:00-аас өмнөх захиалга өмнөх өдөрт ордог. Клиентэд `toISOString().slice(0,10)` биш `toDayInput()`.
@@ -377,6 +380,9 @@ session-ий тэмдэглэл HISTORY.md-д, дүрэм л энд. Ажилл�
 ажилд, output-оо хэрхэн таслах, session-ээ хэрхэн хуваах) TOKEN-USAGE.md-д.
 
 ## ⚠️ Tom-оос хүлээж буй (2026-09-14, "Za bugdiin hii"-ийн дараа)
+- 🔴 **(2026-09-29) DB руу TLS "certificate signature failure"** (энэ лаптоп): тунель асдаг ч сервер сертификат `oci-ca.pem`-тэй таарахгүй — HeatWave-ийн CA-г дахин татаж солих. Дараа нь migration 0096 → 0097-г `--staging` ба prod-д, integration suite + `pnpm e2e`.
+- 🔴 **(2026-09-29) Production `JWT_SECRET`-ийг шалга**: гарын авлагад `local-test-secret-12345` жишээ байсан (энэ лаптоп яг тэрийг хэрэглэдэг). Prod ийм бол хэн ч admin сешн хуурамчаар үүсгэж чадна → 64 hex болгож солих (бүгд нэг удаа гарна). Сервер одоо эхлэхдээ сул бол анхааруулна.
+- **(2026-09-29) Хямдралын 6 шийдвэр** — [SITEWIDE-SALE-PLAN.md](SITEWIDE-SALE-PLAN.md) §2.
 - ✅ **(2026-09-22) `ca670e7`-ийн регресс ЗАСАГДСАН** (Tom: *"Ali boloh hereglegchid taalamjtai medremj turuulhiin tuld chadah buhnee hii"*): hero-г түрүүлж зурах хүлээлт хэвээр, харин анхны товч/хүрэлт React-ийг шууд mount хийж, товшилтыг React-ийн ижил товч руу дамжуулна; shell `inert`. HISTORY 2026-09-22.
 - **(2026-09-22) Шинэ /admin урсгалыг бодит утас/камераар турших**: нууц үг → царай (нэг удаа анивчина). Анивчилт хэт олон удаа илрэхгүй бол `ADMIN_FACE_LIVENESS_ENFORCED=0` түр буцаана.
 - ✅ **Монгол нэр ДУУССАН (2026-09-20)**: 979/984 бараа монгол нэртэй (үлдсэн 5 нь аль хэдийн монгол — 4 бэлгийн карт + нэг эвдэрсэн нэр). Гадны API түлхүүр ашиглаагүй: нэрийг 10 багцаар гараар орчуулж `docs/product-names-mn.tsv`-д хадгалсан. Засвар хийвэл тэр файлд бичээд `pnpm exec tsx scripts/apply-product-names-mn.ts docs/product-names-mn.tsv --apply --force`, эсвэл /admin → Бүтээгдэхүүн → "Монгол нэр" талбар. `scripts/generate-product-names-mn.ts` (Claude API) үлдсэн ч хэрэгцээгүй болсон.

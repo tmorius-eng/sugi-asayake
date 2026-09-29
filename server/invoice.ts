@@ -35,8 +35,15 @@ const PAYMENT_LABEL: Record<string, string> = {
   qpay: "QPay", storepay: "StorePay", bank_transfer: "Банкны шилжүүлэг", card: "Карт", cash_on_delivery: "Хүргэлтээр бэлнээр", in_store: "Дэлгүүрт",
 };
 const STATUS_LABEL: Record<string, string> = {
-  pending: "Хүлээгдэж буй", confirmed: "Баталгаажсан", processing: "Бэлтгэж буй", shipped: "Хүргэлтэд гарсан", delivered: "Хүргэгдсэн", completed: "Дууссан", cancelled: "Цуцлагдсан", returned: "Буцаагдсан", refunded: "Буцаан олгосон",
+  // 2026-09-27: захиалгын жинхэнэ enum-ийн (`packed`, `out_for_delivery`) шошго дутуу байсан тул
+  // харилцагчийн PDF дээр англи түлхүүр гардаг байв; хуучин нэрсийг хуучин мөрд үлдээв.
+  pending: "Хүлээгдэж буй", confirmed: "Баталгаажсан", packed: "Савласан", out_for_delivery: "Хүргэлтэд гарсан", processing: "Бэлтгэж буй", shipped: "Хүргэлтэд гарсан", delivered: "Хүргэгдсэн", completed: "Дууссан", cancelled: "Цуцлагдсан", returned: "Буцаагдсан", refunded: "Буцаан олгосон",
 };
+/** 2026-09-27: `refunded`-ийг "төлөөгүй" гэж хэвлэдэг байв. */
+const paidWord = (paymentStatus: string, form: "short" | "long") =>
+  paymentStatus === "paid" ? (form === "short" ? "төлсөн" : "төлөгдсөн")
+    : paymentStatus === "refunded" ? "буцаан олгосон"
+      : (form === "short" ? "төлөөгүй" : "төлөгдөөгүй");
 
 export type InvoiceResult = { fileName: string; base64: string };
 
@@ -80,7 +87,7 @@ export async function renderPackingSlip(orderId: number): Promise<InvoiceResult 
   doc.fillColor(muted).fontSize(9).text(`${siteName} · БЭЛТГЭХ ХУУДАС`, left, 48);
   doc.fillColor(ink).fontSize(28).text(order.orderNumber, left, 62);
   doc.fontSize(10).fillColor(muted)
-    .text(`Огноо: ${new Date(order.createdAt).toLocaleString("mn-MN", { timeZone: "Asia/Ulaanbaatar" })} · Төлөв: ${STATUS_LABEL[order.status] ?? order.status} · Төлбөр: ${PAYMENT_LABEL[order.paymentMethod] ?? order.paymentMethod} (${order.paymentStatus === "paid" ? "төлсөн" : "төлөөгүй"})`, left, 100);
+    .text(`Огноо: ${new Date(order.createdAt).toLocaleString("mn-MN", { timeZone: "Asia/Ulaanbaatar" })} · Төлөв: ${STATUS_LABEL[order.status] ?? order.status} · Төлбөр: ${PAYMENT_LABEL[order.paymentMethod] ?? order.paymentMethod} (${paidWord(order.paymentStatus, "short")})`, left, 100);
   doc.fillColor(ink).fontSize(11).text("Худалдан авагч", left, 128);
   doc.fillColor(muted).fontSize(11).text(`${order.customerName ?? "—"} · ${order.customerPhone ?? ""}`, left, 144);
   doc.fillColor(ink).fontSize(11).text(order.deliveryMethod === "store_pickup" ? "Салбараас авах" : "Хүргэлт", 320, 128);
@@ -145,7 +152,7 @@ async function renderInvoiceFor(order: OrderRow): Promise<InvoiceResult> {
   doc.fontSize(10).fillColor(muted)
     .text(`Дугаар: ${order.orderNumber}`, left, 122)
     .text(`Огноо: ${new Date(order.createdAt).toLocaleString("mn-MN", { timeZone: "Asia/Ulaanbaatar" })}`, left, 136)
-    .text(`Төлөв: ${STATUS_LABEL[order.status] ?? order.status} · Төлбөр: ${PAYMENT_LABEL[order.paymentMethod] ?? order.paymentMethod} (${order.paymentStatus === "paid" ? "төлөгдсөн" : "төлөгдөөгүй"})`, left, 150);
+    .text(`Төлөв: ${STATUS_LABEL[order.status] ?? order.status} · Төлбөр: ${PAYMENT_LABEL[order.paymentMethod] ?? order.paymentMethod} (${paidWord(order.paymentStatus, "long")})`, left, 150);
 
   // Customer / delivery
   doc.fillColor(ink).fontSize(10).text("Худалдан авагч", left, 180);

@@ -21,7 +21,7 @@ import { registerVerifyMnCallbackRoute } from "../verifyMn";
 import { warmUpModerationModel } from "./moderationModel";
 import { warmCatalogSearchIndex } from "../search/catalogSearch";
 import { warmUpImageSafety } from "./imageSafety";
-import { dbPing } from "../db";
+import { dbPing, getDb } from "../db";
 import { serveRobots, serveSitemap } from "./sitemap";
 import { serveMerchantFeed } from "./merchantFeed";
 import { serveProductOgImage } from "./ogImage";
@@ -53,6 +53,57 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
     }
   }
   throw new Error(`No available port found starting from ${startPort}`);
+}
+
+/**
+ * 2026-09-27: there was no SIGTERM/SIGINT handler at all -- pm2 restart /
+ * `deploy.ps1` / a plain Ctrl+C killed the process mid-request and left the
+ * MySQL pool's connections to close uncleanly (Aiven/HeatWave's own
+ * `Aborted_clients` counter). Stop accepting new connections, let in-flight
+ * requests finish, close the DB pool, then exit -- bounded so a stuck
+ * connection can never hang a deploy forever. No `startScheduler`/
+ * `startNotificationDispatcher` stop hook exists (server/_core/scheduler.ts,
+ * server/notifications.ts) to call here; skipped rather than invented.
+ */
+function registerGracefulShutdown(server: ReturnType<typeof createServer>): void {
+  let shuttingDown = false;
+  const shutdown = (signal: NodeJS.Signals) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`[shutdown] ${signal} received, closing gracefully...`);
+    const forceExitTimer = setTimeout(() => {
+      console.error("[shutdown] graceful shutdown timed out after 10s, forcing exit");
+      process.exit(1);
+    }, 10_000);
+    forceExitTimer.unref();
+    // Idle keep-alive sockets (dev's own tsx watch reload, an idle browser
+    // tab) would otherwise hold server.close()'s callback open until they
+    // time out on their own -- closing them immediately still lets a
+    // genuinely in-flight request finish before the callback fires.
+    server.closeIdleConnections();
+    // Dev: Vite HMR-ийн websocket хэзээ ч idle болдоггүй тул close() 10 с гацна —
+    // хөгжүүлэгчийн Ctrl+C-д бүх холболтыг шууд хаана (production-д websocket алга).
+    if (process.env.NODE_ENV !== "production") server.closeAllConnections();
+    server.close(closeError => {
+      if (closeError) console.error("[shutdown] error closing HTTP server:", closeError);
+      void (async () => {
+        try {
+          const db = await getDb();
+          if (db) await new Promise<void>(resolve => db.$client.end(endError => {
+            if (endError) console.error("[shutdown] error closing DB pool:", endError);
+            resolve();
+          }));
+        } catch (error) {
+          console.error("[shutdown] error during DB pool shutdown:", error);
+        } finally {
+          clearTimeout(forceExitTimer);
+          process.exit(0);
+        }
+      })();
+    });
+  };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
 async function startServer() {
@@ -201,6 +252,7 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
+  registerGracefulShutdown(server);
   // Хайлт v3 (2026-09-20): индексийг урьдчилан барина — worker бүр өөрийнхөө.
   // Production-д 5 с хойшлуулна: boot дээрх HeatWave холболтын багцтай зэрэгцэхгүй.
   warmCatalogSearchIndex(process.env.NODE_ENV === "production" ? 5_000 : 0);

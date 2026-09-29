@@ -65,7 +65,12 @@ function stringifyParam(value: unknown): string {
 // `token` дангаараа `guestToken`/`sessionToken`-ыг ч барьдаг тул сагс/зочны
 // сешний ердийн query бүхэлдээ нуугддаг байв (2026-09-23) — нууц нь ЗӨВХӨН
 // нэвтрэлт/сэргээлт/handoff-ийн токенууд тул тэднийг нэрлэж шалгана.
-const SENSITIVE_QUERY_PATTERN = /password|resetToken|tokenHash|secret|`?code`?\s*=|phone_verification_sessions|face_handoff_requests|face_templates|integration_settings/i;
+// 2026-09-27: push_subscriptions карт a webpush subscription's private auth
+// secret (`auth`) and encryption key (`p256dh`) -- both were logged in full
+// (endpoint URL too). `auth` alone would also match "author" etc., so it is
+// anchored the same way `code` already is above (a bare/backticked column
+// name immediately before `=`).
+const SENSITIVE_QUERY_PATTERN = /password|resetToken|tokenHash|secret|`?code`?\s*=|`?auth`?\s*=|push_subscriptions|p256dh|phone_verification_sessions|face_handoff_requests|face_templates|integration_settings/i;
 
 export const sqlQueryLogger: Logger = {
   logQuery(query: string, params: unknown[]) {

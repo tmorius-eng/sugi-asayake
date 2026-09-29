@@ -2,12 +2,44 @@
 // 2026-09-21: server/db.ts (7 066 мөр) домэйнээр хуваагдав; server/db.ts нь одоо barrel
 // (export *) тул import зам өөрчлөгдөөгүй. Функц зөөхдөө энэ файлын import-ыг мөн шинэчил.
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { orders, paymentAttempts } from "../../drizzle/schema";
 import { invalidateCachedByPrefix } from "../_core/ttlCache";
 import { getDb } from "./connection";
 import { announceIssuedGiftCards, issueGiftCardsForPaidOrder, type IssuedGiftCard } from "./gift-cards";
 import { recordNotification } from "./notifications";
+
+/**
+ * Нэг захиалгын төлбөрийн хүсэлтийг (QPay нэхэмжлэл / StorePay зээл) зэрэг хоёр
+ * удаа үүсгэхээс сэргийлнэ (2026-09-27). "Өмнөх оролдлого байна уу → байхгүй бол
+ * провайдерт шинэ хүсэлт" нь check-then-act байсан тул давхар товшилт/хоёр таб
+ * хоёр төлөгдөх нэхэмжлэл эсвэл хоёр зээлийн хүсэлт нээдэг байв.
+ *
+ * MySQL-ийн нэрлэсэн цоож (`GET_LOCK`) — сервер даяар, хоёр лаптоп + prod-д ч
+ * хүчинтэй. Захиалгын мөрийг `FOR UPDATE`-ээр барьвал провайдерийн HTTP дуудлагын
+ * турш callback хүлээх бөгөөд оролдлогын INSERT (өөр connection) FK-ийн shared
+ * lock-оор deadlock болно — тиймээс мөр биш нэр цоожилно. Транзакц нь зөвхөн
+ * нэг connection-ийг барих зорилготой; `fn` дотор pool-оор уншиж/бичнэ.
+ */
+export class PaymentRequestBusyError extends Error {
+  constructor() { super("Энэ захиалгын төлбөрийн хүсэлт яг одоо боловсруулагдаж байна. Хэдэн секундын дараа дахин оролдоно уу."); }
+}
+
+export async function withOrderPaymentLock<T>(orderId: number, fn: () => Promise<T>): Promise<T> {
+  const db = await getDb();
+  if (!db) return fn();
+  const lockName = `sugi:payment-request:${orderId}`;
+  return db.transaction(async tx => {
+    const [rows] = await tx.execute(sql`SELECT GET_LOCK(${lockName}, 20) AS got`);
+    const got = Number((rows as unknown as Array<{ got: number | null }>)[0]?.got ?? 0);
+    if (got !== 1) throw new PaymentRequestBusyError();
+    try {
+      return await fn();
+    } finally {
+      await tx.execute(sql`SELECT RELEASE_LOCK(${lockName})`).catch(() => undefined);
+    }
+  });
+}
 
 export async function createQPayPaymentAttempt(input: { orderId: number; providerInvoiceId: string; responseJson: string }) {
   const db = await getDb();
@@ -96,7 +128,14 @@ export async function markQPayPaymentAttemptPaid(input: { id: number; orderId: n
   invalidateCachedByPrefix("storefront:bestsellers:");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  await db.update(paymentAttempts).set({ status: "paid", providerPaymentId: input.providerPaymentId, updatedAt: new Date() }).where(eq(paymentAttempts.id, input.id));
+  // 2026-09-27: энэ оролдлого АНХ удаа "paid" болж байгаа эсэхийг guarded
+  // UPDATE-ээр мэднэ — провайдерийн давтан callback (at-least-once) бол 0 мөр.
+  // Анх удаа боловч захиалга аль хэдийн ӨӨР оролдлогоор төлөгдсөн бол энэ бол
+  // давхар төлбөр (StorePay 15 минутын дараах 2 дахь зээл, QPay-ийн дутуу
+  // төлбөрийн дараах шинэ нэхэмжлэл) — өмнө нь зөвхөн console.warn үлддэг байв.
+  const attemptFlip = await db.update(paymentAttempts).set({ status: "paid", providerPaymentId: input.providerPaymentId, updatedAt: new Date() })
+    .where(and(eq(paymentAttempts.id, input.id), ne(paymentAttempts.status, "paid")));
+  const attemptNewlyPaid = Number(attemptFlip[0].affectedRows ?? 0) === 1;
   const updated = await db.update(orders)
     .set({ paymentStatus: "paid", status: sql`IF(${orders.status} = 'pending', 'confirmed', ${orders.status})`, updatedAt: new Date() })
     .where(and(eq(orders.id, input.orderId), eq(orders.paymentStatus, "unpaid"), sql`${orders.status} NOT IN ('cancelled', 'returned')`));
@@ -126,7 +165,19 @@ export async function markQPayPaymentAttemptPaid(input: { id: number; orderId: n
   // callbacks harmless: one "paid" per order, one alarm per payment attempt.
   const [order] = await db.select({ orderNumber: orders.orderNumber, totalMnt: orders.totalMnt, status: orders.status, paymentStatus: orders.paymentStatus }).from(orders).where(eq(orders.id, input.orderId)).limit(1);
   if (order && orderUpdated) {
-    await recordNotification("order.paid", { orderNumber: order.orderNumber, totalMnt: order.totalMnt }, `order:${input.orderId}`);
+    // 2026-09-27: энэ push зурвас өмнө нь "QPay-аар" гэж ХАТУУ бичигдсэн байсан
+    // ч StorePay-ийн төлбөр ч яг энэ л функцээр (нэрийг үл харгалзан QPay/
+    // StorePay хоёулаа энд дуудагддаг) "paid" болдог -- жинхэнэ провайдерыг
+    // унших нь энэ мессежийг зөв болгоно (shared/notification-events.ts).
+    const [paidAttempt] = await db.select({ provider: paymentAttempts.provider }).from(paymentAttempts).where(eq(paymentAttempts.id, input.id)).limit(1);
+    await recordNotification("order.paid", { orderNumber: order.orderNumber, totalMnt: order.totalMnt, paymentMethod: paidAttempt?.provider }, `order:${input.orderId}`);
+  } else if (order && attemptNewlyPaid && order.paymentStatus === "paid" && order.status !== "cancelled" && order.status !== "returned") {
+    const [otherPaid] = await db.select({ id: paymentAttempts.id }).from(paymentAttempts)
+      .where(and(eq(paymentAttempts.orderId, input.orderId), eq(paymentAttempts.status, "paid"), ne(paymentAttempts.id, input.id))).limit(1);
+    const [attemptRow] = await db.select({ provider: paymentAttempts.provider }).from(paymentAttempts).where(eq(paymentAttempts.id, input.id)).limit(1);
+    if (otherPaid) {
+      await recordNotification("payment.duplicate", { orderNumber: order.orderNumber, provider: attemptRow?.provider ?? "qpay", totalMnt: order.totalMnt }, `attempt:${input.id}`);
+    }
   } else if (order && (order.status === "cancelled" || order.status === "returned" || order.paymentStatus === "refunded")) {
     // Money arrived for an order that is closed -- someone has to give it
     // back. (A repeat callback for an order that is simply already paid is

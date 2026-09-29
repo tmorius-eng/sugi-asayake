@@ -278,6 +278,20 @@ function previousSnapshotSize(cursor: string | null | undefined): number | null 
   } catch { return null; }
 }
 
+/**
+ * 2026-09-27 (I17): the count note's "as of" stamp used to be
+ * `fetchedAt.toISOString().slice(0, 16)` -- UTC. Ulaanbaatar is UTC+8 with
+ * no DST, so every snapshot read 8 hours earlier than when it was actually
+ * fetched (a 14:00 pull said "06:00").
+ */
+function ubTimestampLabel(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ulaanbaatar", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(date);
+  const get = (type: string) => parts.find(part => part.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}`;
+}
+
 export async function runPullSnapshot(provider: InventorySyncProvider, options: SyncOptions = {}) {
   if (!provider.pullStockSnapshot) return { ran: false as const, skipped: "provider cannot report stock" };
   const namespace = namespaceOf(options);
@@ -312,9 +326,20 @@ export async function runPullSnapshot(provider: InventorySyncProvider, options: 
   const sanityBlocked = dropLimit > 0 && dropPercent > dropLimit;
   const willAutoApply = autoApplyWanted && !sanityBlocked;
 
-  const stamp = snapshot.fetchedAt.toISOString().slice(0, 16).replace("T", " ");
-  const results: { branchId: number; branchName: string; locationId: string; countId: number | null; code: string | null; lines: number }[] = [];
+  const stamp = ubTimestampLabel(snapshot.fetchedAt);
+  const results: { branchId: number; branchName: string; locationId: string; countId: number | null; code: string | null; lines: number; onlineAutoApplyBlocked: boolean }[] = [];
   const problems: string[] = [];
+  // I2: a branch flagged countsTowardOnlineStock must never auto-apply a
+  // vendor snapshot -- see setBranchExternalId's own doc comment below for
+  // the failure this prevents (mapping refused going forward). Checked
+  // again here too, because a branch already mapped before this guard
+  // shipped, or toggled online AFTER being mapped, would otherwise still
+  // auto-apply.
+  const onlineBranchIds = new Set(
+    (await db.select({ id: branches.id }).from(branches).where(eq(branches.countsTowardOnlineStock, true))).map(row => row.id),
+  );
+  let branchAttempts = 0;
+  let branchFailures = 0;
   for (const [branchId, locationId] of Array.from(refs.byOurs)) {
     // What the vendor says this location holds, by our variant id.
     const theirs = new Map<number, number>();
@@ -334,7 +359,9 @@ export async function runPullSnapshot(provider: InventorySyncProvider, options: 
       .filter(variantId => (ours.get(variantId) ?? 0) !== theirs.get(variantId))
       .map(variantId => ({ variantId, sku: skuByVariant.get(variantId)!, countedQty: theirs.get(variantId)!, systemQty: ours.get(variantId) ?? 0 }));
     const [branchRow] = await db.select({ name: branches.name }).from(branches).where(eq(branches.id, branchId)).limit(1);
-    if (!lines.length) { results.push({ branchId, branchName: branchRow?.name ?? String(branchId), locationId, countId: null, code: null, lines: 0 }); continue; }
+    const onlineAutoApplyBlocked = onlineBranchIds.has(branchId);
+    if (!lines.length) { results.push({ branchId, branchName: branchRow?.name ?? String(branchId), locationId, countId: null, code: null, lines: 0, onlineAutoApplyBlocked }); continue; }
+    branchAttempts++;
     try {
       // 2026-09-23: хамгаалалт ажилласан (autoApplySkipped) үед `silent: true`.
       // Хамгаалалт нь одоо baseline-ыг хөлдөөдөг (доорх writeState) тул блок
@@ -342,9 +369,10 @@ export async function runPullSnapshot(provider: InventorySyncProvider, options: 
       // минут тутам ШИНЭ тооллого + "батлуулахаар ирлээ" push явж, өдөрт ~96
       // мэдэгдэл болно. Тооллого өөрөө үүсч, админ түүнийг батлах боломжтой
       // хэвээр — зөвхөн давтагдах мэдэгдэл дуугүй болно.
-      const count = await createSnapshotCount({ branchId, sourceLabel: `${locationId} · ${stamp}`, lines, silent: willAutoApply || (autoApplyWanted && sanityBlocked) });
-      results.push({ branchId, branchName: count.branchName, locationId, countId: count.id, code: count.code, lines: lines.length });
+      const count = await createSnapshotCount({ branchId, sourceLabel: `${locationId} · ${stamp}`, lines, silent: (willAutoApply && !onlineAutoApplyBlocked) || (autoApplyWanted && sanityBlocked) });
+      results.push({ branchId, branchName: count.branchName, locationId, countId: count.id, code: count.code, lines: lines.length, onlineAutoApplyBlocked });
     } catch (error) {
+      branchFailures++;
       problems.push(`${branchRow?.name ?? branchId}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -358,6 +386,17 @@ export async function runPullSnapshot(provider: InventorySyncProvider, options: 
   if (willAutoApply) {
     for (const result of results) {
       if (!result.countId) continue;
+      // I2: never auto-post a snapshot at a branch the site sells FROM
+      // online -- the vendor's figure is a re-count of the shelf as it
+      // stands right now, not a delta; auto-applying it every 15 minutes
+      // would revert every online sale rung up at that branch since the
+      // last pull (nothing pushes our sales back to the vendor yet, see
+      // this file's own header comment). Left as a normal count awaiting
+      // manual approval instead.
+      if (result.onlineAutoApplyBlocked) {
+        problems.push(`${result.branchName}: онлайн худалдаанд тооцогддог тул автоматаар батлагдсангүй — Бараа хүлээн авах → Тооллого дээр гараар шалгаад батална уу.`);
+        continue;
+      }
       try {
         const posted = await postCount(SYSTEM_INVENTORY_ACTOR, result.countId, { automatic: true });
         autoApplied.push({ branchId: result.branchId, countId: result.countId, adjustedLines: posted.adjustedLines });
@@ -385,8 +424,18 @@ export async function runPullSnapshot(provider: InventorySyncProvider, options: 
   // Өөрөөр хэлбэл "автоматаар бичсэнгүй, шалгаад батална уу" гэсэн амлалт
   // 15 минутын дараа худал болдог (өдрийн dedupeKey тул хоёр дахь
   // сэрэмжлүүлэг ч гарахгүй).
+  // I29: if every branch we actually attempted to snapshot this run threw
+  // (branchFailures === branchAttempts, and at least one was attempted),
+  // nothing real happened -- no count was created or updated anywhere. The
+  // baseline must stay exactly as it was (same reasoning as the sanity-drop
+  // freeze just above), not advance to this run's product count, or the
+  // NEXT run's real drop/recovery would be compared against a number that
+  // was never actually recorded successfully.
+  const allAttemptedBranchesFailed = branchAttempts > 0 && branchFailures === branchAttempts;
   await writeState("snapshot", {
-    cursor: JSON.stringify({ at: snapshot.fetchedAt.toISOString(), products: autoApplySkipped ? (previousSize ?? snapshot.products.length) : snapshot.products.length }),
+    cursor: allAttemptedBranchesFailed
+      ? (previousState?.cursor ?? null)
+      : JSON.stringify({ at: snapshot.fetchedAt.toISOString(), products: autoApplySkipped ? (previousSize ?? snapshot.products.length) : snapshot.products.length }),
     ok: !problems.length,
     error: problems.length ? problems.slice(0, 3).join("; ") : null,
   }, namespace);
@@ -437,11 +486,34 @@ export async function getInventorySyncStatus(options: SyncOptions = {}) {
   };
 }
 
-/** Sets (or clears, with an empty code) a branch's location code at the vendor. */
+/**
+ * Sets (or clears, with an empty code) a branch's location code at the
+ * vendor.
+ *
+ * 2026-09-27 (I2): a branch mapped here while ALSO flagged
+ * countsTowardOnlineStock gets its shelf re-counted from the vendor's
+ * snapshot every 15 minutes -- that snapshot is a re-count of what is on
+ * the shelf right now, not a delta, and nothing here pushes this site's own
+ * online sales back to the vendor (`runPushMovements`'s doc comment: Smart
+ * POS has no endpoint for it). So every online sale at that branch would be
+ * silently reverted the next time the snapshot lands, whether or not
+ * auto-apply is on for the count itself. Refused up front instead of
+ * relying only on runPullSnapshot's own per-branch auto-apply skip below,
+ * which protects the STOCK but would still leave a confusing "mapped but
+ * never actually auto-applies" branch sitting in the admin card.
+ */
 export async function setBranchExternalId(branchId: number, externalId: string | null, options: SyncOptions = {}) {
   const namespace = namespaceOf(options);
   const db = await requireDb();
   const code = externalId?.trim() || null;
+  if (code) {
+    const [branch] = await db.select({ name: branches.name, countsTowardOnlineStock: branches.countsTowardOnlineStock }).from(branches).where(eq(branches.id, branchId)).limit(1);
+    // 2026-09-27: хориглохгүй (үндсэн онлайн салбар `countsTowardOnlineStock`-ийг заавал
+    // асаалттай байлгадаг тул хориг нь автомат нөөцийг бүрмөсөн хаадаг байв). Оронд нь
+    // runPullSnapshot ийм салбарын snapshot-ыг АВТОМАТААР батлахгүй, гараар батлуулна —
+    // онлайн борлуулалт снапшотоор буцах эрсдэлийг Tom шийдэх хүртэл (docs/AUDIT-2026-09-27-final.md I2).
+    if (branch?.countsTowardOnlineStock) console.warn(`[inventory-sync] "${branch.name}" онлайн нөөцөд тооцогддог — snapshot гараар батлагдана.`);
+  }
   await db.transaction(async tx => {
     await tx.delete(externalRefs).where(and(eq(externalRefs.provider, namespace), eq(externalRefs.entityType, "branch"), eq(externalRefs.entityId, branchId)));
     if (code) {

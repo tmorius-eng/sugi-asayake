@@ -30,7 +30,10 @@ export default function ManualOrderForm({ onDone }: { onDone: () => void }) {
   const [district, setDistrict] = useState<UbDistrict | "">("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [pickupBranch, setPickupBranch] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"cash_on_delivery" | "bank_transfer" | "qpay" | "storepay" | "card">("cash_on_delivery");
+  // 2026-09-27 (A8): a manual order has no userId (server:
+  // admin.createManualOrder), so nobody could ever create the QPay invoice
+  // or StorePay loan for it -- it could never become paid through either.
+  const [paymentMethod, setPaymentMethod] = useState<"cash_on_delivery" | "bank_transfer" | "card">("cash_on_delivery");
   const [adminNote, setAdminNote] = useState("");
   const [lines, setLines] = useState<ComposerLine[]>([]);
   const create = trpc.admin.createManualOrder.useMutation({
@@ -58,7 +61,7 @@ export default function ManualOrderForm({ onDone }: { onDone: () => void }) {
         <label className="grid gap-1.5 text-xs font-bold">Имэйл (сонголтоор)<input value={customerEmail} onChange={event => setCustomerEmail(event.target.value)} inputMode="email" className={field} /></label>
         <label className="grid gap-1.5 text-xs font-bold">Суваг<select value={salesChannel} onChange={event => setSalesChannel(event.target.value as typeof salesChannel)} className={field}><option value="phone">Утсаар</option><option value="messenger">Messenger</option><option value="in_store">Дэлгүүрт (хүргэлттэй)</option></select></label>
         <label className="grid gap-1.5 text-xs font-bold">Хүргэлт<select value={deliveryMethod} onChange={event => setDeliveryMethod(event.target.value as typeof deliveryMethod)} className={field}><option value="ub_delivery">Улаанбаатар хүргэлт</option><option value="store_pickup">Салбараас авах</option></select></label>
-        <label className="grid gap-1.5 text-xs font-bold">Төлбөр<select value={paymentMethod} onChange={event => setPaymentMethod(event.target.value as typeof paymentMethod)} className={field}><option value="cash_on_delivery">Бэлэн (хүргэлтээр/салбарт)</option><option value="bank_transfer">Банкны шилжүүлэг</option><option value="qpay">QPay</option><option value="storepay">StorePay</option><option value="card">Карт</option></select></label>
+        <label className="grid gap-1.5 text-xs font-bold">Төлбөр<select value={paymentMethod} onChange={event => setPaymentMethod(event.target.value as typeof paymentMethod)} className={field}><option value="cash_on_delivery">Бэлэн (хүргэлтээр/салбарт)</option><option value="bank_transfer">Банкны шилжүүлэг</option><option value="card">Карт</option></select></label>
         {deliveryMethod === "ub_delivery" ? <>
           <label className="grid gap-1.5 text-xs font-bold">Дүүрэг<select value={district} onChange={event => setDistrict(event.target.value as UbDistrict | "")} className={field}><option value="">Сонгох</option>{ubDistricts.map(key => <option key={key} value={key}>{ubDistrictLabels[key]}</option>)}</select></label>
           <label className="grid gap-1.5 text-xs font-bold sm:col-span-2">Хаяг<input value={deliveryAddress} onChange={event => setDeliveryAddress(event.target.value)} placeholder="Хороо, байр, орц, тоот" className={field} /></label>

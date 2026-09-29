@@ -6,6 +6,7 @@ import { trpc } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
 import { formatVariantAttributes } from "@shared/catalog-filter";
 import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
+import { normaliseBarcode } from "@shared/barcode";
 
 // "Controls everything" admin overhaul (2026-09-08, Phase M): the POS
 // in-person-sale tool -- records a REAL order (paymentStatus "paid"
@@ -42,7 +43,11 @@ export default function AdminPosPanel() {
   const utils = trpc.useUtils();
 
   // Сагс/салбар өөрчлөгдвөл өөр борлуулалт — өөр idempotency түлхүүр.
-  const basketSignature = `${branchId ?? "none"}|${lineItems.map(item => `${item.variantId}x${item.quantity}`).join(",")}`;
+  // 2026-09-27 (F-pos): нэр/утас ЭНЭ гарын үсэгт ороогүй байсан тул ижил
+  // сагсанд зөвхөн харилцагчийн мэдээллийг засаад дарвал сервер хуучин
+  // (өмнөх нэртэй) борлуулалтыг буцааж, шинэ засвар бичигдээгүй "амжилттай"
+  // гэж харагддаг байв.
+  const basketSignature = `${branchId ?? "none"}|${lineItems.map(item => `${item.variantId}x${item.quantity}`).join(",")}|${customerName.trim()}|${customerPhone.trim()}`;
   const lastBasketSignatureRef = useRef(basketSignature);
   if (lastBasketSignatureRef.current !== basketSignature) {
     lastBasketSignatureRef.current = basketSignature;
@@ -73,7 +78,12 @@ export default function AdminPosPanel() {
     if (!branchId) { toast.error("Эхлээд салбараа сонгоно уу."); return; }
     try {
       const matches = await utils.admin.posSearchVariants.fetch({ branchId, search: code });
-      const variant = matches.find(row => row.sku === code);
+      // 2026-09-27 (F-pos): comparing the raw scanned code against row.sku
+      // verbatim missed anything the scanner/keyboard-wedge normalises
+      // differently (leading zeros, case, whitespace) -- normalise both
+      // sides the same way checkout/lookups do elsewhere.
+      const scanned = normaliseBarcode(code);
+      const variant = matches.find(row => normaliseBarcode(row.sku) === scanned);
       if (!variant) { toast.error("Энэ баркодтой бараа олдсонгүй.", { description: code }); return; }
       addItem(variant);
       // Stock is enforced for real by the server when the sale is recorded;
@@ -172,10 +182,16 @@ export default function AdminPosPanel() {
             {lineItems.map(item => (
               <div key={item.variantId} className="flex items-center gap-2 rounded-xl bg-white/10 p-2.5">
                 <div className="min-w-0 flex-1"><strong className="block truncate text-xs">{item.productName}</strong><span className="mt-0.5 block text-[10px] text-white/50">{formatMnt(item.priceMnt)}</span></div>
-                <button type="button" onClick={() => changeQuantity(item.variantId, -1)} className="grid size-7 shrink-0 place-items-center rounded-full bg-white/10 hover:bg-white/20" aria-label="Тоо хасах"><Minus size={11} /></button>
+                {/* 2026-09-27 (F-pos): editing the basket while the sale is
+                    in flight rotates saleRequestIdRef -- since that rotation
+                    only reacts to the basket AFTER this render, an edit made
+                    mid-submit could land between the request being built and
+                    the key changing, letting a second click send stale data
+                    under a fresh key. Simplest fix: disable editing while pending. */}
+                <button type="button" disabled={recordSale.isPending} onClick={() => changeQuantity(item.variantId, -1)} className="grid size-7 shrink-0 place-items-center rounded-full bg-white/10 hover:bg-white/20 disabled:opacity-40" aria-label="Тоо хасах"><Minus size={11} /></button>
                 <span className="w-5 shrink-0 text-center text-xs font-bold">{item.quantity}</span>
-                <button type="button" onClick={() => changeQuantity(item.variantId, 1)} className="grid size-7 shrink-0 place-items-center rounded-full bg-white/10 hover:bg-white/20" aria-label="Тоо нэмэх"><Plus size={11} /></button>
-                <button type="button" onClick={() => removeItem(item.variantId)} className="shrink-0 rounded-full p-1.5 text-white/60 hover:bg-white/10 hover:text-[#df1f3d]" aria-label="Хасах"><Trash2 size={13} /></button>
+                <button type="button" disabled={recordSale.isPending} onClick={() => changeQuantity(item.variantId, 1)} className="grid size-7 shrink-0 place-items-center rounded-full bg-white/10 hover:bg-white/20 disabled:opacity-40" aria-label="Тоо нэмэх"><Plus size={11} /></button>
+                <button type="button" disabled={recordSale.isPending} onClick={() => removeItem(item.variantId)} className="shrink-0 rounded-full p-1.5 text-white/60 hover:bg-white/10 hover:text-[#df1f3d] disabled:opacity-40" aria-label="Хасах"><Trash2 size={13} /></button>
               </div>
             ))}
           </div>

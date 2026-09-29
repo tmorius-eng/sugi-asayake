@@ -69,6 +69,12 @@ export async function upsertSearchSynonym(input: { id?: number; concept: string;
   // админы "+ синоним" 60 секундын турш ажиллаагүй мэт харагддаг байв
   // (`seedSearchDictionaries` аль хэдийн зөв дараалалтай).
   if (input.id) {
+    // 2026-09-27 (D17): renaming an existing concept ONTO another concept's
+    // name (e.g. merging two synonym rows by hand) hit the unique index and
+    // surfaced as a raw duplicate-key INTERNAL error. Check first and give
+    // an actionable Mongolian message instead.
+    const [collision] = await db.select({ id: searchSynonyms.id }).from(searchSynonyms).where(eq(searchSynonyms.concept, concept)).limit(1);
+    if (collision && collision.id !== input.id) throw new Error("Энэ ойлголт аль хэдийн бүртгэгдсэн байна.");
     await db.update(searchSynonyms).set({ concept, terms: terms.join(", "), isActive: input.isActive ?? true, updatedAt: new Date() }).where(eq(searchSynonyms.id, input.id));
     invalidateSearchDictionaries();
     const [row] = await db.select().from(searchSynonyms).where(eq(searchSynonyms.id, input.id)).limit(1);
@@ -113,6 +119,13 @@ export async function createBrandAlias(input: { canonicalBrand: string; alias: s
   const alias = input.alias.trim();
   if (!canonical || !alias) throw new Error("Брэнд ба alias хоёулаа хэрэгтэй.");
   if (canonical.toLowerCase() === alias.toLowerCase()) throw new Error("Alias нь брэндийн өөрийнх нь нэртэй ижил байж болохгүй.");
+  // 2026-09-27 (D18): `onDuplicateKeyUpdate` дор хамгаалалтгүй байсан тул өөр
+  // брэндэд аль хэдийн бүртгэгдсэн alias-ыг чимээгүй дарж, эзэмшигчийг
+  // сольдог байв ("SSELECT" → бусад брэндэд ямар ч анхааруулгагүй шилждэг).
+  const [existing] = await db.select({ id: brandAliases.id, canonicalBrand: brandAliases.canonicalBrand }).from(brandAliases).where(eq(brandAliases.alias, alias)).limit(1);
+  if (existing && existing.canonicalBrand !== canonical) {
+    throw new Error(`Энэ alias аль хэдийн "${existing.canonicalBrand}" брэндэд бүртгэгдсэн байна.`);
+  }
   const inserted = await db.insert(brandAliases).values({ canonicalBrand: canonical, alias }).onDuplicateKeyUpdate({ set: { canonicalBrand: canonical } });
   invalidateSearchDictionaries();
   const [row] = await db.select().from(brandAliases).where(eq(brandAliases.alias, alias)).limit(1);

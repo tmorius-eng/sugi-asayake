@@ -27,7 +27,7 @@ import { createContext, signSessionToken } from "./context";
 import { getSessionCookieOptions } from "./cookies";
 import { hashPassword } from "./password";
 import { COOKIE_NAME } from "../../shared/const";
-import { createUserFromFacebook, findUserByFacebookId, linkFacebookIdToUser, touchUserLastSignedIn } from "../db";
+import { createUserFromFacebook, findUserByFacebookId, linkFacebookIdToUser, recordLoginAttempt, touchUserLastSignedIn } from "../db";
 import { mergeGuestCartAndClearCookie } from "../routers";
 
 const GRAPH = "https://graph.facebook.com/v26.0";
@@ -132,6 +132,8 @@ export async function finishFacebookLogin(req: Request, res: Response) {
     if (user.suspendedAt) return fail("suspended");
 
     await touchUserLastSignedIn(user.id);
+    // 2026-09-27: Facebook-оор нэвтэрсэн нь нэвтрэлтийн түүхэнд ордоггүй байв.
+    await recordLoginAttempt({ email: `facebook:${me.id}`, userId: user.id, success: true, reason: "facebook", ipAddress: req.ip || null });
     const session = await signSessionToken(user.id, user.sessionVersion);
     res.cookie(COOKIE_NAME, session, getSessionCookieOptions(req));
     await mergeGuestCartAndClearCookie({ ...ctx, user: null }, user.id);

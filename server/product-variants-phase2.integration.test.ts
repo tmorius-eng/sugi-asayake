@@ -83,7 +83,7 @@ describeWithDatabase("product variants (phase 2) integration", () => {
   it("enforces stock per-variant, not pooled across a product's variants", async () => {
     // The default (170ml) variant only has 1 unit in stock; the sibling
     // 400ml variant having 5 must not let this succeed.
-    await expect(addCartItem({ owner: { userId }, variantId: defaultVariantId, quantity: 5 })).rejects.toThrow("not available in stock");
+    await expect(addCartItem({ owner: { userId }, variantId: defaultVariantId, quantity: 5 })).rejects.toThrow("нөөцөд хүрэлцэхгүй");
   });
 
   it("checkout decrements only the purchased variant's stock and records its real variantId + sku", async () => {

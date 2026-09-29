@@ -344,7 +344,13 @@ export default function AdminPostsPanel({ preview = false }: { preview?: boolean
           </label>
           <div className="mt-4 grid gap-2">
             {alreadyPublished ? (
-              <button type="button" disabled={savingPost} onClick={() => savePost(true)} className="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--a-btn-dark)] px-5 py-3 text-xs font-bold text-white disabled:opacity-60">{savingPost && <LoaderCircle className="animate-spin" size={14} />}Шинэчлэх</button>
+              <>
+                <button type="button" disabled={savingPost} onClick={() => savePost(true)} className="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--a-btn-dark)] px-5 py-3 text-xs font-bold text-white disabled:opacity-60">{savingPost && <LoaderCircle className="animate-spin" size={14} />}Шинэчлэх</button>
+                {/* 2026-09-27 (F-posts): once published, there was no way
+                    back to draft short of the trash -- a post pulled for
+                    revision had to stay live while it was being reworked. */}
+                <button type="button" disabled={savingPost} onClick={() => savePost(false)} className="inline-flex items-center justify-center gap-2 rounded-full border border-black/15 px-5 py-3 text-xs font-bold text-[var(--a-text-soft)] disabled:opacity-60">Ноорог болгох</button>
+              </>
             ) : (
               <>
                 <button type="button" disabled={savingPost} onClick={() => savePost(false)} className="inline-flex items-center justify-center gap-2 rounded-full border border-black/15 px-5 py-3 text-xs font-bold text-[var(--a-text-soft)] disabled:opacity-60">Ноорог хадгалах</button>

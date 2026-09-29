@@ -45,6 +45,17 @@ export type SmartTransport = (request: SmartTransportRequest) => Promise<SmartTr
 
 // The product list is the whole catalogue in one response; give it room.
 const TIMEOUT_MS = 30_000;
+// 2026-09-27 (I24): node:http(s)'s `timeout` option/event is IDLE-only -- it
+// resets every time a byte arrives, so a server trickling data slowly (or a
+// misbehaving proxy) never trips it even though the request never finishes.
+// This is a hard wall-clock cap on the WHOLE request regardless of traffic.
+const OVERALL_DEADLINE_MS = 60_000;
+// 2026-09-27 (I24): the catalogue endpoint has "no paging, no filter" by
+// design (this file's own header comment) -- an unbounded response buffer
+// is exactly the shape of thing that turns a vendor-side bug or a wrong
+// URL (proxied through something that streams back an unrelated huge file)
+// into a server OOM.
+const MAX_RESPONSE_BYTES = 50 * 1024 * 1024;
 // Refresh a token this many seconds before the vendor says it expires.
 const TOKEN_MARGIN_SECONDS = 60;
 const MAX_ERROR_BODY = 200;
@@ -62,14 +73,37 @@ export const nodeTransport: SmartTransport = request => new Promise((resolve, re
   const send = url.protocol === "http:" ? httpRequest : httpsRequest;
   const headers = { ...request.headers };
   if (request.body !== undefined) headers["Content-Length"] = String(Buffer.byteLength(request.body));
+  // 2026-09-27 (I24): guards settle exactly once -- the deadline timer,
+  // the response's own 'error', and the request's 'error'/'timeout' can
+  // all otherwise race and call resolve/reject twice (Node just ignores
+  // the second call, but req.destroy() would also run twice).
+  let settled = false;
+  const settle = (fn: () => void) => { if (settled) return; settled = true; clearTimeout(deadline); fn(); };
   const req = send(url, { method: request.method, headers, timeout: TIMEOUT_MS }, response => {
     const chunks: Buffer[] = [];
-    response.on("data", chunk => chunks.push(chunk as Buffer));
-    response.on("end", () => resolve({ status: response.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8") }));
-    response.on("error", reject);
+    let received = 0;
+    response.on("data", (chunk: Buffer) => {
+      received += chunk.length;
+      if (received > MAX_RESPONSE_BYTES) {
+        settle(() => reject(new SmartSoftwareError(`хариу ${MAX_RESPONSE_BYTES} байтаас хэтэрсэн тул зогсоов.`)));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    response.on("end", () => settle(() => resolve({ status: response.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8") })));
+    response.on("error", error => settle(() => reject(error)));
   });
+  // Overall wall-clock deadline -- the `timeout` option/socket event above
+  // is idle-only (resets on every byte received), so it never bounds a
+  // request that keeps trickling data slowly forever.
+  const deadline = setTimeout(() => {
+    settle(() => reject(new SmartSoftwareError(`${OVERALL_DEADLINE_MS}мс дотор дуусаагүй тул зогсоов.`)));
+    req.destroy();
+  }, OVERALL_DEADLINE_MS);
+  deadline.unref?.();
   req.on("timeout", () => req.destroy(new Error(`timed out after ${TIMEOUT_MS}ms`)));
-  req.on("error", reject);
+  req.on("error", error => settle(() => reject(error)));
   if (request.body !== undefined) req.write(request.body);
   req.end();
 });
@@ -177,7 +211,13 @@ export class SmartSoftwareProvider implements InventorySyncProvider {
     if (response.status < 200 || response.status >= 300) throw new SmartSoftwareError(`Token авахад ${response.status} хариу ирлээ: ${response.body.slice(0, MAX_ERROR_BODY)}`.trim(), response.status);
     const parsed = parseJson(response.body, "Token") as { access_token?: unknown; expires_in?: unknown };
     if (typeof parsed.access_token !== "string" || !parsed.access_token) throw new SmartSoftwareError("Token-ийн хариунд access_token алга.");
-    const expiresIn = typeof parsed.expires_in === "number" && parsed.expires_in > 0 ? parsed.expires_in : 3600;
+    // 2026-09-27 (I14): `expires_in` арrives as a STRING on some OAuth2
+    // servers (Smart Software's own being one observed case) -- the old
+    // `typeof === "number"` check silently fell back to the 3600s default
+    // for every token, which is wrong whenever the vendor's real TTL differs.
+    const expiresInRaw = parsed.expires_in;
+    const expiresInParsed = typeof expiresInRaw === "number" ? expiresInRaw : typeof expiresInRaw === "string" ? Number(expiresInRaw) : NaN;
+    const expiresIn = Number.isFinite(expiresInParsed) && expiresInParsed > 0 ? expiresInParsed : 3600;
     tokenCache.set(key, { token: parsed.access_token, expiresAt: this.now() + Math.max(1, expiresIn - TOKEN_MARGIN_SECONDS) * 1000 });
     return parsed.access_token;
   }
@@ -193,8 +233,20 @@ export class SmartSoftwareProvider implements InventorySyncProvider {
   private async getJson(baseUrl: string, path: string, what: string): Promise<unknown> {
     const token = await this.token(baseUrl);
     const response = await this.send({ method: "GET", url: `${baseUrl}${path}`, headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } });
-    // A rejected token is never reused: the next call fetches a fresh one.
-    if (response.status === 401) tokenCache.delete(`${baseUrl}|${this.username}`);
+    if (response.status === 401) {
+      // 2026-09-27 (I14): the cached token was evicted here before, but the
+      // REQUEST STILL FAILED with the stale token's 401 -- the caller (e.g.
+      // runInventorySync's whole snapshot pull) had to wait for its own next
+      // retry (15 minutes later) even though a fresh token would have
+      // succeeded immediately. A cached token can go stale between our own
+      // margin-based refresh checks (the vendor revokes/rotates it, clock
+      // skew), so retry once, right away, with a newly minted token.
+      tokenCache.delete(`${baseUrl}|${this.username}`);
+      const retryToken = await this.token(baseUrl);
+      const retryResponse = await this.send({ method: "GET", url: `${baseUrl}${path}`, headers: { Authorization: `Bearer ${retryToken}`, Accept: "application/json" } });
+      if (retryResponse.status < 200 || retryResponse.status >= 300) throw new SmartSoftwareError(`${what}: ${retryResponse.status} хариу ирлээ: ${retryResponse.body.slice(0, MAX_ERROR_BODY)}`.trim(), retryResponse.status);
+      return parseJson(retryResponse.body, what);
+    }
     if (response.status < 200 || response.status >= 300) throw new SmartSoftwareError(`${what}: ${response.status} хариу ирлээ: ${response.body.slice(0, MAX_ERROR_BODY)}`.trim(), response.status);
     return parseJson(response.body, what);
   }

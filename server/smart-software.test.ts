@@ -103,7 +103,11 @@ describe("SmartSoftwareProvider", () => {
     await expect(provider.pullStockSnapshot()).rejects.toThrow(/JSON биш/);
   });
 
-  it("drops a token the vendor rejects, so the next call fetches a fresh one", async () => {
+  // 2026-09-27 (I14): a 401 used to just drop the cached token and fail the
+  // CURRENT call outright -- the caller (e.g. the 15-minute snapshot job)
+  // had to wait for its own next tick even though a fresh token would have
+  // worked immediately. Now the same request retries once, right away.
+  it("retries once with a fresh token when the vendor rejects the cached one", async () => {
     let unauthorized = true;
     const { calls, transport } = stub(request => {
       if (request.url.endsWith("/oauth/token")) return { status: 200, body: tokenBody };
@@ -111,9 +115,16 @@ describe("SmartSoftwareProvider", () => {
       return { status: 200, body: "[]" };
     });
     const provider = new SmartSoftwareProvider(credentials, transport);
-    await expect(provider.listLocations()).rejects.toThrow(/401/);
     await expect(provider.listLocations()).resolves.toEqual([]);
+    // Token endpoint hit twice: once for the initial (stale) token, once
+    // more after the 401 evicted it and the retry needed a fresh one.
     expect(calls.filter(call => call.url.endsWith("/oauth/token"))).toHaveLength(2);
+  });
+
+  it("still fails if the retried request is rejected too", async () => {
+    const { transport } = stub(request => request.url.endsWith("/oauth/token") ? { status: 200, body: tokenBody } : { status: 401, body: "expired" });
+    const provider = new SmartSoftwareProvider(credentials, transport);
+    await expect(provider.listLocations()).rejects.toThrow(/401/);
   });
 
   it("uses the configured hosts, trimming a trailing slash", async () => {

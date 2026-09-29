@@ -117,6 +117,10 @@ export default function ReviewThread({ productId, reviews, canReply }: { product
       {reviews.map(review => {
         const hasReplies = review.replies.length > 0;
         const open = replyingTo === review.id;
+        // 2026-09-27: like товч pending үед идэвхтэй хэвээр байсан тул давхар
+        // товшилт хоёр дахь mutate дуудалт явуулж, сервер тоглож (toggle)
+        // байгаа тул тоо/төлөв буруу гарах эрсдэлтэй байв.
+        const likePending = like.isPending && like.variables?.reviewId === review.id;
         return (
           <li key={review.id} className={`review-item${hasReplies || open ? " review-item--has-replies" : ""}`}>
             <div className="review-row">
@@ -124,11 +128,14 @@ export default function ReviewThread({ productId, reviews, canReply }: { product
               <div className="review-main">
                 <div className="review-bubble">
                   <div className="review-bubble-head">
-                    <strong className="review-author">{review.reviewerName || "Худалдан авагч"}</strong>
+                    {/* translate="no" (2026-09-27): худалдан авагчийн нэр,
+                        сэтгэгдлийн эх бичвэр -- TranslateSurface-ийн дурын
+                        хэл рүү будлиулбал үг зохисгүй орчуулагдах эрсдэлтэй. */}
+                    <strong className="review-author" translate="no">{review.reviewerName || "Худалдан авагч"}</strong>
                     {review.reviewerIsStaff && <StaffBadge />}
                     <Stars value={review.rating} />
                   </div>
-                  {review.comment ? <p className="review-text">{review.comment}</p> : <p className="review-text review-text--muted">Үнэлгээ өгсөн, сэтгэгдэл бичээгүй.</p>}
+                  {review.comment ? <p className="review-text" translate="no">{review.comment}</p> : <p className="review-text review-text--muted">Үнэлгээ өгсөн, сэтгэгдэл бичээгүй.</p>}
                   {review.imageUrl ? (
                     <button type="button" className="review-photo" onClick={() => setPhoto(review.imageUrl ?? null)} aria-label={`${review.reviewerName || "Худалдан авагч"}-ийн зургийг томоор харах`}>
                       <img src={gridVariantUrl(review.imageUrl) ?? review.imageUrl} alt="" loading="lazy" />
@@ -138,6 +145,7 @@ export default function ReviewThread({ productId, reviews, canReply }: { product
                 <div className="review-actions">
                   <button
                     type="button"
+                    disabled={likePending}
                     className={`review-action${review.likedByMe ? " is-active" : ""}`}
                     onClick={() => (isAuthenticated ? like.mutate({ reviewId: review.id }) : requireLogin())}
                     /* 2026-09-23: `aria-label` хассан. Харагдах текст нь
@@ -171,10 +179,10 @@ export default function ReviewThread({ productId, reviews, canReply }: { product
                       <div className="review-main">
                         <div className="review-bubble">
                           <div className="review-bubble-head">
-                            <strong className="review-author">{item.authorName || "Хэрэглэгч"}</strong>
+                            <strong className="review-author" translate="no">{item.authorName || "Хэрэглэгч"}</strong>
                             {item.authorIsStaff && <StaffBadge />}
                           </div>
-                          <p className="review-text">{item.body}</p>
+                          <p className="review-text" translate="no">{item.body}</p>
                         </div>
                         <div className="review-actions">
                           <time className="review-time" dateTime={new Date(item.createdAt).toISOString()} title={new Date(item.createdAt).toLocaleString("mn-MN")}>{relativeTime(item.createdAt)}</time>
@@ -196,6 +204,7 @@ export default function ReviewThread({ productId, reviews, canReply }: { product
                       <span className="review-avatar review-avatar--initials" style={{ width: 32, height: 32 }} aria-hidden="true">Та</span>
                       <div className="review-main">
                         <textarea
+                          translate="no"
                           value={draft}
                           onChange={event => setDraft(event.target.value)}
                           maxLength={2000}

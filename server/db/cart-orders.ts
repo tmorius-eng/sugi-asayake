@@ -18,7 +18,9 @@ import { getStoreSettingNumber } from "./ops";
 import { getApplicableRoutineDiscount } from "./routines-promotions";
 import { discountRedemptionKey, validateDiscountCode } from "./discounts";
 import { getApplicableLoyaltyDiscount } from "./customers";
-import { IssuedGiftCard, issueGiftCardsForPaidOrder } from "./gift-cards";
+import { forgetSessionUser } from "./users";
+import { priceLinesForOrder, withLiveCampaign } from "./price-campaigns";
+import { IssuedGiftCard, announceIssuedGiftCards, issueGiftCardsForPaidOrder } from "./gift-cards";
 
 /**
  * Identifies who a cart (or an in-progress checkout) belongs to: either a
@@ -50,7 +52,9 @@ export async function getActiveCartForOwner(owner: CartOwner) {
     .select({ id: carts.id, status: carts.status, updatedAt: carts.updatedAt })
     .from(carts)
     .where(and(cartOwnerCondition(owner), eq(carts.status, "active")))
-    .orderBy(desc(carts.updatedAt))
+    // 2026-09-27: `id` тэнцвэр — getOrCreateActiveCart ЯГ ижил эрэмбээр сонгоно
+    // (секундын нарийвчлалтай `updatedAt` тэнцэхэд хоёр зам өөр сагс уншихгүй).
+    .orderBy(desc(carts.updatedAt), desc(carts.id))
     .limit(1);
 
   if (!cart[0]) return null;
@@ -80,7 +84,10 @@ export async function getActiveCartForOwner(owner: CartOwner) {
     .innerJoin(products, eq(productVariants.productId, products.id))
     .where(eq(cartItems.cartId, cart[0].id));
 
-  return { ...cart[0], items };
+  // 2026-09-29: нийтийн хямдрал — сагс, checkout-ийн урьдчилсан тооцоо, захиалга
+  // гурвуулаа ЭНЭ үнийг хэрэглэнэ. `listPriceMnt` = хямдралын өмнөх үнэ (тайлан).
+  const priced = await priceLinesForOrder(items);
+  return { ...cart[0], items: priced.lines, priceCampaignId: priced.campaignId };
 }
 
 async function getOrCreateActiveCart(owner: CartOwner) {
@@ -89,8 +96,18 @@ async function getOrCreateActiveCart(owner: CartOwner) {
   const active = await getActiveCartForOwner(owner);
   if (active) return active;
   const inserted = await db.insert(carts).values({ userId: owner.userId ?? null, guestToken: owner.guestToken ?? null, status: "active" });
-  const created = await db.select({ id: carts.id, status: carts.status, updatedAt: carts.updatedAt }).from(carts).where(eq(carts.id, Number(inserted[0].insertId))).limit(1);
-  if (!created[0]) throw new Error("Unable to create an active cart.");
+  const createdId = Number(inserted[0].insertId);
+  // 2026-09-27: хоёр таб зэрэг "сагсанд нэмэх" дарвал хоёулаа "сагс байхгүй" гэж
+  // уншаад ХОЁР идэвхтэй сагс үүсгэдэг (unique индекс байхгүй) — дараа нь нэгнийх
+  // нь мөрүүд UI/checkout-оос алга болдог байв. Хамгийн ЭРТНИЙ идэвхтэйг үлдээж,
+  // өөрийн шинээр үүсгэсэн (хоосон) давхарыг устгана — аль хүсэлт түрүүлсэн ч
+  // хоёулаа ижил сагсан дээр тогтоно.
+  const actives = await db.select({ id: carts.id }).from(carts)
+    .where(and(cartOwnerCondition(owner), eq(carts.status, "active"))).orderBy(asc(carts.id));
+  const keepId = actives[0]?.id ?? createdId;
+  if (keepId !== createdId) await db.delete(carts).where(and(eq(carts.id, createdId), eq(carts.status, "active")));
+  const created = await db.select({ id: carts.id, status: carts.status, updatedAt: carts.updatedAt }).from(carts).where(eq(carts.id, keepId)).limit(1);
+  if (!created[0]) throw new Error("Сагс үүсгэж чадсангүй. Дахин оролдоно уу.");
   return { ...created[0], items: [] };
 }
 
@@ -112,7 +129,7 @@ export async function addCartItem(input: { owner: CartOwner; quantity: number; p
   const variantRow = input.variantId !== undefined
     ? await db.select(variantSelect).from(productVariants).innerJoin(products, eq(productVariants.productId, products.id)).where(eq(productVariants.id, input.variantId)).limit(1)
     : await db.select(variantSelect).from(productVariants).innerJoin(products, eq(productVariants.productId, products.id)).where(and(eq(productVariants.productId, input.productId!), eq(productVariants.isDefault, true))).limit(1);
-  if (!variantRow[0]?.isPublished) throw new Error("This product is not currently available for ordering.");
+  if (!variantRow[0]?.isPublished) throw new Error("Энэ бараа одоогоор захиалах боломжгүй байна.");
   const variantId = variantRow[0].id;
 
   const cart = await getOrCreateActiveCart(input.owner);
@@ -127,7 +144,7 @@ export async function addCartItem(input: { owner: CartOwner; quantity: number; p
     await tx.select({ id: carts.id }).from(carts).where(eq(carts.id, cart.id)).for("update");
     const existing = await tx.select().from(cartItems).where(and(eq(cartItems.cartId, cart.id), eq(cartItems.variantId, variantId))).limit(1);
     const quantity = (existing[0]?.quantity ?? 0) + input.quantity;
-    if (quantity > variantRow[0].stockQuantity) throw new Error("The requested quantity is not available in stock.");
+    if (quantity > variantRow[0].stockQuantity) throw new Error("Хүссэн тоо ширхэг нөөцөд хүрэлцэхгүй байна.");
 
     if (existing[0]) {
       await tx.update(cartItems).set({ quantity, updatedAt: new Date() }).where(eq(cartItems.id, existing[0].id));
@@ -148,11 +165,11 @@ export async function updateCartItemQuantity(input: { owner: CartOwner; itemId: 
     .innerJoin(productVariants, eq(cartItems.variantId, productVariants.id))
     .where(and(eq(cartItems.id, input.itemId), cartOwnerCondition(input.owner), eq(carts.status, "active")))
     .limit(1);
-  if (!row[0]) throw new Error("Cart item not found.");
+  if (!row[0]) throw new Error("Сагсны мөр олдсонгүй.");
   if (input.quantity === 0) {
     await db.delete(cartItems).where(eq(cartItems.id, row[0].itemId));
   } else {
-    if (input.quantity > row[0].stockQuantity) throw new Error("The requested quantity is not available in stock.");
+    if (input.quantity > row[0].stockQuantity) throw new Error("Хүссэн тоо ширхэг нөөцөд хүрэлцэхгүй байна.");
     await db.update(cartItems).set({ quantity: input.quantity, updatedAt: new Date() }).where(eq(cartItems.id, row[0].itemId));
   }
   return getActiveCartForOwner(input.owner);
@@ -227,6 +244,8 @@ export async function findExistingOrderForClientRequest(clientRequestId: string,
 
 export async function createOrderFromActiveCart(input: {
   owner: CartOwner;
+  /** 2026-09-29: клиентийн харуулсан нийт дүн — зөрвөл (хямдрал яг тэр мөчид дууссан г.м.) захиалга үүсгэхгүй. */
+  expectedTotalMnt?: number;
   customerName: string;
   customerPhone: string;
   customerEmail?: string | null;
@@ -260,7 +279,7 @@ export async function createOrderFromActiveCart(input: {
     if (replay) return replay;
   }
   const cart = await getActiveCartForOwner(input.owner);
-  if (!cart?.items.length) throw new Error("Your cart is empty.");
+  if (!cart?.items.length) throw new Error("Сагс хоосон байна.");
   // Gift cards sold at checkout (2026-09-14, shared/gift-cards.ts): digital
   // lines have no shelf, a basket of only gift cards has no delivery and
   // no pickup branch, and no percentage discount ever applies to them.
@@ -289,7 +308,7 @@ export async function createOrderFromActiveCart(input: {
     // Pickup is only ever at a STORE (2026-09-11) -- a warehouse is not a
     // place a shopper can walk into, even if someone posts its name.
     const matchedBranch = input.pickupBranch ? activeBranchesForOrder.find(branch => branch.name === input.pickupBranch && branch.kind === "store") : undefined;
-    if (!matchedBranch) throw new Error("Select a valid SUGI branch for store pickup.");
+    if (!matchedBranch) throw new Error("Авах салбараа зөв сонгоно уу.");
     if (matchedBranch.countsTowardOnlineStock) {
       fulfillingBranchId = matchedBranch.id;
     } else {
@@ -297,11 +316,11 @@ export async function createOrderFromActiveCart(input: {
       // through Smart POS, not here), so the goods come from the warehouse
       // and are brought to the store; the order still records the store the
       // customer picks up from in pickupBranch.
-      if (!fulfillmentBranch) throw new Error("No fulfilment branch is configured. Please contact support.");
+      if (!fulfillmentBranch) throw new Error("Захиалга биелүүлэх үндсэн салбар тохируулагдаагүй байна. Дэлгүүртэй холбогдоно уу.");
       fulfillingBranchId = fulfillmentBranch.id;
     }
   } else {
-    if (!fulfillmentBranch) throw new Error("No fulfilment branch is configured. Please contact support.");
+    if (!fulfillmentBranch) throw new Error("Захиалга биелүүлэх үндсэн салбар тохируулагдаагүй байна. Дэлгүүртэй холбогдоно уу.");
     fulfillingBranchId = fulfillmentBranch.id;
   }
 
@@ -357,6 +376,16 @@ export async function createOrderFromActiveCart(input: {
     storeCreditAppliedMnt = Math.max(0, Math.min(input.applyStoreCreditMnt, creditRow?.storeCreditMnt ?? 0, payableBeforeCreditMnt));
   }
   let orderId = 0;
+  // 2026-09-27: дэлгүүрийн зээл (эсвэл 100% купон) бүх дүнг нөхсөн бол цуглуулах
+  // мөнгө байхгүй — захиалга шууд төлөгдсөн. Өмнө нь QPay/StorePay сонгосон
+  // 0₮-ийн захиалга 0₮-ийн нэхэмжлэл рүү явж (провайдер татгалзана) мөнхөд
+  // `unpaid` үлддэг, зээл нь аль хэдийн хасагдсан, бэлгийн карт гардаггүй байв.
+  const orderTotalMnt = payableBeforeCreditMnt - storeCreditAppliedMnt;
+  if (input.expectedTotalMnt !== undefined && orderTotalMnt > input.expectedTotalMnt) {
+    throw new Error(`Үнэ шинэчлэгдлээ: нийт дүн одоо ${orderTotalMnt.toLocaleString("en-US")}₮. Сагсаа шалгаад дахин батална уу.`);
+  }
+  const settledAtCheckout = orderTotalMnt === 0;
+  let issuedGiftCards: IssuedGiftCard[] = [];
   // The whole checkout transaction, parameterised by the order number so it
   // can be re-run with a fresh one on the (rare) UNIQUE collision -- see
   // generateOrderNumber / isDuplicateOrderNumberError. A failed attempt has
@@ -419,7 +448,9 @@ export async function createOrderFromActiveCart(input: {
       loyaltyDiscountMnt,
       appliedLoyaltyTierName: loyaltyDiscount?.tierName ?? null,
       storeCreditAppliedMnt,
-      totalMnt: payableBeforeCreditMnt - storeCreditAppliedMnt,
+      ...(cart.priceCampaignId ? { priceCampaignId: cart.priceCampaignId } : {}),
+      totalMnt: orderTotalMnt,
+      ...(settledAtCheckout ? { paymentStatus: "paid" as const, status: "confirmed" as const } : {}),
     });
     orderId = Number(inserted[0].insertId);
     // Нэг хэрэглэгчийн купон хязгаарын АТОМИК хамгаалалт (2026-09-16, migration
@@ -457,6 +488,7 @@ export async function createOrderFromActiveCart(input: {
       productName: item.name,
       sku: item.sku,
       unitPriceMnt: item.priceMnt,
+      listPriceMnt: item.listPriceMnt,
       quantity: item.quantity,
     })));
     // Stock ledger (2026-09-11): the decrements above, now that the order id
@@ -502,6 +534,12 @@ export async function createOrderFromActiveCart(input: {
     if (Number(converted[0].affectedRows ?? 0) !== 1) {
       throw new Error("Энэ сагс өөр захиалгаар аль хэдийн баталгаажсан байна. Захиалгын түүхээ шалгана уу.");
     }
+    // Төлөгдсөн гарах гурван цэгтэй адил (CODEBASE §3.5): "paid" бичсэн зам бүр картаа гаргана.
+    if (settledAtCheckout) {
+      issuedGiftCards = await issueGiftCardsForPaidOrder(tx, orderId);
+      // Агуулах "төлбөр орсон" push-ийг хүлээж баглана — 0₮ захиалгад callback ирэхгүй тул энд.
+      await enqueueNotification(tx, "order.paid", { orderNumber, totalMnt: 0, paymentMethod: "store_credit" }, { dedupeKey: `order:${orderId}` });
+    }
   });
   const nextOrderNumber = options?.generateOrderNumber ?? generateOrderNumber;
   for (let attempt = 1; ; attempt++) {
@@ -520,6 +558,9 @@ export async function createOrderFromActiveCart(input: {
     }
   }
 
+  if (settledAtCheckout) announceIssuedGiftCards(orderId, issuedGiftCards);
+  // 2026-09-27: зээлийн үлдэгдэл хасагдсан — сешний 5 с кэшийг commit-ын дараа цэвэрлэнэ.
+  if (storeCreditAppliedMnt > 0 && input.owner.userId) forgetSessionUser(input.owner.userId);
   const order = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
   // The cart's items are already in memory (loaded above, before the stock
   // decrement) — reuse them here instead of a redundant order_items query,
@@ -580,7 +621,7 @@ export async function recordInStoreSale(input: InStoreSaleInput) {
   // Real, current price/name/sku -- never trusts a client-supplied amount.
   const variantIds = input.items.map(item => item.variantId);
   const variantRows = await db.select({
-    id: productVariants.id, priceMnt: productVariants.priceMnt, sku: productVariants.sku,
+    id: productVariants.id, priceMnt: productVariants.priceMnt, compareAtPriceMnt: productVariants.compareAtPriceMnt, sku: productVariants.sku,
     productId: productVariants.productId, productName: products.name,
     // 2026-09-23: `kind`. POS-ийн зарах зам нь бэлгийн картын мөрөөс ч
     // тавиурын нөөцийг хасаж, `sale_pos` дэвтрийн мөр бичдэг байсан —
@@ -590,7 +631,9 @@ export async function recordInStoreSale(input: InStoreSaleInput) {
     kind: products.kind,
   }).from(productVariants).innerJoin(products, eq(products.id, productVariants.productId))
     .where(inArray(productVariants.id, variantIds));
-  const variantsById = new Map(variantRows.map(row => [row.id, row]));
+  // 2026-09-29: нийтийн хямдрал касст ч хэрэглэгдэнэ (Tom-ийн шийдвэр).
+  const posPriced = await priceLinesForOrder(variantRows);
+  const variantsById = new Map(posPriced.lines.map(row => [row.id, row]));
   for (const item of input.items) {
     if (!variantsById.has(item.variantId)) throw new Error("One of the selected products no longer exists.");
   }
@@ -629,6 +672,11 @@ export async function recordInStoreSale(input: InStoreSaleInput) {
       customerPhone: input.customerPhone?.trim() || "-",
       subtotalMnt,
       totalMnt: subtotalMnt,
+      ...(posPriced.campaignId ? { priceCampaignId: posPriced.campaignId } : {}),
+      // 2026-09-27: кассын борлуулалт шууд "дууссан" — буцаалтын хугацаа, сэтгэгдэл
+      // хүсэх ажил `completedAt`-ийг хардаг (0094); байхгүй бол `updatedAt` руу унаж
+      // дараагийн UPDATE бүрт хугацаа шилждэг байв.
+      completedAt: new Date(),
     });
     orderId = Number(inserted[0].insertId);
     await tx.insert(orderItems).values(input.items.map(item => {
@@ -636,7 +684,7 @@ export async function recordInStoreSale(input: InStoreSaleInput) {
       return {
         orderId, productId: variant.productId, variantId: item.variantId,
         productName: variant.productName, sku: variant.sku,
-        unitPriceMnt: variant.priceMnt, quantity: item.quantity,
+        unitPriceMnt: variant.priceMnt, listPriceMnt: variant.listPriceMnt, quantity: item.quantity,
       };
     }));
     for (const item of trackedItems) {
@@ -682,12 +730,14 @@ export async function searchVariantsForBranch(branchId: number, search: string) 
   const trimmed = search.trim();
   // 2026-09-23: `%`/`_` нь LIKE-ийн орлуулагч тул хайлтын үгнээс салгана.
   const term = `%${escapeLike(trimmed)}%`;
-  return db.select({
+  const rows = await db.select({
     variantId: productVariants.id,
     productId: productVariants.productId,
     productName: products.name,
     sku: productVariants.sku,
     priceMnt: productVariants.priceMnt,
+    compareAtPriceMnt: productVariants.compareAtPriceMnt,
+    kind: products.kind,
     attributesJson: productVariants.attributesJson,
     stockAtBranch: sql<number>`COALESCE(${branchStock.stockQuantity}, 0)`,
   }).from(productVariants)
@@ -696,4 +746,6 @@ export async function searchVariantsForBranch(branchId: number, search: string) 
     .where(trimmed ? or(like(products.name, term), like(productVariants.sku, term)) : undefined)
     .orderBy(asc(products.name))
     .limit(30);
+  // 2026-09-29: кассчин хямдарсан үнийг харна (борлуулалт ч мөн үнээр бичигдэнэ).
+  return withLiveCampaign(rows);
 }

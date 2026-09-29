@@ -39,7 +39,11 @@ export async function sendPushToUser(userId: number, payload: PushPayload): Prom
   const delivered: number[] = [];
   await Promise.all(subscriptions.map(async sub => {
     try {
-      await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, body, { TTL: 60 * 60 * 24, urgency: "normal" });
+      // C1: no timeout meant a slow/hung push service endpoint could hold
+      // this open indefinitely -- every other outbound fetch in this
+      // codebase has one (docs/PROJECT-GUIDE.md), web-push forwards its
+      // own `timeout` option straight to the underlying request.
+      await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, body, { TTL: 60 * 60 * 24, urgency: "normal", timeout: 10_000 });
       delivered.push(sub.id);
     } catch (error) {
       const status = (error as { statusCode?: number }).statusCode;
@@ -51,7 +55,36 @@ export async function sendPushToUser(userId: number, payload: PushPayload): Prom
   return delivered.length;
 }
 
-const PUSH_STATUSES = new Set(["confirmed", "processing", "shipped", "delivered", "completed", "cancelled", "ready_for_pickup"]);
+/**
+ * 2026-09-27 (C15): маps a real `orders.status` (drizzle/schema.ts's enum:
+ * pending/confirmed/packed/out_for_delivery/completed/cancelled/returned)
+ * to one of the admin-editable push template keys in
+ * shared/store-settings.ts (confirmed/processing/shipped/delivered/
+ * completed/cancelled/ready_for_pickup). These two lists were never the
+ * same set of names -- the old code compared `order.status` directly
+ * against the TEMPLATE names, so `packed`, `out_for_delivery` and
+ * `returned` (real statuses) never matched anything and silently never
+ * pushed, while `processing`/`shipped`/`delivered`/`ready_for_pickup`
+ * (template names) sat there as templates nothing could ever select.
+ *
+ * `packed`/`completed` are pickup-aware: a store-pickup order should say
+ * "ready for pickup", not "shipped". `deliveryMethod` is optional here --
+ * callers that do not pass it (not yet wired through server/routers.ts's
+ * `OrderStatusNotifiable`) fall back to the delivery-flow templates, same
+ * as before this fix for every status that already worked.
+ */
+export function templateKeyForOrderStatus(status: string, deliveryMethod?: string | null): string | null {
+  switch (status) {
+    case "confirmed": return "confirmed";
+    case "packed": return deliveryMethod === "store_pickup" ? "ready_for_pickup" : "processing";
+    case "out_for_delivery": return "shipped";
+    case "completed": return deliveryMethod === "store_pickup" ? "completed" : "delivered";
+    case "cancelled": return "cancelled";
+    // "pending" is the initial state, nothing to announce; "returned" has
+    // no push-title-order-returned/push-body-order-returned slot today.
+    default: return null;
+  }
+}
 
 /**
  * Fire-and-forget order status push; safe to await inside the same try as the email.
@@ -62,14 +95,15 @@ const PUSH_STATUSES = new Set(["confirmed", "processing", "shipped", "delivered"
  * болдог"*. Унтраах хоёр зам: `push-order-notifications = 0` (бүгд), эсвэл
  * тухайн төлөвийн **биеийг хоосон болгох** (зөвхөн тэр нэг).
  */
-export async function sendOrderStatusPush(order: { id: number; userId: number | null; orderNumber: string; status: string }): Promise<void> {
+export async function sendOrderStatusPush(order: { id: number; userId: number | null; orderNumber: string; status: string; deliveryMethod?: string | null }): Promise<void> {
   if (!order.userId) return;
-  if (!PUSH_STATUSES.has(order.status)) return;
+  const templateKey = templateKeyForOrderStatus(order.status, order.deliveryMethod);
+  if (!templateKey) return;
   try {
     if ((await getStoreSettingValue("push-order-notifications")).trim() === "0") return;
     const [title, body] = await Promise.all([
-      getStoreSettingValue(`push-title-order-${order.status}` as StoreSettingKey),
-      getStoreSettingValue(`push-body-order-${order.status}` as StoreSettingKey),
+      getStoreSettingValue(`push-title-order-${templateKey}` as StoreSettingKey),
+      getStoreSettingValue(`push-body-order-${templateKey}` as StoreSettingKey),
     ]);
     // Хоосон бие = энэ төлөвийг унтраасан. Гарчиг нь хоосон бол мэдэгдэл
     // нэргүй гарах тул мөн илгээхгүй.

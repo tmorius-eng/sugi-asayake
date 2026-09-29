@@ -1,4 +1,4 @@
-import { boolean, index, int, mysqlEnum, mysqlTable, text, timestamp, tinyint, uniqueIndex, varchar , primaryKey } from "drizzle-orm/mysql-core";
+import { boolean, index, int, mediumtext, mysqlEnum, mysqlTable, text, timestamp, tinyint, uniqueIndex, varchar , primaryKey } from "drizzle-orm/mysql-core";
 import { ubDistricts } from "../shared/districts";
 import { INTEGRATION_PROVIDERS } from "../shared/integrations";
 
@@ -250,6 +250,7 @@ export const wishlistItems = mysqlTable("wishlist_items", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, table => [
   uniqueIndex("wishlist_items_user_product_idx").on(table.userId, table.productId),
+  index("wishlist_items_restock_idx").on(table.notifyOnRestock, table.restockNotifiedAt), // 0096
   index("wishlist_items_product_idx").on(table.productId),
 ]);
 
@@ -771,6 +772,7 @@ export const carts = mysqlTable("carts", {
   index("carts_user_idx").on(table.userId),
   index("carts_guest_token_idx").on(table.guestToken),
   index("carts_status_idx").on(table.status),
+  index("carts_status_updated_idx").on(table.status, table.updatedAt), // 0096
 ]);
 
 /**
@@ -832,7 +834,7 @@ export const orders = mysqlTable("orders", {
    *  see scripts/backfill-order-districts.ts, run once). See
    *  shared/districts.ts and server/analytics.ts's district breakdown. */
   deliveryDistrict: mysqlEnum("deliveryDistrict", ubDistricts),
-  pickupBranch: varchar("pickupBranch", { length: 120 }),
+  pickupBranch: varchar("pickupBranch", { length: 160 }), // 0096: 120 → 160 (салбарын нэр 160)
   // "Controls everything" admin overhaul (2026-09-08, Phase L): which
   // branch's branch_stock rows this order's items were actually decremented
   // from -- captured once, at order-creation time (store_pickup: the
@@ -871,7 +873,9 @@ export const orders = mysqlTable("orders", {
    * constant, not a DB table) purely for order-history/admin display.
    */
   loyaltyDiscountMnt: int("loyaltyDiscountMnt").notNull().default(0),
-  appliedLoyaltyTierName: varchar("appliedLoyaltyTierName", { length: 40 }),
+  /** 0098: захиалгын үеийн нийтийн хямдрал (FK SET NULL → price_campaigns). */
+  priceCampaignId: int("priceCampaignId"),
+  appliedLoyaltyTierName: varchar("appliedLoyaltyTierName", { length: 60 }), // 0096: 40 → 60 (зэрэглэлийн нэр 60)
   /**
    * "Controls everything" admin overhaul (2026-09-08, Phase I): how much of
    * this order's final total was paid with store credit (users.storeCreditMnt),
@@ -988,6 +992,7 @@ export const orders = mysqlTable("orders", {
   // dashboard's recent-orders list -- neither had an index. Invisible at
   // today's ~4 real orders; cheap to add now, before it isn't.
   index("orders_payment_status_idx").on(table.paymentStatus),
+  index("orders_payment_status_created_idx").on(table.paymentStatus, table.status, table.createdAt), // 0096
   index("orders_created_at_idx").on(table.createdAt),
   uniqueIndex("orders_client_request_unique").on(table.clientRequestId),
 ]);
@@ -1007,6 +1012,8 @@ export const orderItems = mysqlTable("order_items", {
   productName: varchar("productName", { length: 180 }).notNull(),
   sku: varchar("sku", { length: 80 }).notNull(),
   unitPriceMnt: int("unitPriceMnt").notNull(),
+  /** 0098: нийтийн хямдралаар зарагдсан бол анхны үнэ (тайлан: хөнгөлсөн дүн). */
+  listPriceMnt: int("listPriceMnt"),
   quantity: int("quantity").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, table => [
@@ -1165,7 +1172,7 @@ export const posts = mysqlTable("posts", {
   title: varchar("title", { length: 220 }).notNull(),
   slug: varchar("slug", { length: 240 }).notNull().unique(),
   excerpt: text("excerpt"),
-  content: text("content").notNull(),
+  content: mediumtext("content").notNull(), // 0096: TEXT (64 KB) → MEDIUMTEXT
   coverImageUrl: text("coverImageUrl"),
   isPublished: boolean("isPublished").notNull().default(false),
   publishedAt: timestamp("publishedAt"),
@@ -1306,7 +1313,7 @@ export const siteDocuments = mysqlTable("site_documents", {
   locale: varchar("locale", { length: 2 }).notNull().default("mn"),
   title: varchar("title", { length: 200 }).notNull(),
   lead: text("lead"),
-  contentHtml: text("contentHtml").notNull(),
+  contentHtml: mediumtext("contentHtml").notNull(), // 0096: TEXT → MEDIUMTEXT
   updatedLabel: varchar("updatedLabel", { length: 40 }),
   updatedByUserId: int("updatedByUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -1500,6 +1507,27 @@ export const discountCodeRedemptions = mysqlTable("discount_code_redemptions", {
  * single best-matching active+in-window one is ever served publicly — see
  * getActiveSitePromotion in server/db.ts.
  */
+/**
+ * Бүх барааны нийтийн хямдрал (2026-09-29, 0098). DB-ийн үнийг өөрчлөхгүй —
+ * `shared/price-campaign.ts`-ийн дүрмээр үнэ уншдаг газар бүрт хэрэглэгдэнэ.
+ * Зөвхөн admin үүсгэнэ/засна/зогсооно; давхцсан хоёр идэвхтэй хямдрал байхгүй.
+ */
+export const priceCampaigns = mysqlTable("price_campaigns", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 120 }).notNull(),
+  percentOff: int("percentOff").notNull(),
+  startsAt: timestamp("startsAt").notNull(),
+  endsAt: timestamp("endsAt").notNull(),
+  stoppedAt: timestamp("stoppedAt"),
+  createdByUserId: int("createdByUserId").references(() => users.id, { onDelete: "set null" }),
+  updatedByUserId: int("updatedByUserId").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  index("price_campaigns_window_idx").on(table.startsAt, table.endsAt),
+]);
+export type PriceCampaign = typeof priceCampaigns.$inferSelect;
+
 export const sitePromotions = mysqlTable("site_promotions", {
   id: int("id").autoincrement().primaryKey(),
   isActive: boolean("isActive").notNull().default(false),
@@ -1912,6 +1940,10 @@ export const integrationSyncState = mysqlTable("integration_sync_state", {
 export const scheduledJobRuns = mysqlTable("scheduled_job_runs", {
   jobName: varchar("jobName", { length: 80 }).primaryKey(),
   lastRunAt: timestamp("lastRunAt").defaultNow().notNull(),
+  // 2026-09-27 (migration 0097): DB-level claim so two processes sharing this
+  // DB (two laptops + prod) can't both run the same due job at once -- see
+  // server/_core/scheduler.ts. Null when nobody currently holds the job.
+  claimedAt: timestamp("claimedAt"),
 });
 export type ScheduledJobRun = typeof scheduledJobRuns.$inferSelect;
 

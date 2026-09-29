@@ -178,9 +178,27 @@ export async function buildVendorCatalogDiff(provider: InventorySyncProvider): P
  * than trusting anything the client sent, so the only thing a caller decides
  * is WHICH rows move.
  */
-export async function applyVendorCatalog(provider: InventorySyncProvider, input: { kind: "price" | "facts"; skus: string[]; actorUserId: number }) {
+export async function applyVendorCatalog(provider: InventorySyncProvider, input: {
+  kind: "price" | "facts";
+  skus: string[];
+  /**
+   * 2026-09-27 (F6): per-(sku, field) selection for the facts tab. The admin
+   * panel already shows and toggles one checkbox PER FIELD (a product can
+   * have ingredients + usage instructions + warnings all differ at once,
+   * each its own row) -- but until now the client stripped the field back
+   * out and sent bare SKUs, so ticking only "Найрлага" for a product still
+   * wrote every differing field for that SKU. Optional and additive: a
+   * caller that only sends `skus` (the current server/routers.ts input
+   * schema, unchanged) keeps the old sku-level behaviour exactly.
+   */
+  fields?: { sku: string; field: FactField }[];
+  actorUserId: number;
+}) {
   const diff = await buildVendorCatalogDiff(provider);
   const wanted = new Set(input.skus.map(normaliseBarcode));
+  const wantedFields = input.fields?.length
+    ? new Set(input.fields.map(item => `${normaliseBarcode(item.sku)}|${item.field}`))
+    : null;
   const db = await requireDb();
   const changes: { sku: string; name: string; field: string; from: string | null; to: string }[] = [];
 
@@ -201,24 +219,36 @@ export async function applyVendorCatalog(provider: InventorySyncProvider, input:
   if (input.kind === "price") {
     for (const row of diff.priceRows) {
       if (!wanted.has(normaliseBarcode(row.sku))) continue;
-      await db.update(productVariants)
-        .set({ priceMnt: row.vendorPriceMnt, compareAtPriceMnt: row.vendorBasePriceMnt })
-        .where(eq(productVariants.id, row.variantId));
-      // The shop's price lives in TWO places (products.priceMnt is what the
-      // catalogue lists, product_variants.priceMnt is what a basket charges).
-      // Writing only one leaves the storefront showing a price nobody pays.
-      if (row.pricesWholeProduct) {
-        await db.update(products)
+      // I30: the variant write and the (conditional) product write are the
+      // SAME price change reaching two columns -- without a transaction, a
+      // failure/crash between them left the variant (what checkout actually
+      // charges) and the product row (what the catalogue/search show) at
+      // two different prices, silently, until someone compared them.
+      await db.transaction(async tx => {
+        await tx.update(productVariants)
           .set({ priceMnt: row.vendorPriceMnt, compareAtPriceMnt: row.vendorBasePriceMnt })
-          .where(eq(products.id, row.productId));
-      }
+          .where(eq(productVariants.id, row.variantId));
+        // The shop's price lives in TWO places (products.priceMnt is what the
+        // catalogue lists, product_variants.priceMnt is what a basket charges).
+        // Writing only one leaves the storefront showing a price nobody pays.
+        if (row.pricesWholeProduct) {
+          await tx.update(products)
+            .set({ priceMnt: row.vendorPriceMnt, compareAtPriceMnt: row.vendorBasePriceMnt })
+            .where(eq(products.id, row.productId));
+        }
+      });
       changes.push({ sku: row.sku, name: row.name, field: "priceMnt", from: String(row.ourPriceMnt), to: String(row.vendorPriceMnt) });
     }
   } else {
     // Group by product: one update per product, however many fields moved.
     const byProduct = new Map<number, { sku: string; name: string; values: Partial<Record<FactField, string>> }>();
     for (const row of diff.factRows) {
-      if (!wanted.has(normaliseBarcode(row.sku))) continue;
+      const sku = normaliseBarcode(row.sku);
+      // F6: prefer the exact (sku, field) selection when the caller sent
+      // one; falls back to "every differing field for this sku" only for a
+      // caller that never sent `fields` (today's server/routers.ts input).
+      const selected = wantedFields ? wantedFields.has(`${sku}|${row.field}`) : wanted.has(sku);
+      if (!selected) continue;
       const entry = byProduct.get(row.productId) ?? { sku: row.sku, name: row.name, values: {} };
       entry.values[row.field] = row.vendorValue;
       byProduct.set(row.productId, entry);

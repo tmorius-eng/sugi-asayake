@@ -34,5 +34,30 @@ export function PageviewTracker() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location]);
 
+  // 2026-09-27: consent granted while STAYING on the landing page (the
+  // Silktide banner's own Accept click) never fired anything above -- the
+  // effect above only re-runs on a route change, so a visitor who lands,
+  // accepts, and never navigates again was invisible to Conversion Rate.
+  // The vendor consent manager (client/public/vendor/silktide-consent-
+  // manager.js) fires no event on accept, only writes localStorage, so this
+  // polls hasAnalyticsConsent() briefly instead of adding a coupling to its
+  // internal DOM/API. Bounded (5 minutes) so a visitor who never opts in
+  // doesn't leave a timer running for the rest of the visit.
+  useEffect(() => {
+    if (location.startsWith("/admin") || hasAnalyticsConsent()) return;
+    let attempts = 0;
+    const interval = window.setInterval(() => {
+      attempts += 1;
+      if (hasAnalyticsConsent()) {
+        window.clearInterval(interval);
+        trackPageview.mutate({ path: location, trafficSource: getStoredTrafficSource() ?? null });
+      } else if (attempts >= 300) {
+        window.clearInterval(interval);
+      }
+    }, 1_000);
+    return () => window.clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location]);
+
   return null;
 }

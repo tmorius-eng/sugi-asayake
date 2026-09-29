@@ -124,6 +124,7 @@ browser → /api/trpc/<router>.<procedure>
 | `face.ts` | admin царай: enrollment (**шифрлэгдсэн**, `enc1:` AES-GCM, хуучин plaintext мөр амжилттай шалгалтын дараа шифрлэгдэнэ)/challenge (24 ц retention)/attempt, `countRecentFailedFaceAttempts` (данс тус бүрийн lockout) |
 | `questions.ts` | асуулт/хариулт |
 | `gift-cards.ts` | бэлгийн карт (үүсгэх, хүчингүй, redeem) |
+| `price-campaigns.ts` | (2026-09-29, 0098) бүх барааны нийтийн хямдрал: `withLiveCampaign`/`priceLinesForOrder` (кэшээс уншсаны ДАРАА), admin CRUD, урьдчилан харах. Дүрэм `shared/price-campaign.ts` |
 
 
 > 2026-09-20: `getSiteTextValue(slot)` / `getSiteName()` — баримт PDF, имэйл, тайлан, төлбөрийн тайлбар зэрэг **серверээс гардаг бүх брэндийн нэр** эндээс уншина (өмнө нь кодод хатуу бичигдсэн байв).

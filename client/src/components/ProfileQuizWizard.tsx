@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -64,6 +64,29 @@ function pillStyle(active: boolean): React.CSSProperties {
   };
 }
 
+// 2026-09-27: hoisted to module scope (was a component-local const declared
+// AFTER the seed effect below) so the seed effect can snapshot its own
+// output and the close-early handler can compare against it.
+function toPayload(source: Draft) {
+  return {
+    gender: (source.gender || null) as "male" | "female" | "other" | null,
+    primaryDistrict: (source.primaryDistrict || null) as UbDistrict | null,
+    birthYear: source.birthYear.trim() ? Number(source.birthYear) : null,
+    occupation: source.occupation.trim() || null,
+    skinType: (source.skinType || null) as "dry" | "oily" | "combination" | "sensitive" | "normal" | null,
+    skinConcerns: source.skinConcerns.length ? source.skinConcerns.join(",") : null,
+    skinRoutineComplexity: (source.skinRoutineComplexity || null) as "minimal" | "moderate" | "extensive" | null,
+    hairType: (source.hairType || null) as "dry" | "oily" | "normal" | "damaged" | "color_treated" | null,
+    hairConcerns: source.hairConcerns.length ? source.hairConcerns.join(",") : null,
+    fragrancePreference: (source.fragrancePreference || null) as "unscented" | "light" | "floral" | "citrus" | null,
+    wellnessInterests: source.wellnessInterests.length ? source.wellnessInterests.join(",") : null,
+    hasYoungChildren: source.hasYoungChildren,
+    interiorStyle: source.interiorStyle || null,
+    bodySkinType: (source.bodySkinType || null) as "dry" | "normal" | "sensitive" | null,
+    bodyConcerns: source.bodyConcerns.length ? source.bodyConcerns.join(",") : null,
+  };
+}
+
 function PillGroup({ options, selected, onToggle, ranked }: { options: Array<{ value: string; label: string }>; selected: string[]; onToggle: (value: string) => void; ranked?: boolean }) {
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
@@ -89,11 +112,30 @@ export default function ProfileQuizWizard({ open, onOpenChange }: { open: boolea
   const utils = trpc.useUtils();
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
+  const updatePreferences = trpc.profile.updatePreferences.useMutation({
+    onSuccess: () => utils.auth.me.invalidate(),
+  });
+  // 2026-09-27: the payload the dialog was SEEDED with, so the close-early
+  // handler below can tell "nothing changed" from "the shopper actually
+  // answered something" -- without it, closing the wizard without touching
+  // it fired an identical no-op save every time.
+  const seededPayloadRef = useRef<ReturnType<typeof toPayload> | null>(null);
 
   useEffect(() => {
     if (!open) return;
+    // 2026-09-27: always reset to step 0 on open, even while a close-early
+    // save from last time is still pending below -- only the DRAFT reseed
+    // needs to wait on that (see the pending guard just below), landing on
+    // whatever step the shopper happened to be on last time is a separate,
+    // unrelated bug.
     setStep(0);
-    setDraft({
+    // A close-early save (handleClose below) is fire-and-forget
+    // (`updatePreferences.mutate`, not awaited) -- if the shopper reopens the
+    // wizard before it resolves and `auth.me` refetches, `user` here is
+    // still the STALE pre-save snapshot; reseeding from it would silently
+    // discard the answer that save is in the middle of persisting.
+    if (updatePreferences.isPending) return;
+    const seeded: Draft = {
       gender: user?.gender ?? "",
       primaryDistrict: user?.primaryDistrict ?? "",
       birthYear: user?.birthYear ? String(user.birthYear) : "",
@@ -109,33 +151,13 @@ export default function ProfileQuizWizard({ open, onOpenChange }: { open: boolea
       interiorStyle: user?.interiorStyle ?? "",
       bodySkinType: user?.bodySkinType ?? "",
       bodyConcerns: user?.bodyConcerns ? user.bodyConcerns.split(",").filter(Boolean) : [],
-    });
+    };
+    setDraft(seeded);
+    seededPayloadRef.current = toPayload(seeded);
     // Only re-seed when the dialog actually opens -- not on every user
     // refetch while it's already open (would stomp in-progress answers).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
-
-  const updatePreferences = trpc.profile.updatePreferences.useMutation({
-    onSuccess: () => utils.auth.me.invalidate(),
-  });
-
-  const toPayload = (source: Draft) => ({
-    gender: (source.gender || null) as "male" | "female" | "other" | null,
-    primaryDistrict: (source.primaryDistrict || null) as UbDistrict | null,
-    birthYear: source.birthYear.trim() ? Number(source.birthYear) : null,
-    occupation: source.occupation.trim() || null,
-    skinType: (source.skinType || null) as "dry" | "oily" | "combination" | "sensitive" | "normal" | null,
-    skinConcerns: source.skinConcerns.length ? source.skinConcerns.join(",") : null,
-    skinRoutineComplexity: (source.skinRoutineComplexity || null) as "minimal" | "moderate" | "extensive" | null,
-    hairType: (source.hairType || null) as "dry" | "oily" | "normal" | "damaged" | "color_treated" | null,
-    hairConcerns: source.hairConcerns.length ? source.hairConcerns.join(",") : null,
-    fragrancePreference: (source.fragrancePreference || null) as "unscented" | "light" | "floral" | "citrus" | null,
-    wellnessInterests: source.wellnessInterests.length ? source.wellnessInterests.join(",") : null,
-    hasYoungChildren: source.hasYoungChildren,
-    interiorStyle: source.interiorStyle || null,
-    bodySkinType: (source.bodySkinType || null) as "dry" | "normal" | "sensitive" | null,
-    bodyConcerns: source.bodyConcerns.length ? source.bodyConcerns.join(",") : null,
-  });
 
   const toggleList = (key: "skinConcerns" | "hairConcerns" | "wellnessInterests" | "bodyConcerns", value: string) =>
     setDraft(current => ({ ...current, [key]: current[key].includes(value) ? current[key].filter(item => item !== value) : [...current[key], value] }));
@@ -144,7 +166,13 @@ export default function ProfileQuizWizard({ open, onOpenChange }: { open: boolea
     if (!nextOpen && step < STEP_TITLES.length - 1) {
       // Best-effort partial save so nothing already answered is lost --
       // silent (no toast), since the shopper didn't explicitly ask to save.
-      updatePreferences.mutate(toPayload(draft));
+      // 2026-09-27: skipped when the draft still matches what the dialog was
+      // seeded with -- closing without touching anything used to fire an
+      // identical no-op mutation every time.
+      const payload = toPayload(draft);
+      if (JSON.stringify(payload) !== JSON.stringify(seededPayloadRef.current)) {
+        updatePreferences.mutate(payload);
+      }
     }
     onOpenChange(nextOpen);
   };
