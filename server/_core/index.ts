@@ -27,6 +27,7 @@ import { serveMerchantFeed } from "./merchantFeed";
 import { serveProductOgImage } from "./ogImage";
 import { finishFacebookLogin, startFacebookLogin } from "./facebookAuth";
 import { startScheduler } from "./scheduler";
+import { startDbWatchdog } from "./dbWatchdog";
 import { registerAbandonedCartReminderJob, registerDataRetentionJob, registerLowStockDigestJob, registerInventorySyncJob, registerNotificationOutboxPurgeJob, registerStaleTransferJob, registerStockLedgerDriftJob, registerReviewRequestJob, registerBackInStockJob } from "../automation";
 import { startNotificationDispatcher } from "../notifications";
 import { notifyError, registerHoneybadgerErrorMiddleware, registerHoneybadgerMiddleware } from "./honeybadger";
@@ -272,6 +273,8 @@ async function startServer() {
   // (server/_core/clusterRole.ts).
   console.log(`[cluster] ${describeClusterRole()}`);
   if (!isBackgroundJobRunner()) return;
+  // DB унахад эзэнд имэйл — scheduler-ээс тусдаа, DB-гүйгээр ажилладаг (2026-10-01 тасалдал).
+  if (process.env.NODE_ENV === "production") startDbWatchdog();
   registerAbandonedCartReminderJob();
   registerReviewRequestJob();
   registerBackInStockJob();

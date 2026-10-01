@@ -180,6 +180,9 @@ export async function dbPing(): Promise<{ ok: boolean; error?: string }> {
     await db.execute(sql`SELECT 1`);
     return { ok: true };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "Unknown database error" };
+    // drizzle-ийн "Failed query: SELECT 1" нь шалтгааныг (TLS, auth, timeout) `cause`-д нуудаг.
+    const cause = error instanceof Error && error.cause instanceof Error ? error.cause.message : null;
+    const message = error instanceof Error ? error.message.split("\n")[0] : "Unknown database error";
+    return { ok: false, error: cause ? `${message} — ${cause}` : message };
   }
 }
