@@ -36,6 +36,9 @@ export const ENV = {
   // Public base URL to read uploaded files back from (your bucket's public
   // endpoint, or a CDN/CloudFront/R2 custom domain in front of it).
   s3PublicBaseUrl: (process.env.S3_PUBLIC_BASE_URL ?? "").replace(/\/+$/, ""),
+  // Хувийн bucket (CV, барааны баримтын зураг) — нийтийн URL-гүй, зөвхөн гарын үсэгтэй
+  // холбоосоор уншигдана. Нийтийн bucket-тэй ИЖИЛ endpoint/түлхүүр ашиглана (нэг R2 account).
+  s3PrivateBucket: process.env.S3_PRIVATE_BUCKET ?? "",
 
   // Optional transactional email + SMS (Brevo, formerly Sendinblue — one API
   // key covers both). If unset, staff-invitation/account emails and any SMS

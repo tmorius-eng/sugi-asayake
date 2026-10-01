@@ -33,6 +33,7 @@ import { notifyError, registerHoneybadgerErrorMiddleware, registerHoneybadgerMid
 import { limitApiTraffic, protectStateChangingApiRequests, setSecurityHeaders } from "./security";
 import { blockScannerProbes } from "./scannerProbes";
 import { logRequests } from "./requestLog";
+import { trpcBatchGuard } from "./trpcBatchGuard";
 import { serveStatic, setupVite } from "./vite";
 import { describeClusterRole, isBackgroundJobRunner } from "./clusterRole";
 
@@ -173,6 +174,8 @@ async function startServer() {
   // throw) бодит, гэнэтийн алдаа тул мэдээлэгдэнэ.
   const EXPECTED_TRPC_ERROR_CODES = new Set(["BAD_REQUEST", "UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND", "CONFLICT", "PRECONDITION_FAILED", "TOO_MANY_REQUESTS"]);
   // tRPC API
+  // 2026-10-01: Cloudflare Access-ийн admin*/inventory* дүрмийг batch-ээр тойрохоос хамгаална.
+  app.use("/api/trpc", trpcBatchGuard);
   app.use(
     "/api/trpc",
     createExpressMiddleware({

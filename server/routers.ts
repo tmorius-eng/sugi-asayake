@@ -235,9 +235,9 @@ import { clearFaceProofCookie, completeFaceVerification, faceProofIdleTimeoutMs,
 import { assertReauthProof, clearReauthCookie, hasValidReauthProof, issueReauthProof } from "./_core/faceProof";
 import { FaceTemplateKeyMissingError } from "./db/face";
 import { approveFaceHandoff, assertHandoffApprovable, claimFaceHandoff, denyFaceHandoff, getFaceHandoffContext, startFaceHandoff } from "./faceHandoff";
-import { FACE_DESCRIPTOR_LENGTH, FACE_DIAGNOSTIC_MAX, FACE_IDLE_TIMEOUT_MS, FACE_MODEL_VERSION, isAdminPanelRole, isValidFaceDescriptor } from "../shared/face-auth";
+import { FACE_DESCRIPTOR_LENGTH, FACE_DIAGNOSTIC_MAX, FACE_IDLE_TIMEOUT_MS, FACE_MODEL_VERSION, isAdminPanelRole, isContentReadRole, isValidFaceDescriptor } from "../shared/face-auth";
 import { adminProcedure, anyStaffProcedure, catalogReadProcedure, checkoutRateLimitedProcedure, contentReadProcedure, financeProcedure, lenientRateLimitedProcedure, loginRateLimitedProcedure, loginRateLimitedProtectedProcedure, marketingProcedure, moderateRateLimitedProcedure, moderateRateLimitedProtectedProcedure, ordersReadProcedure, phoneVerifyRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure, usersReadProcedure, warehouseProcedure, isInternalErrorText, userFacingMessage } from "./_core/trpc";
-import { storageDelete, storageGetSignedUrl, storagePing, storagePut, storagePutImageVariants } from "./storage";
+import { PRIVATE_STORAGE_UNAVAILABLE_MSG, canStorePrivately, storageDelete, storageGetSignedUrlPrivate, storagePing, storagePut, storagePutImageVariants, storagePutPrivate } from "./storage";
 import { IMAGE_MAX_DIMENSION, processUploadedImageVariants } from "./_core/imageProcessing";
 import { createQPayInvoice, parseQPayInvoicePayload, getQPayAvailability } from "./qpay";
 import { sendNtfyTest } from "./notifications";
@@ -246,6 +246,7 @@ import { inventoryRouter } from "./inventoryRouter";
 import { getInventorySyncProvider, getInventorySyncStatus, runInventorySync, runPullSnapshot, setBranchExternalId } from "./integrations/inventorySync";
 import { applyVendorCatalog, buildVendorCatalogDiff } from "./integrations/vendorCatalog";
 import { createStorepayLoan, getStorepayAvailability, normaliseMobileNumber, storepayPossibleAmount } from "./storepay";
+import { checkPersistentRateLimit } from "./_core/persistentRateLimit";
 // Registers the Smart Software adapter on import (side effect).
 import { clearSmartSoftwareTokenCache } from "./integrations/smartSoftware";
 import { assertImageSignature, imageContentTypes, mediaContentTypes, processUploadedImageOrThrow } from "./_core/imageUpload";
@@ -812,9 +813,9 @@ async function sendOrderStatusUpdateEmail(order: { orderNumber: string; customer
 // accept supplier-invoice photos too.
 
 /** Same BAD_REQUEST translation as processUploadedImageOrThrow, for the WebP + grid-derivative path. */
-async function processUploadedImageVariantsOrThrow(buffer: Buffer, maxDimension: number) {
+async function processUploadedImageVariantsOrThrow(buffer: Buffer, maxDimension: number, options?: { flattenAnimation?: boolean }) {
   try {
-    return await processUploadedImageVariants(buffer, maxDimension);
+    return await processUploadedImageVariants(buffer, maxDimension, options);
   } catch {
     throw new TRPCError({ code: "BAD_REQUEST", message: "Зургийг уншиж чадсангүй. Файл гэмтсэн эсвэл дэмжигдээгүй байж магадгүй." });
   }
@@ -1517,7 +1518,8 @@ export const appRouter = router({
           throw new TRPCError({ code: "BAD_REQUEST", message: "Зураг 8 МБ-аас бага байх ёстой." });
         }
         assertImageSignature(buffer, input.contentType);
-        const variants = await processUploadedImageVariantsOrThrow(buffer, IMAGE_MAX_DIMENSION.review);
+        // Хөдөлгөөнт зургийн зөвхөн эхний кадр — classifyImageSafety яг тэр кадрыг шалгана, шалгасан = хадгалсан.
+        const variants = await processUploadedImageVariantsOrThrow(buffer, IMAGE_MAX_DIMENSION.review, { flattenAnimation: true });
         let safety;
         try {
           safety = await classifyImageSafety(variants.full);
@@ -1635,7 +1637,9 @@ export const appRouter = router({
         if (!expected) throw new TRPCError({ code: "BAD_REQUEST", message: "CV нь PDF эсвэл Word файл байх ёстой." });
         const extension = input.cv.contentType === "application/pdf" ? "pdf" : input.cv.contentType === "application/msword" ? "doc" : "docx";
         const safeBase = input.cv.fileName.replace(/\.[^.]*$/, "").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "cv";
-        const stored = await storagePut(`applications/${randomBytes(16).toString("hex")}/${safeBase}.${extension}`, buffer, input.cv.contentType);
+        // Fail closed: production-д хувийн bucket-гүй бол CV-г нийтийн bucket-д ХАДГАЛАХГҮЙ.
+        if (!canStorePrivately()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: PRIVATE_STORAGE_UNAVAILABLE_MSG });
+        const stored = await storagePutPrivate(`applications/${randomBytes(16).toString("hex")}/${safeBase}.${extension}`, buffer, input.cv.contentType);
         cvKey = stored.key; cvFileName = `${safeBase}.${extension}`; cvSizeBytes = buffer.length;
       }
       const { id } = await createJobApplication({
@@ -1668,9 +1672,14 @@ export const appRouter = router({
     // cookie on every request regardless of the calling procedure's public/
     // protected status (verified in server/_core/context.ts), so this can
     // branch on role without needing a second procedure.
-    bySlug: publicProcedure.input(z.object({ slug: z.string().min(1).max(240) })).query(({ ctx, input }) => {
-      // 2026-09-27: нийтлэл бичих эрхтэй бүх ажилтны эрх (marketing г.м.) ноорогоо харна.
-      const bypassGate = isAdminPanelRole(ctx.user?.role);
+    bySlug: publicProcedure.input(z.object({ slug: z.string().min(1).max(240) })).query(async ({ ctx, input }) => {
+      // Ноорог харах эрх = contentReadProcedure-ийн дүрүүд (admin/staff/marketing; finance/warehouse БИШ)
+      // ба царайны баталгаа (gate асаалттай бол). Preview нь noopener шинэ табд нээгддэг тул
+      // табын id өөр — `anyTab` ашиглана.
+      let bypassGate = false;
+      if (ctx.user && isContentReadRole(ctx.user.role)) {
+        bypassGate = !isFaceGateEnabled() || (await hasValidFaceProof(ctx.req, ctx.user.id, ctx.user.sessionVersion, { anyTab: true }));
+      }
       return getPublishedPostBySlug(input.slug, { bypassGate });
     }),
     // 2026-09-21: storefront-д R2-ийн шууд хаяг (publicUrl.ts-ийн directStorageUrl) —
@@ -2258,11 +2267,20 @@ export const appRouter = router({
     // нэг данс 15 минутад ~1 200 дугаар шалгаж, гуравдагч хүмүүсийн StorePay
     // зээлийн боломж/дүнг дэлгүүрийн merchant эрхээр тоолж мэдэх боломжтой
     // байв (дугаар нь хувийн мэдээлэл гэдгийг кодын тайлбар өөрөө хэлдэг).
-    storepayLimit: strictRateLimitedProtectedProcedure.input(z.object({ mobileNumber: z.string().trim().min(6).max(20) })).mutation(async ({ input }) => {
+    storepayLimit: strictRateLimitedProtectedProcedure.input(z.object({ mobileNumber: z.string().trim().min(6).max(20) })).mutation(async ({ ctx, input }) => {
       const mobileNumber = normaliseMobileNumber(input.mobileNumber);
       if (!mobileNumber) throw new TRPCError({ code: "BAD_REQUEST", message: "Утасны дугаараа зөв оруулна уу (8 орон)." });
+      // 2026-10-01: зөвхөн ӨӨРИЙН бүртгэлтэй дугаар — өмнө нь нэвтэрсэн хэн ч дурын хүний
+      // StorePay зээлийн боломж/дүнг дэлгүүрийн merchant эрхээр шалгаж чаддаг байв.
+      const ownPhone = ctx.user.phone ? normaliseMobileNumber(ctx.user.phone) : null;
+      if (!ownPhone || ownPhone !== mobileNumber) {
+        return { mobileNumber, possibleAmountMnt: null as number | null, reason: "own-phone-only" as const };
+      }
+      // Хэрэглэгч бүрт тогтвортой (DB-д) хязгаар — IP солих замаар тойрч болохгүй.
+      const limit = await checkPersistentRateLimit("storepay-limit", `user:${ctx.user.id}`, 20, 15 * 60 * 1000);
+      if (!limit.allowed) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: `Хэт олон удаа шалгалаа. ${limit.retryAfterSeconds} секундийн дараа дахин оролдоно уу.` });
       try {
-        return { mobileNumber, possibleAmountMnt: await storepayPossibleAmount(mobileNumber) };
+        return { mobileNumber, possibleAmountMnt: (await storepayPossibleAmount(mobileNumber)) as number | null, reason: null };
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "StorePay-ээс хариу ирсэнгүй." });
       }
@@ -4180,7 +4198,7 @@ export const appRouter = router({
     jobApplicationCvUrl: adminProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ input }) => {
       const application = await getJobApplication(input.id);
       if (!application?.cvKey) throw new TRPCError({ code: "NOT_FOUND", message: "Энэ анкетад CV хавсаргаагүй." });
-      return { url: await storageGetSignedUrl(application.cvKey), fileName: application.cvFileName ?? "cv" };
+      return { url: await storageGetSignedUrlPrivate(application.cvKey, { downloadName: application.cvFileName ?? "cv" }), fileName: application.cvFileName ?? "cv" };
     }),
 
     // ---- Loyalty ladder (2026-09-12) ----------------------------------

@@ -27,7 +27,19 @@ import { ENV } from "./env";
 // download, not something to hand out to anyone who happens to have or guess
 // the key. Every other prefix in this bucket (product images, site media,
 // avatars) is genuinely public content.
-const NON_PUBLIC_KEY_PREFIXES = ["applications/"];
+const NON_PUBLIC_KEY_PREFIXES = ["applications/", "inventory/receipts/"];
+
+/**
+ * `/cdn/<key>` зам дахь key аюулгүй эсэх: `..`/`.`/хоосон сегмент, `\`, эхний `/`,
+ * хяналтын тэмдэгт агуулсан key-г татгалзана (угтвар шалгалтыг `a/../applications/x`
+ * маягаар тойрч, эсвэл R2/CDN-ийн замыг normalise хийхэд ашиглуулахгүй).
+ */
+export function isSafeStorageKey(key: string): boolean {
+  if (!key || key.startsWith("/") || key.includes("\\")) return false;
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/.test(key)) return false;
+  return key.split("/").every(segment => segment !== "" && segment !== "." && segment !== "..");
+}
 
 export function isPublicStorageKey(key: string): boolean {
   return !NON_PUBLIC_KEY_PREFIXES.some(prefix => key.startsWith(prefix));
@@ -37,7 +49,7 @@ export function registerStorageProxy(app: Express) {
   const redirectToR2: RequestHandler = (req, res) => {
     const key = (req.params as Record<string, string>)[0];
     if (!key) return res.status(400).send("Missing storage key.");
-    if (!isPublicStorageKey(key)) {
+    if (!isSafeStorageKey(key) || !isPublicStorageKey(key)) {
       return res.status(404).type("text/plain").send("not found");
     }
     if (!ENV.s3PublicBaseUrl) {

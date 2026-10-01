@@ -159,7 +159,7 @@ export async function faceProofIdleTimeoutMs(req: Request, userId: number, sessi
   return proof ? proof.idleTimeoutMs : null;
 }
 
-export async function hasValidFaceProof(req: Request, userId: number, sessionVersion: number): Promise<boolean> {
+export async function hasValidFaceProof(req: Request, userId: number, sessionVersion: number, options: { anyTab?: boolean } = {}): Promise<boolean> {
   // readFaceProof parses the raw header rather than reading `req.cookies`:
   // this app has no cookie-parser middleware, so `req.cookies` is ALWAYS
   // undefined. Using it meant this check silently returned false for
@@ -167,7 +167,7 @@ export async function hasValidFaceProof(req: Request, userId: number, sessionVer
   // query failed to see it, and the gate looped on "verified, entering
   // admin..." forever. Same approach server/_core/context.ts already uses for
   // the session cookie.
-  return (await readFaceProof(req, userId, sessionVersion)) !== null;
+  return (await readFaceProof(req, userId, sessionVersion, options)) !== null;
 }
 
 /**

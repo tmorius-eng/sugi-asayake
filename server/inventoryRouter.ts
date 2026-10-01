@@ -8,7 +8,7 @@ import { randomBytes } from "node:crypto";
 import { cancelTransfer, confirmTransferReceipt, createTransfer, getInTransitForVariant, getTransfer, listTransfers, resolveTransferLine, saveReceivedDraft, saveTransferLines, sendTransfer } from "./transfers";
 import { OVER_RESOLUTIONS, SHORT_RESOLUTIONS } from "../shared/transfer-reconcile";
 import { logAdminAction } from "./db";
-import { storagePut } from "./storage";
+import { PRIVATE_STORAGE_UNAVAILABLE_MSG, canStorePrivately, storageGetSignedUrlPrivate, storagePutPrivate } from "./storage";
 import { assertImageSignature, decodeBase64Upload, imageContentTypes, processUploadedImageOrThrow } from "./_core/imageUpload";
 import { IMAGE_MAX_DIMENSION } from "./_core/imageProcessing";
 import { inventoryProcedure, router } from "./_core/trpc";
@@ -25,6 +25,20 @@ const lineSchema = z.object({ code: z.string().trim().min(1).max(80), quantity: 
 const linesSchema = z.array(lineSchema).max(3000);
 const text = (max: number) => z.string().trim().max(max).nullable().optional();
 
+// Баримтын зураг хувийн bucket-д, DB-д `/cdn/inventory/receipts/...` хэвээр хадгалагдана.
+// `/cdn` энэ угтварыг 404 болгодог тул админд харуулахдаа гарын үсэгтэй URL болгож сольно.
+const CDN_PREFIX = "/cdn/";
+async function withSignedReceiptPhoto<T extends { invoicePhotoUrl: string | null }>(receipt: T): Promise<T> {
+  const url = receipt.invoicePhotoUrl;
+  if (!url || !url.startsWith(CDN_PREFIX + "inventory/receipts/")) return receipt;
+  try {
+    return { ...receipt, invoicePhotoUrl: await storageGetSignedUrlPrivate(url.slice(CDN_PREFIX.length)) };
+  } catch (error) {
+    console.warn("[inventory] receipt photo signing failed:", error instanceof Error ? error.message : error);
+    return { ...receipt, invoicePhotoUrl: null };
+  }
+}
+
 async function run<T>(action: () => Promise<T>): Promise<T> {
   try {
     return await action();
@@ -40,7 +54,7 @@ export const inventoryRouter = router({
   skuIndex: inventoryProcedure.query(() => getSkuIndex()),
 
   receipts: inventoryProcedure.input(z.object({ branchId: z.number().int().positive().optional() }).optional()).query(async ({ ctx, input }) => listReceipts(await loadInventoryActor(ctx.user), { branchId: input?.branchId })),
-  receipt: inventoryProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ ctx, input }) => run(async () => getReceipt(await loadInventoryActor(ctx.user), input.id))),
+  receipt: inventoryProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ ctx, input }) => run(async () => withSignedReceiptPhoto(await getReceipt(await loadInventoryActor(ctx.user), input.id)))),
   createReceipt: inventoryProcedure.input(z.object({ branchId: z.number().int().positive(), supplierName: text(160), supplierInvoiceNo: text(80), note: text(500) })).mutation(async ({ ctx, input }) => run(async () => {
     const receipt = await createReceipt(await loadInventoryActor(ctx.user), input);
     await logAdminAction({ actorUserId: ctx.user.id, action: "inventory.receipt_created", entityType: "stock_receipt", entityId: receipt.id, metadata: { code: receipt.code, branchId: receipt.branchId } });
@@ -58,8 +72,7 @@ export const inventoryRouter = router({
   })),
   // A phone photo of the supplier's paper invoice, kept with the receipt --
   // the one thing the old group-chat photo did that scanning does not.
-  // Stored under an unguessable key; the bucket is public-read, so
-  // "unlisted", not private.
+  // 2026-10-01: хувийн bucket-д (S3_PRIVATE_BUCKET) хадгална, админ гарын үсэгтэй URL-аар үзнэ.
   uploadReceiptPhoto: inventoryProcedure.input(z.object({ id: z.number().int().positive(), contentType: z.enum(imageContentTypes), dataBase64: z.string().min(16).max(14_000_000) })).mutation(async ({ ctx, input }) => run(async () => {
     const actor = await loadInventoryActor(ctx.user);
     const receipt = await getReceipt(actor, input.id); // existence + branch permission
@@ -71,8 +84,9 @@ export const inventoryRouter = router({
     assertImageSignature(buffer, input.contentType);
     const processed = await processUploadedImageOrThrow(buffer, input.contentType, IMAGE_MAX_DIMENSION.siteMedia);
     const extension = input.contentType === "image/jpeg" ? "jpg" : input.contentType === "image/png" ? "png" : "webp";
-    const stored = await storagePut(`inventory/receipts/${input.id}/${randomBytes(12).toString("hex")}.${extension}`, processed, input.contentType);
-    return updateReceiptDetails(actor, input.id, { invoicePhotoUrl: stored.url });
+    if (!canStorePrivately()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: PRIVATE_STORAGE_UNAVAILABLE_MSG });
+    const stored = await storagePutPrivate(`inventory/receipts/${input.id}/${randomBytes(12).toString("hex")}.${extension}`, processed, input.contentType);
+    return withSignedReceiptPhoto(await updateReceiptDetails(actor, input.id, { invoicePhotoUrl: `/cdn/${stored.key}` }));
   })),
   cancelReceipt: inventoryProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => run(async () => {
     const result = await cancelReceipt(await loadInventoryActor(ctx.user), input.id);

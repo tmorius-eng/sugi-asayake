@@ -2,7 +2,7 @@
 // 2026-09-21: server/db.ts (7 066 мөр) домэйнээр хуваагдав; server/db.ts нь одоо barrel
 // (export *) тул import зам өөрчлөгдөөгүй. Функц зөөхдөө энэ файлын import-ыг мөн шинэчил.
 
-import { and, asc, desc, eq, gte, inArray, isNull, like, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, like, lt, ne, or, sql } from "drizzle-orm";
 import { branches, branchStock, cartItems, carts, discountCodeRedemptions, discountCodes, orderItems, orders, productVariants, products, storeCreditLedger, users } from "../../drizzle/schema";
 import { guessDistrictFromAddress, type UbDistrict } from "../../shared/districts";
 import { computeDeliveryFeeMnt } from "../../shared/delivery";
@@ -460,16 +460,34 @@ export async function createOrderFromActiveCart(input: {
     // мөр болгон бичнэ — хожигдсон тал давхардлын алдаанд унаж, захиалга
     // бүхэлдээ (нөөц, купоны тоолуур хамт) буцна.
     if (couponResult && couponResult.maxUsesPerCustomer !== null) {
+      const limitMessage = couponResult.maxUsesPerCustomer === 1 ? "Та энэ кодыг аль хэдийн ашигласан байна." : `Энэ кодыг нэг хэрэглэгч хамгийн ихдээ ${couponResult.maxUsesPerCustomer} удаа ашиглана — та хязгаартаа хүрсэн байна.`;
+      // 2026-10-01: validateDiscountCode-ийн (account ЭСВЭЛ утас) тоог энд ЦООЖТОЙ дахин тоолно.
+      // Дэвтрийн түлхүүр нь account-аар ("u:") эсвэл утсаар ("p:") нэг л хэлбэртэй тул ижил
+      // хүн нэг удаа нэвтэрсэн, нэг удаа зочноор захиалбал хоёр өөр түлхүүр болж хязгаарыг
+      // давдаг байв. Купоны мөр дээрх UPDATE-ийн түгжээ бидэнд байгаа тул ижил кодтой өөр
+      // checkout энд дараалалд орно; FOR SHARE нь snapshot биш хамгийн сүүлийн commit-ийг уншина.
+      const phoneDigits = input.customerPhone ? input.customerPhone.replace(/\D/g, "").slice(-8) : "";
+      const identityConditions = [
+        ...(input.owner.userId ? [eq(orders.userId, input.owner.userId)] : []),
+        ...(phoneDigits.length === 8 ? [sql`RIGHT(REGEXP_REPLACE(${orders.customerPhone}, '[^0-9]', ''), 8) = ${phoneDigits}`] : []),
+      ];
+      if (identityConditions.length) {
+        const [others] = await tx.select({ count: sql<number>`count(*)` }).from(orders)
+          .where(and(eq(orders.couponCode, couponResult.code), ne(orders.status, "cancelled"), ne(orders.id, orderId), or(...identityConditions)))
+          .for("share");
+        if (Number(others?.count ?? 0) >= couponResult.maxUsesPerCustomer) throw new Error(limitMessage);
+      }
       const redemptionKey = discountRedemptionKey({ userId: input.owner.userId ?? null, phone: input.customerPhone });
       if (redemptionKey) {
-        const [used] = await tx.select({ count: sql<number>`count(*)` }).from(discountCodeRedemptions)
+        const [used] = await tx.select({ count: sql<number>`count(*)`, maxSeq: sql<number>`COALESCE(MAX(${discountCodeRedemptions.seq}), 0)` }).from(discountCodeRedemptions)
           .where(and(eq(discountCodeRedemptions.discountCodeId, couponResult.id), eq(discountCodeRedemptions.customerKey, redemptionKey)));
         const usedCount = Number(used?.count ?? 0);
-        if (usedCount >= couponResult.maxUsesPerCustomer) {
-          throw new Error(couponResult.maxUsesPerCustomer === 1 ? "Та энэ кодыг аль хэдийн ашигласан байна." : `Энэ кодыг нэг хэрэглэгч хамгийн ихдээ ${couponResult.maxUsesPerCustomer} удаа ашиглана — та хязгаартаа хүрсэн байна.`);
-        }
+        // seq = MAX+1: цуцлалт дэвтрийн мөрийг устгадаг тул count+1 нь цоорхой үлдээж,
+        // байгаа суудалтай мөнхөд давхцдаг байв.
+        const nextSeq = Number(used?.maxSeq ?? 0) + 1;
+        if (usedCount >= couponResult.maxUsesPerCustomer) throw new Error(limitMessage);
         try {
-          await tx.insert(discountCodeRedemptions).values({ discountCodeId: couponResult.id, customerKey: redemptionKey, seq: usedCount + 1, orderId });
+          await tx.insert(discountCodeRedemptions).values({ discountCodeId: couponResult.id, customerKey: redemptionKey, seq: nextSeq, orderId });
         } catch (error) {
           if (isDuplicateKeyError(error, "discount_code_redemptions_slot")) {
             throw new Error("Энэ кодыг яг энэ мөчид өөр захиалгаар ашиглаж байна. Дахин оролдоно уу.", { cause: error });

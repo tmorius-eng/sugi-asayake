@@ -234,6 +234,13 @@ export const FACE_MODEL_URL = "/face-models";
 
 export const ADMIN_PANEL_ROLES = ["staff", "finance", "marketing", "warehouse", "admin"] as const;
 
+/** Нийтлэл унших/ноорог preview хийх эрхтэй дүрүүд — contentReadProcedure болон content.bySlug-ийн ИЖИЛ жагсаалт. */
+export const CONTENT_READ_ROLES = ["admin", "staff", "marketing"] as const;
+
+export function isContentReadRole(role: string | null | undefined): boolean {
+  return (CONTENT_READ_ROLES as readonly string[]).includes(role ?? "");
+}
+
 export function isAdminPanelRole(role: string | null | undefined): boolean {
   return !!role && (ADMIN_PANEL_ROLES as readonly string[]).includes(role);
 }

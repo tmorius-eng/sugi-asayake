@@ -125,6 +125,74 @@ export async function storageGet(relKey: string): Promise<{ key: string; url: st
   return { key, url: `/cdn/${key}` };
 }
 
+// ---- Хувийн bucket (2026-10-01) --------------------------------------------
+// CV болон барааны баримтын зураг нь нийтийн R2 bucket-д "нууц" key-тэй байсан ч
+// bucket public-read тул key мэдсэн хэн ч уншдаг байв. S3_PRIVATE_BUCKET-д хадгалбал
+// нийтийн URL огт байхгүй; зөвхөн админы үүсгэсэн богино хугацаатай гарын үсэгтэй URL.
+
+export const PRIVATE_STORAGE_UNAVAILABLE_MSG = "Файл хадгалах хувийн сан тохируулагдаагүй байна. Түр хүлээгээд дахин оролдоно уу эсвэл дэлгүүртэй холбогдоно уу.";
+
+export function isPrivateBucketConfigured(): boolean {
+  return Boolean(ENV.s3PrivateBucket);
+}
+
+/** Шинэ хувийн файл хадгалж болох эсэх: хувийн bucket байгаа, эсвэл (зөвхөн dev-д) нийтийн bucket-д түр хадгална. */
+export function canStorePrivately(): boolean {
+  return isPrivateBucketConfigured() || process.env.NODE_ENV !== "production";
+}
+
+export async function storagePutPrivate(
+  relKey: string,
+  data: Buffer | Uint8Array,
+  contentType = "application/octet-stream",
+): Promise<{ key: string }> {
+  const key = appendHashSuffix(normalizeKey(relKey));
+  if (!ENV.s3PrivateBucket) {
+    // Fail closed: production-д нийтийн bucket руу хувийн файл бичихгүй.
+    if (process.env.NODE_ENV === "production") throw new Error(PRIVATE_STORAGE_UNAVAILABLE_MSG);
+    console.warn(`[storage] S3_PRIVATE_BUCKET тохируулаагүй — "${key}"-г нийтийн bucket-д хадгаллаа (зөвхөн dev).`);
+    await putObject(key, data, contentType);
+    return { key };
+  }
+  await getClient().send(new PutObjectCommand({
+    Bucket: ENV.s3PrivateBucket,
+    Key: key,
+    Body: data,
+    ContentType: contentType,
+    CacheControl: "private, no-store",
+  }));
+  return { key };
+}
+
+function safeDownloadName(name: string | undefined): string | undefined {
+  if (!name) return undefined;
+  const cleaned = name.replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^[._]+/, "").slice(0, 80);
+  return cleaned || undefined;
+}
+
+/**
+ * Хувийн файлын 1 цагийн гарын үсэгтэй URL. Хувийн bucket-д байвал тэндээс; байхгүй
+ * (move-private-objects.ts-ээс өмнөх хуучин объект) эсвэл bucket тохируулаагүй бол нийтийн
+ * bucket-ийн гарын үсэгтэй URL руу буцна.
+ */
+export async function storageGetSignedUrlPrivate(relKey: string, options: { downloadName?: string } = {}): Promise<string> {
+  const key = normalizeKey(relKey);
+  const downloadName = safeDownloadName(options.downloadName);
+  const disposition = downloadName ? `attachment; filename="${downloadName}"` : "attachment";
+  const client = getClient();
+  let bucket = ENV.s3Bucket;
+  if (ENV.s3PrivateBucket) {
+    try {
+      await client.send(new HeadObjectCommand({ Bucket: ENV.s3PrivateBucket, Key: key }), { abortSignal: AbortSignal.timeout(10_000) });
+      bucket = ENV.s3PrivateBucket;
+    } catch {
+      // хуучин объект нийтийн bucket-д хэвээр
+    }
+  }
+  const command = new GetObjectCommand({ Bucket: bucket, Key: key, ResponseContentDisposition: disposition, ResponseCacheControl: "private, no-store" });
+  return getSignedUrl(client, command, { expiresIn: 3600 });
+}
+
 export async function storageGetSignedUrl(relKey: string): Promise<string> {
   const client = getClient();
   const key = normalizeKey(relKey);
@@ -189,6 +257,8 @@ export async function storageDelete(relKey: string): Promise<boolean> {
   if (!key) return false;
   try {
     await getClient().send(new DeleteObjectCommand({ Bucket: ENV.s3Bucket, Key: key }), { abortSignal: AbortSignal.timeout(10_000) });
+    // Хувийн bucket-д байж болох тул тэндээс ч устгана (байхгүй объект устгах нь алдаа биш).
+    if (ENV.s3PrivateBucket) await getClient().send(new DeleteObjectCommand({ Bucket: ENV.s3PrivateBucket, Key: key }), { abortSignal: AbortSignal.timeout(10_000) });
     existsCache.delete(key);
     return true;
   } catch (error) {

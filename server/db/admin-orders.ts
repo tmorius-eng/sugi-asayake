@@ -478,6 +478,13 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
       await restoreStockForOrder(tx, input.id, { type: "order_restock", actorUserId: input.actorUserId ?? null });
     }
     if (input.status === "cancelled") {
+      // 2026-10-01: бэлгийн картуудыг НЭГ ДОРОО цоожилж (orders → gift_cards → users дараалал,
+      // redeem-тэй нийцнэ) шалгана. Өмнө нь цоожгүй байсан тул картыг зэрэг ашиглах (redeem) нь
+      // цуцлалт + зээл буцаалттай уралдаж картын дүнг давхар авах боломжтой байв. Ашиглагдсан
+      // карттай захиалгыг цуцалж болохгүй — буцаалтын замаар шийднэ (дэвтэр орно).
+      if ((await lockGiftCardsAndSumRedeemed(tx, input.id)) > 0) {
+        throw new Error("Энэ захиалгын бэлгийн карт аль хэдийн ашиглагдсан тул цуцлах боломжгүй — буцаалтын замаар шийднэ үү.");
+      }
       // Цуцлагдсан захиалга купоны тоололд ороогүй (validateDiscountCode-ийн
       // `ne(status, "cancelled")`) тул дэвтрийн суудлыг ч мөн чөлөөлнө — эс
       // бөгөөс хүн цуцалсан захиалгынхаа улмаас кодоо дахин ашиглаж чадахгүй
