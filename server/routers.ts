@@ -24,12 +24,16 @@ import { sendAccountEmail, sendAccountSms } from "./_core/notification";
 import { ENV } from "./_core/env";
 import { directStorageUrl, storageKeyOf } from "./_core/publicUrl";
 import { systemRouter } from "./_core/systemRouter";
-import { signSessionToken, type TrpcContext } from "./_core/context";
+import { readSessionTokenClaims, signSessionToken, type TrpcContext } from "./_core/context";
+import { FACEBOOK_LINK_COOKIE, FACEBOOK_LINK_TTL_MS, signFacebookLinkIntent } from "./_core/facebookLinkIntent";
 import { hashPassword, verifyPassword } from "./_core/password";
 import {
   addCartItem,
   addWishlistItem,
   adminGlobalSearch,
+  bumpFaceGrantVersion,
+  clearFacebookIdForUser,
+  revokeSessionToken,
   bumpUserSessionVersion,
   type CartOwner,
   categoryExists,
@@ -232,7 +236,7 @@ import { deletePushSubscription, hasPushSubscription, issueGiftCards, listGiftCa
 import { sendOrderStatusPush, sendPushToUser, webPushEnabled } from "./_core/webPush";
 // Admin face gate (2026-09-08) -- see server/faceAuth.ts.
 import { clearFaceProofCookie, completeFaceVerification, faceProofIdleTimeoutMs, hasValidFaceProof, isFaceGateEnabled, lockFaceSession, refreshFaceProof, startFaceVerification } from "./faceAuth";
-import { assertReauthProof, clearReauthCookie, hasValidReauthProof, issueReauthProof } from "./_core/faceProof";
+import { assertReauthProof, clearReauthCookie, hasValidReauthProof, issueReauthProof, rotateFaceGrant } from "./_core/faceProof";
 import { FaceTemplateKeyMissingError } from "./db/face";
 import { approveFaceHandoff, assertHandoffApprovable, claimFaceHandoff, denyFaceHandoff, getFaceHandoffContext, startFaceHandoff } from "./faceHandoff";
 import { FACE_DESCRIPTOR_LENGTH, FACE_DIAGNOSTIC_MAX, FACE_IDLE_TIMEOUT_MS, FACE_MODEL_VERSION, isAdminPanelRole, isContentReadRole, isValidFaceDescriptor } from "../shared/face-auth";
@@ -587,6 +591,38 @@ const DUMMY_PASSWORD_HASH = `${"0".repeat(32)}:${"0".repeat(128)}`;
 // дээд тоо (countRecentFailedLoginAttempts, server/db.ts). IP-ийн tier-ээс тусдаа.
 const LOGIN_LOCKOUT_MAX_FAILURES = 10;
 const LOGIN_LOCKOUT_WINDOW_MS = 15 * 60 * 1000;
+
+/**
+ * Нууц үг шалгадаг НЭВТРЭЛТЭЭС ГАДНАХ замууд (нууц үг солих, акаунт устгах, утас солих,
+ * Facebook холбох/салгах) — login-той ИЖИЛ данс тус бүрийн lockout, ИЖИЛ буруу оролдлогын
+ * төсөв (2026-10-01, аюулгүй байдлын scan #9). Өмнө нь эдгээр нь зөвхөн IP-ийн tier-д
+ * хязгаарлагдаж, сешн cookie-той халдагч өөр IP-үүдээр нууц үгийг таах боломжтой байв.
+ *
+ * Хэш нь lockout-ээс ӨМНӨ шалгагдана — "түгжигдсэн" ба "буруу"-д хариу өгөх хугацаа ижил
+ * (auth.login-той адил). Түгжигдсэн ч зөв нууц үг + танил IP бол нэвтрүүлнэ.
+ * `invalidReason` нь COUNTED_LOGIN_FAILURE_REASONS-д байх ЁСТОЙ (server/db/ops.ts).
+ */
+async function verifyPasswordWithLockout(
+  ctx: { req: TrpcContext["req"] },
+  user: { id: number; phone: string | null; passwordHash: string },
+  password: string,
+  invalidReason: string,
+  wrongMessage: string,
+): Promise<void> {
+  const ipAddress = ctx.req.ip || ctx.req.socket?.remoteAddress || null;
+  const identifier = user.phone ?? `#${user.id}`;
+  const valid = await verifyPassword(password, user.passwordHash);
+  const lockedOut = (await countRecentFailedLoginAttempts(user.id, LOGIN_LOCKOUT_WINDOW_MS)) >= LOGIN_LOCKOUT_MAX_FAILURES;
+  const knownIp = lockedOut ? await hasRecentSuccessfulLoginFromIp(user.id, ipAddress) : false;
+  if (lockedOut && !(valid && knownIp)) {
+    await recordLoginAttempt({ email: identifier, userId: user.id, success: false, reason: "locked", ipAddress });
+    throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Хэт олон буруу оролдлого хийгдсэн тул энэ данс түр түгжигдлээ. 15 минутын дараа дахин оролдоно уу." });
+  }
+  if (!valid) {
+    await recordLoginAttempt({ email: identifier, userId: user.id, success: false, reason: invalidReason, ipAddress });
+    throw new TRPCError({ code: "UNAUTHORIZED", message: wrongMessage });
+  }
+}
 
 // Called right after auth.login/auth.register issue a session: if the
 // browser was shopping as a guest, fold that cart into the now-known
@@ -1053,7 +1089,18 @@ export const appRouter = router({
         const { passwordHash: _omit, ...safeUser } = user;
         return safeUser;
       }),
-    logout: publicProcedure.mutation(({ ctx }) => {
+    logout: publicProcedure.mutation(async ({ ctx }) => {
+      // 2026-10-01: cookie цэвэрлэх нь хулгайлсан/хуулсан токеныг хүчингүй болгодоггүй
+      // байв (365 хоног). Одоо ЭНЭ токены jti хар жагсаалтад орно — бусад төхөөрөмж
+      // хөндөгдөхгүй. jti-гүй хуучин токен бол (нэг удаагийн шилжилт) хэрэглэгчийн
+      // sessionVersion өсдөг. Зөвхөн хүчинтэй сешнтэй дуудагчид (ctx.user) үйлчилнэ.
+      if (ctx.user) {
+        const claims = await readSessionTokenClaims(ctx.req);
+        if (claims && claims.userId === ctx.user.id) {
+          if (claims.jti) await revokeSessionToken({ jti: claims.jti, userId: claims.userId, expiresAt: claims.expiresAt });
+          else await bumpUserSessionVersion(claims.userId);
+        }
+      }
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       // Admin face gate (2026-09-08): the face-proof cookie MUST die with the
@@ -1078,6 +1125,35 @@ export const appRouter = router({
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+    // 2026-10-01: Facebook холбох нь нууц үгээр баталгаажуулсан "intent"-ээр л (server/_core/
+    // facebookLinkIntent.ts). Клиент энэ procedure-ийг дуудаж, амжилттай бол
+    // /api/auth/facebook?redirect=/profile руу шилжинэ.
+    startFacebookLink: strictRateLimitedProtectedProcedure
+      .input(z.object({ password: z.string().min(1).max(200) }))
+      .mutation(async ({ ctx, input }) => {
+        if (!ENV.facebookAppId || !ENV.facebookAppSecret) throw new TRPCError({ code: "BAD_REQUEST", message: "Facebook-ээр холбох боломж одоогоор идэвхгүй байна." });
+        const user = await getUserById(ctx.user.id);
+        if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "Хэрэглэгч олдсонгүй." });
+        if (user.facebookId) throw new TRPCError({ code: "BAD_REQUEST", message: "Таны данс Facebook-тэй аль хэдийн холбогдсон байна." });
+        await verifyPasswordWithLockout(ctx, user, input.password, "facebook_link_invalid", "Нууц үг буруу байна.");
+        const intent = await signFacebookLinkIntent(user.id, user.sessionVersion);
+        ctx.res.cookie(FACEBOOK_LINK_COOKIE, intent, { ...getSessionCookieOptions(ctx.req), maxAge: FACEBOOK_LINK_TTL_MS });
+        return { ok: true as const };
+      }),
+    unlinkFacebook: strictRateLimitedProtectedProcedure
+      .input(z.object({ password: z.string().min(1).max(200) }))
+      .mutation(async ({ ctx, input }) => {
+        const user = await getUserById(ctx.user.id);
+        if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "Хэрэглэгч олдсонгүй." });
+        if (!user.facebookId) throw new TRPCError({ code: "BAD_REQUEST", message: "Таны данс Facebook-тэй холбогдоогүй байна." });
+        // Утас баталгаажаагүй, зөвхөн Facebook-ээр орж байгаа данс холбоосоо салгавал нэвтрэх
+        // ямар ч арга үлдэхгүй (нууц үг нь санамсаргүй) — эхлээд утсаа баталгаажуулна.
+        if (!user.phone) throw new TRPCError({ code: "BAD_REQUEST", message: "Facebook-ийг салгахын өмнө утасны дугаараа баталгаажуулна уу — эс бөгөөс дансанд нэвтрэх арга үлдэхгүй." });
+        await verifyPasswordWithLockout(ctx, user, input.password, "facebook_link_invalid", "Нууц үг буруу байна.");
+        await clearFacebookIdForUser(user.id);
+        await recordLoginAttempt({ email: user.phone, userId: user.id, success: true, reason: "facebook_unlinked", ipAddress: ctx.req.ip || null });
+        return { success: true } as const;
+      }),
     // verify.mn phone verification (2026-09-05) -- the ONLY password-reset
     // method now ("we do not need brevo at all" -- the old email-code
     // requestPasswordReset/resetPassword pair is gone). purpose:"register" also lets an
@@ -1243,8 +1319,20 @@ export const appRouter = router({
     // register-flow only: attaches+verifies a phone for an already-logged-in
     // user (see startPhoneVerification's purpose:"register" branch above).
     attachPhoneViaVerification: strictRateLimitedProtectedProcedure
-      .input(z.object({ sessionId: z.string().trim().min(1).max(80) }))
+      .input(z.object({ sessionId: z.string().trim().min(1).max(80), currentPassword: z.string().max(200).optional() }))
       .mutation(async ({ ctx, input }) => {
+        // 2026-10-01: утас бол нэвтрэлтийн identity. Аль хэдийн утастай данс түүнийг СОЛИХДОО
+        // одоогийн нууц үгээ (lockout-той) өгнө — хулгайлсан сешн cookie дангаараа дансны
+        // утсыг өөрийн дугаар болгож, SMS-ээр нууц үг сэргээж данс булааж чаддаг байв.
+        // Утасгүй данс (анхны холбоо, жишээ нь Facebook-ээр үүссэн) нууц үггүй холбоно.
+        // Нууц үгээ мэдэхгүй (Facebook-ээр үүссэн, нууц үг тавиагүй) бол эхлээд
+        // "Нууц үг мартсан" урсгалаар нууц үгээ тогтооно.
+        const account = await getUserById(ctx.user.id);
+        if (!account) throw new TRPCError({ code: "NOT_FOUND", message: "Хэрэглэгч олдсонгүй." });
+        if (account.phone) {
+          if (!input.currentPassword) throw new TRPCError({ code: "BAD_REQUEST", message: "Утасны дугаар солихын тулд одоогийн нууц үгээ оруулна уу." });
+          await verifyPasswordWithLockout(ctx, account, input.currentPassword, "phone_change_invalid", "Одоогийн нууц үг буруу байна.");
+        }
         const session = await getPhoneVerificationSessionByVerifyMnId(input.sessionId);
         // 2026-09-23: сессийг ЗӨВХӨН түүнийг эхлүүлсэн данс зарцуулна. Өмнө нь
         // дуудагчтай огт холбоогүй байсан тул verify.mn-ий сессийн id-г мэдсэн
@@ -1266,6 +1354,10 @@ export const appRouter = router({
         } catch (error) {
           throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Утасны дугаар хадгалж чадсангүй." });
         }
+        // attachPhoneFromVerifiedSession нь sessionVersion-ийг өсгөсөн (бусад төхөөрөмж гарна);
+        // ЭНЭ төхөөрөмжид шинэ сешн cookie олгоно.
+        const updated = await getUserById(ctx.user.id);
+        if (updated) ctx.res.cookie(COOKIE_NAME, await signSessionToken(updated.id, updated.sessionVersion), getSessionCookieOptions(ctx.req));
         return { success: true } as const;
       }),
   }),
@@ -1681,7 +1773,7 @@ export const appRouter = router({
       // табын id өөр — `anyTab` ашиглана.
       let bypassGate = false;
       if (ctx.user && isContentReadRole(ctx.user.role)) {
-        bypassGate = !isFaceGateEnabled() || (await hasValidFaceProof(ctx.req, ctx.user.id, ctx.user.sessionVersion, { anyTab: true }));
+        bypassGate = !isFaceGateEnabled() || (await hasValidFaceProof(ctx.req, ctx.user.id, ctx.user.sessionVersion, ctx.user.faceGrantVersion, { anyTab: true }));
       }
       return getPublishedPostBySlug(input.slug, { bypassGate });
     }),
@@ -2164,8 +2256,7 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const user = await getUserById(ctx.user.id);
         if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "Хэрэглэгч олдсонгүй." });
-        const valid = await verifyPassword(input.currentPassword, user.passwordHash);
-        if (!valid) throw new TRPCError({ code: "UNAUTHORIZED", message: "Одоогийн нууц үг буруу байна." });
+        await verifyPasswordWithLockout(ctx, user, input.currentPassword, "password_change_invalid", "Одоогийн нууц үг буруу байна.");
         const newHash = await hashPassword(input.newPassword);
         const updated = await changeUserPassword(ctx.user.id, newHash);
         await recordLoginAttempt({ email: ctx.user.phone ?? `#${ctx.user.id}`, userId: ctx.user.id, success: true, reason: "password_changed", ipAddress: ctx.req.ip || null });
@@ -2186,8 +2277,7 @@ export const appRouter = router({
         }
         const user = await getUserById(ctx.user.id);
         if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "Хэрэглэгч олдсонгүй." });
-        const valid = await verifyPassword(input.password, user.passwordHash);
-        if (!valid) throw new TRPCError({ code: "UNAUTHORIZED", message: "Нууц үг буруу байна." });
+        await verifyPasswordWithLockout(ctx, user, input.password, "delete_account_invalid", "Нууц үг буруу байна.");
         await deleteUserAccount(ctx.user.id);
         ctx.res.clearCookie(COOKIE_NAME, { ...getSessionCookieOptions(ctx.req), maxAge: -1 });
         return { success: true } as const;
@@ -2359,10 +2449,11 @@ export const appRouter = router({
         return { gateEnabled, passwordConfirmed: true, enrolled: true, verified: true, modelStale: false, idleTimeoutMs: FACE_IDLE_TIMEOUT_MS };
       }
       const enrollment = await getFaceEnrollment(ctx.user.id);
+      const subject = ctx.user;
       // The proof's OWN idle window, not the global constant: a session
       // unlocked by phone handoff runs on 10 minutes (2026-09-16), and the
       // browser's countdown has to match what the server enforces.
-      const proofIdleMs = await faceProofIdleTimeoutMs(ctx.req, ctx.user.id, ctx.user.sessionVersion);
+      const proofIdleMs = await faceProofIdleTimeoutMs(ctx.req, subject.id, subject.sessionVersion, subject.faceGrantVersion);
       const hasProof = proofIdleMs !== null;
       // A proof cookie only counts while an enrollment actually exists.
       //
@@ -2379,7 +2470,7 @@ export const appRouter = router({
         // the browser shows the password screen before anything else -- which
         // is every time the face is needed: the step is one-shot and a
         // sign-in does not count as it.
-        passwordConfirmed: await hasValidReauthProof(ctx.req, ctx.user.id, ctx.user.sessionVersion),
+        passwordConfirmed: await hasValidReauthProof(ctx.req, subject.id, subject.sessionVersion, subject.faceGrantVersion),
         enrolled: !!enrollment,
         verified,
         // A descriptor from a superseded model can't be compared with a new
@@ -2405,7 +2496,9 @@ export const appRouter = router({
      */
     heartbeat: protectedProcedure.mutation(async ({ ctx }) => {
       if (!isFaceGateEnabled() || !isAdminPanelRole(ctx.user.role)) return { ok: true as const, idleExpiresAt: null, absoluteExpiresAt: null };
-      return refreshFaceProof({ req: ctx.req, res: ctx.res, userId: ctx.user.id, sessionVersion: ctx.user.sessionVersion });
+      // ctx.user нь panel эрхтэйд КЭШГҮЙ уншигдсан (context.ts) — faceGrantVersion шинэ.
+      const subject = ctx.user;
+      return refreshFaceProof({ req: ctx.req, res: ctx.res, userId: subject.id, sessionVersion: subject.sessionVersion, faceGrantVersion: subject.faceGrantVersion });
     }),
 
     /** Ends the face session now -- the browser's idle timer firing, or
@@ -2449,7 +2542,7 @@ export const appRouter = router({
           await recordLoginAttempt({ email: identifier, userId: user.id, success: false, reason: "reauth_invalid", ipAddress });
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Нууц үг буруу байна." });
         }
-        await issueReauthProof({ req: ctx.req, res: ctx.res, userId: user.id, sessionVersion: user.sessionVersion });
+        await issueReauthProof({ req: ctx.req, res: ctx.res, userId: user.id, sessionVersion: user.sessionVersion, faceGrantVersion: user.faceGrantVersion });
         await recordLoginAttempt({ email: identifier, userId: user.id, success: true, reason: "reauth", ipAddress });
         return { ok: true as const };
       }),
@@ -2492,10 +2585,11 @@ export const appRouter = router({
         // A first enrolment, a stale model or an unreadable template has no
         // current face to prove; an admin's reset (Users drawer) is the way
         // back for someone whose face no longer matches.
-        await assertReauthProof({ req: ctx.req, user: ctx.user, evenWhenGateOff: true });
+        const subject = ctx.user;
+        await assertReauthProof({ req: ctx.req, user: subject, evenWhenGateOff: true });
         const existing = await getFaceEnrollment(ctx.user.id);
         const replacingUsableFace = !!existing && existing.modelVersion === FACE_MODEL_VERSION && existing.templateReadable;
-        if (replacingUsableFace && isFaceGateEnabled() && !(await hasValidFaceProof(ctx.req, ctx.user.id, ctx.user.sessionVersion))) {
+        if (replacingUsableFace && isFaceGateEnabled() && !(await hasValidFaceProof(ctx.req, subject.id, subject.sessionVersion, subject.faceGrantVersion))) {
           throw new TRPCError({ code: "FORBIDDEN", message: FACE_REQUIRED_ERR_MSG });
         }
         if (!isValidFaceDescriptor(input.descriptor)) {
@@ -2530,6 +2624,11 @@ export const appRouter = router({
         // Enrolling does NOT by itself open /admin: the user still performs a
         // live check immediately afterwards. Otherwise "enroll" would be a
         // way to bypass the very gate it exists to feed.
+        // 2026-10-01: бүртгэл солигдсон тул өмнө олгосон БҮХ царайны proof-ийг
+        // хүчингүй болгоно (faceGrantVersion+1); энэ табын нууц үгийн алхмыг шинэ
+        // утгаар дахин гарын үсэглэж үлдээнэ — эс бөгөөс бүртгэлийн дараа нууц үгийг
+        // дахин асууна.
+        await rotateFaceGrant({ req: ctx.req, res: ctx.res, userId: subject.id, sessionVersion: subject.sessionVersion, faceGrantVersion: subject.faceGrantVersion });
         return { ok: true as const };
       }),
 
@@ -2568,10 +2667,12 @@ export const appRouter = router({
         // and without this it could hand one to THIS procedure instead of
         // approveHandoff and mint the proof for itself -- admin on the phone,
         // with no password ever entered there (2026-09-22 review).
-        await assertReauthProof({ req: ctx.req, user: ctx.user });
+        const subject = ctx.user;
+        await assertReauthProof({ req: ctx.req, user: subject });
         return completeFaceVerification({
           userId: ctx.user.id,
           sessionVersion: ctx.user.sessionVersion,
+          faceGrantVersion: subject.faceGrantVersion,
           challengeId: input.challengeId,
           descriptor: input.descriptor,
           livenessPassed: input.livenessPassed,
@@ -2606,7 +2707,8 @@ export const appRouter = router({
      */
     handoffStatus: protectedProcedure.input(z.object({ token: z.string().min(10).max(120) })).mutation(async ({ ctx, input }) => {
       if (!isAdminPanelRole(ctx.user.role)) throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
-      const claim = await claimFaceHandoff({ token: input.token, userId: ctx.user.id, sessionVersion: ctx.user.sessionVersion, req: ctx.req, res: ctx.res });
+      const subject = ctx.user;
+      const claim = await claimFaceHandoff({ token: input.token, userId: ctx.user.id, sessionVersion: ctx.user.sessionVersion, faceGrantVersion: subject.faceGrantVersion, req: ctx.req, res: ctx.res });
       return { status: claim.status, expiresAt: claim.expiresAt ? claim.expiresAt.toISOString() : null };
     }),
 
@@ -2663,6 +2765,7 @@ export const appRouter = router({
         const verification = await completeFaceVerification({
           userId: ctx.user.id,
           sessionVersion: ctx.user.sessionVersion,
+          faceGrantVersion: ctx.user.faceGrantVersion,
           challengeId: input.challengeId,
           descriptor: input.descriptor,
           livenessPassed: input.livenessPassed,
@@ -2892,6 +2995,10 @@ export const appRouter = router({
      */
     resetUserFaceEnrollment: adminProcedure.input(z.object({ userId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       await deleteFaceEnrollment(input.userId);
+      // 2026-10-01: өмнө олгосон царайны proof/step-up cookie (өөр төхөөрөмж, хуулсан
+      // хуулбар) хаана ч байсан хүчингүй — өөрийгөө reset хийх үед ч cookie цэвэрлэхээс
+      // гадна (доор) grant-ийн хувилбарыг өсгөнө.
+      await bumpFaceGrantVersion(input.userId);
       // 2026-09-27: reset-ийн өмнөх царайны proof cookie 8 цаг хүчинтэй хэвээр
       // үлддэг байв (proof нь sessionVersion-оор холбогддог) — reset нь тухайн
       // хэрэглэгчийг бүх төхөөрөмжөөс гаргаж, дахин нууц үг + шинэ царай шаардана.
@@ -3298,6 +3405,9 @@ export const appRouter = router({
       }
     }),
     unsuspendUser: adminProcedure.input(z.object({ userId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      // 2026-10-01: өөрийгөө буцаан нээх боломжгүй — түр хаагдсан admin-ий сешн (хулгайлагдсан
+      // эсвэл дараа нь админ хаасан) өөрийгөө дахин идэвхжүүлж чаддаг байв.
+      if (ctx.user.id === input.userId) throw new TRPCError({ code: "BAD_REQUEST", message: "Өөрийн дансыг өөрөө буцаан нээх боломжгүй. Өөр админд хандана уу." });
       try {
         const updated = await unsuspendUser(input.userId);
         await logAdminAction({ actorUserId: ctx.user.id, action: "user.unsuspended", entityType: "user", entityId: input.userId });
@@ -3305,6 +3415,13 @@ export const appRouter = router({
       } catch (error) {
         throw new TRPCError({ code: "NOT_FOUND", message: error instanceof Error ? error.message : "Unable to unsuspend this user." });
       }
+    }),
+    // 2026-10-01: хэрэглэгчийн Facebook холбоосыг админ салгана (хулгайлагдсан/буруу холбосон
+    // Facebook-ийг нэвтрэлтээс хасах; хэрэглэгч дараа нь өөрөө нууц үгээрээ дахин холбоно).
+    clearUserFacebook: adminProcedure.input(z.object({ userId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      await clearFacebookIdForUser(input.userId);
+      await logAdminAction({ actorUserId: ctx.user.id, action: "user.facebook_cleared", entityType: "user", entityId: input.userId });
+      return { success: true } as const;
     }),
     forceLogoutUser: adminProcedure.input(z.object({ userId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       await bumpUserSessionVersion(input.userId);

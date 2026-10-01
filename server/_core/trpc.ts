@@ -146,6 +146,13 @@ export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
 // called did not, so an expired proof (or none) still let every call through.
 // See server/_core/faceProof.ts for the incident. Customer-facing procedures
 // stay on protectedProcedure -- a shopper never has a proof and never needs one.
+//
+// 2026-10-01 (аюулгүй байдлын scan #35): `ctx.user` нь 5 секундын процесс доторх кэшээс
+// ирдэг (getSessionUserById) тул олон worker/процесст нэгэнд хийсэн түр хаалт, эрх
+// өөрчлөлт, "бүх төхөөрөмжөөс гаргах" нөгөөд хүртэл 5 секунд харагдахгүй. Панелийн
+// procedure-ийн хувьд ЭНЭ хугацааг арилгахын тулд createContext (server/_core/context.ts)
+// panel эрхтэй (role != "user") хэрэглэгчийг КЭШГҮЙ дахин уншдаг — тиймээс энд
+// `ctx.user` (role, suspendedAt, sessionVersion, faceGrantVersion) admin-д үргэлж шинэ.
 const panelProcedure = protectedProcedure.use(async ({ ctx, next }) => {
   await assertFaceProofForPanelRole({ req: ctx.req, user: ctx.user });
   return next({ ctx });

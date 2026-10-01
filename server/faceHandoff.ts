@@ -242,7 +242,7 @@ export type HandoffClaim = { status: "pending" | "approved" | "expired" | "denie
  * дээр** proof cookie-г мөнгөлнө — өөрөөр хэлбэл proof яг энэ хөтөч, яг энэ
  * табд үүснэ. Утас руу ямар ч proof хэзээ ч очихгүй.
  */
-export async function claimFaceHandoff(input: { token: string; userId: number; sessionVersion: number; req: Request; res: Response }): Promise<HandoffClaim> {
+export async function claimFaceHandoff(input: { token: string; userId: number; sessionVersion: number; faceGrantVersion: number; req: Request; res: Response }): Promise<HandoffClaim> {
   const db = await getDb();
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Өгөгдлийн сан бэлэн биш байна." });
   const row = await loadRequest(input.token);
@@ -261,7 +261,7 @@ export async function claimFaceHandoff(input: { token: string; userId: number; s
 
   // Handoff-оор нээгдсэн сесс богино идэвхгүй цонхтой (10 минут) —
   // shared/face-auth.ts-ийн FACE_HANDOFF_IDLE_TIMEOUT_MS.
-  await issueFaceProof({ req: input.req, res: input.res, userId: input.userId, sessionVersion: input.sessionVersion, idleTimeoutMs: FACE_HANDOFF_IDLE_TIMEOUT_MS });
+  await issueFaceProof({ req: input.req, res: input.res, userId: input.userId, sessionVersion: input.sessionVersion, faceGrantVersion: input.faceGrantVersion, idleTimeoutMs: FACE_HANDOFF_IDLE_TIMEOUT_MS });
   return { status: "approved", expiresAt: null };
 }
 

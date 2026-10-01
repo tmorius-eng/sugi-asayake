@@ -3,8 +3,8 @@
 // (export *) тул import зам өөрчлөгдөөгүй. Функц зөөхдөө энэ файлын import-ыг мөн шинэчил.
 
 import { randomBytes } from "node:crypto";
-import { and, desc, eq, gt, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
-import { phoneVerificationSessions, products, pushSubscriptions, userAddresses, users, wishlistItems } from "../../drizzle/schema";
+import { and, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { phoneVerificationSessions, products, pushSubscriptions, sessionRevocations, userAddresses, users, wishlistItems } from "../../drizzle/schema";
 import { type UbDistrict } from "../../shared/districts";
 import { getOrSetCached, invalidateCached } from "../_core/ttlCache";
 import { withLiveCampaign } from "./price-campaigns";
@@ -70,16 +70,13 @@ export async function createUserWithPassword(input: { phone: string; passwordHas
   const existing = await findUserByPhone(input.phone);
   if (existing) throw new Error("Энэ утасны дугаараар бүртгэл үүссэн байна.");
 
-  // The very first account on a fresh deployment is granted admin
-  // automatically -- this replaces the old "openId === ENV.ownerOpenId"
-  // bootstrap rule. The old second bootstrap path (email === OWNER_EMAIL)
-  // is gone along with it: registration no longer collects an email to
-  // compare, and the one real owner account already exists with admin role
-  // and its own phone on file. ENV.ownerEmail itself is untouched -- it
-  // still routes owner alert emails (server/_core/notification.ts).
-  const [{ userCount }] = await db.select({ userCount: sql<number>`count(*)` }).from(users);
-  const isFirstUser = Number(userCount) === 0;
-  const role: "user" | "admin" = isFirstUser ? "admin" : "user";
+  // 2026-10-01 (аюулгүй байдлын scan): "хамгийн эхний хэрэглэгч автоматаар admin"
+  // дүрэм ХАСАГДСАН. count-аар шалгаад insert хийх нь race-тэй байсан (хоёр
+  // зэрэгцээ бүртгэл хоёулаа admin болно) ба хоосон DB дээр (шинэ эзэн, staging
+  // хуулбар, CI) хэн түрүүлж бүртгүүлсэн нь admin болдог байв. Одоо бүх бүртгэл
+  // "user"; анхны admin-ийг серверт хандах эрхтэй хүн
+  // `pnpm exec tsx scripts/make-admin.ts <утас>`-аар оноодог.
+  const role = "user" as const;
 
   const inserted = await db.insert(users).values({
     phone: input.phone,
@@ -394,6 +391,76 @@ export async function bumpUserSessionVersion(id: number) {
   forgetSessionUser(id);
 }
 
+// ---------------------------------------------------------------------------
+// Нэг төхөөрөмжийн logout (2026-10-01, migration 0099). Сешн JWT `jti`-тай;
+// logout түүнийг `session_revocations`-д бичнэ, resolveUserFromToken шалгана.
+// Хүчингүй болсон jti-г токены хугацаа дуустал процесс дотор урт кэшлэнэ
+// (хүчингүй болох нь буцдаггүй); "хүчингүй биш" гэсэн хариуг ЗӨВХӨН 5 секунд —
+// нөгөө worker дээр logout хийсэн токен хамгийн ихдээ тэр хугацаанд ажиллана.
+// ---------------------------------------------------------------------------
+const REVOKED_NEGATIVE_TTL_MS = 5_000;
+const REVOKED_CACHE_MAX = 5_000;
+const revokedJtis = new Map<string, number>(); // jti -> токены хугацаа дуусах мс
+const notRevokedUntil = new Map<string, number>(); // jti -> "хүчингүй биш" кэшийн дуусах мс
+
+function rememberRevoked(jti: string, expiresAtMs: number) {
+  if (revokedJtis.size >= REVOKED_CACHE_MAX) {
+    const now = Date.now();
+    for (const [key, exp] of revokedJtis) if (exp <= now) revokedJtis.delete(key);
+    // Цэвэрлэсний дараа ч дүүрэн бол хамгийн эхний бичлэгийг гаргана — хүчингүй
+    // болсон токен кэшээс гарсан ч DB-ээс дахин олдох тул аюулгүй.
+    if (revokedJtis.size >= REVOKED_CACHE_MAX) {
+      const oldest = revokedJtis.keys().next().value;
+      if (oldest !== undefined) revokedJtis.delete(oldest);
+    }
+  }
+  revokedJtis.set(jti, expiresAtMs);
+  notRevokedUntil.delete(jti);
+}
+
+export async function isSessionRevoked(jti: string): Promise<boolean> {
+  const now = Date.now();
+  const known = revokedJtis.get(jti);
+  if (known !== undefined) {
+    if (known > now) return true;
+    revokedJtis.delete(jti);
+  }
+  const negative = notRevokedUntil.get(jti);
+  if (negative !== undefined && negative > now) return false;
+  const db = await getDb();
+  if (!db) return false;
+  const [row] = await db.select({ expiresAt: sessionRevocations.expiresAt }).from(sessionRevocations).where(eq(sessionRevocations.jti, jti)).limit(1);
+  if (row) {
+    rememberRevoked(jti, row.expiresAt.getTime());
+    return true;
+  }
+  if (notRevokedUntil.size >= REVOKED_CACHE_MAX) notRevokedUntil.clear();
+  notRevokedUntil.set(jti, now + REVOKED_NEGATIVE_TTL_MS);
+  return false;
+}
+
+/** Энэ нэг токеныг хүчингүй болгоно (бусад төхөөрөмж хөндөгдөхгүй). Давхар дуудлага аюулгүй. */
+export async function revokeSessionToken(input: { jti: string; userId: number; expiresAt: Date }): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.insert(sessionRevocations).values({ jti: input.jti, userId: input.userId, expiresAt: input.expiresAt }).onDuplicateKeyUpdate({ set: { jti: input.jti } });
+  rememberRevoked(input.jti, input.expiresAt.getTime());
+}
+
+/** Токены хугацаа дууссан мөрийг устгана (өдөр тутмын retention job, server/automation.ts). */
+export async function purgeExpiredSessionRevocations(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db.delete(sessionRevocations).where(lt(sessionRevocations.expiresAt, new Date()));
+  return Number(result[0].affectedRows ?? 0);
+}
+
+/** Тест seam: процессын кэшийг март. */
+export function clearSessionRevocationCacheForTests() {
+  revokedJtis.clear();
+  notRevokedUntil.clear();
+}
+
 // Tom, 2026-09-05 ("we do not need brevo at all"): the email-OTP password
 // reset (createPasswordResetCode/resetPasswordWithCode) and email
 // verification (createEmailVerificationCode/verifyEmailWithCode) functions
@@ -535,6 +602,8 @@ export async function updatePhoneVerificationSessionStatus(id: number, status: "
 // (auth.resetPasswordViaPhone) is responsible for re-checking verify.mn's
 // LIVE status immediately before calling this -- this function trusts
 // whatever status is already on the row, so it must be fresh.
+class PhoneChangedError extends Error {}
+
 export async function resetPasswordViaPhoneSession(input: { sessionId: number; passwordHash: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
@@ -558,13 +627,20 @@ export async function resetPasswordViaPhoneSession(input: { sessionId: number; p
   if (Number(claimed[0].affectedRows ?? 0) !== 1) throw new Error("Энэ баталгаажуулалт аль хэдийн ашиглагдсан байна.");
 
   try {
-    await db.update(users).set({ passwordHash: input.passwordHash, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: new Date() }).where(eq(users.id, session.userId));
-  forgetSessionUser(session.userId);
+    // 2026-10-01: `users.phone = session.phone` нөхцөл. Сесс нь утсаар баталгаажсан;
+    // тэр хооронд дансны утас солигдсон (эсвэл хэн нэгэн хуучин утсаа авсан) бол
+    // хуучин утасны баталгаажуулалтаар НЭГ ӨӨР утастай дансны нууц үгийг солихгүй.
+    const updated = await db.update(users)
+      .set({ passwordHash: input.passwordHash, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: new Date() })
+      .where(and(eq(users.id, session.userId), eq(users.phone, session.phone)));
+    if (Number(updated[0].affectedRows ?? 0) !== 1) throw new PhoneChangedError();
+    forgetSessionUser(session.userId);
   } catch (error) {
     // Claimed the session but the actual password update failed (a genuine
     // DB error) -- release the claim so the shopper isn't left with a
     // burned, unusable session and no changed password.
     await db.update(phoneVerificationSessions).set({ consumedAt: null }).where(eq(phoneVerificationSessions.id, session.id));
+    if (error instanceof PhoneChangedError) throw new Error("Энэ баталгаажуулалт одоогийн утасны дугаарт хамаарахгүй байна. Нууц үг сэргээх хүсэлтээ шинээр эхлүүлнэ үү.", { cause: error });
     throw error;
   }
   return { userId: session.userId };
@@ -650,7 +726,10 @@ export async function attachPhoneFromVerifiedSession(input: { sessionId: number 
   if (Number(claimed[0].affectedRows ?? 0) !== 1) throw new Error("Энэ баталгаажуулалт аль хэдийн ашиглагдсан байна.");
 
   try {
-    await db.update(users).set({ phone: session.phone, updatedAt: new Date() }).where(eq(users.id, session.userId));
+    // 2026-10-01: утас бол нэвтрэлтийн identity — солигдоход бусад төхөөрөмж (хуучин утсаар
+    // нэвтэрсэн, хулгайлагдсан сешн) гарна. Дуудагч (auth.attachPhoneViaVerification)
+    // ЭНЭ төхөөрөмжид шинэ сешн cookie олгоно.
+    await db.update(users).set({ phone: session.phone, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: new Date() }).where(eq(users.id, session.userId));
     // 2026-09-23: сешний 5 секундын кэш — үүнгүйгээр шинэ утас тэр хугацаанд
     // `ctx.user.phone`-д харагдахгүй (checkout-ийн зочны OTP шалгалт үүнээс хамаарна).
     forgetSessionUser(session.userId);
@@ -710,5 +789,17 @@ export async function linkFacebookIdToUser(userId: number, facebookId: string) {
   const [self] = await db.select({ facebookId: users.facebookId }).from(users).where(eq(users.id, userId)).limit(1);
   if (self?.facebookId && self.facebookId !== facebookId) throw new Error("Энэ дансанд өөр Facebook аль хэдийн тохируулагдсан байна. Солих бол дэлгүүрийн админтай ярина уу.");
   await db.update(users).set({ facebookId }).where(eq(users.id, userId));
+  forgetSessionUser(userId);
+}
+
+/**
+ * Facebook холбоосыг салгана (2026-10-01). Хэрэглэгч өөрөө (нууц үгээр баталгаажуулсны
+ * дараа — auth.unlinkFacebook) эсвэл admin (admin.clearUserFacebook) дууддаг.
+ * Холбоогүй байсан ч алдаагүй (idempotent).
+ */
+export async function clearFacebookIdForUser(userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.update(users).set({ facebookId: null, updatedAt: new Date() }).where(eq(users.id, userId));
   forgetSessionUser(userId);
 }

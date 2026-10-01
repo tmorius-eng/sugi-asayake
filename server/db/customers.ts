@@ -100,9 +100,12 @@ export async function getAdminUserDetail(userId: number) {
     loyaltyManualAdjustmentMnt: users.loyaltyManualAdjustmentMnt,
     storeCreditMnt: users.storeCreditMnt,
     branchId: users.branchId,
+    // Түүхий Facebook id-г админ руу ч гаргахгүй — зөвхөн холбогдсон эсэх (2026-10-01).
+    hasFacebook: sql<number>`${users.facebookId} IS NOT NULL`,
   }).from(users).where(eq(users.id, userId)).limit(1);
-  const user = rows[0];
-  if (!user) return null;
+  const row = rows[0];
+  if (!row) return null;
+  const user = { ...row, hasFacebook: Boolean(Number(row.hasFacebook)) };
 
   const [userOrders, [spendRow]] = await Promise.all([
     db.select({

@@ -70,6 +70,21 @@ pnpm exec tsx scripts/db-apply-migration.ts drizzle/00NN_name.sql --staging
 production-тай ижил. `--> statement-breakpoint` тэмдэглэгээг өөрөө хасна.
 Админ эрх шаардвал `DATABASE_ADMIN_URL` ашиглана.
 
+### Анхны admin өгөх (2026-10-01)
+
+Шинэ суурилуулалт/хоосон DB дээр "эхний бүртгэл автоматаар admin" дүрэм **байхгүй**
+(race-тэй, хэн түрүүлж бүртгүүлсэн нь admin болдог байв). Эхлээд сайтаар (/login →
+бүртгүүлэх) ердийн данс үүсгээд, серверт хандах эрхтэй хүн:
+
+```powershell
+pnpm exec tsx scripts/make-admin.ts 99112233 --dry-run   # юу өөрчлөгдөхийг харах
+pnpm exec tsx scripts/make-admin.ts 99112233             # admin болгох (staging: --staging)
+```
+
+Хэрэглэгч олдохгүй бол татгалзана (данс үүсгэдэггүй). Тухайн хэрэглэгчийн бүх одоогийн
+сешн хүчингүй болж (sessionVersion+1) дахин нэвтэрнэ; дараа нь /admin дээр нууц үг +
+царайны step-up.
+
 > ⛔ **`deploy.ps1 -Staging` нь migration зөөдөггүй** — зөвхөн кодыг зөөнө.
 > Шинэ `.sql` бүрийг staging дээр мөн **гараар** ажиллуул. Эс бөгөөс staging
 > чимээгүй 500 алдаа өгнө (2026-09-16-нд /careers болон admin-ий бүтээгдэхүүн
@@ -226,7 +241,8 @@ INTEGRATIONS_ENCRYPTION_KEY=           # 64 тэмдэгт hex (32 байт). А
                                        # Admin-ийн царайны загвар ч үүгээр шифрлэгдэнэ (2026-09-22):
                                        # БҮХ машин дээр ИЖИЛ байх ёстой, эс бөгөөс өөр машин дээр
                                        # бүртгэсэн царай "дахин бүртгүүлнэ үү" болно.
-OWNER_EMAIL=                           # энэ хаягаар бүртгүүлсэн хүн admin болно
+OWNER_EMAIL=                           # зөвхөн эзэнд очих имэйл мэдэгдэл (хэнийг ч admin болгодоггүй;
+                                       # admin өгөх: pnpm exec tsx scripts/make-admin.ts <утас>)
 PUBLIC_BASE_URL=https://example.com    # төлбөрийн callback, canonical URL
 PORT=3000
 NODE_ENV=production

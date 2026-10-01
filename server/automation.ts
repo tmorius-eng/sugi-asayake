@@ -7,7 +7,7 @@ import { emailConfigured, sendAccountEmail, notifyOwner } from "./_core/notifica
 import { sendPushToUser } from "./_core/webPush";
 import { registerJob } from "./_core/scheduler";
 import { purgeExpiredFaceHandoffs } from "./faceHandoff";
-import { purgeExpiredFaceChallenges } from "./db";
+import { purgeExpiredFaceChallenges, purgeExpiredSessionRevocations } from "./db";
 import { purgeSearchQueries } from "./search/searchAnalytics";
 
 /**
@@ -242,7 +242,9 @@ export async function runDataRetentionJob(): Promise<void> {
   const challenges = await purgeExpiredFaceChallenges(24);
   // Хайлтын лог 90 хоног (2026-09-20): статистикт 30/90 хоногийн цонх л хэрэгтэй.
   const searches = await purgeSearchQueries(90);
-  if (visitorSessions || loginAttempts || handoffs || challenges || searches) console.log(`[retention] removed ${visitorSessions} visitor session(s) older than 24 months, ${loginAttempts} login attempt(s) older than 12 months, ${handoffs} face handoff request(s) older than 24 hours, ${challenges} face challenge(s) expired over 24 hours ago, ${searches} search log row(s) older than 90 days`);
+  // Logout-ийн хар жагсаалт (2026-10-01): токены хугацаа дууссан мөр хэрэггүй.
+  const revocations = await purgeExpiredSessionRevocations();
+  if (visitorSessions || loginAttempts || handoffs || challenges || searches || revocations) console.log(`[retention] removed ${visitorSessions} visitor session(s) older than 24 months, ${loginAttempts} login attempt(s) older than 12 months, ${handoffs} face handoff request(s) older than 24 hours, ${challenges} face challenge(s) expired over 24 hours ago, ${searches} search log row(s) older than 90 days, ${revocations} expired session revocation(s)`);
 }
 
 export function registerDataRetentionJob() {

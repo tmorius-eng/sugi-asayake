@@ -26,6 +26,7 @@ import { ENV } from "./env";
 import { createContext, signSessionToken } from "./context";
 import { getSessionCookieOptions } from "./cookies";
 import { hashPassword } from "./password";
+import { FACEBOOK_LINK_COOKIE, readFacebookLinkIntent } from "./facebookLinkIntent";
 import { COOKIE_NAME } from "../../shared/const";
 import { createUserFromFacebook, findUserByFacebookId, linkFacebookIdToUser, recordLoginAttempt, touchUserLastSignedIn } from "../db";
 import { mergeGuestCartAndClearCookie } from "../routers";
@@ -43,10 +44,23 @@ function baseUrl(req: Request): string {
 }
 const callbackUrl = (req: Request) => `${baseUrl(req)}/api/auth/facebook/callback`;
 
-/** Same-site path only: must start with a single "/" (not "//host"). */
-function safeRedirect(value: unknown): string {
-  if (typeof value !== "string") return "/";
-  return /^\/(?!\/)/.test(value) && value.length <= 500 ? value : "/";
+/**
+ * Same-site path only. 2026-10-01: өмнөх `/^\/(?!\/)/` нь "/\\evil.example"-ийг
+ * (backslash) нэвтрүүлдэг байв — хөтөч `\`-г `/` болгож "//evil.example" гэж тайлдаг.
+ * Одоо: "/"-ээр эхэлсэн, "//" биш, backslash/control тэмдэгтгүй, мөн
+ * `new URL(value, "https://x.invalid")` нь ижил origin хэвээр үлдэх ёстой.
+ */
+export function safeRedirect(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 500) return "/";
+  if (!value.startsWith("/") || value.startsWith("//")) return "/";
+  // eslint-disable-next-line no-control-regex
+  if (/[\\\u0000-\u001f\u007f]/.test(value)) return "/";
+  try {
+    if (new URL(value, "https://x.invalid").origin !== "https://x.invalid") return "/";
+  } catch {
+    return "/";
+  }
+  return value;
 }
 
 function stateCookieOptions(req: Request) {
@@ -83,6 +97,10 @@ export async function finishFacebookLogin(req: Request, res: Response) {
   // State check.
   const raw = parseCookie(req.headers.cookie ?? "", STATE_COOKIE);
   res.clearCookie(STATE_COOKIE, { ...stateCookieOptions(req), maxAge: -1 });
+  // Холбох зорилгын токен — нэг удаагийн: ашигласан ч, ашиглаагүй ч энд арилна.
+  const rawIntent = parseCookie(req.headers.cookie ?? "", FACEBOOK_LINK_COOKIE);
+  res.clearCookie(FACEBOOK_LINK_COOKIE, { ...stateCookieOptions(req), maxAge: -1 });
+  let signedInUserId: number | null = null;
   let saved: { state: string; redirect: string; ts: number } | null;
   try { saved = raw ? JSON.parse(raw) : null; } catch { saved = null; }
   const state = typeof req.query.state === "string" ? req.query.state : "";
@@ -112,10 +130,16 @@ export async function finishFacebookLogin(req: Request, res: Response) {
     const ctx = await createContext({ req, res } as Parameters<typeof createContext>[0]);
     const avatar = me.picture?.data && !me.picture.data.is_silhouette ? (me.picture.data.url ?? null) : null;
 
-    // Signed in already -> link, don't create.
+    // Signed in already -> link, don't create -- BUT only with the password-confirmed
+    // intent (auth.startFacebookLink, 2026-10-01). A bare session cookie is not enough.
     if (ctx.user) {
+      signedInUserId = ctx.user.id;
+      const intent = await readFacebookLinkIntent(rawIntent);
+      if (!intent || intent.userId !== ctx.user.id || intent.sessionVersion !== ctx.user.sessionVersion) {
+        return res.redirect(302, "/profile?facebook=link-required");
+      }
       await linkFacebookIdToUser(ctx.user.id, me.id);
-      return res.redirect(302, saved.redirect === "/" ? "/profile?facebook=linked" : saved.redirect);
+      return res.redirect(302, "/profile?facebook=linked");
     }
 
     let user = await findUserByFacebookId(me.id);
@@ -140,7 +164,10 @@ export async function finishFacebookLogin(req: Request, res: Response) {
     return res.redirect(302, saved.redirect);
   } catch (error) {
     console.error("[facebook-auth]", error instanceof Error ? error.message : error);
-    return fail(error instanceof Error && /холбогдсон/.test(error.message) ? "linked-elsewhere" : "exchange");
+    const reason = error instanceof Error && /холбогдсон/.test(error.message) ? "linked-elsewhere" : "exchange";
+    // Профайлаас холбож байсан бол нэвтрэх хуудас биш профайл руу буцаана.
+    if (signedInUserId !== null) return res.redirect(302, `/profile?facebook=${reason === "linked-elsewhere" ? "linked-elsewhere" : "error"}`);
+    return fail(reason);
   }
 }
 

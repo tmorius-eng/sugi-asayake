@@ -132,6 +132,12 @@ export const users = mysqlTable("users", {
    */
   sessionVersion: int("sessionVersion").notNull().default(0),
   /**
+   * 2026-10-01 (migration 0099): face proof ба нууц үгийн step-up JWT-ийн `fgv`
+   * claim-тэй тэнцүү байх ёстой. Lock, царайны дахин бүртгэл, step-up зарцуулалт,
+   * амжилттай царайн баталгаажуулалт бүрт өсч, өмнө олгосон proof-ийг хүчингүй болгоно.
+   */
+  faceGrantVersion: int("faceGrantVersion").notNull().default(0),
+  /**
    * Set by an admin to lock the account out (TIER 2 admin panel). Checked on
    * every request in server/_core/context.ts, so it takes effect immediately
    * for already-issued sessions too — not just at the next login.
@@ -2144,6 +2150,20 @@ export const faceHandoffRequests = mysqlTable("face_handoff_requests", {
   index("face_handoff_requests_expiry_idx").on(table.expiresAt),
 ]);
 export type FaceHandoffRequest = typeof faceHandoffRequests.$inferSelect;
+
+/**
+ * 2026-10-01 (migration 0099): нэг төхөөрөмжийн logout. Сешн JWT-ийн `jti`-г
+ * энд бичнэ; resolveUserFromToken шалгана. expiresAt-аас хойших мөрийг retention job устгана.
+ */
+export const sessionRevocations = mysqlTable("session_revocations", {
+  jti: varchar("jti", { length: 32 }).primaryKey(),
+  userId: int("userId").notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  index("session_revocations_expiry_idx").on(table.expiresAt),
+  index("session_revocations_user_idx").on(table.userId),
+]);
 
 export const faceAttempts = mysqlTable("face_attempts", {
   id: int("id").autoincrement().primaryKey(),

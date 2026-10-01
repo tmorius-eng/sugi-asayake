@@ -13,7 +13,7 @@
  * `assertFaceProofForPanelRole` ажиллуулна.
  */
 
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { SignJWT, jwtVerify } from "jose";
 import { parseCookie as parseCookieHeader } from "cookie";
 import { TRPCError } from "@trpc/server";
@@ -21,6 +21,7 @@ import type { Request, Response } from "express";
 import { FACE_IDLE_TIMEOUT_MS, FACE_REAUTH_TTL_MS, FACE_VERIFICATION_TTL_MS, isAdminPanelRole } from "../../shared/face-auth";
 import { ADMIN_FACE_COOKIE_NAME, ADMIN_REAUTH_COOKIE_NAME, FACE_REQUIRED_ERR_MSG, REAUTH_REQUIRED_ERR_MSG } from "../../shared/const";
 import { ENV } from "./env";
+import { bumpFaceGrantVersion } from "../db";
 
 /** Whether the gate is switched on at all. Everything else in this module is
  *  a no-op path when this is false -- see ENV.adminFaceGateEnabled's own
@@ -75,13 +76,23 @@ const REAUTH_TYP = "reauth";
 const ADMIN_TAB_HEADER = "x-admin-tab";
 export const NO_TAB = "-";
 const MAX_BOUND_TABS = 6;
+/**
+ * JWT-д табын id-г түүхий хэлбэрээр БИШ, sha256-ийн хэшээр хадгална (2026-10-01).
+ * Proof cookie нь httpOnly ч түүний payload base64 тул уншигдаж болно; түүхий id
+ * ил байвал хулгайлсан cookie-г тэр табын id-тай header-тэй хамт дахин ашиглах
+ * нь хялбар болно. Хэш нь ямар id хэрэгтэйг ил болгохгүй.
+ */
+export function hashTabId(tab: string): string {
+  return createHash("sha256").update(tab).digest("hex").slice(0, 32);
+}
+
 export function tabIdFrom(req: Request): string {
   const raw = req.headers?.[ADMIN_TAB_HEADER];
   const value = Array.isArray(raw) ? raw[0] : raw;
   return typeof value === "string" && /^[A-Za-z0-9-]{8,64}$/.test(value) ? value : NO_TAB;
 }
 
-async function signFaceProof(userId: number, sessionVersion: number, absoluteDeadlineMs: number, tabs: readonly string[], idleTimeoutMs: number): Promise<string> {
+async function signFaceProof(userId: number, sessionVersion: number, faceGrantVersion: number, absoluteDeadlineMs: number, tabs: readonly string[], idleTimeoutMs: number): Promise<string> {
   // Two deadlines in one token. `exp` is the IDLE one and slides forward on
   // real activity (see refreshFaceProof); `abs` is the absolute one and is
   // copied unchanged through every refresh, so renewing can extend a working
@@ -94,7 +105,7 @@ async function signFaceProof(userId: number, sessionVersion: number, absoluteDea
   // and silently hand it the longer session it was deliberately denied.
   const window = Math.min(Math.max(idleTimeoutMs, 60_000), FACE_IDLE_TIMEOUT_MS);
   const idleDeadline = Math.min(Date.now() + window, absoluteDeadlineMs);
-  return new SignJWT({ typ: FACE_TYP, sub: String(userId), sv: sessionVersion, abs: absoluteDeadlineMs, idle: window, tabs: tabs.slice(-MAX_BOUND_TABS) })
+  return new SignJWT({ typ: FACE_TYP, sub: String(userId), sv: sessionVersion, fgv: faceGrantVersion, abs: absoluteDeadlineMs, idle: window, tabs: tabs.slice(-MAX_BOUND_TABS) })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(new Date(idleDeadline))
@@ -103,7 +114,7 @@ async function signFaceProof(userId: number, sessionVersion: number, absoluteDea
 
 /** The proof this request carries, or null when there is not a valid one.
  *  Shared by the status check and the heartbeat so they can never disagree. */
-async function readFaceProof(req: Request, userId: number, sessionVersion: number, options: { anyTab?: boolean } = {}): Promise<{ absoluteDeadlineMs: number; idleDeadlineMs: number; idleTimeoutMs: number; tabs: string[] } | null> {
+async function readFaceProof(req: Request, userId: number, sessionVersion: number, faceGrantVersion: number, options: { anyTab?: boolean } = {}): Promise<{ absoluteDeadlineMs: number; idleDeadlineMs: number; idleTimeoutMs: number; tabs: string[] } | null> {
   const raw = parseCookieHeader(req.headers.cookie ?? "")[ADMIN_FACE_COOKIE_NAME];
   if (!raw) return null;
   try {
@@ -113,6 +124,10 @@ async function readFaceProof(req: Request, userId: number, sessionVersion: numbe
     if (payload.typ !== FACE_TYP) return null;
     if (Number(payload.sub) !== userId) return null;
     if (Number(payload.sv) !== sessionVersion) return null;
+    // `fgv` (2026-10-01): lock, царайны дахин бүртгэл, step-up зарцуулалт, амжилттай
+    // царай бүрт users.faceGrantVersion өсдөг. `fgv`-гүй (хуучин) эсвэл зөрүүтэй
+    // proof — cookie хуулсан ч — хүчингүй.
+    if (Number(payload.fgv) !== faceGrantVersion) return null;
     // jwtVerify already rejected an expired `exp` (the idle deadline). The
     // absolute deadline is checked here: a token minted before this claim
     // existed has none, and is treated as expiring at its own idle deadline.
@@ -132,7 +147,7 @@ async function readFaceProof(req: Request, userId: number, sessionVersion: numbe
     // (one more camera pass, same policy as the missing-`abs` case above).
     const tabs = Array.isArray(payload.tabs) ? payload.tabs.filter((t): t is string => typeof t === "string") : null;
     if (!tabs || tabs.length === 0) return null;
-    if (!options.anyTab && !tabs.includes(tabIdFrom(req))) return null;
+    if (!options.anyTab && !tabs.includes(hashTabId(tabIdFrom(req)))) return null;
     // A proof minted before the `idle` claim existed keeps the standard
     // window -- the sanity check above already bounds it.
     const claimed = Number(payload.idle);
@@ -154,12 +169,12 @@ async function readFaceProof(req: Request, userId: number, sessionVersion: numbe
 /** The live proof's own idle window, for the client's countdown -- a
  *  handoff-unlocked session runs on the shorter one (10 minutes), and the
  *  browser has to show the same number the server will enforce. */
-export async function faceProofIdleTimeoutMs(req: Request, userId: number, sessionVersion: number): Promise<number | null> {
-  const proof = await readFaceProof(req, userId, sessionVersion);
+export async function faceProofIdleTimeoutMs(req: Request, userId: number, sessionVersion: number, faceGrantVersion: number): Promise<number | null> {
+  const proof = await readFaceProof(req, userId, sessionVersion, faceGrantVersion);
   return proof ? proof.idleTimeoutMs : null;
 }
 
-export async function hasValidFaceProof(req: Request, userId: number, sessionVersion: number, options: { anyTab?: boolean } = {}): Promise<boolean> {
+export async function hasValidFaceProof(req: Request, userId: number, sessionVersion: number, faceGrantVersion: number, options: { anyTab?: boolean } = {}): Promise<boolean> {
   // readFaceProof parses the raw header rather than reading `req.cookies`:
   // this app has no cookie-parser middleware, so `req.cookies` is ALWAYS
   // undefined. Using it meant this check silently returned false for
@@ -167,7 +182,7 @@ export async function hasValidFaceProof(req: Request, userId: number, sessionVer
   // query failed to see it, and the gate looped on "verified, entering
   // admin..." forever. Same approach server/_core/context.ts already uses for
   // the session cookie.
-  return (await readFaceProof(req, userId, sessionVersion, options)) !== null;
+  return (await readFaceProof(req, userId, sessionVersion, faceGrantVersion, options)) !== null;
 }
 
 /**
@@ -187,12 +202,12 @@ export async function hasValidFaceProof(req: Request, userId: number, sessionVer
  * completeFaceVerification below, and the idle-timeout tests, which have to
  * exercise the real cookie rather than a re-implementation of it.
  */
-export async function issueFaceProof(input: { req: Request; res: Response; userId: number; sessionVersion: number; idleTimeoutMs?: number }): Promise<void> {
+export async function issueFaceProof(input: { req: Request; res: Response; userId: number; sessionVersion: number; faceGrantVersion: number; idleTimeoutMs?: number }): Promise<void> {
   // A second tab that passes the camera JOINS the existing proof (its
   // absolute window and its other tabs kept) rather than replacing it, so
   // two open admin tabs do not keep locking each other out.
-  const existing = await readFaceProof(input.req, input.userId, input.sessionVersion, { anyTab: true });
-  const tab = requireRealTab(input.req);
+  const existing = await readFaceProof(input.req, input.userId, input.sessionVersion, input.faceGrantVersion, { anyTab: true });
+  const tab = hashTabId(requireRealTab(input.req));
   const tabs = existing ? [...existing.tabs.filter(t => t !== tab), tab] : [tab];
   const absolute = existing ? existing.absoluteDeadlineMs : Date.now() + FACE_VERIFICATION_TTL_MS;
   // Joining an existing proof keeps the SHORTER of the two idle windows: a
@@ -200,18 +215,24 @@ export async function issueFaceProof(input: { req: Request; res: Response; userI
   // second tab, and a normal session is never shortened by accident either --
   // whichever is stricter wins.
   const idleTimeoutMs = Math.min(input.idleTimeoutMs ?? FACE_IDLE_TIMEOUT_MS, existing?.idleTimeoutMs ?? FACE_IDLE_TIMEOUT_MS);
-  const proof = await signFaceProof(input.userId, input.sessionVersion, absolute, tabs, idleTimeoutMs);
+  // 2026-10-01: нэг удаагийн grant. Баталгаажуулалт бүр faceGrantVersion-ийг өсгөж,
+  // шинэ proof-ийг шинэ утгаар гарын үсэг зурна — өмнө олгосон БҮХ proof ба
+  // зарцуулагдсан нууц үгийн step-up (cookie-г хуулж аваад дахин ашиглах) хүчингүй
+  // болно. Одоогийн cookie-д байгаа табууд (дээр уншсан) шинэ утгаар дахин
+  // гарын үсэг зурагдаж хамт үлдэнэ.
+  const nextVersion = await bumpFaceGrantVersion(input.userId);
+  const proof = await signFaceProof(input.userId, input.sessionVersion, nextVersion, absolute, tabs, idleTimeoutMs);
   input.res.cookie(ADMIN_FACE_COOKIE_NAME, proof, faceProofCookieOptions(input.req));
   // The password step that allowed this check is used up (one-shot, see
   // FACE_REAUTH_TTL_MS): the next time this tab needs the face -- idle lock,
   // 8 hours -- it needs the password first again.
-  await consumeReauthForTab(input.req, input.res, input.userId, input.sessionVersion, tab);
+  await consumeReauthForTab(input.req, input.res, input.userId, input.sessionVersion, input.faceGrantVersion, nextVersion, tab);
 }
 
-export async function refreshFaceProof(input: { req: Request; res: Response; userId: number; sessionVersion: number }): Promise<{ ok: boolean; idleExpiresAt: number | null; absoluteExpiresAt: number | null }> {
-  const proof = await readFaceProof(input.req, input.userId, input.sessionVersion);
+export async function refreshFaceProof(input: { req: Request; res: Response; userId: number; sessionVersion: number; faceGrantVersion: number }): Promise<{ ok: boolean; idleExpiresAt: number | null; absoluteExpiresAt: number | null }> {
+  const proof = await readFaceProof(input.req, input.userId, input.sessionVersion, input.faceGrantVersion);
   if (!proof) return { ok: false, idleExpiresAt: null, absoluteExpiresAt: null };
-  const renewed = await signFaceProof(input.userId, input.sessionVersion, proof.absoluteDeadlineMs, proof.tabs, proof.idleTimeoutMs);
+  const renewed = await signFaceProof(input.userId, input.sessionVersion, input.faceGrantVersion, proof.absoluteDeadlineMs, proof.tabs, proof.idleTimeoutMs);
   input.res.cookie(ADMIN_FACE_COOKIE_NAME, renewed, faceProofCookieOptions(input.req));
   return {
     ok: true,
@@ -275,15 +296,15 @@ export function requireRealTab(req: Request): string {
 // like the face proof: user, sessionVersion, the tabs it was entered in.
 // ---------------------------------------------------------------------------
 
-async function signReauthProof(userId: number, sessionVersion: number, absoluteDeadlineMs: number, tabs: readonly string[]): Promise<string> {
-  return new SignJWT({ typ: REAUTH_TYP, sub: String(userId), sv: sessionVersion, tabs: tabs.slice(-MAX_BOUND_TABS) })
+async function signReauthProof(userId: number, sessionVersion: number, faceGrantVersion: number, absoluteDeadlineMs: number, tabs: readonly string[]): Promise<string> {
+  return new SignJWT({ typ: REAUTH_TYP, sub: String(userId), sv: sessionVersion, fgv: faceGrantVersion, tabs: tabs.slice(-MAX_BOUND_TABS) })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(new Date(absoluteDeadlineMs))
     .sign(secretKey());
 }
 
-async function readReauthProof(req: Request, userId: number, sessionVersion: number, options: { anyTab?: boolean } = {}): Promise<{ absoluteDeadlineMs: number; tabs: string[] } | null> {
+async function readReauthProof(req: Request, userId: number, sessionVersion: number, faceGrantVersion: number, options: { anyTab?: boolean } = {}): Promise<{ absoluteDeadlineMs: number; tabs: string[] } | null> {
   const raw = parseCookieHeader(req.headers?.cookie ?? "")[ADMIN_REAUTH_COOKIE_NAME];
   if (!raw) return null;
   try {
@@ -291,13 +312,14 @@ async function readReauthProof(req: Request, userId: number, sessionVersion: num
     if (payload.typ !== REAUTH_TYP) return null;
     if (Number(payload.sub) !== userId) return null;
     if (Number(payload.sv) !== sessionVersion) return null;
+    if (Number(payload.fgv) !== faceGrantVersion) return null;
     const absoluteDeadlineMs = Number(payload.exp) * 1000;
     // A deadline further out than the rule allows is refused, whatever it was
     // signed with.
     if (!Number.isFinite(absoluteDeadlineMs) || absoluteDeadlineMs - Date.now() > FACE_REAUTH_TTL_MS + 5_000) return null;
     const tabs = Array.isArray(payload.tabs) ? payload.tabs.filter((t): t is string => typeof t === "string") : [];
     if (tabs.length === 0) return null;
-    if (!options.anyTab && !tabs.includes(tabIdFrom(req))) return null;
+    if (!options.anyTab && !tabs.includes(hashTabId(tabIdFrom(req)))) return null;
     return { absoluteDeadlineMs, tabs };
   } catch {
     return null;
@@ -309,17 +331,17 @@ async function readReauthProof(req: Request, userId: number, sessionVersion: num
  * cookie (up to MAX_BOUND_TABS) and a fresh password restarts the window --
  * the password has just been proven again.
  */
-export async function issueReauthProof(input: { req: Request; res: Response; userId: number; sessionVersion: number }): Promise<void> {
-  const tab = requireRealTab(input.req);
-  const existing = await readReauthProof(input.req, input.userId, input.sessionVersion, { anyTab: true });
+export async function issueReauthProof(input: { req: Request; res: Response; userId: number; sessionVersion: number; faceGrantVersion: number }): Promise<void> {
+  const tab = hashTabId(requireRealTab(input.req));
+  const existing = await readReauthProof(input.req, input.userId, input.sessionVersion, input.faceGrantVersion, { anyTab: true });
   const tabs = existing ? [...existing.tabs.filter(t => t !== tab), tab] : [tab];
-  const token = await signReauthProof(input.userId, input.sessionVersion, Date.now() + FACE_REAUTH_TTL_MS, tabs);
+  const token = await signReauthProof(input.userId, input.sessionVersion, input.faceGrantVersion, Date.now() + FACE_REAUTH_TTL_MS, tabs);
   input.res.cookie(ADMIN_REAUTH_COOKIE_NAME, token, { ...faceProofCookieOptions(input.req), maxAge: FACE_REAUTH_TTL_MS });
 }
 
 /** Whether this tab holds a live password step-up for this account. */
-export async function hasValidReauthProof(req: Request, userId: number, sessionVersion: number): Promise<boolean> {
-  return (await readReauthProof(req, userId, sessionVersion)) !== null;
+export async function hasValidReauthProof(req: Request, userId: number, sessionVersion: number, faceGrantVersion: number): Promise<boolean> {
+  return (await readReauthProof(req, userId, sessionVersion, faceGrantVersion)) !== null;
 }
 
 /**
@@ -328,12 +350,12 @@ export async function hasValidReauthProof(req: Request, userId: number, sessionV
  * (client/src/main.tsx). A no-op with the gate off: the escape hatch switches
  * off the whole second-factor flow, password step included.
  */
-export async function assertReauthProof(input: { req: Request; user: { id: number; sessionVersion: number }; evenWhenGateOff?: boolean }): Promise<void> {
+export async function assertReauthProof(input: { req: Request; user: { id: number; sessionVersion: number; faceGrantVersion: number }; evenWhenGateOff?: boolean }): Promise<void> {
   // 2026-09-27: `evenWhenGateOff` — царай БҮРТГЭХ нь хаалга унтраалттай үед ч нууц
   // үг шаардана: эс бөгөөс засвар үйлчилгээний үед хулгайлсан session дангаараа
   // эзний царайг өөрийнхөөрөө сольж, хаалга дахин асахад шууд нэвтэрнэ.
   if (!isFaceGateEnabled() && !input.evenWhenGateOff) return;
-  if (await hasValidReauthProof(input.req, input.user.id, input.user.sessionVersion)) return;
+  if (await hasValidReauthProof(input.req, input.user.id, input.user.sessionVersion, input.user.faceGrantVersion)) return;
   throw new TRPCError({ code: "FORBIDDEN", message: REAUTH_REQUIRED_ERR_MSG });
 }
 
@@ -341,17 +363,32 @@ export function clearReauthCookie(req: Request, res: Response) {
   res.clearCookie(ADMIN_REAUTH_COOKIE_NAME, { ...faceProofCookieOptions(req), maxAge: undefined });
 }
 
+/**
+ * Царайг ДАХИН БҮРТГЭСНИЙ дараа (2026-10-01): faceGrantVersion-ийг өсгөж өмнө олгосон
+ * БҮХ царайны proof-ийг хүчингүй болгоно, харин энэ хөтчийн нууц үгийн step-up-ийг
+ * (хугацаа, табуудтай нь) шинэ утгаар дахин гарын үсэглэнэ — бүртгэлийн дараах
+ * шууд царайн шалгалт нууц үгийг дахин асуухгүй. Царайн proof cookie-г мөн цэвэрлэнэ.
+ */
+export async function rotateFaceGrant(input: { req: Request; res: Response; userId: number; sessionVersion: number; faceGrantVersion: number }): Promise<void> {
+  const reauth = await readReauthProof(input.req, input.userId, input.sessionVersion, input.faceGrantVersion, { anyTab: true });
+  const nextVersion = await bumpFaceGrantVersion(input.userId);
+  clearFaceProofCookie(input.req, input.res);
+  if (!reauth) return;
+  const token = await signReauthProof(input.userId, input.sessionVersion, nextVersion, reauth.absoluteDeadlineMs, reauth.tabs);
+  input.res.cookie(ADMIN_REAUTH_COOKIE_NAME, token, { ...faceProofCookieOptions(input.req), maxAge: Math.max(0, reauth.absoluteDeadlineMs - Date.now()) });
+}
+
 /** Uses up this tab's password step. Other tabs that entered the password and
  *  are still mid-way through their own face check keep theirs. */
-async function consumeReauthForTab(req: Request, res: Response, userId: number, sessionVersion: number, tab: string): Promise<void> {
-  const existing = await readReauthProof(req, userId, sessionVersion, { anyTab: true });
+async function consumeReauthForTab(req: Request, res: Response, userId: number, sessionVersion: number, currentFaceGrantVersion: number, nextFaceGrantVersion: number, tab: string): Promise<void> {
+  const existing = await readReauthProof(req, userId, sessionVersion, currentFaceGrantVersion, { anyTab: true });
   if (!existing) return;
   const remaining = existing.tabs.filter(t => t !== tab);
   if (remaining.length === 0) {
     clearReauthCookie(req, res);
     return;
   }
-  const token = await signReauthProof(userId, sessionVersion, existing.absoluteDeadlineMs, remaining);
+  const token = await signReauthProof(userId, sessionVersion, nextFaceGrantVersion, existing.absoluteDeadlineMs, remaining);
   res.cookie(ADMIN_REAUTH_COOKIE_NAME, token, { ...faceProofCookieOptions(req), maxAge: Math.max(0, existing.absoluteDeadlineMs - Date.now()) });
 }
 
@@ -366,8 +403,8 @@ async function consumeReauthForTab(req: Request, res: Response, userId: number, 
  * Plain customers are never asked -- they have no panel to protect -- and
  * with the gate off nothing here runs, exactly like faceAuth.status.
  */
-export async function assertFaceProofForPanelRole(input: { req: Request; user: { id: number; role: string | null; sessionVersion: number } }): Promise<void> {
+export async function assertFaceProofForPanelRole(input: { req: Request; user: { id: number; role: string | null; sessionVersion: number; faceGrantVersion: number } }): Promise<void> {
   if (!isFaceGateEnabled() || !isAdminPanelRole(input.user.role)) return;
-  if (await hasValidFaceProof(input.req, input.user.id, input.user.sessionVersion)) return;
+  if (await hasValidFaceProof(input.req, input.user.id, input.user.sessionVersion, input.user.faceGrantVersion)) return;
   throw new TRPCError({ code: "FORBIDDEN", message: FACE_REQUIRED_ERR_MSG });
 }

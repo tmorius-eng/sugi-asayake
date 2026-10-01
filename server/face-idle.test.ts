@@ -20,7 +20,14 @@ import { ADMIN_FACE_COOKIE_NAME, ADMIN_REAUTH_COOKIE_NAME, COOKIE_NAME } from ".
  *
  * No database: face proofs live entirely in a signed cookie.
  */
+// users.faceGrantVersion's stand-in (migration 0099): bumped by issueFaceProof / lockFaceSession,
+// exactly like the real bumpFaceGrantVersion. Reset before every test.
+const grant = vi.hoisted(() => ({ v: 0 }));
+
 vi.mock("./db", () => ({
+  bumpFaceGrantVersion: vi.fn(async () => { grant.v += 1; return grant.v; }),
+  hasSeenFaceDescriptorHash: vi.fn(async () => false),
+  isSessionRevoked: vi.fn(async () => false),
   recordFaceAttempt: vi.fn(async () => undefined),
   getFaceEnrollment: vi.fn(async () => null),
   getFaceChallenge: vi.fn(async () => null),
@@ -35,10 +42,12 @@ vi.mock("./db", () => ({
   // For the token-type tests below: every id resolves to a live, unsuspended
   // account on the current session version.
   getSessionUserById: vi.fn(async (id: number) => ({ id, sessionVersion: 3, suspendedAt: null, passwordHash: "x", role: "admin" })),
+  // A panel-role session is re-read uncached (server/_core/context.ts, scan #35).
+  getUserById: vi.fn(async (id: number) => ({ id, sessionVersion: 3, suspendedAt: null, passwordHash: "x", role: "admin" })),
 }));
 
 const { hasValidFaceProof, issueFaceProof, lockFaceSession, refreshFaceProof } = await import("./faceAuth");
-const { assertFaceProofForPanelRole, assertReauthProof, hasValidReauthProof, issueReauthProof } = await import("./_core/faceProof");
+const { assertFaceProofForPanelRole, assertReauthProof, hasValidReauthProof, hashTabId, issueReauthProof, rotateFaceGrant } = await import("./_core/faceProof");
 const { createContext, signSessionToken } = await import("./_core/context");
 const { ENV } = await import("./_core/env");
 const { SignJWT } = await import("jose");
@@ -68,23 +77,23 @@ function requestWith(jar: Map<string, string>, tab: string | null = TAB) {
 }
 
 async function issueProof(jar: Map<string, string>, res: Response) {
-  await issueFaceProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION });
+  await issueFaceProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v });
 }
 
 describe("admin face gate idle timeout", () => {
-  beforeEach(() => vi.useFakeTimers({ now: new Date("2026-09-12T09:00:00Z") }));
+  beforeEach(() => { grant.v = 0; vi.useFakeTimers({ now: new Date("2026-09-12T09:00:00Z") }); });
   afterEach(() => vi.useRealTimers());
 
   it("keeps a fresh check valid, and expires it after 25 idle minutes", async () => {
     const { res, jar } = fakeResponse();
     await issueProof(jar, res);
-    await expect(hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION)).resolves.toBe(true);
+    await expect(hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION, grant.v)).resolves.toBe(true);
 
     vi.advanceTimersByTime(FACE_IDLE_TIMEOUT_MS - 60_000); // 24 minutes: still working
-    await expect(hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION)).resolves.toBe(true);
+    await expect(hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION, grant.v)).resolves.toBe(true);
 
     vi.advanceTimersByTime(120_000); // past 25
-    await expect(hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION)).resolves.toBe(false);
+    await expect(hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION, grant.v)).resolves.toBe(false);
   });
 
   it("renews on activity, so somebody working is never interrupted", async () => {
@@ -93,10 +102,10 @@ describe("admin face gate idle timeout", () => {
     // Four hours of working: a beat every 20 minutes.
     for (let minute = 0; minute < 240; minute += 20) {
       vi.advanceTimersByTime(20 * 60_000);
-      const renewed = await refreshFaceProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION });
+      const renewed = await refreshFaceProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v });
       expect(renewed.ok).toBe(true);
     }
-    await expect(hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION)).resolves.toBe(true);
+    await expect(hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION, grant.v)).resolves.toBe(true);
   });
 
   it("never renews past the absolute cap, however busy the shift", async () => {
@@ -107,7 +116,7 @@ describe("admin face gate idle timeout", () => {
     let lastOk = 0;
     for (let elapsed = 10 * 60_000; elapsed <= 9 * 60 * 60_000; elapsed += 10 * 60_000) {
       vi.advanceTimersByTime(10 * 60_000);
-      const renewed = await refreshFaceProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION });
+      const renewed = await refreshFaceProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v });
       if (renewed.ok) {
         lastOk = elapsed;
         // The renewed idle deadline can reach the cap but never exceed it.
@@ -115,37 +124,37 @@ describe("admin face gate idle timeout", () => {
       }
     }
     expect(lastOk).toBeLessThanOrEqual(FACE_VERIFICATION_TTL_MS);
-    await expect(hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION)).resolves.toBe(false);
+    await expect(hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION, grant.v)).resolves.toBe(false);
   });
 
   it("refuses to renew a proof that already went idle -- only the camera brings it back", async () => {
     const { res, jar } = fakeResponse();
     await issueProof(jar, res);
     vi.advanceTimersByTime(FACE_IDLE_TIMEOUT_MS + 1000);
-    const renewed = await refreshFaceProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION });
+    const renewed = await refreshFaceProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v });
     expect(renewed).toMatchObject({ ok: false, idleExpiresAt: null });
-    await expect(hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION)).resolves.toBe(false);
+    await expect(hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION, grant.v)).resolves.toBe(false);
   });
 
   it("locking clears the proof immediately", async () => {
     const { res, jar } = fakeResponse();
     await issueProof(jar, res);
     await lockFaceSession({ req: requestWith(jar), res, userId: USER, reason: "idle" });
-    await expect(hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION)).resolves.toBe(false);
+    await expect(hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION, grant.v)).resolves.toBe(false);
   });
 
   it("belongs to one account and one session: another user's, or a reset session's, is refused", async () => {
     const { res, jar } = fakeResponse();
     await issueProof(jar, res);
-    await expect(hasValidFaceProof(requestWith(jar), USER + 1, SESSION_VERSION)).resolves.toBe(false);
+    await expect(hasValidFaceProof(requestWith(jar), USER + 1, SESSION_VERSION, grant.v)).resolves.toBe(false);
     // A password reset / "sign out everywhere" bumps sessionVersion.
-    await expect(hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION + 1)).resolves.toBe(false);
+    await expect(hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION + 1, grant.v)).resolves.toBe(false);
   });
 
   it("treats a missing or tampered cookie as 'verify again', never as an error", async () => {
-    await expect(hasValidFaceProof(requestWith(new Map()), USER, SESSION_VERSION)).resolves.toBe(false);
+    await expect(hasValidFaceProof(requestWith(new Map()), USER, SESSION_VERSION, grant.v)).resolves.toBe(false);
     const tampered = new Map([[ADMIN_FACE_COOKIE_NAME, "not.a.jwt"]]);
-    await expect(hasValidFaceProof(requestWith(tampered), USER, SESSION_VERSION)).resolves.toBe(false);
+    await expect(hasValidFaceProof(requestWith(tampered), USER, SESSION_VERSION, grant.v)).resolves.toBe(false);
   });
 
   it("refuses a proof minted before the idle lock existed (flat 8-hour exp, no abs claim)", async () => {
@@ -155,17 +164,17 @@ describe("admin face gate idle timeout", () => {
     const legacy = await new SignJWT({ sub: String(USER), sv: SESSION_VERSION })
       .setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime(new Date(Date.now() + FACE_VERIFICATION_TTL_MS)).sign(key);
     const jar = new Map([[ADMIN_FACE_COOKIE_NAME, legacy]]);
-    expect(await hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION)).toBe(false);
+    expect(await hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION, grant.v)).toBe(false);
     // ...and it cannot be renewed into a proper one either.
     const { res } = fakeResponse();
-    expect((await refreshFaceProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION })).ok).toBe(false);
+    expect((await refreshFaceProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v })).ok).toBe(false);
   });
 
   describe("server-side enforcement on admin-panel procedures", () => {
     const previous = process.env.ADMIN_FACE_GATE_ENABLED;
     beforeEach(() => { process.env.ADMIN_FACE_GATE_ENABLED = "1"; });
     afterEach(() => { process.env.ADMIN_FACE_GATE_ENABLED = previous; });
-    const panelUser = { id: USER, role: "admin", sessionVersion: SESSION_VERSION };
+    const panelUser = { id: USER, role: "admin", sessionVersion: SESSION_VERSION, get faceGrantVersion() { return grant.v; } };
 
     it("refuses a panel role with no proof, with the message the client maps to the camera", async () => {
       await expect(assertFaceProofForPanelRole({ req: requestWith(new Map()), user: panelUser })).rejects.toMatchObject({ code: "FORBIDDEN", message: FACE_REQUIRED_ERR_MSG });
@@ -190,16 +199,16 @@ describe("admin face gate idle timeout", () => {
 describe("face proof is bound to the browser tab that earned it (2026-09-14)", () => {
   it("rejects the same cookie from another tab or with no tab header, accepts it from the verified tab, and lets a second tab join", async () => {
     const { res, jar } = fakeResponse();
-    await issueFaceProof({ req: requestWith(jar, "tab-aaaaaaaa"), res, userId: USER, sessionVersion: SESSION_VERSION });
-    expect(await hasValidFaceProof(requestWith(jar, "tab-aaaaaaaa"), USER, SESSION_VERSION)).toBe(true);
+    await issueFaceProof({ req: requestWith(jar, "tab-aaaaaaaa"), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v });
+    expect(await hasValidFaceProof(requestWith(jar, "tab-aaaaaaaa"), USER, SESSION_VERSION, grant.v)).toBe(true);
     // A freshly opened tab has a new id -- exactly the "closed the tab and came back" case.
-    expect(await hasValidFaceProof(requestWith(jar, "tab-bbbbbbbb"), USER, SESSION_VERSION)).toBe(false);
+    expect(await hasValidFaceProof(requestWith(jar, "tab-bbbbbbbb"), USER, SESSION_VERSION, grant.v)).toBe(false);
     // A replayed cookie with no tab header at all is not a proof either.
-    expect(await hasValidFaceProof(requestWith(jar, null), USER, SESSION_VERSION)).toBe(false);
+    expect(await hasValidFaceProof(requestWith(jar, null), USER, SESSION_VERSION, grant.v)).toBe(false);
     // The second tab passes the camera: it joins, and the first keeps working.
-    await issueFaceProof({ req: requestWith(jar, "tab-bbbbbbbb"), res, userId: USER, sessionVersion: SESSION_VERSION });
-    expect(await hasValidFaceProof(requestWith(jar, "tab-bbbbbbbb"), USER, SESSION_VERSION)).toBe(true);
-    expect(await hasValidFaceProof(requestWith(jar, "tab-aaaaaaaa"), USER, SESSION_VERSION)).toBe(true);
+    await issueFaceProof({ req: requestWith(jar, "tab-bbbbbbbb"), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v });
+    expect(await hasValidFaceProof(requestWith(jar, "tab-bbbbbbbb"), USER, SESSION_VERSION, grant.v)).toBe(true);
+    expect(await hasValidFaceProof(requestWith(jar, "tab-aaaaaaaa"), USER, SESSION_VERSION, grant.v)).toBe(true);
   });
 });
 
@@ -207,8 +216,8 @@ describe("face proof is bound to the browser tab that earned it (2026-09-14)", (
 describe("minting needs a real tab id (2026-09-22)", () => {
   it("refuses to mint a face proof or a password step-up for a header-less request", async () => {
     const { res, jar } = fakeResponse();
-    await expect(issueFaceProof({ req: requestWith(jar, null), res, userId: USER, sessionVersion: SESSION_VERSION })).rejects.toMatchObject({ code: "BAD_REQUEST" });
-    await expect(issueReauthProof({ req: requestWith(jar, null), res, userId: USER, sessionVersion: SESSION_VERSION })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(issueFaceProof({ req: requestWith(jar, null), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(issueReauthProof({ req: requestWith(jar, null), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect(jar.size).toBe(0);
   });
 });
@@ -219,71 +228,125 @@ describe("password step-up before the face (2026-09-22, Tom: password -> face ->
 
   it("is valid in the tab it was entered in, for FACE_REAUTH_TTL_MS, and not in another tab", async () => {
     const { res, jar } = fakeResponse();
-    await issueReauthProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION });
+    await issueReauthProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v });
     expect(jar.has(ADMIN_REAUTH_COOKIE_NAME)).toBe(true);
-    expect(await hasValidReauthProof(requestWith(jar), USER, SESSION_VERSION)).toBe(true);
+    expect(await hasValidReauthProof(requestWith(jar), USER, SESSION_VERSION, grant.v)).toBe(true);
     // A new tab (closed and reopened) needs the password again.
-    expect(await hasValidReauthProof(requestWith(jar, "tab-other-0001"), USER, SESSION_VERSION)).toBe(false);
+    expect(await hasValidReauthProof(requestWith(jar, "tab-other-0001"), USER, SESSION_VERSION, grant.v)).toBe(false);
     vi.advanceTimersByTime(FACE_REAUTH_TTL_MS - 60_000);
-    expect(await hasValidReauthProof(requestWith(jar), USER, SESSION_VERSION)).toBe(true);
+    expect(await hasValidReauthProof(requestWith(jar), USER, SESSION_VERSION, grant.v)).toBe(true);
     vi.advanceTimersByTime(120_000);
-    expect(await hasValidReauthProof(requestWith(jar), USER, SESSION_VERSION)).toBe(false);
+    expect(await hasValidReauthProof(requestWith(jar), USER, SESSION_VERSION, grant.v)).toBe(false);
   });
 
   it("belongs to one account and one session version", async () => {
     const { res, jar } = fakeResponse();
-    await issueReauthProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION });
-    expect(await hasValidReauthProof(requestWith(jar), USER + 1, SESSION_VERSION)).toBe(false);
-    expect(await hasValidReauthProof(requestWith(jar), USER, SESSION_VERSION + 1)).toBe(false);
+    await issueReauthProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v });
+    expect(await hasValidReauthProof(requestWith(jar), USER + 1, SESSION_VERSION, grant.v)).toBe(false);
+    expect(await hasValidReauthProof(requestWith(jar), USER, SESSION_VERSION + 1, grant.v)).toBe(false);
   });
 
   it("is ONE-SHOT: a passed face check uses it up, so after an idle lock the password comes first again", async () => {
     // Tom, after testing the first version: "zuwhun face unshij baina,
     // password garj irehgui baina" -- the idle lock asked only for the face.
     const { res, jar } = fakeResponse();
-    await issueReauthProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION });
+    await issueReauthProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v });
     await issueProof(jar, res);
-    expect(await hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION)).toBe(true);
-    expect(await hasValidReauthProof(requestWith(jar), USER, SESSION_VERSION)).toBe(false);
+    expect(await hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION, grant.v)).toBe(true);
+    expect(await hasValidReauthProof(requestWith(jar), USER, SESSION_VERSION, grant.v)).toBe(false);
     await lockFaceSession({ req: requestWith(jar), res, userId: USER, reason: "idle" });
-    expect(await hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION)).toBe(false);
-    expect(await hasValidReauthProof(requestWith(jar), USER, SESSION_VERSION)).toBe(false);
+    expect(await hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION, grant.v)).toBe(false);
+    expect(await hasValidReauthProof(requestWith(jar), USER, SESSION_VERSION, grant.v)).toBe(false);
   });
 
   it("using it up in one tab leaves another tab's pending password step alone", async () => {
     const { res, jar } = fakeResponse();
-    await issueReauthProof({ req: requestWith(jar, "tab-aaaaaaaa"), res, userId: USER, sessionVersion: SESSION_VERSION });
-    await issueReauthProof({ req: requestWith(jar, "tab-bbbbbbbb"), res, userId: USER, sessionVersion: SESSION_VERSION });
-    await issueFaceProof({ req: requestWith(jar, "tab-aaaaaaaa"), res, userId: USER, sessionVersion: SESSION_VERSION });
-    expect(await hasValidReauthProof(requestWith(jar, "tab-aaaaaaaa"), USER, SESSION_VERSION)).toBe(false);
-    expect(await hasValidReauthProof(requestWith(jar, "tab-bbbbbbbb"), USER, SESSION_VERSION)).toBe(true);
+    await issueReauthProof({ req: requestWith(jar, "tab-aaaaaaaa"), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v });
+    await issueReauthProof({ req: requestWith(jar, "tab-bbbbbbbb"), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v });
+    await issueFaceProof({ req: requestWith(jar, "tab-aaaaaaaa"), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v });
+    expect(await hasValidReauthProof(requestWith(jar, "tab-aaaaaaaa"), USER, SESSION_VERSION, grant.v)).toBe(false);
+    expect(await hasValidReauthProof(requestWith(jar, "tab-bbbbbbbb"), USER, SESSION_VERSION, grant.v)).toBe(true);
   });
 
   it("does not shorten the face proof: it keeps its own 8-hour window after the 10-minute password step lapses", async () => {
     const { res, jar } = fakeResponse();
-    await issueReauthProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION });
+    await issueReauthProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v });
     await issueProof(jar, res);
     // Keep working for an hour, heartbeat every 10 minutes.
     for (let i = 0; i < 6; i += 1) {
       vi.advanceTimersByTime(10 * 60 * 1000);
-      await refreshFaceProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION });
+      await refreshFaceProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v });
     }
-    expect(await hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION)).toBe(true);
+    expect(await hasValidFaceProof(requestWith(jar), USER, SESSION_VERSION, grant.v)).toBe(true);
   });
 
   it("assertReauthProof refuses without it (the message the client maps to the password screen) and is a no-op with the gate off", async () => {
     const previous = process.env.ADMIN_FACE_GATE_ENABLED;
     try {
       process.env.ADMIN_FACE_GATE_ENABLED = "1";
-      await expect(assertReauthProof({ req: requestWith(new Map()), user: { id: USER, sessionVersion: SESSION_VERSION } })).rejects.toMatchObject({ code: "FORBIDDEN", message: REAUTH_REQUIRED_ERR_MSG });
+      await expect(assertReauthProof({ req: requestWith(new Map()), user: { id: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v } })).rejects.toMatchObject({ code: "FORBIDDEN", message: REAUTH_REQUIRED_ERR_MSG });
       const { res, jar } = fakeResponse();
-      await issueReauthProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION });
-      await expect(assertReauthProof({ req: requestWith(jar), user: { id: USER, sessionVersion: SESSION_VERSION } })).resolves.toBeUndefined();
+      await issueReauthProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v });
+      await expect(assertReauthProof({ req: requestWith(jar), user: { id: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v } })).resolves.toBeUndefined();
       process.env.ADMIN_FACE_GATE_ENABLED = "0";
-      await expect(assertReauthProof({ req: requestWith(new Map()), user: { id: USER, sessionVersion: SESSION_VERSION } })).resolves.toBeUndefined();
+      await expect(assertReauthProof({ req: requestWith(new Map()), user: { id: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v } })).resolves.toBeUndefined();
     } finally {
       process.env.ADMIN_FACE_GATE_ENABLED = previous;
     }
+  });
+});
+
+describe("faceGrantVersion and hashed tabs (2026-10-01 security scan, group B)", () => {
+  beforeEach(() => { grant.v = 0; });
+
+  it("a copied face-proof cookie dies when the session is locked (the version moves on), even though the copy was never cleared", async () => {
+    const { res, jar } = fakeResponse();
+    await issueReauthProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v });
+    await issueProof(jar, res);
+    const stolen = new Map(jar); // an attacker's copy of the cookies
+    expect(await hasValidFaceProof(requestWith(stolen), USER, SESSION_VERSION, grant.v)).toBe(true);
+    await lockFaceSession({ req: requestWith(jar), res, userId: USER, reason: "manual" });
+    expect(await hasValidFaceProof(requestWith(stolen), USER, SESSION_VERSION, grant.v)).toBe(false);
+    expect(await refreshFaceProof({ req: requestWith(stolen), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v })).toMatchObject({ ok: false });
+  });
+
+  it("the password step-up is one-shot even when its cookie was copied: a face check bumps the version, the copy no longer counts", async () => {
+    const { res, jar } = fakeResponse();
+    await issueReauthProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v });
+    const copiedReauth = jar.get(ADMIN_REAUTH_COOKIE_NAME)!;
+    await issueProof(jar, res);
+    expect(await hasValidReauthProof(requestWith(jar), USER, SESSION_VERSION, grant.v)).toBe(false);
+    const replay = new Map([[ADMIN_REAUTH_COOKIE_NAME, copiedReauth]]);
+    expect(await hasValidReauthProof(requestWith(replay), USER, SESSION_VERSION, grant.v)).toBe(false);
+  });
+
+  it("a proof without an fgv claim (minted before 0099) is refused", async () => {
+    const key = new TextEncoder().encode(ENV.cookieSecret);
+    const legacy = await new SignJWT({ typ: "face", sub: String(USER), sv: SESSION_VERSION, abs: Date.now() + 3_600_000, idle: 60_000, tabs: [TAB] })
+      .setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime(new Date(Date.now() + 60_000)).sign(key);
+    expect(await hasValidFaceProof(requestWith(new Map([[ADMIN_FACE_COOKIE_NAME, legacy]])), USER, SESSION_VERSION, grant.v)).toBe(false);
+  });
+
+  it("the tabs claim holds sha256 of the tab id, never the raw id, and a raw-id proof is refused", async () => {
+    const { res, jar } = fakeResponse();
+    await issueProof(jar, res);
+    const payload = JSON.parse(Buffer.from(jar.get(ADMIN_FACE_COOKIE_NAME)!.split(".")[1], "base64url").toString("utf8")) as { tabs: string[]; fgv: number };
+    expect(payload.tabs).toEqual([hashTabId(TAB)]);
+    expect(payload.tabs).not.toContain(TAB);
+    expect(payload.fgv).toBe(grant.v);
+    const key = new TextEncoder().encode(ENV.cookieSecret);
+    const rawTabs = await new SignJWT({ typ: "face", sub: String(USER), sv: SESSION_VERSION, fgv: grant.v, abs: Date.now() + 3_600_000, idle: 60_000, tabs: [TAB] })
+      .setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime(new Date(Date.now() + 60_000)).sign(key);
+    expect(await hasValidFaceProof(requestWith(new Map([[ADMIN_FACE_COOKIE_NAME, rawTabs]])), USER, SESSION_VERSION, grant.v)).toBe(false);
+  });
+
+  it("rotateFaceGrant (after a re-enrolment) kills the face proof but keeps this tab's password step", async () => {
+    const { res, jar } = fakeResponse();
+    await issueReauthProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v });
+    const before = grant.v;
+    await rotateFaceGrant({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v });
+    expect(grant.v).toBe(before + 1);
+    expect(await hasValidReauthProof(requestWith(jar), USER, SESSION_VERSION, grant.v)).toBe(true);
   });
 });
 
@@ -296,14 +359,27 @@ describe("token types cannot stand in for each other (2026-09-22 audit)", () => 
 
   it("refuses a face proof or a password step-up pasted into the session cookie", async () => {
     const { res, jar } = fakeResponse();
-    await issueReauthProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION });
+    await issueReauthProof({ req: requestWith(jar), res, userId: USER, sessionVersion: SESSION_VERSION, faceGrantVersion: grant.v });
     await issueProof(jar, res);
     expect(await sessionUserFrom(COOKIE_NAME, jar.get(ADMIN_FACE_COOKIE_NAME)!)).toBeNull();
     expect(await sessionUserFrom(COOKIE_NAME, jar.get(ADMIN_REAUTH_COOKIE_NAME)!)).toBeNull();
     // ...and neither proof is accepted in the other's place.
     const swapped = new Map([[ADMIN_FACE_COOKIE_NAME, jar.get(ADMIN_REAUTH_COOKIE_NAME)!], [ADMIN_REAUTH_COOKIE_NAME, jar.get(ADMIN_FACE_COOKIE_NAME)!]]);
-    expect(await hasValidFaceProof(requestWith(swapped), USER, SESSION_VERSION)).toBe(false);
-    expect(await hasValidReauthProof(requestWith(swapped), USER, SESSION_VERSION)).toBe(false);
+    expect(await hasValidFaceProof(requestWith(swapped), USER, SESSION_VERSION, grant.v)).toBe(false);
+    expect(await hasValidReauthProof(requestWith(swapped), USER, SESSION_VERSION, grant.v)).toBe(false);
+  });
+
+  it("a session token carries a jti, and one whose jti was revoked at logout is refused (single-device logout, 2026-10-01)", async () => {
+    const { isSessionRevoked } = await import("./db");
+    const token = await signSessionToken(USER, SESSION_VERSION);
+    const claims = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8")) as { jti?: string };
+    expect(claims.jti).toMatch(/^[0-9a-f]{32}$/);
+    expect((await sessionUserFrom(COOKIE_NAME, token))?.id).toBe(USER);
+    vi.mocked(isSessionRevoked).mockResolvedValueOnce(true);
+    expect(await sessionUserFrom(COOKIE_NAME, token)).toBeNull();
+    // Two sessions of the same user have different ids, so one logout cannot end the other.
+    const other = JSON.parse(Buffer.from((await signSessionToken(USER, SESSION_VERSION)).split(".")[1], "base64url").toString("utf8")) as { jti?: string };
+    expect(other.jti).not.toBe(claims.jti);
   });
 
   it("still accepts a real session, including one minted before typ existed (nobody is signed out)", async () => {
@@ -314,7 +390,7 @@ describe("token types cannot stand in for each other (2026-09-22 audit)", () => 
     expect((await sessionUserFrom(COOKIE_NAME, legacySession))?.id).toBe(USER);
     // A session token is not a proof of anything at the gate.
     const asProof = new Map([[ADMIN_FACE_COOKIE_NAME, legacySession], [ADMIN_REAUTH_COOKIE_NAME, legacySession]]);
-    expect(await hasValidFaceProof(requestWith(asProof), USER, SESSION_VERSION)).toBe(false);
-    expect(await hasValidReauthProof(requestWith(asProof), USER, SESSION_VERSION)).toBe(false);
+    expect(await hasValidFaceProof(requestWith(asProof), USER, SESSION_VERSION, grant.v)).toBe(false);
+    expect(await hasValidReauthProof(requestWith(asProof), USER, SESSION_VERSION, grant.v)).toBe(false);
   });
 });

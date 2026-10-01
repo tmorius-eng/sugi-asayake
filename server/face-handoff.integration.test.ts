@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import type { Request, Response } from "express";
 import { adminAuditLogs, faceHandoffRequests, users } from "../drizzle/schema";
-import { getDb } from "./db";
+import { getDb, getUserById } from "./db";
 import { hashPassword } from "./_core/password";
 import { hasValidFaceProof } from "./_core/faceProof";
 import {
@@ -46,6 +46,7 @@ function fakeDevice(options: { tab?: string; ip?: string; agent?: string } = {})
 describeWithDatabase("face handoff integration", () => {
   const marker = `handoff-${Date.now().toString(36)}`;
   let userId = 0;
+  const grantOf = async () => (await getUserById(userId))!.faceGrantVersion;
   let otherUserId = 0;
 
   beforeAll(async () => {
@@ -88,21 +89,21 @@ describeWithDatabase("face handoff integration", () => {
     expect(context.differentNetwork).toBe(true);
 
     // Компьютер батлагдахаас өмнө proof авахгүй.
-    expect((await claimFaceHandoff({ token: started.token, userId, sessionVersion: 0, req: desktop.req, res: desktop.res })).status).toBe("pending");
-    expect(await hasValidFaceProof(desktop.req, userId, 0)).toBe(false);
+    expect((await claimFaceHandoff({ token: started.token, userId, sessionVersion: 0, faceGrantVersion: await grantOf(), req: desktop.req, res: desktop.res })).status).toBe("pending");
+    expect(await hasValidFaceProof(desktop.req, userId, 0, await grantOf())).toBe(false);
 
     await assertHandoffApprovable({ token: started.token, userId, sessionVersion: 0, matchNumber: started.matchNumber, req: phone.req });
     await approveFaceHandoff({ token: started.token, userId, sessionVersion: 0, matchNumber: started.matchNumber, req: phone.req });
 
     // Утас өөрөө ямар ч proof авахгүй.
-    expect(await hasValidFaceProof(phone.req, userId, 0)).toBe(false);
+    expect(await hasValidFaceProof(phone.req, userId, 0, await grantOf())).toBe(false);
 
-    const claimed = await claimFaceHandoff({ token: started.token, userId, sessionVersion: 0, req: desktop.req, res: desktop.res });
+    const claimed = await claimFaceHandoff({ token: started.token, userId, sessionVersion: 0, faceGrantVersion: await grantOf(), req: desktop.req, res: desktop.res });
     expect(claimed.status).toBe("approved");
-    expect(await hasValidFaceProof(desktop.req, userId, 0)).toBe(true);
+    expect(await hasValidFaceProof(desktop.req, userId, 0, await grantOf())).toBe(true);
 
     // Нэг удаагийн: дахин авах боломжгүй.
-    expect((await claimFaceHandoff({ token: started.token, userId, sessionVersion: 0, req: desktop.req, res: desktop.res })).status).toBe("expired");
+    expect((await claimFaceHandoff({ token: started.token, userId, sessionVersion: 0, faceGrantVersion: await grantOf(), req: desktop.req, res: desktop.res })).status).toBe("expired");
   });
 
   it("өөр хэрэглэгч контекстийг ч харахгүй, батлах ч боломжгүй", async () => {
@@ -123,7 +124,7 @@ describeWithDatabase("face handoff integration", () => {
     await expect(assertHandoffApprovable({ token: started.token, userId, sessionVersion: 0, matchNumber: wrong, req: phone.req })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     // Зөв тоогоор ч дахин оролдох боломжгүй — хүсэлт хаагдсан.
     await expect(assertHandoffApprovable({ token: started.token, userId, sessionVersion: 0, matchNumber: started.matchNumber, req: phone.req })).rejects.toMatchObject({ code: "BAD_REQUEST" });
-    expect((await claimFaceHandoff({ token: started.token, userId, sessionVersion: 0, req: desktop.req, res: desktop.res })).status).toBe("denied");
+    expect((await claimFaceHandoff({ token: started.token, userId, sessionVersion: 0, faceGrantVersion: await grantOf(), req: desktop.req, res: desktop.res })).status).toBe("denied");
   });
 
   it("өөр таб батлагдсан хүсэлтийг ашиглаж чадахгүй", async () => {
@@ -133,8 +134,8 @@ describeWithDatabase("face handoff integration", () => {
     await approveFaceHandoff({ token: started.token, userId, sessionVersion: 0, matchNumber: started.matchNumber, req: phone.req });
 
     const otherTab = fakeDevice({ tab: "tab-different" });
-    expect((await claimFaceHandoff({ token: started.token, userId, sessionVersion: 0, req: otherTab.req, res: otherTab.res })).status).toBe("expired");
-    expect(await hasValidFaceProof(otherTab.req, userId, 0)).toBe(false);
+    expect((await claimFaceHandoff({ token: started.token, userId, sessionVersion: 0, faceGrantVersion: await grantOf(), req: otherTab.req, res: otherTab.res })).status).toBe("expired");
+    expect(await hasValidFaceProof(otherTab.req, userId, 0, await grantOf())).toBe(false);
   });
 
   it("нэвтрэлт шинэчлэгдвэл (sessionVersion) хүсэлт үхнэ", async () => {
@@ -142,7 +143,7 @@ describeWithDatabase("face handoff integration", () => {
     const phone = fakeDevice({ tab: "tab-phone", ip: "198.51.100.5" });
     const started = await startFaceHandoff({ userId, sessionVersion: 0, req: desktop.req });
     await expect(getFaceHandoffContext({ token: started.token, userId, sessionVersion: 1, req: phone.req })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    expect((await claimFaceHandoff({ token: started.token, userId, sessionVersion: 1, req: desktop.req, res: desktop.res })).status).toBe("expired");
+    expect((await claimFaceHandoff({ token: started.token, userId, sessionVersion: 1, faceGrantVersion: await grantOf(), req: desktop.req, res: desktop.res })).status).toBe("expired");
   });
 
   it("шинэ QR гаргахад өмнөх хүлээгдэж буй хүсэлт хүчингүй болно", async () => {
@@ -150,7 +151,7 @@ describeWithDatabase("face handoff integration", () => {
     const first = await startFaceHandoff({ userId, sessionVersion: 0, req: desktop.req });
     const second = await startFaceHandoff({ userId, sessionVersion: 0, req: desktop.req });
     expect(second.token).not.toBe(first.token);
-    expect((await claimFaceHandoff({ token: first.token, userId, sessionVersion: 0, req: desktop.req, res: desktop.res })).status).toBe("expired");
+    expect((await claimFaceHandoff({ token: first.token, userId, sessionVersion: 0, faceGrantVersion: await grantOf(), req: desktop.req, res: desktop.res })).status).toBe("expired");
   });
 
   it("хугацаа дууссан хүсэлт батлагдахгүй", async () => {
@@ -166,7 +167,7 @@ describeWithDatabase("face handoff integration", () => {
     const desktop = fakeDevice();
     const started = await startFaceHandoff({ userId, sessionVersion: 0, req: desktop.req });
     await denyFaceHandoff({ token: started.token, userId });
-    expect((await claimFaceHandoff({ token: started.token, userId, sessionVersion: 0, req: desktop.req, res: desktop.res })).status).toBe("denied");
+    expect((await claimFaceHandoff({ token: started.token, userId, sessionVersion: 0, faceGrantVersion: await grantOf(), req: desktop.req, res: desktop.res })).status).toBe("denied");
   });
 
   it("хуучин мөрүүд цэвэрлэгддэг", async () => {

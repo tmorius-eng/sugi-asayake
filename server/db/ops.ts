@@ -502,7 +502,17 @@ export async function hasStoreCreditLedgerReason(userId: number, reason: string)
 }
 
 /** Lockout-д тоологдох шалтгаанууд — зөвхөн буруу нууц үг. */
-export const COUNTED_LOGIN_FAILURE_REASONS = ["invalid_credentials", "reauth_invalid"] as const;
+// 2026-10-01: нууц үг шалгадаг бусад бүх зам (нууц үг солих, акаунт устгах, утас солих,
+// Facebook холбох/салгах) мөн ЭНЭ ижил төсөвт тоологдоно — эс бөгөөс сешн cookie-той
+// халдагч lockout-гүй замаар нууц үгийг хязгааргүй таана.
+export const COUNTED_LOGIN_FAILURE_REASONS = [
+  "invalid_credentials",
+  "reauth_invalid",
+  "password_change_invalid",
+  "delete_account_invalid",
+  "phone_change_invalid",
+  "facebook_link_invalid",
+] as const;
 
 /**
  * Энэ IP-ээс энэ данс сүүлийн `days` хоногт амжилттай нэвтэрсэн эсэх (2026-09-27).
