@@ -4,6 +4,15 @@
 
 ---
 
+## Staging дээр бүрэн шалгалт + DB watchdog (2026-10-01, үдээс хойш)
+
+Tom: *"laptopoo asaaltai uldeegeed remote controloor handaj baina! Bugdiin chi hiiged uguuch"*. Шинэ CA-г (VM дээрхтэй SHA-256 хурууны хээ таарсан) scratchpad-д татаж `DATABASE_CA_CERT[_PATH]` орчны хувьсагчаар өгч (`.env`/`oci-ca.pem`-д хүрэх эрх хаалттай) staging-д 0096–0100-г ажиллуулав.
+- **Integration** (бүрэн, `sugi_staging`): эхний run 27 уналт / 9 файл → **2 бодит алдаа** (7f3ab8e: `postCount` статусыг `posted` болгосны ДАРАА `getCount`-оор дахин уншдаг тул бүрэн тооллого болон вендорын автомат тооллого тоологдоогүй барааг ТЭГЛЭХЭЭ больсон байв — `getCount({ whilePosting })`; бөөн засварын "олдсонгүй" мессеж ерөнхий болсон), бусад нь санаатай өөрчлөлтийг хуучнаар хүлээсэн тест (fgv, нэг удаагийн step-up, replay, push allowlist, утасны guard, монгол мессеж, вендорын онлайн салбар). Хамгаалалт сулруулаагүй, 2 шинэ тест нэмэгдсэн. Дахин run: **1281 passed / 2 skipped / 0 failed**.
+- **E2E** (бүтэн, desktop+mobile): 235 + 4 уналт → хоёр нь 09-29-ний санаатай өөрчлөлт (клиент утасны формат шалгадаг; барааны хуудас нөөцтэй хувилбарыг анхдагчаар сонгодог) → тест засаад **239/0**.
+- **DB watchdog** (`server/_core/dbWatchdog.ts`): production-ий background процесс минут тутам `dbPing`, 3 дараалсан алдаа → эзэнд имэйл (Brevo `.env`-ээр, DB-гүйгээр), 6 цаг тутам сануулга, сэргэхэд мэдэгдэл. `dbPing` drizzle-ийн `cause`-ийг (жинхэнэ TLS/auth шалтгаан) харуулдаг болов. `DB_WATCHDOG=0` унтраана.
+- `scripts/r2-create-private-bucket.ts` — хувийн bucket үүсгэх/шалгах. Claude-ийн ажиллуулахыг "shared resource" гэж хаасан → Tom.
+- Production migration + deploy-г Claude-д "Production Deploy" гэж хаасан → Tom (PROJECT-GUIDE-ийн командууд). Код `origin/main`-д push хийгдсэн (CI л ажиллана, автомат deploy байхгүй).
+
 ## Production DB тасалдал — HeatWave CA солигдсон (2026-10-01)
 
 **Шинж** (Tom, утаснаас): /shop "Каталогийг ачаалж чадсангүй. Интернэт холболтоо шалгаад…", hero зураг маш удаан. Интернэт биш: `/health` → 503 `database: down`, бүх tRPC 500.
