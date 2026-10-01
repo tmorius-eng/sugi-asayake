@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * server/storepay.ts against a stubbed fetch and stubbed settings: the exact
+ * server/storepay.ts against a stubbed transport and stubbed settings: the exact
  * request StorePay receives (two credential pairs, one of them as HTTP
  * Basic), and their envelope rule -- HTTP 200 with status != "Success" is a
  * FAILURE, which is the mistake worth a test.
@@ -31,19 +31,31 @@ const { checkStorepayLoan, clearStorepayTokenCache, createStorepayLoan, getStore
 const tokenResponse = () => new Response(JSON.stringify({ access_token: "tok-1", expires_in: 3600 }), { status: 200 });
 const ok = (value: unknown) => new Response(JSON.stringify({ value, msgList: [], attrs: null, status: "Success" }), { status: 200 });
 
-function stubFetch(handler: (url: string, init: RequestInit) => Response) {
-  const calls: { url: string; init: RequestInit }[] = [];
-  vi.stubGlobal("fetch", vi.fn(async (input: string | URL, init: RequestInit) => {
+// 2026-10-01: StorePay now goes through safeRequest (no redirects, no private
+// IPs, capped body) instead of global fetch; the stub stands in for it and
+// keeps the {url, init} shape the assertions below read.
+let stubHandler: ((url: string, init: RequestInit) => Response) | null = null;
+const stubCalls: { url: string; init: RequestInit }[] = [];
+vi.mock("./_core/safeHttp", async importOriginal => ({
+  ...(await importOriginal<typeof import("./_core/safeHttp")>()),
+  safeRequest: async (input: string | URL, options: { method?: string; headers?: Record<string, string>; body?: string }) => {
     const url = String(input);
-    calls.push({ url, init });
-    return handler(url, init);
-  }));
-  return calls;
+    const init: RequestInit = { method: options.method, headers: options.headers, body: options.body };
+    stubCalls.push({ url, init });
+    const response = stubHandler!(url, init);
+    return { status: response.status, headers: {}, body: await response.text() };
+  },
+}));
+
+function stubFetch(handler: (url: string, init: RequestInit) => Response) {
+  stubCalls.length = 0;
+  stubHandler = handler;
+  return stubCalls;
 }
 
 describe("StorePay", () => {
   beforeEach(() => { activeSettings = { ...settings }; clearStorepayTokenCache(); });
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { stubHandler = null; });
 
   it("accepts a Mongolian mobile number in the forms people actually type", () => {
     expect(normaliseMobileNumber("99112233")).toBe("99112233");

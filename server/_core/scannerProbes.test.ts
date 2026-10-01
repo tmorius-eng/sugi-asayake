@@ -30,6 +30,19 @@ const REAL = [
 describe("isScannerProbe", () => {
   it.each(PROBES)("refuses %s", path => { expect(isScannerProbe(path)).toBe(true); });
   it.each(REAL)("lets %s through", path => { expect(isScannerProbe(path.split("?")[0])).toBe(false); });
+
+  it("treats the Vite dev-server paths as probes in production (no Vite there; /@fs is the file-read CVE path)", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    try {
+      for (const path of ["/@fs/C:/Users/x/.env", "/@fs/etc/passwd", "/@vite/client", "/@id/x", "/node_modules/.vite/deps/react.js", "/src/main.tsx"]) {
+        expect(isScannerProbe(path), path).toBe(true);
+      }
+      expect(isScannerProbe("/shop")).toBe(false);
+      expect(isScannerProbe("/assets/index-abc.js")).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });
 
 function fakeRequest(path: string, ip: string): Request {

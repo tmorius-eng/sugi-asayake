@@ -12,6 +12,7 @@
  * false` нь "Идэвхтэй" toggle амьд интеграц мэт харагдуулахын оронд admin дэлгэцэд
  * тэгж хэлүүлнэ.
  */
+import { isPrivateAddress } from "./ip-address";
 
 export const INTEGRATION_PROVIDERS = ["ebarimt", "storepay", "card_golomt", "courier_ebuuhia", "ntfy", "smartsoftware"] as const;
 export type IntegrationProvider = (typeof INTEGRATION_PROVIDERS)[number];
@@ -205,18 +206,15 @@ const CLOUD_VENDOR_PROVIDERS = new Set<IntegrationProvider>(["smartsoftware", "s
  *  check (no DNS): it stops the obvious mistakes and the obvious attack, and
  *  the vendors in question are only ever reached by public hostname. */
 export function isPrivateHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  // 2026-10-01: төгсгөлийн цэг ("localhost.") нь DNS-д ижил хост ч өмнөх шалгалтыг давдаг байв.
+  const host = hostname.trim().toLowerCase().replace(/^\[|\]$/g, "").replace(/\.+$/, "");
+  if (!host) return true;
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
-  // 2026-09-23: IPv6-ийн шалгалтыг ЗӨВХӨН IPv6 хаяг дээр. `fc00::/7` (ULA)
-  // шалгалт нь `startsWith("fc")`/`("fd")` байсан тул `fcstore.com`,
-  // `fdx.mn` зэрэг НИЙТИЙН домэйнийг "дотоод сүлжээ" гэж татгалзаж, админ
-  // тийм хостоор ирсэн API хаягийг хадгалж чаддаггүй байв.
-  if (host === "::1") return true;
-  if (host.includes(":") && (host.startsWith("fe80:") || host.startsWith("fc") || host.startsWith("fd"))) return true;
-  const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (!v4) return !host.includes(".");
-  const [a, b] = [Number(v4[1]), Number(v4[2])];
-  return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+  // IPv6 (mapped, ULA, link-local, ...) болон IPv4 хаягийг нэг дүрмээр
+  // (shared/ip-address.ts). 2026-09-23: `fcstore.com` зэрэг НИЙТИЙН домэйныг
+  // "fc00::/7" гэж андуурахгүйн тулд IPv6 дүрэм зөвхөн ":" агуулсан хост дээр.
+  if (host.includes(":") || /^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return isPrivateAddress(host);
+  return !host.includes(".");
 }
 
 /**

@@ -1,5 +1,4 @@
-import { request as httpRequest } from "node:http";
-import { request as httpsRequest } from "node:https";
+import { SafeHttpError, safeRequest } from "../_core/safeHttp";
 import { SMART_SOFTWARE_DEFAULT_INVENTORY_URL, SMART_SOFTWARE_DEFAULT_POS_URL } from "../../shared/integrations";
 import { registerInventorySyncProvider, type CatalogSnapshot, type InventorySyncProvider, type StockSnapshot, type VendorDiscount, type VendorProduct } from "./inventorySync";
 
@@ -67,46 +66,22 @@ export class SmartSoftwareError extends Error {
   }
 }
 
-/** Sends exactly what the request says -- including a body on a GET. */
-export const nodeTransport: SmartTransport = request => new Promise((resolve, reject) => {
-  const url = new URL(request.url);
-  const send = url.protocol === "http:" ? httpRequest : httpsRequest;
-  const headers = { ...request.headers };
-  if (request.body !== undefined) headers["Content-Length"] = String(Buffer.byteLength(request.body));
-  // 2026-09-27 (I24): guards settle exactly once -- the deadline timer,
-  // the response's own 'error', and the request's 'error'/'timeout' can
-  // all otherwise race and call resolve/reject twice (Node just ignores
-  // the second call, but req.destroy() would also run twice).
-  let settled = false;
-  const settle = (fn: () => void) => { if (settled) return; settled = true; clearTimeout(deadline); fn(); };
-  const req = send(url, { method: request.method, headers, timeout: TIMEOUT_MS }, response => {
-    const chunks: Buffer[] = [];
-    let received = 0;
-    response.on("data", (chunk: Buffer) => {
-      received += chunk.length;
-      if (received > MAX_RESPONSE_BYTES) {
-        settle(() => reject(new SmartSoftwareError(`хариу ${MAX_RESPONSE_BYTES} байтаас хэтэрсэн тул зогсоов.`)));
-        req.destroy();
-        return;
-      }
-      chunks.push(chunk);
-    });
-    response.on("end", () => settle(() => resolve({ status: response.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8") })));
-    response.on("error", error => settle(() => reject(error)));
-  });
-  // Overall wall-clock deadline -- the `timeout` option/socket event above
-  // is idle-only (resets on every byte received), so it never bounds a
-  // request that keeps trickling data slowly forever.
-  const deadline = setTimeout(() => {
-    settle(() => reject(new SmartSoftwareError(`${OVERALL_DEADLINE_MS}мс дотор дуусаагүй тул зогсоов.`)));
-    req.destroy();
-  }, OVERALL_DEADLINE_MS);
-  deadline.unref?.();
-  req.on("timeout", () => req.destroy(new Error(`timed out after ${TIMEOUT_MS}ms`)));
-  req.on("error", error => settle(() => reject(error)));
-  if (request.body !== undefined) req.write(request.body);
-  req.end();
-});
+/**
+ * Sends exactly what the request says -- including a body on a GET. 2026-10-01:
+ * the socket work moved to server/_core/safeHttp.ts, which additionally refuses
+ * private/reserved addresses (checked at connect time, so DNS rebinding cannot
+ * slip past), never follows redirects, and enforces the byte cap and the hard
+ * wall-clock deadline described above.
+ */
+export const nodeTransport: SmartTransport = async request => {
+  try {
+    const response = await safeRequest(request.url, { method: request.method, headers: request.headers, body: request.body, timeoutMs: TIMEOUT_MS, deadlineMs: OVERALL_DEADLINE_MS, maxBytes: MAX_RESPONSE_BYTES });
+    return { status: response.status, body: response.body };
+  } catch (error) {
+    if (error instanceof SafeHttpError) throw new SmartSoftwareError(error.message);
+    throw error;
+  }
+};
 
 const trimSlash = (value: string) => value.trim().replace(/\/+$/, "");
 

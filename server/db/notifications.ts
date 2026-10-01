@@ -6,6 +6,7 @@ import { and, desc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { loginAttempts, notificationOutbox, pushSubscriptions, users, visitorSessions } from "../../drizzle/schema";
 import { enqueueNotification, TEST_SUPPRESSED_MARKER } from "../notificationOutbox";
 import type { NotificationEventType, NotificationPayloads } from "../../shared/notification-events";
+import { MAX_PUSH_SUBSCRIPTIONS_PER_USER } from "../../shared/push-endpoint";
 import { sqlInt } from "../_core/sqlSafe";
 import { getDb } from "./connection";
 
@@ -133,7 +134,17 @@ export async function markNotificationsSeen(userId: number, upToId: number) {
 export async function upsertPushSubscription(input: { userId: number; endpoint: string; p256dh: string; auth: string; userAgent: string | null }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  await db.insert(pushSubscriptions).values(input).onDuplicateKeyUpdate({ set: { userId: input.userId, p256dh: input.p256dh, auth: input.auth, userAgent: input.userAgent } });
+  // 2026-10-01: an endpoint that is already registered to a DIFFERENT account
+  // (shared browser: previous user logged out, new one subscribes) is removed
+  // first and inserted fresh for the caller, instead of silently re-pointing
+  // the old row (and its old keys) at them. The same-user case still updates
+  // in place via the unique index.
+  await db.delete(pushSubscriptions).where(and(eq(pushSubscriptions.endpoint, input.endpoint), ne(pushSubscriptions.userId, input.userId)));
+  await db.insert(pushSubscriptions).values(input).onDuplicateKeyUpdate({ set: { p256dh: input.p256dh, auth: input.auth, userAgent: input.userAgent } });
+  // Cap per user: keep the newest MAX_PUSH_SUBSCRIPTIONS_PER_USER, drop the rest.
+  const rows = await db.select({ id: pushSubscriptions.id }).from(pushSubscriptions).where(eq(pushSubscriptions.userId, input.userId)).orderBy(desc(pushSubscriptions.id));
+  const stale = rows.slice(MAX_PUSH_SUBSCRIPTIONS_PER_USER).map(row => row.id);
+  if (stale.length) await db.delete(pushSubscriptions).where(inArray(pushSubscriptions.id, stale));
 }
 
 export async function deletePushSubscription(endpoint: string, userId?: number) {

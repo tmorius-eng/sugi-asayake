@@ -11,12 +11,19 @@
  *
  * Ухамсартайгаар production дээр ажиллуулах шаардлага гарвал `--i-know-this-is-production`.
  */
-const PRODUCTION_SCHEMAS = new Set(["defaultdb", "mysql", "sys"]);
+import { decodedSchemaOf, PRODUCTION_SCHEMAS } from "../shared/dbUrl";
 
 export function refuseProductionDatabase(scriptName: string, url = process.env.DATABASE_URL): void {
   if (!url || process.argv.includes("--i-know-this-is-production")) return;
   let schema: string;
-  try { schema = new URL(url).pathname.replace(/^\//, ""); } catch { return; }
+  try {
+    schema = decodedSchemaOf(url);
+  } catch {
+    // 2026-10-01: an unparseable URL used to be waved through ("can't tell, allow").
+    // A SAFETY guard fails closed.
+    console.error(`${scriptName}: DATABASE_URL задлагдсангүй — аюулгүй байдлын үүднээс скрипт ажиллахаас татгалзав.`);
+    process.exit(2);
+  }
   if (PRODUCTION_SCHEMAS.has(schema)) {
     console.error(`${scriptName}: DATABASE_URL нь "${schema}" (бодит дэлгүүр) руу заасан байна — энэ скрипт тест/CI/туршилтын схемд л ажиллана. ` +
       `sugi_staging эсвэл хоосон туршилтын схем рүү заа (жишээ: $env:DATABASE_URL=".../sugi_staging").`);

@@ -86,16 +86,25 @@ try {
   $dumpArgs += @("--single-transaction", "--routines", "--triggers", "--result-file=$sqlFile")
   & $MySqlDumpPath @dumpArgs $dbName
   if ($LASTEXITCODE -ne 0) { throw "mysqldump exited with code $LASTEXITCODE" }
+} catch {
+  # A failed dump leaves a partial .sql behind; remove it before re-throwing.
+  if (Test-Path $sqlFile) { Remove-Item $sqlFile -Force -ErrorAction SilentlyContinue }
+  throw
 } finally {
   if ($null -eq $previousPwd) { Remove-Item Env:\MYSQL_PWD -ErrorAction SilentlyContinue } else { $env:MYSQL_PWD = $previousPwd }
 }
 
-if (-not (Test-Path $sqlFile) -or (Get-Item $sqlFile).Length -eq 0) {
-  throw "Backup file is missing or empty - treating this as a failed backup."
+try {
+  if (-not (Test-Path $sqlFile) -or (Get-Item $sqlFile).Length -eq 0) {
+    throw "Backup file is missing or empty - treating this as a failed backup."
+  }
+  Compress-Archive -Path $sqlFile -DestinationPath $zipFile -Force
+} finally {
+  # 2026-10-01: the raw .sql holds every customer row in clear text. It used to be
+  # removed only on the success path, so a failed run (0-byte or partial dump, a
+  # Compress-Archive error) left it in backups/ for good.
+  if (Test-Path $sqlFile) { Remove-Item $sqlFile -Force -ErrorAction SilentlyContinue }
 }
-
-Compress-Archive -Path $sqlFile -DestinationPath $zipFile -Force
-Remove-Item $sqlFile
 
 $sizeKb = [math]::Round((Get-Item $zipFile).Length / 1KB, 1)
 Write-Host "Backup written: $zipFile ($sizeKb KB)"

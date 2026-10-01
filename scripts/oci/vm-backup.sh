@@ -40,6 +40,10 @@ BACKUP_PASSPHRASE="$(env_get BACKUP_PASSPHRASE)"
 CA_PATH="$(env_get DATABASE_CA_CERT_PATH)"
 [ -n "$DATABASE_ADMIN_URL" ] || { echo "DATABASE_ADMIN_URL missing"; exit 1; }
 [ -n "$BACKUP_PASSPHRASE" ] || { echo "BACKUP_PASSPHRASE missing"; exit 1; }
+# 2026-10-01: the CA is REQUIRED -- without it the dump (every customer row) would
+# travel over TLS that nobody verifies. Better no backup tonight than an unverified one.
+[ -n "$CA_PATH" ] || { echo "DATABASE_CA_CERT_PATH missing -- refusing to dump without verifying the server certificate"; exit 1; }
+[ -r "$CA_PATH" ] || { echo "DATABASE_CA_CERT_PATH=$CA_PATH is not readable"; exit 1; }
 export BACKUP_PASSPHRASE
 
 # mysql://user:pass@host:port/db?... -- the password is percent-encoded in .env.
@@ -63,7 +67,7 @@ echo "[$(date -u +%FT%TZ)] dump $DB_NAME from $DB_HOST:$DB_PORT as $DB_USER"
 # Same flags as scripts/db-backup.ps1: HeatWave is GTID-enabled and admin
 # lacks SUPER/PROCESS, so the dump must not carry GTID_PURGED or tablespaces.
 MYSQL_PWD="$DB_PASS" mysqldump --host="$DB_HOST" --port="$DB_PORT" --user="$DB_USER" \
-  ${CA_PATH:+--ssl-ca="$CA_PATH" --ssl-mode=VERIFY_CA} \
+  --ssl-ca="$CA_PATH" --ssl-mode=VERIFY_CA \
   --set-gtid-purged=OFF --no-tablespaces --single-transaction --routines --triggers "$DB_NAME" \
   | gzip -9 \
   | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:BACKUP_PASSPHRASE -out "$OUT"

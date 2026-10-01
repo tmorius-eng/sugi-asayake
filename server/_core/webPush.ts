@@ -17,6 +17,13 @@ import webpush from "web-push";
 import { ENV } from "./env";
 import { deletePushSubscription, getPushSubscriptionsForUser, getStoreSettingValue, touchPushSubscriptions } from "../db";
 import { fillTemplate, type StoreSettingKey } from "../../shared/store-settings";
+import { isAllowedPushEndpoint } from "../../shared/push-endpoint";
+import { mapLimit } from "./mapLimit";
+
+// 2026-10-01: at most 4 pushes in flight per call, and the whole fan-out gives up
+// after this long (each send also has its own 10 s timeout below).
+const PUSH_CONCURRENCY = 4;
+const PUSH_OVERALL_DEADLINE_MS = 30_000;
 
 let configured = false;
 export function webPushEnabled(): boolean {
@@ -32,12 +39,24 @@ export type PushPayload = { title: string; body: string; url?: string; tag?: str
 
 /** Sends to every subscription of one user. Returns how many were delivered. */
 export async function sendPushToUser(userId: number, payload: PushPayload): Promise<number> {
+  if (ENV.notificationsSuppressed) {
+    console.log(JSON.stringify({ event: "notification_not_sent", channel: "push", reason: "suppressed", userId }));
+    return 0;
+  }
   if (!webPushEnabled()) return 0;
-  const subscriptions = await getPushSubscriptionsForUser(userId);
+  const stored = await getPushSubscriptionsForUser(userId);
+  // Rows saved before the host allowlist existed (or inserted some other way)
+  // must never be dialled: drop them instead of sending.
+  const subscriptions = stored.filter(sub => isAllowedPushEndpoint(sub.endpoint));
+  for (const sub of stored) {
+    if (!isAllowedPushEndpoint(sub.endpoint)) await deletePushSubscription(sub.endpoint).catch(() => undefined);
+  }
   if (subscriptions.length === 0) return 0;
   const body = JSON.stringify({ ...payload, url: payload.url ?? "/profile?tab=orders", icon: "/icons/icon-192.png", badge: "/icons/icon-192.png" });
   const delivered: number[] = [];
-  await Promise.all(subscriptions.map(async sub => {
+  const deadline = Date.now() + PUSH_OVERALL_DEADLINE_MS;
+  await mapLimit(subscriptions, PUSH_CONCURRENCY, async sub => {
+    if (Date.now() > deadline) return;
     try {
       // C1: no timeout meant a slow/hung push service endpoint could hold
       // this open indefinitely -- every other outbound fetch in this
@@ -50,7 +69,7 @@ export async function sendPushToUser(userId: number, payload: PushPayload): Prom
       if (status === 404 || status === 410) await deletePushSubscription(sub.endpoint).catch(() => undefined);
       else console.warn(`[push] user=${userId} status=${status ?? "?"} ${error instanceof Error ? error.message : error}`);
     }
-  }));
+  });
   await touchPushSubscriptions(delivered).catch(() => undefined);
   return delivered.length;
 }

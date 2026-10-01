@@ -22,6 +22,18 @@ import { getDb } from "../server/db";
  * бүртгэх: `db-apply-migration.ts <файлууд> --mark-applied` (ажиллуулахгүй,
  * зөвхөн бүртгэнэ). Тиймээс "дутуу" жагсаалтыг эхний удаад нүдээр шалга.
  */
+/** drizzle wraps the driver error (`DrizzleQueryError.cause`), so walk the chain. */
+function causeChain(error: unknown): { code?: string; errno?: number; message?: string }[] {
+  const chain: { code?: string; errno?: number; message?: string }[] = [];
+  for (let current: unknown = error, depth = 0; current && typeof current === "object" && depth < 6; depth++) {
+    chain.push(current as { code?: string; errno?: number; message?: string });
+    current = (current as { cause?: unknown }).cause;
+  }
+  return chain;
+}
+const isNoSuchTable = (error: unknown) => causeChain(error).some(entry => entry.code === "ER_NO_SUCH_TABLE" || entry.errno === 1146);
+const describeError = (error: unknown) => causeChain(error).map(entry => [entry.code, entry.message].filter(Boolean).join(" ")).filter(Boolean).join(" <- ") || String(error);
+
 async function main() {
   // 2026-09-23: admin URL нь ЗӨВХӨН ижил схем рүү заасан үед л DATABASE_URL-ийг
   // орлоно. Өмнө нь `$env:DATABASE_URL=".../sugi_staging"` гэж эхлээд staging-д
@@ -58,7 +70,14 @@ async function main() {
   try {
     const rows = await db.execute(sql`SELECT name FROM schema_migrations`);
     applied = new Set((rows[0] as unknown as { name: string }[]).map(row => row.name));
-  } catch {
+  } catch (error) {
+    // 2026-10-01: ANY error used to print "table not created yet", so a TLS /
+    // network failure looked like a fresh database with every migration missing.
+    // Only a genuinely missing table is that; everything else is fatal.
+    if (!isNoSuchTable(error)) {
+      console.error(`DB-тэй холбогдож чадсангүй (schema_migrations унших үед алдаа): ${describeError(error)}`);
+      process.exit(1);
+    }
     console.log("schema_migrations хүснэгт хараахан үүсээгүй — бүртгэл хоосон гэж үзнэ.\n");
   }
 

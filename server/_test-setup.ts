@@ -33,6 +33,7 @@
  *    дарж бичихгүй.
  */
 import "dotenv/config";
+import { decodedSchemaOf, PRODUCTION_SCHEMAS } from "../shared/dbUrl";
 
 // 0. БОДИТ ДЭЛГҮҮРИЙН СХЕМ РҮҮ БИЧИХГҮЙ (2026-09-23). `.env`-ийн DATABASE_URL нь
 //    `defaultdb` (production) тул integration suite бүр бараа, захиалга, хэрэглэгч,
@@ -44,19 +45,21 @@ import "dotenv/config";
 //    ухамсартайгаар ажиллуулах шаардлага гарвал `ALLOW_PROD_TESTS=1`.
 //    ⚠️ Шинэ migration-ийг staging-д ч ажиллуулсан байх ёстой (PROJECT-GUIDE).
 {
-  const PRODUCTION_SCHEMAS = new Set(["defaultdb", "mysql", "sys"]);
   if (process.env.VITEST_DATABASE_URL) process.env.DATABASE_URL = process.env.VITEST_DATABASE_URL;
   const source = process.env.DATABASE_URL;
   if (source && process.env.ALLOW_PROD_TESTS !== "1") {
+    // 2026-10-01: decoded/lower-cased (shared/dbUrl.ts) and FAIL CLOSED -- an
+    // unparseable URL used to be skipped, i.e. tests ran against whatever it named.
+    let schema: string;
     try {
-      const url = new URL(source);
-      const schema = url.pathname.replace(/^\//, "");
-      if (PRODUCTION_SCHEMAS.has(schema)) {
-        url.pathname = "/sugi_staging";
-        process.env.DATABASE_URL = url.toString();
-      }
+      schema = decodedSchemaOf(source);
     } catch {
-      // Задлагдахгүй URL — апп өөрөө холбогдохдоо тодорхой алдаа өгнө.
+      throw new Error("DATABASE_URL задлагдсангүй — тест production руу чиглэж болзошгүй тул зогсоов.");
+    }
+    if (PRODUCTION_SCHEMAS.has(schema)) {
+      const url = new URL(source);
+      url.pathname = "/sugi_staging";
+      process.env.DATABASE_URL = url.toString();
     }
   }
 }

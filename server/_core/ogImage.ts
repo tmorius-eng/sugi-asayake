@@ -14,6 +14,7 @@
  * Бараа байхгүй -> 404; зураг татагдахгүй -> 503, эвдэрсэн карт хэзээ ч биш.
  */
 import { isPrivateHost } from "../../shared/integrations";
+import { readBodyWithLimit } from "./safeHttp";
 import type { Request, Response } from "express";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -55,14 +56,18 @@ function isPublicHttpsUrl(url: string): boolean {
   }
 }
 
+const OG_MAX_SOURCE_BYTES = 10 * 1024 * 1024;
+const OG_MAX_SOURCE_PIXELS = 40_000_000;
+
 export async function composeProductCard(sourceUrl: string): Promise<Buffer> {
   // Гадаад эх сурвалжид redirect хориглоно — нийтийн хост дотоод хаяг руу 302 хийж SSRF болгохгүй.
   // Өөрийн /cdn/ нь R2 руу 302 хийдэг тул тэнд л дагана.
   const external = isPublicHttpsUrl(sourceUrl) && storageKeyOf(sourceUrl) === null;
   const response = await fetch(absoluteUrl(sourceUrl), { redirect: external ? "error" : "follow", signal: AbortSignal.timeout(10_000) });
   if (!response.ok) throw new Error(`source image ${response.status}`);
-  const source = Buffer.from(await response.arrayBuffer());
-  const packshot = await sharp(source)
+  // 2026-10-01: хариуны хэмжээ 10 MB-аар, пиксел 40 MP-ээр хязгаарлав (decompression bomb / санах ойн DoS).
+  const source = await readBodyWithLimit(response, OG_MAX_SOURCE_BYTES);
+  const packshot = await sharp(source, { limitInputPixels: OG_MAX_SOURCE_PIXELS })
     .resize(OG_WIDTH - PADDING * 2, OG_HEIGHT - PADDING * 2, { fit: "inside", withoutEnlargement: false })
     .flatten({ background: "#ffffff" })
     .toBuffer();

@@ -47,6 +47,8 @@ const PROBE_PATTERNS: RegExp[] = [
   // page. The classic composer probe (/vendor/phpunit/.../eval-stdin.php)
   // is still caught by the *.php rule above.
   /(^|\/)(wp-admin|wp-login|wp-content|wp-includes|xmlrpc\.php|phpmyadmin|pma|adminer|cgi-bin|actuator|_profiler|telescope|laravel|storage\/logs|debug\/default|console|jenkins|solr|manager\/html)(\/|$)/i,
+  // Vite dev-server internals and source/dependency trees: never served in production.
+  /^\/(@fs|@vite|@id|@react-refresh|node_modules|src)(\/|$)/i,
   // The app's own source files, which are never served at these names.
   /^\/(server|app|main|index|config|secrets?|settings|credentials)\.(js|ts|json|cjs|mjs)$/i,
 ];
@@ -62,9 +64,15 @@ const ALLOW_PATTERNS: RegExp[] = [
   /^\/health$/,
   /^\/(favicon\.ico|robots\.txt|sitemap\.xml|manifest\.webmanifest|manifest\.json|site\.webmanifest|sw\.js|offline\.html)$/,
   /^\/\.well-known\//,
-  // Vite dev-server internals, only present under `pnpm dev`.
-  /^\/(@vite|@react-refresh|@fs|@id|node_modules|src)\//,
 ];
+
+/**
+ * Vite dev-server internals, only present under `pnpm dev`. 2026-10-01: allowed
+ * ONLY outside production. In production there is no Vite, so /@fs/..., /src/...
+ * and /node_modules/... are nothing but scanner probes (and /@fs is the path of
+ * Vite's arbitrary-file-read CVEs) -- they fall through to PROBE_PATTERNS.
+ */
+const DEV_ONLY_ALLOW_PATTERNS: RegExp[] = [/^\/(@vite|@react-refresh|@fs|@id|node_modules|src)\//];
 
 export function isScannerProbe(pathname: string): boolean {
   let path: string;
@@ -75,6 +83,7 @@ export function isScannerProbe(pathname: string): boolean {
     return true;
   }
   if (ALLOW_PATTERNS.some(pattern => pattern.test(path))) return false;
+  if (process.env.NODE_ENV !== "production" && DEV_ONLY_ALLOW_PATTERNS.some(pattern => pattern.test(path))) return false;
   return PROBE_PATTERNS.some(pattern => pattern.test(path));
 }
 
