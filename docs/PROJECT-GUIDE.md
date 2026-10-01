@@ -136,6 +136,7 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
 Өдөр бүрийн бүрэн тэмдэглэл HISTORY.md-д байна — тодорхой bug/шийдвэрийн
 шалтгааныг мэдэх хэрэгтэй үед л тэнд гарчгаар хайна.
 
+- (10-01) **Аюулгүй байдлын deep scan — 38 олдвор + 5 нэмэлт, бүгд кодонд засагдсан** (Tom: *"deep scan … zunduuu ih tsoorhoi"*). Logout нь зөвхөн тэр төхөөрөмжийг `jti`-аар хүчингүй болгоно (0099), нууц үг/утас/Facebook-д step-up + lockout, анхны admin `scripts/make-admin.ts`, царайн proof `faceGrantVersion`, SSRF (`safeHttp`), push allowlist, DB TLS fail-closed, CV хувийн bucket, бэлгийн карт/купоны race, Access-ийн tRPC зам. Бие даасан 3 шалгалтын 21 олдвор мөн засагдсан. ⛔ Migration **0099, 0100 заавал кодоос өмнө** (0099-гүй бол `users.faceGrantVersion` байхгүй → бүх хэрэглэгч гарсан мэт). ⚠️ Integration/E2E энэ лаптопоос ажиллаагүй (DB TLS). HISTORY 2026-10-01.
 - (09-29) **Бүх барааны нийтийн хямдрал** — /admin → Урамшуулал (зөвхөн admin). DB-ийн үнэ хөндөгдөхгүй, `withLiveCampaign()` үнэ уншдаг газар бүрт. ⛔ Migration **0098** заавал кодоос өмнө. [SITEWIDE-SALE-PLAN.md](SITEWIDE-SALE-PLAN.md).
 - (09-24→29) **Сүүлчийн бүтэн-стек аудит** — ~200 олдвор (4 P0 мөнгө), бүгд засагдсан + бие даасан шалгалтын 27 регресс. [docs/AUDIT-2026-09-27-final.md](AUDIT-2026-09-27-final.md). ⛔ Migration **0096, 0097 ажиллуулаагүй** (энэ лаптопоос DB TLS алдаа) — prod + staging-д ажиллуулаад л deploy. Хямдралын төлөвлөгөө: [docs/SITEWIDE-SALE-PLAN.md](SITEWIDE-SALE-PLAN.md) (6 шийдвэр хүлээж буй). HISTORY 2026-09-29.
 - (09-22) **/admin: нууц үг → царай → admin (step-up) + царайны системийн аудит** (Tom: *"эхлээд нууц үг, дараа нь царай гэж ярьсан — одоо нууц үг асуухгүй шууд царай"*). Шалтгаан: сешн cookie 365 хоног тул нууц үг зөвхөн анх нэг удаа асуугддаг байв. Одоо `sugi_admin_pw` step-up cookie (таб тус бүр, **нэг удаагийн**, 10 мин) — царай асуух БҮРТ /admin-ий нууц үгийн дэлгэц түрүүлнэ (Tom туршаад "зөвхөн царай уншиж байна" гэснээр `/login` тооцогдохоо больж, амжилттай царай алхмыг зарцуулдаг болсон). Аудитаар засав: сешн cookie-оор л **бусдын царайг өөрийнхөөрөө солих** боломж (`enroll` дарж бичдэг байв; одоо нууц үг + одоогийн царай, `resetOwnEnrollment` устгасан), `distance` oracle, данс тус бүрийн царайны lockout (5/15 мин), токен төөрөгдөл (`typ` claim), загвар **шифрлэгдсэн** (`enc1:`), **анивчилт заавал** (liveness анхдагчаар блоклоно), `/face-approve` утасны хуудас CSS-гүй байсан (`face.css`), handoff-ийн тоог камераас өмнө шалгана, CSPRNG, challenge retention, IdleLockWatcher-ийн effect, камер цэвэрлэгээ, flash/LivenessTracker хог код. HISTORY.md 2026-09-22.
@@ -168,7 +169,7 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
 - (09-11) **Linen палитр**, **ntfy push + нөөцийн ledger + сканнер + шилжүүлэг**
 
 ## ⚠️ Admin эрх хэн авдаг вэ — bootstrap логик (`server/db.ts`-ийн `createUserWithPassword`)
-**(2026-10-01-ээс) Бүх шинэ бүртгэл `"user"`** — "эхний хэрэглэгч автоматаар admin" дүрэм ХАСАГДСАН (count→insert race, хоосон DB-д түрүүлж бүртгүүлсэн нь admin болдог). Анхны admin-ийг серверт хандах эрхтэй хүн `pnpm exec tsx scripts/make-admin.ts <утас> [--staging] [--dry-run]`-аар оноодог (олдохгүй хэрэглэгч үүсгэхгүй; sessionVersion+1). Шинэ тест/seed admin хэрэгтэй бол `role`-ийг шууд DB-д тавина (`e2e/helpers/session.ts`, `faceAuth.integration.test.ts` шиг). Доорх хуучин тайлбар түүхийн зорилгоор:
+**(2026-10-01-ээс) Бүх шинэ бүртгэл `"user"`** — "эхний хэрэглэгч автоматаар admin" дүрэм ХАСАГДСАН (count→insert race, хоосон DB-д түрүүлж бүртгүүлсэн нь admin болдог). Анхны admin-ийг серверт хандах эрхтэй хүн `pnpm exec tsx scripts/make-admin.ts <утас> [--staging] [--dry-run] [--yes]` (staging биш схемд `--yes` заавал)-аар оноодог (олдохгүй хэрэглэгч үүсгэхгүй; sessionVersion+1). Шинэ тест/seed admin хэрэгтэй бол `role`-ийг шууд DB-д тавина (`e2e/helpers/session.ts`, `faceAuth.integration.test.ts` шиг). Доорх хуучин тайлбар түүхийн зорилгоор:
 
 (хуучин, ХҮЧИНГҮЙ) Шинээр бүртгүүлж буй хэрэглэгч **admin** эрхтэй болдог ЗӨВХӨН `users` хүснэгт хоосон үеийн хамгийн ЭХНИЙ хэрэглэгч (утсаар бүртгүүлсэн; Facebook-оор үүссэн данс хэзээ ч admin болдоггүй). ⚠️ (2026-09-27-нд кодоос шалгав) `OWNER_EMAIL`-ээр admin болгох зам кодод БАЙХГҮЙ — утсаар нэвтрэх болсноос хойш хасагдсан (`server/db/users.ts`-ийн тайлбар); `OWNER_EMAIL` нь зөвхөн эзэнд очих имэйл мэдэгдэл ба VAPID subject. Бусад бүх шинэ бүртгэл энгийн `"user"` эрхтэй. `staff`/`admin` эрхийг зөвхөн одоо байгаа admin гараар л оноож болно.
 
@@ -271,6 +272,10 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
   замыг солино) — эс бөгөөс staging чимээгүй 500 өгнө.
 
 **Admin, аюулгүй байдал**
+- **Гадагш HTTP (хэрэглэгч/админ тохируулсан хост руу) `server/_core/safeHttp.ts`-ийн `safeRequest`-ээр** (2026-10-01) — DNS-ийн дараах хувийн IP-г хаана, redirect дагахгүй, байтын хязгаар. Энгийн `fetch` нь redirect дагаж, нэрээр нь л шалгадаг тул SSRF. Хариуг `fetch`-ээр уншвал `readBodyWithLimit`.
+- **Хувь хүний файл (CV, баримтын зураг) `storagePutPrivate` / `storageGetSignedUrlPrivate`-аар** — нийтийн bucket-д бичвэл түлхүүрийг мэдсэн хэн ч `S3_PUBLIC_BASE_URL`-аар шууд татна. Шинэ хувийн угтвар нэмбэл `storageProxy.ts`-ийн `NON_PUBLIC_KEY_PREFIXES`-д мөн.
+- **`/api/trpc/` зам нэг л сегменттэй** (`trpcBatchGuard.ts`): tRPC процедурын нэрийг сүүлийн `/`-ийн дараахаас авдаг тул `/api/trpc/x/admin.users` Access-ийг тойрдог байв; admin./inventory.-г бусадтай нэг batch-д холихгүй (клиент `splitLink`). Шинэ эрхтэй router нэмбэл `PRIVILEGED_PREFIXES`-д нэм.
+- **`NOTIFICATIONS_SUPPRESS=1` нь имэйл/SMS/push-ийг бүгдийг гадагш явуулахгүй** — тестэд илгээгдсэн мессежийг console биш `getSuppressedOutbox()`-оос шалга. Fallback лог мессежийн биеийг ХЭЗЭЭ Ч бичихгүй (бэлгийн картын код орж байсан).
 - Шинэ admin procedure бичихдээ `protectedProcedure` БИШ, role builder (`adminProcedure`/`marketingProcedure`/…) — эс бөгөөс царайны proof шалгагдахгүй.
 - Session-ий эрх өөрчилдөг шинэ бичигч `forgetSessionUser` дуудна (5 секундын cache).
 - Шинэ tRPC client/fetch зам `x-admin-tab` header дамжуулна (`adminTabId()`).
@@ -386,6 +391,14 @@ session-ий тэмдэглэл HISTORY.md-д, дүрэм л энд. Ажилл�
 ажилд, output-оо хэрхэн таслах, session-ээ хэрхэн хуваах) TOKEN-USAGE.md-д.
 
 ## ⚠️ Tom-оос хүлээж буй (2026-09-14, "Za bugdiin hii"-ийн дараа)
+- 🔴 **(2026-10-01) Аюулгүй байдлын засварыг deploy хийхээс ӨМНӨ** (дарааллаар):
+  1. DB TLS-ийг засах (доорх мөр) → migration 0096, 0097, 0098, **0099, 0100**-г эхлээд `--staging`, дараа нь prod-д → бүрэн integration suite + `pnpm e2e` (энэ код нэг ч удаа DB дээр туршигдаагүй).
+  2. Cloudflare R2-д **public access-гүй** шинэ bucket → `.env`-д `S3_PRIVATE_BUCKET` (prod + 2 лаптоп); R2 API токен **хоёр bucket-ийг хоёуланг** хамрах ёстой. Эс бөгөөс production-д CV болон бараа хүлээн авалтын баримтын зураг upload татгалзана. Дараа нь `pnpm exec tsx scripts/move-private-objects.ts` (dry-run) → `--apply`.
+  3. VM-ийн `.env`-д `DATABASE_CA_CERT_PATH` байгааг батла — одоо production CA-гүй бол сервер ЭХЛЭХГҮЙ (өмнө нь warning). `vm-backup.sh` ч CA-гүй бол зогсоно.
+  4. Access ашигладаг бол `node scripts/cloudflare-harden.mjs --access` дахин (шинэ `/api/trpc/inventory*` зам; PUT байгаа бодлогыг хадгална, дараа нь шалгана).
+  5. Deploy-ийн дараа бүх admin нэг удаа нууц үг + царай дахин (proof-ийн формат өөрчлөгдсөн). ⚠️ Нэг төхөөрөмж дээр царай амжилттай болмогц БУСАД төхөөрөмжийн царайн сешн дуусна (зориуд — FACE-HANDOFF-PLAN §13); лаптоп + утсаар зэрэг admin хийдэг бол туршаад хэлээрэй.
+  6. `backups/` дахь задгай `.sql` 6 файл (4 нь 0 байт; `defaultdb_2026-09-26_202246.sql`, `oracle-migration_2026-09-09_003515.sql`) — шифрлэгдээгүй DB dump, устгах эсэхээ шийд.
+  7. Push allowlist-д Huawei хост (`push-api.cloud.huawei.com`) ойн санамжаар нэмэгдсэн — бодит `push_subscriptions`-ийн хостуудыг нэг удаа шалга (allowlist-гүй мөр одоо УСТГАГДАХГҮЙ, зөвхөн алгасагдана).
 - 🔴 **(2026-09-29) DB руу TLS "certificate signature failure"** (энэ лаптоп): тунель асдаг ч сервер сертификат `oci-ca.pem`-тэй таарахгүй — HeatWave-ийн CA-г дахин татаж солих. Дараа нь migration 0096 → 0097-г `--staging` ба prod-д, integration suite + `pnpm e2e`.
 - 🔴 **(2026-09-29) Production `JWT_SECRET`-ийг шалга**: гарын авлагад `local-test-secret-12345` жишээ байсан (энэ лаптоп яг тэрийг хэрэглэдэг). Prod ийм бол хэн ч admin сешн хуурамчаар үүсгэж чадна → 64 hex болгож солих (бүгд нэг удаа гарна). Сервер одоо эхлэхдээ сул бол анхааруулна.
 - **(2026-09-29) Хямдралын 6 шийдвэр** — [SITEWIDE-SALE-PLAN.md](SITEWIDE-SALE-PLAN.md) §2.

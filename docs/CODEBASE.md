@@ -74,7 +74,11 @@ browser → /api/trpc/<router>.<procedure>
 | `scheduler.ts` | цорын ганц job хуваарь | нэг `setInterval`, `scheduled_job_runs` хүснэгтээр `lastRunAt`-ыг хардаг. Cron парсер байхгүй |
 | `notification.ts` | имэйл илгээх (Brevo) | `deliverEmail` нь **хэзээ ч throw хийхгүй** — үр дүнг буцаана. `notifyOwner`, `sendAccountEmail` |
 | `ntfy.ts` | утасны push (ntfy.sh) | JSON POST (кирилл header найдваргүй), 5с timeout, ~3.8KB тайралт, хэзээ ч throw хийхгүй |
-| `storageProxy.ts` | `/cdn/*` → R2 | |
+| `storageProxy.ts` | `/cdn/*` → R2 | `isSafeStorageKey` (`..`, `\`, хоосон сегмент → 404), `NON_PUBLIC_KEY_PREFIXES` (`applications/`, `inventory/receipts/`) — тэдгээр нь хувийн bucket-д (`storagePutPrivate`) |
+| `safeHttp.ts` | гадагш HTTP-ийн SSRF хамгаалалт (2026-10-01) | `safeRequest` (lookup-ийн дараах хувийн IP, IP literal, redirect, байт, deadline), `readBodyWithLimit`; дүрэм нь `shared/ip-address.ts` |
+| `trpcBatchGuard.ts` | `/api/trpc` замын хамгаалалт | нэмэлт `/` сегмент → 404, admin./inventory. холилдсон batch → 400 |
+| `faceReplay.ts` / `facebookLinkIntent.ts` | царайн descriptor replay; Facebook холбох intent cookie (`typ: fb-link`, 10 мин) | |
+| `mapLimit.ts` | concurrency хязгаартай map | push илгээлт (4) |
 | `imageProcessing.ts` / `imageUpload.ts` | sharp-аар хувиргалт, upload-ийн шалгалт | |
 | `sanitizeHtml.ts` | админы HTML контентыг цэвэрлэх | |
 | `honeybadger.ts` / `honeybadgerReadApi.ts` | алдааны хяналт | түлхүүргүй бол чимээгүй no-op |

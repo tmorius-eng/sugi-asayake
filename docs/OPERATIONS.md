@@ -242,7 +242,7 @@ INTEGRATIONS_ENCRYPTION_KEY=           # 64 тэмдэгт hex (32 байт). А
                                        # БҮХ машин дээр ИЖИЛ байх ёстой, эс бөгөөс өөр машин дээр
                                        # бүртгэсэн царай "дахин бүртгүүлнэ үү" болно.
 OWNER_EMAIL=                           # зөвхөн эзэнд очих имэйл мэдэгдэл (хэнийг ч admin болгодоггүй;
-                                       # admin өгөх: pnpm exec tsx scripts/make-admin.ts <утас>)
+                                       # admin өгөх: pnpm exec tsx scripts/make-admin.ts <утас> --yes)
 PUBLIC_BASE_URL=https://example.com    # төлбөрийн callback, canonical URL
 PORT=3000
 NODE_ENV=production

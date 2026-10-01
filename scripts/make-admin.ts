@@ -7,7 +7,7 @@ import { users } from "../drizzle/schema";
 /**
  * Хэрэглэгчид `admin` эрх олгоно — СЕРВЕРТ/DB-д хандах эрхтэй хүний гар үйлдэл.
  *
- *   pnpm exec tsx scripts/make-admin.ts <утас>               # production (.env-ийн DATABASE_URL)
+ *   pnpm exec tsx scripts/make-admin.ts <утас> --yes         # production (.env-ийн DATABASE_URL), --yes заавал
  *   pnpm exec tsx scripts/make-admin.ts <утас> --staging     # sugi_staging
  *   pnpm exec tsx scripts/make-admin.ts <утас> --dry-run     # зөвхөн юу өөрчлөгдөхийг харуулна
  *
@@ -26,10 +26,11 @@ import { users } from "../drizzle/schema";
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
 const staging = args.includes("--staging");
+const confirmed = args.includes("--yes");
 const rawPhone = args.find(arg => !arg.startsWith("--"));
 
 if (!rawPhone) {
-  console.error("Хэрэглэх: pnpm exec tsx scripts/make-admin.ts <утас> [--staging] [--dry-run]");
+  console.error("Хэрэглэх: pnpm exec tsx scripts/make-admin.ts <утас> [--staging] [--dry-run] [--yes]");
   process.exit(2);
 }
 const phone = normalizePhoneForVerifyMn(rawPhone);
@@ -52,6 +53,11 @@ if (!db) {
 
 const [schemaRow] = (await db.execute(sql`SELECT DATABASE() AS name`) as unknown as [{ name: string }[]])[0];
 console.log(`Өгөгдлийн сан: ${schemaRow?.name ?? "?"}${dryRun ? " (dry-run)" : ""}`);
+// Бодит дэлгүүрийн схем дээр санамсаргүй нэг командаар admin олгохгүйн тулд `--yes` заавал.
+if (!dryRun && !confirmed && !staging) {
+  console.error(`"${schemaRow?.name ?? "?"}" нь staging биш. Юу өөрчлөгдөхийг эхлээд --dry-run-аар харж, дараа нь --yes нэмж ажиллуулна уу.`);
+  process.exit(2);
+}
 
 const [user] = await db.select({ id: users.id, name: users.name, role: users.role, suspendedAt: users.suspendedAt }).from(users).where(eq(users.phone, phone)).limit(1);
 if (!user) {

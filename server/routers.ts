@@ -1097,8 +1097,14 @@ export const appRouter = router({
       if (ctx.user) {
         const claims = await readSessionTokenClaims(ctx.req);
         if (claims && claims.userId === ctx.user.id) {
-          if (claims.jti) await revokeSessionToken({ jti: claims.jti, userId: claims.userId, expiresAt: claims.expiresAt });
-          else await bumpUserSessionVersion(claims.userId);
+          // DB түр тасарсан ч cookie ЗААВАЛ цэвэрлэгдэнэ — өмнө нь revoke шидэхэд хэрэглэгч
+          // "гарах" дарсан ч нэвтэрсэн хэвээр үлддэг байв (2026-10-01 шалгалт).
+          try {
+            if (claims.jti) await revokeSessionToken({ jti: claims.jti, userId: claims.userId, expiresAt: claims.expiresAt });
+            else await bumpUserSessionVersion(claims.userId);
+          } catch (error) {
+            console.warn("[auth] logout revocation failed; cookie cleared anyway:", error instanceof Error ? error.message : error);
+          }
         }
       }
       const cookieOptions = getSessionCookieOptions(ctx.req);
