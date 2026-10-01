@@ -31,7 +31,7 @@ async function main() {
     exists = true;
   } catch (error) {
     const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
-    if (status !== 404) throw new Error(`Bucket "${name}"-ийг шалгаж чадсангүй (HTTP ${status ?? "?"}): ${error instanceof Error ? error.message : error}`);
+    if (status !== 404) throw new Error(`Bucket "${name}"-ийг шалгаж чадсангүй (HTTP ${status ?? "?"}): ${error instanceof Error ? error.message : error}`, { cause: error });
   }
   if (!exists) {
     await client.send(new CreateBucketCommand({ Bucket: name }), timeout());
