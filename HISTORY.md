@@ -4,6 +4,16 @@
 
 ---
 
+## Production DB тасалдал — HeatWave CA солигдсон (2026-10-01)
+
+**Шинж** (Tom, утаснаас): /shop "Каталогийг ачаалж чадсангүй. Интернэт холболтоо шалгаад…", hero зураг маш удаан. Интернэт биш: `/health` → 503 `database: down`, бүх tRPC 500.
+
+**Шалтгаан**: HeatWave 2026-09-28 15:04 UTC-д өөрийн `MySQL_Endpoint_CA`-г шинээр үүсгэсэн (засвар үйлчилгээ), харин VM (09-13) ба лаптопууд дээрх `oci-ca.pem` хуучин CA хэвээр → шинэ холболт бүр `HANDSHAKE_SSL_ERROR: certificate signature failure`. Production нээлттэй байсан pool холболтоороо хэд хоног амьд байгаад тэд дуусахаар бүрэн унасан. Энэ лаптопын 09-29-ний "TLS алдаа" яг энэ байсан. Hero удаашрал нь мөн үүнээс: `#storefront-bootstrap`-ийн site media хоосон ирж, hero нь унаж буй tRPC-г хүлээж байв.
+
+**Засвар** (Tom зөвшөөрсөн): VM дээр DB-ийн гинжийг VCN-ийн хувийн сүлжээгээр татаж, шинэ CA серверийг баталгаажуулж байгааг (`Verify return code: 0 (ok)`) шалгаад `~/sugi-asayake/oci-ca.pem` ба `~/sugi-asayake-staging/oci-ca.pem`-ийг сольж (хуучин нь `.bak-20261001`), `pm2 restart sugi sugi-staging` → хоёулаа `database: up`; гаднаас /health 200, каталог 0.28 с, hero AVIF 0.2–0.4 с. Өнөөдрийн аюулгүй байдлын код deploy ХИЙГДЭЭГҮЙ. Лаптопуудын CA-г Tom өөрөө солино (энэ session-д CA файлд бичих эрх хаалттай).
+
+**Яагаад хэн ч анзаараагүй**: uptime монитор 09-18-аас хойш Cloudflare-д хаагдсан хэвээр (PROJECT-GUIDE №15) — 503 өгч байсан ч дохио ирээгүй. `db-migration-status.ts` ч холболтын алдааг "хүснэгт үүсээгүй" гэж залгидаг байсан (өнөөдөр засагдсан, push хийгээгүй).
+
 ## Аюулгүй байдлын deep scan — 38 олдвор, бүгд засагдсан (2026-10-01)
 
 **Эх сурвалж**: sugi.karkaron.com-ийн deep scan (revision `7f3ab8e`, 17 medium / 21 low). Tom: *"deep scan hiisne ur dun zunduuu ih tsoorhoi aldaa baina!!!"*. Гурван судлагчаар кодтой тулгахад 38 бүгд бодит байсан (зарим нь scan-ийн хэлснээс явцуу: Facebook redirect-ийг Express encode хийдэг, session cache зөвхөн `-Instances >1` үед). Scan-д ороогүй 5 нэмэлт олдсон: production-д `/@fs`/`/src` probe биш "зөвшөөрөгдсөн", `inventory/receipts/` нийтийн bucket-д, CV `Cache-Control: public immutable`, `deleteAccount` lockout-гүй, `db-migration-status` холболтын алдааг "хүснэгт байхгүй" гэж залгидаг.
