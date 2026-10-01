@@ -101,6 +101,24 @@ export default function Profile() {
   })();
   const goToTab = (next: TabKey) => setLocation(`/profile?tab=${next}`);
 
+  // 2026-10-01: Facebook холбох урсгалын үр дүн (server/_core/facebookAuth.ts callback
+  // `/profile?facebook=<үр дүн>`-ээр буцаана) — мэдээд, URL-ийг цэвэрлэж аюулгүй байдлын
+  // хэсэг рүү шилжүүлнэ.
+  useEffect(() => {
+    const result = new URLSearchParams(search).get("facebook");
+    if (!result) return;
+    const messages: Record<string, { ok: boolean; text: string }> = {
+      linked: { ok: true, text: "Facebook амжилттай холбогдлоо." },
+      "link-required": { ok: false, text: "Facebook холбохын тулд Аюулгүй байдал хэсэгт нууц үгээ оруулж \"Facebook холбох\" товчийг дарна уу." },
+      "linked-elsewhere": { ok: false, text: "Энэ Facebook данс өөр бүртгэлтэй холбогдсон байна." },
+      error: { ok: false, text: "Facebook холбож чадсангүй. Дахин оролдоно уу." },
+    };
+    const message = messages[result];
+    if (message) (message.ok ? toast.success : toast.error)(message.text);
+    utils.auth.me.invalidate();
+    setLocation("/profile?tab=security", { replace: true });
+  }, [search, setLocation, utils]);
+
   const uploadAvatar = trpc.profile.uploadAvatar.useMutation({
     onSuccess: () => { utils.auth.me.invalidate(); toast.success("Зураг шинэчлэгдлээ."); },
     onError: error => toast.error(messageFrom(error)),
@@ -489,6 +507,13 @@ function PreferencesTab() {
   // баталгаажуулалтгүй хадгалагддаг тул (a) зочны checkout-ийн OTP алгасагдаж,
   // (b) бусдын дугаарыг эзэмшиж тэр хүнийг бүртгүүлэхээс хаах боломжтой байв.
   const [phoneStepOpen, setPhoneStepOpen] = useState(false);
+  // 2026-10-01: утастай данс утсаа СОЛИХДОО одоогийн нууц үгээ өгнө (сервер lockout-той
+  // шалгана) — хулгайлсан сешн дангаараа нэвтрэх утсыг сольж чадахгүй.
+  const [phonePassword, setPhonePassword] = useState("");
+  const [phonePasswordReady, setPhonePasswordReady] = useState(false);
+  const phoneErrors = useFieldErrors();
+  const replacingPhone = Boolean(user?.phone);
+  const closePhoneStep = () => { setPhoneStepOpen(false); setPhonePassword(""); setPhonePasswordReady(false); };
 
   useEffect(() => {
     setName(user?.name ?? "");
@@ -499,8 +524,14 @@ function PreferencesTab() {
     onError: error => toast.error(messageFrom(error)),
   });
   const attachPhone = trpc.auth.attachPhoneViaVerification.useMutation({
-    onSuccess: () => { utils.auth.me.invalidate(); setPhoneStepOpen(false); toast.success("Утасны дугаар баталгаажиж, шинэчлэгдлээ."); },
-    onError: error => toast.error(messageFrom(error)),
+    onSuccess: () => { utils.auth.me.invalidate(); closePhoneStep(); toast.success("Утасны дугаар баталгаажиж, шинэчлэгдлээ."); },
+    onError: error => {
+      // Нууц үг буруу бол нууц үгийн алхам руу буцаж, алдааг талбар дээр нь харуулна.
+      if (replacingPhone && error.data?.code === "UNAUTHORIZED") {
+        setPhonePasswordReady(false);
+        phoneErrors.showErrors({ "phone-change-password": messageFrom(error) });
+      } else toast.error(messageFrom(error));
+    },
   });
 
   // Preference Profile v2 (2026-09-01): everything that used to be a static
@@ -584,7 +615,7 @@ function PreferencesTab() {
           </label>
           <div style={{ gridColumn: "1 / -1", display: "flex", flexWrap: "wrap", gap: "10px" }}>
             <button type="submit" disabled={updateProfile.isPending} className="button button-primary">{updateProfile.isPending && <LoaderCircle className="animate-spin" size={15} />} Хадгалах</button>
-            <button type="button" onClick={() => setPhoneStepOpen(current => !current)} className="button button-light">{phoneStepOpen ? "Болих" : "Утасны дугаар солих"}</button>
+            <button type="button" onClick={() => (phoneStepOpen ? closePhoneStep() : setPhoneStepOpen(true))} className="button button-light">{phoneStepOpen ? "Болих" : "Утасны дугаар солих"}</button>
           </div>
         </form>
         {phoneStepOpen ? (
@@ -592,12 +623,31 @@ function PreferencesTab() {
             <p style={{ margin: "0 0 10px", fontSize: "12px", lineHeight: 1.6, color: "var(--ck-muted)" }}>
               Утасны дугаар бол таны нэвтрэх нэр тул шинэ дугаараа SMS-ээр нэг удаа баталгаажуулна. Баталгаажсаны дараа шинэ дугаараар нэвтэрнэ.
             </p>
-            <PhoneVerificationStep
-              purpose="register"
-              compact
-              initialPhone={user?.phone ?? ""}
-              onVerified={sessionId => attachPhone.mutate({ sessionId })}
-            />
+            {replacingPhone && !phonePasswordReady ? (
+              <form
+                onSubmit={event => {
+                  event.preventDefault();
+                  if (phonePassword.length === 0) { phoneErrors.showErrors({ "phone-change-password": "Одоогийн нууц үгээ оруулна уу." }); return; }
+                  phoneErrors.showErrors({});
+                  setPhonePasswordReady(true);
+                }}
+                style={{ display: "grid", gap: "10px", maxWidth: "320px" }}
+              >
+                <label className="auth-field" htmlFor="phone-change-password">
+                  Одоогийн нууц үг
+                  <div className="auth-field-shell"><input type="password" value={phonePassword} onChange={event => { setPhonePassword(event.target.value); phoneErrors.clearError("phone-change-password"); }} autoComplete="current-password" maxLength={200} {...phoneErrors.fieldProps("phone-change-password")} /></div>
+                  <FieldError field="phone-change-password" message={phoneErrors.errorFor("phone-change-password")} />
+                </label>
+                <div><button type="submit" className="button button-primary">Үргэлжлүүлэх</button></div>
+              </form>
+            ) : (
+              <PhoneVerificationStep
+                purpose="register"
+                compact
+                initialPhone={user?.phone ?? ""}
+                onVerified={sessionId => attachPhone.mutate({ sessionId, currentPassword: replacingPhone ? phonePassword : undefined })}
+              />
+            )}
           </div>
         ) : null}
       </section>
@@ -969,6 +1019,20 @@ function SecurityTab() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [deletePassword, setDeletePassword] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // 2026-10-01: Facebook холбох/салгах нь нууц үгээр баталгаажна (сервер lockout-той).
+  const [facebookPassword, setFacebookPassword] = useState("");
+  const facebookErrors = useFieldErrors();
+  const socialProviders = trpc.auth.socialProviders.useQuery(undefined, { staleTime: 5 * 60_000 });
+  const utils = trpc.useUtils();
+  const startFacebookLink = trpc.auth.startFacebookLink.useMutation({
+    // Intent cookie тавигдсан — одоо Facebook руу шилжинэ (callback профайл руу буцаана).
+    onSuccess: () => window.location.assign("/api/auth/facebook?redirect=/profile"),
+    onError: error => facebookErrors.showErrors({ "facebook-password": messageFrom(error) }),
+  });
+  const unlinkFacebook = trpc.auth.unlinkFacebook.useMutation({
+    onSuccess: () => { toast.success("Facebook холбоос салгагдлаа."); setFacebookPassword(""); utils.auth.me.invalidate(); },
+    onError: error => facebookErrors.showErrors({ "facebook-password": messageFrom(error) }),
+  });
 
   const changePassword = trpc.profile.changePassword.useMutation({
     onSuccess: () => { toast.success("Нууц үг амжилттай солигдлоо."); setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); },
@@ -1012,6 +1076,33 @@ function SecurityTab() {
           </div>
         </form>
       </section>
+
+      {socialProviders.data?.facebook || user?.facebookId ? (
+        <section className="profile-section" data-reveal>
+          <div className="profile-section-head"><div><h2>Facebook</h2><p>{user?.facebookId ? "Таны данс Facebook-тэй холбогдсон байна." : "Facebook-ээр нэвтрэхийн тулд дансаа холбоно."}</p></div></div>
+          <form
+            onSubmit={event => {
+              event.preventDefault();
+              if (facebookPassword.length === 0) { facebookErrors.showErrors({ "facebook-password": "Нууц үгээ оруулна уу." }); return; }
+              facebookErrors.showErrors({});
+              if (user?.facebookId) unlinkFacebook.mutate({ password: facebookPassword });
+              else startFacebookLink.mutate({ password: facebookPassword });
+            }}
+            style={{ display: "grid", gap: "10px", maxWidth: "320px" }}
+          >
+            <label className="auth-field" htmlFor="facebook-password">
+              Баталгаажуулахын тулд нууц үгээ оруулна уу
+              <div className="auth-field-shell"><input type="password" value={facebookPassword} onChange={event => { setFacebookPassword(event.target.value); facebookErrors.clearError("facebook-password"); }} autoComplete="current-password" maxLength={200} {...facebookErrors.fieldProps("facebook-password")} /></div>
+              <FieldError field="facebook-password" message={facebookErrors.errorFor("facebook-password")} />
+            </label>
+            <div>
+              <button type="submit" disabled={startFacebookLink.isPending || unlinkFacebook.isPending} className="button button-primary">
+                {(startFacebookLink.isPending || unlinkFacebook.isPending) && <LoaderCircle className="animate-spin" size={15} />} {user?.facebookId ? "Facebook салгах" : "Facebook холбох"}
+              </button>
+            </div>
+          </form>
+        </section>
+      ) : null}
 
       <section className="profile-section" data-reveal>
         <div className="profile-section-head"><div><h2>Session удирдлага</h2><p>Бусад төхөөрөмж/хөтчөөс гарах</p></div></div>

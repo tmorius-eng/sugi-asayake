@@ -98,8 +98,10 @@ async function proofCookie(userId: number, options: { sessionVersion?: number; f
   // Face first: a passed face check uses up the password step (one-shot), so
   // a caller that needs BOTH (e.g. replacing a working face) gets the step
   // entered after it, the way a browser would by confirming the password again.
-  if (options.face) await issueFaceProof({ req: req(), res, userId, sessionVersion });
-  await issueReauthProof({ req: req(), res, userId, sessionVersion });
+  // faceGrantVersion is bumped by every passed face check (migration 0099), so each step reads it fresh.
+  const grant = async () => (await getUserById(userId))!.faceGrantVersion;
+  if (options.face) await issueFaceProof({ req: req(), res, userId, sessionVersion, faceGrantVersion: await grant() });
+  await issueReauthProof({ req: req(), res, userId, sessionVersion, faceGrantVersion: await grant() });
   return Array.from(jar, ([name, value]) => `${name}=${value}`).join("; ");
 }
 

@@ -16,7 +16,7 @@ vi.mock("./_core/env", async importOriginal => {
 
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
-import { attachPhoneFromVerifiedSession, completeRegistrationViaPhoneSession, createUserWithPassword, getDb, getUserById, resetPasswordViaPhoneSession } from "./db";
+import { attachPhoneFromVerifiedSession, completeRegistrationViaPhoneSession, createUserWithPassword, forgetSessionUser, getDb, getUserById, resetPasswordViaPhoneSession } from "./db";
 import { hashPassword, verifyPassword } from "./_core/password";
 import { phoneVerificationSessions, users } from "../drizzle/schema";
 
@@ -107,9 +107,33 @@ describeWithDatabase("verify.mn phone verification integration", () => {
     });
     const sessionId = Number(inserted[0].insertId);
 
+    const before = await getUserById(userId);
     await attachPhoneFromVerifiedSession({ sessionId });
     const updated = await getUserById(userId);
     expect(updated!.phone).toBe(newPhone);
+    // 2026-10-01: утас солигдоход бусад төхөөрөмж гарна.
+    expect(updated!.sessionVersion).toBe(before!.sessionVersion + 1);
+    // Дараагийн тестүүд анхны дугаартай ажиллана.
+    await db.update(users).set({ phone: testPhone }).where(eq(users.id, userId));
+    forgetSessionUser(userId);
+  });
+
+  it("2026-10-01: a password-reset session verified for an OLD phone cannot reset the account once its phone changed", async () => {
+    const db = await getDb();
+    if (!db) throw new Error("DATABASE_URL is required for this test.");
+    const stalePhone = "88334455";
+    const inserted = await db.insert(phoneVerificationSessions).values({
+      userId, purpose: "password_reset", phone: stalePhone, verifyMnSessionId: `test-stale-reset-${Date.now()}`, code: "333333", status: "verified", expiresAt: new Date(Date.now() + 60_000),
+    });
+    const sessionId = Number(inserted[0].insertId);
+    const before = await getUserById(userId);
+    await expect(resetPasswordViaPhoneSession({ sessionId, passwordHash: await hashPassword("should-not-apply-9") })).rejects.toThrow("одоогийн утасны дугаарт хамаарахгүй");
+    const after = await getUserById(userId);
+    expect(after!.passwordHash).toBe(before!.passwordHash);
+    expect(after!.sessionVersion).toBe(before!.sessionVersion);
+    // Claim нь суллагдсан (consumedAt NULL) — унасан үйлдэл сессийг шатаагаагүй.
+    const [row] = await db.select({ consumedAt: phoneVerificationSessions.consumedAt }).from(phoneVerificationSessions).where(eq(phoneVerificationSessions.id, sessionId));
+    expect(row.consumedAt).toBeNull();
   });
 
   // Audit finding BUG-003 (2026-09-06): a double-click / client retry firing

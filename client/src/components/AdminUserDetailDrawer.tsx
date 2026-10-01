@@ -37,6 +37,9 @@ export default function AdminUserDetailDrawer({ userId, role, onClose }: { userI
   const suspendUser = trpc.admin.suspendUser.useMutation({ onSuccess: refresh });
   const unsuspendUser = trpc.admin.unsuspendUser.useMutation({ onSuccess: refresh });
   const forceLogoutUser = trpc.admin.forceLogoutUser.useMutation();
+  // 2026-10-01: хэрэглэгчийн Facebook холбоосыг админ салгана (хулгайлагдсан/буруу холбосон
+  // Facebook-ийг нэвтрэлтээс хасах). Хэрэглэгч нууц үгээрээ дахин холбож чадна.
+  const clearFacebook = trpc.admin.clearUserFacebook.useMutation({ onSuccess: refresh });
   // PREMIUM-FEATURES.md TIER 5: bridges the physical-POS gap manually.
   const updateLoyaltyAdjustment = trpc.admin.updateUserLoyaltyAdjustment.useMutation({ onSuccess: refresh });
   const [loyaltyAdjustment, setLoyaltyAdjustment] = useState("0");
@@ -158,6 +161,16 @@ export default function AdminUserDetailDrawer({ userId, role, onClose }: { userI
     }
   };
 
+  const onClearFacebook = async () => {
+    if (!await confirm({ title: "Энэ хэрэглэгчийн Facebook холбоосыг салгах уу?", body: "Тэр Facebook-ээр нэвтрэх боломжгүй болно. Нууц үгээрээ нэвтэрч дахин холбож болно.", confirmLabel: "Салгах", danger: true })) return;
+    try {
+      await clearFacebook.mutateAsync({ userId });
+      toast.success("Facebook холбоос салгагдлаа.");
+    } catch (error) {
+      toast.error(messageFrom(error));
+    }
+  };
+
   const onForceLogout = async () => {
     if (!await confirm({ title: "Энэ хэрэглэгчийг бүх төхөөрөмжөөс гаргах уу?", danger: true })) return;
     try {
@@ -271,6 +284,7 @@ export default function AdminUserDetailDrawer({ userId, role, onClose }: { userI
                 ? <button type="button" disabled={isBusy} onClick={onUnsuspend} className="inline-flex items-center gap-1.5 rounded-full bg-[#2c7650] px-3 py-2 text-xs font-bold text-white disabled:opacity-60">{unsuspendUser.isPending ? <LoaderCircle className="animate-spin" size={14} /> : <ShieldCheck size={14} />}Хандалт сэргээх</button>
                 : <button type="button" disabled={isBusy} onClick={onSuspend} className="inline-flex items-center gap-1.5 rounded-full bg-[#df1f3d] px-3 py-2 text-xs font-bold text-white disabled:opacity-60">{suspendUser.isPending ? <LoaderCircle className="animate-spin" size={14} /> : <ShieldAlert size={14} />}Түр хаах</button>}
               <button type="button" disabled={forceLogoutUser.isPending || isOwnUser} title={isOwnUser ? "Өөрийгөө гаргах боломжгүй" : undefined} onClick={onForceLogout} className="inline-flex items-center gap-1.5 rounded-full border border-[var(--a-border)] px-3 py-2 text-xs font-bold text-[var(--a-text-soft)] disabled:opacity-60">{forceLogoutUser.isPending ? <LoaderCircle className="animate-spin" size={14} /> : <LogOut size={14} />}Бүх төхөөрөмжөөс гаргах</button>
+              {detail.hasFacebook && <button type="button" disabled={clearFacebook.isPending} onClick={onClearFacebook} className="inline-flex items-center gap-1.5 rounded-full border border-[var(--a-border)] px-3 py-2 text-xs font-bold text-[var(--a-text-soft)] disabled:opacity-60">{clearFacebook.isPending ? <LoaderCircle className="animate-spin" size={14} /> : <ShieldAlert size={14} />}Facebook холбоос салгах</button>}
             </div>
             {!detail.suspendedAt && <label className="mt-3 grid gap-1.5 text-xs font-bold">Түр хаах шалтгаан (сонголтоор)<input value={reason} onChange={event => setReason(event.target.value)} placeholder="ж: төлбөрийн маргаан" className="h-10 rounded-xl border border-[var(--a-border)] px-3 text-xs font-normal outline-none focus:border-[#df1f3d]" /></label>}
           </div>}

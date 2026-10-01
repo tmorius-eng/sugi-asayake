@@ -40,6 +40,7 @@ export function testSessionUser(overrides: Partial<SessionUser> & { id: number }
     role: "user",
     emailVerifiedAt: now,
     sessionVersion: 0,
+    faceGrantVersion: 0,
     suspendedAt: null,
     suspendedReason: null,
     loyaltyManualAdjustmentMnt: 0,

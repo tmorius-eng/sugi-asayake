@@ -2,10 +2,11 @@
 // 2026-09-21: server/db.ts (7 066 мөр) домэйнээр хуваагдав; server/db.ts нь одоо barrel
 // (export *) тул import зам өөрчлөгдөөгүй. Функц зөөхдөө энэ файлын import-ыг мөн шинэчил.
 
-import { and, count, desc, eq, gte, inArray, isNull, lt } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNull, like, lt, sql } from "drizzle-orm";
 import { faceAttempts, faceChallenges, faceEnrollments, users } from "../../drizzle/schema";
 import { ENCRYPTED_TEXT_PREFIX, decryptText, encryptText, hasEncryptionKey } from "../_core/crypto";
 import { getDb } from "./connection";
+import { forgetSessionUser } from "./users";
 
 // ---------------------------------------------------------------------------
 // Admin face gate (2026-09-08). See server/faceAuth.ts for the flow and
@@ -267,4 +268,38 @@ export async function getFaceAttempts(input: { limit?: number; userId?: number }
     .orderBy(desc(faceAttempts.createdAt), desc(faceAttempts.id))
     .limit(limit);
   return rows;
+}
+
+/**
+ * 2026-10-01 (migration 0099): `users.faceGrantVersion`-ийг атомаар өсгөж шинэ утгыг буцаана.
+ * Царайн proof ба нууц үгийн step-up JWT-ийн `fgv` claim энэ утгатай тэнцүү байх ёстой тул
+ * өсгөх бүрт өмнө олгосон БҮХ proof (cookie хуулсан ч) хүчингүй болно: lock, царайны
+ * дахин бүртгэл, step-up зарцуулалт, амжилттай царайн баталгаажуулалт.
+ * Сешний 5 секундын кэшийг мартна (энэ процесст; бусад worker-д faceAuth router
+ * `getUserById`-аар кэшгүй уншдаг).
+ */
+export async function bumpFaceGrantVersion(userId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.update(users).set({ faceGrantVersion: sql`${users.faceGrantVersion} + 1` }).where(eq(users.id, userId));
+  forgetSessionUser(userId);
+  const [row] = await db.select({ v: users.faceGrantVersion }).from(users).where(eq(users.id, userId)).limit(1);
+  if (!row) throw new Error("Хэрэглэгч олдсонгүй.");
+  return row.v;
+}
+
+/**
+ * Replay хамгаалалт (2026-10-01): энэ descriptor-ийн (квантласан) хэш энэ хэрэглэгчийн
+ * сүүлийн `days` хоногийн оролдлогод аль хэдийн бичигдсэн эсэх. Хэш нь
+ * face_attempts.detail-ийн төгсгөлд ` d=<16 hex>` хэлбэрээр бичигддэг (recordFaceAttempt-ийг
+ * дуудагч нэмнэ).
+ */
+export async function hasSeenFaceDescriptorHash(userId: number, hash: string, days = 30): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const [row] = await db.select({ id: faceAttempts.id }).from(faceAttempts)
+    .where(and(eq(faceAttempts.userId, userId), gte(faceAttempts.createdAt, since), like(faceAttempts.detail, `% d=${hash}`)))
+    .limit(1);
+  return Boolean(row);
 }

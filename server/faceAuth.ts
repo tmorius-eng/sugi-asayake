@@ -29,15 +29,25 @@ import {
 } from "../shared/face-auth";
 import { ENV } from "./_core/env";
 import {
+  bumpFaceGrantVersion,
   consumeFaceChallenge,
   countRecentFailedFaceAttempts,
   createFaceChallenge,
   encryptFaceEnrollmentIfPlain,
   getFaceEnrollment,
+  hasSeenFaceDescriptorHash,
   logAdminAction,
   recordFaceAttempt,
   touchFaceVerified,
 } from "./db";
+import {
+  FACE_REPLAY_WINDOW_DAYS,
+  detailWithDescriptorHash,
+  isNearDuplicate,
+  quantizedDescriptorHash,
+  recentAcceptedDescriptors,
+  rememberAcceptedDescriptor,
+} from "./_core/faceReplay";
 
 // The proof cookie itself (sign / read / refresh / clear) lives in
 // server/_core/faceProof.ts so the tRPC layer can enforce it without a
@@ -56,6 +66,10 @@ import { clearFaceProofCookie, issueFaceProof } from "./_core/faceProof";
  */
 export async function lockFaceSession(input: { req: Request; res: Response; userId: number; reason: "idle" | "manual" }): Promise<void> {
   clearFaceProofCookie(input.req, input.res);
+  // 2026-10-01: cookie-г цэвэрлэх нь зөвхөн ЭНЭ хөтөчийн хуулбарыг устгадаг — өмнө нь
+  // хуулж аваад түр хадгалсан proof lock-ийн дараа ч 8 цаг хүртэл хүчинтэй байв.
+  // faceGrantVersion өсгөх нь тэр cookie-г (хаана ч байсан) хүчингүй болгоно.
+  await bumpFaceGrantVersion(input.userId);
   await recordFaceAttempt({ userId: input.userId, outcome: "idle_locked", detail: input.reason, ip: input.req.ip ?? null });
 }
 
@@ -123,19 +137,32 @@ export type FaceVerificationResult =
  * descriptor against the enrolled one.
  *
  * ON TRUSTING THE CLIENT'S LIVENESS FLAG, stated plainly rather than buried
- * (2026-09-22: blocking by default now, see ENV.adminFaceLivenessEnforced):
+ * (2026-09-22: blocking by default now, see ENV.adminFaceLivenessEnforced;
+ * restated 2026-10-01 after the security scan, Tom's decision: document the
+ * limit, do not try to verify liveness on the server):
  * `livenessPassed` is asserted by the browser, because the frames it was
  * derived from never leave the browser. A technically capable attacker who
  * already holds this account's password could therefore assert it falsely.
- * That does NOT let them in — they would still have to supply a descriptor
- * within matching distance of the enrolled face, which they cannot read and
- * cannot guess — so the liveness step is a deterrent against someone holding
- * a photo to the lens, not a defence against a determined attacker. The
- * password remains the first factor and this remains the second.
+ * That alone does not let them in — they still have to supply a descriptor
+ * within matching distance of the enrolled face, which they cannot read
+ * (stored encrypted) and cannot guess — so the liveness step is a deterrent
+ * against someone holding a photo to the lens, NOT a defence against a
+ * determined attacker. FACE IS THE SECOND FACTOR AFTER THE PASSWORD, and
+ * liveness is a client-side check; neither is stronger than the password
+ * alone against someone who can run their own client code AND has obtained a
+ * genuine descriptor of the owner's face.
+ *
+ * The one thing the server CAN do without ever seeing a frame is refuse a
+ * REPLAYED descriptor: a real camera never emits the same 128 numbers twice.
+ * See server/_core/faceReplay.ts (exact-hash replay: durable, in
+ * face_attempts.detail; near-duplicate: best-effort, in-process; the 0.02
+ * threshold is NOT calibrated on real data yet).
  */
 export async function completeFaceVerification(input: {
   userId: number;
   sessionVersion: number;
+  /** users.faceGrantVersion (шинэ, кэшгүй уншсан) — proof-ийг шинэ утгаар гарын үсэглэхэд. */
+  faceGrantVersion: number;
   challengeId: number;
   descriptor: number[];
   livenessPassed: boolean;
@@ -185,6 +212,20 @@ export async function completeFaceVerification(input: {
     return { ok: false, reason: "bad_challenge" };
   }
 
+  // Replay (2026-10-01): same quantized descriptor already seen for this account
+  // in the last 30 days, or practically identical to a recently ACCEPTED one.
+  // Recorded like a failed match (counts toward the lockout); the browser is
+  // only told the attempt was not usable -- never why, never a distance.
+  const descriptorHash = quantizedDescriptorHash(input.descriptor);
+  const withHash = (detail: string | null | undefined) => detailWithDescriptorHash(detail, descriptorHash);
+  if (
+    (await hasSeenFaceDescriptorHash(input.userId, descriptorHash, FACE_REPLAY_WINDOW_DAYS)) ||
+    isNearDuplicate(input.descriptor, recentAcceptedDescriptors(input.userId))
+  ) {
+    await recordFaceAttempt({ userId: input.userId, outcome: "no_match", detail: withHash("replay"), ip });
+    return { ok: false, reason: "bad_challenge" };
+  }
+
   // Liveness is ALWAYS evaluated and ALWAYS recorded, whether or not it
   // blocks -- see ENV.adminFaceLivenessEnforced for why blocking is opt-in.
   // The face match below is unconditional and is the real identity control.
@@ -192,7 +233,7 @@ export async function completeFaceVerification(input: {
     await recordFaceAttempt({
       userId: input.userId,
       outcome: "liveness_failed",
-      detail: input.diagnostic ? `${challenge.action} ${input.diagnostic}`.slice(0, 160) : challenge.action,
+      detail: withHash(input.diagnostic ? `${challenge.action} ${input.diagnostic}` : challenge.action),
       ip,
     });
     if (ENV.adminFaceLivenessEnforced) return { ok: false, reason: "liveness_failed" };
@@ -239,15 +280,16 @@ export async function completeFaceVerification(input: {
   const distanceMilli = Math.round(distance * 1000);
 
   if (distance > FACE_MATCH_THRESHOLD) {
-    await recordFaceAttempt({ userId: input.userId, outcome: "no_match", distance: distanceMilli, detail: challenge.action, ip });
+    await recordFaceAttempt({ userId: input.userId, outcome: "no_match", distance: distanceMilli, detail: withHash(challenge.action), ip });
     return { ok: false, reason: "no_match" };
   }
 
   if (input.issueProof !== false) {
-    await issueFaceProof({ req: input.req, res: input.res, userId: input.userId, sessionVersion: input.sessionVersion });
+    await issueFaceProof({ req: input.req, res: input.res, userId: input.userId, sessionVersion: input.sessionVersion, faceGrantVersion: input.faceGrantVersion });
   }
+  rememberAcceptedDescriptor(input.userId, input.descriptor);
   await touchFaceVerified(input.userId);
-  await recordFaceAttempt({ userId: input.userId, outcome: "verified", distance: distanceMilli, detail: input.issueProof === false ? `handoff ${challenge.action}`.slice(0, 160) : challenge.action, ip });
+  await recordFaceAttempt({ userId: input.userId, outcome: "verified", distance: distanceMilli, detail: withHash(input.issueProof === false ? `handoff ${challenge.action}` : challenge.action), ip });
   // A template stored before encryption at rest is rewritten encrypted now,
   // by the person it belongs to, with no manual migration step.
   await encryptFaceEnrollmentIfPlain(input.userId);

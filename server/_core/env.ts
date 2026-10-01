@@ -17,10 +17,9 @@ function required(_name: string, value: string | undefined): string {
 export const ENV = {
   // Session / auth
   cookieSecret: required("JWT_SECRET", process.env.JWT_SECRET),
-  // If set, this email is granted the "admin" role automatically the moment it
-  // registers (in addition to: the very first account created is always made
-  // admin, so a fresh deployment always has at least one admin without any
-  // manual DB edit).
+  // Owner alert-email address (and the default VAPID subject). It does NOT grant
+  // admin to anyone -- since 2026-10-01 nobody becomes admin by registering; the
+  // first admin is assigned with scripts/make-admin.ts.
   ownerEmail: (process.env.OWNER_EMAIL ?? "").trim().toLowerCase(),
 
   // Database

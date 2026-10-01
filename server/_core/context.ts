@@ -5,7 +5,7 @@ import { parseCookie as parseCookieHeader } from "cookie";
 import { jwtVerify } from "jose";
 import { COOKIE_NAME } from "@shared/const";
 import { ENV } from "./env";
-import { getSessionUserById } from "../db";
+import { getSessionUserById, getUserById, isSessionRevoked } from "../db";
 import type { User } from "../../drizzle/schema";
 
 // Audit finding BUG-001: called once at process startup (see
@@ -45,7 +45,7 @@ export function assertProductionSecrets() {
   // canonical, og:url, BreadcrumbList, /og/product/* бүгд сайтынхаа биш
   // домэйн рүү заана. Шинэ эзэн/staging дээр энэ нь SEO-гийн бодит алдаа.
   if (!ENV.publicBaseUrl) warnings.push("PUBLIC_BASE_URL -- canonical, og:url, BreadcrumbList болон OG зураг ХАТУУ БИЧСЭН домэйн руу заана (server/_core/publicUrl.ts); sitemap/robots/feed нь хүсэлтийн Host руу унана");
-  if (!ENV.ownerEmail) warnings.push("OWNER_EMAIL -- owner alert emails (notifyOwner) and the default VAPID subject have no address (it no longer promotes anyone to admin; only the very first account does)");
+  if (!ENV.ownerEmail) warnings.push("OWNER_EMAIL -- owner alert emails (notifyOwner) and the default VAPID subject have no address (it does not promote anyone to admin; use scripts/make-admin.ts)");
   for (const warning of warnings) console.warn(`[env] production is missing ${warning}`);
 }
 
@@ -81,7 +81,7 @@ export type TrpcContext = {
 // nobody outside this process can predict it), instead of the previous
 // fallback being a known, publicly-committed string.
 let devFallbackSecret: Uint8Array | null = null;
-function secretKey() {
+export function secretKey() {
   if (ENV.cookieSecret) return new TextEncoder().encode(ENV.cookieSecret);
   if (!devFallbackSecret) devFallbackSecret = randomBytes(32);
   return devFallbackSecret;
@@ -96,9 +96,34 @@ export async function signSessionToken(userId: number, sessionVersion: number): 
   // other kinds.
   return new SignJWT({ typ: SESSION_TYP, sub: String(userId), sv: sessionVersion })
     .setProtectedHeader({ alg: "HS256" })
+    // 2026-10-01: `jti` — нэг төхөөрөмжийн logout энэ id-г `session_revocations`-д
+    // бичнэ (auth.logout). jti-гүй хуучин токен хүчинтэй хэвээр (хэн ч гарахгүй),
+    // харин logout хийхэд тэр хэрэглэгчийн sessionVersion өсдөг.
+    .setJti(randomBytes(16).toString("hex"))
     .setIssuedAt()
     .setExpirationTime("365d")
     .sign(secretKey());
+}
+
+export type SessionTokenClaims = { userId: number; sessionVersion: number; jti: string | null; expiresAt: Date };
+
+/**
+ * Хүсэлтийн сешн cookie-ийн (гарын үсэг, typ, хугацаа шалгагдсан) claim-ууд.
+ * Logout-д хэрэгтэй: аль токеныг хүчингүй болгохоо мэдэх. Хүчингүй/дууссан бол null.
+ */
+export async function readSessionTokenClaims(req: Request): Promise<SessionTokenClaims | null> {
+  const token = parseCookieHeader(req.headers?.cookie ?? "")[COOKIE_NAME];
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, secretKey());
+    if (payload.typ !== undefined && payload.typ !== SESSION_TYP) return null;
+    if (payload.abs !== undefined || payload.tabs !== undefined) return null;
+    const userId = Number(payload.sub);
+    if (!Number.isFinite(userId) || typeof payload.exp !== "number") return null;
+    return { userId, sessionVersion: Number(payload.sv), jti: typeof payload.jti === "string" ? payload.jti : null, expiresAt: new Date(payload.exp * 1000) };
+  } catch {
+    return null;
+  }
 }
 
 async function userFromToken(token: string | undefined): Promise<SessionUser | null> {
@@ -119,11 +144,19 @@ async function resolveUserFromToken(token: string): Promise<SessionUser | null> 
     if (payload.abs !== undefined || payload.tabs !== undefined) return null;
     const userId = Number(payload.sub);
     if (!Number.isFinite(userId)) return null;
+    // 2026-10-01: энэ төхөөрөмж logout хийсэн токен (нэг төхөөрөмжийн logout).
+    if (typeof payload.jti === "string" && (await isSessionRevoked(payload.jti))) return null;
     // The row comes from a per-user cache (server/db.ts getSessionUserById)
     // that every security-relevant writer invalidates, so a suspension, a
     // role change or a sessionVersion bump is seen on the very next request
     // while an ordinary request no longer pays a database round trip.
-    const user = await getSessionUserById(userId);
+    // 2026-10-01 (аюулгүй байдлын scan #35): кэш (5 с) олон worker-т нөгөө процессын
+    // хаалт/эрх өөрчлөлтийг хоцроодог. Кэшэд panel эрхтэй (role != "user") гэж байвал
+    // КЭШГҮЙ дахин уншина — admin урсгал цөөн тул өртөг нь бага; энгийн худалдан авагч
+    // кэшээс хэвээр (түүний эрх "user"-ээс доош буурах зүйл байхгүй, зөвхөн түр хаалт 5 с).
+    // Кэш хуучин "user" гэж үзэж байгаа, бодитоор дэвшсэн хүн зүгээр л түр хоцорно (аюулгүй тал).
+    const cached = await getSessionUserById(userId);
+    const user = cached && cached.role !== "user" ? await getUserById(userId) : cached;
     if (!user) return null;
     // A token signed before the user's last "sign out everywhere" or
     // password reset carries the old sessionVersion — reject it just like an
