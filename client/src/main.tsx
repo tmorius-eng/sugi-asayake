@@ -2,7 +2,7 @@ import { adminTabId } from "@/lib/adminTab";
 import { trpc } from "@/lib/trpc";
 import { FACE_REQUIRED_ERR_MSG, REAUTH_REQUIRED_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { httpBatchLink, TRPCClientError } from "@trpc/client";
+import { httpBatchLink, splitLink, TRPCClientError } from "@trpc/client";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import superjson from "superjson";
@@ -99,22 +99,27 @@ queryClient.getMutationCache().subscribe(event => {
   }
 });
 
+// Admin царайны баталгаа энэ tab-д холбоотой (client/src/lib/adminTab.ts);
+// бусад дуудлагад хор нөлөөгүй тул зүгээр л үргэлж илгээнэ.
+function trpcFetch(input: RequestInfo | URL, init?: RequestInit) {
+  const headers = new Headers(init?.headers ?? {});
+  headers.set("x-admin-tab", adminTabId());
+  return globalThis.fetch(input, {
+    ...(init ?? {}),
+    headers,
+    credentials: "include",
+  });
+}
+
+// 2026-10-01: admin./inventory. процедур нь ТУСДАА batch-ээр явна. Cloudflare Access зөвхөн
+// URL-ийн эхний процедурыг хардаг тул холимог batch (`catalog.list,admin.x`) нь Access-ийг тойрдог;
+// сервер (server/_core/trpcBatchGuard.ts) холимог batch-ийг 400-аар татгалзана.
 const trpcClient = trpc.createClient({
   links: [
-    httpBatchLink({
-      url: "/api/trpc",
-      transformer: superjson,
-      fetch(input, init) {
-        // Admin царайны баталгаа энэ tab-д холбоотой (client/src/lib/adminTab.ts);
-        // бусад дуудлагад хор нөлөөгүй тул зүгээр л үргэлж илгээнэ.
-        const headers = new Headers(init?.headers ?? {});
-        headers.set("x-admin-tab", adminTabId());
-        return globalThis.fetch(input, {
-          ...(init ?? {}),
-          headers,
-          credentials: "include",
-        });
-      },
+    splitLink({
+      condition: op => op.path.startsWith("admin.") || op.path.startsWith("inventory."),
+      true: httpBatchLink({ url: "/api/trpc", transformer: superjson, fetch: trpcFetch }),
+      false: httpBatchLink({ url: "/api/trpc", transformer: superjson, fetch: trpcFetch }),
     }),
   ],
 });

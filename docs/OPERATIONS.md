@@ -238,6 +238,9 @@ S3_BUCKET=
 S3_ACCESS_KEY_ID=
 S3_SECRET_ACCESS_KEY=
 S3_PUBLIC_BASE_URL=https://pub-<hash>.r2.dev
+# Хувийн bucket (CV, барааны баримтын зураг) — нийтийн URL-гүй. Production-д заавал: байхгүй бол CV upload татгалзана.
+# Хуучин объектыг зөөх: pnpm exec tsx scripts/move-private-objects.ts [--apply]
+S3_PRIVATE_BUCKET=
 
 # ---- Имэйл, SMS (Brevo) — байхгүй бол лог руу бичнэ ------------------------
 BREVO_API_KEY=

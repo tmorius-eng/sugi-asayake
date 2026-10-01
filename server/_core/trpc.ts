@@ -6,6 +6,7 @@ import { ENV } from "./env";
 import { checkRateLimit } from "./security";
 import { checkPersistentRateLimit } from "./persistentRateLimit";
 import { assertFaceProofForPanelRole } from "./faceProof";
+import { isContentReadRole } from "@shared/face-auth";
 
 /**
  * Аудит 2026-09-20 (P0-2): tRPC нь procedure-ийн шидсэн АЛЬ Ч алдааны
@@ -238,7 +239,7 @@ export const catalogReadProcedure = panelProcedure.use(({ ctx, next }) => {
 // promotions — this never grants marketing a way to create/edit/delete a
 // post, only to read the list.
 export const contentReadProcedure = panelProcedure.use(({ ctx, next }) => {
-  if (ctx.user.role !== "admin" && ctx.user.role !== "staff" && ctx.user.role !== "marketing") {
+  if (!isContentReadRole(ctx.user.role)) {
     throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
   }
   return next({ ctx });

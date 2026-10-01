@@ -21,7 +21,7 @@ export async function processUploadedImage(
   contentType: "image/jpeg" | "image/png" | "image/webp",
   maxDimension: number,
 ): Promise<Buffer> {
-  const pipeline = sharp(buffer).rotate().resize({
+  const pipeline = sharp(buffer, { limitInputPixels: MAX_INPUT_PIXELS }).rotate().resize({
     width: maxDimension,
     height: maxDimension,
     fit: "inside",
@@ -82,22 +82,41 @@ export type ImageVariants = {
 /** AVIF quality chosen by eye on the site's own images (see comment above). */
 export const AVIF_QUALITY = 60;
 
+/**
+ * sharp-ийн анхдагч хязгаар 268 мегапиксел — жижиг файлд шахсан "decompression bomb" зураг
+ * санах ойг үрэх боломжтой. 40 МП (≈ 8000×5000) нь бодит зурагт хангалттай.
+ */
+export const MAX_INPUT_PIXELS = 40e6;
+
+export type ImageVariantOptions = {
+  /**
+   * Хөдөлгөөнт (GIF/WebP) зургийг ЗӨВХӨН эхний кадраар хөрвүүлнэ. Сэтгэгдлийн зураг:
+   * imageSafety.classifyImageSafety нь зөвхөн эхний кадрыг шалгадаг тул хадгалах зураг нь
+   * яг шалгасан кадр байх ёстой (эс бөгөөс 2-р кадраас цааш шалгагдаагүй агуулга орно).
+   */
+  flattenAnimation?: boolean;
+};
+
 export async function processUploadedImageVariants(
   buffer: Buffer,
   maxDimension: number,
+  options: ImageVariantOptions = {},
 ): Promise<ImageVariants> {
-  const probe = await sharp(buffer, { animated: true }).metadata();
-  const animated = (probe.pages ?? 1) > 1;
+  const flatten = options.flattenAnimation === true;
+  const inputOptions = { limitInputPixels: MAX_INPUT_PIXELS };
+  const animatedInputOptions = { animated: true, limitInputPixels: MAX_INPUT_PIXELS };
+  const probe = await sharp(buffer, flatten ? inputOptions : animatedInputOptions).metadata();
+  const animated = !flatten && (probe.pages ?? 1) > 1;
   // Олон PNG зураг alpha СУВАГТАЙ боловч бүрэн тунгалаг бус (утасны
   // screenshot, экспортолсон зураг). Сувагтай эсэхийг биш, үнэхээр
   // ТУНГАЛАГ пиксел байгаа эсэхийг шалгана — эс бөгөөс энгийн зураг
   // "graphic" болж AVIF-гүй үлдэнэ.
-  const transparent = !animated && probe.hasAlpha ? !(await sharp(buffer).stats()).isOpaque : false;
+  const transparent = !animated && probe.hasAlpha ? !(await sharp(buffer, inputOptions).stats()).isOpaque : false;
   const kind: ImageKind = animated ? "animated" : transparent ? "graphic" : "photo";
 
   // `animated: true` keeps every frame; `.rotate()` is skipped for animations
   // (EXIF orientation is a still-photo concept and rotate() flattens frames).
-  const base = animated ? sharp(buffer, { animated: true }) : sharp(buffer).rotate();
+  const base = animated ? sharp(buffer, animatedInputOptions) : sharp(buffer, inputOptions).rotate();
   const { width, height } = animated ? { width: probe.width, height: probe.pageHeight ?? probe.height } : await base.metadata();
   const longestEdge = Math.max(width ?? 0, height ?? 0);
   const fits = (limit: number) => ({ width: limit, height: limit, fit: "inside" as const, withoutEnlargement: true });

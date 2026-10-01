@@ -159,21 +159,30 @@ if (withAccess) {
   if (!otp) throw new Error("No One-time PIN identity provider in Zero Trust; add it in the dashboard first");
   const name = "SUGI ASAYAKE /admin";
   const existing = (await cf("GET", `/accounts/${ACCT}/access/apps`)).find((a) => a.name === name);
-  const app =
-    existing ??
-    (await cf("POST", `/accounts/${ACCT}/access/apps`, {
-      name,
-      type: "self_hosted",
-      domain: `${HOST}/admin`,
-      self_hosted_domains: [`${HOST}/admin`, `${HOST}/api/trpc/admin*`],
-      session_duration: "24h",
-      allowed_idps: [otp.id],
-      auto_redirect_to_identity: true,
-      app_launcher_visible: false,
-      http_only_cookie_attribute: true,
-      policies: [{ name: "Owner", decision: "allow", include: [{ email: { email: OWNER } }] }],
-    }));
-  ok(`Access app "${app.name}" ${existing ? "already existed" : "created"} (${app.self_hosted_domains.join(", ")})`);
+  const wantedDomains = [`${HOST}/admin`, `${HOST}/api/trpc/admin*`, `${HOST}/api/trpc/inventory*`];
+  const body = {
+    name,
+    type: "self_hosted",
+    domain: `${HOST}/admin`,
+    self_hosted_domains: wantedDomains,
+    session_duration: "24h",
+    allowed_idps: [otp.id],
+    auto_redirect_to_identity: true,
+    app_launcher_visible: false,
+    http_only_cookie_attribute: true,
+  };
+  let app;
+  if (!existing) {
+    app = await cf("POST", `/accounts/${ACCT}/access/apps`, { ...body, policies: [{ name: "Owner", decision: "allow", include: [{ email: { email: OWNER } }] }] });
+  } else if (wantedDomains.every((d) => (existing.self_hosted_domains ?? []).includes(d))) {
+    app = existing;
+  } else {
+    // 2026-10-01: байгаа app-д шинэ зам (/api/trpc/inventory*) нэмэх — өмнө нь байгаа app-ыг огт
+    // шинэчилдэггүй байсан тул замын жагсаалт хөгжихгүй байв. Бодлого (policies)-ийг PUT-д
+    // оруулахгүй тул хэвээр үлдэнэ.
+    app = await cf("PUT", `/accounts/${ACCT}/access/apps/${existing.id}`, { ...body, self_hosted_domains: [...new Set([...(existing.self_hosted_domains ?? []), ...wantedDomains])] });
+  }
+  ok(`Access app "${app.name}" ${!existing ? "created" : app === existing ? "already up to date" : "updated"} (${app.self_hosted_domains.join(", ")})`);
 } else {
   console.log("INFO Access gate on /admin not applied (pass --access to add it)");
 }
