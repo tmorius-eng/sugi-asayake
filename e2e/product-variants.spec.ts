@@ -33,6 +33,10 @@ test.describe("барааны хувилбар", () => {
     // хүртээмжийн нэр нь яг "URL slug" биш — эхлэлээр нь тааруулна.
     await page.getByLabel(/^URL slug/).fill(slug);
     await page.getByLabel("Үнэ (₮)", { exact: true }).fill("10000");
+    // 2026-09-29-өөс барааны хуудас НӨӨЦТЭЙ хувилбарыг анхдагчаар сонгодог — үндсэн
+    // хувилбар 0 нөөцтэй бол 25,000₮-ийнх аль хэдийн сонгогдож, "үнэ солигдох"-ыг
+    // шалгах боломжгүй. Тиймээс үндсэн хувилбарт ч нөөц өгнө.
+    await page.getByLabel(/^Үлдэгдэл/).first().fill("5");
     const category = page.locator("form select").first();
     await category.selectOption((await category.locator("option:not([disabled])").first().getAttribute("value"))!);
     // Шинэ бараа анхдагчаар нийтлэгдээгүй байдаг — худалдан авагчийн талыг

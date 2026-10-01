@@ -1,6 +1,4 @@
 import { expect, test } from "./helpers/fixtures";
-import { E2E_MARKER } from "./helpers/environment";
-import { ensureE2EUser } from "./helpers/session";
 
 /**
  * /login — маягтын алдаа талбар дээр нь (hooks/useFieldErrors, 2026-09-21) ба
@@ -23,9 +21,13 @@ test.describe("/login", () => {
   });
 
   test("буруу нууц үг: серверийн монгол мессеж, нэвтрүүлэхгүй", async ({ page }) => {
-    const user = await ensureE2EUser("user");
+    // 2026-09-29-өөс клиент утасны ФОРМАТЫГ урьдчилан шалгадаг тул E2E хэрэглэгчийн
+    // `e2e-sugi-user` "утас" серверт хүрэхгүй. Форматын хувьд зөв, санамсаргүй дугаар
+    // ашиглана — сервер бүртгэлгүй дугаар ба буруу нууц үгт ИЖИЛ мессеж өгдөг
+    // (хэрэглэгч тоолох боломжгүй), тэр мессежийг л шалгана.
+    const phone = `8${String(Math.floor(Math.random() * 1e7)).padStart(7, "0")}`;
     await page.goto("/login");
-    await page.locator("#login-phone").fill(user.phone ?? `${E2E_MARKER}-user`);
+    await page.locator("#login-phone").fill(phone);
     await page.locator("#login-password").fill("this-is-not-the-password");
     await page.getByRole("button", { name: "Нэвтрэх" }).click();
     await expect(page.locator("[data-sonner-toast]").first()).toBeVisible({ timeout: 15_000 });
