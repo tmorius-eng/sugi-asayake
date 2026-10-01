@@ -21,6 +21,7 @@ import { getDb, upsertStoreSetting } from "./db";
 import { sendOrderStatusPush, webPushEnabled } from "./_core/webPush";
 import { pushSubscriptions, storeSettings, users } from "../drizzle/schema";
 import { hashPassword } from "./_core/password";
+import { ENV } from "./_core/env";
 
 const describeWithDatabase = process.env.RUN_AUTH_INTEGRATION_TESTS === "1" && process.env.COMMERCE_INTEGRATION_TESTS === "1" ? describe : describe.skip;
 
@@ -32,6 +33,12 @@ describeWithDatabase("order status push is admin-configurable", () => {
 
   const payloadOf = (call: unknown[]) => JSON.parse(String(call[1])) as { title: string; body: string; url: string };
 
+  // The suite setup suppresses every notification (NOTIFICATIONS_SUPPRESS=1, 2026-10-01). web-push is
+  // mocked above, so nothing can reach a phone: lift the suppression for THIS file only, to test the sending path.
+  const wasSuppressed = ENV.notificationsSuppressed;
+  beforeAll(() => { ENV.notificationsSuppressed = false; });
+  afterAll(() => { ENV.notificationsSuppressed = wasSuppressed; });
+
   beforeAll(async () => {
     const db = await getDb();
     if (!db) throw new Error("DATABASE_URL required.");
@@ -40,7 +47,7 @@ describeWithDatabase("order status push is admin-configurable", () => {
     const customer = await db.insert(users).values({ email: `${marker}-c@example.invalid`, passwordHash: await hashPassword("CustPassw0rd!"), name: "OSP Customer", role: "user", emailVerifiedAt: new Date() });
     userId = Number(customer[0].insertId);
     await db.insert(pushSubscriptions).values({
-      userId, endpoint: `https://push.example.invalid/${marker}`,
+      userId, endpoint: `https://updates.push.services.mozilla.com/wpush/v2/${marker}`, // must pass the push host allowlist (2026-10-01); web-push is mocked, nothing is dialled
       p256dh: "BJ3QFm5cQxV9hfQOTBiG6dsRp6cDjT0SwIbGcIcD1nQ", auth: "cGFzc3dvcmRwYXNzd29yZA",
     });
   });

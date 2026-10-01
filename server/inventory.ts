@@ -352,7 +352,7 @@ async function shelfCounts(db: DbOrTx, branchId: number, variantIds: number[]) {
  * first scanned, and the resulting adjustment. For a FULL count, every item
  * with stock at the location that nobody scanned is listed as counted 0.
  */
-export async function getCount(actor: InventoryActor, id: number, executor?: DbOrTx) {
+export async function getCount(actor: InventoryActor, id: number, executor?: DbOrTx, options: { whilePosting?: boolean } = {}) {
   // 2026-09-27: `executor` -- postCount транзакцын дотроос дахин дуудагдан,
   // "уншуулаагүй" бүрэн тооллогын жагсаалт flip-ийн дараа тэр ижил
   // транзакцын дотор дахин уншигдана (доорх postCount-ийн тайлбарыг үзнэ үү).
@@ -372,7 +372,9 @@ export async function getCount(actor: InventoryActor, id: number, executor?: DbO
     .leftJoin(products, eq(products.id, productVariants.productId))
     .where(eq(stockCountLines.countId, id)).orderBy(desc(stockCountLines.id));
   let unscanned: { variantId: number; sku: string; productName: string; systemQty: number }[] = [];
-  if (count.scope === "full" && count.status !== "posted" && count.status !== "cancelled") {
+  // `whilePosting`: postCount reads this INSIDE its own transaction, after it has flipped the status to
+  // "posted" -- without it the unscanned list is empty and a full count silently stops zeroing unscanned items.
+  if (count.scope === "full" && (count.status !== "posted" || options.whilePosting) && count.status !== "cancelled") {
     const scannedIds = lines.map(line => line.variantId).filter((value): value is number => value !== null);
     unscanned = (await db.select({ variantId: branchStock.variantId, sku: productVariants.sku, productName: products.name, systemQty: branchStock.stockQuantity })
       .from(branchStock).innerJoin(productVariants, eq(productVariants.id, branchStock.variantId)).innerJoin(products, eq(products.id, productVariants.productId))
@@ -462,7 +464,7 @@ export async function postCount(actor: InventoryActor, id: number, options: { au
     // `branch_stock`-ыг өөрчилсөн ч "уншуулаагүй" жагсаалт хуучин утгаараа
     // үлддэг байв). Энэ нь 2026-09-23-ний гараар бичсэн
     // committedCountLines-ийн дахин шалгалтыг илүү цэвэр орлуулав.
-    const detail = await getCount(actor, id, tx);
+    const detail = await getCount(actor, id, tx, { whilePosting: true });
     // I11: шинэ бүтээгдэхүүн үүсгэсний дараа л танигдсан баркодыг postReceipt-
     // ийн адил энд ДАХИН уусгана -- өмнө нь variantId=null мөрийг чимээгүй
     // алгасдаг байсан тул тэр тоо тооллогод хэзээ ч ороогүй.

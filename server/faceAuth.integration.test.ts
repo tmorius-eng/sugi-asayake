@@ -49,6 +49,26 @@ function descriptorOf(offset: number): number[] {
   return Array.from({ length: FACE_DESCRIPTOR_LENGTH }, (_, i) => Math.sin((i + 1) * 1.7) * 0.5 + offset);
 }
 
+/** A descriptor that matches the enrolled descriptorOf(0) but is NEVER the same
+ *  twice: since 2026-10-01 the server refuses a replayed descriptor (exact hash
+ *  within 30 days, or within 0.02 of a recently accepted one), and a real camera
+ *  never emits the same 128 numbers twice. Each step is 0.003 * sqrt(128) ~ 0.034
+ *  away from the last (> the 0.02 near-duplicate distance) and stays well under
+ *  the 0.45 match threshold for the handful of uses in this file. */
+let freshOffset = 0.004;
+function freshMatch(): number[] {
+  freshOffset += 0.003;
+  return descriptorOf(freshOffset);
+}
+
+/** A browser in TAB: starts from `cookie` and keeps whatever cookies the server
+ *  sets, so a re-signed step-up cookie reaches the next call as it does in real life. */
+function browserFor(userId: number, role: string, cookie: string) {
+  const jar = new Map<string, string>();
+  for (const part of cookie.split("; ")) { const i = part.indexOf("="); if (i > 0) jar.set(part.slice(0, i), part.slice(i + 1)); }
+  return { jar, call: () => callerFor(userId, role, 0, Array.from(jar, ([n, v]) => `${n}=${v}`).join("; "), jar) };
+}
+
 async function makeUser(role: "user" | "staff" | "admin"): Promise<number> {
   // Random 8-digit phone in a range no real Mongolian mobile uses, so a
   // throwaway can never collide with (or be mistaken for) a real account.
@@ -68,6 +88,25 @@ async function makeUser(role: "user" | "staff" | "admin"): Promise<number> {
 /** A tRPC caller for one account in TAB. `jar` (optional) collects the
  *  cookies the server sets, exactly as a browser would. */
 function callerFor(userId: number, role: string, sessionVersion = 0, cookie?: string, jar?: Map<string, string>) {
+  // The real createContext re-reads a panel user (uncached) on every request, so
+  // `ctx.user.faceGrantVersion` is always the DB's current value -- and every
+  // passed face check, lock or re-enrolment bumps it. This helper mimics that:
+  // the context is built at CALL time, not when the caller object is created.
+  const at = (path: string[]): unknown =>
+    new Proxy(() => undefined, {
+      get: (_t, key) => at([...path, String(key)]),
+      apply: async (_t, _this, args: unknown[]) => {
+        const fgv = (await getUserById(userId))!.faceGrantVersion;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let target: any = buildCaller(userId, role, sessionVersion, fgv, cookie, jar);
+        for (const key of path.slice(0, -1)) target = target[key];
+        return target[path[path.length - 1]](...args);
+      },
+    });
+  return at([]) as ReturnType<typeof buildCaller>;
+}
+
+function buildCaller(userId: number, role: string, sessionVersion: number, faceGrantVersion: number, cookie?: string, jar?: Map<string, string>) {
   const ip = `203.0.113.${Math.floor(Math.random() * 200) + 1}`;
   const ctx: TrpcContext = {
     user: {
@@ -77,6 +116,7 @@ function callerFor(userId: number, role: string, sessionVersion = 0, cookie?: st
       phone: null,
       role,
       sessionVersion,
+      faceGrantVersion,
       emailVerifiedAt: null,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -190,7 +230,7 @@ describeWithDatabase("admin face gate (real DB)", () => {
     await db!.insert(faceEnrollments).values({ userId: staffUserId, descriptorJson: JSON.stringify(descriptorOf(0)), sampleCount: 5, modelVersion: FACE_MODEL_VERSION, consentedAt: new Date() });
     const caller = callerFor(staffUserId, "staff", 0, await proofCookie(staffUserId));
     const { challengeId } = await caller.faceAuth.startVerification();
-    const result = await caller.faceAuth.completeVerification({ challengeId, descriptor: descriptorOf(0.005), livenessPassed: true });
+    const result = await caller.faceAuth.completeVerification({ challengeId, descriptor: freshMatch(), livenessPassed: true });
     expect(result.ok).toBe(true);
     const [raw] = await db!.select().from(faceEnrollments).where(eq(faceEnrollments.userId, staffUserId));
     expect(raw.descriptorJson.startsWith("enc1:")).toBe(true);
@@ -348,10 +388,15 @@ describeWithDatabase("admin face gate (real DB)", () => {
 
   it("a FIRST enrolment (or a stale one) needs only the password step", async () => {
     await upsertFaceEnrollment({ userId: staffUserId, descriptor: descriptorOf(0), sampleCount: 5, modelVersion: "some-older-model" });
-    const caller = callerFor(staffUserId, "staff", 0, await proofCookie(staffUserId));
-    await expect(caller.faceAuth.enroll({ descriptor: descriptorOf(0), sampleCount: 5, consented: true })).resolves.toEqual({ ok: true });
+    const cookie = await proofCookie(staffUserId);
+    const browser = browserFor(staffUserId, "staff", cookie);
+    await expect(browser.call().faceAuth.enroll({ descriptor: descriptorOf(0), sampleCount: 5, consented: true })).resolves.toEqual({ ok: true });
     await deleteFaceEnrollment(staffUserId);
-    await expect(caller.faceAuth.enroll({ descriptor: descriptorOf(0), sampleCount: 5, consented: true })).resolves.toEqual({ ok: true });
+    // Enrolling bumps the grant version but re-signs THIS browser's password step
+    // (rotateFaceGrant), so one password entry covers an enrolment and a repeat.
+    await expect(browser.call().faceAuth.enroll({ descriptor: descriptorOf(0), sampleCount: 5, consented: true })).resolves.toEqual({ ok: true });
+    // The cookie from BEFORE the enrolment, though, is dead (grant version moved on).
+    await expect(callerFor(staffUserId, "staff", 0, cookie).faceAuth.enroll({ descriptor: descriptorOf(0), sampleCount: 5, consented: true })).rejects.toMatchObject({ message: REAUTH_REQUIRED_ERR_MSG });
   });
 
   it("refuses enrollment from a non-admin-panel role", async () => {
@@ -420,7 +465,7 @@ describeWithDatabase("admin face gate (real DB)", () => {
 
     const result = await caller.faceAuth.completeVerification({
       challengeId,
-      descriptor: descriptorOf(0.005),
+      descriptor: freshMatch(),
       livenessPassed: false,
     });
     expect(result.ok).toBe(false);
@@ -437,7 +482,7 @@ describeWithDatabase("admin face gate (real DB)", () => {
       await upsertFaceEnrollment({ userId: staffUserId, descriptor: descriptorOf(0), sampleCount: 5, modelVersion: FACE_MODEL_VERSION });
       const caller = callerFor(staffUserId, "staff", 0, await proofCookie(staffUserId));
       const { challengeId } = await caller.faceAuth.startVerification();
-      const result = await caller.faceAuth.completeVerification({ challengeId, descriptor: descriptorOf(0.005), livenessPassed: false });
+      const result = await caller.faceAuth.completeVerification({ challengeId, descriptor: freshMatch(), livenessPassed: false });
       expect(result.ok).toBe(true);
     } finally {
       if (previous === undefined) delete process.env.ADMIN_FACE_LIVENESS_ENFORCED;
@@ -451,7 +496,7 @@ describeWithDatabase("admin face gate (real DB)", () => {
     for (const part of (await proofCookie(staffUserId)).split("; ")) { const i = part.indexOf("="); jar.set(part.slice(0, i), part.slice(i + 1)); }
     const browser = () => callerFor(staffUserId, "staff", 0, Array.from(jar, ([n, v]) => `${n}=${v}`).join("; "), jar);
     const { challengeId } = await browser().faceAuth.startVerification();
-    expect((await browser().faceAuth.completeVerification({ challengeId, descriptor: descriptorOf(0.005), livenessPassed: true })).ok).toBe(true);
+    expect((await browser().faceAuth.completeVerification({ challengeId, descriptor: freshMatch(), livenessPassed: true })).ok).toBe(true);
     const status = await browser().faceAuth.status();
     expect(status.verified).toBe(true);
     expect(status.passwordConfirmed).toBe(false);
@@ -467,7 +512,7 @@ describeWithDatabase("admin face gate (real DB)", () => {
     const result = await caller.faceAuth.completeVerification({
       challengeId,
       // Same face, slight frame-to-frame noise.
-      descriptor: descriptorOf(0.005),
+      descriptor: freshMatch(),
       livenessPassed: true,
     });
     expect(result).toEqual({ ok: true });
@@ -486,10 +531,12 @@ describeWithDatabase("admin face gate (real DB)", () => {
     const caller = callerFor(staffUserId, "staff", 0, await proofCookie(staffUserId));
     const { challengeId } = await caller.faceAuth.startVerification();
 
-    const first = await caller.faceAuth.completeVerification({ challengeId, descriptor: descriptorOf(0.005), livenessPassed: true });
+    const first = await caller.faceAuth.completeVerification({ challengeId, descriptor: freshMatch(), livenessPassed: true });
     expect(first.ok).toBe(true);
 
-    const replay = await caller.faceAuth.completeVerification({ challengeId, descriptor: descriptorOf(0.005), livenessPassed: true });
+    // The passed check used up the password step (one-shot), so enter it again -- the point here is the CHALLENGE, not the step.
+    const again = callerFor(staffUserId, "staff", 0, await proofCookie(staffUserId));
+    const replay = await again.faceAuth.completeVerification({ challengeId, descriptor: freshMatch(), livenessPassed: true });
     expect(replay.ok).toBe(false);
     if (!replay.ok) expect(replay.reason).toBe("bad_challenge");
   });
@@ -516,12 +563,13 @@ describeWithDatabase("admin face gate (real DB)", () => {
     await db!.update(faceEnrollments).set({ updatedAt: new Date(Date.now() - 5 * 60 * 1000) }).where(eq(faceEnrollments.userId, personId));
     const before = new Date(Date.now() - 2 * 60 * 1000);
     await db!.insert(faceAttempts).values(Array.from({ length: FACE_FAILURE_LOCKOUT_MAX }, () => ({ userId: personId, outcome: "no_match" as const, distance: 900, detail: "test", ip: "198.51.100.1", createdAt: before })));
-    const caller = callerFor(personId, "staff", 0, await proofCookie(personId));
-    await expect(caller.faceAuth.startVerification()).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS" });
+    const browser = browserFor(personId, "staff", await proofCookie(personId));
+    await expect(browser.call().faceAuth.startVerification()).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS" });
     // Admin: "Царайн бүртгэлийг цуцлах", then the person enrols afresh.
     await deleteFaceEnrollment(personId);
-    await caller.faceAuth.enroll({ descriptor: descriptorOf(0.001), sampleCount: 5, consented: true });
-    await expect(caller.faceAuth.startVerification()).resolves.toMatchObject({ action: "blink" });
+    await browser.call().faceAuth.enroll({ descriptor: descriptorOf(0.001), sampleCount: 5, consented: true });
+    // Enrolling re-signs this browser's password step, so the live check that must follow needs no second password.
+    await expect(browser.call().faceAuth.startVerification()).resolves.toMatchObject({ action: "blink" });
   });
 
   it("with ADMIN_FACE_LIVENESS_ENFORCED=0 a missing blink PASSED, so it does not count towards the lockout", async () => {

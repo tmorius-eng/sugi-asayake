@@ -85,7 +85,7 @@ describeWithDatabase("admin bulk actions integration", () => {
     const bogusId = 999_999_999;
     const result = await adminCaller.admin.bulkUpdateProductPublishStatus({ ids: [productAId, bogusId], isPublished: false });
     expect(result.succeeded).toEqual([productAId]);
-    expect(result.failed).toEqual([{ id: bogusId, message: "Product not found." }]);
+    expect(result.failed).toEqual([{ id: bogusId, message: "Бараа олдсонгүй." }]);
   });
 
   it("bulk order status: succeeds for an order that can take the transition, fails (without blocking) for a closed one", async () => {

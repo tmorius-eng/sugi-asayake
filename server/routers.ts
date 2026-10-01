@@ -4076,7 +4076,7 @@ export const appRouter = router({
       for (const id of input.ids) {
         try {
           const product = await updateAdminProduct({ id, isPublished: input.isPublished });
-          if (!product) throw new Error("Product not found.");
+          if (!product) throw new Error("Бараа олдсонгүй.");
           await logAdminAction({ actorUserId: ctx.user.id, action: "product.updated", entityType: "product", entityId: product.id, metadata: { isPublished: input.isPublished, bulk: true } });
           succeeded.push(id);
         } catch (error) {

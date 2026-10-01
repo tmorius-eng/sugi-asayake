@@ -137,7 +137,7 @@ maybeDescribe("branch stock integration", () => {
     // aggregate is 14, plenty for a 1-unit order, but asking for MORE than
     // branch B's own 4 at branch B specifically must still fail.
     await adminCaller.admin.setBranchStock({ branchId: branchBId, variantId, quantity: 0 });
-    await expect(placeOrder("store_pickup", `${marker} Branch B (pickup only)`)).rejects.toThrow(/at the selected branch/i);
+    await expect(placeOrder("store_pickup", `${marker} Branch B (pickup only)`)).rejects.toThrow(/сонгосон салбарт хүссэн тоогоор байхгүй/);
 
     // The aggregate must be untouched by the rejected attempt.
     const variants = await adminCaller.admin.productVariants({ productId });

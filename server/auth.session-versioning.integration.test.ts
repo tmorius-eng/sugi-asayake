@@ -26,12 +26,15 @@ describeWithDatabase("session versioning integration", () => {
   const marker = `session-version-test-${Date.now()}`;
   const email = `${marker}@example.invalid`;
   let userId = 0;
+  // Password reset only applies to the account whose phone the session verified (2026-10-01).
+  const phone = `7${Math.floor(1_000_000 + Math.random() * 8_999_999)}`;
 
   beforeAll(async () => {
     const db = await getDb();
     if (!db) throw new Error("DATABASE_URL is required for session versioning integration tests.");
     const inserted = await db.insert(users).values({
       email,
+      phone,
       passwordHash: await hashPassword("OriginalPassw0rd!"),
       name: "Session Versioning Test",
       role: "user",
@@ -78,11 +81,27 @@ describeWithDatabase("session versioning integration", () => {
     expect((await contextFor(preResetToken)).user?.id).toBe(userId);
 
     const inserted = await db.insert(phoneVerificationSessions).values({
-      userId, purpose: "password_reset", phone: "88990011", verifyMnSessionId: `session-versioning-test-${Date.now()}`, code: "356894", status: "verified", expiresAt: new Date(Date.now() + 60_000),
+      userId, purpose: "password_reset", phone, verifyMnSessionId: `session-versioning-test-${Date.now()}`, code: "356894", status: "verified", expiresAt: new Date(Date.now() + 60_000),
     });
     const sessionId = Number(inserted[0].insertId);
     await resetPasswordViaPhoneSession({ sessionId, passwordHash: await hashPassword("YetAnotherPassw0rd!") });
 
     expect((await contextFor(preResetToken)).user).toBeNull();
+  });
+
+  it("refuses a reset whose verified phone is not the account's phone, and leaves the password and tokens alone", async () => {
+    const db = await getDb();
+    if (!db) throw new Error("DATABASE_URL is required for session versioning integration tests.");
+    const [before] = await db.select({ sessionVersion: users.sessionVersion, passwordHash: users.passwordHash }).from(users).where(eq(users.id, userId));
+    const token = await signSessionToken(userId, before!.sessionVersion);
+    const inserted = await db.insert(phoneVerificationSessions).values({
+      userId, purpose: "password_reset", phone: "70000001", verifyMnSessionId: `session-versioning-mismatch-${Date.now()}`, code: "111111", status: "verified", expiresAt: new Date(Date.now() + 60_000),
+    });
+    const sessionId = Number(inserted[0].insertId);
+    await expect(resetPasswordViaPhoneSession({ sessionId, passwordHash: await hashPassword("SomeOtherPassw0rd!") })).rejects.toThrow(/утасны дугаарт хамаарахгүй/);
+    const [after] = await db.select({ sessionVersion: users.sessionVersion, passwordHash: users.passwordHash }).from(users).where(eq(users.id, userId));
+    expect(after!.passwordHash).toBe(before!.passwordHash);
+    expect(after!.sessionVersion).toBe(before!.sessionVersion);
+    expect((await contextFor(token)).user?.id).toBe(userId);
   });
 });

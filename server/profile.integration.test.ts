@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { testSessionUser } from "./_test-helpers";
 import { eq } from "drizzle-orm";
-import { adminAuditLogs, productCategories, products, userAddresses, users, wishlistItems } from "../drizzle/schema";
+import { adminAuditLogs, productCategories, productVariants, products, userAddresses, users, wishlistItems } from "../drizzle/schema";
 import { appRouter } from "./routers";
 import { getDb, getUserByEmail } from "./db";
 import { hashPassword } from "./_core/password";
@@ -306,12 +306,15 @@ describeWithDatabase("customer wishlist + back-in-stock alerts", () => {
     categoryId = Number(categoryResult[0].insertId);
     const productResult = await db.insert(products).values({ categoryId, name: "Wishlist test product", slug: `${marker}-product`, sku: `${marker}-SKU`, priceMnt: 12_000, stockQuantity: 0, isPublished: true });
     productId = Number(productResult[0].insertId);
+    // A real product always has a sole default variant; updateAdminProduct refuses a stock change on a product with none or several (2026-09-27).
+    await db.insert(productVariants).values({ productId, sku: `${marker}-SKU`, priceMnt: 12_000, stockQuantity: 0, isDefault: true });
   });
 
   afterAll(async () => {
     const db = await getDb();
     if (!db) return;
     await db.delete(wishlistItems).where(eq(wishlistItems.productId, productId));
+    await db.delete(productVariants).where(eq(productVariants.productId, productId));
     await db.delete(products).where(eq(products.id, productId));
     await db.delete(productCategories).where(eq(productCategories.id, categoryId));
     await db.delete(users).where(eq(users.id, userId));

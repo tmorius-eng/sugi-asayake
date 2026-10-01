@@ -62,8 +62,9 @@ describeWithDatabase("inventory sync runners (fake provider)", () => {
   beforeAll(async () => {
     const database = await db();
     adminId = Number((await database.insert(users).values({ email: `${marker}-admin@example.invalid`, passwordHash: await hashPassword("SyncPassw0rd!"), name: "Sync admin", role: "admin", emailVerifiedAt: new Date() }))[0].insertId);
-    branchId = Number((await database.insert(branches).values({ name: `${marker} store`, slug: `${marker}-store`, address: "Sync test", isActive: true, sortOrder: 9999 }))[0].insertId);
-    otherBranchId = Number((await database.insert(branches).values({ name: `${marker} other`, slug: `${marker}-other`, address: "Sync test other", isActive: true, sortOrder: 9999 }))[0].insertId);
+    // A physical store the site does NOT sell from: the vendor feed may post to it by itself. A branch that counts toward online stock is never auto-applied (I2, 2026-09-27) -- see the dedicated test below.
+    branchId = Number((await database.insert(branches).values({ name: `${marker} store`, slug: `${marker}-store`, address: "Sync test", isActive: true, sortOrder: 9999, countsTowardOnlineStock: false }))[0].insertId);
+    otherBranchId = Number((await database.insert(branches).values({ name: `${marker} other`, slug: `${marker}-other`, address: "Sync test other", isActive: true, sortOrder: 9999, countsTowardOnlineStock: false }))[0].insertId);
     categoryId = Number((await database.insert(productCategories).values({ name: `${marker} category`, slug: `${marker}-category`, sortOrder: 99999, isActive: true }))[0].insertId);
     for (const sku of [skuA, skuB]) {
       const productId = Number((await database.insert(products).values({ categoryId, name: `Sync test ${sku}`, slug: `${marker}-${sku}`, sku, priceMnt: 10_000, stockQuantity: 0, isPublished: true }))[0].insertId);
@@ -208,6 +209,25 @@ describeWithDatabase("inventory sync runners (fake provider)", () => {
     expect(movements).toHaveLength(1);
     expect(movements[0].actorUserId).toBeNull();
     expect(movements[0].delta).toBe(5);
+  });
+
+  it("never auto-posts at a branch the site sells from online: the count waits for a person (I2)", async () => {
+    const database = await db();
+    await database.update(branches).set({ countsTowardOnlineStock: true }).where(eq(branches.id, branchId));
+    try {
+      const provider = new FakeInventorySyncProvider();
+      const before = await shelf(variantA);
+      provider.snapshot = snapshotOf({ [skuA]: { [locationId]: before + 7 } });
+      const result = await runPullSnapshot(provider, autoOptions);
+      expect(result.ran).toBe(true);
+      if (!result.ran) return;
+      expect(result.autoApplied).toHaveLength(0);
+      expect(await shelf(variantA)).toBe(before);
+      const [count] = await database.select().from(stockCounts).where(eq(stockCounts.id, result.branches[0].countId!)).limit(1);
+      expect(count.status).not.toBe("posted");
+    } finally {
+      await database.update(branches).set({ countsTowardOnlineStock: false }).where(eq(branches.id, branchId));
+    }
   });
 
   it("leaves a product the vendor did not send completely alone", async () => {

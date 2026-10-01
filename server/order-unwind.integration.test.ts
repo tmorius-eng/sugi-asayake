@@ -283,7 +283,7 @@ describeWithDatabase("order unwind integration (cancel / refund / late webhook)"
     const saved = { u: process.env.QPAY_USERNAME, p: process.env.QPAY_PASSWORD, c: process.env.QPAY_INVOICE_CODE };
     process.env.QPAY_USERNAME = "test"; process.env.QPAY_PASSWORD = "test"; process.env.QPAY_INVOICE_CODE = "test";
     try {
-      await expect(callerFor(customerUser()).payments.qpayCreateInvoice({ orderId })).rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringContaining("closed") });
+      await expect(callerFor(customerUser()).payments.qpayCreateInvoice({ orderId })).rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringContaining("Хаагдсан захиалгыг төлөх") });
     } finally {
       process.env.QPAY_USERNAME = saved.u; process.env.QPAY_PASSWORD = saved.p; process.env.QPAY_INVOICE_CODE = saved.c;
     }
