@@ -143,6 +143,15 @@ describe("integration settings", () => {
     expect(isPrivateHost("100.64.0.1")).toBe(true);
   });
 
+  it("isPrivateHost covers trailing dots, reserved ranges and IPv6 forms", () => {
+    for (const bad of ["localhost.", "LOCALHOST..", "foo.localhost.", "198.18.0.1", "198.19.1.1", "192.0.0.8", "224.0.0.1", "239.1.1.1", "240.0.0.1", "255.255.255.255", "::", "::1", "[::1]", "::ffff:127.0.0.1", "::ffff:7f00:1", "fc00::1", "fd00::5", "fe80::1", "ff02::1", "64:ff9b::a00:1", "10.0.0.1."]) {
+      expect(isPrivateHost(bad), bad).toBe(true);
+    }
+    for (const good of ["ntfy.sh", "ntfy.sh.", "fcstore.com", "fdx.mn", "8.8.8.8", "198.17.0.1", "198.20.0.1", "2606:4700:4700::1111"]) {
+      expect(isPrivateHost(good), good).toBe(false);
+    }
+  });
+
   it("describes every provider", () => {
     for (const provider of INTEGRATION_PROVIDERS) {
       expect(INTEGRATION_META[provider].label.length, provider).toBeGreaterThan(2);

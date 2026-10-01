@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { decodedSchemaOf, PRODUCTION_SCHEMAS } from "../../shared/dbUrl";
 
 /**
  * E2E аль өгөгдлийн сан руу бичихийг шийддэг цорын ганц газар.
@@ -12,7 +13,6 @@ import "dotenv/config";
  * Анхдагч зорилт нь нэг ижил HeatWave дээрх `sugi_staging` (prod-ын
  * 2026-09-21-ний хуулбар — `scripts/db-restore.ps1 … -Force`-оор шинэчилнэ). `E2E_DATABASE_URL`-ээр бүрэн дарж болно.
  */
-const FORBIDDEN_SCHEMAS = new Set(["defaultdb", "mysql", "sys"]);
 const DEFAULT_E2E_SCHEMA = "sugi_staging";
 
 export function e2eDatabaseUrl(): string {
@@ -23,8 +23,10 @@ export function e2eDatabaseUrl(): string {
   const url = new URL(source);
   if (!explicit) url.pathname = `/${DEFAULT_E2E_SCHEMA}`;
 
-  const schema = url.pathname.replace(/^\//, "");
-  if (!schema || FORBIDDEN_SCHEMAS.has(schema)) {
+  // 2026-10-01: decoded + lower-cased (`/%64efaultdb`, `/DefaultDB/` are production too);
+  // a parse error throws -- fail closed.
+  const schema = decodedSchemaOf(url.toString());
+  if (!schema || PRODUCTION_SCHEMAS.has(schema)) {
     throw new Error(
       `E2E "${schema}" схем рүү заасан байна. Энэ нь бодит дэлгүүрийн өгөгдөл — тест захиалга, хэрэглэгч үүсгэдэг тул зөвшөөрөхгүй. ` +
         `E2E_DATABASE_URL-ээ ${DEFAULT_E2E_SCHEMA} (эсвэл өөр туршилтын схем) рүү заа.`

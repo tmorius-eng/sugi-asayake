@@ -41,12 +41,35 @@ async function senderName(): Promise<string> {
  * "delivered" when nothing was ever sent, with no retry.
  */
 export function emailConfigured(): boolean {
-  return Boolean(ENV.brevoApiKey && ENV.brevoSenderEmail);
+  // 2026-10-01: NOTIFICATIONS_SUPPRESS=1 (staging / тест) үед имэйл "унтарсан"
+  // тул дээрх ажлууд дахин оролдохгүй, илгээсэнд тооцно.
+  return Boolean(ENV.brevoApiKey && ENV.brevoSenderEmail && !ENV.notificationsSuppressed);
+}
+
+/** Keeps just enough of a recipient to recognise it in a log, never the whole address/number. */
+function maskRecipient(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.length <= 4 ? "***" : `***${trimmed.slice(-3)}`;
+}
+
+/**
+ * 2026-10-01: the "not delivered" fallback used to print the whole message --
+ * password-reset links, gift-card codes -- and, being a raw template string, let
+ * a recipient/subject containing a newline forge extra log lines. Now ONE JSON
+ * line with the masked recipient and the body LENGTH only (JSON.stringify
+ * escapes control characters).
+ */
+function logUndelivered(channel: "email" | "sms" | "owner", to: string, content: string, reason: string, subject?: string) {
+  console.log(JSON.stringify({ event: "notification_not_sent", channel, reason, to: maskRecipient(to), ...(subject !== undefined ? { subject: subject.slice(0, 120) } : {}), length: content.length }));
 }
 
 async function deliverEmail(input: { to: string; subject: string; content: string }): Promise<boolean> {
+  if (ENV.notificationsSuppressed) {
+    logUndelivered("email", input.to, input.content, "suppressed", input.subject);
+    return false;
+  }
   if (!ENV.brevoApiKey || !ENV.brevoSenderEmail) {
-    console.log(`[Email] To: ${input.to}\n${input.subject}\n${input.content}`);
+    logUndelivered("email", input.to, input.content, "not_configured", input.subject);
     return false;
   }
 
@@ -113,13 +136,17 @@ export function normalizePhoneForSms(rawPhone: string): string | null {
  * Transactional SMS > country pricing before relying on this in production.
  */
 async function deliverSms(input: { to: string; content: string }): Promise<boolean> {
+  if (ENV.notificationsSuppressed) {
+    logUndelivered("sms", input.to, input.content, "suppressed");
+    return false;
+  }
   if (!ENV.brevoApiKey) {
-    console.log(`[SMS] To: ${input.to}\n${input.content}`);
+    logUndelivered("sms", input.to, input.content, "not_configured");
     return false;
   }
   const recipient = normalizePhoneForSms(input.to);
   if (!recipient) {
-    console.error("[SMS] Could not normalize phone number, not sending:", input.to);
+    logUndelivered("sms", input.to, input.content, "bad_phone");
     return false;
   }
 
@@ -156,7 +183,7 @@ async function deliverSms(input: { to: string; content: string }): Promise<boole
  */
 export async function notifyOwner(input: { title: string; content: string }): Promise<boolean> {
   if (!ENV.ownerEmail) {
-    console.log(`[Owner notification] ${input.title}\n${input.content}`);
+    logUndelivered("owner", "", input.content, "no_owner_email", input.title);
     return false;
   }
   return deliverEmail({ to: ENV.ownerEmail, subject: input.title, content: input.content });

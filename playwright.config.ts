@@ -32,8 +32,8 @@ import { e2eDatabaseUrl } from "./e2e/helpers/environment";
  * БҮХ E2E run чимээгүйгээр хаалгатай горимд орж, admin тестүүд бүгд унана
  * (2026-09-16-нд яг ингэж болсон). Зөвхөн тусгайлан өгсөн үед л асна.
  *
- * Хоёр горим ӨӨР порт дээр: Playwright нь `reuseExistingServer` тул хаалгатай
- * сервер үлдсэн бол дараагийн ердийн run түүнийг дахин ашиглаж мөн л унана.
+ * Хоёр горим ӨӨР порт дээр (2026-10-01-аас `reuseExistingServer: false` тул
+ * үлдсэн сервер порт дээр байвал run татгалзана — түүнийг эхлээд зогсоо).
  */
 const GATE_ON = process.env.E2E_FACE_GATE === "1";
 const PORT = Number(process.env.E2E_PORT ?? (GATE_ON ? 3101 : 3100));
@@ -44,11 +44,13 @@ const startsOwnServer = !process.env.E2E_BASE_URL;
 // E2E_BASE_URL нь production байвал checkout/profile тестүүд амьд сайтаар
 // бодит захиалга үүсгэж, `signInAs` staging-ийн хэрэглэгчийн id-аар (prod-ын
 // өөр хүнтэй давхцаж болох) cookie гаргана. Зөвхөн локал ба staging.
-{
-  const allowedHosts = new Set(["127.0.0.1", "localhost", "sugi-staging.karkaron.com"]);
-  const host = new URL(baseURL).hostname.toLowerCase();
-  if (!allowedHosts.has(host)) {
-    throw new Error(`E2E_BASE_URL "${host}" зөвшөөрөгдөөгүй — E2E зөвхөн локал сервер эсвэл sugi-staging.karkaron.com дээр ажиллана (бодит сайтад тест захиалга/хэрэглэгч үүсгэнэ).`);
+// 2026-10-01: гаднах E2E_BASE_URL нь ЗӨВХӨН staging. localhost/127.0.0.1-ийг гадаад
+// зорилт болгож болохгүй — тэнд тунелиар бодит сайт руу заасан порт байж болно
+// (E2E_BASE_URL-гүй бол config өөрөө 127.0.0.1 дээр өөрийн серверийг асаадаг).
+if (process.env.E2E_BASE_URL) {
+  const host = new URL(process.env.E2E_BASE_URL).hostname.toLowerCase();
+  if (host !== "sugi-staging.karkaron.com") {
+    throw new Error(`E2E_BASE_URL "${host}" зөвшөөрөгдөөгүй — гаднах хаяг зөвхөн sugi-staging.karkaron.com байж болно (бодит сайтад тест захиалга/хэрэглэгч үүсгэнэ). Локал серверийг config өөрөө асаана — E2E_BASE_URL-ийг бүү өг.`);
   }
 }
 
@@ -99,7 +101,10 @@ export default defineConfig({
     ? {
         command: "node dist/index.js",
         url: `http://127.0.0.1:${PORT}/health`,
-        reuseExistingServer: !process.env.CI,
+        // 2026-10-01: хэзээ ч дахин ашиглахгүй — порт дээр аль хэдийн ажиллаж буй
+        // сервер (бодит DB руу заасан dev/prod процесс байж болно) нь E2E-ийн
+        // хамгаалалттай `DATABASE_URL`/`NOTIFICATIONS_SUPPRESS` env-ийг авахгүй.
+        reuseExistingServer: false,
         timeout: 120_000,
         stdout: "pipe",
         stderr: "pipe",

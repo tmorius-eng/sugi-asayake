@@ -16,14 +16,14 @@
 //    (файл) тавигдсан бол серверийн сертификатыг түүгээр шалгана — Aiven төслийн
 //    CA-аар гарын үсэг зурдаг тул системийн root store мэдэхгүй (системийн root-
 //    оор rejectUnauthorized:true HANDSHAKE_SSL_ERROR өгдгийг баталгаажуулсан). CA-
-//    гүй бол шифрлэсээр ч серверийг баталгаажуулж чадахгүй; үүнийг нэг удаа warning
-//    бичнэ — зөвхөн шифрлэлт нь plaintext-ээс бодит сайжруулалт ч дууссан төлөв
-//    биш. PEM нь Aiven Console -> service -> Overview -> "CA certificate"-ээс.
+//    гүй бол шифрлэсээр ч серверийг баталгаажуулж чадахгүй: dev-д warning-тай
+//    unverified TLS, харин NODE_ENV=production эсвэл ssl-mode=VERIFY_CA/
+//    VERIFY_IDENTITY үед CA-гүй бол throw (2026-10-01). PEM нь Aiven Console -> service -> Overview -> "CA certificate"-ээс.
 // 3. URL дахь `ssl-mode=DISABLED` хүндэтгэгдэнэ (санаатай татгалзал), бусад query
 //    параметр дамжуулагдахгүй хаягдана, тиймээс mysql2 мэдэхгүй option харахгүй.
 import { readFileSync } from "node:fs";
 
-export type MysqlSslOptions = { rejectUnauthorized: boolean; ca?: string; minVersion: "TLSv1.2" };
+export type MysqlSslOptions = { rejectUnauthorized: boolean; ca?: string; minVersion: "TLSv1.2"; verifyIdentity?: boolean };
 
 export type MysqlConnectionOptions = {
   host: string;
@@ -77,24 +77,44 @@ export function planMysqlConnection(databaseUrl: string, env: NodeJS.ProcessEnv 
     return { options, transport: "plaintext-explicit" };
   }
   const ca = loadCaCertificate(env);
+  const verifyMode = sslMode === "VERIFY_CA" || sslMode === "VERIFY_IDENTITY";
   if (!ca) {
+    // 2026-10-01 (security audit E1): the unverified fallback used to apply even
+    // when the URL explicitly asked for VERIFY_CA / VERIFY_IDENTITY, and in
+    // production -- the one place a man-in-the-middle matters. Both now refuse
+    // to start. Development keeps the (warned) unverified TLS so a laptop
+    // without the CA file can still connect.
+    if (verifyMode) {
+      throw new Error(`DATABASE_URL asks for ssl-mode=${sslMode} but no CA certificate is configured -- set DATABASE_CA_CERT_PATH (or DATABASE_CA_CERT).`);
+    }
+    if (env.NODE_ENV === "production") {
+      throw new Error("Refusing to connect to the database in production without a CA certificate to verify the server -- set DATABASE_CA_CERT_PATH (or DATABASE_CA_CERT).");
+    }
     options.ssl = { rejectUnauthorized: false, minVersion: "TLSv1.2" };
     return { options, transport: "tls-unverified" };
   }
   // A MySQL reached by bare IP -- an Oracle Cloud HeatWave endpoint through
   // an SSH tunnel (127.0.0.1) or a VM by its address (2026-09-13) -- presents
-  // a certificate whose CN/SAN name the address, not what we typed, so Node
-  // would reject it on hostname mismatch even though the chain is pinned to
-  // the exact CA we shipped. For an IP-literal host the CA pin IS the
-  // identity check (only a server holding a key signed by that private CA
-  // can pass), so hostname matching is skipped there and nowhere else: a DNS
-  // name such as the Aiven hostname still gets the full identity check.
+  // a certificate whose CN/SAN name the address, not what we typed.
+  //
+  // 2026-10-01 correction: this used to set `ssl.checkServerIdentity` to a
+  // no-op for IP hosts "to skip hostname matching". mysql2 (3.x) never reads
+  // that option -- it only honours `ssl.verifyIdentity` -- so the line did
+  // nothing and the comment lied. What really happens: with `verifyIdentity`
+  // unset, mysql2 passes no servername for an IP host and node skips identity
+  // verification, i.e. for an IP-literal host the CA pin IS the identity check
+  // (only a server whose key was signed by that private CA passes the chain
+  // check). For a DNS host we now turn `verifyIdentity` on, so the certificate
+  // must also name the host we dialled.
   const ipLiteral = isIpLiteral(url.hostname);
+  if (ipLiteral && sslMode === "VERIFY_IDENTITY") {
+    throw new Error(`ssl-mode=VERIFY_IDENTITY cannot be honoured for the IP address ${url.hostname} (mysql2 sends no servername for an IP host) -- connect by DNS name, or use ssl-mode=VERIFY_CA / REQUIRED with DATABASE_CA_CERT_PATH (CA pinning).`);
+  }
   options.ssl = {
     rejectUnauthorized: true,
     ca,
     minVersion: "TLSv1.2",
-    ...(ipLiteral ? { checkServerIdentity: () => undefined } : {}),
+    ...(ipLiteral ? {} : { verifyIdentity: true }),
   };
   return { options, transport: "tls-verified" };
 }

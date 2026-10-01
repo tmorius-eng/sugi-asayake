@@ -73,7 +73,18 @@ export default defineConfig({
     allowedHosts: devAllowedHosts.length > 0 ? devAllowedHosts : undefined,
     fs: {
       strict: true,
-      deny: ["**/.*"],
+      // 2026-10-01 (security audit F1): Vite's default allow list is the whole
+      // workspace, so `/@fs/<abs path>` could read backups/*.sql, .env, *.pem
+      // from a dev server reachable on the LAN (`host: true`). Serve only what
+      // the client build actually imports: its own root (index.html, src,
+      // public), the shared/ alias, and node_modules (pnpm's real paths).
+      allow: [
+        path.resolve(import.meta.dirname, "client"),
+        path.resolve(import.meta.dirname, "shared"),
+        path.resolve(import.meta.dirname, "node_modules"),
+      ],
+      // Setting `deny` REPLACES Vite's defaults, so they are restated here.
+      deny: [".env", ".env.*", "*.{crt,pem}", "**/.git/**", "**/.*", "**/backups/**", "**/*.sql", "**/*.zip"],
     },
   },
 });

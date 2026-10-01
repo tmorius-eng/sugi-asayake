@@ -24,7 +24,20 @@ describe("planMysqlConnection", () => {
   it("verifies the server certificate when DATABASE_CA_CERT is set (escaped newlines allowed)", () => {
     const plan = planMysqlConnection(AIVEN, { DATABASE_CA_CERT: "-----BEGIN CERTIFICATE-----\\nabc\\n-----END CERTIFICATE-----" });
     expect(plan.transport).toBe("tls-verified");
-    expect(plan.options.ssl).toEqual({ rejectUnauthorized: true, ca: "-----BEGIN CERTIFICATE-----\nabc\n-----END CERTIFICATE-----", minVersion: "TLSv1.2" });
+    expect(plan.options.ssl).toEqual({ rejectUnauthorized: true, ca: "-----BEGIN CERTIFICATE-----\nabc\n-----END CERTIFICATE-----", minVersion: "TLSv1.2", verifyIdentity: true });
+  });
+
+  it("refuses VERIFY_CA / VERIFY_IDENTITY without a CA instead of silently skipping verification", () => {
+    expect(() => planMysqlConnection("mysql://u:p@db.example.com/app?ssl-mode=VERIFY_CA", {})).toThrow(/no CA certificate/);
+    expect(() => planMysqlConnection("mysql://u:p@db.example.com/app?ssl-mode=VERIFY_IDENTITY", {})).toThrow(/no CA certificate/);
+    expect(() => planMysqlConnection("mysql://u:p@localhost/app?ssl-mode=VERIFY_CA", {})).toThrow(/no CA certificate/);
+  });
+
+  it("refuses to run in production without a CA, but not for plaintext loopback or an explicit DISABLED", () => {
+    expect(() => planMysqlConnection(AIVEN, { NODE_ENV: "production" })).toThrow(/production without a CA/);
+    expect(planMysqlConnection("mysql://root:x@127.0.0.1/sugi", { NODE_ENV: "production" }).transport).toBe("plaintext-loopback");
+    expect(planMysqlConnection("mysql://u:p@db.example.com/app?ssl-mode=DISABLED", { NODE_ENV: "production" }).transport).toBe("plaintext-explicit");
+    expect(planMysqlConnection(AIVEN, { NODE_ENV: "production", DATABASE_CA_CERT: "-----BEGIN CERTIFICATE-----\nabc\n-----END CERTIFICATE-----" }).transport).toBe("tls-verified");
   });
 
   it("enables TLS for a remote host that has no ssl-mode flag at all", () => {
@@ -51,18 +64,18 @@ describe("planMysqlConnection", () => {
 
 describe("IP-literal hosts with a pinned CA (HeatWave through an SSH tunnel, or a VM by address)", () => {
   const ca = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----";
-  it("keeps chain verification but skips hostname matching for a bare IP", () => {
+  it("pins the CA (chain verification only) for a bare IP: no verifyIdentity, no ineffective checkServerIdentity", () => {
     const { options, transport } = planMysqlConnection("mysql://sugi_app:pw@127.0.0.1:3307/defaultdb?ssl-mode=REQUIRED", { DATABASE_CA_CERT: ca });
     expect(transport).toBe("tls-verified");
-    const ssl = options.ssl as { rejectUnauthorized: boolean; ca: string; checkServerIdentity?: unknown };
-    expect(ssl.rejectUnauthorized).toBe(true);
-    expect(ssl.ca).toBe(ca);
-    expect(typeof ssl.checkServerIdentity).toBe("function");
+    expect(options.ssl).toEqual({ rejectUnauthorized: true, ca, minVersion: "TLSv1.2" });
+    expect(planMysqlConnection("mysql://u:p@10.0.1.227/defaultdb?ssl-mode=VERIFY_CA", { DATABASE_CA_CERT: ca, NODE_ENV: "production" }).transport).toBe("tls-verified");
   });
-  it("still checks the hostname for a DNS name (Aiven)", () => {
+  it("turns on verifyIdentity for a DNS name (mysql2 only honours ssl.verifyIdentity)", () => {
     const { options } = planMysqlConnection("mysql://u:p@sugi-asayake-db-project-4b75.h.aivencloud.com:25861/defaultdb?ssl-mode=REQUIRED", { DATABASE_CA_CERT: ca });
-    const ssl = options.ssl as { checkServerIdentity?: unknown };
-    expect(ssl.checkServerIdentity).toBeUndefined();
+    expect(options.ssl).toEqual({ rejectUnauthorized: true, ca, minVersion: "TLSv1.2", verifyIdentity: true });
+  });
+  it("throws for VERIFY_IDENTITY on an IP literal rather than pretending to verify the identity", () => {
+    expect(() => planMysqlConnection("mysql://u:p@127.0.0.1:3307/defaultdb?ssl-mode=VERIFY_IDENTITY", { DATABASE_CA_CERT: ca })).toThrow(/VERIFY_IDENTITY cannot be honoured/);
   });
   it("recognises IPv4 and IPv6 literals only", () => {
     expect(isIpLiteral("140.83.1.2")).toBe(true);

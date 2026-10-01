@@ -249,7 +249,8 @@ import { createStorepayLoan, getStorepayAvailability, normaliseMobileNumber, sto
 // Registers the Smart Software adapter on import (side effect).
 import { clearSmartSoftwareTokenCache } from "./integrations/smartSoftware";
 import { assertImageSignature, imageContentTypes, mediaContentTypes, processUploadedImageOrThrow } from "./_core/imageUpload";
-import { INTEGRATION_PROVIDERS, isPrivateHost } from "../shared/integrations";
+import { INTEGRATION_PROVIDERS } from "../shared/integrations";
+import { isAllowedPushEndpoint } from "../shared/push-endpoint";
 import { buildNotificationMessage, NOTIFICATION_GROUP_LABELS, NOTIFICATION_GROUPS, NTFY_TOPIC_FIELD } from "../shared/notification-events";
 import { createNoOpVerificationSession, createVerificationSession, getSessionStatus, isNoOpSessionExpired, normalizePhoneForVerifyMn } from "./verifyMn";
 import { consumeCheckoutPhoneVerificationSession, createManualOrder, editAdminOrder, findExistingOrderForClientRequest, getAdminOrderWithItems, getStoreSettingNumber, isOrderSettled, recordNotification, releaseCheckoutPhoneVerificationSession, requestOrderReturn } from "./db";
@@ -1418,7 +1419,8 @@ export const appRouter = router({
         // хариу өгдөггүй хост бүртгэж админы төлөв солих хүсэлтийг гацааж болдог байв.
         let endpointUrl: URL;
         try { endpointUrl = new URL(input.endpoint); } catch { throw new TRPCError({ code: "BAD_REQUEST", message: "Push бүртгэлийн хаяг буруу байна." }); }
-        if (endpointUrl.protocol !== "https:" || isPrivateHost(endpointUrl.hostname)) {
+        // 2026-10-01: зөвхөн хөтчийн мэдэгдэл үйлчилгээний host (shared/push-endpoint.ts).
+        if (!isAllowedPushEndpoint(endpointUrl.href)) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Push бүртгэлийн хаяг буруу байна." });
         }
         await upsertPushSubscription({ userId: ctx.user.id, endpoint: input.endpoint, p256dh: input.keys.p256dh, auth: input.keys.auth, userAgent: (ctx.req.headers["user-agent"] ?? "").slice(0, 300) || null });

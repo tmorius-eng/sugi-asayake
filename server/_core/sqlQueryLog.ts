@@ -80,7 +80,9 @@ export const sqlQueryLogger: Logger = {
     if (buffer.length > MAX_ENTRIES) buffer.shift();
     // LOG_SQL=1 (2026-09-12): the same entry, in the terminal, as it fires.
     // The admin SQL tab shows the last 200; this shows all of them live.
-    if (process.env.LOG_SQL === "1") console.log(`[sql] ${entry.query}${entry.params.length ? `  -- [${entry.params.join(", ")}]` : ""}`);
+    // 2026-10-01: ONE JSON line -- a parameter containing a newline used to forge
+    // extra log lines (JSON.stringify escapes control characters).
+    if (process.env.LOG_SQL === "1") console.log(JSON.stringify({ sql: entry.query, params: entry.params }));
   },
 };
 

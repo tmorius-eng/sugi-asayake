@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { getActiveIntegrationConfig, getOrderById, getPaymentAttemptByInvoiceId, markQPayPaymentAttemptPaid, storeQPayPaymentAttemptResponse } from "./db";
 import { normaliseMongolianMobile } from "../shared/mobile";
 import { limitQPayCallbackTraffic } from "./_core/security";
+import { SafeHttpError, safeRequest } from "./_core/safeHttp";
 
 /**
  * StorePay (buy now, pay later), 2026-09-12. Tom: all four shops already
@@ -40,6 +41,7 @@ import { limitQPayCallbackTraffic } from "./_core/security";
 export type StorepayConfig = { authUrl: string; baseUrl: string; appUsername: string; appPassword: string; username: string; password: string; storeId: string };
 
 const TIMEOUT_MS = 15_000;
+const MAX_RESPONSE_BYTES = 1024 * 1024;
 const trimSlash = (value: string) => value.trim().replace(/\/+$/, "");
 
 let cachedToken: { value: string; expiresAt: number; key: string } | null = null;
@@ -94,21 +96,38 @@ async function storepayToken(config: StorepayConfig): Promise<string> {
   url.searchParams.set("username", config.appUsername);
   url.searchParams.set("password", config.appPassword);
   const basic = Buffer.from(`${config.username}:${config.password}`).toString("base64");
-  const response = await fetch(url, { method: "POST", headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/json" }, signal: AbortSignal.timeout(TIMEOUT_MS) });
-  const payload = await response.json().catch(() => null) as { access_token?: string; expires_in?: number } | null;
+  const response = await storepayHttp(url, { method: "POST", headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/json" } });
+  const payload = ((): { access_token?: string; expires_in?: number } | null => {
+    try { return JSON.parse(response.body) as { access_token?: string; expires_in?: number } | null; } catch { return null; }
+  })();
   if (!response.ok || !payload?.access_token) throw new StorepayError(`StorePay-д нэвтэрч чадсангүй (${response.status})`, response.status);
   cachedToken = { value: payload.access_token, expiresAt: Date.now() + Math.max(60, payload.expires_in ?? 300) * 1000, key };
   return payload.access_token;
 }
 
-async function storepayFetch(config: StorepayConfig, path: string, init: RequestInit) {
+/**
+ * 2026-10-01: StorePay-ийн хаягийг админ тохируулдаг тул `fetch` (redirect дагана,
+ * дотоод сүлжээ рүү холбогдоно, хариуны хэмжээ хязгааргүй) биш `safeRequest`:
+ * redirect = алдаа, хувийн IP = алдаа, хариу 1 MB-аас хэтрэхгүй.
+ */
+async function storepayHttp(url: string | URL, init: { method: string; headers: Record<string, string>; body?: string }) {
+  try {
+    const response = await safeRequest(url, { method: init.method, headers: init.headers, body: init.body, timeoutMs: TIMEOUT_MS, deadlineMs: TIMEOUT_MS * 2, maxBytes: MAX_RESPONSE_BYTES });
+    return { status: response.status, ok: response.status >= 200 && response.status < 300, body: response.body };
+  } catch (error) {
+    if (error instanceof SafeHttpError) throw new StorepayError(`StorePay-тэй холбогдож чадсангүй: ${error.message}`);
+    throw error;
+  }
+}
+
+async function storepayFetch(config: StorepayConfig, path: string, init: { method: string; body?: string }) {
   const token = await storepayToken(config);
-  const response = await fetch(`${config.baseUrl}${path}`, {
-    ...init,
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(init.headers ?? {}) },
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+  const response = await storepayHttp(`${config.baseUrl}${path}`, {
+    method: init.method,
+    body: init.body,
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
   });
-  const text = await response.text();
+  const text = response.body;
   if (!response.ok) throw new StorepayError(`StorePay хүсэлт амжилтгүй (${response.status}): ${text.slice(0, 200)}`, response.status);
   try {
     return JSON.parse(text) as unknown;
