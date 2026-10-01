@@ -84,9 +84,17 @@ export const AVIF_QUALITY = 60;
 
 /**
  * sharp-ийн анхдагч хязгаар 268 мегапиксел — жижиг файлд шахсан "decompression bomb" зураг
- * санах ойг үрэх боломжтой. 40 МП (≈ 8000×5000) нь бодит зурагт хангалттай.
+ * санах ойг үрэх боломжтой. 50 МП нь утасны 48/50 МП бүтэн зургийг багтаана (40 МП нь
+ * iPhone-ийн 48 МП зургийг "гэмтсэн" гэж татгалзаж байсан — 2026-10-01 шалгалт).
  */
-export const MAX_INPUT_PIXELS = 40e6;
+export const MAX_INPUT_PIXELS = 50e6;
+
+/** sharp-ийн "Input image exceeds pixel limit" алдааг таних — хэрэглэгчид тодорхой мессеж өгөхөд. */
+export function isPixelLimitError(error: unknown): boolean {
+  return error instanceof Error && /pixel limit/i.test(error.message);
+}
+
+export const PIXEL_LIMIT_MESSAGE = `Зураг хэт том байна (${MAX_INPUT_PIXELS / 1e6} мегапикселээс их). Камерын нягтралыг багасгах эсвэл зургаа жижгэрүүлээд дахин оруулна уу.`;
 
 export type ImageVariantOptions = {
   /**

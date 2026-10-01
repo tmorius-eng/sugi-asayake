@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { processUploadedImage } from "./imageProcessing";
+import { PIXEL_LIMIT_MESSAGE, isPixelLimitError, processUploadedImage } from "./imageProcessing";
 
 /**
  * Image upload validation shared by every tRPC upload endpoint (2026-09-11:
@@ -39,7 +39,8 @@ export function assertImageSignature(buffer: Buffer, contentType: ImageContentTy
 export async function processUploadedImageOrThrow(buffer: Buffer, contentType: ImageContentType, maxDimension: number): Promise<Buffer> {
   try {
     return await processUploadedImage(buffer, contentType, maxDimension);
-  } catch {
+  } catch (error) {
+    if (isPixelLimitError(error)) throw new TRPCError({ code: "BAD_REQUEST", message: PIXEL_LIMIT_MESSAGE });
     throw new TRPCError({ code: "BAD_REQUEST", message: "Зургийг уншиж чадсангүй. Файл гэмтсэн эсвэл дэмжигдээгүй байж магадгүй." });
   }
 }

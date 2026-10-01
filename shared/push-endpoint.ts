@@ -6,7 +6,10 @@
  * we accept exactly those -- the strongest check available without DNS.
  */
 
-const EXACT_HOSTS = new Set(["fcm.googleapis.com", "updates.push.services.mozilla.com"]);
+// android.googleapis.com: legacy Chrome (GCM) endpoints still held by old subscriptions.
+// push-api.cloud.huawei.com: Huawei Mobile Services browsers (Huawei Browser web push);
+// host from memory, plausible but not verified against a live device.
+const EXACT_HOSTS = new Set(["fcm.googleapis.com", "android.googleapis.com", "updates.push.services.mozilla.com", "push-api.cloud.huawei.com"]);
 const HOST_SUFFIXES = [".push.services.mozilla.com", ".push.apple.com", ".notify.windows.com"];
 
 export function isAllowedPushEndpoint(endpoint: string): boolean {

@@ -178,9 +178,14 @@ if (withAccess) {
     app = existing;
   } else {
     // 2026-10-01: байгаа app-д шинэ зам (/api/trpc/inventory*) нэмэх — өмнө нь байгаа app-ыг огт
-    // шинэчилдэггүй байсан тул замын жагсаалт хөгжихгүй байв. Бодлого (policies)-ийг PUT-д
-    // оруулахгүй тул хэвээр үлдэнэ.
-    app = await cf("PUT", `/accounts/${ACCT}/access/apps/${existing.id}`, { ...body, self_hosted_domains: [...new Set([...(existing.self_hosted_domains ?? []), ...wantedDomains])] });
+    // шинэчилдэггүй байсан тул замын жагсаалт хөгжихгүй байв. PUT нь бүтэн солих тул байгаа
+    // бодлогуудыг (id + precedence) заавал дамжуулна — эс бөгөөс app бодлогогүй үлдэж Access
+    // хүн бүрийг (Tom-ийг ч) хаана. Доор PUT-ийн дараа бодлого үлдсэнийг шалгана.
+    const policies = (existing.policies ?? []).map((p, i) => ({ id: p.id, precedence: p.precedence ?? i + 1 }));
+    if (!policies.length) throw new Error(`Access app "${name}" has no policies to preserve — refusing to PUT; fix it in the dashboard first`);
+    app = await cf("PUT", `/accounts/${ACCT}/access/apps/${existing.id}`, { ...body, policies, self_hosted_domains: [...new Set([...(existing.self_hosted_domains ?? []), ...wantedDomains])] });
+    const after = await cf("GET", `/accounts/${ACCT}/access/apps/${existing.id}`);
+    if (!(after.policies ?? []).length) throw new Error(`Access app "${name}" lost its policies after PUT — re-add the Owner allow policy in Zero Trust NOW or /admin is locked for everyone`);
   }
   ok(`Access app "${app.name}" ${!existing ? "created" : app === existing ? "already up to date" : "updated"} (${app.self_hosted_domains.join(", ")})`);
 } else {

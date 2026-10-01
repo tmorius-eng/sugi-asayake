@@ -14,15 +14,27 @@ export function isPrivilegedProcedure(path: string): boolean {
   return PRIVILEGED_PREFIXES.some(prefix => path.startsWith(prefix));
 }
 
+function decodePath(rawPath: string) {
+  try {
+    return decodeURIComponent(rawPath);
+  } catch {
+    return rawPath; // буруу кодчилол — түүхий хэлбэрээр нь шалгана
+  }
+}
+
+/**
+ * tRPC-ийн express adapter процедурын нэрийг СҮҮЛИЙН `/`-ийн дараах хэсгээс авдаг тул
+ * `/api/trpc/x/admin.users` нь `admin.users`-ийг ажиллуулж, Access-ийн `/api/trpc/admin*`
+ * дүрмийг тойрдог (2026-10-01 шалгалт). Жинхэнэ tRPC зам дотроо `/` агуулдаггүй.
+ */
+export function hasExtraPathSegment(rawPath: string): boolean {
+  // Эхний `/`-ийг НЭГ л удаа хасна: `//admin.users` ч Access-ийн дүрэмд таарахгүй.
+  return decodePath(rawPath).replace(/^\//, "").includes("/");
+}
+
 /** `rawPath`: `/api/trpc`-ийн дараах хэсэг (эхний `/`-тэй эсвэл угүй), URL-кодчилсон байж болно. */
 export function isMixedPrivilegedBatch(rawPath: string): boolean {
-  let decoded = rawPath;
-  try {
-    decoded = decodeURIComponent(rawPath);
-  } catch {
-    // буруу кодчилол — түүхий хэлбэрээр нь шалгана
-  }
-  const procedures = decoded.replace(/^\/+/, "").split(",").map(part => part.trim()).filter(Boolean);
+  const procedures = decodePath(rawPath).replace(/^\/+/, "").split(",").map(part => part.trim()).filter(Boolean);
   if (procedures.length < 2) return false;
   const privileged = procedures.filter(isPrivilegedProcedure).length;
   return privileged > 0 && privileged < procedures.length;
@@ -30,6 +42,10 @@ export function isMixedPrivilegedBatch(rawPath: string): boolean {
 
 export const trpcBatchGuard: RequestHandler = (req, res, next) => {
   // `app.use("/api/trpc", …)`-д req.path нь угтваргүй (`/a.b,c.d`).
+  if (hasExtraPathSegment(req.path)) {
+    res.status(404).json({ error: "Олдсонгүй." });
+    return;
+  }
   if (isMixedPrivilegedBatch(req.path)) {
     res.status(400).json({ error: "Админ болон нийтийн дуудлагыг нэг batch-д холихыг хориглоно." });
     return;

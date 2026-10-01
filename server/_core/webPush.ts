@@ -37,6 +37,13 @@ export function webPushEnabled(): boolean {
 
 export type PushPayload = { title: string; body: string; url?: string; tag?: string };
 
+let skippedPushWarned = false;
+function warnSkippedPushEndpoints(count: number) {
+  if (skippedPushWarned) return;
+  skippedPushWarned = true;
+  console.warn(JSON.stringify({ event: "push_endpoint_skipped", reason: "not_allowlisted", count }));
+}
+
 /** Sends to every subscription of one user. Returns how many were delivered. */
 export async function sendPushToUser(userId: number, payload: PushPayload): Promise<number> {
   if (ENV.notificationsSuppressed) {
@@ -46,11 +53,10 @@ export async function sendPushToUser(userId: number, payload: PushPayload): Prom
   if (!webPushEnabled()) return 0;
   const stored = await getPushSubscriptionsForUser(userId);
   // Rows saved before the host allowlist existed (or inserted some other way)
-  // must never be dialled: drop them instead of sending.
+  // must never be dialled. They are SKIPPED, not deleted: an allowlist gap must
+  // not destroy real subscriptions (only a 404/410 from the provider does).
   const subscriptions = stored.filter(sub => isAllowedPushEndpoint(sub.endpoint));
-  for (const sub of stored) {
-    if (!isAllowedPushEndpoint(sub.endpoint)) await deletePushSubscription(sub.endpoint).catch(() => undefined);
-  }
+  if (subscriptions.length < stored.length) warnSkippedPushEndpoints(stored.length - subscriptions.length);
   if (subscriptions.length === 0) return 0;
   const body = JSON.stringify({ ...payload, url: payload.url ?? "/profile?tab=orders", icon: "/icons/icon-192.png", badge: "/icons/icon-192.png" });
   const delivered: number[] = [];

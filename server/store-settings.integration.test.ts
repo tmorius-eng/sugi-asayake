@@ -1,10 +1,11 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { testSessionUser } from "./_test-helpers";
 import { eq, inArray } from "drizzle-orm";
 import { appRouter } from "./routers";
 import { getDb } from "./db";
 import { GUEST_CART_COOKIE_NAME } from "../shared/const";
 import { orderItems, orders, productCategories, products, productVariants } from "../drizzle/schema";
+import { clearSuppressedOutbox, getSuppressedOutbox } from "./_core/notification";
 import type { TrpcContext } from "./_core/context";
 
 // "Controls everything" admin overhaul (2026-09-08, Phase A). Same
@@ -243,34 +244,33 @@ maybeDescribeCheckout("store-settings checkout wiring integration", () => {
 
   // Phase C: the confirmation-email + status-message prose is admin-editable
   // too -- proven the same way order-notifications.integration.test.ts
-  // proves email content, by spying on console.log (no BREVO_API_KEY in this
-  // test run, so every send falls back to a logged line).
+  // proves email content, via the suppressed-outbox recorder (NOTIFICATIONS_SUPPRESS=1 in tests).
   it("sends the admin-overridden confirmation closing line and status message, and reverts to today's wording once cleared", async () => {
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    clearSuppressedOutbox();
+    const sentEmails = () => getSuppressedOutbox().map(m => `${m.to} ${m.subject} ${m.content}`);
     try {
       await adminCaller.admin.updateStoreSetting({ settingKey: "email-order-confirmation-closing", settingValue: "QA OVERRIDE CLOSING LINE" });
       await adminCaller.admin.updateStoreSetting({ settingKey: "email-order-status-confirmed", settingValue: "QA OVERRIDE STATUS MESSAGE" });
 
       const order = await placeGuestOrder(productId, "store_pickup");
       createdOrderIds.push(order.id);
-      const afterConfirmationEmail = logSpy.mock.calls.map(call => call.join(" ")).join("\n");
+      const afterConfirmationEmail = sentEmails().join(" ");
       expect(afterConfirmationEmail).toContain("QA OVERRIDE CLOSING LINE");
-      logSpy.mockClear();
+      clearSuppressedOutbox();
 
       await adminCaller.admin.updateOrder({ id: order.id, status: "confirmed" });
-      const afterStatusEmail = logSpy.mock.calls.map(call => call.join(" ")).join("\n");
+      const afterStatusEmail = sentEmails().join(" ");
       expect(afterStatusEmail).toContain("QA OVERRIDE STATUS MESSAGE");
-      logSpy.mockClear();
+      clearSuppressedOutbox();
 
       await adminCaller.admin.clearStoreSetting({ settingKey: "email-order-confirmation-closing" });
       await adminCaller.admin.clearStoreSetting({ settingKey: "email-order-status-confirmed" });
       const secondOrder = await placeGuestOrder(productId, "store_pickup");
       createdOrderIds.push(secondOrder.id);
-      const afterReset = logSpy.mock.calls.map(call => call.join(" ")).join("\n");
+      const afterReset = sentEmails().join(" ");
       expect(afterReset).toContain("Захиалгынхаа явцыг веб сайтаас харах боломжтой. Худалдан авалт хийсэнд баярлалаа!");
       expect(afterReset).not.toContain("QA OVERRIDE");
     } finally {
-      logSpy.mockRestore();
       await adminCaller.admin.clearStoreSetting({ settingKey: "email-order-confirmation-closing" }).catch(() => undefined);
       await adminCaller.admin.clearStoreSetting({ settingKey: "email-order-status-confirmed" }).catch(() => undefined);
     }

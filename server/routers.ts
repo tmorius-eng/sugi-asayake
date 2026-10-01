@@ -238,7 +238,7 @@ import { approveFaceHandoff, assertHandoffApprovable, claimFaceHandoff, denyFace
 import { FACE_DESCRIPTOR_LENGTH, FACE_DIAGNOSTIC_MAX, FACE_IDLE_TIMEOUT_MS, FACE_MODEL_VERSION, isAdminPanelRole, isContentReadRole, isValidFaceDescriptor } from "../shared/face-auth";
 import { adminProcedure, anyStaffProcedure, catalogReadProcedure, checkoutRateLimitedProcedure, contentReadProcedure, financeProcedure, lenientRateLimitedProcedure, loginRateLimitedProcedure, loginRateLimitedProtectedProcedure, marketingProcedure, moderateRateLimitedProcedure, moderateRateLimitedProtectedProcedure, ordersReadProcedure, phoneVerifyRateLimitedProcedure, protectedProcedure, publicProcedure, router, staffProcedure, strictRateLimitedProcedure, strictRateLimitedProtectedProcedure, usersReadProcedure, warehouseProcedure, isInternalErrorText, userFacingMessage } from "./_core/trpc";
 import { PRIVATE_STORAGE_UNAVAILABLE_MSG, canStorePrivately, storageDelete, storageGetSignedUrlPrivate, storagePing, storagePut, storagePutImageVariants, storagePutPrivate } from "./storage";
-import { IMAGE_MAX_DIMENSION, processUploadedImageVariants } from "./_core/imageProcessing";
+import { IMAGE_MAX_DIMENSION, PIXEL_LIMIT_MESSAGE, isPixelLimitError, processUploadedImageVariants } from "./_core/imageProcessing";
 import { createQPayInvoice, parseQPayInvoicePayload, getQPayAvailability } from "./qpay";
 import { sendNtfyTest } from "./notifications";
 import { notificationsRouter } from "./notificationsRouter";
@@ -817,7 +817,8 @@ async function sendOrderStatusUpdateEmail(order: { orderNumber: string; customer
 async function processUploadedImageVariantsOrThrow(buffer: Buffer, maxDimension: number, options?: { flattenAnimation?: boolean }) {
   try {
     return await processUploadedImageVariants(buffer, maxDimension, options);
-  } catch {
+  } catch (error) {
+    if (isPixelLimitError(error)) throw new TRPCError({ code: "BAD_REQUEST", message: PIXEL_LIMIT_MESSAGE });
     throw new TRPCError({ code: "BAD_REQUEST", message: "Зургийг уншиж чадсангүй. Файл гэмтсэн эсвэл дэмжигдээгүй байж магадгүй." });
   }
 }

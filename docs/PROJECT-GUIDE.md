@@ -35,7 +35,7 @@ HONEYBADGER_API_KEY=
 VERIFY_MN_API_KEY=
 # Сонголттой боловч production-д ЗААВАЛ (2026-09-09 deep audit, доор дэлгэрэнгүй): Aiven-ий CA
 # сертификат (PEM, Aiven Console → service → Overview → "CA certificate"). Байвал сервер
-# сертификатыг шалгана; байхгүй бол TLS ажиллах ч сертификат шалгагдахгүй (startup-д warning).
+# сертификатыг шалгана; production-д байхгүй бол сервер эхлэхээс ТАТГАЛЗАНА (2026-10-01, fail-closed).
 # Эсвэл файлын зам: DATABASE_CA_CERT_PATH=./aiven-ca.pem (файлыг commit хийхгүй).
 # ✅ 2026-09-12: ГЭРИЙН лаптоп дээр ./aiven-ca.pem + DATABASE_CA_CERT_PATH тавигдаж, бодитоор шалгасан
 #    (TLSv1.3, буруу CA-г татгалзсан). АЖЛЫН лаптоп + production host дээр ижил файлыг гараар хуулна
@@ -327,7 +327,7 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
 - **"Локал ногоон" нь "CI ногоон" гэсэн үг БИШ**: локал DB бол production-ийн хуулбар (`sugi_staging`), CI-нх бол migration гинжээс байгуулсан схем. Гинжийг хөндвөл шинэ схем дээр ажиллуулж шалга (2026-09-16: `openId` нэг мөрөөс болж 42 файл CI-д унасан).
 - **Шинэ integration тест нь хөгжүүлэгчийн DB-д байдаг зүйлд НАЙДАХГҮЙ**: `actorUserId: 1`, `variantId: 1`, "ямар нэг ангилал байгаа" гэх мэт нь локал дээр мөнхөд ногоон, цэвэр схемд мөнхөд улаан. Шаардлагатай өгөгдлөө өөрөө үүсгэ, эсвэл `scripts/ci-seed.ts`-д лавлах мөр болгож нэм (2026-09-16).
 - **CI-г эндээс харах**: `gh` суулгасан. `gh auth login` нь `read:org` шаарддаг тул `GH_TOKEN`-оор дамжуулна: `export GH_TOKEN=$(printf "protocol=https
-- **Тест/CI/туршилтын скрипт `refuseProductionDatabase()`-тай** (`scripts/_refuse-production.ts`): migration гинж, ci-seed, verify-review-thread нь `defaultdb` рүү заавал татгалзана. Шинэ туршилтын скрипт бичвэл мөн дууд. E2E_BASE_URL зөвхөн локал/staging.
+- **Тест/CI/туршилтын скрипт `refuseProductionDatabase()`-тай** (`scripts/_refuse-production.ts`): migration гинж, ci-seed, verify-review-thread нь `defaultdb` рүү заавал татгалзана. Шинэ туршилтын скрипт бичвэл мөн дууд. E2E_BASE_URL зөвхөн staging хост (2026-10-01).
 - **Deploy нь git-ийн төлөвийг шалгадаг** (2026-09-23): origin/main-ээс хоцорсон эсвэл commit хийгээгүй өөрчлөлттэй бол татгалзана (`-AllowDirty`). Шинэ build-ийг `pnpm install` амжилттай болсны дараа л солино.
 - **CI-г локал дээр давтах**: `pnpm exec tsx scripts/ci-local.ts` (схем хоослох → гинж → seed → CI-ийн орчны хувьсагчаар vitest). ⚠️ Схемээ цэвэрлэлгүй ажиллуулбал өмнөх ажиллалтын өгөгдөл үлдэж **худал ногоон** гардаг.
 - **`timestamp` нь секундын нарийвчлалтай** — нэг секундэд болсон хоёр мөр `orderBy(desc(createdAt))`-д ТЭНЦЭНЭ. Эрэмбэ чухал бол `id` тэнцвэр заавал; `createdAt < NOW()` төрлийн шүүлт нь яг тэр секундын мөрийг хасдаг (2026-09-16: 3 уналт).

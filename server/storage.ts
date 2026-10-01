@@ -185,8 +185,12 @@ export async function storageGetSignedUrlPrivate(relKey: string, options: { down
     try {
       await client.send(new HeadObjectCommand({ Bucket: ENV.s3PrivateBucket, Key: key }), { abortSignal: AbortSignal.timeout(10_000) });
       bucket = ENV.s3PrivateBucket;
-    } catch {
-      // хуучин объект нийтийн bucket-д хэвээр
+    } catch (error) {
+      // Зөвхөн "байхгүй" (зөөгдөөгүй хуучин объект) үед нийтийн bucket руу буцна. Бусад алдаа
+      // (токены эрх хүрэлцэхгүй 403, timeout) нь тохиргооны асуудал — чимээгүй 404 холбоос
+      // өгөхийн оронд шидэнэ (2026-10-01 шалгалт).
+      const status = (error as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode;
+      if (status !== 404) throw error;
     }
   }
   const command = new GetObjectCommand({ Bucket: bucket, Key: key, ResponseContentDisposition: disposition, ResponseCacheControl: "private, no-store" });
@@ -255,14 +259,19 @@ export async function storageDelete(relKey: string): Promise<boolean> {
   if (!ENV.s3Bucket || !ENV.s3AccessKeyId || !ENV.s3SecretAccessKey) return false;
   const key = normalizeKey(relKey);
   if (!key) return false;
-  try {
-    await getClient().send(new DeleteObjectCommand({ Bucket: ENV.s3Bucket, Key: key }), { abortSignal: AbortSignal.timeout(10_000) });
-    // Хувийн bucket-д байж болох тул тэндээс ч устгана (байхгүй объект устгах нь алдаа биш).
-    if (ENV.s3PrivateBucket) await getClient().send(new DeleteObjectCommand({ Bucket: ENV.s3PrivateBucket, Key: key }), { abortSignal: AbortSignal.timeout(10_000) });
-    existsCache.delete(key);
-    return true;
-  } catch (error) {
-    console.warn(`[storage] delete failed for ${key}:`, error instanceof Error ? error.message : error);
-    return false;
+  // Bucket тус бүрийг БИЕ ДААН устгана: хувийн bucket-ийн алдаа (эрхгүй токен гэх мэт) нь
+  // аль хэдийн амжилттай болсон нийтийн устгалтыг "амжилтгүй" гэж харуулах ёсгүй.
+  const buckets = [ENV.s3Bucket, ...(ENV.s3PrivateBucket ? [ENV.s3PrivateBucket] : [])];
+  let deleted = false;
+  for (const bucket of buckets) {
+    try {
+      // байхгүй объект устгах нь S3/R2-д алдаа биш
+      await getClient().send(new DeleteObjectCommand({ Bucket: bucket, Key: key }), { abortSignal: AbortSignal.timeout(10_000) });
+      deleted = true;
+    } catch (error) {
+      console.warn(`[storage] delete failed for ${key} in ${bucket === ENV.s3Bucket ? "public" : "private"} bucket:`, error instanceof Error ? error.message : error);
+    }
   }
+  if (deleted) existsCache.delete(key);
+  return deleted;
 }

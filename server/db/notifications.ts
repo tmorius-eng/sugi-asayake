@@ -139,10 +139,12 @@ export async function upsertPushSubscription(input: { userId: number; endpoint: 
   // first and inserted fresh for the caller, instead of silently re-pointing
   // the old row (and its old keys) at them. The same-user case still updates
   // in place via the unique index.
-  await db.delete(pushSubscriptions).where(and(eq(pushSubscriptions.endpoint, input.endpoint), ne(pushSubscriptions.userId, input.userId)));
-  await db.insert(pushSubscriptions).values(input).onDuplicateKeyUpdate({ set: { p256dh: input.p256dh, auth: input.auth, userAgent: input.userAgent } });
-  // Cap per user: keep the newest MAX_PUSH_SUBSCRIPTIONS_PER_USER, drop the rest.
-  const rows = await db.select({ id: pushSubscriptions.id }).from(pushSubscriptions).where(eq(pushSubscriptions.userId, input.userId)).orderBy(desc(pushSubscriptions.id));
+  // The unique index is on endpoint(255) (migration 0074), so match the same prefix.
+  await db.delete(pushSubscriptions).where(and(sql`SUBSTRING(${pushSubscriptions.endpoint}, 1, 255) = SUBSTRING(${input.endpoint}, 1, 255)`, ne(pushSubscriptions.userId, input.userId)));
+  const now = new Date();
+  await db.insert(pushSubscriptions).values({ ...input, lastUsedAt: now }).onDuplicateKeyUpdate({ set: { p256dh: input.p256dh, auth: input.auth, userAgent: input.userAgent, lastUsedAt: now } });
+  // Cap per user: keep the most recently used MAX_PUSH_SUBSCRIPTIONS_PER_USER, drop the rest.
+  const rows = await db.select({ id: pushSubscriptions.id }).from(pushSubscriptions).where(eq(pushSubscriptions.userId, input.userId)).orderBy(sql`${pushSubscriptions.lastUsedAt} IS NULL`, desc(pushSubscriptions.lastUsedAt), desc(pushSubscriptions.id));
   const stale = rows.slice(MAX_PUSH_SUBSCRIPTIONS_PER_USER).map(row => row.id);
   if (stale.length) await db.delete(pushSubscriptions).where(inArray(pushSubscriptions.id, stale));
 }

@@ -62,7 +62,7 @@ export const inventoryRouter = router({
   })),
   updateReceipt: inventoryProcedure.input(z.object({ id: z.number().int().positive(), supplierName: text(160), supplierInvoiceNo: text(80), note: text(500) })).mutation(async ({ ctx, input }) => run(async () => {
     const { id, ...fields } = input;
-    return updateReceiptDetails(await loadInventoryActor(ctx.user), id, fields);
+    return withSignedReceiptPhoto(await updateReceiptDetails(await loadInventoryActor(ctx.user), id, fields));
   })),
   saveReceiptLines: inventoryProcedure.input(z.object({ id: z.number().int().positive(), lines: linesSchema })).mutation(async ({ ctx, input }) => run(async () => saveReceiptLines(await loadInventoryActor(ctx.user), input.id, input.lines))),
   postReceipt: inventoryProcedure.input(z.object({ id: z.number().int().positive(), skipUnknown: z.boolean().optional() })).mutation(async ({ ctx, input }) => run(async () => {

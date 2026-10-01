@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { testSessionUser } from "./_test-helpers";
 import { eq } from "drizzle-orm";
 import { adminAuditLogs, orderItems, orders, productCategories, productVariants, products, users } from "../drizzle/schema";
@@ -6,12 +6,13 @@ import { appRouter } from "./routers";
 import { getDb } from "./db";
 import { hashPassword } from "./_core/password";
 import type { TrpcContext } from "./_core/context";
+import { clearSuppressedOutbox, getSuppressedOutbox } from "./_core/notification";
 
 // ROADMAP.md TIER 2: order confirmation + status-change emails (Brevo).
 // Same opt-in convention as the other commerce integration suites — this
 // needs a real cart/product/order round trip, not just mocked functions.
 // No BREVO_API_KEY is set for this test run, so every send falls back to a
-// `console.log` line (see server/_core/notification.ts) — that's the
+// suppressed-outbox recorder (see server/_core/notification.ts) — that's the
 // observable signal these tests assert on.
 const describeWithDatabase = process.env.COMMERCE_INTEGRATION_TESTS === "1" ? describe : describe.skip;
 
@@ -33,7 +34,6 @@ describeWithDatabase("order notification integration", () => {
   let orderId = 0;
   let adminCaller: ReturnType<typeof appRouter.createCaller>;
   let shopperCaller: ReturnType<typeof appRouter.createCaller>;
-  let logSpy: MockInstance<typeof console.log>;
 
   beforeAll(async () => {
     const db = await getDb();
@@ -73,8 +73,8 @@ describeWithDatabase("order notification integration", () => {
     if (shopperUserId) await db.delete(users).where(eq(users.id, shopperUserId));
   });
 
-  beforeEach(() => { logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined); });
-  afterEach(() => { logSpy.mockRestore(); });
+  beforeEach(() => { clearSuppressedOutbox(); });
+  const sentEmails = () => getSuppressedOutbox().filter(m => m.channel === "email").map(m => [m.to, m.subject, m.content].join("\n")).join("\n");
 
   it("logs an order confirmation email (customer email present) right after checkout", async () => {
     await shopperCaller.cart.addItem({ productId, quantity: 3 });
@@ -93,7 +93,7 @@ describeWithDatabase("order notification integration", () => {
     // email/OrderConfirmation page to show which option was bought.
     expect(order.items).toEqual([{ name: "Order Notify Test Product", quantity: 3, priceMnt: 15_000, attributesJson: null }]);
 
-    const logged = logSpy.mock.calls.map(call => call.join(" ")).join("\n");
+    const logged = sentEmails();
     expect(logged).toContain("notify-test-customer@example.invalid");
     expect(logged).toContain(order.orderNumber);
     expect(logged).toContain("Order Notify Test Product"); // itemized in the email body
@@ -101,7 +101,7 @@ describeWithDatabase("order notification integration", () => {
 
   it("skips the confirmation email entirely when checkout has no customer email (common for guests)", async () => {
     await shopperCaller.cart.addItem({ productId, quantity: 1 });
-    logSpy.mockClear();
+    clearSuppressedOutbox();
     const order = await shopperCaller.checkout.createOrder({
       customerName: "No Email Customer",
       customerPhone: "88119901",
@@ -111,8 +111,8 @@ describeWithDatabase("order notification integration", () => {
       paymentMethod: "cash_on_delivery",
     });
 
-    const logged = logSpy.mock.calls.map(call => call.join(" ")).join("\n");
-    expect(logged).not.toContain("[Email]");
+    const logged = sentEmails();
+    expect(logged).toBe("");
 
     const db = await getDb();
     await db!.delete(orderItems).where(eq(orderItems.orderId, order.id));
@@ -120,24 +120,24 @@ describeWithDatabase("order notification integration", () => {
   });
 
   it("logs a status-change email when an admin moves the order forward, but not on a tracking-ref-only edit", async () => {
-    logSpy.mockClear();
+    clearSuppressedOutbox();
     const confirmed = await adminCaller.admin.updateOrder({ id: orderId, status: "confirmed" });
     expect(confirmed.status).toBe("confirmed");
-    const afterStatusChange = logSpy.mock.calls.map(call => call.join(" ")).join("\n");
+    const afterStatusChange = sentEmails();
     expect(afterStatusChange).toContain("notify-test-customer@example.invalid");
     expect(afterStatusChange).toContain("баталгаажууллаа");
 
-    logSpy.mockClear();
+    clearSuppressedOutbox();
     await adminCaller.admin.updateOrder({ id: orderId, deliveryTrackingRef: "TRACK-123" });
-    const afterTrackingOnlyChange = logSpy.mock.calls.map(call => call.join(" ")).join("\n");
-    expect(afterTrackingOnlyChange).not.toContain("[Email]");
+    const afterTrackingOnlyChange = sentEmails();
+    expect(afterTrackingOnlyChange).toBe("");
   });
 
   it("bulk status change also sends a per-order status email", async () => {
-    logSpy.mockClear();
+    clearSuppressedOutbox();
     const result = await adminCaller.admin.bulkUpdateOrderStatus({ ids: [orderId], status: "packed" });
     expect(result.succeeded).toEqual([orderId]);
-    const logged = logSpy.mock.calls.map(call => call.join(" ")).join("\n");
+    const logged = sentEmails();
     expect(logged).toContain("бэлтгэж дууслаа");
   });
 });

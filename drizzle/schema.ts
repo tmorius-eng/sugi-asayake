@@ -994,6 +994,7 @@ export const orders = mysqlTable("orders", {
   index("orders_payment_status_idx").on(table.paymentStatus),
   index("orders_payment_status_created_idx").on(table.paymentStatus, table.status, table.createdAt), // 0096
   index("orders_created_at_idx").on(table.createdAt),
+  index("orders_coupon_code_idx").on(table.couponCode), // 0100: купоны хязгаарын FOR SHARE тоолол
   uniqueIndex("orders_client_request_unique").on(table.clientRequestId),
 ]);
 

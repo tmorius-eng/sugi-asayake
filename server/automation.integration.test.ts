@@ -1,14 +1,15 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import { cartItems, carts, productCategories, products, productVariants, pushSubscriptions, users } from "../drizzle/schema";
 import { getAbandonedCartsNeedingReminder, getDb } from "./db";
 import { hashPassword } from "./_core/password";
+import { clearSuppressedOutbox, getSuppressedOutbox } from "./_core/notification";
 import { runAbandonedCartReminderJob, runLowStockDigestJob } from "./automation";
 
 // "Controls everything" admin overhaul (2026-09-08, Phases E/F). Same
 // opt-in convention as the other commerce integration suites -- these jobs
 // touch real products/carts/users. No BREVO_API_KEY is set for this test
-// run, so every send falls back to a `console.log` line (see
+// run, so every send falls back to a suppressed-outbox entry (see
 // server/_core/notification.ts) -- that's the observable signal these
 // tests assert on, same technique as order-notifications.integration.test.ts.
 const describeWithDatabase = process.env.COMMERCE_INTEGRATION_TESTS === "1" ? describe : describe.skip;
@@ -22,7 +23,6 @@ describeWithDatabase("automation jobs integration", () => {
   let optedInUserId = 0;
   let optedOutUserId = 0;
   const createdCartIds: number[] = [];
-  let logSpy: MockInstance<typeof console.log>;
 
   beforeAll(async () => {
     const db = await getDb();
@@ -41,8 +41,8 @@ describeWithDatabase("automation jobs integration", () => {
     optedOutUserId = Number(optedOutInsert[0].insertId);
   });
 
-  beforeEach(() => { logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined); });
-  afterEach(() => { logSpy.mockRestore(); });
+  beforeEach(() => { clearSuppressedOutbox(); });
+  const sentEmails = () => getSuppressedOutbox().filter(m => m.channel === "email").map(m => [m.to, m.subject, m.content].join("\n")).join("\n");
 
   afterAll(async () => {
     const db = await getDb();
@@ -79,7 +79,7 @@ describeWithDatabase("automation jobs integration", () => {
     await insertStaleCart({ guestToken: `${marker}-guest-token` }); // guest -- must be skipped (no userId to join on)
 
     await runAbandonedCartReminderJob();
-    const logged = logSpy.mock.calls.map(call => call.join(" ")).join("\n");
+    const logged = sentEmails();
     expect(logged).toContain(`${marker}-optedin@example.invalid`);
     expect(logged).not.toContain(`${marker}-optedout@example.invalid`);
 
@@ -89,9 +89,9 @@ describeWithDatabase("automation jobs integration", () => {
     expect(reminded.reminderSentAt).not.toBeNull();
 
     // Running it again must not re-send: reminderSentAt now excludes this cart.
-    logSpy.mockClear();
+    clearSuppressedOutbox();
     await runAbandonedCartReminderJob();
-    const secondRun = logSpy.mock.calls.map(call => call.join(" ")).join("\n");
+    const secondRun = sentEmails();
     expect(secondRun).not.toContain(`${marker}-optedin@example.invalid`);
   });
 
@@ -125,15 +125,15 @@ describeWithDatabase("automation jobs integration", () => {
     await db.update(products).set({ stockQuantity: 2 }).where(eq(products.id, productId));
     try {
       await runLowStockDigestJob();
-      const logged = logSpy.mock.calls.map(call => call.join(" ")).join("\n");
+      const logged = sentEmails();
       expect(logged).toContain(`${marker}-SKU`);
     } finally {
       await db.update(products).set({ stockQuantity: 10 }).where(eq(products.id, productId));
     }
 
-    logSpy.mockClear();
+    clearSuppressedOutbox();
     await runLowStockDigestJob();
-    const afterRestock = logSpy.mock.calls.map(call => call.join(" ")).join("\n");
+    const afterRestock = sentEmails();
     expect(afterRestock).not.toContain(`${marker}-SKU`);
   });
 });

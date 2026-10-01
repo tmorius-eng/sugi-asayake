@@ -32,8 +32,8 @@ cd "$(dirname "$0")"
 # .env is KEY=VALUE lines (dotenv); export the ones we need without sourcing
 # the whole file (a value containing spaces or '#' would trip `source`).
 # `|| true` (2026-09-23): under `set -euo pipefail` a MISSING key made grep exit 1
-# and killed the whole backup before its first log line -- even for the optional
-# DATABASE_CA_CERT_PATH. Required keys are checked explicitly below.
+# and killed the whole backup before its first log line. Required keys are
+# checked explicitly below (DATABASE_CA_CERT_PATH is REQUIRED since 2026-10-01).
 env_get() { { grep -E "^$1=" .env || true; } | head -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'; }
 DATABASE_ADMIN_URL="$(env_get DATABASE_ADMIN_URL)"
 BACKUP_PASSPHRASE="$(env_get BACKUP_PASSPHRASE)"

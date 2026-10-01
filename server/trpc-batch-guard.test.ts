@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isMixedPrivilegedBatch } from "./_core/trpcBatchGuard";
+import { hasExtraPathSegment, isMixedPrivilegedBatch } from "./_core/trpcBatchGuard";
 
 describe("isMixedPrivilegedBatch", () => {
   it("allows single and all-public batches", () => {
@@ -23,5 +23,18 @@ describe("isMixedPrivilegedBatch", () => {
   it("handles URL-encoded commas and malformed encoding", () => {
     expect(isMixedPrivilegedBatch("/catalog.list%2Cadmin.users")).toBe(true);
     expect(isMixedPrivilegedBatch("/catalog.list,%E0%A4%A,admin.users")).toBe(true);
+  });
+});
+
+describe("hasExtraPathSegment", () => {
+  it("allows ordinary procedure paths", () => {
+    expect(hasExtraPathSegment("/admin.users")).toBe(false);
+    expect(hasExtraPathSegment("/catalog.list,content.siteMedia")).toBe(false);
+  });
+
+  it("rejects paths where tRPC would run the part after the last slash", () => {
+    expect(hasExtraPathSegment("/x/admin.users")).toBe(true);
+    expect(hasExtraPathSegment("//admin.users")).toBe(true);
+    expect(hasExtraPathSegment("/catalog.list%2Fadmin.users")).toBe(true);
   });
 });

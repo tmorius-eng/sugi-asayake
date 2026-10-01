@@ -59,12 +59,33 @@ function maskRecipient(value: string): string {
  * line with the masked recipient and the body LENGTH only (JSON.stringify
  * escapes control characters).
  */
+/**
+ * Тестийн hook: NOTIFICATIONS_SUPPRESS=1 үед зөвхөн тест процесст (VITEST /
+ * NODE_ENV=test) "илгээх байсан" мессежийг санах ойд хадгална. Лог мөр
+ * биеийн текстгүй хэвээр; production-д хэзээ ч бичигдэхгүй.
+ */
+export type SuppressedMessage = { channel: "email" | "sms"; to: string; subject?: string; content: string };
+const suppressedOutbox: SuppressedMessage[] = [];
+const recordSuppressed = (m: SuppressedMessage) => {
+  if (process.env.VITEST || process.env.NODE_ENV === "test") {
+    suppressedOutbox.push(m);
+    if (suppressedOutbox.length > 500) suppressedOutbox.shift();
+  }
+};
+export function getSuppressedOutbox(): readonly SuppressedMessage[] {
+  return suppressedOutbox;
+}
+export function clearSuppressedOutbox(): void {
+  suppressedOutbox.length = 0;
+}
+
 function logUndelivered(channel: "email" | "sms" | "owner", to: string, content: string, reason: string, subject?: string) {
   console.log(JSON.stringify({ event: "notification_not_sent", channel, reason, to: maskRecipient(to), ...(subject !== undefined ? { subject: subject.slice(0, 120) } : {}), length: content.length }));
 }
 
 async function deliverEmail(input: { to: string; subject: string; content: string }): Promise<boolean> {
   if (ENV.notificationsSuppressed) {
+    recordSuppressed({ channel: "email", to: input.to, subject: input.subject, content: input.content });
     logUndelivered("email", input.to, input.content, "suppressed", input.subject);
     return false;
   }
@@ -137,6 +158,7 @@ export function normalizePhoneForSms(rawPhone: string): string | null {
  */
 async function deliverSms(input: { to: string; content: string }): Promise<boolean> {
   if (ENV.notificationsSuppressed) {
+    recordSuppressed({ channel: "sms", to: input.to, content: input.content });
     logUndelivered("sms", input.to, input.content, "suppressed");
     return false;
   }

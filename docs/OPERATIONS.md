@@ -220,7 +220,7 @@ pnpm e2e        # БҮТНЭЭР (desktop + mobile)
 ```bash
 # ---- ЗААВАЛ ---------------------------------------------------------------
 DATABASE_URL=mysql://user:pass@127.0.0.1:3307/defaultdb?ssl-mode=REQUIRED
-DATABASE_CA_CERT_PATH=./oci-ca.pem     # байхгүй бол TLS шалгагдахгүй (warning)
+DATABASE_CA_CERT_PATH=./oci-ca.pem     # production-д ЗААВАЛ: байхгүй бол сервер эхлэхээс татгалзана
 JWT_SECRET=                            # урт санамсаргүй мөр
 INTEGRATIONS_ENCRYPTION_KEY=           # 64 тэмдэгт hex (32 байт). АЛДВАЛ СЭРГЭЭГДЭХГҮЙ.
                                        # Admin-ийн царайны загвар ч үүгээр шифрлэгдэнэ (2026-09-22):

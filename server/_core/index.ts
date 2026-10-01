@@ -36,6 +36,7 @@ import { logRequests } from "./requestLog";
 import { trpcBatchGuard } from "./trpcBatchGuard";
 import { serveStatic, setupVite } from "./vite";
 import { describeClusterRole, isBackgroundJobRunner } from "./clusterRole";
+import { planMysqlConnection } from "./dbConnection";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -112,6 +113,9 @@ async function startServer() {
   // production-д эхлэхээс татгалзана — hardcode-логдсон, нийтэд commit хийгдсэн
   // нууц руу чимээгүй буцахын оронд (context.ts-ийн secretKey()).
   assertProductionSecrets();
+  // getDb() залгидаг тул DB-ийн буруу тохиргоо (production-д CA байхгүй гэх мэт)
+  // чимээгүй DB-гүй асахын оронд эхлэхээс татгалзана (pm2 алдааг харуулна).
+  if (process.env.DATABASE_URL) planMysqlConnection(process.env.DATABASE_URL);
   const app = express();
   const server = createServer(app);
   app.set("trust proxy", 1);
