@@ -14,7 +14,7 @@
  */
 import { isPrivateAddress } from "./ip-address";
 
-export const INTEGRATION_PROVIDERS = ["ebarimt", "storepay", "card_golomt", "courier_ebuuhia", "ntfy", "smartsoftware", "lark"] as const;
+export const INTEGRATION_PROVIDERS = ["ebarimt", "storepay", "card_golomt", "courier_ebuuhia", "ntfy", "smartsoftware"] as const;
 export type IntegrationProvider = (typeof INTEGRATION_PROVIDERS)[number];
 
 /**
@@ -43,7 +43,7 @@ export type IntegrationField = {
  * bundle, and a hex would skip the admin's dark-mode tokens.
  */
 export type IntegrationAccent = "amber" | "blue" | "green" | "violet" | "slate";
-export type IntegrationIcon = "receipt" | "wallet" | "card" | "truck" | "phone" | "store" | "chat";
+export type IntegrationIcon = "receipt" | "wallet" | "card" | "truck" | "phone" | "store";
 
 /**
  * The "not connected yet" hero card. A provider that declares this gets a
@@ -85,14 +85,6 @@ export const NTFY_DEFAULT_SERVER_URL = "https://ntfy.sh";
  *  family and the Smart POS family live on different hosts. */
 export const SMART_SOFTWARE_DEFAULT_INVENTORY_URL = "https://retailapiv2.smartlogic.mn";
 export const SMART_SOFTWARE_DEFAULT_POS_URL = "https://smartposapi.smartapp.mn";
-/** Lark Open Platform-ийн хоёр л хост (2026-10-03): олон улсын Lark ба Хятадын
- *  Feishu. Сервер апп-ын нууцаар token авдаг тул admin-ий бичсэн дурын хост руу
- *  дуудахгүй — зөвхөн эдгээр. */
-export const LARK_DOMAINS = ["https://open.larksuite.com", "https://open.feishu.cn"] as const;
-export const LARK_DEFAULT_DOMAIN = LARK_DOMAINS[0];
-/** Lark-ийн апп ID (`cli_…`) ба бүлэг чатын ID (`oc_…`). */
-export const LARK_APP_ID_PATTERN = /^cli_[A-Za-z0-9]{6,40}$/;
-export const LARK_CHAT_ID_PATTERN = /^oc_[A-Za-z0-9]{6,64}$/;
 
 export const INTEGRATION_META: Record<IntegrationProvider, IntegrationMeta> = {
   // CORRECTION (2026-09-12): a note here used to say developer.smartsoftware.mn
@@ -194,36 +186,6 @@ export const INTEGRATION_META: Record<IntegrationProvider, IntegrationMeta> = {
       footnote: "Смарт Ложик ХХК-тай API холболтын гэрээ хийсний дараа имэйлээр ирэх нэвтрэх мэдээллээ оруулна уу.",
     },
   },
-  // 2026-10-03: Lark (larksuite.com) — компанийн удирдлагын орчин, сайтын
-  // мэдээллийн нэг чиглэлийн толь (server/integrations/lark/, docs/LARK.md).
-  // Чатын ID нь нууц биш (бот тэр чатад нэмэгдсэн байж л илгээнэ) тул `text`.
-  lark: {
-    label: "Lark",
-    accent: "blue" as const,
-    icon: "chat" as const,
-    note: "Захиалга, нөөц, тооллогын мэдэгдэл Lark-ийн бүлэг чат руу карт болж очно",
-    wiredUp: true,
-    guidance: "Lark Developer Console → апп → Credentials-аас App ID, App Secret-ийг оруулна. Дараа нь \"Холболт шалгах\" дарахад бот нэмэгдсэн бүлэг чатуудын жагсаалт гарна — бүлэг бүрт тохирох чатын ID-г (oc_…) хуулж тавина. Ботыг чатад нэмээгүй бол харагдахгүй (чат → Тохиргоо → Бот нэмэх). Мессежид харилцагчийн нэр, утас, хаяг хэзээ ч ордоггүй. Автомат илгээлт зөвхөн LARK_PUSH=1 тохируулсан production сервер дээр ажиллана; \"Туршилт\" товч харин production DB-тэй ямар ч машинаас бодит чат руу шууд явна.",
-    fields: [
-      { key: "appId", label: "App ID", kind: "text", help: "cli_ гэж эхэлнэ." },
-      { key: "appSecret", label: "App Secret", kind: "secret" },
-      { key: "domain", label: "API хост", kind: "url", defaultValue: LARK_DEFAULT_DOMAIN, help: "Хоосон бол олон улсын Lark. Хятадын Feishu бол https://open.feishu.cn." },
-      { key: "chatAdmin", label: "Удирдлагын чат", kind: "text", help: "oc_… (Холболт шалгах → жагсаалтаас)." },
-      { key: "chatWarehouse", label: "Агуулахын чат", kind: "text" },
-      { key: "chatFinance", label: "Санхүүгийн чат", kind: "text" },
-      { key: "chatStore", label: "Дэлгүүрийн чат", kind: "text" },
-      { key: "disabledEvents", label: "Унтраасан мэдэгдлүүд", kind: "text", help: "Таслалаар тусгаарласан үйл явдлын код. ntfy-ийн тохиргооноос тусдаа." },
-    ],
-    freeForm: false,
-    testable: true,
-    connect: {
-      title: "Lark",
-      subtitle: "Компанийн чат, хүснэгт, даалгавар",
-      requiredFields: ["appId", "appSecret"],
-      cta: "Холбох",
-      footnote: "Lark Developer Console → таны апп → Credentials & Basic Info хэсгээс хуулна.",
-    },
-  },
 };
 
 export const isIntegrationProvider = (value: string): value is IntegrationProvider => (INTEGRATION_PROVIDERS as readonly string[]).includes(value);
@@ -285,13 +247,6 @@ export function validateIntegrationSettings(provider: IntegrationProvider, setti
         if (parsed.protocol !== "https:") return `${field.label}: зөвхөн https:// хаяг зөвшөөрнө.`;
         if (isPrivateHost(parsed.hostname)) return `${field.label}: дотоод сүлжээний хаяг зөвшөөрөгдөхгүй.`;
       }
-    }
-    if (provider === "lark") {
-      // Сервер апп-ын нууцаар token авдаг — admin-ий бичсэн дурын хост руу
-      // илгээвэл нууц тэнд очно. Зөвхөн Lark/Feishu-ийн албан ёсны хоёр хост.
-      if (key === "domain" && !(LARK_DOMAINS as readonly string[]).includes(value.replace(/\/+$/, ""))) return `${field.label}: зөвхөн ${LARK_DOMAINS.join(" эсвэл ")}.`;
-      if (key === "appId" && !LARK_APP_ID_PATTERN.test(value)) return `${field.label}: "cli_" гэж эхэлсэн утга байх ёстой.`;
-      if (key.startsWith("chat") && !LARK_CHAT_ID_PATTERN.test(value)) return `${field.label}: "oc_" гэж эхэлсэн чатын ID байх ёстой.`;
     }
     if (field.kind === "topic" && !NTFY_TOPIC_PATTERN.test(value)) return `${field.label}: зөвхөн латин үсэг, тоо, "_" болон "-" (64 хүртэл тэмдэгт).`;
     if (field.kind === "topic" && value.length < 16) return `${field.label}: хэт богино байна -- таамаглахад хэцүү байхын тулд 16-аас дээш тэмдэгт хэрэгтэй ("Сэдэв үүсгэх" товчийг ашиглана уу).`;

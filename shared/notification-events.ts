@@ -34,15 +34,6 @@ export const NTFY_TOPIC_FIELD: Record<NotificationGroup, "topicAdmin" | "topicWa
   store: "topicStore",
 };
 
-/** Which key in the lark integration settings holds each group's chat id
- *  (2026-10-03, server/integrations/lark/). */
-export const LARK_CHAT_FIELD: Record<NotificationGroup, "chatAdmin" | "chatWarehouse" | "chatFinance" | "chatStore"> = {
-  admin: "chatAdmin",
-  warehouse: "chatWarehouse",
-  finance: "chatFinance",
-  store: "chatStore",
-};
-
 /**
  * Role -> groups. `staff` are the store sales consultants (Tom, 2026-09-11:
  * they are the ones who used to photograph the handwritten goods list).

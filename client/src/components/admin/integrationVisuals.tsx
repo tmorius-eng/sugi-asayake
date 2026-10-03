@@ -1,4 +1,4 @@
-import { CreditCard, MessagesSquare, Receipt, Smartphone, Store, Truck, Wallet, type LucideIcon } from "lucide-react";
+import { CreditCard, Receipt, Smartphone, Store, Truck, Wallet, type LucideIcon } from "lucide-react";
 import type { IntegrationAccent, IntegrationIcon, IntegrationMeta } from "@shared/integrations";
 
 /**
@@ -15,7 +15,6 @@ export const INTEGRATION_ICON: Record<IntegrationIcon, LucideIcon> = {
   truck: Truck,
   phone: Smartphone,
   store: Store,
-  chat: MessagesSquare,
 };
 
 export const INTEGRATION_ACCENT: Record<IntegrationAccent, { color: string; soft: string }> = {

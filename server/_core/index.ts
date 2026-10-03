@@ -30,8 +30,6 @@ import { startScheduler } from "./scheduler";
 import { startDbWatchdog } from "./dbWatchdog";
 import { registerAbandonedCartReminderJob, registerDataRetentionJob, registerLowStockDigestJob, registerInventorySyncJob, registerNotificationOutboxPurgeJob, registerStaleTransferJob, registerStockLedgerDriftJob, registerReviewRequestJob, registerBackInStockJob } from "../automation";
 import { startNotificationDispatcher } from "../notifications";
-import { startLarkChatDispatcher } from "../integrations/lark/chatDispatcher";
-import { describeLarkGate } from "../integrations/lark/gate";
 import { notifyError, registerHoneybadgerErrorMiddleware, registerHoneybadgerMiddleware } from "./honeybadger";
 import { limitApiTraffic, protectStateChangingApiRequests, setSecurityHeaders } from "./security";
 import { blockScannerProbes } from "./scannerProbes";
@@ -290,10 +288,6 @@ async function startServer() {
   // Утасны push мэдэгдэл (2026-09-11) — зөвхөн NOTIFICATIONS_DISPATCH=1 машин
   // дээр илгээнэ; server/notifications.ts.
   startNotificationDispatcher();
-  // Lark-ийн бүлэг чат (2026-10-03) — outbox-ын хоёр дахь хэрэглэгч; зөвхөн
-  // LARK_PUSH=1 production машин дээр (server/integrations/lark/gate.ts).
-  console.log(describeLarkGate());
-  startLarkChatDispatcher();
 }
 
 // Backend аудит (2026-09-02): аль ч handler хаана ч байсангүй — tRPC-ийн өөрийн

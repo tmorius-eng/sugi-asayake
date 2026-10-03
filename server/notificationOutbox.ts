@@ -18,21 +18,9 @@ import type { DbOrTx } from "./db";
  */
 
 let onEnqueued: (() => void) | null = null;
-/** 2026-10-03: outbox-ын бусад хэрэглэгчид (Lark-ийн чат dispatcher). ntfy-ийн
- *  нэг слотыг хөндөхгүйн тулд тусдаа. */
-const extraListeners = new Set<() => void>();
 
 export function setOutboxListener(listener: (() => void) | null) {
   onEnqueued = listener;
-}
-
-export function addOutboxListener(listener: () => void) {
-  extraListeners.add(listener);
-}
-
-function notifyEnqueued() {
-  onEnqueued?.();
-  for (const listener of extraListeners) listener();
 }
 
 /** `lastError` of rows the test suite wrote. Kept out of the admin bell's
@@ -81,6 +69,6 @@ export async function enqueueNotification<K extends NotificationEventType>(dbOrT
     lastError: status === "suppressed" ? TEST_SUPPRESSED_MARKER : null,
   })));
   const insertedRows = Number(inserted[0]?.affectedRows ?? 0);
-  if (status === "pending" && insertedRows > 0) notifyEnqueued();
+  if (status === "pending" && insertedRows > 0) onEnqueued?.();
   return insertedRows;
 }
