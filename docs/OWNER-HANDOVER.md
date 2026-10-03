@@ -48,6 +48,7 @@ Brevo…) — тэдгээрийг дор дурдсан журмаар туса
 | 12 | **Google** | Analytics 4, Search Console, Merchant feed | /admin → Хэмжилт | Хэмжилт цуглуулахгүй |
 | 13 | **GitHub** | Эх код, CI, uptime шалгалт, Dependabot | GitHub данс | Хувилбарын түүх, автомат шалгалт зогсоно |
 | 14 | **Anthropic** (сонголттой) | Сэтгэгдлийн AI шүүлт | `.env` | Монгол үгийн шүүлт хэвээр ажиллана |
+| 15 | **Lark** (larksuite.com, сонголттой) | Компанийн чат, мэдэгдлийн карт, хожим Base/даалгавар ([LARK.md](LARK.md)) | /admin → Интеграцууд → Lark + Lark admin console (tenant-ийн super admin-ыг шилжүүлнэ) | Сайт хэвийн; Lark руу мэдэгдэл/толь зогсоно. App Secret-ийг консолоос дахин үүсгэж болно |
 
 ---
 

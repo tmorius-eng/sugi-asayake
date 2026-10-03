@@ -1,4 +1,4 @@
-import { boolean, index, int, mediumtext, mysqlEnum, mysqlTable, text, timestamp, tinyint, uniqueIndex, varchar , primaryKey } from "drizzle-orm/mysql-core";
+import { boolean, char, index, int, mediumtext, mysqlEnum, mysqlTable, text, timestamp, tinyint, uniqueIndex, varchar , primaryKey } from "drizzle-orm/mysql-core";
 import { ubDistricts } from "../shared/districts";
 import { INTEGRATION_PROVIDERS } from "../shared/integrations";
 
@@ -1900,8 +1900,55 @@ export const notificationOutbox = mysqlTable("notification_outbox", {
   uniqueIndex("notification_outbox_dedupe_unique").on(table.groupKey, table.dedupeKey),
   index("notification_outbox_status_next_idx").on(table.status, table.nextAttemptAt),
   index("notification_outbox_group_id_idx").on(table.groupKey, table.id),
+  // 0101: Lark-ийн chatDispatcher сүүлийн 120 минутыг уншина.
+  index("notification_outbox_created_idx").on(table.createdAt),
 ]);
 export type NotificationOutboxRow = typeof notificationOutbox.$inferSelect;
+
+/**
+ * 2026-10-03 (migration 0101): Lark-ийн бүлэг чат руу явуулсан карт —
+ * notification_outbox-ийн ХОЁР ДАХЬ хэрэглэгч (server/integrations/lark/
+ * chatDispatcher.ts). ntfy-ийн dispatcher outbox-ын `status`-ыг өөрчилдөг тул
+ * Lark тэр баганыг хуваалцахгүй, outbox мөр бүрт энд тусдаа мөр бичнэ.
+ * UNIQUE(outboxId) дээрх INSERT IGNORE нь эзэмшлийн атом цоож — хоёр лаптоп +
+ * prod нэг DB хуваалцдаг. Мөр үүсэх мөчид `sending` (эзэмшсэн) төлөвтэй.
+ */
+export const larkChatDeliveries = mysqlTable("lark_chat_deliveries", {
+  id: int("id").autoincrement().primaryKey(),
+  outboxId: int("outboxId").notNull().references(() => notificationOutbox.id, { onDelete: "cascade" }),
+  chatKey: varchar("chatKey", { length: 40 }).notNull(),
+  status: mysqlEnum("status", ["pending", "sending", "sent", "failed", "skipped", "expired"]).notNull().default("sending"),
+  attempts: int("attempts").notNull().default(1),
+  lastError: varchar("lastError", { length: 300 }),
+  claimedAt: timestamp("claimedAt").defaultNow(),
+  nextAttemptAt: timestamp("nextAttemptAt").defaultNow().notNull(),
+  sentAt: timestamp("sentAt"),
+  larkMessageId: varchar("larkMessageId", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  uniqueIndex("lark_chat_deliveries_outbox_unique").on(table.outboxId),
+  index("lark_chat_deliveries_status_next_idx").on(table.status, table.nextAttemptAt),
+]);
+export type LarkChatDelivery = typeof larkChatDeliveries.$inferSelect;
+
+/**
+ * 2026-10-03 (migration 0101): сайтын мөр ↔ Lark Base-ийн record_id (Phase 3,
+ * server/integrations/lark/baseSync.ts). `entityKey` = "order:123",
+ * "variant:55", "kpi:2026-09"…; `contentHash` нь өөрчлөгдөөгүй мөрийг дахин
+ * илгээхгүй байх (API квот + Base automation run хэмнэнэ).
+ */
+export const larkRecords = mysqlTable("lark_records", {
+  id: int("id").autoincrement().primaryKey(),
+  tableKey: varchar("tableKey", { length: 40 }).notNull(),
+  entityKey: varchar("entityKey", { length: 80 }).notNull(),
+  objectId: varchar("objectId", { length: 64 }).notNull(),
+  contentHash: char("contentHash", { length: 40 }).notNull(),
+  syncedAt: timestamp("syncedAt").defaultNow().notNull(),
+}, table => [
+  uniqueIndex("lark_records_entity_unique").on(table.tableKey, table.entityKey),
+  uniqueIndex("lark_records_object_unique").on(table.tableKey, table.objectId),
+]);
+export type LarkRecord = typeof larkRecords.$inferSelect;
 
 /**
  * 2026-09-11 (migration 0066): our id <-> a vendor's id (Smart Software, see

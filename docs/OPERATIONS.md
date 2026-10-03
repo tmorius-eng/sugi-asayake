@@ -282,6 +282,10 @@ VAPID_PUBLIC_KEY=
 VAPID_PRIVATE_KEY=
 VAPID_SUBJECT=                         # хоосон = mailto:$OWNER_EMAIL
 NOTIFICATIONS_DISPATCH=                # ЗӨВХӨН нэг машин дээр 1 (production host)
+LARK_PUSH=                             # ЗӨВХӨН production VM дээр 1 — Lark-ийн чат карт (docs/LARK.md).
+                                       # Лаптоп/staging-д ХЭЗЭЭ Ч бүү тавь (prod DB-г уншдаг тул давхар илгээнэ)
+LARK_ALLOW_NON_PRODUCTION=             # зөвхөн тусдаа sandbox Lark tenant-тай staging-д 1
+# Lark-ийн App ID/Secret ба чатын ID нь .env-д БИШ, /admin → Интеграцууд → Lark дотор шифрлэгдэнэ
 
 # ---- Admin-ий царайны хаалга ----------------------------------------------------
 # /admin: нууц үг -> царай -> admin (5 ажилтны эрх). Худалдан авагчид хамаарахгүй.

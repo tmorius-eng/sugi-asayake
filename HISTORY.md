@@ -4,6 +4,26 @@
 
 ---
 
+## Lark — компанийн удирдлагын орчин, Phase 1–2 (2026-10-03)
+
+Tom: *"companihaa buh medeelel bas companyihaa crm erp platform bolgoj ashiglah … odoo buh ajiliin uil ajilgaag larkaas harj uidardag boldog … sain websearch hii!"*. Ажлын компьютер дээр Lark апп (`cli_aa35cee5dc38de17`) үүсгэсэн байсан ч тэр ажлын ул мөр энэ лаптоп/репод байхгүй (git, санах ой, өмнөх яриа бүгдийг шалгав) — Lark-ийн cloud-д л байгаа.
+
+**Судалгаа** (албан ёсны эх сурвалж, [docs/LARK.md](docs/LARK.md)): Starter 20 гишүүн / 2,000 мөр хүснэгт тутам / 1,000 automation run сард; Pro ~$12/хүн, бүх гишүүнд; Basic Монголд зарагддаггүй, Монгол reseller байхгүй. `@larksuiteoapi/lark-mcp` 0.5.1 (2025-08) хоцрогдсон, идэвхтэй нь Lark CLI (`@larksuite/cli`, 26 agent skill). Bitable нэг хүснэгтэд зэрэг бичвэл 1254291; scope өөрчлөлт бүр шинэ хувилбар publish шаарддаг.
+
+**Tom-ийн шийдвэр**: Starter-ээр эхлэх; 4 чиглэл бүгд (захиалга+мэдэгдэл, нөөц, CRM, HR+даалгавар); сайтын DB эзэн, Lark толь.
+
+**Хийсэн (Phase 1–2)**:
+- `.mcp.json`-д `lark` MCP (`APP_ID`/`APP_SECRET` нь Windows-ийн `LARK_APP_ID`/`LARK_APP_SECRET` хувьсагчаас — Tom PowerShell-ээр тавьсан; Claude-ийн тавих оролдлогыг classifier "persistence" гэж хаасан).
+- Migration **0101**: provider enum-д `lark`, `lark_chat_deliveries` (outbox FK cascade, UNIQUE(outboxId)), `lark_records` (Phase 3-т), `notification_outbox(createdAt)` индекс.
+- `server/integrations/lark/`: `gate.ts` (`LARK_PUSH=1` + job runner + production схем + тест биш — лаптопууд prod DB-г уншдаг, staging нь нууцтай хуулбар тул), `client.ts` (fetch + timeout + 2 MB, token кэш, хүчингүй token-д нэг retry, 429 `x-ogw-ratelimit-reset`, байнгын алдааны кодууд, `uuid`-тай илгээлт), `cards.ts` (plain_text — lark_md таг тайлагдахгүй), `chatDispatcher.ts` (outbox-ын ХОЁР ДАХЬ хэрэглэгч: anti-join, INSERT IGNORE эзэмшил, ntfy-тэй ижил retry шат, нэг чатад давхардсан бүлгийг алгасна), `fake.ts`.
+- /admin → Интеграцууд → **Lark**: холбох карт, "Холболт шалгах" (бот + чатын жагсаалт, ID дээр дарж хуулна), чат бүрийн "Туршилт", Lark-ийн хүргэлтийн бүртгэл; `envIntegrationStatus`-д "Lark руу илгээгч".
+- Тест: `server/integrations/lark/lark.test.ts` 19/19 (gate, config, validate, карт, клиент хуурамч fetch-ээр); `server/lark-chat.integration.test.ts` (зэрэг хоёр dispatcher = нэг илгээлт, алгасах дүрэм, retry/байнгын алдаа, тестийн мөр) — **ажиллаагүй**: энэ лаптопын `oci-ca.pem` хуучин (HeatWave CA 09-28), `.env` уншихыг хаасан. Бүрэн unit suite-ийн 66 уналт бүгд ижил DB TLS алдаа.
+- `pnpm check` + `pnpm lint` ногоон.
+
+**Tom-ийн хийх**: PROJECT-GUIDE "Tom-оос хүлээж буй" → 🔴 (2026-10-03) Lark-ийг асаах (7 алхам). App Secret ярианд screenshot-оор орсон тул шинэчлэхийг зөвлөсөн.
+
+**Дараагийн**: Phase 0 (MCP/CLI-ээр tenant-ийн inventory, хүснэгт/баганын нэрийг Tom батлах) → Phase 3 Base толь.
+
 ## Staging дээр бүрэн шалгалт + DB watchdog (2026-10-01, үдээс хойш)
 
 Tom: *"laptopoo asaaltai uldeegeed remote controloor handaj baina! Bugdiin chi hiiged uguuch"*. Шинэ CA-г (VM дээрхтэй SHA-256 хурууны хээ таарсан) scratchpad-д татаж `DATABASE_CA_CERT[_PATH]` орчны хувьсагчаар өгч (`.env`/`oci-ca.pem`-д хүрэх эрх хаалттай) staging-д 0096–0100-г ажиллуулав.

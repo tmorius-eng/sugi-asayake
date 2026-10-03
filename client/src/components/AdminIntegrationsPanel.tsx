@@ -7,7 +7,7 @@ import IntegrationConnectCard, { type ConnectResult } from "./admin/IntegrationC
 import { IntegrationCardHeader, integrationStatus } from "./admin/integrationVisuals";
 import VendorCatalogPanel from "./admin/VendorCatalogPanel";
 import VendorStockAutoApplySwitch from "./admin/VendorStockAutoApplySwitch";
-import { NOTIFICATION_EVENTS, NOTIFICATION_GROUP_LABELS, NTFY_TOPIC_FIELD, type NotificationEventType, type NotificationGroup } from "@shared/notification-events";
+import { LARK_CHAT_FIELD, NOTIFICATION_EVENTS, NOTIFICATION_GROUP_LABELS, NTFY_TOPIC_FIELD, type NotificationEventType, type NotificationGroup } from "@shared/notification-events";
 
 import { useConfirm } from "@/components/ConfirmDialog";
 /**
@@ -45,6 +45,7 @@ type IntegrationRow = {
 };
 
 const TOPIC_GROUP_BY_FIELD = Object.fromEntries(Object.entries(NTFY_TOPIC_FIELD).map(([group, field]) => [field, group])) as Record<string, NotificationGroup>;
+const LARK_GROUP_BY_FIELD = Object.fromEntries(Object.entries(LARK_CHAT_FIELD).map(([group, field]) => [field, group])) as Record<string, NotificationGroup>;
 
 const statusStyles: Record<string, string> = {
   sent: "bg-[var(--a-pos-soft)] text-[var(--a-pos)]",
@@ -53,8 +54,9 @@ const statusStyles: Record<string, string> = {
   failed: "bg-[var(--a-neg-soft)] text-[var(--a-neg)]",
   expired: "bg-[var(--a-warn-soft)] text-[var(--a-warn)]",
   suppressed: "bg-[var(--a-soft)] text-[var(--a-muted)]",
+  skipped: "bg-[var(--a-soft)] text-[var(--a-muted)]",
 };
-const statusLabels: Record<string, string> = { sent: "Илгээсэн", pending: "Хүлээгдэж буй", sending: "Илгээж байна", failed: "Амжилтгүй", expired: "Хугацаа хэтэрсэн", suppressed: "Илгээгээгүй" };
+const statusLabels: Record<string, string> = { sent: "Илгээсэн", pending: "Хүлээгдэж буй", sending: "Илгээж байна", failed: "Амжилтгүй", expired: "Хугацаа хэтэрсэн", suppressed: "Илгээгээгүй", skipped: "Алгассан" };
 
 function ProviderCard({ row }: { row: IntegrationRow }) {
   const { confirm } = useConfirm();
@@ -123,8 +125,8 @@ function ProviderCard({ row }: { row: IntegrationRow }) {
   /** Save the typed credentials, then ask the vendor whether they work. */
   const connectProvider = async (set: Record<string, string>): Promise<ConnectResult> => {
     if (Object.keys(set).length) await updateIntegration.mutateAsync({ provider: row.provider, set });
-    if (row.provider !== "smartsoftware") { await refresh(); return { ok: true, detail: "Хадгаллаа." }; }
-    const result = await testIntegration.mutateAsync({ provider: "smartsoftware" });
+    if (row.provider !== "smartsoftware" && row.provider !== "lark") { await refresh(); return { ok: true, detail: "Хадгаллаа." }; }
+    const result = await testIntegration.mutateAsync({ provider: row.provider });
     // Only a PASSING test refreshes the parent query. `connected` is derived
     // from isSet, so refreshing after a failure would swap this card for the
     // operational panel and tell the admin it worked when it did not.
@@ -192,6 +194,7 @@ function ProviderCard({ row }: { row: IntegrationRow }) {
             const state = row.fields.find(item => item.key === field.key);
             const isSecret = field.kind === "secret" || field.kind === "topic";
             const topicGroup = field.kind === "topic" ? TOPIC_GROUP_BY_FIELD[field.key] : undefined;
+            const larkGroup = row.provider === "lark" ? LARK_GROUP_BY_FIELD[field.key] : undefined;
             return (
               <div key={field.key} className="rounded-2xl bg-[var(--a-soft)] p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -210,6 +213,9 @@ function ProviderCard({ row }: { row: IntegrationRow }) {
                         about the just-typed value still sitting in the
                         field. */}
                     {topicGroup && meta.testable && state?.isSet && <button type="button" disabled={busyKey !== null || hasDirty} title={hasDirty ? "Эхлээд хадгална уу" : undefined} onClick={() => run(`test:${field.key}`, async () => { const result = await testIntegration.mutateAsync({ provider: "ntfy", group: topicGroup }); if (!result.ok) throw new Error(result.error ?? "Илгээж чадсангүй."); }, "Туршилт илгээлээ — утсаа шалгана уу.")} className="inline-flex items-center gap-1 rounded-full bg-[var(--a-info)] px-2.5 py-1 text-[10px] font-extrabold text-white disabled:opacity-60">
+                      {busyKey === `test:${field.key}` ? <LoaderCircle className="animate-spin" size={11} /> : <Send size={11} />}Туршилт
+                    </button>}
+                    {larkGroup && state?.isSet && <button type="button" disabled={busyKey !== null || hasDirty} title={hasDirty ? "Эхлээд хадгална уу" : undefined} onClick={() => run(`test:${field.key}`, async () => { const result = await testIntegration.mutateAsync({ provider: "lark", group: larkGroup }); if (!result.ok) throw new Error(result.detail ?? "Илгээж чадсангүй."); }, "Туршилтын карт илгээлээ — Lark-аа шалгана уу.")} className="inline-flex items-center gap-1 rounded-full bg-[var(--a-info)] px-2.5 py-1 text-[10px] font-extrabold text-white disabled:opacity-60">
                       {busyKey === `test:${field.key}` ? <LoaderCircle className="animate-spin" size={11} /> : <Send size={11} />}Туршилт
                     </button>}
                     {state?.isSet && <button type="button" disabled={busyKey !== null} onClick={() => clearKey(field.key)} className="grid size-6 place-items-center rounded-full text-[var(--a-muted)] hover:bg-[var(--a-neg-soft)] hover:text-[#df1f3d]" aria-label={`${field.label} устгах`}><X size={12} /></button>}
@@ -264,6 +270,76 @@ function ProviderCard({ row }: { row: IntegrationRow }) {
 
       {row.provider === "ntfy" && <NotificationOutboxLog />}
       {row.provider === "smartsoftware" && !showConnect && <SmartSoftwareSyncPanel locations={locations} setLocations={setLocations} />}
+      {row.provider === "lark" && !showConnect && <LarkPanel chats={locations} setChats={setLocations} hasDirty={hasDirty} />}
+    </div>
+  );
+}
+
+/**
+ * Lark (2026-10-03): "Холболт шалгах" нь бот нэмэгдсэн чатуудыг жагсаана —
+ * admin тэндээс бүлэг бүрийн чатын ID-г хуулж дээрх талбарт тавина. Доор нь
+ * outbox → Lark-ийн хүргэлтийн бүртгэл (ntfy-ийнхээс тусдаа).
+ */
+function LarkPanel({ chats, setChats, hasDirty }: { chats: { id: string; name: string }[]; setChats: (next: { id: string; name: string }[]) => void; hasDirty: boolean }) {
+  const testConnection = trpc.admin.testIntegration.useMutation();
+  const deliveriesQuery = trpc.admin.larkDeliveries.useQuery(undefined, { refetchInterval: 30_000 });
+  const rows = deliveriesQuery.data ?? [];
+  const check = async () => {
+    try {
+      const result = await testConnection.mutateAsync({ provider: "lark" });
+      setChats(result.locations ?? []);
+      if (result.ok) toast.success(result.detail); else toast.error(result.detail ?? "Холбогдсонгүй.");
+    } catch (error) { toast.error(messageFrom(error)); }
+  };
+  // clipboard нь зөвхөн secure context-д — fallback нь ID-г toast-оор харуулна.
+  const copy = async (id: string) => {
+    try { await navigator.clipboard.writeText(id); toast.success("Хуулагдлаа."); } catch { toast.message(id); }
+  };
+  return (
+    <div className="mt-4 grid gap-4">
+      <div className="rounded-2xl bg-[var(--a-soft)] p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[10px] font-extrabold tracking-[.08em] text-[var(--a-info)]">БОТ НЭМЭГДСЭН ЧАТУУД</p>
+          <button type="button" onClick={check} disabled={testConnection.isPending || hasDirty} title={hasDirty ? "Эхлээд хадгална уу" : undefined} className="inline-flex items-center gap-1.5 rounded-full bg-[var(--a-info)] px-3 py-1.5 text-[10px] font-extrabold text-white disabled:opacity-60">
+            {testConnection.isPending ? <LoaderCircle className="animate-spin" size={12} /> : <RefreshCw size={12} />}Холболт шалгах
+          </button>
+        </div>
+        {chats.length === 0
+          ? <p className="mt-2 text-[11px] text-[var(--a-faint)]">"Холболт шалгах" дарж чатуудыг харна. Чат харагдахгүй бол Lark дээр тэр чат → Тохиргоо → Бот нэмэх.</p>
+          : <ul className="mt-2 grid gap-1.5">{chats.map(chat => (
+              <li key={chat.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[var(--a-card)] px-3 py-2 text-[11px]">
+                <span className="font-bold">{chat.name}</span>
+                <button type="button" onClick={() => copy(chat.id)} className="break-all font-mono text-[var(--a-muted)] hover:text-[var(--a-info)]" aria-label={`${chat.name} чатын ID ${chat.id} хуулах`}>{chat.id}</button>
+              </li>
+            ))}</ul>}
+      </div>
+      <div>
+        <p className="text-[10px] font-extrabold tracking-[.08em] text-[var(--a-info)]">LARK РУУ ЯВСАН МЭДЭГДЛҮҮД</p>
+        {!deliveriesQuery.isLoading && !rows.length && <p className="mt-2 text-[11px] text-[var(--a-faint)]">Одоогоор илгээгээгүй. Бодит илгээлт зөвхөн LARK_PUSH=1 тохируулсан production сервер дээр явна.</p>}
+        {rows.length > 0 && (
+          <div className="mt-2 max-h-80 overflow-auto rounded-2xl border border-[var(--a-border)]">
+            <table className="w-full min-w-[560px] text-left text-[11px]">
+              <thead className="sticky top-0 bg-[var(--a-soft)] text-[10px] uppercase tracking-[.06em] text-[var(--a-muted)]">
+                <tr><th className="px-3 py-2">Хэзээ</th><th className="px-3 py-2">Мэдэгдэл</th><th className="px-3 py-2">Бүлэг</th><th className="px-3 py-2">Төлөв</th></tr>
+              </thead>
+              <tbody>
+                {rows.map(row => (
+                  <tr key={row.id} className="border-t border-[var(--a-border)] align-top">
+                    <td className="whitespace-nowrap px-3 py-2 text-[var(--a-muted)]">{new Date(row.createdAt).toLocaleString("mn-MN")}</td>
+                    <td className="px-3 py-2"><span className="font-bold">{row.title}</span><span className="block text-[var(--a-faint)]">{NOTIFICATION_EVENTS[row.eventType as NotificationEventType]?.label ?? row.eventType}</span></td>
+                    <td className="px-3 py-2">{NOTIFICATION_GROUP_LABELS[row.groupKey as NotificationGroup] ?? row.groupKey}</td>
+                    <td className="px-3 py-2">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${statusStyles[row.status] ?? ""}`}>{statusLabels[row.status] ?? row.status}</span>
+                      {row.attempts > 1 && <span className="ml-1 text-[var(--a-faint)]">×{row.attempts}</span>}
+                      {row.lastError && row.status !== "sent" && <span className="mt-1 block max-w-[220px] break-words text-[var(--a-faint)]">{row.lastError}</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

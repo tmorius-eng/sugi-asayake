@@ -95,6 +95,7 @@ import {
   getAdminAuditLogs,
   getAdminDiscountCodes,
   getAdminIntegrations,
+  getIntegrationSettings,
   getAdminSitePromotions,
   findProductBySku,
   getAdminCategories,
@@ -253,6 +254,11 @@ import { createStorepayLoan, getStorepayAvailability, normaliseMobileNumber, sto
 import { checkPersistentRateLimit } from "./_core/persistentRateLimit";
 // Registers the Smart Software adapter on import (side effect).
 import { clearSmartSoftwareTokenCache } from "./integrations/smartSoftware";
+import { clearLarkTokenCache, larkClientFor } from "./integrations/lark/client";
+import { larkConfigFromSettings } from "./integrations/lark/config";
+import { buildTestCard } from "./integrations/lark/cards";
+import { isLarkPushAllowed, isLarkTestAllowed } from "./integrations/lark/gate";
+import { getRecentLarkDeliveries } from "./integrations/lark/chatDispatcher";
 import { assertImageSignature, imageContentTypes, mediaContentTypes, processUploadedImageOrThrow } from "./_core/imageUpload";
 import { INTEGRATION_PROVIDERS } from "../shared/integrations";
 import { isAllowedPushEndpoint } from "../shared/push-endpoint";
@@ -3084,6 +3090,7 @@ export const appRouter = router({
       // kept using the old token for up to an hour. The connect card IS the
       // credential-rotation flow, which makes this the path that needs it.
       if (input.provider === "smartsoftware" && (Object.keys(set).length || input.clearKeys?.length || input.replaceAll)) clearSmartSoftwareTokenCache();
+      if (input.provider === "lark" && (Object.keys(set).length || input.clearKeys?.length || input.replaceAll)) clearLarkTokenCache();
       // Key NAMES only, never values.
       await logAdminAction({ actorUserId: ctx.user.id, action: "integration.updated", entityType: "integration", metadata: { provider: input.provider, isActive: input.isActive, keysSet: Object.keys(set), keysCleared: input.clearKeys ?? [], replaceAll: Boolean(input.replaceAll) } });
       return result;
@@ -3095,7 +3102,44 @@ export const appRouter = router({
     testIntegration: adminProcedure.input(z.discriminatedUnion("provider", [
       z.object({ provider: z.literal("ntfy"), group: z.enum(NOTIFICATION_GROUPS) }),
       z.object({ provider: z.literal("smartsoftware") }),
+      // Lark (2026-10-03): group-гүй = холболт шалгах (бот + чатын жагсаалт,
+      // `locations`-оор буцаана — admin тэндээс чатын ID-г хуулна); group-тэй =
+      // тэр бүлгийн чат руу туршилтын карт.
+      z.object({ provider: z.literal("lark"), group: z.enum(NOTIFICATION_GROUPS).optional() }),
     ])).mutation(async ({ ctx, input }) => {
+      if (input.provider === "lark") {
+        const gate = isLarkTestAllowed();
+        const current = await getIntegrationSettings("lark");
+        const config = current ? larkConfigFromSettings(current.settings) : null;
+        let outcome: { ok: boolean; detail: string; locations: { id: string; name: string }[] };
+        if (!gate.allowed) outcome = { ok: false, detail: `Энэ серверээс Lark руу илгээхгүй: ${gate.reason}.`, locations: [] };
+        else if (!config) outcome = { ok: false, detail: "App ID, App Secret-ээ оруулаад хадгална уу.", locations: [] };
+        else {
+          const client = larkClientFor(config);
+          try {
+            if (input.group) {
+              const chatId = config.chats[input.group];
+              if (!chatId) outcome = { ok: false, detail: `"${NOTIFICATION_GROUP_LABELS[input.group]}" бүлгийн чатын ID тохируулаагүй.`, locations: [] };
+              else {
+                await client.sendCard(chatId, buildTestCard(NOTIFICATION_GROUP_LABELS[input.group], ENV.publicBaseUrl));
+                outcome = { ok: true, detail: "Туршилтын карт илгээлээ — Lark-аа шалгана уу.", locations: [] };
+              }
+            } else {
+              const bot = await client.botInfo();
+              const chats = await client.listChats();
+              outcome = {
+                ok: true,
+                detail: `Бот "${bot.name}"${bot.active ? "" : " (идэвхгүй — консолд Bot чадварыг асааж, хувилбар гаргана уу)"} · ${chats.length} чатад нэмэгдсэн`,
+                locations: chats.map(chat => ({ id: chat.chatId, name: chat.name })),
+              };
+            }
+          } catch (error) {
+            outcome = { ok: false, detail: error instanceof Error ? error.message : "Lark-тай холбогдсонгүй.", locations: [] };
+          }
+        }
+        await logAdminAction({ actorUserId: ctx.user.id, action: "integration.tested", entityType: "integration", metadata: { provider: "lark", group: input.group ?? null, ok: outcome.ok } });
+        return { ok: outcome.ok, status: null, error: outcome.ok ? null : outcome.detail, detail: outcome.detail, locations: outcome.locations };
+      }
       if (input.provider === "smartsoftware") {
         const provider = await getInventorySyncProvider({ requireActive: false });
         const result = provider?.testConnection ? await provider.testConnection() : { ok: false, detail: "Нэвтрэх нэр, нууц үгээ оруулаад хадгална уу." };
@@ -3135,9 +3179,11 @@ export const appRouter = router({
         { key: "databaseCa", label: "Өгөгдлийн сангийн сертификат", configured: Boolean(process.env.DATABASE_CA_CERT || process.env.DATABASE_CA_CERT_PATH), note: "Aiven-ий TLS сертификатыг шалгана" },
         { key: "faceGate", label: "Царайгаар нэвтрэх шалгалт", configured: ENV.adminFaceGateEnabled, note: "ADMIN_FACE_GATE_ENABLED=1" },
         { key: "notificationsDispatch", label: "Мэдэгдэл илгээгч (энэ сервер)", configured: ENV.notificationsDispatchEnabled, note: "NOTIFICATIONS_DISPATCH=1 тохируулсан машин л утас руу илгээнэ" },
+        { key: "larkPush", label: "Lark руу илгээгч (энэ сервер)", configured: isLarkPushAllowed().allowed, note: `LARK_PUSH=1 тохируулсан production сервер л Lark руу бичнэ — одоо: ${isLarkPushAllowed().reason}` },
       ];
     }),
     notificationOutbox: adminProcedure.query(() => getRecentNotificationOutbox(50)),
+    larkDeliveries: adminProcedure.query(() => getRecentLarkDeliveries(30)),
     // Phase 6 (2026-09-11): the Smart Software sync seam -- stream status,
     // and each branch's store code in Smart POS (server/integrations/inventorySync.ts).
     inventorySyncStatus: adminProcedure.query(() => getInventorySyncStatus()),

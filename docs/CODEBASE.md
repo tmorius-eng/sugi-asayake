@@ -186,6 +186,7 @@ browser → /api/trpc/<router>.<procedure>
 - **Мессежид харилцагчийн нэр/утас/хаяг ХЭЗЭЭ Ч ОРОХГҮЙ** — `shared/notification-events.ts`-ийн payload төрөл нь ийм талбаргүй тул компилятор өөрөө хамгаална.
 - **Dedupe түлхүүр төрлөөр namespace хийгдсэн** (`outboxDedupeKey`): нэг захиалгын "шинэ"/"төлөгдсөн"/"цуцлагдсан" бүгд `order:<id>` ашигладаг тул namespace-гүй бол unique index тэднийг залгина.
 - `NOTIFICATIONS_DISPATCH=1` тохируулсан машин л илгээнэ; тестэд `NOTIFICATIONS_SUPPRESS=1`.
+- **Хоёр дахь хэрэглэгч — Lark** (2026-10-03, `server/integrations/lark/`, [LARK.md](LARK.md)): `chatDispatcher.ts` outbox-ын `status`-ыг ХӨНДӨХГҮЙ, мөр бүрт `lark_chat_deliveries`-д тусдаа хүргэлт бичнэ (UNIQUE(outboxId) + INSERT IGNORE = эзэмшил). Бүлэг → Lark чат (`LARK_CHAT_FIELD`), карт `cards.ts` (plain_text). Зөвхөн `isLarkPushAllowed()` (`gate.ts`: `LARK_PUSH=1` + job runner + production схем + тест биш). `addOutboxListener` нь ntfy-ийн `setOutboxListener` слотоос тусдаа.
 
 ### 3.5 Төлбөр
 

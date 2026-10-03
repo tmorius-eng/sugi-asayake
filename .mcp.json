@@ -22,6 +22,15 @@
     "chrome-devtools": {
       "command": "npx",
       "args": ["-y", "chrome-devtools-mcp@latest"]
+    },
+    "lark": {
+      "command": "npx",
+      "args": ["-y", "@larksuiteoapi/lark-mcp@0.5.1", "mcp"],
+      "env": {
+        "APP_ID": "${LARK_APP_ID}",
+        "APP_SECRET": "${LARK_APP_SECRET}",
+        "LARK_DOMAIN": "https://open.larksuite.com"
+      }
     }
   }
 }
