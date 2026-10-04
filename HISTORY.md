@@ -4,6 +4,10 @@
 
 ---
 
+## Lark — компанийн удирдлагын орчин (2026-10-03/04, сайтын кодтой холбоогүй)
+
+Tom: *"companihaa buh medeelel … larkaas harj udirddag … lark iin buh 100% potentialiig ashiglmaar baina"*. 10-03-нд эхлээд сайт→Lark мэдэгдлийн интеграц бичсэнийг Tom татгалзаж (*"website bish shde"*) revert (41c09f5) — бүх ажил **Lark дотор**, код `Documents/Projects/lark-asayake/` (энэ repo-гоос гадуур). Хийгдсэн: 6 Base (~34 хүснэгт, 847 бараа Zochil-оос), 6 самбар, 10 маягт, 17 workflow, Wiki "Компанийн төв", 43 хавтастай Drive сан (3 түвшний эрх), 8 чатын 3D эможи аватар, слэш команд 6, Lark CLI + skills, Cloudflare Worker ERP апп (https://asayake-erp.asayake-erp.workers.dev, Tom-ийн баталсан Linear/Stripe дизайн, 8 хуудас, KV кэш — Starter-ийн **10,000 API дуудлага/сар** хязгаарт, зардал/чөлөө батлах, cron 4). Судалгаа: Custom Workplace Pro-only, видео уулзалт Starter-т эхлүүлэхгүй, Base AI ажиллахгүй, slash команд олон улсад ажилладаг. Tom-ийн консолын алхмууд `lark-asayake/TOM-CONSOLE.md`. Энэ repo-д кодын өөрчлөлт байхгүй.
+
 ## Staging дээр бүрэн шалгалт + DB watchdog (2026-10-01, үдээс хойш)
 
 Tom: *"laptopoo asaaltai uldeegeed remote controloor handaj baina! Bugdiin chi hiiged uguuch"*. Шинэ CA-г (VM дээрхтэй SHA-256 хурууны хээ таарсан) scratchpad-д татаж `DATABASE_CA_CERT[_PATH]` орчны хувьсагчаар өгч (`.env`/`oci-ca.pem`-д хүрэх эрх хаалттай) staging-д 0096–0100-г ажиллуулав.
