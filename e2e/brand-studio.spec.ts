@@ -82,6 +82,16 @@ test.describe("Брэнд студи", () => {
     }
   });
 
+  test("таб/апп дүрс ба manifest тохиргооноос (асаагаагүй үед статик дүрс хэвээр)", async ({ request }) => {
+    const icon = await request.get("/brand-icon/icon-192.png");
+    expect(icon.status()).toBe(200);
+    expect(icon.headers()["content-type"]).toContain("image/png");
+    expect((await request.get("/brand-icon/evil.png")).status()).toBe(404);
+    const manifest = await (await request.get("/manifest.webmanifest")).json() as { name: string; short_name: string; icons: Array<{ src: string }> };
+    expect(manifest.name.length).toBeGreaterThan(0);
+    expect(manifest.icons.every(i => i.src.startsWith("/brand-icon/"))).toBe(true);
+  });
+
   test("энгийн хэрэглэгчийн iframe-гүй хуудсанд гүүр юу ч хийхгүй", async ({ page }) => {
     await page.goto("/?brandPreview=1");
     await expect(page.locator("html")).not.toHaveAttribute("data-brand-preview", "");

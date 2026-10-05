@@ -23,7 +23,7 @@ const NAME_SLOTS: Array<{ key: SiteTextSlotKey; label: string }> = [
 ];
 
 const STEPS: Array<{ title: string; detail: string; section: AdminSection | "colors" }> = [
-  { title: "Лого", detail: "Сайтын лого ба тэмдэг — Content & Media → \"Сайтын лого\". Хөтчийн табын дүрсийг (icons/*.png) мөн солино.", section: "media" },
+  { title: "Лого", detail: "Сайтын лого ба \"жижиг бэлгэ тэмдэг\" — Content & Media. Таб/апп дүрсийг тэмдгээс үүсгэх бол Дэлгүүрийн тохиргоо → \"Таб ба апп дүрсийг логоноос үүсгэх\" = 1.", section: "media" },
   { title: "Өнгө", detail: "Логоноос палитр гаргаж, Өнгө ба хэлбэр табаас хадгална.", section: "colors" },
   { title: "Холбоо барих, хүргэлт", detail: "Утас, имэйл, ажлын цаг, сошиал хаяг, хүргэлтийн үнэ, бэлгийн картын угтвар.", section: "storeSettings" },
   { title: "Салбарууд", detail: "Хаяг, газрын зураг, онлайн захиалга хүргэх үндсэн салбар (checkout-д заавал нэг).", section: "branches" },

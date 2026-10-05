@@ -24,6 +24,7 @@ import { warmUpImageSafety } from "./imageSafety";
 import { dbPing, getDb } from "../db";
 import { serveRobots, serveSitemap } from "./sitemap";
 import { serveManifest } from "./manifest";
+import { serveBrandIcon } from "./brandIcons";
 import { serveMerchantFeed } from "./merchantFeed";
 import { serveProductOgImage } from "./ogImage";
 import { finishFacebookLogin, startFacebookLogin } from "./facebookAuth";
@@ -223,6 +224,8 @@ async function startServer() {
   app.get("/robots.txt", serveRobots);
   // PWA manifest — нэр/өнгө тохиргооноос (эзэн солих, manifest.ts). Статик файлаас ӨМНӨ.
   app.get("/manifest.webmanifest", (req, res, next) => { serveManifest(req, res).catch(next); });
+  // Таб/апп дүрс логоноос (brandIcons.ts) — тохиргоо асаагаагүй бол статик /icons руу 302.
+  app.get("/brand-icon/:name.png", (req, res, next) => { serveBrandIcon(req, res).catch(next); });
   // Google Merchant Center-ийн scheduled-fetch URL (2026-09-14).
   app.get("/feeds/google-merchant.xml", serveMerchantFeed);
   // Барааны 1200x630 хуваалцах карт (2026-09-14, ogImage.ts).

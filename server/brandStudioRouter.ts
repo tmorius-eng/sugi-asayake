@@ -1,6 +1,3 @@
-import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { join, normalize } from "node:path";
 import sharp from "sharp";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -12,8 +9,7 @@ import { HOLIDAYS, getHoliday } from "../shared/holidays";
 import { holidayOccurrence, holidayWindow, isDateKey, type HolidaySettings } from "../shared/theme-resolver";
 import { ubDateKey } from "../shared/notification-events";
 import { getActiveThemeBundle, getHomeLayout, saveHomeLayout, getSiteMedia, getSiteText, upsertSiteMedia, upsertSiteText, getThemeRows, listThemeVersions, logAdminAction, rollbackTheme, saveTheme } from "./db";
-import { storageGetSignedUrl } from "./storage";
-import { storageKeyOf } from "./_core/publicUrl";
+import { readSiteImageBytes } from "./_core/brandIcons";
 import { invalidateIndexHtmlCache } from "./_core/indexHtml";
 import { adminProcedure, marketingProcedure, router } from "./_core/trpc";
 import { siteTextSlotKeys } from "../shared/site-text";
@@ -37,22 +33,6 @@ const holidaySchema = z.object({
 });
 
 const readJson = (json: string | null | undefined): unknown => { if (!json) return null; try { return JSON.parse(json); } catch { return null; } };
-
-/** Логоны байт: R2-д байвал signed URL-аар, кодын анхдагч бол public хавтаснаас (production: dist/public). */
-async function readLogoBytes(url: string): Promise<Buffer> {
-  const key = storageKeyOf(url);
-  if (key) {
-    const response = await fetch(await storageGetSignedUrl(key), { signal: AbortSignal.timeout(10_000) });
-    if (!response.ok) throw new Error(`logo fetch ${response.status}`);
-    return Buffer.from(await response.arrayBuffer());
-  }
-  if (!url.startsWith("/") || url.includes("..")) throw new Error("unsupported logo url");
-  for (const dir of [join(process.cwd(), "dist", "public"), join(process.cwd(), "client", "public")]) {
-    const file = normalize(join(dir, url));
-    if (file.startsWith(dir) && existsSync(file)) return readFile(file);
-  }
-  throw new Error("logo file not found");
-}
 
 export const brandStudioRouter = router({
   /** Бүх загвар + 13 баярын энэ/дараа жилийн цонх, одоо идэвхтэй загвар. */
@@ -161,7 +141,7 @@ export const brandStudioRouter = router({
     if (!url) throw new TRPCError({ code: "BAD_REQUEST", message: "Лого байршуулаагүй байна (Content & Media → Сайтын лого)." });
     let raw: { data: Buffer; info: { channels: number } };
     try {
-      raw = await sharp(await readLogoBytes(url)).resize(96, 96, { fit: "inside" }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      raw = await sharp(await readSiteImageBytes(url)).resize(96, 96, { fit: "inside" }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
     } catch {
       throw new TRPCError({ code: "BAD_REQUEST", message: "Логог уншиж чадсангүй. PNG/WEBP логогоо дахин байршуулна уу." });
     }

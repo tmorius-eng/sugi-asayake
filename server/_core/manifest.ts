@@ -29,7 +29,10 @@ export async function buildManifest(): Promise<Record<string, unknown>> {
     const screenshots = Array.isArray(base.screenshots)
       ? (base.screenshots as Array<Record<string, unknown>>).map(shot => ({ ...shot, label: typeof shot.label === "string" ? shot.label.replace(/^[^—]+—/, `${shortName} —`) : shot.label }))
       : base.screenshots;
-    return { ...base, name, short_name: shortName.slice(0, 30), theme_color: theme.look.light["primary-text"], background_color: theme.look.light.background, screenshots };
+    // Дүрс: /brand-icon/* (логоноос, тохиргоо асаагаагүй бол статик руу 302) — brandIcons.ts.
+    const rewriteIcon = (src: unknown) => (typeof src === "string" ? src.replace(/^\/icons\/(favicon-64|apple-touch-icon|icon-192|icon-512|maskable-192|maskable-512)\.png$/, "/brand-icon/$1.png") : src);
+    const icons = Array.isArray(base.icons) ? (base.icons as Array<Record<string, unknown>>).map(icon => ({ ...icon, src: rewriteIcon(icon.src) })) : base.icons;
+    return { ...base, name, short_name: shortName.slice(0, 30), theme_color: theme.look.light["primary-text"], background_color: theme.look.light.background, icons, screenshots };
   });
 }
 
