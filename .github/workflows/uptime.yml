@@ -30,6 +30,8 @@ jobs:
     env:
       NTFY_URL: ${{ secrets.NTFY_URL }}
       NTFY_TOKEN: ${{ secrets.NTFY_TOKEN }}
+      # Эзэн солих (2026-10-05): repo -> Settings -> Variables -> SITE_HOST (анхдагч одоогийн домэйн).
+      SITE_HOST: ${{ vars.SITE_HOST || 'sugi.karkaron.com' }}
     steps:
       - name: Probe /health (3 attempts, 20 s apart)
         id: probe
@@ -45,7 +47,7 @@ jobs:
           UA="SUGI-ASAYAKE-uptime/1.0 (+https://github.com/tmorius-eng/sugi-asayake)"
           blocked=0
           for attempt in 1 2 3; do
-            body=$(curl -sS --max-time 20 -A "$UA" -w '\n%{http_code}' https://sugi.karkaron.com/health)
+            body=$(curl -sS --max-time 20 -A "$UA" -w '\n%{http_code}' https://$SITE_HOST/health)
             code=$(echo "$body" | tail -1)
             json=$(echo "$body" | head -n -1)
             echo "attempt $attempt: HTTP $code ${json:0:200}"
@@ -73,7 +75,7 @@ jobs:
         # (`$(`/backtick агуулсан бие token-той алхамд bash-аар ажиллахгүй).
         env:
           DETAIL: ${{ steps.probe.outputs.detail }}
-          TITLE: ${{ steps.probe.outputs.blocked == '1' && 'sugi.karkaron.com: monitor blocked (status unknown)' || 'sugi.karkaron.com is DOWN' }}
+          TITLE: ${{ steps.probe.outputs.blocked == '1' && format('{0}: monitor blocked (status unknown)', env.SITE_HOST) || format('{0} is DOWN', env.SITE_HOST) }}
         run: |
           curl -sS --max-time 20 \
             -H "Authorization: Bearer $NTFY_TOKEN" \

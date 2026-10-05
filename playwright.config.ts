@@ -49,8 +49,10 @@ const startsOwnServer = !process.env.E2E_BASE_URL;
 // (E2E_BASE_URL-гүй бол config өөрөө 127.0.0.1 дээр өөрийн серверийг асаадаг).
 if (process.env.E2E_BASE_URL) {
   const host = new URL(process.env.E2E_BASE_URL).hostname.toLowerCase();
-  if (host !== "sugi-staging.karkaron.com") {
-    throw new Error(`E2E_BASE_URL "${host}" зөвшөөрөгдөөгүй — гаднах хаяг зөвхөн sugi-staging.karkaron.com байж болно (бодит сайтад тест захиалга/хэрэглэгч үүсгэнэ). Локал серверийг config өөрөө асаана — E2E_BASE_URL-ийг бүү өг.`);
+  // Эзэн солих (2026-10-05): staging-ийн домэйн E2E_STAGING_HOST-оор (анхдагч одоогийнх).
+  const stagingHost = (process.env.E2E_STAGING_HOST || "sugi-staging.karkaron.com").toLowerCase();
+  if (host !== stagingHost) {
+    throw new Error(`E2E_BASE_URL "${host}" зөвшөөрөгдөөгүй — гаднах хаяг зөвхөн ${stagingHost} байж болно (бодит сайтад тест захиалга/хэрэглэгч үүсгэнэ). Локал серверийг config өөрөө асаана — E2E_BASE_URL-ийг бүү өг.`);
   }
 }
 

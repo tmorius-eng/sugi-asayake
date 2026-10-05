@@ -24,10 +24,11 @@ import { readFileSync } from "node:fs";
 const T = readFileSync(process.argv[2], "utf8").trim();
 const withAccess = process.argv.includes("--access");
 const A = "https://api.cloudflare.com/client/v4";
-const ACCT = "2deded39a0bd5b415ae8a2d79e9ccdb7"; // T.morius@gmail.com's account
-const ZONE = "a9d1a84c784531a8ba875c46faac12ca"; // karkaron.com
-const HOST = "sugi.karkaron.com";
-const OWNER = "t.morius@gmail.com";
+// Эзэн солих (2026-10-05): env-ээр дарна — шинэ эзний Cloudflare данс/домэйн/имэйл.
+const ACCT = process.env.CLOUDFLARE_ACCOUNT_ID || "2deded39a0bd5b415ae8a2d79e9ccdb7"; // одоогийн эзний данс
+const ZONE = process.env.CLOUDFLARE_ZONE_ID || "a9d1a84c784531a8ba875c46faac12ca"; // karkaron.com
+const HOST = process.env.SITE_HOST || "sugi.karkaron.com";
+const OWNER = process.env.OWNER_EMAIL || "t.morius@gmail.com";
 
 async function cf(method, path, body) {
   const r = await fetch(A + path, {

@@ -33,13 +33,16 @@
   a restart, so changing -Instances deletes and re-creates the pm2 app (a few
   seconds of 502 on that app, which is why it is opt-in rather than default).
 #>
-param([switch]$Staging, [int]$Instances = 1, [switch]$AllowDirty)
+# Эзэн солих (2026-10-05): хост/домэйн параметр — шинэ эзний VM ба домэйнд скриптийг засахгүйгээр.
+#   -SshHost     ~/.ssh/config-ийн Host нэр (анхдагч sugi-oci, эсвэл $env:DEPLOY_SSH_HOST)
+#   -PublicHost  health шалгах домэйн (анхдагч sugi.karkaron.com / sugi-staging…, эсвэл $env:DEPLOY_PUBLIC_HOST)
+param([switch]$Staging, [int]$Instances = 1, [switch]$AllowDirty, [string]$SshHost = $(if ($env:DEPLOY_SSH_HOST) { $env:DEPLOY_SSH_HOST } else { "sugi-oci" }), [string]$PublicHost = $env:DEPLOY_PUBLIC_HOST)
 if ($Instances -lt 1) { throw "-Instances must be at least 1" }
 $ErrorActionPreference = "Stop"
 $app = if ($Staging) { "sugi-staging" } else { "sugi" }
 $dir = if ($Staging) { "sugi-asayake-staging" } else { "sugi-asayake" }
 $port = if ($Staging) { 3001 } else { 3000 }
-$publicHost = if ($Staging) { "sugi-staging.karkaron.com" } else { "sugi.karkaron.com" }
+$publicHost = if ($PublicHost) { $PublicHost } elseif ($Staging) { "sugi-staging.karkaron.com" } else { "sugi.karkaron.com" }
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location $root
 
@@ -68,7 +71,7 @@ tar czf $bundle dist package.json pnpm-lock.yaml pnpm-workspace.yaml
 # ClearAllForwardings: the Host block carries the 3307 tunnel forward, which
 # the always-on tunnel task already holds -- without this, ssh aborts with
 # "Address already in use" before running anything (ExitOnForwardFailure).
-scp -q -o ClearAllForwardings=yes $bundle "sugi-oci:~/$bundle"
+scp -q -o ClearAllForwardings=yes $bundle "${SshHost}:~/$bundle"
 Remove-Item $bundle
 
 Write-Host "==> install + restart on the VM" -ForegroundColor Cyan
@@ -135,13 +138,13 @@ $remote = $remote.Replace("__BUNDLE__", $bundle).Replace("__DIR__", $dir).Replac
 # re-split by the remote shell and its quotes are lost ("[: missing ]").
 # tr strips the CR that PowerShell appends to every line when it pipes a
 # string into a native process (that was the "cut: invalid ... '\r'" noise).
-$remoteOutput = $remote | ssh -o ClearAllForwardings=yes sugi-oci "tr -d '\r' | bash -s" 2>&1
+$remoteOutput = $remote | ssh -o ClearAllForwardings=yes $SshHost "tr -d '\r' | bash -s" 2>&1
 $remoteExit = $LASTEXITCODE
 $remoteOutput | ForEach-Object { Write-Host "   [vm] $_" }
 # The remote script prints DEPLOY-RESTART-OK only after verifying pm2 really
 # restarted the app; anything else means the old build may still be serving.
 if ($remoteExit -ne 0 -or -not ($remoteOutput -match "DEPLOY-RESTART-OK")) {
-  throw "Remote install/restart failed (exit $remoteExit) -- the site may still be running the PREVIOUS build. Output above; check: ssh sugi-oci 'pm2 logs $app --lines 40'"
+  throw "Remote install/restart failed (exit $remoteExit) -- the site may still be running the PREVIOUS build. Output above; check: ssh $SshHost 'pm2 logs $app --lines 40'"
 }
 
 Write-Host "==> public check" -ForegroundColor Cyan
@@ -156,4 +159,4 @@ foreach ($attempt in 1..18) {
 }
 Write-Host "https://$publicHost/health -> $code (after $attempt attempt(s))"
 if ($code -ne 200 -and $Staging) { Write-Host "(staging is not reachable publicly yet -- add the DNS CNAME sugi-staging -> bbd3128e-486e-481d-8c21-f9d3d240a56c.cfargotunnel.com in Cloudflare; the VM-local health above is what counts)" -ForegroundColor Yellow }
-elseif ($code -ne 200) { throw "The site did not come back within 90 s -- check: ssh sugi-oci 'pm2 logs $app --lines 40'" }
+elseif ($code -ne 200) { throw "The site did not come back within 90 s -- check: ssh $SshHost 'pm2 logs $app --lines 40'" }

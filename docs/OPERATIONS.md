@@ -163,6 +163,19 @@ node --env-file=.env scripts/oci/media-backup.mjs --dry-run
 
 ---
 
+## 4b. Брэнд студи ба эзэн солих (2026-10-05)
+
+| Ажил | Команд |
+|---|---|
+| Баярын постер R2-д (шинэ зураг бол `HOLIDAY_POSTER_VERSION` ахиулна — immutable кэш) | `pnpm exec tsx scripts/upload-theme-assets.ts [--apply] [--dir=…]` |
+| Хатуу брэнд hex-ийг токен болгох (guard тест унавал) | `pnpm exec tsx scripts/codemod-hex-to-tokens.ts [--write]` |
+| Шинэ эзэнд шилжүүлэхийн өмнөх цэвэрлэгээ (dry-run анхдагч) | `pnpm exec tsx scripts/new-owner-reset.ts --keep-admin-phone=… [--staging]` |
+| Цэвэрлэгээний бодит туршилт (зөвхөн sugi_migtest) | `pnpm exec tsx scripts/ci-local.ts server/new-owner-reset.integration.test.ts` |
+| Deploy өөр VM/домэйн руу | `.\scripts\oci\deploy.ps1 -SshHost <host> -PublicHost <домэйн>` |
+
+Migration 0103–0105 (`site_themes`, `site_theme_versions`, `site_layouts`) нь `REQUIRED_MIGRATIONS`-д
+— production-д кодоос ӨМНӨ.
+
 ## 4a. Зургийн формат (2026-09-21)
 
 | Агуулга | Хадгалах формат | Яагаад |
