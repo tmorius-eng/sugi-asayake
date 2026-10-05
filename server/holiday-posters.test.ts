@@ -1,25 +1,14 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { HOLIDAYS } from "../shared/holidays";
+import { HOLIDAYS, HOLIDAY_POSTER_VERSION } from "../shared/holidays";
 import { withHolidayPoster } from "./_core/holidayHero";
-import { hasAvif } from "./_core/imagePreload";
+import { storageObjectExists } from "./storage";
 
-const publicDir = join(__dirname, "..", "client", "public");
+// Баярын анхдагч постер R2-д (2026-10-05, scripts/upload-theme-assets.ts) — репод зураг байхгүй.
+const describeWithMedia = process.env.RUN_MEDIA_INTEGRATION_TESTS === "1" ? describe : describe.skip;
 
 describe("баярын анхдагч постерууд", () => {
-  it.each(HOLIDAYS.map(h => [h.key, h.poster] as const))("%s — webp/avif, 1024 ба 600w бүгд байна", (_key, poster) => {
-    expect(poster).toMatch(/^\/images\/holidays\/[a-z-]+\.webp$/);
-    const base = poster.slice(0, -".webp".length);
-    // hero shell AVIF-ийг "байгаа" гэж тооцдог (imagePreload.ts LOCAL_AVIF_PREFIXES) — дутвал зураг эвдэрнэ.
-    for (const file of [`${base}.webp`, `${base}-600w.webp`, `${base}.avif`, `${base}-600w.avif`]) {
-      expect(existsSync(join(publicDir, file)), file).toBe(true);
-    }
-  });
-
-  it("локал постерийн AVIF-ийг hero shell мэддэг (React-тэй ижил файл сонгоно)", async () => {
-    expect(await hasAvif("/images/holidays/naadam.webp")).toBe(true);
-    expect(await hasAvif("/images/holidays/naadam-600w.webp")).toBe(false);
+  it.each(HOLIDAYS.map(h => [h.key, h.poster] as const))("%s — R2 хувилбартай хавтасны зам", (key, poster) => {
+    expect(poster).toBe(`/cdn/themes/holidays/${HOLIDAY_POSTER_VERSION}/${key}.webp`);
   });
 
   it("постер home-hero слотыг солино, бусдыг хөндөхгүй; слот байхгүй бол нэмнэ", () => {
@@ -27,5 +16,14 @@ describe("баярын анхдагч постерууд", () => {
     expect(withHolidayPoster(rows, null)).toBe(rows);
     expect(withHolidayPoster(rows, "/p.webp").map(r => r.imageUrl)).toEqual(["/p.webp", "/b.webp"]);
     expect(withHolidayPoster([{ slotKey: "home-hero-2", imageUrl: "/b.webp" }], "/p.webp").find(r => r.slotKey === "home-hero")?.imageUrl).toBe("/p.webp");
+  });
+});
+
+describeWithMedia("баярын постер R2-д бодитоор байна", () => {
+  it.each(HOLIDAYS.map(h => [h.key, h.poster.replace(/^\/cdn\//, "")] as const))("%s — webp/avif × 1024/600", async (_key, objectKey) => {
+    // hero shell AVIF-ийг R2-оос шалгадаг (imagePreload.ts hasAvif) — дутвал shell WebP, React AVIF сонгож зөрнө.
+    for (const variant of [objectKey, objectKey.replace(".webp", "-600w.webp"), objectKey.replace(".webp", ".avif"), objectKey.replace(".webp", "-600w.avif")]) {
+      expect(await storageObjectExists(variant), variant).toBe(true);
+    }
   });
 });

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
-import { adminAuditLogs, siteLayouts, siteThemeVersions, siteThemes, users } from "../drizzle/schema";
+import { adminAuditLogs, siteLayouts, siteText, siteThemeVersions, siteThemes, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
 import { getActiveThemeBundle, getDb, getHomeLayout, invalidateThemeCache } from "./db";
 import { invalidateCached } from "./_core/ttlCache";
@@ -8,6 +8,7 @@ import { testSessionUser } from "./_test-helpers";
 import { hashPassword } from "./_core/password";
 import type { TrpcContext } from "./_core/context";
 import { HOLIDAY_PALETTES } from "../shared/holiday-palettes";
+import { HOLIDAY_POSTER_VERSION } from "../shared/holidays";
 
 // Брэнд студи (2026-10-05): хадгалах → AA хамгаалалт → хувилбар → сэргээх → баярын идэвхжилт.
 // site_themes бол админы бодит тохиргоо тул snapshot-and-restore (PROJECT-GUIDE): тест эхлэхээс
@@ -82,7 +83,7 @@ describeWithDatabase("Брэнд студи — хадгалах, AA, түүх, 
     expect(bundle.reason).toBe("holiday");
     expect(bundle.look.light.primary).toBe("#0a3a8a");
     expect(bundle.greeting).toBeNull(); // "" хадгалсан = мэндчилгээгүй
-    expect(bundle.poster).toBe(`/images/holidays/${KEY}.webp`);
+    expect(bundle.poster).toBe(`/cdn/themes/holidays/${HOLIDAY_POSTER_VERSION}/${KEY}.webp`);
 
     const versions = await admin().admin.brandStudio.versions({ themeKey: KEY });
     expect(versions.length).toBeGreaterThanOrEqual(1);
@@ -130,6 +131,33 @@ describeWithDatabase("Брэнд студи — хадгалах, AA, түүх, 
     expect(Object.keys(pack).sort()).toEqual(["exportedAt", "format", "homeLayout", "siteMedia", "siteText", "themes"]);
     const json = JSON.stringify(pack);
     expect(json).not.toMatch(/passwordHash|apiKey|secret|clientSecret|INTEGRATIONS_ENCRYPTION/i);
+  });
+
+  it("брэнд багц импорт: мэдэгдэх slot л, AA унасан загварыг алгасна (snapshot-and-restore)", async () => {
+    const db = (await getDb())!;
+    const [before] = await db.select().from(siteText).where(eq(siteText.slotKey, "brand-text-short-name")).limit(1);
+    const [layoutBefore] = await db.select().from(siteLayouts).where(eq(siteLayouts.pageKey, "home")).limit(1);
+    try {
+      const result = await admin().admin.brandStudio.importPack({
+        format: "brand-pack.v1",
+        themes: [{ themeKey: KEY, look: { light: { "primary-foreground": "#f5a0a8" } } }, { themeKey: "evil-theme", look: {} }],
+        homeLayout: [],
+        siteText: [{ slotKey: "brand-text-short-name", textValue: `ТЕСТ ${marker}` }, { slotKey: "not-a-slot", textValue: "x" }],
+        siteMedia: [{ slotKey: "home-hero", imageUrl: "javascript:alert(1)" }],
+      });
+      expect(result.texts).toBe(1);
+      expect(result.media).toBe(0);
+      expect(result.skipped).toEqual(expect.arrayContaining([`загвар ${KEY} (AA)`, "загвар evil-theme", "текст not-a-slot", "зураг home-hero"]));
+      const [row] = await db.select().from(siteText).where(eq(siteText.slotKey, "brand-text-short-name")).limit(1);
+      expect(row.textValue).toBe(`ТЕСТ ${marker}`);
+      await expect(callerFor(testSessionUser({ id: adminId, email: `${marker}@example.invalid`, name: "m", role: "marketing" })).admin.brandStudio.importPack({ format: "brand-pack.v1", themes: [], homeLayout: [], siteText: [], siteMedia: [] })).rejects.toThrow();
+    } finally {
+      if (before) await db.update(siteText).set({ textValue: before.textValue, updatedByUserId: before.updatedByUserId }).where(eq(siteText.id, before.id));
+      else await db.delete(siteText).where(eq(siteText.slotKey, "brand-text-short-name"));
+      if (layoutBefore) await db.update(siteLayouts).set({ sectionsJson: layoutBefore.sectionsJson, updatedByUserId: layoutBefore.updatedByUserId }).where(eq(siteLayouts.id, layoutBefore.id));
+      else await db.delete(siteLayouts).where(eq(siteLayouts.pageKey, "home"));
+      invalidateCached("storefront:layout:home");
+    }
   });
 });
 

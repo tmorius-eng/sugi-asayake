@@ -11,11 +11,13 @@ import { getSiteMediaSlot } from "../shared/site-media";
 import { HOLIDAYS, getHoliday } from "../shared/holidays";
 import { holidayOccurrence, holidayWindow, isDateKey, type HolidaySettings } from "../shared/theme-resolver";
 import { ubDateKey } from "../shared/notification-events";
-import { getActiveThemeBundle, getHomeLayout, saveHomeLayout, getSiteMedia, getSiteText, getThemeRows, listThemeVersions, logAdminAction, rollbackTheme, saveTheme } from "./db";
+import { getActiveThemeBundle, getHomeLayout, saveHomeLayout, getSiteMedia, getSiteText, upsertSiteMedia, upsertSiteText, getThemeRows, listThemeVersions, logAdminAction, rollbackTheme, saveTheme } from "./db";
 import { storageGetSignedUrl } from "./storage";
 import { storageKeyOf } from "./_core/publicUrl";
 import { invalidateIndexHtmlCache } from "./_core/indexHtml";
-import { marketingProcedure, router } from "./_core/trpc";
+import { adminProcedure, marketingProcedure, router } from "./_core/trpc";
+import { siteTextSlotKeys } from "../shared/site-text";
+import { siteMediaSlotKeys } from "../shared/site-media";
 
 /**
  * /admin → Брэнд студи (2026-10-05, A1). `admin.brandStudio.*` — `admin.` угтвартай тул
@@ -199,6 +201,61 @@ export const brandStudioRouter = router({
       siteText: text.map(row => ({ slotKey: row.slotKey, textValue: row.textValue })),
       siteMedia: media.map(row => ({ slotKey: row.slotKey, imageUrl: row.imageUrl, altText: row.altText })),
     };
+  }),
+
+  /**
+   * Брэнд багц импорт (B2): exportPack-ийн JSON-ийг буцааж тавина — шинэ эзний сайтыг өөр суулгацаас
+   * эсвэл нөөцөөс сэргээх. adminProcedure (бүх брэндийг нэг дор дарж бичдэг). Зөвхөн мэдэгдэх
+   * загвар/slot; өнгө AA шалгалтгүй орж ирвэл тэр загварыг алгасна; зургийн хаяг дотоод/https л.
+   */
+  importPack: adminProcedure.input(z.object({
+    format: z.literal("brand-pack.v1"),
+    themes: z.array(z.object({ themeKey: z.string(), name: z.string().max(120).optional(), look: z.unknown(), extra: z.unknown().optional(), holiday: z.unknown().optional() })).max(40),
+    homeLayout: z.array(z.object({ key: z.string(), visible: z.boolean(), variant: z.string() })).max(40),
+    siteText: z.array(z.object({ slotKey: z.string(), textValue: z.string().nullable() })).max(1000),
+    siteMedia: z.array(z.object({ slotKey: z.string(), imageUrl: z.string(), altText: z.string().nullable().optional() })).max(200),
+  }).passthrough()).mutation(async ({ ctx, input }) => {
+    const skipped: string[] = [];
+    const known = new Set<string>(["base", ...HOLIDAYS.map(h => h.key)]);
+    const base = input.themes.find(theme => theme.themeKey === "base");
+    const baseLook = mergeLook(BASE_THEME, base?.look);
+    for (const theme of [...input.themes].sort((a, b) => (a.themeKey === "base" ? -1 : b.themeKey === "base" ? 1 : 0))) {
+      if (!known.has(theme.themeKey)) { skipped.push(`загвар ${theme.themeKey}`); continue; }
+      const merged = theme.themeKey === "base" ? baseLook : mergeLook(baseLook, theme.look);
+      if (checkLookContrast(merged).some(result => !result.ok)) { skipped.push(`загвар ${theme.themeKey} (AA)`); continue; }
+      const extra = (theme.extra && typeof theme.extra === "object" ? theme.extra : {}) as { greeting?: unknown; posterUrl?: unknown; showPoster?: unknown };
+      const holiday = theme.holiday && typeof theme.holiday === "object" ? holidaySchema.safeParse(theme.holiday) : null;
+      await saveTheme({
+        themeKey: theme.themeKey,
+        name: theme.name,
+        look: sanitizeLookPatch(theme.look),
+        extra: {
+          greeting: typeof extra.greeting === "string" ? extra.greeting.slice(0, 200) : undefined,
+          posterUrl: typeof extra.posterUrl === "string" ? extra.posterUrl : null,
+          showPoster: extra.showPoster === false ? false : undefined,
+        },
+        holiday: holiday?.success ? holiday.data : undefined,
+        note: "Брэнд багцаас импортлов",
+      }, ctx.user.id);
+    }
+    await saveHomeLayout(input.homeLayout, ctx.user.id);
+    const textKeys = new Set<string>(siteTextSlotKeys);
+    let texts = 0;
+    for (const row of input.siteText) {
+      if (!textKeys.has(row.slotKey) || !row.textValue?.trim()) { if (!textKeys.has(row.slotKey)) skipped.push(`текст ${row.slotKey}`); continue; }
+      await upsertSiteText({ slotKey: row.slotKey, textValue: row.textValue.trim().slice(0, 4000), updatedByUserId: ctx.user.id });
+      texts++;
+    }
+    const mediaKeys = new Set<string>(siteMediaSlotKeys);
+    let media = 0;
+    for (const row of input.siteMedia) {
+      if (!mediaKeys.has(row.slotKey) || !/^(\/cdn\/|\/images\/|https:\/\/)[^\s"'<>]+$/.test(row.imageUrl)) { skipped.push(`зураг ${row.slotKey}`); continue; }
+      await upsertSiteMedia({ slotKey: row.slotKey as (typeof siteMediaSlotKeys)[number], imageUrl: row.imageUrl.slice(0, 1000), altText: row.altText?.slice(0, 240) ?? null, updatedByUserId: ctx.user.id });
+      media++;
+    }
+    invalidateIndexHtmlCache();
+    await logAdminAction({ actorUserId: ctx.user.id, action: "brand_pack.imported", entityType: "site_theme", entityId: null, metadata: { themes: input.themes.length, texts, media, skipped } });
+    return { themes: input.themes.length - skipped.filter(s => s.startsWith("загвар")).length, texts, media, skipped };
   }),
 
   versions: marketingProcedure.input(z.object({ themeKey: themeKeySchema })).query(({ input }) => listThemeVersions(input.themeKey)),

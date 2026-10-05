@@ -11,6 +11,8 @@ import HolidaysTab from "./HolidaysTab";
 import HistoryTab from "./HistoryTab";
 import LogoPaletteCard from "./LogoPaletteCard";
 import LayoutTab from "./LayoutTab";
+import OwnerChangeTab from "./OwnerChangeTab";
+import type { AdminSection } from "../../AdminWorkspace";
 import type { HomeSectionEntry } from "@shared/home-sections";
 import type { RouterOutputs } from "@/lib/trpc";
 import { ASPECT_LABELS, CODE_BASE, DARK_LABELS, diffLook, LIGHT_GROUPS, RADIUS_LABELS } from "./tokenMeta";
@@ -20,11 +22,11 @@ import { ASPECT_LABELS, CODE_BASE, DARK_LABELS, diffLook, LIGHT_GROUPS, RADIUS_L
  * амьд урьдчилан харалттайгаар засна. Хадгалах үед серверт AA (4.5:1) дахин шалгагдана
  * (server/brandStudioRouter.ts), хувилбар үлдэнэ (Түүх таб).
  */
-type Tab = "colors" | "layout" | "holidays" | "history";
-const TABS: Array<[Tab, string]> = [["colors", "Өнгө ба хэлбэр"], ["layout", "Нүүрний бүтэц"], ["holidays", "Баярын загвар"], ["history", "Түүх"]];
+type Tab = "colors" | "layout" | "holidays" | "history" | "owner";
+const TABS: Array<[Tab, string]> = [["colors", "Өнгө ба хэлбэр"], ["layout", "Нүүрний бүтэц"], ["holidays", "Баярын загвар"], ["history", "Түүх"], ["owner", "Эзэн солих"]];
 const messageFrom = (error: unknown) => (error instanceof Error ? error.message : "Хадгалж чадсангүй.");
 
-export default function BrandStudioPanel({ preview }: { preview?: boolean }) {
+export default function BrandStudioPanel({ preview, isAdmin = false, onNavigate }: { preview?: boolean; isAdmin?: boolean; onNavigate?: (section: AdminSection) => void }) {
   const utils = trpc.useUtils();
   const { confirm } = useConfirm();
   const overviewQuery = trpc.admin.brandStudio.overview.useQuery(undefined, { enabled: !preview });
@@ -119,7 +121,9 @@ export default function BrandStudioPanel({ preview }: { preview?: boolean }) {
         </div>
       </div>
 
-      {tab === "history"
+      {tab === "owner"
+        ? <OwnerChangeTab isAdmin={isAdmin} onNavigate={onNavigate} onColors={() => { setTarget("base"); setTab("colors"); }} />
+        : tab === "history"
         ? <HistoryTab themes={themesForHistory} />
         : (
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] [&>*]:min-w-0">

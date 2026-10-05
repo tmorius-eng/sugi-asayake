@@ -61,9 +61,19 @@ test.describe("Брэнд студи", () => {
     const card = page.locator("article").filter({ has: page.getByRole("heading", { name: "Цагаан сар" }) });
     await card.getByRole("button", { name: "Урьдчилан харах" }).click();
     await expect(frame.locator(".hero-greeting")).toHaveText("Сар шинэдээ сайхан шинэлээрэй!", { timeout: 5_000 });
-    await expect(frame.locator('[data-slot="home-hero"] img').first()).toHaveAttribute("src", /\/images\/holidays\/tsagaan-sar\.webp$/);
+    await expect(frame.locator('[data-slot="home-hero"] img').first()).toHaveAttribute("src", /\/themes\/holidays\/v\d+\/tsagaan-sar\.webp$/);
     await expect.poll(async () => frame.locator('[data-slot="home-hero"] img').first().evaluate(img => (img as HTMLImageElement).naturalWidth), { timeout: 10_000 }).toBeGreaterThan(0);
     await page.screenshot({ path: testInfo.outputPath("brand-studio-holidays.png"), fullPage: false });
+
+    // Эзэн солих таб: нэр, алхам, брэнд багц, CLI цэвэрлэгээ (вэбээс устгах товч байхгүй).
+    await page.getByRole("tab", { name: "Эзэн солих" }).click();
+    await expect(page.getByRole("tab", { name: "Эзэн солих" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab", { name: "Баярын загвар" })).toHaveAttribute("aria-selected", "false");
+    await expect(page.getByRole("heading", { name: "Брэндийн нэр" })).toBeVisible();
+    await expect(page.getByLabel(/Богино нэр/)).not.toHaveValue("");
+    await expect(page.getByRole("heading", { name: "Хуучин эзний өгөгдөл цэвэрлэх" })).toBeVisible();
+    await expect(page.getByText("Брэнд багц импортлох")).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath("brand-studio-owner.png"), fullPage: false });
 
     // Утасны өргөнд хуудас бүхэлдээ хэвтээ гүйлгэхгүй.
     if (testInfo.project.name === "mobile") {

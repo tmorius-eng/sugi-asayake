@@ -29,7 +29,7 @@ export interface HolidayDefinition {
   priority: number;
   /** Анхдагч мэндчилгээ (hero-ийн дээр) — админ Брэнд студиэс солино/хоосолно */
   greeting: string;
-  /** Анхдагч постер (client/public/images/holidays) — hero-ийн эхний зургийг солино */
+  /** Анхдагч постер (R2: themes/holidays/<хувилбар>/, scripts/upload-theme-assets.ts) — hero-ийн эхний зургийг солино */
   poster: string;
 }
 
@@ -46,20 +46,26 @@ export const LUNAR_DATES: Record<"tsagaan-sar" | "duichin" | "chinggis", Record<
   chinggis: { 2026: "2026-11-10", 2027: "2027-11-29" },
 };
 
+/**
+ * Постерийн R2 хавтасны хувилбар. R2 объектууд 1 жилийн immutable кэштэй тул постер солих бол
+ * шинэ зургийг шинэ хувилбарын хавтсанд upload хийгээд (scripts/upload-theme-assets.ts) энийг ахиулна.
+ */
+export const HOLIDAY_POSTER_VERSION = "v1";
+
 export const HOLIDAYS: readonly HolidayDefinition[] = [
-  { key: "new-year", name: "Шинэ жил", official: true, rule: { type: "fixed", month: 1, day: 1 }, startOffsetDays: -14, endOffsetDays: 1, priority: 50, greeting: "Шинэ оны мэнд хүргэе!", poster: "/images/holidays/new-year.webp" },
-  { key: "tsagaan-sar", name: "Цагаан сар", official: true, rule: { type: "lunar", table: "tsagaan-sar", durationDays: 3 }, startOffsetDays: -14, endOffsetDays: 1, priority: 90, greeting: "Сар шинэдээ сайхан шинэлээрэй!", poster: "/images/holidays/tsagaan-sar.webp" },
-  { key: "valentine", name: "Гэгээн Валентины өдөр", official: false, rule: { type: "fixed", month: 2, day: 14 }, startOffsetDays: -7, endOffsetDays: 0, priority: 70, greeting: "Гэгээн Валентины өдрийн мэнд хүргэе!", poster: "/images/holidays/valentine.webp" },
-  { key: "womens-day", name: "Олон улсын эмэгтэйчүүдийн өдөр (3/8)", official: true, rule: { type: "fixed", month: 3, day: 8 }, startOffsetDays: -7, endOffsetDays: 0, priority: 70, greeting: "Олон улсын эмэгтэйчүүдийн өдрийн мэнд хүргэе!", poster: "/images/holidays/womens-day.webp" },
-  { key: "soldiers-day", name: "Цэргийн баяр (3/18)", official: false, rule: { type: "fixed", month: 3, day: 18 }, startOffsetDays: -4, endOffsetDays: 0, priority: 70, greeting: "Монгол цэргийн баярын мэнд хүргэе!", poster: "/images/holidays/soldiers-day.webp" },
-  { key: "duichin", name: "Бурхан багшийн Их дүйчин", official: true, rule: { type: "lunar", table: "duichin" }, startOffsetDays: -3, endOffsetDays: 0, priority: 70, greeting: "Бурхан багшийн Их дүйчин өдрийн мэнд хүргэе!", poster: "/images/holidays/duichin.webp" },
-  { key: "childrens-day", name: "Эх үрсийн баяр (6/1)", official: true, rule: { type: "fixed", month: 6, day: 1 }, startOffsetDays: -10, endOffsetDays: 0, priority: 70, greeting: "Эх үрсийн баярын мэнд хүргэе!", poster: "/images/holidays/childrens-day.webp" },
-  { key: "naadam", name: "Үндэсний их баяр наадам", official: true, rule: { type: "fixed", month: 7, day: 10, durationDays: 6 }, startOffsetDays: -14, endOffsetDays: 0, priority: 80, greeting: "Үндэсний их баяр наадмын мэнд хүргэе!", poster: "/images/holidays/naadam.webp" },
-  { key: "knowledge-day", name: "Мэдлэгийн баяр (9/1)", official: false, rule: { type: "fixed", month: 9, day: 1 }, startOffsetDays: -10, endOffsetDays: 0, priority: 70, greeting: "Мэдлэгийн баярын мэнд хүргэе!", poster: "/images/holidays/knowledge-day.webp" },
-  { key: "capital-day", name: "Нийслэлийн өдөр (10/29)", official: false, rule: { type: "fixed", month: 10, day: 29 }, startOffsetDays: -3, endOffsetDays: 0, priority: 70, greeting: "Нийслэлийн өдрийн мэнд хүргэе!", poster: "/images/holidays/capital-day.webp" },
-  { key: "chinggis", name: "Чингис хааны мэндэлсэн өдөр", official: true, rule: { type: "lunar", table: "chinggis" }, startOffsetDays: -7, endOffsetDays: 0, priority: 75, greeting: "Их Эзэн Чингис хааны мэндэлсэн өдрийн мэнд хүргэе!", poster: "/images/holidays/chinggis.webp" },
-  { key: "republic-day", name: "Бүгд Найрамдах Улс тунхагласан өдөр (11/26)", official: true, rule: { type: "fixed", month: 11, day: 26 }, startOffsetDays: -3, endOffsetDays: 0, priority: 70, greeting: "Бүгд Найрамдах Улс тунхагласан өдрийн мэнд хүргэе!", poster: "/images/holidays/republic-day.webp" },
-  { key: "independence-day", name: "Үндэсний эрх чөлөө, тусгаар тогтнолоо сэргээсний баяр (12/29)", official: true, rule: { type: "fixed", month: 12, day: 29 }, startOffsetDays: -2, endOffsetDays: 0, priority: 60, greeting: "Үндэсний эрх чөлөө, тусгаар тогтнолоо сэргээсний баярын мэнд хүргэе!", poster: "/images/holidays/independence-day.webp" },
+  { key: "new-year", name: "Шинэ жил", official: true, rule: { type: "fixed", month: 1, day: 1 }, startOffsetDays: -14, endOffsetDays: 1, priority: 50, greeting: "Шинэ оны мэнд хүргэе!", poster: `/cdn/themes/holidays/${HOLIDAY_POSTER_VERSION}/new-year.webp` },
+  { key: "tsagaan-sar", name: "Цагаан сар", official: true, rule: { type: "lunar", table: "tsagaan-sar", durationDays: 3 }, startOffsetDays: -14, endOffsetDays: 1, priority: 90, greeting: "Сар шинэдээ сайхан шинэлээрэй!", poster: `/cdn/themes/holidays/${HOLIDAY_POSTER_VERSION}/tsagaan-sar.webp` },
+  { key: "valentine", name: "Гэгээн Валентины өдөр", official: false, rule: { type: "fixed", month: 2, day: 14 }, startOffsetDays: -7, endOffsetDays: 0, priority: 70, greeting: "Гэгээн Валентины өдрийн мэнд хүргэе!", poster: `/cdn/themes/holidays/${HOLIDAY_POSTER_VERSION}/valentine.webp` },
+  { key: "womens-day", name: "Олон улсын эмэгтэйчүүдийн өдөр (3/8)", official: true, rule: { type: "fixed", month: 3, day: 8 }, startOffsetDays: -7, endOffsetDays: 0, priority: 70, greeting: "Олон улсын эмэгтэйчүүдийн өдрийн мэнд хүргэе!", poster: `/cdn/themes/holidays/${HOLIDAY_POSTER_VERSION}/womens-day.webp` },
+  { key: "soldiers-day", name: "Цэргийн баяр (3/18)", official: false, rule: { type: "fixed", month: 3, day: 18 }, startOffsetDays: -4, endOffsetDays: 0, priority: 70, greeting: "Монгол цэргийн баярын мэнд хүргэе!", poster: `/cdn/themes/holidays/${HOLIDAY_POSTER_VERSION}/soldiers-day.webp` },
+  { key: "duichin", name: "Бурхан багшийн Их дүйчин", official: true, rule: { type: "lunar", table: "duichin" }, startOffsetDays: -3, endOffsetDays: 0, priority: 70, greeting: "Бурхан багшийн Их дүйчин өдрийн мэнд хүргэе!", poster: `/cdn/themes/holidays/${HOLIDAY_POSTER_VERSION}/duichin.webp` },
+  { key: "childrens-day", name: "Эх үрсийн баяр (6/1)", official: true, rule: { type: "fixed", month: 6, day: 1 }, startOffsetDays: -10, endOffsetDays: 0, priority: 70, greeting: "Эх үрсийн баярын мэнд хүргэе!", poster: `/cdn/themes/holidays/${HOLIDAY_POSTER_VERSION}/childrens-day.webp` },
+  { key: "naadam", name: "Үндэсний их баяр наадам", official: true, rule: { type: "fixed", month: 7, day: 10, durationDays: 6 }, startOffsetDays: -14, endOffsetDays: 0, priority: 80, greeting: "Үндэсний их баяр наадмын мэнд хүргэе!", poster: `/cdn/themes/holidays/${HOLIDAY_POSTER_VERSION}/naadam.webp` },
+  { key: "knowledge-day", name: "Мэдлэгийн баяр (9/1)", official: false, rule: { type: "fixed", month: 9, day: 1 }, startOffsetDays: -10, endOffsetDays: 0, priority: 70, greeting: "Мэдлэгийн баярын мэнд хүргэе!", poster: `/cdn/themes/holidays/${HOLIDAY_POSTER_VERSION}/knowledge-day.webp` },
+  { key: "capital-day", name: "Нийслэлийн өдөр (10/29)", official: false, rule: { type: "fixed", month: 10, day: 29 }, startOffsetDays: -3, endOffsetDays: 0, priority: 70, greeting: "Нийслэлийн өдрийн мэнд хүргэе!", poster: `/cdn/themes/holidays/${HOLIDAY_POSTER_VERSION}/capital-day.webp` },
+  { key: "chinggis", name: "Чингис хааны мэндэлсэн өдөр", official: true, rule: { type: "lunar", table: "chinggis" }, startOffsetDays: -7, endOffsetDays: 0, priority: 75, greeting: "Их Эзэн Чингис хааны мэндэлсэн өдрийн мэнд хүргэе!", poster: `/cdn/themes/holidays/${HOLIDAY_POSTER_VERSION}/chinggis.webp` },
+  { key: "republic-day", name: "Бүгд Найрамдах Улс тунхагласан өдөр (11/26)", official: true, rule: { type: "fixed", month: 11, day: 26 }, startOffsetDays: -3, endOffsetDays: 0, priority: 70, greeting: "Бүгд Найрамдах Улс тунхагласан өдрийн мэнд хүргэе!", poster: `/cdn/themes/holidays/${HOLIDAY_POSTER_VERSION}/republic-day.webp` },
+  { key: "independence-day", name: "Үндэсний эрх чөлөө, тусгаар тогтнолоо сэргээсний баяр (12/29)", official: true, rule: { type: "fixed", month: 12, day: 29 }, startOffsetDays: -2, endOffsetDays: 0, priority: 60, greeting: "Үндэсний эрх чөлөө, тусгаар тогтнолоо сэргээсний баярын мэнд хүргэе!", poster: `/cdn/themes/holidays/${HOLIDAY_POSTER_VERSION}/independence-day.webp` },
 ];
 
 export const HOLIDAY_KEYS = HOLIDAYS.map(h => h.key);

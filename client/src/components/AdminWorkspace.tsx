@@ -874,7 +874,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
             {section === "campaigns" && preview && <div className="rounded-3xl bg-[var(--a-soft)] p-8 text-center text-sm text-[var(--a-muted)]">Preview горимд кампанит ажил харагдахгүй.</div>}
             {section === "storeSettings" && <AdminStoreSettingsPanel preview={preview} />}
             {section === "measurement" && <AdminMeasurementPanel preview={preview} />}
-            {section === "brandStudio" && <BrandStudioPanel preview={preview} />}
+            {section === "brandStudio" && <BrandStudioPanel preview={preview} isAdmin={role === "admin"} onNavigate={target => { setSection(target); setQuery(""); setComposer(null); }} />}
             {section === "documents" && <><AdminDocumentsPanel preview={preview} /><AdminJobPostingsPanel preview={preview} />{role === "admin" && <AdminJobApplicationsPanel preview={preview} />}</>}
             {section === "loyalty" && <AdminLoyaltyTiersPanel preview={preview} />}
             {section === "integrations" && !preview && <AdminIntegrationsPanel />}
