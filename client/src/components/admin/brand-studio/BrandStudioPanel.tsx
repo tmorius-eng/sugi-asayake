@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, ChevronDown, LoaderCircle, RotateCcw, Sparkles, TriangleAlert, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { mergeLook, normalizeHex, PRODUCT_ASPECTS, RADIUS_PRESETS, DARK_TOKEN_KEYS, type ProductAspect, type RadiusPreset, type ThemeLook } from "@shared/theme-tokens";
 import { checkLookContrast, fixForeground } from "@shared/color/contrast";
 import { HOLIDAY_PALETTES } from "@shared/holiday-palettes";
+import { BRAND_FONTS, fontFaceCss, fontStack, type FontKey } from "@shared/fonts";
 import { useConfirm } from "@/components/ConfirmDialog";
 import PreviewFrame from "./PreviewFrame";
 import HolidaysTab from "./HolidaysTab";
@@ -41,6 +42,15 @@ export default function BrandStudioPanel({ preview, isAdmin = false, onNavigate 
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [logoPalette, setLogoPalette] = useState<RouterOutputs["admin"]["brandStudio"]["derivePalette"] | null>(null);
 
+  // Фонтын жишээ admin-д ч харагдахын тулд бүх фонтын @font-face (зөвхөн ашиглагдсан нь татагдана).
+  useEffect(() => {
+    const style = document.createElement("style");
+    style.id = "admin-brand-fonts";
+    style.textContent = BRAND_FONTS.map(font => fontFaceCss(font.key)).join("");
+    document.head.appendChild(style);
+    return () => style.remove();
+  }, []);
+
   const overview = overviewQuery.data;
   const savedBase = overview?.base.look ?? CODE_BASE;
   const holidayRow = (key: string) => overview?.holidays.find(h => h.key === key);
@@ -59,7 +69,7 @@ export default function BrandStudioPanel({ preview, isAdmin = false, onNavigate 
       return { ...current, [target]: { ...base, [scope]: { ...base[scope], [key]: hex } } as ThemeLook };
     });
   };
-  const setShape = (patch: Partial<Pick<ThemeLook, "radius" | "productAspect">>) =>
+  const setShape = (patch: Partial<Pick<ThemeLook, "radius" | "productAspect" | "fontBody" | "fontDisplay">>) =>
     setDrafts(current => ({ ...current, [target]: { ...(current[target] ?? savedLook(target)), ...patch } }));
 
   const fixAll = () => {
@@ -211,6 +221,23 @@ export default function BrandStudioPanel({ preview, isAdmin = false, onNavigate 
                             className={`h-9 rounded-xl border px-3 text-[11px] font-bold transition ${draft.productAspect === aspect ? "border-[var(--a-info)] bg-[var(--a-info-soft)] text-[var(--a-info)]" : "border-[var(--a-border)]"}`}>{ASPECT_LABELS[aspect]}</button>
                         ))}
                       </div>
+                    </div>
+                  </section>
+
+                  <section>
+                    <h4 className="text-[10px] font-extrabold tracking-[.14em] text-[var(--a-muted)]">ФОНТ <span className="font-semibold normal-case tracking-normal">· бүгд монгол Ө, Ү үсэгтэй (OFL)</span></h4>
+                    <div className="mt-2 grid gap-3 2xl:grid-cols-2">
+                      {(["fontDisplay", "fontBody"] as const).map(field => (
+                        <label key={field} className="grid gap-1.5 text-[11px] font-bold">{field === "fontDisplay" ? "Гарчиг" : "Үндсэн текст"}
+                          <select value={draft[field]} onChange={event => setShape({ [field]: event.target.value as FontKey })} aria-label={field === "fontDisplay" ? "Гарчгийн фонт" : "Үндсэн текстийн фонт"}
+                            className="h-9 min-w-0 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-2 text-xs font-bold">
+                            {BRAND_FONTS.map(font => <option key={font.key} value={font.key}>{font.family} — {font.note}</option>)}
+                          </select>
+                          <span className="min-w-0 truncate rounded-xl bg-[var(--a-soft)] px-3 py-2 text-[17px] text-[var(--a-text)]" style={{ fontFamily: fontStack(draft[field]), fontWeight: field === "fontDisplay" ? 700 : 400 }}>
+                            Өглөөний арчилгаа — Аа Өө Үү Ёё 25,000₮
+                          </span>
+                        </label>
+                      ))}
                     </div>
                   </section>
 

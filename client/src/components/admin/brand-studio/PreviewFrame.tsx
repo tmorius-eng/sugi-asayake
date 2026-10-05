@@ -49,7 +49,7 @@ export default function PreviewFrame({ look, mode, onModeChange, greeting, poste
 
   // Хамгийн сүүлийн утгыг ref-д — iframe "ready" гэж хэлэхэд ч, өнгө хөдлөхөд ч ижил мессеж.
   const payloadRef = useRef<unknown>(null);
-  payloadRef.current = { type: "brand-preview", mode, vars: previewVars(look, mode), greeting, posterUrl, layout };
+  payloadRef.current = { type: "brand-preview", mode, vars: previewVars(look, mode), fontBody: look.fontBody, fontDisplay: look.fontDisplay, greeting, posterUrl, layout };
   const post = () => frameRef.current?.contentWindow?.postMessage(payloadRef.current, window.location.origin);
 
   const payloadKey = JSON.stringify(payloadRef.current);

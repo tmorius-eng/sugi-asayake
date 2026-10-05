@@ -45,6 +45,13 @@ test.describe("Брэнд студи", () => {
     await page.screenshot({ path: testInfo.outputPath("brand-studio-logo-palette.png"), fullPage: false });
     await page.getByRole("button", { name: "Цуцлах" }).click();
 
+    // Фонт (A2): гарчгийн фонт солиход preview-ийн h1 тэр фонтоор (reload-гүй).
+    await page.getByLabel("Гарчгийн фонт").selectOption("montserrat");
+    await expect.poll(() => frame.locator(".hero-copy h1").evaluate(el => getComputedStyle(el).fontFamily), { timeout: 5_000 }).toContain("Montserrat");
+    await page.screenshot({ path: testInfo.outputPath("brand-studio-fonts.png"), fullPage: false });
+    await page.getByRole("button", { name: "Цуцлах" }).click();
+    await expect.poll(() => frame.locator(".hero-copy h1").evaluate(el => getComputedStyle(el).fontFamily), { timeout: 5_000 }).toContain("Golos");
+
     // Нүүрний бүтэц (A3): салбаруудыг хамгийн дээр, ангиллыг нуух — preview reload-гүй дахин эрэмбэлнэ.
     await page.getByRole("tab", { name: "Нүүрний бүтэц" }).click();
     for (let i = 0; i < 8; i++) await page.getByRole("button", { name: "Салбарууд — дээш" }).click();

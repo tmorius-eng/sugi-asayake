@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { setHomeLayoutPreview } from "@/lib/homeLayout";
+import { FONT_KEYS, fontFaceCss, fontStack } from "@shared/fonts";
 
 /**
  * Брэнд студийн амьд preview-ийн storefront тал (2026-10-05). Зөвхөн `?brandPreview=1` бөгөөд
@@ -52,13 +53,22 @@ export default function BrandPreviewBridge() {
 
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin || event.source !== window.parent) return;
-      const data = event.data as { type?: string; mode?: string; vars?: Record<string, unknown>; greeting?: unknown; posterUrl?: unknown; layout?: unknown } | null;
+      const data = event.data as { type?: string; mode?: string; vars?: Record<string, unknown>; fontBody?: unknown; fontDisplay?: unknown; greeting?: unknown; posterUrl?: unknown; layout?: unknown } | null;
       if (!data || data.type !== "brand-preview") return;
       const mode = data.mode === "dark" ? "dark" : "light";
       root.setAttribute("data-storefront-theme", mode);
       root.style.colorScheme = mode;
       for (const [name, value] of Object.entries(data.vars ?? {})) {
         if (VAR_NAME.test(name) && typeof value === "string" && VAR_VALUE.test(value)) root.style.setProperty(name, value);
+      }
+      // Фонт (A2): зөвхөн бүртгэлтэй түлхүүр — stack ба @font-face-ийг shared/fonts.ts-ээс өөрөө бүтээнэ.
+      const fontKeys = [data.fontBody, data.fontDisplay].filter((key): key is string => typeof key === "string" && (FONT_KEYS as readonly string[]).includes(key));
+      if (fontKeys.length === 2) {
+        let faces = document.getElementById("brand-preview-fonts");
+        if (!faces) { faces = document.createElement("style"); faces.id = "brand-preview-fonts"; document.head.appendChild(faces); }
+        faces.textContent = [...new Set(fontKeys)].map(fontFaceCss).join("");
+        root.style.setProperty("--font-body", fontStack(fontKeys[0]));
+        root.style.setProperty("--font-display", fontStack(fontKeys[1]));
       }
       applyGreeting(data.greeting);
       applyPoster(data.posterUrl);

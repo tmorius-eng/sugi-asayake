@@ -215,6 +215,7 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
 - **Storefront-ийн өнгийг шинэ кодонд hex-ээр БИЧИХГҮЙ — `var(--primary)` гэх мэт токен** (`shared/theme-tokens.ts`). Шинэ токен нэмбэл `LIGHT_TOKEN_KEYS` + `BASE_THEME` + index.css гурвуулаа (`theme-tokens.test.ts` тулгана); текстийн токен бол `CONTRAST_PAIRS`-д хос нэм.
 - **Баярын постер `home-hero` слотыг ЗӨВХӨН `withHolidayPoster()`-оор солино** — indexHtml ба `content.siteMedia` хоёуланд; өөр газар солибол React ирэх мөчид hero үсэрнэ. Мэндчилгээний markup heroShell ↔ HeroSection ижил.
 - **Шинэ хүснэгт нэмбэл `scripts/new-owner-reset.ts`-ийн `TABLE_GROUPS`-д ангил** (харилцагчийн өгөгдөл бол `customerData`) — эс бөгөөс `new-owner-reset.test.ts` унана, скрипт production дээр татгалзана.
+- **Брэнд фонт нэмбэл**: `shared/fonts.ts` + `scripts/fetch-brand-fonts.ts` + `client/public/fonts/OFL.txt`-д зохиогчийн эрх; Reserved Font Name-тэй фонт (IBM Plex г.м.) ОРУУЛАХГҮЙ; `brand-fonts.spec.ts` монгол глифийг хэмжинэ.
 - **Theme/баярын зураг репод биш R2-д** (`themes/…`, `scripts/upload-theme-assets.ts`); постер солих бол `HOLIDAY_POSTER_VERSION` ахиулна (immutable кэш).
 - **Брэндийн нэрийг client кодонд бичихгүй — `brandName()` / `brandTitle("Хуудас")`** (`client/src/lib/brand.ts`); `brand-name-guard.test.ts` барина. Сервер талд `getSiteName()`.
 - Хатуу брэнд hex орвол `theme-hex-guard.test.ts` унана → `pnpm exec tsx scripts/codemod-hex-to-tokens.ts --write`. Хүчтэй улаан = `var(--primary-strong)`.

@@ -1,5 +1,31 @@
-Golos Text (golos-text-*.woff2 in this folder)
+Fonts in this folder, each licensed under the SIL Open Font License, Version 1.1 (below):
+
+Golos Text (golos-text-*.woff2)
 Copyright 2021 The Golos Text Project Authors (https://github.com/paratype/Golos-Text)
+
+Inter (inter/*.woff2)
+Copyright 2020 The Inter Project Authors (https://github.com/rsms/inter)
+
+Manrope (manrope/*.woff2)
+Copyright 2018 The Manrope Project Authors (https://github.com/sharanda/manrope)
+
+Onest (onest/*.woff2)
+Copyright 2021 The Onest Project Authors (https://github.com/simpals/onest)
+
+Nunito (nunito/*.woff2)
+Copyright 2014 The Nunito Project Authors (https://github.com/googlefonts/nunito)
+
+Montserrat (montserrat/*.woff2)
+Copyright 2011 The Montserrat Project Authors (https://github.com/JulietaUla/Montserrat)
+
+Noto Sans (noto-sans/*.woff2)
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)
+
+Roboto Flex (roboto-flex/*.woff2)
+Copyright 2017 The Roboto Flex Project Authors (https://github.com/googlefonts/roboto-flex)
+
+The per-subset files (cyrillic-ext, cyrillic, latin-ext, latin) are the subsets
+distributed by Google Fonts; they are unmodified otherwise.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:

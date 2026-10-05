@@ -11,6 +11,8 @@
  * ажилладаг тул HSL/OKLCH руу хөрвүүлэх шаардлагагүй.
  */
 
+import { FONT_KEYS, type FontKey } from "./fonts";
+
 /** Гэрэл горимд `:root`-д байдаг токенууд. */
 export const LIGHT_TOKEN_KEYS = [
   "background", "foreground",
@@ -49,6 +51,9 @@ export interface ThemeLook {
   dark: DarkThemeTokens;
   radius: RadiusPreset;
   productAspect: ProductAspect;
+  /** Үндсэн текст ба гарчгийн фонт (shared/fonts.ts, A2) — анхдагч Golos Text */
+  fontBody: FontKey;
+  fontDisplay: FontKey;
 }
 
 /** index.css-ийн одоогийн утгууд (2026-10-05). Энд өөрчилбөл index.css-ийг МӨН өөрчил (тест тулгана). */
@@ -101,6 +106,8 @@ export const BASE_THEME: ThemeLook = {
   },
   radius: "lg",
   productAspect: "1/1",
+  fontBody: "golos",
+  fontDisplay: "golos",
 };
 
 const HEX_RE = /^#[0-9a-f]{6}$/;
@@ -117,7 +124,9 @@ export function normalizeHex(value: unknown): string | null {
  * Хэсэгчилсэн өөрчлөлтийг (баярын загвар зөвхөн хэдэн өнгө солино) хадгалахад бэлэн болгоно:
  * зөвхөн мэдэгдэх түлхүүр, зөвхөн зөв hex. DB-д үргэлж эндээс гарсан утга бичигдэнэ.
  */
-export function sanitizeLookPatch(patch: unknown): Partial<{ light: Partial<ThemeTokens>; dark: Partial<DarkThemeTokens>; radius: RadiusPreset; productAspect: ProductAspect }> {
+const isFontKey = (value: unknown): value is FontKey => (FONT_KEYS as readonly string[]).includes(value as string);
+
+export function sanitizeLookPatch(patch: unknown): Partial<{ light: Partial<ThemeTokens>; dark: Partial<DarkThemeTokens>; radius: RadiusPreset; productAspect: ProductAspect; fontBody: FontKey; fontDisplay: FontKey }> {
   const p = (patch && typeof patch === "object" ? patch : {}) as Record<string, unknown>;
   const out: ReturnType<typeof sanitizeLookPatch> = {};
   const pl = (p.light && typeof p.light === "object" ? p.light : {}) as Record<string, unknown>;
@@ -130,6 +139,8 @@ export function sanitizeLookPatch(patch: unknown): Partial<{ light: Partial<Them
   if (Object.keys(dark).length) out.dark = dark;
   if (typeof p.radius === "string" && p.radius in RADIUS_PRESETS) out.radius = p.radius as RadiusPreset;
   if ((PRODUCT_ASPECTS as readonly string[]).includes(p.productAspect as string)) out.productAspect = p.productAspect as ProductAspect;
+  if (isFontKey(p.fontBody)) out.fontBody = p.fontBody;
+  if (isFontKey(p.fontDisplay)) out.fontDisplay = p.fontDisplay;
   return out;
 }
 
@@ -147,5 +158,7 @@ export function mergeLook(base: ThemeLook, patch: unknown): ThemeLook {
   for (const key of DARK_TOKEN_KEYS) { const v = normalizeHex(pd[key]); if (v) dark[key] = v; }
   const radius = typeof p.radius === "string" && p.radius in RADIUS_PRESETS ? (p.radius as RadiusPreset) : base.radius;
   const productAspect = (PRODUCT_ASPECTS as readonly string[]).includes(p.productAspect as string) ? (p.productAspect as ProductAspect) : base.productAspect;
-  return { light, dark, radius, productAspect };
+  const fontBody = isFontKey(p.fontBody) ? p.fontBody : base.fontBody;
+  const fontDisplay = isFontKey(p.fontDisplay) ? p.fontDisplay : base.fontDisplay;
+  return { light, dark, radius, productAspect, fontBody, fontDisplay };
 }

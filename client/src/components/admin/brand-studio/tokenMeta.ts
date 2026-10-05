@@ -1,3 +1,4 @@
+import type { FontKey } from "@shared/fonts";
 import { BASE_THEME, DARK_TOKEN_KEYS, LIGHT_TOKEN_KEYS, RADIUS_PRESETS, type DarkTokenKey, type ProductAspect, type RadiusPreset, type ThemeLook, type ThemeTokenKey } from "@shared/theme-tokens";
 
 /** Брэнд студи → Өнгө табын бүлгүүд. Токен бүр нэг л бүлэгт (tokenMeta.test-гүйгээр ч гараар тулгахад хялбар). */
@@ -43,7 +44,7 @@ export const DARK_LABELS: Record<DarkTokenKey, string> = {
 export const RADIUS_LABELS: Record<RadiusPreset, string> = { none: "0", sm: "6px", md: "10px", lg: "14px", xl: "20px" };
 export const ASPECT_LABELS: Record<ProductAspect, string> = { "1/1": "1:1", "4/5": "4:5", "3/4": "3:4", "8/9": "8:9", "7/5": "7:5" };
 
-export type LookPatch = { light?: Partial<Record<ThemeTokenKey, string>>; dark?: Partial<Record<DarkTokenKey, string>>; radius?: RadiusPreset; productAspect?: ProductAspect };
+export type LookPatch = { light?: Partial<Record<ThemeTokenKey, string>>; dark?: Partial<Record<DarkTokenKey, string>>; radius?: RadiusPreset; productAspect?: ProductAspect; fontBody?: FontKey; fontDisplay?: FontKey };
 
 /** Зөвхөн суурьнаас ялгаатай утгууд — баярын загвар суурийн дээр давхарлагддаг тул бүрэн хуулбар хадгалахгүй. */
 export function diffLook(base: ThemeLook, look: ThemeLook): LookPatch {
@@ -56,6 +57,8 @@ export function diffLook(base: ThemeLook, look: ThemeLook): LookPatch {
   if (Object.keys(dark).length) patch.dark = dark;
   if (look.radius !== base.radius) patch.radius = look.radius;
   if (look.productAspect !== base.productAspect) patch.productAspect = look.productAspect;
+  if (look.fontBody !== base.fontBody) patch.fontBody = look.fontBody;
+  if (look.fontDisplay !== base.fontDisplay) patch.fontDisplay = look.fontDisplay;
   return patch;
 }
 

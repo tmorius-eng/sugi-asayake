@@ -1,4 +1,5 @@
 import { DARK_TOKEN_KEYS, LIGHT_TOKEN_KEYS, RADIUS_PRESETS, normalizeHex, type ThemeLook } from "../../shared/theme-tokens";
+import { fontFaceCss, fontStack, getBrandFont } from "../../shared/fonts";
 
 /**
  * Брэнд студийн загварыг `<style id="brand-tokens">` болгоно (2026-10-05) — indexHtml.ts нь
@@ -17,6 +18,11 @@ export function renderBrandTokensStyle(look: ThemeLook): string {
   const light = LIGHT_TOKEN_KEYS.map(key => decl(key, normalizeHex(look.light[key]))).join("")
     + decl("radius", RADIUS_PRESETS[look.radius] ?? RADIUS_PRESETS.lg)
     + decl("product-aspect", look.productAspect.replace("/", " / "));
+  // Фонт (A2): Golos бол юу ч нэмэхгүй (index.css-д бий) — сонгосон фонтын л @font-face, бусад нь хэзээ ч татагдахгүй.
+  const body = getBrandFont(look.fontBody ?? "golos").key;
+  const display = getBrandFont(look.fontDisplay ?? "golos").key;
+  const fonts = (body !== "golos" ? decl("font-body", fontStack(body)) : "") + (display !== "golos" ? decl("font-display", fontStack(display)) : "");
+  const faces = [...new Set([body, display])].map(fontFaceCss).join("");
   const dark = DARK_TOKEN_KEYS.map(key => decl(key, normalizeHex(look.dark[key]))).join("");
-  return `<style id="brand-tokens">html:root{${light}}html:root[data-storefront-theme="dark"]{${dark}}</style>`;
+  return `<style id="brand-tokens">${faces}html:root{${light}${fonts}}html:root[data-storefront-theme="dark"]{${dark}}</style>`;
 }
