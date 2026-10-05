@@ -37,7 +37,11 @@ export function responsiveImagePreloadTag(url: string, fullWidth: number, sizes:
 /** /cdn/<key>.webp зургийн AVIF хувилбар R2-д бий эсэх (10 минут кэштэй).
  *  heroShell.ts ч ашиглана: серверийн зурсан <picture> нь байхгүй AVIF-г заавал
  *  бол хөтөч эвдэрсэн зураг үзүүлнэ (ResponsivePicture шиг onError fallback-гүй). */
+// Репод AVIF-тайгаа хамт ирдэг локал зургууд (server/holiday-posters.test.ts бүх файлыг шалгана).
+const LOCAL_AVIF_PREFIXES = ["/images/holidays/"];
+
 export async function hasAvif(url: string): Promise<boolean> {
+  if (LOCAL_AVIF_PREFIXES.some(prefix => url.startsWith(prefix)) && url.endsWith(".webp") && !url.endsWith("-600w.webp")) return true;
   // `/cdn/<key>` ба R2-ийн шууд хаяг хоёулаа (publicUrl.ts-ийн directStorageUrl).
   const key = storageKeyOf(url);
   if (!key || !url.endsWith(".webp") || url.endsWith("-600w.webp")) return false;

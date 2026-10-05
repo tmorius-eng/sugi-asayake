@@ -29,6 +29,8 @@ export function PageviewTracker() {
 
   useEffect(() => {
     if (location.startsWith("/admin")) return;
+    // Брэнд студийн iframe preview (BrandPreviewBridge тэмдэглэнэ) — admin-ий үзэлт хандалт биш.
+    if (document.documentElement.hasAttribute("data-brand-preview")) return;
     if (!hasAnalyticsConsent()) return;
     trackPageview.mutate({ path: location, trafficSource: getStoredTrafficSource() ?? null });
     // eslint-disable-next-line react-hooks/exhaustive-deps

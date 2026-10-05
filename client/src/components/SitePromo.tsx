@@ -177,14 +177,14 @@ export default function SitePromo() {
         ))}
       </>
     );
-    return <div ref={bannerRef} className="site-promo-banner sticky top-0 z-[60] flex items-center gap-3 bg-[#17181b] px-4 py-2.5 text-white">
+    return <div ref={bannerRef} className="site-promo-banner sticky top-0 z-[60] flex items-center gap-3 bg-[var(--promo-bar-bg)] px-4 py-2.5 text-[var(--promo-bar-fg)]">
       <div ref={tickerRef} className="site-promo-ticker" aria-label={promoText}>
         <div>{tickerRow("promo-a")}</div>
         <div aria-hidden="true">{tickerRow("promo-b")}</div>
       </div>
       <div className="flex shrink-0 items-center gap-3">
-        {promo.ctaLabel && promo.ctaUrl ? <a href={promo.ctaUrl} className="shrink-0 rounded-full bg-[#df1f3d] px-3 py-1 text-[11px] font-bold text-white transition hover:bg-[#bc1732]">{promo.ctaLabel}</a> : null}
-        <button type="button" onClick={dismiss} aria-label="Зарыг хаах" className="-m-1.5 shrink-0 p-1.5 text-white/60 transition hover:text-white"><X size={16} /></button>
+        {promo.ctaLabel && promo.ctaUrl ? <a href={promo.ctaUrl} className="shrink-0 rounded-full bg-[var(--primary)] px-3 py-1 text-[11px] font-bold text-[var(--primary-foreground)] transition hover:bg-[var(--primary-hover)]">{promo.ctaLabel}</a> : null}
+        <button type="button" onClick={dismiss} aria-label="Зарыг хаах" className="-m-1.5 shrink-0 p-1.5 text-[var(--promo-bar-fg)] opacity-60 transition hover:opacity-100"><X size={16} /></button>
       </div>
     </div>;
   }
@@ -218,7 +218,7 @@ export default function SitePromo() {
         <h2 className="mt-3 font-[var(--font-display)] text-2xl font-semibold tracking-[-.04em] text-[#17181b] sm:text-3xl max-sm:text-[2rem] max-sm:leading-[1.05]">{promo.headline}</h2>
         {promo.message ? <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-[#5c5d61]">{promo.message}</p> : null}
         {promo.ctaLabel && promo.ctaUrl
-          ? <a href={promo.ctaUrl} onClick={dismiss} className="mt-6 inline-flex min-h-12 items-center justify-center rounded-full bg-[#df1f3d] px-7 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97]">{promo.ctaLabel}</a>
+          ? <a href={promo.ctaUrl} onClick={dismiss} className="mt-6 inline-flex min-h-12 items-center justify-center rounded-full bg-[var(--primary)] px-7 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-[var(--primary-hover)] active:scale-[.97]">{promo.ctaLabel}</a>
           : <button type="button" onClick={dismiss} className="mt-6 inline-flex min-h-12 items-center justify-center rounded-full border border-black/10 px-7 text-sm font-bold text-[#17181b] transition hover:bg-black/5">Ойлголоо</button>}
       </div>
     </div>

@@ -22,7 +22,7 @@
  * EditorialBanner primitive-ээр) -> StoreLocatorSection -> Footer (хуучин final-cta-г
  * opt-in banner болгон шингээсэн, SiteFooter.tsx).
  */
-import { useLayoutEffect, useMemo, useState } from "react";
+import { Fragment, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import CartDrawer from "@/components/CartDrawer";
 import CommerceHeader from "@/components/CommerceHeader";
 import SiteFooter from "@/components/SiteFooter";
@@ -43,6 +43,8 @@ import { useShopContact } from "@/hooks/useShopContact";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { useSiteText } from "@/hooks/useSiteText";
 import { trpc } from "@/lib/trpc";
+import { useHomeLayout } from "@/lib/homeLayout";
+import type { HomeSectionKey } from "@shared/home-sections";
 
 // These have no bundled fallback photo (unlike product shots, there's no
 // generic stand-in for real store/lifestyle photography) -- null here
@@ -132,6 +134,7 @@ export default function Home() {
     return url ? { backgroundImage: `url(${url})` } : undefined;
   };
   const textFor = useSiteText();
+  const homeLayout = useHomeLayout();
   const contact = useShopContact();
   // The catalogue categories, from the database rather than a hardcoded
   // array -- see useCategories() for how the photo/icon halves are joined.
@@ -145,23 +148,19 @@ export default function Home() {
   );
   const [careHeadingLine1, careHeadingLine2] = textFor("home-text-care-heading", "Багахан итгэл.\nИх халамж").split("\n");
   const [finalCtaHeadingLine1, finalCtaHeadingLine2] = textFor("home-text-finalcta-heading", "Сайн сонголт\nойрхон байна").split("\n");
-  return (
-    <div className="sugi-site" id="top">
-      <CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="SUGI ASAYAKE" marketingNav />
-
-      <main>
-        {/* mediaReady: the hero must not paint its row until it knows how
-            many photographs there are. Slots 4-6 have no brand default, so
-            while this query is in flight the row would be three tiles wide,
-            then grow to five and visibly jump (Tom: "refresh hiiheer ehnii 3
-            slide ... daraa n suuld nemegdsen slide garj irj baina, lag").
-            The hero reserves the exact height meanwhile, so nothing shifts. */}
-        <HeroSection imageFor={imageFor} mediaReady={!siteMediaQuery.isLoading} />
-
+  // Брэнд студи A3 (2026-10-05): хэсгүүдийн дараалал/нуулт/хувилбар админаас (shared/home-sections.ts).
+  // Hero тогтмол эхэнд (hero shell), бусад нь layout-ын дарааллаар.
+  const variantOf = (key: HomeSectionKey) => homeLayout.find(entry => entry.key === key)?.variant;
+  const sections: Record<HomeSectionKey, ReactNode> = {
+    chips: (
+      <>
         {/* The reference's popular-keyword box, built from this shop's own
             real categories and featured brands rather than invented terms. */}
         <KeywordChips categories={categories} brands={featuredBrands} />
-
+      </>
+    ),
+    bestsellers: (
+      <>
         {/* matsukiyococokara-online.com's bestseller ranking, adapted:
             real paid-order history via getBestsellingProducts, never a
             curated list. 2026-09-12: the 6-up grid of shadowed cards became
@@ -182,7 +181,10 @@ export default function Home() {
             {bestsellers.map((product, index) => <ShelfProductCard product={product} rank={index + 1} key={product.id} />)}
           </CarouselShelf>
         )}
-
+      </>
+    ),
+    recommended: (
+      <>
         {/* Preference Profile v2 (2026-09-01): the same catalog.recommended
             endpoint /shop's rail uses -- public, and backed by a bestseller
             fallback server-side, so this hides only on a genuinely failed
@@ -197,7 +199,10 @@ export default function Home() {
             {recommended.map(product => <ShelfProductCard product={product} key={product.id} />)}
           </CarouselShelf>
         )}
-
+      </>
+    ),
+    brands: (
+      <>
         {/* Restored 2026-09-06 (Tom: "we need Top Brands, must have!!"), then
             rebuilt 2026-09-10 against matsuyaginza.com/en's "Featured Brands"
             at Tom's request -- the CarouselShelf/BrandTileCard version was a
@@ -215,7 +220,10 @@ export default function Home() {
             />
           </div>
         )}
-
+      </>
+    ),
+    categories: (
+      <>
         {/* Photo precedence (admin upload -> the category's own imageUrl
             -> this codebase's per-slot default -> placeholder) is resolved
             inside useCategories(), so every surface that shows a category
@@ -225,15 +233,24 @@ export default function Home() {
           anchorImageStyle={bgStyle("home-categories", assortmentImage)}
           symbolImage={symbolImage}
         />
-
+      </>
+    ),
+    story: (
+      <>
         <BrandStorySection branchCount={branchCount} productCountLabel={productCountLabel} featuredReviews={featuredReviews} />
-
+      </>
+    ),
+    stats: (
+      <>
         {/* Home redesign Tier 7 -- replaces the old membership-strip promo
             panel (generic "3-10%" prose, no real data) with a real,
             server-authoritative membership summary. See
             client/src/components/home/QuickStatsSection.tsx. */}
         <QuickStatsSection />
-
+      </>
+    ),
+    editorial: (
+      <>
         {/* 2026-09-06: the old hand-rolled .care-section markup (image half +
             text half + a rotated "sun stamp" badge) replaced by the
             already-built-but-previously-unused EditorialBanner primitive
@@ -246,7 +263,7 @@ export default function Home() {
             heading itself. The "03" belonged to a section numbering that no
             longer exists, and the eyebrow repeated the heading. One tag now. */}
         <EditorialBanner
-          variant="image-left"
+          variant={variantOf("editorial") === "image-right" ? "image-right" : "image-left"}
           tag={textFor("home-text-care-tag", "FAMILY CARE")}
           headingLine1={careHeadingLine1}
           headingLine2={careHeadingLine2}
@@ -259,8 +276,28 @@ export default function Home() {
           imageUrl={imageFor("home-family", familyImage)}
           imageAlt="SUGI ASAYAKE-ийн гэр бүлийн арчилгааны бүтээгдэхүүнүүд"
         />
-
+      </>
+    ),
+    stores: (
+      <>
         <StoreLocatorSection />
+      </>
+    ),
+  };
+  return (
+    <div className="sugi-site" id="top">
+      <CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="SUGI ASAYAKE" marketingNav />
+
+      <main>
+        {/* mediaReady: the hero must not paint its row until it knows how
+            many photographs there are. Slots 4-6 have no brand default, so
+            while this query is in flight the row would be three tiles wide,
+            then grow to five and visibly jump (Tom: "refresh hiiheer ehnii 3
+            slide ... daraa n suuld nemegdsen slide garj irj baina, lag").
+            The hero reserves the exact height meanwhile, so nothing shifts. */}
+        <HeroSection imageFor={imageFor} mediaReady={!siteMediaQuery.isLoading} />
+
+        {homeLayout.filter(entry => entry.visible).map(entry => <Fragment key={entry.key}>{sections[entry.key]}</Fragment>)}
       </main>
 
       <SiteFooter

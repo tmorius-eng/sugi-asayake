@@ -4,6 +4,22 @@
 
 ---
 
+## Брэнд студи A0+A1 + баярын загвар (постер, мэндчилгээ) (2026-10-05, орой)
+
+Tom: *"сайтыг өөр компани/хувь хүнд ч зарж болдог болго — загвар, өнгө, фонт, блок, баярын загвар (Цагаан сар, Наадам, Шинэ жил, 6/1, 11/26, Чингис хаан, 3/8, Валентин…). Zochil шиг биш, шинэ санаатай."* Батлагдсан төлөвлөгөө: A0 (өгөгдөл/токен) → A1 (admin) → A2 (лого→палитр, фонт) → A3 (нүүрний бүтэц) → A4 (баяр) → A5 (hex цэвэрлэлт) → B (эзэн солих).
+
+- **A0 токен**: `shared/theme-tokens.ts` (index.css-ийн бодит утга = `BASE_THEME`, тест тулгана), сервер `<style id="brand-tokens">` (`html:root` specificity — дарааллаас үл хамаарна), `theme-color` мета токеноос, `--product-aspect`, `--promo-bar-*`, `--primary-hover` (SitePromo/heroShell-ийн хатуу hex). Migration **0103–0105** (`site_themes`, `site_theme_versions`, `site_layouts`) staging-д орсон, `REQUIRED_MIGRATIONS`-д. HTML кэшийн түлхүүрт УБ-ийн өдөр. E2E 94/94 — харагдах өөрчлөлт 0.
+- **Баярын хуанли**: `shared/holidays.ts` (13 баяр, сарны тооллын баталгаатай огноо л), `shared/theme-resolver.ts` (цэвэр, УБ өдөр, priority, override, Битүүн), анхдагч бүгд **унтраалттай**.
+- **A1 /admin → Брэнд студи** (`server/brandStudioRouter.ts`, `client/src/components/admin/brand-studio/`): Өнгө ба хэлбэр (бүлэглэсэн токен, AA badge, "Бүгдийг засах" = `fixForeground`, булан, зургийн харьцаа), **амьд preview** (бодит сайт iframe `?brandPreview=1` + postMessage, `BrandPreviewBridge.tsx`, компьютер/утас, гэрэл/харанхуй), Баярын загвар (timeline, асаах, хоног, гараар огноо, мэндчилгээ, постер upload, урьдчилан харах), Түүх (сүүлийн 30, сэргээх). Сервер AA-г дахин шалгана (`checkLookContrast`, 22 хос).
+- **Баяр бүрт санал болгох өнгө** (`shared/holiday-palettes.ts`, бүгд AA) — товчоор л хэрэгжинэ.
+- **Постер + мэндчилгээ**: идэвхтэй баярын үед `home-hero` слотыг постероор **нэг газар** солино (`server/_core/holidayHero.ts` → indexHtml + `content.siteMedia`), мэндчилгээ `.hero-greeting` (heroShell ↔ HeroSection ижил). 13 анхдагч постер `client/public/images/holidays/` (webp+avif, 1024/600) — **Gemini Nano Banana Pro**-оор. Tom-ийн шүүмжээр 2 дахин хийсэн: эхнийх нь хятад хэв маягтай (хадаг, шаазан, бадамлянхуа) ба мөнгөн аяга "хөнгөн цагаан шиг", Blue Sky-г Төрийн ордны ард тавьсан → бодит объектын судалгаа + Wikimedia-ийн бодит УБ зургийг лавлагаа болгосон. Дүрэм санах ойд (`mongolian-imagery-authenticity`).
+- **A2 лого → палитр** (`shared/color/palette.ts`: median-cut, брэнд өнгө сонголт, "Тод/Зөөлөн/Харанхуй зурвас" 3 палитр бүгд AA — дунд гэрэлтэй өнгөнд товчийг өөрийг нь харанхуйлна; `admin.brandStudio.derivePalette` логог R2/public-аас уншина). Фонтын сонголт (A2-ын үлдсэн хэсэг) Tom-ийн фонтын жагсаалтын зөвшөөрлийг хүлээж байна (дүрэм 0.1).
+- **A3 нүүрний бүтэц** (`shared/home-sections.ts`, `server/db/layouts.ts`, bootstrap `layout`, `client/src/lib/homeLayout.ts`, Home.tsx `sections` map): 9 хэсгийг дараалах/нуух, EditorialBanner зураг зүүн/баруун. **Hero тогтмол эхэнд** (shell-ийн дүрэм). Preview нь reload-гүй дахин эрэмбэлнэ.
+- **Бие даасан шалгагчийн 8 олдвор засагдсан**: зарын зурвасын текст `promo-bar-fg`/`primary-foreground` токен (AA шалгалт худал баталгаа өгч байв), preview iframe хандалт/GA4-д тоологддог байсан, гараар огноо оруулбал дараа жилүүдэд баяр бүрмөсөн унтардаг байсан, rollback баярын асаалтыг буцаадаггүй, баярын токен /admin-ий UI-г ч солих байсан (одоо /admin, /face-approve кодын суурьтай), rollback-ийн driver алдаа клиент рүү, суурь солиход баярын patch шалгагддаггүй, PreviewFrame-ийн төвлөрөлт.
+- Тест: unit 990 (шинэ: токен, резолвер, контраст, палитр, лого палитр, постер, нүүрний layout), integration `brand-studio.integration.test.ts` 4/4 (staging, snapshot-and-restore), E2E 112/112 (`brand-studio.spec.ts`: өнгө→preview, AA засвар, лого палитр, нүүрний бүтэц, баярын урьдчилан харалт; hero-shell 1 удаа ачааллын flake — дангаар 30/30, дахин бүтэн run ногоон).
+- ⛔ **Prod-д 0103 → 0105 ЗААВАЛ кодоос ӨМНӨ** (REQUIRED_MIGRATIONS — үгүй бол сервер эхлэхгүй).
+- Gemini MCP: `claude mcp add gemini -s user -e GEMINI_API_KEY=… -e GEMINI_IMAGE_OUTPUT_DIR=C:/Users/hero_/Pictures/gemini -- npx -y @houtini/gemini-mcp` (нэрийг `-e`-ээс ӨМНӨ). Зураг үүсгэхэд billing хэрэгтэй (үнэгүй горимд зургийн хязгаар 0). Түлхүүр чатад ил болсон — дуусмагц солих.
+
 ## /admin → Процесс самбар + сайтын бодит төлөвийн шинжилгээ (2026-10-05)
 
 Tom Facebook-оор **NEXUS demo** artifact (Аксиллион ХХК, "Худалдан авалт PR → PO": BPMN диаграм,

@@ -153,6 +153,7 @@ import {
   getReviewEligibility,
   getRoutineForProduct,
   getSiteMedia,
+  getActiveThemeBundle,
   getSiteText,
   getStoreSettings,
   getStoreSettingValue,
@@ -250,6 +251,8 @@ import { createQPayInvoice, parseQPayInvoicePayload, getQPayAvailability } from 
 import { sendNtfyTest } from "./notifications";
 import { notificationsRouter } from "./notificationsRouter";
 import { inventoryRouter } from "./inventoryRouter";
+import { brandStudioRouter } from "./brandStudioRouter";
+import { withHolidayPoster } from "./_core/holidayHero";
 import { getInventorySyncProvider, getInventorySyncStatus, runInventorySync, runPullSnapshot, setBranchExternalId } from "./integrations/inventorySync";
 import { applyVendorCatalog, buildVendorCatalogDiff } from "./integrations/vendorCatalog";
 import { createStorepayLoan, getStorepayAvailability, normaliseMobileNumber, storepayPossibleAmount } from "./storepay";
@@ -259,7 +262,7 @@ import { clearSmartSoftwareTokenCache } from "./integrations/smartSoftware";
 import { assertImageSignature, imageContentTypes, mediaContentTypes, processUploadedImageOrThrow } from "./_core/imageUpload";
 import { INTEGRATION_PROVIDERS } from "../shared/integrations";
 import { isAllowedPushEndpoint } from "../shared/push-endpoint";
-import { buildNotificationMessage, NOTIFICATION_GROUP_LABELS, NOTIFICATION_GROUPS, NTFY_TOPIC_FIELD } from "../shared/notification-events";
+import { buildNotificationMessage, NOTIFICATION_GROUP_LABELS, NOTIFICATION_GROUPS, NTFY_TOPIC_FIELD, ubDateKey } from "../shared/notification-events";
 import { createNoOpVerificationSession, createVerificationSession, getSessionStatus, isNoOpSessionExpired, normalizePhoneForVerifyMn } from "./verifyMn";
 import { consumeCheckoutPhoneVerificationSession, createManualOrder, editAdminOrder, findExistingOrderForClientRequest, getAdminOrderWithItems, getStoreSettingNumber, isOrderSettled, recordNotification, releaseCheckoutPhoneVerificationSession, requestOrderReturn } from "./db";
 import { getCategoryWriteViolation, getProductWriteViolation } from "./catalog-validation";
@@ -1803,7 +1806,11 @@ export const appRouter = router({
     // 2026-09-21: storefront-д R2-ийн шууд хаяг (publicUrl.ts-ийн directStorageUrl) —
     // indexHtml.ts-ийн bootstrap/shell/preload-той ИЖИЛ URL, эс бөгөөс арын refetch
     // hero-ийн src-ийг сольж дахин татуулна. Admin-ий siteMedia `/cdn/` хэвээр.
-    siteMedia: publicProcedure.query(async () => (await getSiteMedia()).map(row => ({ ...row, imageUrl: directStorageUrl(row.imageUrl) }))),
+    // Баярын постер (2026-10-05): indexHtml-тэй ИЖИЛ солилт — React-ийн refetch hero-г буцааж солихгүй.
+    siteMedia: publicProcedure.query(async () => {
+      const [rows, theme] = await Promise.all([getSiteMedia(), getActiveThemeBundle(ubDateKey())]);
+      return withHolidayPoster(rows.map(row => ({ ...row, imageUrl: directStorageUrl(row.imageUrl) })), theme.poster && directStorageUrl(theme.poster));
+    }),
     siteText: publicProcedure.query(() => getSiteText()),
     // "Controls everything" admin overhaul (2026-09-08, Phase A): public so
     // the checkout page (delivery fee/free-shipping threshold) can read it
@@ -3464,6 +3471,8 @@ export const appRouter = router({
     // хүний шийдвэр хүлээж буй алхмууд, job-уудын түүх (job_runs, 0102). `admin.`
     // угтвар хэвээр тул trpcBatchGuard-ийн PRIVILEGED_PREFIXES, клиентийн splitLink
     // өөрчлөгдөхгүй. Батлах дэлгэцүүдийг ДАХИН хийхгүй — байгаа хэсгүүд рүү холбоос.
+    // /admin → Брэнд студи (2026-10-05): өнгө, баярын загвар, түүх — server/brandStudioRouter.ts
+    brandStudio: brandStudioRouter,
     process: router({
       overview: ordersReadProcedure.input(z.object({ stuckHours: z.number().int().min(1).max(168).default(24) }))
         .query(({ input }) => getOrSetCached(`process:overview:${input.stuckHours}`, 30_000, () => getProcessOverview(input.stuckHours))),

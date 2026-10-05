@@ -1,4 +1,4 @@
-import { Workflow, LayoutDashboard, LineChart, PackagePlus, CheckCircle2, CreditCard, FilePenLine, FileText, Star, ListChecks, Megaphone, Tag, Tags, ImageUp, UsersRound, ChartColumnIncreasing, ShieldAlert, Plug, CalendarDays, Send, Settings, MapPin, ShoppingBag, Smartphone, ScanBarcode, Search, LogOut, Menu, type LucideIcon } from "lucide-react";
+import { Workflow, Paintbrush, LayoutDashboard, LineChart, PackagePlus, CheckCircle2, CreditCard, FilePenLine, FileText, Star, ListChecks, Megaphone, Tag, Tags, ImageUp, UsersRound, ChartColumnIncreasing, ShieldAlert, Plug, CalendarDays, Send, Settings, MapPin, ShoppingBag, Smartphone, ScanBarcode, Search, LogOut, Menu, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import type { AdminSection } from "../AdminWorkspace";
@@ -39,6 +39,8 @@ const flatGroup: NavItem[] = [
   // Хайлт v3 (2026-09-20): статистик, синонимын толь, брэндийн alias.
   { key: "search", label: "Хайлт", Icon: Search },
   { key: "media", label: "Content & Media", Icon: ImageUp },
+  // Брэнд студи (2026-10-05): өнгө, хэлбэр, баярын загвар — Content & Media-тай ижил жин.
+  { key: "brandStudio", label: "Брэнд студи", Icon: Paintbrush },
   { key: "documents", label: "Баримт бичиг", Icon: FileText },
   { key: "campaigns", label: "Кампанит ажил", Icon: Send },
   { key: "storeSettings", label: "Дэлгүүрийн тохиргоо", Icon: Settings },
@@ -86,6 +88,8 @@ export const SECTION_ROLES: Record<AdminSection, ReadonlySet<string>> = {
   // Хайлт v3: толь/alias бичигчид marketingProcedure — brands-тай ижил жин.
   search: new Set(["marketing", "admin"]),
   media: new Set(["marketing", "admin"]),
+  // server/brandStudioRouter.ts — marketingProcedure.
+  brandStudio: new Set(["marketing", "admin"]),
   // Published page copy, same weight as Content & Media.
   documents: new Set(["marketing", "admin"]),
   // admin-only: unlike page copy, these percentages price real orders.

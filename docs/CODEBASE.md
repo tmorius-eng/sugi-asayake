@@ -129,6 +129,8 @@ browser → /api/trpc/<router>.<procedure>
 | `questions.ts` | асуулт/хариулт |
 | `gift-cards.ts` | бэлгийн карт (үүсгэх, хүчингүй, redeem) |
 | `order-events.ts` | (2026-10-05, 0101) захиалгын үйл явдлын append-only бүртгэл: `recordOrderEvent` (захиалга бичдэг 10 функц (13 дуудлагын цэг) ижил tx-д дуудна; актор customer/staff/job/webhook/system), `getOrderTrail` (event + ledger + төлбөр + outbox + аудит → `shared/process-timeline.ts` `mergeTimeline`), `getProcessOverview`/`getStageOrders`/`getAuditFeed` — /admin → Процесс |
+| `themes.ts` | (2026-10-05, 0103–0105) Брэнд студи: `getThemeRows` (30 с кэш), `getActiveThemeBundle(dateKey, previewKey?)` (суурь + идэвхтэй баяр → look/greeting/poster), `saveTheme` (FOR UPDATE, өмнөх төлөв `site_theme_versions`-д, 30 хувилбар), `listThemeVersions`, `rollbackTheme`. HTML кэшийг роутер цэвэрлэнэ (тойрог import) |
+| `layouts.ts` | (2026-10-05, 0105) нүүрний хэсгүүдийн дараалал: `getHomeLayout` (30 с кэш, мөргүй бол `DEFAULT_HOME_LAYOUT`), `saveHomeLayout` (`sanitizeHomeLayout`, upsert) — Брэнд студи → Нүүрний бүтэц |
 | `price-campaigns.ts` | (2026-09-29, 0098) бүх барааны нийтийн хямдрал: `withLiveCampaign`/`priceLinesForOrder` (кэшээс уншсаны ДАРАА), admin CRUD, урьдчилан харах. Дүрэм `shared/price-campaign.ts` |
 
 

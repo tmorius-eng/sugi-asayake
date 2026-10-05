@@ -4,6 +4,10 @@ import { getSiteMediaSlot, type SiteMediaSlotKey } from "@shared/site-media";
 import { useSiteText } from "@/hooks/useSiteText";
 import { useT } from "@/hooks/useLocale";
 import HeroImageSlideshow, { type HeroSlide } from "./HeroImageSlideshow";
+import { storefrontThemeInfo } from "@/lib/bootstrap";
+
+// Баярын мэндчилгээ (Брэнд студи) — серверийн hero shell-тэй ИЖИЛ мөр (heroShell.ts).
+const themeGreeting = storefrontThemeInfo()?.greeting ?? null;
 
 /**
  * Homepage opening -- 2026-09-12, rebuilt against cosmekitchen-webstore.jp
@@ -76,6 +80,7 @@ export default function HeroSection({ imageFor, mediaReady = true }: {
         ? <HeroImageSlideshow slides={slides} imageAlt="SUGI ASAYAKE everyday-care products" />
         : <div className="hero-rail-reserve" aria-hidden="true" />}
       <div className="hero-copy">
+        {themeGreeting ? <p className="hero-greeting">{themeGreeting}</p> : null}
         {/* Tom, 2026-09-12: the brand half sits on the house red and the
             place half on the house blue, same typeface and size as before.
             The slash in the admin's own text is what separates them, so an

@@ -118,6 +118,13 @@
      #dae0da and the pale-mint #ced5cf/#d3dad4 family) darker variant scoped
      to exactly that one small-bold-text-on-light-background pattern. */
   --primary-text: #b01729;
+  /* Брэнд студи (2026-10-05): товчны hover ба зарын зурвас — өмнө нь SitePromo/heroShell-д
+     `#bc1732` / `#17181b` хатуу бичигдсэн байв. Утга нь shared/theme-tokens.ts BASE_THEME. */
+  --primary-hover: #bc1732;
+  --promo-bar-bg: #17181b;
+  --promo-bar-fg: #ffffff;
+  /* Бүтээгдэхүүний зургийн харьцаа — Брэнд студиэс (1/1, 4/5, 3/4, 8/9, 7/5) */
+  --product-aspect: 1 / 1;
   --background: #dae0da;
   --foreground: #17181b;
   --card: #f2f5f2;
@@ -974,7 +981,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .shop-product-card:hover { transform: translateY(-3px); border-color: #dcdce1; box-shadow: 0 10px 26px rgba(23, 24, 27, .1); }
 
 /* --- media --- */
-.shop-product-media { position: relative; aspect-ratio: 1; overflow: hidden; background: #fff; }
+.shop-product-media { position: relative; aspect-ratio: var(--product-aspect); overflow: hidden; background: #fff; }
 .shop-product-media .shop-product-link { position: absolute; inset: 0; display: grid; place-items: center; padding: 11%; }
 .shop-product-media img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; transition: transform .3s var(--ease-out); }
 .shop-product-card:hover .shop-product-media img { transform: scale(1.04); }
@@ -1315,7 +1322,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .wishlist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
 .wishlist-card { position: relative; overflow: hidden; background: var(--card); border: 1px solid rgba(23,24,27,.08); transition: transform .2s var(--ease-out), box-shadow .2s var(--ease-out); }
 .wishlist-card:hover { transform: translateY(-4px); box-shadow: 0 16px 30px rgba(20,22,24,.1); }
-.wishlist-card-image { position: relative; aspect-ratio: 1; overflow: hidden; background: #d3dad4; }
+.wishlist-card-image { position: relative; aspect-ratio: var(--product-aspect); overflow: hidden; background: #d3dad4; }
 .wishlist-card-image img { width: 100%; height: 100%; object-fit: cover; }
 .wishlist-remove { position: absolute; top: 9px; right: 9px; z-index: 1; display: grid; width: 30px; height: 30px; place-items: center; border: 0; border-radius: 50%; background: rgba(255,255,255,.94); color: var(--primary); box-shadow: 0 6px 14px rgba(20,22,24,.14); transition: transform .18s var(--ease-out), background .18s var(--ease-out), color .18s var(--ease-out); }
 .wishlist-remove:hover { background: var(--primary); color: #fff; transform: scale(1.08); }
@@ -1497,7 +1504,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .bestseller-card { position: relative; display: flex; flex-direction: column; overflow: hidden; background: #f2f5f2; color: #17181b; box-shadow: 7px 8px 0 rgba(23,24,27,.14); transition: transform .22s var(--ease-out), box-shadow .22s var(--ease-out); }
 .bestseller-card:hover { box-shadow: 10px 12px 0 rgba(223,31,61,.22); transform: translateY(-5px); }
 .bestseller-rank { position: absolute; top: 9px; left: 9px; z-index: 1; display: grid; width: 26px; height: 26px; place-items: center; border-radius: 50%; background: #17181b; color: #f0b52d; font-family: var(--font-display); font-size: 12px; font-weight: 700; }
-.bestseller-card img { width: 100%; aspect-ratio: 1; object-fit: cover; }
+.bestseller-card img { width: 100%; aspect-ratio: var(--product-aspect); object-fit: cover; }
 .bestseller-card > div { padding: 13px 14px 15px; }
 .bestseller-card p { margin: 0; color: var(--primary-text); font-size: 11px; font-weight: 900; letter-spacing: .07em; }
 .bestseller-card h3 { display: -webkit-box; overflow: hidden; margin: 6px 0; font-family: var(--font-display); font-size: 14px; font-weight: 650; letter-spacing: -.03em; line-height: 1.15; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
@@ -1560,7 +1567,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid rgba(57, 112, 167, .5
 .shelf-card { display: flex; flex-direction: column; height: 100%; overflow: hidden; background: #f2f5f2; border-radius: 18px; box-shadow: var(--shadow-sm); transition: transform .22s var(--ease-out), box-shadow .22s var(--ease-out); }
 .shelf-card:hover { box-shadow: var(--shadow-md); transform: translateY(-4px); }
 .shelf-card-image { position: relative; }
-.shelf-card-image img { width: 100%; aspect-ratio: 1; object-fit: cover; }
+.shelf-card-image img { width: 100%; aspect-ratio: var(--product-aspect); object-fit: cover; }
 .shelf-card-rank { position: absolute; top: 9px; left: 9px; z-index: 1; display: grid; width: 24px; height: 24px; place-items: center; border-radius: 50%; background: #17181b; color: #f0b52d; font-family: var(--font-display); font-size: 11px; font-weight: 700; }
 .shelf-card-body { display: flex; flex: 1 1 auto; flex-direction: column; padding: 13px 14px 15px; }
 .shelf-card-body p { margin: 0; color: var(--primary-text); font-size: 8px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
@@ -2699,7 +2706,7 @@ body:has(.sugi-site) { background: var(--ck-page); }
 .shelf-card-frame { display: flex; flex: 1 1 auto; flex-direction: column; border: 1px solid var(--ck-line); border-radius: 4px; background: var(--ck-surface); transition: border-color .18s var(--ease-out); }
 .shelf-card:hover .shelf-card-frame { border-color: #cfcfcf; }
 .shelf-card-image { position: relative; display: block; }
-.shelf-card-image img { width: 100%; aspect-ratio: 1; object-fit: contain; background: var(--ck-surface); }
+.shelf-card-image img { width: 100%; aspect-ratio: var(--product-aspect); object-fit: contain; background: var(--ck-surface); }
 .shelf-card-body { display: flex; flex: 1 1 auto; flex-direction: column; padding: 10px 12px 14px; }
 .shelf-card-body p { margin: 0 -12px 8px; padding: 4px 12px; background: var(--ck-chip); color: var(--ck-muted); font-size: 13px; font-weight: 500; letter-spacing: .04em; text-transform: none; }
 .shelf-card-body h3 {
@@ -3242,6 +3249,10 @@ body:has(.auth-shell) { background: var(--ck-page); }
    so these two marks opt back in explicitly. */
 /* No gap: the two marks sit tight against the slash between them (Tom), so
    the whole line reads as one lockup rather than three floating pieces. */
+/* Брэнд студийн iframe preview-д күүкийн самбар сайтыг хаахгүй (BrandPreviewBridge тэмдэглэнэ). */
+html[data-brand-preview] #silktide-wrapper, html[data-brand-preview] #silktide-banner { display: none !important; }
+/* Баярын мэндчилгээ (Брэнд студи, 2026-10-05) — heroShell.ts-тэй ижил. Алтлаг токен нь AA (5.8:1). */
+.sugi-site .hero-greeting { margin: 0 0 .65rem; color: var(--ck-gold); font-size: .78rem; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; text-align: center; }
 .sugi-site .hero-eyebrow { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0; }
 .sugi-site .hero-eyebrow .hero-eyebrow-brand,
 .sugi-site .hero-eyebrow .hero-eyebrow-place {

@@ -136,6 +136,7 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
 Өдөр бүрийн бүрэн тэмдэглэл HISTORY.md-д байна — тодорхой bug/шийдвэрийн
 шалтгааныг мэдэх хэрэгтэй үед л тэнд гарчгаар хайна.
 
+- (10-05, орой) **Брэнд студи A0+A1 + баярын загвар** — /admin → Брэнд студи: өнгө/хэлбэр амьд preview-тэй, AA хамгаалалт, 13 баяр (асаах, хоног, мэндчилгээ, постер), түүх. 13 постер Gemini-ээр (монгол соёлоор 2 дахин). ⛔ Prod-д migration **0103–0105** кодоос өмнө. HISTORY 2026-10-05 орой.
 - (10-05) **/admin → Процесс самбар + prod-ын бодит төлөв** (Tom NEXUS BPMN demo үзээд *"энэ шиг лаг юм болох уу, зарахад юу засах вэ"*). Шинжилгээ: prod дээр **09-23-ны `2abe751`** ажиллаж байгаа нь `/api/trpc/x/catalog.list` 200-оор батлагдав (шинэ код 404 өгнө) — 29 commit deploy хийгдээгүй, 0096–0100 дутуу; кодоос: **0098/0099-гүй deploy = бүх checkout + бүх сешн унана** (fallback алга) → `server/_core/migrationCheck.ts` production-д дутуу migration-тай бол сервер ЭХЛЭХГҮЙ (`REQUIRED_MIGRATIONS`, тест нь drizzle/-ийн сүүлийн файлтай тулгана). Самбар: migration **0101 `order_events`** (захиалга бичдэг 10 функц (13 дуудлагын цэг) ижил tx-д `recordOrderEvent`, актор customer/staff/job/webhook/system) + **0102 `job_runs`**; `admin.process.*`; гинж/түүх/ажлууд 3 tab; backfill скрипт. Мөн brace-expansion 0 vuln, admin Q&A хуудаслалт, drift-check төрөл, SALE §4 тайлан. Хөтчөөр компьютер + утас (E2E 4) — утсан дээр `.sr-only` хуудсыг 376px тэлдэг байсныг олж зассан. ⚠️ Энэ лаптопын `oci-ca.pem` хуучин — scratchpad CA + `DATABASE_CA_CERT_PATH`-аар ажиллуулсан. HISTORY 2026-10-05.
 - (10-01) **Аюулгүй байдлын deep scan — 38 олдвор + 5 нэмэлт, бүгд кодонд засагдсан** (Tom: *"deep scan … zunduuu ih tsoorhoi"*). Logout нь зөвхөн тэр төхөөрөмжийг `jti`-аар хүчингүй болгоно (0099), нууц үг/утас/Facebook-д step-up + lockout, анхны admin `scripts/make-admin.ts`, царайн proof `faceGrantVersion`, SSRF (`safeHttp`), push allowlist, DB TLS fail-closed, CV хувийн bucket, бэлгийн карт/купоны race, Access-ийн tRPC зам. Бие даасан 3 шалгалтын 21 олдвор мөн засагдсан. ⛔ Migration **0099, 0100 заавал кодоос өмнө** (0099-гүй бол `users.faceGrantVersion` байхгүй → бүх хэрэглэгч гарсан мэт). ⚠️ Integration/E2E энэ лаптопоос ажиллаагүй (DB TLS). HISTORY 2026-10-01.
 - (09-29) **Бүх барааны нийтийн хямдрал** — /admin → Урамшуулал (зөвхөн admin). DB-ийн үнэ хөндөгдөхгүй, `withLiveCampaign()` үнэ уншдаг газар бүрт. ⛔ Migration **0098** заавал кодоос өмнө. [SITEWIDE-SALE-PLAN.md](SITEWIDE-SALE-PLAN.md).
@@ -209,6 +210,13 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
 4. **Нэг төлөвийг хоёр газар зурвал төлөв нь ХУВААЛЦСАН байна.** Салангид
    төлөвтэй хоёр товч → давхар илгээлт. Салаа бүрийг тест хийгээд харилцан
    үйлчлэлийг орхивол баригдахгүй.
+
+**Брэнд студи, баяр (2026-10-05)**
+- **Storefront-ийн өнгийг шинэ кодонд hex-ээр БИЧИХГҮЙ — `var(--primary)` гэх мэт токен** (`shared/theme-tokens.ts`). Шинэ токен нэмбэл `LIGHT_TOKEN_KEYS` + `BASE_THEME` + index.css гурвуулаа (`theme-tokens.test.ts` тулгана); текстийн токен бол `CONTRAST_PAIRS`-д хос нэм.
+- **Баярын постер `home-hero` слотыг ЗӨВХӨН `withHolidayPoster()`-оор солино** — indexHtml ба `content.siteMedia` хоёуланд; өөр газар солибол React ирэх мөчид hero үсэрнэ. Мэндчилгээний markup heroShell ↔ HeroSection ижил.
+- **Нүүрэнд шинэ хэсэг нэмбэл `shared/home-sections.ts` (`HOME_SECTIONS`) ба Home.tsx-ийн `sections` map хоёуланд** — эс бөгөөс админ нууж/дараалж чадахгүй. Hero layout-д ОРОХГҮЙ (shell).
+- Брэнд токен /admin, /face-approve-д кодын суурь (`isAdminPath`, indexHtml) — admin UI баярын загвараар солигдохгүй.
+- Монгол соёлын зураг (Gemini): судалгаа + бодит лавлагаа зураг + сөрөг жагсаалт; Gemini API зөвхөн зураг үүсгэхэд.
 
 **Хайлт, санал болголт (2026-09-20)**
 - Синоним, брэндийн alias кодонд БИЧИХГҮЙ — DB (`search_synonyms`, `brand_aliases`, /admin → Хайлт). Кодын `DEFAULT_*` жагсаалт зөвхөн seed.
@@ -395,6 +403,7 @@ session-ий тэмдэглэл HISTORY.md-д, дүрэм л энд. Ажилл�
 ажилд, output-оо хэрхэн таслах, session-ээ хэрхэн хуваах) TOKEN-USAGE.md-д.
 
 ## ⚠️ Tom-оос хүлээж буй (2026-09-14, "Za bugdiin hii"-ийн дараа)
+- 🔴 **(2026-10-05 орой) Брэнд студийн migration**: дараагийн deploy-оос ӨМНӨ prod-д `pnpm exec tsx scripts/db-apply-migration.ts drizzle/0103_site_themes.sql`, `0104_site_theme_versions.sql`, `0105_site_layouts.sql` (staging-д орсон) — эс бөгөөс REQUIRED_MIGRATIONS сервер эхлүүлэхгүй. Дараа нь /admin → Брэнд студи → Баярын загвар → хүссэн баяраа асаана (анхдагч бүгд унтраалттай). Gemini түлхүүрийг ажил дуусмагц солих.
 - ✅ **(2026-10-05 20:54) PRODUCTION DEPLOY ХИЙГДСЭН** — Tom prod-д 0096→0102-ыг ажиллуулж (103/103, дутуу 0), `deploy.ps1` (`d91b9fd`), шинэ код амьд (`/api/trpc/x/catalog.list` → 404 "Олдсонгүй.", /health database up, үндсэн хуудсууд 200), `backfill-order-events` prod-д (6 захиалга → 7 event, үлдсэн 0). Хувийн bucket `sugi-asayake-private` үүссэн, VM prod+staging ба энэ лаптопын `.env`-д `S3_PRIVATE_BUCKET`; энэ лаптопын `oci-ca.pem` шинэ CA. ⚠️ Admin бүр нэг удаа нууц үг + царай дахин. Доорх 10-01 жагсаалтаас 1, 2, 3 хаагдсан; 4 (Access), 6 (задгай dump), 7 (push allowlist) нээлттэй.
 - ~~(2026-10-05) Процессын самбарын migration~~ (хийгдсэн, дээрхийг үз): prod-д 0096→0100-ийн ДАРАА `0101_order_events.sql`, `0102_job_runs.sql` (staging-д орсон, 103/103) → deploy → `pnpm exec tsx scripts/backfill-order-events.ts --i-know-this-is-production` (idempotent; хуучин захиалгад түүх) → /admin → Процесс. Deploy батлах тэмдэг: `/api/trpc/x/catalog.list` → 404 "Олдсонгүй.". ⚠️ Энэ лаптопын `oci-ca.pem`-ийг солиогүй — `scp sugi-oci:sugi-asayake/oci-ca.pem oci-ca.pem` (бусад скрипт энэ session-д scratchpad CA + `DATABASE_CA_CERT_PATH`-аар ажилласан).
 - 🔴 **(2026-10-01) Аюулгүй байдлын засварыг deploy хийхээс ӨМНӨ** (дарааллаар):

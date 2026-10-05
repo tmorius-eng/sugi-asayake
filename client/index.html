@@ -11,7 +11,10 @@
       content="width=device-width, initial-scale=1.0" />
     <title>%SEO_TITLE%</title>
     <meta name="description" content="%SEO_DESCRIPTION%" />
-    <meta name="theme-color" content="#e31b3b" />
+    <meta name="theme-color" content="%STOREFRONT_THEME_COLOR%" />
+    <!-- Брэнд студийн загвар (2026-10-05): server/_core/themeCss.ts — index.css-ийн токенуудыг
+         эхний зурагдалтаас өмнө дарна (html:root specificity-гээр, дарааллаас үл хамааран). -->
+    %STOREFRONT_BRAND_TOKENS%
     <link rel="canonical" href="%SEO_CANONICAL%" />
     <meta property="og:type" content="%SEO_OG_TYPE%" />
     <meta property="og:url" content="%SEO_CANONICAL%" />

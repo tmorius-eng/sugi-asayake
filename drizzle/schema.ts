@@ -2277,3 +2277,48 @@ export const pushSubscriptions = mysqlTable("push_subscriptions", {
   uniqueIndex("push_subscriptions_endpoint_unique").on(table.endpoint),
 ]);
 export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
+
+/**
+ * Брэнд студи (2026-10-05, migration 0103–0105, server/db/themes.ts): storefront-ийн загварууд,
+ * тэдгээрийн хувилбарын түүх, хуудасны бүтэц. Өнгө/хэлбэр өмнө нь зөвхөн index.css-д байв.
+ * JSON талбарууд уншихдаа zod/`mergeLook`-оор шалгагдана (CSS injection-ий хамгаалалт).
+ */
+export const siteThemes = mysqlTable("site_themes", {
+  id: int("id").autoincrement().primaryKey(),
+  themeKey: varchar("themeKey", { length: 64 }).notNull(),
+  name: varchar("name", { length: 120 }).notNull(),
+  kind: mysqlEnum("kind", ["base", "holiday", "custom"]).notNull().default("custom"),
+  lookJson: text("lookJson").notNull(),
+  extraJson: text("extraJson"),
+  holidayJson: text("holidayJson"),
+  updatedByUserId: int("updatedByUserId").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  uniqueIndex("site_themes_key_unique").on(table.themeKey),
+]);
+export type SiteThemeRow = typeof siteThemes.$inferSelect;
+
+export const siteThemeVersions = mysqlTable("site_theme_versions", {
+  id: int("id").autoincrement().primaryKey(),
+  themeId: int("themeId").notNull().references(() => siteThemes.id, { onDelete: "cascade" }),
+  version: int("version").notNull(),
+  snapshotJson: mediumtext("snapshotJson").notNull(),
+  note: varchar("note", { length: 200 }),
+  createdByUserId: int("createdByUserId").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  uniqueIndex("site_theme_versions_unique").on(table.themeId, table.version),
+]);
+export type SiteThemeVersionRow = typeof siteThemeVersions.$inferSelect;
+
+export const siteLayouts = mysqlTable("site_layouts", {
+  id: int("id").autoincrement().primaryKey(),
+  pageKey: varchar("pageKey", { length: 32 }).notNull(),
+  sectionsJson: text("sectionsJson").notNull(),
+  updatedByUserId: int("updatedByUserId").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  uniqueIndex("site_layouts_page_unique").on(table.pageKey),
+]);
+export type SiteLayoutRow = typeof siteLayouts.$inferSelect;

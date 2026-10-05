@@ -58,7 +58,8 @@
     }
     return false;
   }
-  function isPrivatePage() { return PRIVATE_PATH.test(location.pathname) || hasSecretParam(location.search); }
+  // Брэнд студийн iframe preview (`?brandPreview=1`, 2026-10-05) — admin-ий үзэлтийг GA4/Pixel-д тоолохгүй.
+  function isPrivatePage() { return PRIVATE_PATH.test(location.pathname) || hasSecretParam(location.search) || /[?&]brandPreview=/.test(location.search); }
   function safeLocation() {
     try {
       var url = new URL(location.href);

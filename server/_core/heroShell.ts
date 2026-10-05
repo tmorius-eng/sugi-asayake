@@ -36,6 +36,8 @@ export type HeroShellInput = {
   textFor: (key: SiteTextSlotKey) => string;
   brandLogo: string;
   promo: { id: number; headline: string; message: string | null; ctaLabel: string | null; ctaUrl: string | null; displayMode: string } | null;
+  /** Баярын мэндчилгээ (Брэнд студи) — null бол мөр гарахгүй */
+  greeting?: string | null;
 };
 
 const esc = (value: string) =>
@@ -76,7 +78,7 @@ const HERO_SLIDES: Array<{ slot: SiteMediaSlotKey; href: string; label: string }
   { slot: "home-hero-6", href: "/shop", label: "Бүтээгдэхүүн үзэх" },
 ];
 
-export async function renderHeroShell({ media, textFor, brandLogo, promo }: HeroShellInput): Promise<string> {
+export async function renderHeroShell({ media, textFor, brandLogo, promo, greeting }: HeroShellInput): Promise<string> {
   const bySlot = new Map(media.map(row => [row.slotKey, row.imageUrl]));
   const slides = HERO_SLIDES
     .map(slide => ({ ...slide, url: bySlot.get(slide.slot) || getSiteMediaSlot(slide.slot).fallbackUrl }))
@@ -115,11 +117,11 @@ export async function renderHeroShell({ media, textFor, brandLogo, promo }: Hero
     const httpsUrl = /^https:\/\//i;
     const safeCtaUrl = promo.ctaUrl && (internalPath.test(promo.ctaUrl) || httpsUrl.test(promo.ctaUrl)) ? promo.ctaUrl : null;
     const cta = promo.ctaLabel && safeCtaUrl
-      ? `<a href="${esc(safeCtaUrl)}" class="shrink-0 rounded-full bg-[#df1f3d] px-3 py-1 text-[11px] font-bold text-white transition hover:bg-[#bc1732]">${esc(promo.ctaLabel)}</a>`
+      ? `<a href="${esc(safeCtaUrl)}" class="shrink-0 rounded-full bg-[var(--primary)] px-3 py-1 text-[11px] font-bold text-[var(--primary-foreground)] transition hover:bg-[var(--primary-hover)]">${esc(promo.ctaLabel)}</a>`
       : "";
-    promoBar = `<div class="site-promo-banner sticky top-0 z-[60] flex items-center gap-3 bg-[#17181b] px-4 py-2.5 text-white" data-promo-id="${promo.id}">`
+    promoBar = `<div class="site-promo-banner sticky top-0 z-[60] flex items-center gap-3 bg-[var(--promo-bar-bg)] px-4 py-2.5 text-[var(--promo-bar-fg)]" data-promo-id="${promo.id}">`
       + `<div class="site-promo-ticker"><div>${row}</div><div aria-hidden="true">${row}</div></div>`
-      + `<div class="flex shrink-0 items-center gap-3">${cta}<button type="button" tabindex="-1" class="-m-1.5 shrink-0 p-1.5 text-white/60 transition hover:text-white">${icon("x", 16)}</button></div></div>`;
+      + `<div class="flex shrink-0 items-center gap-3">${cta}<button type="button" tabindex="-1" class="-m-1.5 shrink-0 p-1.5 text-[var(--promo-bar-fg)] opacity-60 transition hover:opacity-100">${icon("x", 16)}</button></div></div>`;
   }
 
   const nav = NAV_ITEMS.map(item => `<a href="${item.href}">${esc(textFor(item.slot) || item.fallback)}</a>`).join("");
@@ -147,6 +149,8 @@ export async function renderHeroShell({ media, textFor, brandLogo, promo }: Hero
     + `<div><section class="hero-section">`
     + `<div class="hero-rail-wrap"><div class="hero-rail" role="group">${figures}</div></div>`
     + `<div class="hero-copy">`
+    // HeroSection.tsx-тэй ИЖИЛ: баярын мэндчилгээ eyebrow-ийн дээр (Брэнд студи, 2026-10-05).
+    + (greeting ? `<p class="hero-greeting">${esc(greeting)}</p>` : "")
     + `<p class="eyebrow hero-eyebrow">${eyebrow}</p>`
     + `<h1>${heading}</h1>`
     + `<p class="hero-description">${esc(textFor("home-text-hero-description"))}</p>`

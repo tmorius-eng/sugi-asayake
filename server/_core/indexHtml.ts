@@ -1,6 +1,10 @@
-import { getActiveSitePromotion, getSiteMedia, getSiteText, getStoreSettingValue, getStorefrontBranches } from "../db";
+import { getActiveSitePromotion, getActiveThemeBundle, getHomeLayout, getSiteMedia, getSiteText, getStoreSettingValue, getStorefrontBranches } from "../db";
+import { renderBrandTokensStyle } from "./themeCss";
+import { withHolidayPoster } from "./holidayHero";
+import { BASE_THEME } from "../../shared/theme-tokens";
+import { ubDateKey } from "../../shared/notification-events";
 import { renderHeroShell } from "./heroShell";
-import { getOrSetCached, invalidateCached } from "./ttlCache";
+import { getOrSetCached, invalidateCachedByPrefix } from "./ttlCache";
 import { getSiteTextSlot, type SiteTextSlotKey } from "../../shared/site-text";
 import { checkStoreSettingFormat } from "../../shared/store-settings";
 import { getSiteMediaSlot } from "../../shared/site-media";
@@ -59,7 +63,9 @@ const CACHE_TTL_MS = 60_000;
 // herd on every page view, worst right after the entry expires). Routed
 // through the shared TTL cache (server/_core/ttlCache.ts), which collapses
 // concurrent computes into one in-flight promise.
-const VALUES_CACHE_KEY = "indexHtml:values";
+// 2026-10-05: түлхүүрт УБ-ийн өдөр орно — Брэнд студийн баярын загвар шөнө дунд солигдоход
+// хуучин өдрийн кэш (60 с хүртэл) шинэ өдөрт үйлчлэхгүй. Цэвэрлэлт prefix-ээр.
+const VALUES_CACHE_PREFIX = "indexHtml:values";
 
 /** Escapes a value for an HTML attribute (every placeholder lands in one, except the JSON-LD block). */
 export const escapeAttribute = (value: string) =>
@@ -87,11 +93,12 @@ export const escapeJsString = (value: string) => {
 };
 
 async function resolveValues(): Promise<Map<string, string>> {
-  return getOrSetCached(VALUES_CACHE_KEY, CACHE_TTL_MS, computeValues);
+  const dateKey = ubDateKey();
+  return getOrSetCached(`${VALUES_CACHE_PREFIX}:${dateKey}`, CACHE_TTL_MS, () => computeValues(dateKey));
 }
 
-async function computeValues(): Promise<Map<string, string>> {
-  const [rows, branches, phoneDigits, facebookUrl, instagramUrl, mediaRows, googleVerification, facebookVerification, promo] = await Promise.all([
+async function computeValues(dateKey: string): Promise<Map<string, string>> {
+  const [rows, branches, phoneDigits, facebookUrl, instagramUrl, mediaRows, googleVerification, facebookVerification, promo, theme, homeLayout] = await Promise.all([
     getSiteText(),
     getStorefrontBranches(),
     getStoreSettingValue("contact-phone-tel"),
@@ -101,11 +108,14 @@ async function computeValues(): Promise<Map<string, string>> {
     getStoreSettingValue("seo-google-site-verification"),
     getStoreSettingValue("seo-facebook-domain-verification"),
     getActiveSitePromotion(),
+    getActiveThemeBundle(dateKey),
+    getHomeLayout(),
   ]);
   // 2026-09-21: R2-ийн шууд хаяг (publicUrl.ts-ийн directStorageUrl) — preload, shell,
   // bootstrap, OG бүгд нэг URL: `/cdn/` 302-ын нэг RTT hero-ийн замаас хасагдана.
   // content.siteMedia (routers.ts) ижил хөрвүүлэлт хийдэг тул React дахин татахгүй.
-  const media = mediaRows.map(row => ({ ...row, imageUrl: directStorageUrl(row.imageUrl) }));
+  // Баярын постер (Брэнд студи): идэвхтэй баярын үед `home-hero` слотыг солино — content.siteMedia ч ижил.
+  const media = withHolidayPoster(mediaRows.map(row => ({ ...row, imageUrl: directStorageUrl(row.imageUrl) })), theme.poster && directStorageUrl(theme.poster));
   // Measurement ids (2026-09-14): handed to /vendor/analytics-init.js as a
   // JSON data block; the tags themselves load only after cookie consent.
   const [ga4Id, pixelId] = await Promise.all([getStoreSettingValue("analytics-ga4-measurement-id"), getStoreSettingValue("analytics-meta-pixel-id")]);
@@ -152,6 +162,11 @@ async function computeValues(): Promise<Map<string, string>> {
     siteMedia: media,
     siteText: rows,
     promo,
+    // Брэнд студи (2026-10-05): идэвхтэй загвар — токенууд нь `<style id="brand-tokens">`-д,
+    // энд зөвхөн клиентэд хэрэгтэй мэдээлэл (баярын мэндчилгээ, аль загвар, яагаад).
+    theme: { key: theme.activeKey, reason: theme.reason, greeting: theme.greeting, holiday: theme.holiday?.key ?? null, productAspect: theme.look.productAspect },
+    // Брэнд студи A3: нүүрний хэсгүүдийн дараалал (client/src/lib/homeLayout.ts).
+    layout: homeLayout,
   }).replace(/</g, "\\u003c");
 
   const saved = new Map(rows.map(row => [row.slotKey, row.textValue]));
@@ -218,6 +233,8 @@ async function computeValues(): Promise<Map<string, string>> {
     ["ANALYTICS_CONFIG_JSON", analyticsConfig],
     ["STOREFRONT_BOOTSTRAP_JSON", bootstrapJson],
     ["STOREFRONT_CDN_PRECONNECT", cdnPreconnectTag()],
+    ["STOREFRONT_BRAND_TOKENS", renderBrandTokensStyle(theme.look)],
+    ["STOREFRONT_THEME_COLOR", escapeAttribute(theme.look.light.primary)],
     // Нүүрний дээд хэсэг серверээс (heroShell.ts). `HERO_SHELL=0` = унтраах
     // (kill switch); renderIndexHtml нь зөвхөн "/" дээр л оруулна.
     ["SITE_HERO_SHELL", process.env.HERO_SHELL === "0" ? "" : await renderHeroShell({
@@ -225,6 +242,7 @@ async function computeValues(): Promise<Map<string, string>> {
       textFor,
       brandLogo: media.find(row => row.slotKey === "brand-logo")?.imageUrl || getSiteMediaSlot("brand-logo").fallbackUrl || "",
       promo,
+      greeting: theme.greeting,
     })],
   ]);
 
@@ -274,8 +292,13 @@ export async function renderIndexHtml(template: string, pathname = "/"): Promise
   // Серверийн зурсан hero зөвхөн нүүр хуудсанд — бусад зам дээр React өөр
   // хуудас зурах тул shell нэг агшин "буруу" дэлгэц үзүүлнэ.
   const isHome = (pathname.split("?")[0].replace(/\/+$/, "") || "/") === "/";
+  const isAdminPath = /^\/(admin|face-approve)(\/|$)/.test(pathname.split("?")[0]);
   return template.replace(/%((?:SEO|COOKIE|ANALYTICS|STOREFRONT|SITE)_[A-Z_]+)%/g, (match, key: string) => {
     if (key === "SITE_HERO_SHELL" && !isHome) return "";
+    // Брэнд студийн загвар зөвхөн storefront-д: /admin-ий shadcn UI (bg-primary, rounded-lg…) ижил
+    // токен уншдаг тул баярын цэнхэр/дөрвөлжин загвар admin-ийг ч солих байсан.
+    if (key === "STOREFRONT_BRAND_TOKENS" && isAdminPath) return renderBrandTokensStyle(BASE_THEME);
+    if (key === "STOREFRONT_THEME_COLOR" && isAdminPath) return BASE_THEME.light.primary;
     return routeMeta?.get(key) ?? values.get(key) ?? fallbackFor(key) ?? match;
   });
 }
@@ -317,6 +340,9 @@ function fallbackFor(key: string): string | undefined {
     // (лого, hero нь slot-ын brand default руу буцна — яг DB-гүй үеийн зөв дүр).
     case "STOREFRONT_BOOTSTRAP_JSON": return "{}";
     case "STOREFRONT_CDN_PRECONNECT": return cdnPreconnectTag();
+    // DB унтарсан ч index.css-тэй ижил кодын суурь загвар — өнгө хэвээр.
+    case "STOREFRONT_BRAND_TOKENS": return renderBrandTokensStyle(BASE_THEME);
+    case "STOREFRONT_THEME_COLOR": return BASE_THEME.light.primary;
     case "SITE_HERO_SHELL": return "";
     case "SEO_OG_TYPE": return "website";
     case "SEO_OG_IMAGE_META": return "";
@@ -334,5 +360,5 @@ function fallbackFor(key: string): string | undefined {
 
 /** Called after an admin saves an SEO slot or a contact setting, so the change is visible immediately. */
 export function invalidateIndexHtmlCache() {
-  invalidateCached(VALUES_CACHE_KEY);
+  invalidateCachedByPrefix(VALUES_CACHE_PREFIX);
 }

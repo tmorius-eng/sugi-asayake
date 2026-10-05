@@ -13,7 +13,7 @@ const ADMIN_SECTIONS = [
   "dashboard", "analytics", "products", "orders", "posts", "reviews", "routines",
   "promotions", "calendar", "discountCodes", "brands", "search", "branches", "pos",
   "campaigns", "storeSettings", "measurement", "users", "media", "documents", "loyalty",
-  "security", "integrations", "notifications", "receiving",
+  "security", "integrations", "notifications", "receiving", "brandStudio",
 ] as const;
 
 describe("admin section tips", () => {

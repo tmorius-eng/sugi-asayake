@@ -2,6 +2,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { useScrollToTopOnNavigate } from "./hooks/useScrollToTopOnNavigate";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Suspense, useEffect } from "react";
+import BrandPreviewBridge from "./components/BrandPreviewBridge";
 import { lazyRetry } from "./lib/lazyRetry";
 import { Route, Switch, useLocation } from "wouter";
 import AddedToCartToast from "./components/AddedToCartToast";
@@ -161,6 +162,8 @@ function App() {
         {/* Сайтын өөрийн confirm/prompt dialog (window.confirm-ийн оронд, 2026-09-21). */}
         <ConfirmProvider>
         <SkipLink />
+        {/* Брэнд студийн iframe preview (зөвхөн ?brandPreview=1 + admin-ий iframe). */}
+        <BrandPreviewBridge />
         <Toaster />
         <PageviewTracker />
         {/* Translates whatever the storefront renders; see the component. */}
