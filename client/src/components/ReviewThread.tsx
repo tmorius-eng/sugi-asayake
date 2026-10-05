@@ -5,6 +5,7 @@ import { trpc } from "@/lib/trpc";
 import ImageLightbox from "@/components/ImageLightbox";
 import { gridVariantUrl } from "@shared/image-variants";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { brandName } from "@/lib/brand";
 
 /**
  * Threaded review conversation (2026-09-13) -- the layout Tom pointed at
@@ -85,7 +86,7 @@ function Stars({ value }: { value: number }) {
 }
 
 function StaffBadge() {
-  return <span className="review-staff-badge">SUGI ASAYAKE</span>;
+  return <span className="review-staff-badge">{brandName()}</span>;
 }
 
 export default function ReviewThread({ productId, reviews, canReply }: { productId: number; reviews: ThreadReview[]; canReply: boolean }) {

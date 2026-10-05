@@ -5,6 +5,7 @@ import { TRPCClientError } from "@trpc/client";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { FieldError, useFieldErrors } from "@/hooks/useFieldErrors";
+import { brandName } from "@/lib/brand";
 
 /**
  * Step one of /admin: the account password (2026-09-22).
@@ -46,7 +47,7 @@ export default function AdminPasswordStep({ onConfirmed }: { onConfirmed: () => 
     <div className="face-gate-shell">
       <form className="face-gate-card face-gate-card--wide face-gate-card--consent" onSubmit={submit} noValidate>
         <div className="face-gate-brandstrip" aria-hidden="true" />
-        <p className="face-gate-brand">SUGI ASAYAKE ADMIN</p>
+        <p className="face-gate-brand">{`${brandName()} ADMIN`}</p>
         {/* Whose password: someone left signed in as a colleague should notice
             before typing their own. */}
         {user && <p className="face-gate-identity">{user.name || user.phone || `#${user.id}`}</p>}

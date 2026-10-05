@@ -1,5 +1,6 @@
 import { ArrowRight, Check, Monitor, ScanFace, ShieldCheck, Smartphone } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { brandName } from "@/lib/brand";
 
 /**
  * Царайгаар баталгаажуулах АРГАА сонгох дэлгэц (2026-09-16, Tom-ийн өгсөн
@@ -29,7 +30,7 @@ export default function FaceMethodChooser({ tips, onUseCamera, onUsePhone }: {
     <div className="face-gate-shell">
       <div className="face-gate-card face-gate-card--wide face-gate-card--consent">
         <div className="face-gate-brandstrip" aria-hidden="true" />
-        <p className="face-gate-brand">SUGI ASAYAKE ADMIN</p>
+        <p className="face-gate-brand">{`${brandName()} ADMIN`}</p>
         {user && <p className="face-gate-identity">{user.name || user.phone || `#${user.id}`}</p>}
 
         <h1 className="face-gate-title">Царайгаар баталгаажуулах</h1>

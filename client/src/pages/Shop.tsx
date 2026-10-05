@@ -28,6 +28,7 @@ import { useStoreSetting } from "@/hooks/useStoreSetting";
 import { useProductName } from "@/hooks/useProductName";
 import { formatMnt } from "@shared/format";
 import ResponsivePicture from "@/components/ResponsivePicture";
+import { brandName } from "@/lib/brand";
 // 2026-09-04 cohesion audit: this used to be a locally hardcoded 4-of-6-category
 // list with its own copy/ordering, independent of (and already drifted from)
 // Home.tsx's real 6-category array -- now the same shared source of truth
@@ -76,7 +77,7 @@ export default function Shop() {
   // Монгол нэр (2026-09-20): карт бүр нэг дүрмээр (shared/product-name.ts).
   const displayName = useProductName();
   useDocumentMeta(
-    textFor("seo-text-shop-title", "Дэлгүүр — SUGI ASAYAKE"),
+    textFor("seo-text-shop-title", `Дэлгүүр — ${brandName()}`),
     textFor("seo-text-shop-description", "Японоос албан ёсоор нийлүүлсэн арьс арчилгаа, эрүүл мэнд, гэр бүлийн хэрэгцээний 900+ бүтээгдэхүүн."),
   );
   const contact = useShopContact();
@@ -420,7 +421,7 @@ export default function Shop() {
         <div className="shop-hero-copy"><p className="shop-kicker"><span /> {textFor("shop-text-hero-kicker", "02 / SUGI MARKET")}</p><h1>{shopLine1}<br /><em>{shopLine2}</em></h1><p>{textFor("shop-text-hero-description", "Японоос албан ёсоор нийлүүлсэн арьс арчилгаа, эрүүл мэнд, гэр бүлийн хэрэгцээний бүтээгдэхүүнээ өөртөө тохируулан олоорой.")}</p><div className="shop-hero-badges"><div className="shop-hero-signature"><Sparkles size={17} /><span>{textFor("shop-text-hero-signature", "ТАНЫ ӨДӨР БҮРТ / ЯПОН ЧАНАР")}</span></div><div className="shop-hero-delivery"><Truck size={17} /><span>УБ ХҮРГЭЛТ {formatMnt(deliveryFeeUbMnt)} / САЛБАРААС ҮНЭГҮЙ АВАХ</span></div></div></div>
         <div className="shop-search-panel"><div className="shop-search-stamp" aria-hidden="true">CARE<br />IS<br />COLOR</div><label><Search size={19} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Бүтээгдэхүүн, брэндээр хайх" /></label><p><strong>{resultCount}</strong> үр дүн / <span>{sourceCount} бүтээгдэхүүн</span></p></div>
       </section>
-      <div className="shop-ribbon" aria-label="SUGI ASAYAKE брэндийн мессеж">
+      <div className="shop-ribbon" aria-label={`${brandName()} брэндийн мессеж`}>
         <div>{shopRibbonRow("shop-ribbon-a")}</div>
         <div aria-hidden="true">{shopRibbonRow("shop-ribbon-b")}</div>
       </div>
@@ -458,8 +459,8 @@ export default function Shop() {
         )}
       </section>
       {catalogLoading ? <section className="shop-product-grid" aria-busy="true" aria-label={isSearching ? "Хайж байна" : "Каталогийг бэлдэж байна"}>{Array.from({ length: 8 }, (_, index) => <ProductCardSkeleton key={index} />)}</section> : catalogErrored ? <section className="shop-status-card error"><h2>Каталогийг ачаалж чадсангүй.</h2><p>Интернэт холболтоо шалгаад дахин оролдоно уу.</p></section> : !isSearching && sourceCount === 0 && !forceZeroResults ? <section className="shop-discovery" data-reveal>
-        <div className="shop-discovery-heading"><p className="shop-kicker"><span /> {textFor("shop-text-discovery-kicker", "SUGI ASAYAKE / DISCOVER")}</p><h2>{discoveryLine1}<br /><em>{discoveryLine2}</em></h2><p>{textFor("shop-text-discovery-description", "Онлайн каталогийг бид салбарын бодит нөөцтэй нь уялдуулан шинэчилж байна. Харин та өөрт ойр салбараас дараах ангиллаар шууд асууж болно.")}</p></div>
-        <div className="shop-category-deck">{discoveryCategories.map(item => <div className={`shop-category-card ${item.tone}`} key={item.slug}><span><item.Icon size={18} /></span><div><small>SUGI DAILY CARE</small><h3>{item.name}</h3><p>{item.detail}</p></div><ArrowUpRight size={20} /></div>)}</div>
+        <div className="shop-discovery-heading"><p className="shop-kicker"><span /> {textFor("shop-text-discovery-kicker", `${brandName()} / DISCOVER`)}</p><h2>{discoveryLine1}<br /><em>{discoveryLine2}</em></h2><p>{textFor("shop-text-discovery-description", "Онлайн каталогийг бид салбарын бодит нөөцтэй нь уялдуулан шинэчилж байна. Харин та өөрт ойр салбараас дараах ангиллаар шууд асууж болно.")}</p></div>
+        <div className="shop-category-deck">{discoveryCategories.map(item => <div className={`shop-category-card ${item.tone}`} key={item.slug}><span><item.Icon size={18} /></span><div><small>{brandName()}</small><h3>{item.name}</h3><p>{item.detail}</p></div><ArrowUpRight size={20} /></div>)}</div>
         <div className="shop-discovery-cta" id="shop-contact"><div><MapPin size={20} /><span><strong>{textFor("shop-text-contact-cta-title", "{N} салбар, нэг өдөр тутмын сонголт.").replace("{N}", String(branchCount))}</strong><small>{textFor("shop-text-contact-cta-subtitle", "Таны хайж буй бүтээгдэхүүнийг ойр салбараас асуугаарай.")}</small></span></div><div><Link href="/#stores">Салбар олох <ArrowUpRight size={16} /></Link><a href={`tel:${contact.phoneHref}`}>{contact.phone} <Phone size={15} /></a></div></div>
       </section> : resultCount ? <><div className="shop-grid-toolbar"><button type="button" className={density === "comfortable" ? "active" : ""} onClick={() => setDensity("comfortable")} aria-pressed={density === "comfortable"} aria-label="Том grid харагдац"><LayoutGrid size={15} /></button><button type="button" className={density === "compact" ? "active" : ""} onClick={() => setDensity("compact")} aria-pressed={density === "compact"} aria-label="Жижиг grid харагдац"><Grid3x3 size={15} /></button></div><section className={`shop-product-grid${density === "compact" ? " is-compact" : ""}`} id="shop-product-grid">{pagedProducts.map((product, index) => {
         const salePercent = getSalePercent(product.priceMnt, product.compareAtPriceMnt);
@@ -474,7 +475,7 @@ export default function Shop() {
         // derivative pipeline, so those keep a plain single-source <img>
         // (see shared/image-variants.ts).
         // (2026-09-21: srcset/AVIF-ийг ResponsivePicture өөрөө угсарна.)
-        const brandLabel = product.brand?.trim() || product.categoryName || "SUGI ASAYAKE";
+        const brandLabel = product.brand?.trim() || product.categoryName || `${brandName()}`;
         const outOfStock = !isGiftCard && product.stockQuantity <= 0;
         const addingThis = addToCart.isPending && addToCart.variables?.productId === product.id;
         return <article key={product.id} className="shop-product-card" data-reveal style={{ transitionDelay: `${Math.min(index * 55, 300)}ms` }}>

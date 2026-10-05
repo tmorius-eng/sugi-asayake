@@ -6,6 +6,7 @@ import SiteFooter from "@/components/SiteFooter";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { trpc } from "@/lib/trpc";
 import { useSiteText } from "@/hooks/useSiteText";
+import { brandName } from "@/lib/brand";
 
 /**
  * /brands -- the "Бүх брэнд үзэх" destination the Featured Brands carousel
@@ -49,8 +50,8 @@ function bucketFor(name: string): string {
 export default function Brands() {
   const textFor = useSiteText();
   useDocumentMeta(
-    textFor("seo-text-brands-title", "Бүх брэнд — SUGI ASAYAKE"),
-    textFor("seo-text-brands-description", "SUGI ASAYAKE-д худалдаалагдаж буй Японы бүх брэндийн жагсаалт."),
+    textFor("seo-text-brands-title", `Бүх брэнд — ${brandName()}`),
+    textFor("seo-text-brands-description", `${brandName()}-д худалдаалагдаж буй Японы бүх брэндийн жагсаалт.`),
   );
   const directoryQuery = trpc.catalog.brandDirectory.useQuery();
   const brands: DirectoryBrand[] = useMemo(() => directoryQuery.data ?? [], [directoryQuery.data]);
@@ -85,7 +86,7 @@ export default function Brands() {
 
   return (
     <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]">
-      <CommerceHeader backLabel="SUGI ASAYAKE" />
+      <CommerceHeader />
       <main className="brands-page">
         <header className="brands-intro">
           <h1>{textFor("brands-text-heading", "Бүх брэнд")}</h1>

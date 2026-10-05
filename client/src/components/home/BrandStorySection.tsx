@@ -3,6 +3,7 @@ import { BadgeCheck, Gift, Heart, Leaf, MapPin, Package, ShieldCheck, ShoppingBa
 import { useSiteText } from "@/hooks/useSiteText";
 import type { WcuIconName } from "@shared/site-text";
 import SectionHeading from "./SectionHeading";
+import { brandName } from "@/lib/brand";
 
 /** Every name in shared/site-text.ts WCU_ICON_NAMES, and nothing else --
  *  the Record type makes a missing entry a compile error. */
@@ -46,7 +47,7 @@ export type FeaturedReview = {
 export default function BrandStorySection({ branchCount, productCountLabel, featuredReviews }: { branchCount: number; productCountLabel: string; featuredReviews: FeaturedReview[] }) {
   const textFor = useSiteText();
   // One centred line by default; an admin can still press Enter for two.
-  const headingLines = textFor("home-text-wcu-heading", "Яагаад SUGI ASAYAKE вэ?").split("\n").filter(Boolean);
+  const headingLines = textFor("home-text-wcu-heading", `Яагаад ${brandName()} вэ?`).split("\n").filter(Boolean);
   // Everything visible on an item -- icon, tile colour, title, description --
   // is a site-text slot in the "Яагаад биднийг сонгох вэ" group of /admin.
   const items = [

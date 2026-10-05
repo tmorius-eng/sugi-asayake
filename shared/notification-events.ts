@@ -265,7 +265,7 @@ export function buildNotificationMessage<K extends NotificationEventType>(type: 
     }
     case "integration.test": {
       const p = payload as NotificationPayloads["integration.test"];
-      return { title: "SUGI ASAYAKE — туршилт", message: `"${p.groupLabel}" бүлгийн мэдэгдэл энэ утсан дээр ирж байна.` };
+      return { title: "Туршилтын мэдэгдэл", message: `"${p.groupLabel}" бүлгийн мэдэгдэл энэ утсан дээр ирж байна.` };
     }
   }
   const exhaustive: never = type;

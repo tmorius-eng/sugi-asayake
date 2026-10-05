@@ -45,6 +45,7 @@ import { useSiteText } from "@/hooks/useSiteText";
 import { trpc } from "@/lib/trpc";
 import { useHomeLayout } from "@/lib/homeLayout";
 import type { HomeSectionKey } from "@shared/home-sections";
+import { brandName } from "@/lib/brand";
 
 // These have no bundled fallback photo (unlike product shots, there's no
 // generic stand-in for real store/lifestyle photography) -- null here
@@ -143,8 +144,8 @@ export default function Home() {
   // owns its own so an admin can edit what Google and a shared link show.
   // {N} is the live branch count, never a hardcoded "3".
   useDocumentMeta(
-    textFor("seo-text-home-title", "SUGI ASAYAKE Mongolia — Япон чанарыг гэр бүл бүрт"),
-    textFor("seo-text-home-description", "SUGI ASAYAKE Mongolia — Японоос баталгаат бүтээгдэхүүнүүдийг албан ёсны эрхтэйгээр хүргэж байна. Улаанбаатар хотод {N} салбартай.").replace("{N}", String(branchCount)),
+    textFor("seo-text-home-title", `${brandName()} Mongolia — Япон чанарыг гэр бүл бүрт`),
+    textFor("seo-text-home-description", `${brandName()} Mongolia — Японоос баталгаат бүтээгдэхүүнүүдийг албан ёсны эрхтэйгээр хүргэж байна. Улаанбаатар хотод {N} салбартай.`).replace("{N}", String(branchCount)),
   );
   const [careHeadingLine1, careHeadingLine2] = textFor("home-text-care-heading", "Багахан итгэл.\nИх халамж").split("\n");
   const [finalCtaHeadingLine1, finalCtaHeadingLine2] = textFor("home-text-finalcta-heading", "Сайн сонголт\nойрхон байна").split("\n");
@@ -274,7 +275,7 @@ export default function Home() {
             textFor("home-text-care-point3", "24–48 цагийн дотор Улаанбаатарт хүргэнэ"),
           ]}
           imageUrl={imageFor("home-family", familyImage)}
-          imageAlt="SUGI ASAYAKE-ийн гэр бүлийн арчилгааны бүтээгдэхүүнүүд"
+          imageAlt={`${brandName()}-ийн гэр бүлийн арчилгааны бүтээгдэхүүнүүд`}
         />
       </>
     ),
@@ -286,7 +287,7 @@ export default function Home() {
   };
   return (
     <div className="sugi-site" id="top">
-      <CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} backLabel="SUGI ASAYAKE" marketingNav />
+      <CommerceHeader cartCount={cartCount} onCartOpen={() => setCartOpen(true)} marketingNav />
 
       <main>
         {/* mediaReady: the hero must not paint its row until it knows how

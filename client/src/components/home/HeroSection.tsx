@@ -5,6 +5,7 @@ import { useSiteText } from "@/hooks/useSiteText";
 import { useT } from "@/hooks/useLocale";
 import HeroImageSlideshow, { type HeroSlide } from "./HeroImageSlideshow";
 import { storefrontThemeInfo } from "@/lib/bootstrap";
+import { brandName } from "@/lib/brand";
 
 // Баярын мэндчилгээ (Брэнд студи) — серверийн hero shell-тэй ИЖИЛ мөр (heroShell.ts).
 const themeGreeting = storefrontThemeInfo()?.greeting ?? null;
@@ -77,7 +78,7 @@ export default function HeroSection({ imageFor, mediaReady = true }: {
   return (
     <section className="hero-section" aria-labelledby="hero-title">
       {mediaReady
-        ? <HeroImageSlideshow slides={slides} imageAlt="SUGI ASAYAKE everyday-care products" />
+        ? <HeroImageSlideshow slides={slides} imageAlt={`${brandName()} everyday-care products`} />
         : <div className="hero-rail-reserve" aria-hidden="true" />}
       <div className="hero-copy">
         {themeGreeting ? <p className="hero-greeting">{themeGreeting}</p> : null}
@@ -88,7 +89,7 @@ export default function HeroSection({ imageFor, mediaReady = true }: {
             the whole line renders as one red mark). */}
         <p className="eyebrow hero-eyebrow">
           {(() => {
-            const raw = textFor("home-text-hero-eyebrow", "SUGI ASAYAKE / MONGOLIA");
+            const raw = textFor("home-text-hero-eyebrow", `${brandName()} / MONGOLIA`);
             const [brandPart, ...rest] = raw.split("/");
             const placePart = rest.join("/").trim();
             return <>

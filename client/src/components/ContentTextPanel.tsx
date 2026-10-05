@@ -48,7 +48,7 @@ export default function ContentTextPanel({ preview = false }: { preview?: boolea
 
   const resetSlot = async (slotKey: SiteTextSlotKey) => {
     if (preview) return toast.message("Preview горим", { description: "Бодит тохиргоо сэргээх нь хамгаалагдсан admin хэсэгт ажиллана." });
-    if (!await confirm({ title: "Энэ текстийг SUGI-ийн анхны хувилбар руу буцаах уу?" })) return;
+    if (!await confirm({ title: "Энэ текстийг анхны хувилбар руу буцаах уу?" })) return;
     setActiveSlot(slotKey);
     try {
       await clearText.mutateAsync({ slotKey });
@@ -64,7 +64,7 @@ export default function ContentTextPanel({ preview = false }: { preview?: boolea
 
   return <div>
     <div className="rounded-3xl border border-[#3970a7]/15 bg-[var(--a-info-soft)] p-5 text-sm text-[var(--a-info)]">
-      <div className="flex gap-3"><ShieldCheck className="mt-0.5 shrink-0 text-[var(--a-info)]" size={19} /><p><strong>Таны өөрчлөлт шууд сайт дээр харагдана.</strong> Нүүр хуудасны гарчиг, тайлбар, товч мэдэгдлүүдийг доор ангиллаар нь эмхэтгэсэн. 2 мөртэй гарчигийг Enter товчоор шинэ мөрөнд шилжүүлж бичнэ үү (эхний мөр, дараа нь хоёр дахь мөр). "Анхны текст рүү буцаах" нь SUGI-ийн одоогийн бичсэн эх текстийг сэргээнэ.</p></div>
+      <div className="flex gap-3"><ShieldCheck className="mt-0.5 shrink-0 text-[var(--a-info)]" size={19} /><p><strong>Таны өөрчлөлт шууд сайт дээр харагдана.</strong> Нүүр хуудасны гарчиг, тайлбар, товч мэдэгдлүүдийг доор ангиллаар нь эмхэтгэсэн. 2 мөртэй гарчигийг Enter товчоор шинэ мөрөнд шилжүүлж бичнэ үү (эхний мөр, дараа нь хоёр дахь мөр). "Анхны текст рүү буцаах" нь кодонд суулгасан анхдагч текстийг сэргээнэ.</p></div>
     </div>
     <div className="mt-4 rounded-2xl border border-[var(--a-border)] bg-[var(--a-warn-soft)] p-4 text-xs leading-5 text-[var(--a-warn)]">
       <strong>Анхаарна уу:</strong> бүтээгдэхүүний ангиллын нэр (жишээ: "Арьс арчилгаа"), салбарын нэр/хаяг/утас, шинэ мэдээний гарчиг зэрэг бусад системд (Бүтээгдэхүүн, Салбар, Шинэ мэдээ) удирддаг өгөгдөл энд байхгүй -- эдгээрийг холбогдох цэснээс засна уу. Hero badge-ийн бүтээгдэхүүний тоо (жишээ: "900+") одоо бодит каталогийн тооноос автоматаар тооцоологддог (2026-09-04-ээс хойш), гэхдээ доорх "Ангилал" болон "Яагаад биднийг сонгох вэ" бүлгийн текст дотор мөн адил тоог дурдсан өгүүлбэрүүд байгаа тул тэдгээрийг өөрчлөхөд гараар тус тусад нь засах шаардлагатай хэвээр.

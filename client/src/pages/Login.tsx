@@ -11,6 +11,7 @@ import { trpc } from "@/lib/trpc";
 import { useSiteText } from "@/hooks/useSiteText";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { isValidPhoneInput } from "@/lib/clientValidation";
+import { brandName } from "@/lib/brand";
 
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Хүсэлт амжилтгүй боллоо. Дахин оролдоно уу.";
 
@@ -26,7 +27,7 @@ const messageFrom = (error: unknown) => error instanceof Error ? error.message :
 // Login itself is still one-step phone+password (unchanged).
 export default function Login() {
   const textFor = useSiteText();
-  useDocumentMeta(textFor("seo-text-login-title", "Нэвтрэх — SUGI ASAYAKE"), null);
+  useDocumentMeta(textFor("seo-text-login-title", `Нэвтрэх — ${brandName()}`), null);
   const [verifyLine1, verifyLine2] = textFor("login-text-verify-heading", "Утасны дугаараа\nбаталгаажуулах.").split("\n");
   const [loginLine1, loginLine2] = textFor("login-text-heading", "Дахин\nтавтай морил.").split("\n");
   const [registerLine1, registerLine2] = textFor("login-text-register-heading", "Бүртгэл\nүүсгэх.").split("\n");
@@ -121,7 +122,7 @@ export default function Login() {
   if (mode === "register" && !verifiedSessionId) {
     return (
       <div className="auth-shell">
-        <CommerceHeader backLabel="SUGI ASAYAKE" />
+        <CommerceHeader />
         <main className="auth-main">
           <div className="auth-head">
             <h1>{verifyLine1} <em>{verifyLine2}</em></h1>
@@ -137,7 +138,7 @@ export default function Login() {
 
   return (
     <div className="auth-shell">
-      <CommerceHeader backLabel="SUGI ASAYAKE" />
+      <CommerceHeader />
       <main className="auth-main">
         <div className="auth-head">
           <h1>{mode === "login" ? <>{loginLine1} <em>{loginLine2}</em></> : <>{registerLine1} <em>{registerLine2}</em></>}</h1>

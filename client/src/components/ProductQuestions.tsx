@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { relativeTime } from "@/components/ReviewThread";
+import { brandName } from "@/lib/brand";
 
 /**
  * Product Q&A (2026-09-13, growth tier). "Хуурай арьсанд тохирох уу?" asked
@@ -134,7 +135,7 @@ export default function ProductQuestions({ productId, canAnswer }: { productId: 
                             <div className="review-bubble">
                               <div className="review-bubble-head">
                                 <strong className="review-author" translate="no">{item.authorName}</strong>
-                                {item.authorIsStaff ? <span className="review-staff-badge">SUGI ASAYAKE</span> : <span className="product-question-tag">Худалдан авагч</span>}
+                                {item.authorIsStaff ? <span className="review-staff-badge">{brandName()}</span> : <span className="product-question-tag">Худалдан авагч</span>}
                               </div>
                               <p className="review-text" translate="no">{item.body}</p>
                             </div>

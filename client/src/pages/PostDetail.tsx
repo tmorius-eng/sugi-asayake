@@ -5,6 +5,7 @@ import SiteFooter from "@/components/SiteFooter";
 import NotFound from "@/pages/NotFound";
 import { trpc } from "@/lib/trpc";
 import { useDocumentMeta } from "@/lib/useDocumentMeta";
+import { brandName } from "@/lib/brand";
 
 const formatDate = (value: string | Date | null | undefined) => {
   if (!value) return "";
@@ -22,12 +23,12 @@ export default function PostDetail() {
   // 2026-09-27: admin-ий гараар бичсэн metaTitle-ийг ЯГ ХЭВЭЭР нь (бүрэн SEO
   // гарчиг гэж үзнэ); гэвч post.title рүү унавал бусад хуудсын адил сайтын
   // нэрийг залгана -- өмнө нь энэ хуудас цорын ганц site suffix-гүй байсан.
-  useDocumentMeta(post?.metaTitle || (post?.title ? `${post.title} — SUGI ASAYAKE` : undefined), post?.metaDescription || post?.excerpt);
+  useDocumentMeta(post?.metaTitle || (post?.title ? `${post.title} — ${brandName()}` : undefined), post?.metaDescription || post?.excerpt);
 
   if (postQuery.isLoading) {
     return (
       <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]">
-        <CommerceHeader backLabel="SUGI ASAYAKE" />
+        <CommerceHeader />
         <main className="mx-auto grid min-h-[60vh] max-w-3xl place-items-center px-4 sm:px-8">
           <LoaderCircle className="animate-spin text-[var(--primary)]" size={28} aria-label="Мэдээг ачаалж байна" />
         </main>
@@ -43,7 +44,7 @@ export default function PostDetail() {
 
   return (
     <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]">
-      <CommerceHeader backLabel="SUGI ASAYAKE" />
+      <CommerceHeader />
       <main className="mx-auto max-w-3xl px-4 py-10 sm:px-8 sm:py-14">
         <p className="flex items-center gap-3 text-[10px] font-extrabold tracking-[.18em] text-[var(--primary-strong)]">
           <span className="h-px w-10 bg-[var(--primary)]" />

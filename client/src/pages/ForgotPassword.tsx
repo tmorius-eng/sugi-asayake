@@ -9,6 +9,7 @@ import PhoneVerificationStep from "@/components/PhoneVerificationStep";
 import SiteFooter from "@/components/SiteFooter";
 import { trpc } from "@/lib/trpc";
 import { useSiteText } from "@/hooks/useSiteText";
+import { brandName } from "@/lib/brand";
 
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Хүсэлт амжилтгүй боллоо. Дахин оролдоно уу.";
 
@@ -21,7 +22,7 @@ const messageFrom = (error: unknown) => error instanceof Error ? error.message :
 // calls them or shows a method toggle.
 export default function ForgotPassword() {
   const textFor = useSiteText();
-  useDocumentMeta("Нууц үг сэргээх — SUGI ASAYAKE", null);
+  useDocumentMeta(`Нууц үг сэргээх — ${brandName()}`, null);
   const [forgotLine1, forgotLine2] = textFor("forgot-text-heading", "Нууц үгээ\nсэргээх.").split("\n");
   const [, setLocation] = useLocation();
   const [verifiedPhoneSessionId, setVerifiedPhoneSessionId] = useState<string | null>(null);
@@ -45,7 +46,7 @@ export default function ForgotPassword() {
 
   return (
     <div className="auth-shell">
-      <CommerceHeader backLabel="SUGI ASAYAKE" />
+      <CommerceHeader />
       <main className="auth-main">
         <div className="auth-head">
           <p className="auth-kicker">ACCOUNT RECOVERY</p>

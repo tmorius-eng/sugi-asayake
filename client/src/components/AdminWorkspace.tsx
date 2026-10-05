@@ -61,6 +61,7 @@ import { PRODUCT_SHAPE, IMAGE_UPLOAD_ACCEPT, MAX_UPLOAD_BYTES, isUploadableImage
 import UploadTips from "@/components/admin/UploadTips";
 
 import { useConfirm } from "@/components/ConfirmDialog";
+import { brandName } from "@/lib/brand";
 type ProductRow = {
   id: number;
   categoryId: number;
@@ -328,7 +329,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
   const products: ProductRow[] = preview ? previewProducts : (productsQuery.data ?? []);
   const categories: CategoryRow[] = useMemo(() => preview ? previewCategories : (categoriesQuery.data ?? []), [preview, categoriesQuery.data]);
   const users = preview ? [
-    { id: 1, name: "SUGI ASAYAKE Owner", email: "owner@asayake.mn", phone: "99110022", role: "admin", createdAt: new Date(), lastSignedIn: new Date(), suspendedAt: null, suspendedReason: null },
+    { id: 1, name: "Дэлгүүрийн эзэн", email: "owner@example.mn", phone: "99110022", role: "admin", createdAt: new Date(), lastSignedIn: new Date(), suspendedAt: null, suspendedReason: null },
     { id: 2, name: "Store manager", email: null, phone: "88112233", role: "user", createdAt: new Date(), lastSignedIn: new Date(), suspendedAt: null, suspendedReason: null },
   ] : (usersQuery.data?.rows ?? []);
   const usersTotal = preview ? users.length : (usersQuery.data?.total ?? 0);
@@ -603,7 +604,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
       try {
         const stored = await uploadProductImage.mutateAsync({ fileName: file.name, contentType: file.type as UploadImageType, dataBase64: String(reader.result) });
         setProductForm(current => ({ ...current, imageUrl: stored.url }));
-        toast.success("Зураг SUGI сан руу хадгалагдлаа.");
+        toast.success("Зураг медиа сан руу хадгалагдлаа.");
       } catch (error) {
         toast.error(messageFrom(error));
       } finally {
@@ -747,7 +748,7 @@ export default function AdminWorkspace({ preview = false }: { preview?: boolean 
   const sectionLabel = section === "dashboard" ? "Хянах самбар" : section === "products" ? "Бүтээгдэхүүн" : section === "orders" ? "Захиалга" : section === "posts" ? "Шинэ мэдээ" : section === "reviews" ? "Сэтгэгдэл" : section === "routines" ? "Routine" : section === "promotions" ? "Урамшуулал" : section === "calendar" ? "Хуанли" : section === "discountCodes" ? "Хямдралын код" : section === "brands" ? "Топ брэндүүд" : section === "search" ? "Хайлт ба толь бичиг" : section === "branches" ? "Салбарууд" : section === "pos" ? "Дэлгүүрийн худалдаа" : section === "media" ? "Content & Media" : section === "documents" ? "Баримт бичиг" : section === "loyalty" ? "Гишүүнчлэлийн зэрэглэл" : section === "campaigns" ? "Кампанит ажил" : section === "storeSettings" ? "Дэлгүүрийн тохиргоо" : section === "measurement" ? "Хэмжилт" : section === "brandStudio" ? "Брэнд студи" : section === "analytics" ? "Аналитик" : section === "security" ? "Аюулгүй байдал" : section === "integrations" ? "Интеграцууд" : section === "notifications" ? "Утасны мэдэгдэл" : section === "receiving" ? "Бараа хүлээн авах" : section === "process" ? "Процесс" : "Хэрэглэгч";
   // The tab used to read as the storefront ("SUGI ASAYAKE Mongolia — ...") for
   // every admin screen, so two admin tabs could not be told apart.
-  useDocumentMeta(`${sectionLabel} · Админ — SUGI ASAYAKE`, null);
+  useDocumentMeta(`${sectionLabel} · Админ — ${brandName()}`, null);
   // Same query AdminDashboardHome makes (undefined input) -- React Query
   // dedupes identical query keys, so this is a free cache read whenever
   // the dashboard section already fetched it, and a real (still cheap)

@@ -10,6 +10,7 @@ import { isAdminPanelRole } from "@shared/face-auth";
 // with the phone page /face-approve (2026-09-22).
 import "@/admin.css";
 import "@/face.css";
+import { brandName } from "@/lib/brand";
 
 /**
  * Tom, 2026-09-05 (explicit): this page used to wrap AdminWorkspace (the
@@ -55,7 +56,7 @@ export default function AdminDashboard() {
   if (!user) {
     return <div className="grid min-h-screen place-items-center bg-[#f8f5ef] p-8 text-center">
       <div>
-        <p className="text-[10px] font-extrabold tracking-[.18em] text-[#df1f3d]">SUGI ASAYAKE ADMIN</p>
+        <p className="text-[10px] font-extrabold tracking-[.18em] text-[#df1f3d]">{`${brandName()} ADMIN`}</p>
         <h1 className="mt-3 font-[var(--font-display)] text-4xl font-semibold tracking-[-.08em]">Нэвтэрч үргэлжлүүлнэ үү.</h1>
         <p className="mx-auto mt-4 max-w-md text-sm leading-6 text-[#707176]">Энэ хэсгийг үзэхийн тулд эхлээд нэвтэрсэн байх шаардлагатай.</p>
         <button type="button" onClick={startLogin} className="mt-6 inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-[#df1f3d] px-6 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#bc1732] active:scale-[.97]"><LogIn size={16} />Нэвтрэх</button>

@@ -94,7 +94,7 @@ export default function ContentMediaPanel({ preview = false }: { preview?: boole
 
   const resetSlot = async (slotKey: SiteMediaSlotKey) => {
     if (preview) return toast.message("Preview горим", { description: "Бодит тохиргоо сэргээх нь хамгаалагдсан admin хэсэгт ажиллана." });
-    if (!await confirm({ title: "Энэ зургийг SUGI-ийн анхны дизайн руу буцаах уу?" })) return;
+    if (!await confirm({ title: "Энэ зургийг анхны дизайн руу буцаах уу?" })) return;
     setActiveSlot(slotKey);
     try {
       await clearMedia.mutateAsync({ slotKey });
@@ -109,7 +109,7 @@ export default function ContentMediaPanel({ preview = false }: { preview?: boole
 
   return <div>
     <div className="rounded-3xl border border-[#3970a7]/15 bg-[var(--a-info-soft)] p-5 text-sm text-[var(--a-info)]">
-      <div className="flex gap-3"><ShieldCheck className="mt-0.5 shrink-0 text-[var(--a-info)]" size={19} /><p><strong>Таны өөрчлөлт шууд сайт дээр харагдана.</strong> Доорх хэсэг бүрт зураг оруулаад, шаардлагатай бол товч тайлбар нэмнэ үү. “Анхны зураг руу буцаах” нь SUGI-ийн одоогийн дизайны зургийг сэргээнэ.</p></div>
+      <div className="flex gap-3"><ShieldCheck className="mt-0.5 shrink-0 text-[var(--a-info)]" size={19} /><p><strong>Таны өөрчлөлт шууд сайт дээр харагдана.</strong> Доорх хэсэг бүрт зураг оруулаад, шаардлагатай бол товч тайлбар нэмнэ үү. “Анхны зураг руу буцаах” нь кодонд суулгасан анхдагч зургийг сэргээнэ.</p></div>
     </div>
     {!preview && mediaQuery.isLoading && <div className="mt-5 flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={15} />Зургийн тохиргоог уншиж байна…</div>}
     {!preview && mediaQuery.error && <div className="mt-5 rounded-2xl bg-[var(--a-neg-soft)] p-4 text-xs text-[var(--a-neg)]">{messageFrom(mediaQuery.error)}</div>}

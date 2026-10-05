@@ -4,6 +4,7 @@ import { getSalePercent } from "@shared/catalog-filter";
 import { formatMnt } from "@shared/format";
 import { useProductName } from "@/hooks/useProductName";
 import ResponsivePicture from "@/components/ResponsivePicture";
+import { brandName } from "@/lib/brand";
 
 const fallbackImage = "/product-placeholder.svg";
 
@@ -41,7 +42,7 @@ export default function ShelfProductCard({ product, rank }: { product: ShelfProd
           <ResponsivePicture src={product.imageUrl ?? fallbackImage} fullWidth={1600} sizes="220px" alt="" loading="lazy" />
         </span>
         <span className="shelf-card-body">
-          <p>{product.brand ?? "SUGI ASAYAKE"}</p>
+          <p>{product.brand ?? brandName()}</p>
           <h3>{names.primary}</h3>
           {names.secondary ? <span className="product-name-secondary">{names.secondary}</span> : null}
           <span className="shelf-card-price">

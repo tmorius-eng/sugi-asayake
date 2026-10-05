@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import type { AdminSection } from "../AdminWorkspace";
 import { useBrandMedia } from "@/hooks/useBrandMedia";
+import { brandName } from "@/lib/brand";
 
 // One logo for the entire site: the `brand-logo` / `brand-symbol` media slots
 // (/admin -> Content & Media, 2026-09-17), which the storefront header and
@@ -193,7 +194,7 @@ function SidebarNavContent({ section, role, badges, collapsed = false, onSelect,
         <span className={`grid shrink-0 place-items-center rounded-xl bg-white ${collapsed ? "size-10 p-1" : "h-10 px-2.5"}`}>
           <img
             src={(collapsed ? brandSymbol : brandLogo) ?? undefined}
-            alt="SUGI ASAYAKE"
+            alt={brandName()}
             className={collapsed ? "size-full object-contain" : "h-6 w-auto max-w-[124px] object-contain"}
           />
         </span>

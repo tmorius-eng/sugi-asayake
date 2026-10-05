@@ -155,7 +155,7 @@ export default function AdminDocumentsPanel({ preview = false }: { preview?: boo
 
   const reset = async () => {
     if (preview) return toast.message("Preview горим", { description: "Бодит сэргээлт зөвхөн хамгаалагдсан admin хэсэгт ажиллана." });
-    if (!await confirm({ title: "Энэ баримтыг SUGI-ийн анхны хувилбар руу буцаах уу? Таны бичсэн засвар устана." })) return;
+    if (!await confirm({ title: "Энэ баримтыг анхны хувилбар руу буцаах уу? Таны бичсэн засвар устана." })) return;
     try {
       await clearDocument.mutateAsync({ documentKey: activeKey, locale: activeLocale });
       // 2026-09-23: маягтыг ДАХИН үрэхийг зөвшөөрнө. Үрэлт нь одоо нэг

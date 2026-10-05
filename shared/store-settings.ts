@@ -402,6 +402,17 @@ export const storeSettingSlots = [
     fallbackValue: "3",
   },
   {
+    // Эзэн солих (2026-10-05): бэлгийн картын кодын угтвар — өмнө нь "SUGI-" хатуу бичигдсэн.
+    // Хуучин угтвартай гаргасан картууд хүчинтэй хэвээр (normalizeGiftCode хэрэглэгчийн бичсэн угтварыг хадгална).
+    key: "gift-card-prefix",
+    group: "Захиалга",
+    type: "text" as const,
+    label: "Бэлгийн картын кодын угтвар",
+    description: "Шинээр гаргах бэлгийн картын код энэ үсгээр эхэлнэ (жишээ: SUGI-ABCD-EFGH-2345). 2–6 латин том үсэг. Өмнө гаргасан картууд хуучин угтвараараа ажилласаар байна.",
+    fallbackValue: "SUGI",
+    format: { pattern: "^[A-Z]{2,6}$", message: "2–6 латин том үсэг (жишээ: SUGI).", example: "SUGI" } as const,
+  },
+  {
     key: "review-reward-mnt",
     group: "Захиалга",
     type: "number" as const,

@@ -23,6 +23,7 @@ import { warmCatalogSearchIndex } from "../search/catalogSearch";
 import { warmUpImageSafety } from "./imageSafety";
 import { dbPing, getDb } from "../db";
 import { serveRobots, serveSitemap } from "./sitemap";
+import { serveManifest } from "./manifest";
 import { serveMerchantFeed } from "./merchantFeed";
 import { serveProductOgImage } from "./ogImage";
 import { finishFacebookLogin, startFacebookLogin } from "./facebookAuth";
@@ -220,6 +221,8 @@ async function startServer() {
   app.get("/api/auth/facebook/callback", (req, res, next) => { finishFacebookLogin(req, res).catch(next); });
   app.get("/sitemap.xml", serveSitemap);
   app.get("/robots.txt", serveRobots);
+  // PWA manifest — нэр/өнгө тохиргооноос (эзэн солих, manifest.ts). Статик файлаас ӨМНӨ.
+  app.get("/manifest.webmanifest", (req, res, next) => { serveManifest(req, res).catch(next); });
   // Google Merchant Center-ийн scheduled-fetch URL (2026-09-14).
   app.get("/feeds/google-merchant.xml", serveMerchantFeed);
   // Барааны 1200x630 хуваалцах карт (2026-09-14, ogImage.ts).

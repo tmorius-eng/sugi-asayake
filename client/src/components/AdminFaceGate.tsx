@@ -44,6 +44,7 @@ import {
 import { drawTrackedMesh, loadFaceTracker, overlaySize, releaseSnapshot, snapshotFrame, trackFrame, trackerDelegate, warmMeshContours } from "@/lib/faceTracker";
 import { faceBackendName, warmUpFaceModels } from "@/lib/faceEngine";
 import { withTimeout } from "@/lib/withTimeout";
+import { brandName } from "@/lib/brand";
 
 /**
  * Admin face gate (2026-09-08; tracking rebuilt 2026-09-13) — stands between
@@ -1139,7 +1140,7 @@ function ConsentScreen({ modelStale, onAccept }: { modelStale: boolean; onAccept
       <div className="face-gate-card face-gate-card--wide face-gate-card--consent">
         <div className="face-gate-brandstrip" aria-hidden="true" />
 
-        <p className="face-gate-brand">SUGI ASAYAKE ADMIN</p>
+        <p className="face-gate-brand">{`${brandName()} ADMIN`}</p>
         {/* Who is being enrolled. Shown because enrolling a face is tied to a
             specific account, and someone left signed in as a colleague should
             notice before their face is bound to the wrong one. */}

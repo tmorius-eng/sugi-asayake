@@ -9,6 +9,7 @@ import { useShopContact } from "@/hooks/useShopContact";
 import { useSiteText } from "@/hooks/useSiteText";
 import { useT } from "@/hooks/useLocale";
 import { useBrandMedia } from "@/hooks/useBrandMedia";
+import { brandName } from "@/lib/brand";
 
 // NEWVISION.md §9: replaces Home.tsx's old single-row footer (logo + one
 // "Шуурхай холбоос" column mixing an about-anchor, a category-anchor, and a
@@ -73,9 +74,9 @@ export default function SiteFooter({ ctaBanner }: { ctaBanner?: FooterCtaBanner 
       )}
       <div className="footer-grid">
         <div>
-          <img src={brandLogo ?? undefined} alt="SUGI ASAYAKE Mongolia" className="footer-logo" />
+          <img src={brandLogo ?? undefined} alt={brandName()} className="footer-logo" />
           <p>{textFor("footer-text-tagline", "Япон чанарыг гэр бүл бүрт.")}</p>
-          <div className="footer-socials" aria-label="SUGI ASAYAKE сошиал хуудаснууд">
+          <div className="footer-socials" aria-label={`${brandName()} сошиал хуудаснууд`}>
             {socials.map(({ label, href, Icon }) => <a className="footer-social-link" href={href} target="_blank" rel="noreferrer" aria-label={`${label} хуудас нээх`} key={label}><Icon size={17} strokeWidth={1.8} /><span>{label}</span></a>)}
           </div>
           {/* 2026-09-16: суулгах боломжтой хөтөч дээр л өөрөө гарч ирнэ
@@ -128,7 +129,7 @@ export default function SiteFooter({ ctaBanner }: { ctaBanner?: FooterCtaBanner 
         </div>
       </div>
       <div className="footer-bottom">
-        <span>{textFor("footer-text-copyright", "© 2026 SUGI ASAYAKE Mongolia")}</span>
+        <span>{textFor("footer-text-copyright", `© 2026 ${brandName()} Mongolia`)}</span>
         <span>{textFor("footer-text-subsidiary", "Official SUGI Drug Store Japan subsidiary")}</span>
       </div>
     </footer>

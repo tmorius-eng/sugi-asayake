@@ -35,6 +35,7 @@ import { trpc } from "@/lib/trpc";
 import { currentPushSubscription, pushSupport, subscribeToPush, unsubscribeFromPush } from "@/lib/push";
 import type { RouterOutputs } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
+import { brandName } from "@/lib/brand";
 
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Гүйцэтгэж чадсангүй. Дахин оролдоно уу.";
 
@@ -86,7 +87,7 @@ const FAQ_ITEMS = HELP_FAQ;
 
 export default function Profile() {
   const textFor = useSiteText();
-  useDocumentMeta(textFor("seo-text-profile-title", "Миний профайл — SUGI ASAYAKE"), null);
+  useDocumentMeta(textFor("seo-text-profile-title", `Миний профайл — ${brandName()}`), null);
   const { user, loading, isAuthenticated, logout } = useAuth();
   const utils = trpc.useUtils();
   const [, setLocation] = useLocation();
@@ -253,7 +254,7 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: TabKey) => void }) {
   return (
     <div style={{ display: "grid", gap: "20px" }}>
       <div className="overview-hero" data-reveal>
-        <p>{textFor("profile-text-greeting-kicker", "SUGI ASAYAKE / ТАНЫ ӨДӨР БҮР")}</p>
+        <p>{textFor("profile-text-greeting-kicker", `${brandName()} / ТАНЫ ӨДӨР БҮР`)}</p>
         <h2>Сайн байна уу, {firstName}.</h2>
         <span>{textFor("profile-text-greeting-lede", "Өглөөний туяа шиг гэрэлтээрэй — таны бүх мэдээлэл эндээс нэг дороос харагдана.")}</span>
       </div>
@@ -724,7 +725,7 @@ function WishlistTab({ onCartOpen }: { onCartOpen: () => void }) {
                 <Link href={`/product/${item.slug}`}><img src={item.imageUrl ?? fallbackImage} alt={item.name} /></Link>
               </div>
               <div className="wishlist-card-body">
-                <p>SUGI ASAYAKE</p>
+                <p>{brandName()}</p>
                 <Link href={`/product/${item.slug}`} style={{ color: "inherit" }}><h3>{item.name}</h3></Link>
                 <strong>{formatMnt(item.priceMnt)}</strong>
                 {item.stockQuantity > 0 ? (
@@ -1183,7 +1184,7 @@ function GiftCardRedeem() {
     <form onSubmit={event => { event.preventDefault(); if (code.trim().length >= 8) redeem.mutate({ code: code.trim() }); }} className="gift-redeem">
       <div><strong>Бэлгийн карт ашиглах</strong><span>Кодоо оруулахад дүн нь дэлгүүрийн зээл болж, дараагийн захиалгад ашиглагдана.</span></div>
       <div className="gift-redeem-row">
-        <input value={code} onChange={event => setCode(event.target.value)} placeholder="SUGI-XXXX-XXXX-XXXX" maxLength={24} autoComplete="off" spellCheck={false} aria-label="Бэлгийн картын код" />
+        <input value={code} onChange={event => setCode(event.target.value)} placeholder="XXXX-XXXX-XXXX" maxLength={24} autoComplete="off" spellCheck={false} aria-label="Бэлгийн картын код" />
         <button type="submit" className="order-buy-again" disabled={redeem.isPending || code.trim().length < 8}>{redeem.isPending ? <Loader2 className="animate-spin" size={14} /> : <Gift size={14} />} Ашиглах</button>
       </div>
     </form>
@@ -1206,7 +1207,7 @@ function LoyaltyTab() {
         </div>
       ) : data && <>
         <div className={`loyalty-card ${TIER_CARD_CLASS[data.currentTier.name] ?? ""}`}>
-          <div className="loyalty-card-top"><span>SUGI ASAYAKE MEMBER</span><Sparkles size={18} /></div>
+          <div className="loyalty-card-top"><span>{`${brandName()} MEMBER`}</span><Sparkles size={18} /></div>
           <strong className="loyalty-card-tier">{data.currentTier.name}</strong>
           <div className="loyalty-card-number">{data.cardNumber ? data.cardNumber : "Утасны дугаараа \"Хувийн профайл\" хэсэгт бүртгүүлж картаа идэвхжүүлээрэй"}</div>
           {data.currentTier.discountPercent > 0 && <div className="loyalty-card-bottom">Захиалга бүрт -{data.currentTier.discountPercent}%</div>}

@@ -11,6 +11,7 @@ import { useProductName } from "@/hooks/useProductName";
 import { translateProductText } from "@shared/product-i18n";
 import { getCategoryPlaceholderImage, getSalePercent } from "@shared/catalog-filter";
 import { formatMnt } from "@shared/format";
+import { brandName } from "@/lib/brand";
 
 export type QuickViewProduct = {
   id: number;
@@ -120,7 +121,7 @@ export default function QuickViewDialog({ open, product, onOpenChange, onAdded }
       <div className="quick-view-copy">
         <DialogTitle className="font-[var(--font-display)] text-4xl font-semibold tracking-[-.075em] text-[#17181b] sm:text-5xl">{names.primary}</DialogTitle>
         {names.secondary ? <p className="product-name-secondary">{names.secondary}</p> : null}
-        <DialogDescription className="mt-2 text-[10px] font-extrabold tracking-[.15em] text-[var(--primary)]">{display.brand ?? display.categoryName ?? "SUGI ASAYAKE"}</DialogDescription>
+        <DialogDescription className="mt-2 text-[10px] font-extrabold tracking-[.15em] text-[var(--primary)]">{display.brand ?? display.categoryName ?? brandName()}</DialogDescription>
         <p className="quick-view-description">{detail.isLoading ? "Дэлгэрэнгүй мэдээллийг ачаалж байна…" : description}</p>
         <div className="quick-view-price"><strong>{formatMnt(activePriceMnt)}</strong>{salePercent ? <><s>{formatMnt(activeCompareAtPriceMnt!)}</s><em className="quick-view-sale-badge">-{salePercent}%</em></> : <span>НӨАТ багтсан</span>}</div>
         {hasVariantChoice ? <VariantPicker variants={variants} selectedId={selectedVariantId} onSelect={setSelectedVariantId} className="mb-5" /> : null}

@@ -13,6 +13,7 @@ import { toggleStorefrontTheme, useStorefrontTheme } from "@/hooks/useStorefront
 import { useT } from "@/hooks/useLocale";
 import { trpc } from "@/lib/trpc";
 import CartDrawer from "@/components/CartDrawer";
+import { brandName } from "@/lib/brand";
 
 type CommerceHeaderProps = {
   cartCount?: number;
@@ -53,7 +54,7 @@ const marketingNavItems = [
   { slot: "nav-text-journal", fallback: "Зөвлөгөө", href: "/journal", anchor: false },
 ];
 
-export default function CommerceHeader({ cartCount: cartCountProp, onCartOpen: onCartOpenProp, backLabel = "SUGI ASAYAKE", marketingNav = false }: CommerceHeaderProps) {
+export default function CommerceHeader({ cartCount: cartCountProp, onCartOpen: onCartOpenProp, backLabel = brandName(), marketingNav = false }: CommerceHeaderProps) {
   // 2026-09-21: a page that does not wire its own cart (journal, brands, posts,
   // track-order, login, legal, help, checkout...) used to get a DEAD bag icon --
   // always "empty", and clicking it did nothing, because onCartOpen was
@@ -116,7 +117,7 @@ export default function CommerceHeader({ cartCount: cartCountProp, onCartOpen: o
           <div className="commerce-header-left">
             <Link href="/" className="commerce-brand">
               {!isHome && <span className="commerce-back"><ArrowLeft size={17} aria-hidden="true" /></span>}
-              <img src={brandLogo ?? undefined} alt="SUGI ASAYAKE" />
+              <img src={brandLogo ?? undefined} alt={brandName()} />
               {!marketingNav && backLabel ? <span>{backLabel}</span> : null}
             </Link>
           </div>

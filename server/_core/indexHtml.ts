@@ -233,6 +233,7 @@ async function computeValues(dateKey: string): Promise<Map<string, string>> {
     ["ANALYTICS_CONFIG_JSON", analyticsConfig],
     ["STOREFRONT_BOOTSTRAP_JSON", bootstrapJson],
     ["STOREFRONT_CDN_PRECONNECT", cdnPreconnectTag()],
+    ["SITE_SHORT_NAME", escapeAttribute(textFor("brand-text-short-name"))],
     ["STOREFRONT_BRAND_TOKENS", renderBrandTokensStyle(theme.look)],
     ["STOREFRONT_THEME_COLOR", escapeAttribute(theme.look.light.primary)],
     // Нүүрний дээд хэсэг серверээс (heroShell.ts). `HERO_SHELL=0` = унтраах
@@ -341,6 +342,7 @@ function fallbackFor(key: string): string | undefined {
     case "STOREFRONT_BOOTSTRAP_JSON": return "{}";
     case "STOREFRONT_CDN_PRECONNECT": return cdnPreconnectTag();
     // DB унтарсан ч index.css-тэй ижил кодын суурь загвар — өнгө хэвээр.
+    case "SITE_SHORT_NAME": return escapeAttribute(getSiteTextSlot("brand-text-short-name").fallbackValue);
     case "STOREFRONT_BRAND_TOKENS": return renderBrandTokensStyle(BASE_THEME);
     case "STOREFRONT_THEME_COLOR": return BASE_THEME.light.primary;
     case "SITE_HERO_SHELL": return "";

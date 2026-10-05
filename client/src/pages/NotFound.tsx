@@ -3,14 +3,15 @@ import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { useSiteText } from "@/hooks/useSiteText";
 import { Link } from "wouter";
 import SiteFooter from "@/components/SiteFooter";
+import { brandName } from "@/lib/brand";
 
 export default function NotFound() {
   const textFor = useSiteText();
-  useDocumentMeta(textFor("seo-text-notfound-title", "Хуудас олдсонгүй — SUGI ASAYAKE"), null);
+  useDocumentMeta(textFor("seo-text-notfound-title", `Хуудас олдсонгүй — ${brandName()}`), null);
   return (
     <div className="notfound-shell">
       <div className="notfound-card">
-        <p className="eyebrow" style={{ justifyContent: "center" }}><span /> SUGI ASAYAKE</p>
+        <p className="eyebrow" style={{ justifyContent: "center" }}><span /> {brandName()}</p>
         <div className="notfound-code">404</div>
         <h1>{textFor("notfound-text-heading", "Энэ хуудас олдсонгүй.")}</h1>
         <p>{textFor("notfound-text-description", "Холбоос буруу байж болзошгүй, эсвэл хуудас зөөгдсөн байна. Нүүр хуудас руу буцаж дахин хайж үзээрэй.")}</p>

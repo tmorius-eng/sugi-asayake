@@ -7,6 +7,7 @@ import SiteFooter from "@/components/SiteFooter";
 import { trpc } from "@/lib/trpc";
 import { useSiteText } from "@/hooks/useSiteText";
 import { scrollElementToTopNow } from "@/lib/scroll";
+import { brandName } from "@/lib/brand";
 
 // Two lines; the second is the emphasised half. Kept as a constant so the
 // escape lives in exactly one place.
@@ -32,7 +33,7 @@ const formatDate = (value: string | Date | null | undefined) => {
  */
 export default function Journal() {
   const textFor = useSiteText();
-  useDocumentMeta(textFor("seo-text-journal-title", "Зөвлөгөө ба мэдээ — SUGI ASAYAKE"), null);
+  useDocumentMeta(textFor("seo-text-journal-title", `Зөвлөгөө ба мэдээ — ${brandName()}`), null);
   const [journalLine1, journalLine2] = textFor("journal-text-heading", JOURNAL_HEADING_FALLBACK).split("\n");
   // Хуудаслалт (2026-09-21): хуудас URL-д (`?page=2`) — refresh/буцахад хадгалагдана
   // (/shop-ийн дүрэмтэй ижил). 12 нийтлэл = 3 багана × 4 мөр.
@@ -57,17 +58,17 @@ export default function Journal() {
 
   return (
     <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]">
-      <CommerceHeader backLabel="SUGI ASAYAKE" />
+      <CommerceHeader />
       <main className="mx-auto max-w-6xl px-4 py-10 sm:px-8 sm:py-14">
         <p className="flex items-center gap-3 text-[10px] font-extrabold tracking-[.18em] text-[var(--primary-strong)]">
           <span className="h-px w-10 bg-[var(--primary)]" />
-          <Newspaper size={13} /> SUGI JOURNAL
+          <Newspaper size={13} /> {`${brandName()} JOURNAL`}
         </p>
         <h1 className="mt-4 font-[var(--font-display)] text-4xl font-semibold tracking-[-.07em] sm:text-5xl">
           {journalLine1} <em className="text-[var(--primary)] not-italic">{journalLine2}</em>
         </h1>
         <p className="mt-5 max-w-lg text-[15px] leading-7 text-[#66676b]">
-          {textFor("journal-text-lede", "SUGI ASAYAKE-ийн арчилгаа, гоо сайхан, өдөр тутмын зөвлөгөөнүүд.")}
+          {textFor("journal-text-lede", `${brandName()}-ийн арчилгаа, гоо сайхан, өдөр тутмын зөвлөгөөнүүд.`)}
         </p>
 
         <div ref={gridRef} />

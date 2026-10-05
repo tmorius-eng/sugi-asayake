@@ -10,6 +10,7 @@ import {
   siteDocumentFallbacks,
   type SiteDocumentKey,
 } from "@shared/site-documents";
+import { brandName } from "@/lib/brand";
 
 /**
  * /privacy, /terms and /returns.
@@ -70,17 +71,17 @@ export default function Legal() {
   const updatedLabel = saved?.updatedLabel ?? fallback.updated;
   const contentHtml = saved?.contentHtml || documentSectionsToHtml(fallback.sections);
 
-  useDocumentMeta(`${title} — SUGI ASAYAKE`, null);
+  useDocumentMeta(`${title} — ${brandName()}`, null);
 
   return (
     <div className="doc-shell">
       {/* 2026-09-21 (Tom): the legal pages get the site header like every other
           storefront page -- search, language, cart, menu. Its back arrow
           replaces the old in-page "Нүүр хуудас руу буцах" link. */}
-      <CommerceHeader backLabel="SUGI ASAYAKE" />
+      <CommerceHeader />
       <main className="doc-main">
         <div className="doc-head">
-          <p className="doc-kicker">SUGI ASAYAKE MONGOLIA</p>
+          <p className="doc-kicker">{brandName()}</p>
           <h1>{title}</h1>
           {lead && <p>{lead}</p>}
           <span className="doc-updated">Сүүлд шинэчилсэн: {updatedLabel}</span>

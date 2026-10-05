@@ -8,6 +8,7 @@ import { trpc } from "@/lib/trpc";
 import { useShopContact } from "@/hooks/useShopContact";
 import { useT } from "@/hooks/useLocale";
 import { HELP_FAQ } from "@shared/help-faq";
+import { brandName } from "@/lib/brand";
 
 /**
  * /help -- contact, stores and FAQ on one public page (2026-09-14).
@@ -35,15 +36,15 @@ export default function Help() {
   const contact = useShopContact();
   const branches = trpc.content.branches.useQuery();
   const messenger = messengerFor(contact.facebookUrl);
-  useDocumentMeta(`${t("Тусламж, холбоо барих")} — SUGI ASAYAKE`, null);
+  useDocumentMeta(`${t("Тусламж, холбоо барих")} — ${brandName()}`, null);
 
   return (
     <div className="doc-shell">
       {/* 2026-09-21: site header like every storefront page (was footer-only). */}
-      <CommerceHeader backLabel="SUGI ASAYAKE" />
+      <CommerceHeader />
       <main className="doc-main help-main">
         <div className="doc-head">
-          <p className="doc-kicker">SUGI ASAYAKE MONGOLIA</p>
+          <p className="doc-kicker">{brandName()}</p>
           <h1>Тусламж, холбоо барих</h1>
           <p>Захиалга, хүргэлт, буцаалтын талаар асуух зүйл байвал шууд холбогдоорой — ажлын цагаар хариулна.</p>
         </div>

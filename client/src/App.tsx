@@ -20,6 +20,7 @@ import { PageviewTracker } from "./lib/pageviewTracking";
 import { DocumentTitleRouteReset } from "./lib/useDocumentMeta";
 import { useConsentIconAutoHide } from "./lib/consentIconAutoHide";
 import { useScrollReveal } from "./hooks/useScrollReveal";
+import { brandName } from "@/lib/brand";
 
 const AdminDashboard = lazyRetry(() => import("./pages/AdminDashboard"));
 // Зөвхөн dev: admin workspace `preview` горимд (нэвтрэлтгүй, царайны хаалгагүй,
@@ -52,7 +53,7 @@ function RouteLoadingFallback() {
   // -- theme-aware Tailwind токен ашиглана.
   return <main className="min-h-screen bg-background grid place-items-center px-6 text-center">
     <div>
-      <p className="font-display text-2xl text-foreground">SUGI ASAYAKE</p>
+      <p className="font-display text-2xl text-foreground">{brandName()}</p>
       <p className="mt-2 text-sm text-muted-foreground">Түр хүлээнэ үү…</p>
     </div>
   </main>;

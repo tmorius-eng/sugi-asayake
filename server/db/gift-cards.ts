@@ -9,6 +9,7 @@ import { GIFT_CARD_VALIDITY_MONTHS, addMonthsClamped } from "../../shared/gift-c
 import { getDb } from "./connection";
 import { OrderTx } from "./admin-orders";
 import { forgetSessionUser } from "./users";
+import { getStoreSettingValue } from "./ops";
 
 // ---------------------------------------------------------------------------
 // Gift cards (2026-09-13, migration 0073).
@@ -16,26 +17,39 @@ import { forgetSessionUser } from "./users";
 
 /** Crockford-style alphabet without 0/O/1/I so a printed code is unambiguous. */
 const GIFT_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-function generateGiftCode(): string {
+/** Угтвар: `gift-card-prefix` (эзэн солих, 2026-10-05) — буруу утга бол "SUGI". */
+async function giftCodePrefix(): Promise<string> {
+  const value = (await getStoreSettingValue("gift-card-prefix")).trim().toUpperCase();
+  return /^[A-Z]{2,6}$/.test(value) ? value : "SUGI";
+}
+function generateGiftCode(prefix: string): string {
   const bytes = randomBytes(12);
   let out = "";
   for (let i = 0; i < 12; i++) out += GIFT_CODE_ALPHABET[bytes[i]! % GIFT_CODE_ALPHABET.length];
-  return `SUGI-${out.slice(0, 4)}-${out.slice(4, 8)}-${out.slice(8, 12)}`;
+  return `${prefix}-${out.slice(0, 4)}-${out.slice(4, 8)}-${out.slice(8, 12)}`;
 }
-/** "sugi abcd-efgh 2345" -> "SUGI-ABCD-EFGH-2345" (whatever the customer typed). */
-export function normalizeGiftCode(raw: string): string {
-  const body = raw.toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/^SUGI/, "");
-  return `SUGI-${body.slice(0, 4)}-${body.slice(4, 8)}-${body.slice(8, 12)}`;
+/**
+ * "sugi abcd-efgh 2345" -> "SUGI-ABCD-EFGH-2345" (whatever the customer typed). Сүүлийн 12 тэмдэгт
+ * нь код, түүний өмнөх үсэг нь угтвар — угтвар солигдсон ч өмнө гаргасан картууд ажилласаар; угтваргүй
+ * бичвэл одоогийн угтвар.
+ */
+export function normalizeGiftCode(raw: string, currentPrefix = "SUGI"): string {
+  const compact = raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const body = compact.slice(-12);
+  const typedPrefix = compact.slice(0, -12);
+  const prefix = /^[A-Z]{2,6}$/.test(typedPrefix) ? typedPrefix : currentPrefix;
+  return `${prefix}-${body.slice(0, 4)}-${body.slice(4, 8)}-${body.slice(8, 12)}`;
 }
 
 export async function issueGiftCards(input: { amountMnt: number; count: number; issuedByUserId: number; recipientName?: string | null; note?: string | null; expiresAt?: Date | null }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const created: { id: number; code: string }[] = [];
+  const prefix = await giftCodePrefix();
   for (let i = 0; i < input.count; i++) {
     // Retry on the (astronomically unlikely) unique collision.
     for (let attempt = 0; attempt < 3; attempt++) {
-      const code = generateGiftCode();
+      const code = generateGiftCode(prefix);
       try {
         const inserted = await db.insert(giftCards).values({ code, amountMnt: input.amountMnt, issuedByUserId: input.issuedByUserId, recipientName: input.recipientName ?? null, note: input.note ?? null, expiresAt: input.expiresAt ?? null });
         created.push({ id: Number(inserted[0].insertId), code });
@@ -75,10 +89,11 @@ export async function issueGiftCardsForPaidOrder(tx: GiftCardWriter, orderId: nu
   // Сарын төгсгөл халихгүй (2026-09-23, `addMonthsClamped`).
   const expiresAt = addMonthsClamped(new Date(), GIFT_CARD_VALIDITY_MONTHS);
   const issued: IssuedGiftCard[] = [];
+  const prefix = await giftCodePrefix();
   for (const line of lines) {
     for (let unit = 0; unit < line.quantity; unit++) {
       for (let attempt = 0; attempt < 3; attempt++) {
-        const code = generateGiftCode();
+        const code = generateGiftCode(prefix);
         try {
           const inserted = await tx.insert(giftCards).values({ code, amountMnt: line.unitPriceMnt, purchaseOrderId: orderId, issuedByUserId: null, recipientName: line.customerName.slice(0, 120) /* 2026-09-27: баганa 120, захиалгын нэр 160 хүртэл — урт нэр карт гаргалтыг унагадаг байв */, note: `Захиалга ${line.orderNumber}`, expiresAt });
           issued.push({ id: Number(inserted[0].insertId), code, amountMnt: line.unitPriceMnt, expiresAt });
@@ -156,7 +171,7 @@ export async function voidGiftCard(id: number) {
 export async function redeemGiftCard(rawCode: string, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
-  const code = normalizeGiftCode(rawCode);
+  const code = normalizeGiftCode(rawCode, await giftCodePrefix());
   const result = await db.transaction(async tx => {
     const [card] = await tx.select().from(giftCards).where(eq(giftCards.code, code)).limit(1);
     if (!card) throw new Error("Ийм бэлгийн карт олдсонгүй. Кодоо шалгана уу.");

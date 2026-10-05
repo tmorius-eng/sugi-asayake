@@ -60,7 +60,7 @@ const isRevalidatedAsset = url =>
 
 // Customer Web Push (2026-09-13): payload is JSON {title, body, url, icon, badge, tag}.
 self.addEventListener("push", event => {
-  let data = { title: "SUGI ASAYAKE", body: "", url: "/profile?tab=orders", icon: "/icons/icon-192.png", badge: "/icons/icon-192.png", tag: undefined };
+  let data = { title: "Мэдэгдэл", body: "", url: "/profile?tab=orders", icon: "/icons/icon-192.png", badge: "/icons/icon-192.png", tag: undefined };
   try { data = { ...data, ...event.data.json() }; } catch { if (event.data) data.body = event.data.text(); }
   event.waitUntil(self.registration.showNotification(data.title, { body: data.body, icon: data.icon, badge: data.badge, tag: data.tag, data: { url: data.url }, lang: "mn" }));
 });

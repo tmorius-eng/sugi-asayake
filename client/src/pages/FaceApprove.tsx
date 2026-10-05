@@ -8,6 +8,7 @@ import { FaceGateFlow } from "@/components/AdminFaceGate";
 // The camera stage, number buttons and cards (2026-09-22): this page is opened
 // cold on the phone and never loads /admin's stylesheet.
 import "@/face.css";
+import { brandName } from "@/lib/brand";
 
 /**
  * Утсан дээр нээгдэх хуудас: камергүй компьютерийн admin хандалтыг
@@ -152,7 +153,7 @@ function Shell({ title, children }: { title: string; children: React.ReactNode }
   return (
     <main className="face-approve">
       <div className="face-approve-card">
-        <p className="face-approve-eyebrow">SUGI ASAYAKE · ADMIN</p>
+        <p className="face-approve-eyebrow">{`${brandName()} · ADMIN`}</p>
         <h1>{title}</h1>
         {children}
       </div>

@@ -4,6 +4,7 @@ import { useSiteText } from "@/hooks/useSiteText";
 import { useT } from "@/hooks/useLocale";
 import SectionHeading from "./SectionHeading";
 import { useShopContact } from "@/hooks/useShopContact";
+import { brandName } from "@/lib/brand";
 
 // Rough, deliberately non-geographic placement for each pin on the
 // abstract map illustration -- this is an editorial graphic, not a real
@@ -80,7 +81,7 @@ export default function StoreLocatorSection() {
             shapes (grid lines, building blocks) are aria-hidden; the real
             pins keep their own already-correct aria-label each. */}
         <div className="locator-map">
-          <svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" role="group" aria-label={`SUGI ASAYAKE-ийн ${locations.length} салбарын байршлыг харуулсан зурган дүрслэл`}>
+          <svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" role="group" aria-label={`${brandName()}-ийн ${locations.length} салбарын байршлыг харуулсан зурган дүрслэл`}>
             <rect width="400" height="300" fill="none" aria-hidden="true" />
             <g stroke="#c9d6cf" strokeWidth="1.5" opacity=".7" aria-hidden="true">
               <path d="M0 60 H400" /><path d="M0 140 H400" /><path d="M0 220 H400" />

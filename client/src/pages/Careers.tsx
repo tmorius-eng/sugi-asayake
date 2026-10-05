@@ -9,6 +9,7 @@ import { trpc } from "@/lib/trpc";
 import { useLocale, useT } from "@/hooks/useLocale";
 import { useShopContact } from "@/hooks/useShopContact";
 import { getSiteDocumentFallbackFor } from "@shared/site-documents";
+import { brandName } from "@/lib/brand";
 
 /**
  * /careers — нээлттэй ажлын байр (2026-09-14, Tom-ийн лавлагаа дизайнаар).
@@ -42,14 +43,14 @@ export default function Careers() {
   const postingsQuery = trpc.content.jobPostings.useQuery();
   const postings = postingsQuery.data ?? [];
 
-  useDocumentMeta(`${title} — SUGI ASAYAKE`, null);
+  useDocumentMeta(`${title} — ${brandName()}`, null);
 
 
   return (
     <div className="careers-page">
       <div className="careers-card">
         <header className="careers-nav">
-          <Link href="/" className="careers-nav-logo" aria-label="SUGI ASAYAKE"><img src={brandLogo ?? undefined} alt="SUGI ASAYAKE" /></Link>
+          <Link href="/" className="careers-nav-logo" aria-label={brandName()}><img src={brandLogo ?? undefined} alt={brandName()} /></Link>
           <nav className="careers-nav-links" aria-label={t("Цэс")}>
             <Link href="/">{t("Нүүр хуудас")}</Link>
             <Link href="/shop">{t("Дэлгүүр")}</Link>

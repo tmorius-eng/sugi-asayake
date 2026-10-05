@@ -1174,6 +1174,23 @@ export const siteTextSlots = [
   // The server substitutes these into client/index.html on the way out (see
   // server/_core/indexHtml.ts), which is why they live here rather than in
   // the static file they end up in.
+  // ---- Брэнд (эзэн солих, 2026-10-05) --------------------------------------
+  // Толгойн буцах холбоос, хуудасны гарчгийн төгсгөл, ажилтны тэмдэг, admin-ий гарчиг — кодонд
+  // "SUGI ASAYAKE" хатуу бичигдсэн 60 орчим газар энэ нэг slot-оос уншина (client/src/lib/brand.ts).
+  {
+    key: "brand-text-short-name",
+    group: "Брэнд",
+    label: "Брэндийн богино нэр",
+    description: "Толгой хэсэг, хуудасны гарчиг (\"Нэвтрэх — …\"), ажилтны хариултын тэмдэг, admin-ий гарчигт гарна. Сайтыг өөр эзэнд шилжүүлэхэд эхэлж солино.",
+    fallbackValue: "SUGI ASAYAKE",
+  },
+  {
+    key: "brand-text-supplier",
+    group: "Брэнд",
+    label: "Албан ёсны нийлүүлэгч",
+    description: "Барааны хуудасны \"Албан ёсны баталгаа\" мөрөнд гарна (бараа хаанаас ирдэг).",
+    fallbackValue: "SUGI Drug Store Japan",
+  },
   {
     key: "seo-text-site-name",
     group: "SEO (хуваалцах, бүтэцлэгдсэн өгөгдөл)",

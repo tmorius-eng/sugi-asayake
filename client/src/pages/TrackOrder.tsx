@@ -11,6 +11,7 @@ import { trpc } from "@/lib/trpc";
 import { useSiteText } from "@/hooks/useSiteText";
 import { formatMnt } from "@shared/format";
 import { isValidPhoneInput } from "@/lib/clientValidation";
+import { brandName } from "@/lib/brand";
 
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Хайлт амжилтгүй боллоо. Дахин оролдоно уу.";
 
@@ -28,7 +29,7 @@ const PAYMENT_LABEL: Record<string, string> = { paid: "Төлөгдсөн", unpa
 // anti-enumeration (wrong order number and wrong phone read identically).
 export default function TrackOrder() {
   const textFor = useSiteText();
-  useDocumentMeta(textFor("seo-text-track-title", "Захиалга хянах — SUGI ASAYAKE"), null);
+  useDocumentMeta(textFor("seo-text-track-title", `Захиалга хянах — ${brandName()}`), null);
   const [trackLine1, trackLine2] = textFor("track-text-heading", "Захиалгаа\nхянах.").split("\n");
   const [orderNumber, setOrderNumber] = useState("");
   const [phone, setPhone] = useState("");
@@ -54,7 +55,7 @@ export default function TrackOrder() {
 
   return (
     <div className="auth-shell">
-      <CommerceHeader backLabel="SUGI ASAYAKE" />
+      <CommerceHeader />
       <main className="auth-main">
         <div className="auth-head">
           <h1>{trackLine1} <em>{trackLine2}</em></h1>

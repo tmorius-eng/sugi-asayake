@@ -5,6 +5,7 @@ import { getCategoryPlaceholderImage, getSalePercent } from "@shared/catalog-fil
 import { imageSrcSet } from "@shared/image-variants";
 import { formatMnt } from "@shared/format";
 import { useProductName } from "@/hooks/useProductName";
+import { brandName } from "@/lib/brand";
 
 // 2026-09-04 cohesion audit: this exact "small thumbnail + quick-view
 // button" card (CSS class .recently-viewed-card, index.css) was independently
@@ -44,7 +45,7 @@ export default function RailProductCard({ product, onRemember, onQuickView, reas
         <img src={product.imageUrl ?? getCategoryPlaceholderImage(product.categorySlug)} alt="" loading="lazy" {...(imageSrcSet(product.imageUrl, 1600) ? { srcSet: imageSrcSet(product.imageUrl, 1600)!, sizes: "112px" } : {})} />
       </span>
       <div>
-        <p>{product.brand ?? product.categoryName ?? "SUGI ASAYAKE"}</p>
+        <p>{product.brand ?? product.categoryName ?? brandName()}</p>
         <h3>{names.primary}</h3>
         {names.secondary ? <span className="product-name-secondary">{names.secondary}</span> : null}
         {reason ? <span className="rail-reason-chip">{reason}</span> : null}
