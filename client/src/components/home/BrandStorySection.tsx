@@ -104,7 +104,7 @@ export default function BrandStorySection({ branchCount, productCountLabel, feat
           <div className="wcu-reviews-grid">
             {featuredReviews.slice(0, 3).map(review => (
               <div className="wcu-review-card" key={review.id}>
-                <div className="wcu-review-stars">{Array.from({ length: 5 }, (_, index) => <Star key={index} size={12} fill={index < review.rating ? "#f0b52d" : "none"} stroke={index < review.rating ? "#f0b52d" : "#b7beb9"} />)}</div>
+                <div className="wcu-review-stars">{Array.from({ length: 5 }, (_, index) => <Star key={index} size={12} fill={index < review.rating ? "var(--accent)" : "none"} stroke={index < review.rating ? "var(--accent)" : "var(--border)"} />)}</div>
                 {/* getFeaturedReviews already filters comment IS NOT NULL AND
                     <> '' at the DB level -- Drizzle's inferred type just
                     can't encode that SQL WHERE clause, so this is a

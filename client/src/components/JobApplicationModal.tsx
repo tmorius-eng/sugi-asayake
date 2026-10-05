@@ -21,7 +21,7 @@ export type ApplyTarget = { id: number | null; title: string };
 const CV_TYPES = ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"] as const;
 const CV_MAX_BYTES = 5 * 1024 * 1024;
 
-const fieldClass = "h-11 w-full rounded-xl border border-border bg-card px-3 text-sm font-normal outline-none transition focus:border-[#df1f3d]";
+const fieldClass = "h-11 w-full rounded-xl border border-border bg-card px-3 text-sm font-normal outline-none transition focus:border-[var(--primary)]";
 
 export default function JobApplicationModal({ target, onClose }: { target: ApplyTarget | null; onClose: () => void }) {
   const t = useT();
@@ -79,7 +79,7 @@ export default function JobApplicationModal({ target, onClose }: { target: Apply
           <div className="grid place-items-center gap-3 py-6 text-center">
             <CheckCircle2 size={40} className="text-[#1f5c3a]" aria-hidden="true" />
             <p className="max-w-sm text-sm leading-6">{t("Баярлалаа! Анкетыг тань хүлээн авлаа. Бид тантай удахгүй холбогдоно.")}</p>
-            <button type="button" onClick={onClose} className="mt-2 rounded-full bg-[#df1f3d] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-[#c81b34]">{t("Хаах")}</button>
+            <button type="button" onClick={onClose} className="mt-2 rounded-full bg-[var(--primary)] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-[var(--primary-strong)]">{t("Хаах")}</button>
           </div>
         ) : (
           <form onSubmit={submit} className="grid gap-3" noValidate>
@@ -89,7 +89,7 @@ export default function JobApplicationModal({ target, onClose }: { target: Apply
             <label className="grid gap-1.5 text-xs font-bold">{t("Нэр")}<input value={fullName} onChange={event => { setFullName(event.target.value); clearError("job-name"); }} autoComplete="name" required className={fieldClass} {...fieldProps("job-name")} /><FieldError field="job-name" message={errorFor("job-name")} /></label>
             <label className="grid gap-1.5 text-xs font-bold">{t("Утас")}<input value={phone} onChange={event => { setPhone(event.target.value); clearError("job-phone"); }} inputMode="tel" autoComplete="tel" required className={fieldClass} {...fieldProps("job-phone")} /><FieldError field="job-phone" message={errorFor("job-phone")} /></label>
             <label className="grid gap-1.5 text-xs font-bold">{t("Имэйл (сонголттой)")}<input value={email} onChange={event => setEmail(event.target.value)} inputMode="email" autoComplete="email" className={fieldClass} /></label>
-            <label className="grid gap-1.5 text-xs font-bold">{t("Захидал (сонголттой)")}<textarea value={message} onChange={event => setMessage(event.target.value)} maxLength={2000} className="min-h-24 w-full rounded-xl border border-border bg-card p-3 text-sm font-normal outline-none transition focus:border-[#df1f3d]" /></label>
+            <label className="grid gap-1.5 text-xs font-bold">{t("Захидал (сонголттой)")}<textarea value={message} onChange={event => setMessage(event.target.value)} maxLength={2000} className="min-h-24 w-full rounded-xl border border-border bg-card p-3 text-sm font-normal outline-none transition focus:border-[var(--primary)]" /></label>
             {/* <div>, not <label> (2026-09-21, a11y): a <label> may not contain a
                 <button> -- clicking the "Сонгох" button activated the label's
                 own control too, and the whole box was announced as one label.
@@ -105,7 +105,7 @@ export default function JobApplicationModal({ target, onClose }: { target: Apply
             </div>
             <p className="text-[11px] leading-5 text-muted-foreground">{t("Анкетыг зөвхөн ажилд авах зорилгоор ашиглаж, сонгон шалгаруулалт дууссаны дараа устгана.")}</p>
             <div className="mt-1 flex gap-2">
-              <button type="submit" disabled={apply.isPending} className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-[#df1f3d] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#c81b34] disabled:opacity-60">{apply.isPending && <LoaderCircle className="animate-spin" size={15} />}{t("Илгээх")}</button>
+              <button type="submit" disabled={apply.isPending} className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-[var(--primary)] px-5 py-3 text-sm font-bold text-white transition hover:bg-[var(--primary-strong)] disabled:opacity-60">{apply.isPending && <LoaderCircle className="animate-spin" size={15} />}{t("Илгээх")}</button>
               <button type="button" onClick={onClose} className="rounded-full border border-border px-5 py-3 text-sm font-bold transition hover:border-foreground">{t("Болих")}</button>
             </div>
           </form>

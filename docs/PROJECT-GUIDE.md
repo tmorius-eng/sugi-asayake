@@ -214,6 +214,7 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
 **Брэнд студи, баяр (2026-10-05)**
 - **Storefront-ийн өнгийг шинэ кодонд hex-ээр БИЧИХГҮЙ — `var(--primary)` гэх мэт токен** (`shared/theme-tokens.ts`). Шинэ токен нэмбэл `LIGHT_TOKEN_KEYS` + `BASE_THEME` + index.css гурвуулаа (`theme-tokens.test.ts` тулгана); текстийн токен бол `CONTRAST_PAIRS`-д хос нэм.
 - **Баярын постер `home-hero` слотыг ЗӨВХӨН `withHolidayPoster()`-оор солино** — indexHtml ба `content.siteMedia` хоёуланд; өөр газар солибол React ирэх мөчид hero үсэрнэ. Мэндчилгээний markup heroShell ↔ HeroSection ижил.
+- Хатуу брэнд hex орвол `theme-hex-guard.test.ts` унана → `pnpm exec tsx scripts/codemod-hex-to-tokens.ts --write`. Хүчтэй улаан = `var(--primary-strong)`.
 - **Нүүрэнд шинэ хэсэг нэмбэл `shared/home-sections.ts` (`HOME_SECTIONS`) ба Home.tsx-ийн `sections` map хоёуланд** — эс бөгөөс админ нууж/дараалж чадахгүй. Hero layout-д ОРОХГҮЙ (shell).
 - Брэнд токен /admin, /face-approve-д кодын суурь (`isAdminPath`, indexHtml) — admin UI баярын загвараар солигдохгүй.
 - Монгол соёлын зураг (Gemini): судалгаа + бодит лавлагаа зураг + сөрөг жагсаалт; Gemini API зөвхөн зураг үүсгэхэд.

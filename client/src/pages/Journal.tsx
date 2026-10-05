@@ -59,12 +59,12 @@ export default function Journal() {
     <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]">
       <CommerceHeader backLabel="SUGI ASAYAKE" />
       <main className="mx-auto max-w-6xl px-4 py-10 sm:px-8 sm:py-14">
-        <p className="flex items-center gap-3 text-[10px] font-extrabold tracking-[.18em] text-[#c81b34]">
-          <span className="h-px w-10 bg-[#df1f3d]" />
+        <p className="flex items-center gap-3 text-[10px] font-extrabold tracking-[.18em] text-[var(--primary-strong)]">
+          <span className="h-px w-10 bg-[var(--primary)]" />
           <Newspaper size={13} /> SUGI JOURNAL
         </p>
         <h1 className="mt-4 font-[var(--font-display)] text-4xl font-semibold tracking-[-.07em] sm:text-5xl">
-          {journalLine1} <em className="text-[#df1f3d] not-italic">{journalLine2}</em>
+          {journalLine1} <em className="text-[var(--primary)] not-italic">{journalLine2}</em>
         </h1>
         <p className="mt-5 max-w-lg text-[15px] leading-7 text-[#66676b]">
           {textFor("journal-text-lede", "SUGI ASAYAKE-ийн арчилгаа, гоо сайхан, өдөр тутмын зөвлөгөөнүүд.")}
@@ -74,7 +74,7 @@ export default function Journal() {
 
         {postsQuery.isLoading && (
           <div className="mt-16 grid place-items-center py-16">
-            <LoaderCircle className="animate-spin text-[#df1f3d]" size={28} aria-label="Нийтлэлүүдийг ачаалж байна" />
+            <LoaderCircle className="animate-spin text-[var(--primary)]" size={28} aria-label="Нийтлэлүүдийг ачаалж байна" />
           </div>
         )}
 
@@ -112,10 +112,10 @@ export default function Journal() {
                       {post.categories.map(category => <span key={category.id} className="rounded-full bg-[#eef3f1] px-2 py-0.5 text-[10px] font-bold text-[#3970a7]">{category.name}</span>)}
                     </div>
                   )}
-                  {post.publishedAt && <span className="text-[10px] font-extrabold tracking-[.12em] text-[#c81b34]">{formatDate(post.publishedAt)}</span>}
+                  {post.publishedAt && <span className="text-[10px] font-extrabold tracking-[.12em] text-[var(--primary-strong)]">{formatDate(post.publishedAt)}</span>}
                   <h3 className="mt-2 font-[var(--font-display)] text-lg font-semibold tracking-[-.03em]">{post.title}</h3>
                   {post.excerpt && <p className="mt-2 line-clamp-2 flex-1 text-[13px] leading-6 text-[#74757a]">{post.excerpt}</p>}
-                  <span className="mt-4 inline-flex items-center gap-1.5 text-[11px] font-bold text-[#17181b] group-hover:text-[#df1f3d]">
+                  <span className="mt-4 inline-flex items-center gap-1.5 text-[11px] font-bold text-[#17181b] group-hover:text-[var(--primary)]">
                     Дэлгэрэнгүй унших <ArrowUpRight size={13} />
                   </span>
                 </div>

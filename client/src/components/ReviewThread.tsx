@@ -81,7 +81,7 @@ function Avatar({ name, url, size = 40 }: { name: string | null; url: string | n
 }
 
 function Stars({ value }: { value: number }) {
-  return <span className="review-stars" aria-label={`${value} од`}>{[1, 2, 3, 4, 5].map(n => <Star key={n} size={13} fill={n <= value ? "#f0b52d" : "none"} stroke={n <= value ? "#f0b52d" : "currentColor"} strokeOpacity={n <= value ? 1 : 0.35} />)}</span>;
+  return <span className="review-stars" aria-label={`${value} од`}>{[1, 2, 3, 4, 5].map(n => <Star key={n} size={13} fill={n <= value ? "var(--accent)" : "none"} stroke={n <= value ? "var(--accent)" : "currentColor"} strokeOpacity={n <= value ? 1 : 0.35} />)}</span>;
 }
 
 function StaffBadge() {

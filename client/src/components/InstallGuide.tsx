@@ -190,7 +190,7 @@ export default function InstallGuide({ platform }: { platform: GuidePlatform }) 
               aria-selected={iosLayout === value}
               key={value}
               onClick={() => { setIosLayout(value); setIndex(0); }}
-              className={`rounded-full px-3 py-[7px] text-[13px] font-bold transition-colors ${iosLayout === value ? "bg-[#17181b] text-white" : "text-[#545958]"}`}
+              className={`rounded-full px-3 py-[7px] text-[13px] font-bold transition-colors ${iosLayout === value ? "bg-[#17181b] text-white" : "text-[var(--muted-foreground)]"}`}
             >
               {label}
             </button>
@@ -206,7 +206,7 @@ export default function InstallGuide({ platform }: { platform: GuidePlatform }) 
         <button type="button" onClick={() => go(-1)} disabled={index === 0} className="flex size-9 items-center justify-center rounded-full border border-[#d8dcda] text-[#17181b] disabled:opacity-35" aria-label={t("Өмнөх алхам")}>
           <ChevronLeft size={18} aria-hidden="true" />
         </button>
-        <span className="text-[13px] font-bold text-[#545958]">{`${index + 1} / ${steps.length}`}</span>
+        <span className="text-[13px] font-bold text-[var(--muted-foreground)]">{`${index + 1} / ${steps.length}`}</span>
         <button type="button" onClick={() => go(1)} disabled={index === steps.length - 1} className="flex size-9 items-center justify-center rounded-full border border-[#d8dcda] text-[#17181b] disabled:opacity-35" aria-label={t("Дараагийн алхам")}>
           <ChevronRight size={18} aria-hidden="true" />
         </button>

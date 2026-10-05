@@ -86,7 +86,7 @@ export default function TrackOrder() {
 
         {order && (
           <div className="auth-card">
-            <p style={{ fontSize: "10px", fontWeight: 800, letterSpacing: ".14em", color: "#df1f3d" }}>{order.orderNumber}</p>
+            <p style={{ fontSize: "10px", fontWeight: 800, letterSpacing: ".14em", color: "var(--primary)" }}>{order.orderNumber}</p>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", marginTop: "8px" }}>
               <span style={{ fontWeight: 700 }}>{STATUS_LABEL[order.status] ?? order.status}</span>
               <span style={{ fontWeight: 700, color: "#57585e" }}>{PAYMENT_LABEL[order.paymentStatus] ?? order.paymentStatus}</span>

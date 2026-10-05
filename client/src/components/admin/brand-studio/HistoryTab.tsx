@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { History, LoaderCircle, RotateCcw } from "lucide-react";
+import { Download, History, LoaderCircle, RotateCcw } from "lucide-react";
+import { downloadJson } from "@/lib/fileDownload";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -10,6 +11,19 @@ export default function HistoryTab({ themes }: { themes: Array<{ key: string; na
   const utils = trpc.useUtils();
   const { confirm } = useConfirm();
   const versions = trpc.admin.brandStudio.versions.useQuery({ themeKey });
+  const [exporting, setExporting] = useState(false);
+  const exportPack = async () => {
+    setExporting(true);
+    try {
+      const pack = await utils.admin.brandStudio.exportPack.fetch();
+      downloadJson(`brand-pack-${pack.exportedAt.slice(0, 10)}.json`, pack);
+      toast.success("Брэнд багц татагдлаа — өнгө, баяр, нүүрний бүтэц, текст, зургийн хаяг.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Татаж чадсангүй.");
+    } finally {
+      setExporting(false);
+    }
+  };
   const rollback = trpc.admin.brandStudio.rollback.useMutation({
     onSuccess: async () => {
       await Promise.all([utils.admin.brandStudio.overview.invalidate(), utils.admin.brandStudio.versions.invalidate({ themeKey })]);
@@ -27,7 +41,13 @@ export default function HistoryTab({ themes }: { themes: Array<{ key: string; na
           {themes.map(theme => <option key={theme.key} value={theme.key}>{theme.name}</option>)}
         </select>
       </div>
-      <p className="mt-1 text-xs text-[var(--a-muted)]">Хадгалах бүрт өмнөх төлөв энд үлдэнэ (сүүлийн 30). Сэргээх нь одоогийн төлөвийг ч мөн түүхэд үлдээнэ — буцаалтаа буцааж болно.</p>
+      <div className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl bg-[var(--a-soft)] p-3">
+        <p className="min-w-0 flex-1 text-[11px] text-[var(--a-muted)]">Брэнд багц — сайтын бүх харагдах тохиргоог (өнгө, 13 баяр, нүүрний бүтэц, текст, зургийн хаяг) нэг файлд. Нөөц болгох, эсвэл шинэ эзэнд шилжүүлэхэд. Нууц түлхүүр, хэрэглэгч, захиалга ОРОХГҮЙ.</p>
+        <button type="button" onClick={exportPack} disabled={exporting} className="inline-flex items-center gap-1.5 rounded-full bg-[var(--a-invert-bg)] px-3 py-1.5 text-[11px] font-extrabold text-[var(--a-invert-text)] disabled:opacity-50">
+          {exporting ? <LoaderCircle className="animate-spin" size={13} /> : <Download size={13} />}Брэнд багц татах
+        </button>
+      </div>
+      <p className="mt-3 text-xs text-[var(--a-muted)]">Хадгалах бүрт өмнөх төлөв энд үлдэнэ (сүүлийн 30). Сэргээх нь одоогийн төлөвийг ч мөн түүхэд үлдээнэ — буцаалтаа буцааж болно.</p>
       {versions.isLoading && <p className="mt-4 flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={14} />Уншиж байна…</p>}
       {versions.data && versions.data.length === 0 && <p className="mt-4 rounded-2xl bg-[var(--a-soft)] p-4 text-xs text-[var(--a-muted)]">Энэ загварыг хараахан өөрчлөөгүй байна.</p>}
       <ul className="mt-4 grid gap-2">

@@ -11,7 +11,7 @@ import { getSiteMediaSlot } from "../shared/site-media";
 import { HOLIDAYS, getHoliday } from "../shared/holidays";
 import { holidayOccurrence, holidayWindow, isDateKey, type HolidaySettings } from "../shared/theme-resolver";
 import { ubDateKey } from "../shared/notification-events";
-import { getActiveThemeBundle, getHomeLayout, saveHomeLayout, getSiteMedia, getThemeRows, listThemeVersions, logAdminAction, rollbackTheme, saveTheme } from "./db";
+import { getActiveThemeBundle, getHomeLayout, saveHomeLayout, getSiteMedia, getSiteText, getThemeRows, listThemeVersions, logAdminAction, rollbackTheme, saveTheme } from "./db";
 import { storageGetSignedUrl } from "./storage";
 import { storageKeyOf } from "./_core/publicUrl";
 import { invalidateIndexHtmlCache } from "./_core/indexHtml";
@@ -182,6 +182,23 @@ export const brandStudioRouter = router({
     invalidateIndexHtmlCache();
     await logAdminAction({ actorUserId: ctx.user.id, action: "layout.saved", entityType: "site_layout", entityId: null, metadata: { page: "home", sections: saved.map(s => `${s.visible ? "" : "-"}${s.key}:${s.variant}`) } });
     return saved;
+  }),
+
+  /**
+   * Брэнд багц (A5): нэг эзний бүх харагдах тохиргоо нэг JSON-д — өнгө (суурь + 13 баяр), баярын
+   * тохиргоо, нүүрний бүтэц, сайтын текст, медиа слотын URL. Эзэн солих (B) болон нөөцөд.
+   * Нууц юу ч ОРОХГҮЙ (интеграцийн түлхүүр, хэрэглэгч, захиалга биш).
+   */
+  exportPack: marketingProcedure.query(async () => {
+    const [rows, layout, media, text] = await Promise.all([getThemeRows(), getHomeLayout(), getSiteMedia(), getSiteText()]);
+    return {
+      format: "brand-pack.v1" as const,
+      exportedAt: new Date().toISOString(),
+      themes: rows.map(row => ({ themeKey: row.themeKey, name: row.name, kind: row.kind, look: readJson(row.lookJson) ?? {}, extra: readJson(row.extraJson) ?? {}, holiday: readJson(row.holidayJson) })),
+      homeLayout: layout,
+      siteText: text.map(row => ({ slotKey: row.slotKey, textValue: row.textValue })),
+      siteMedia: media.map(row => ({ slotKey: row.slotKey, imageUrl: row.imageUrl, altText: row.altText })),
+    };
   }),
 
   versions: marketingProcedure.input(z.object({ themeKey: themeKeySchema })).query(({ input }) => listThemeVersions(input.themeKey)),

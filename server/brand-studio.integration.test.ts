@@ -122,4 +122,14 @@ describeWithDatabase("Брэнд студи — хадгалах, AA, түүх, 
       invalidateCached("storefront:layout:home");
     }
   });
+
+  it("брэнд багц: харагдах тохиргоо л, нууц мэдээлэлгүй", async () => {
+    const pack = await admin().admin.brandStudio.exportPack();
+    expect(pack.format).toBe("brand-pack.v1");
+    expect(pack.homeLayout.length).toBeGreaterThan(0);
+    expect(Object.keys(pack).sort()).toEqual(["exportedAt", "format", "homeLayout", "siteMedia", "siteText", "themes"]);
+    const json = JSON.stringify(pack);
+    expect(json).not.toMatch(/passwordHash|apiKey|secret|clientSecret|INTEGRATIONS_ENCRYPTION/i);
+  });
 });
+

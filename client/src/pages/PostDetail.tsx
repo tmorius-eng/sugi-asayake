@@ -29,7 +29,7 @@ export default function PostDetail() {
       <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]">
         <CommerceHeader backLabel="SUGI ASAYAKE" />
         <main className="mx-auto grid min-h-[60vh] max-w-3xl place-items-center px-4 sm:px-8">
-          <LoaderCircle className="animate-spin text-[#df1f3d]" size={28} aria-label="Мэдээг ачаалж байна" />
+          <LoaderCircle className="animate-spin text-[var(--primary)]" size={28} aria-label="Мэдээг ачаалж байна" />
         </main>
         <SiteFooter />
       </div>
@@ -45,8 +45,8 @@ export default function PostDetail() {
     <div className="min-h-screen bg-[#f8f5ef] text-[#17181b]">
       <CommerceHeader backLabel="SUGI ASAYAKE" />
       <main className="mx-auto max-w-3xl px-4 py-10 sm:px-8 sm:py-14">
-        <p className="flex items-center gap-3 text-[10px] font-extrabold tracking-[.18em] text-[#c81b34]">
-          <span className="h-px w-10 bg-[#df1f3d]" />
+        <p className="flex items-center gap-3 text-[10px] font-extrabold tracking-[.18em] text-[var(--primary-strong)]">
+          <span className="h-px w-10 bg-[var(--primary)]" />
           МЭДЭЭ {post.publishedAt ? `· ${formatDate(post.publishedAt)}` : ""}
         </p>
         <h1 className="mt-4 font-[var(--font-display)] text-4xl font-semibold tracking-[-.07em] sm:text-5xl">{post.title}</h1>
@@ -81,7 +81,7 @@ export default function PostDetail() {
           </div>
         )}
 
-        <Link href="/" className="mt-12 inline-flex text-xs font-bold text-[#df1f3d] hover:underline">
+        <Link href="/" className="mt-12 inline-flex text-xs font-bold text-[var(--primary)] hover:underline">
           ← Нүүр хуудас руу буцах
         </Link>
       </main>

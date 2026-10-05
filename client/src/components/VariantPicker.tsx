@@ -53,7 +53,7 @@ export default function VariantPicker({ variants, selectedId, onSelect, classNam
             aria-checked={active}
             disabled={soldOut}
             onClick={() => onSelect(variant.id)}
-            className={`min-h-9 rounded-full border px-4 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-40 ${active ? "border-[#df1f3d] bg-[#df1f3d] text-white" : "border-black/15 bg-white text-[#17181b] hover:border-black/35"}`}
+            className={`min-h-9 rounded-full border px-4 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-40 ${active ? "border-[var(--primary)] bg-[var(--primary)] text-white" : "border-black/15 bg-white text-[#17181b] hover:border-black/35"}`}
           >
             {formatVariantLabel(variant)}{soldOut ? " — дууссан" : ""}
           </button>

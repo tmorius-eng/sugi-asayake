@@ -214,7 +214,7 @@ export default function SitePromo() {
       <button type="button" onClick={dismiss} aria-label="Хаах" className="absolute right-4 top-4 z-10 grid h-8 w-8 place-items-center rounded-full bg-white/85 text-[#17181b] transition hover:bg-white"><X size={16} /></button>
       {promo.imageUrl ? <img src={promo.imageUrl} alt="" className="h-44 w-full object-cover max-sm:aspect-[4/5] max-sm:h-auto" /> : null}
       <div className="p-7 text-center sm:p-8">
-        <p className="text-[10px] font-extrabold tracking-[.2em] text-[#df1f3d]">SUGI ASAYAKE</p>
+        <p className="text-[10px] font-extrabold tracking-[.2em] text-[var(--primary)]">SUGI ASAYAKE</p>
         <h2 className="mt-3 font-[var(--font-display)] text-2xl font-semibold tracking-[-.04em] text-[#17181b] sm:text-3xl max-sm:text-[2rem] max-sm:leading-[1.05]">{promo.headline}</h2>
         {promo.message ? <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-[#5c5d61]">{promo.message}</p> : null}
         {promo.ctaLabel && promo.ctaUrl

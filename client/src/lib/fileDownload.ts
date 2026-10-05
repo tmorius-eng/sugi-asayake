@@ -18,3 +18,16 @@ export function downloadBase64File(filename: string, dataBase64: string, mimeTyp
   document.body.removeChild(link);
   revokeObjectUrlLater(url);
 }
+
+/** JSON объектыг файл болгож татуулна (Брэнд студийн брэнд багц, 2026-10-05). */
+export function downloadJson(filename: string, data: unknown) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  revokeObjectUrlLater(url);
+}

@@ -29,7 +29,7 @@ function GlossaryTerm({ text, definition }: { text: string; definition: string }
           onMouseEnter={() => { if (!isCoarsePointer()) setOpen(true); }}
           onMouseLeave={() => { if (!isCoarsePointer()) setOpen(false); }}
           onClick={() => { if (isCoarsePointer()) setOpen(current => !current); else setOpen(true); }}
-          className="inline cursor-help border-0 border-b border-dotted border-[#df1f3d] bg-transparent p-0 text-inherit align-baseline"
+          className="inline cursor-help border-0 border-b border-dotted border-[var(--primary)] bg-transparent p-0 text-inherit align-baseline"
           style={{ font: "inherit" }}
         >
           {text}
