@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { trpc, type RouterOutputs } from "@/lib/trpc";
 import { mergeLook, type ThemeLook } from "@shared/theme-tokens";
 import { prepareImageUpload } from "@/lib/prepareImageUpload";
+import { EFFECT_LABELS, HOLIDAY_EFFECTS, HOLIDAY_ORNAMENTS, ORNAMENT_LABELS, type HolidayEffect, type HolidayOrnament } from "@shared/holiday-decor";
 
 /**
  * Брэнд студи → Баярын загвар (2026-10-05). 13 баяр: асаах/унтраах, цонхны хоног, энэ жилийн
@@ -133,7 +134,7 @@ function HolidayCard({ holiday, today, look, isNext, isPreviewing, isOpen, busy,
   onToggleOpen: () => void;
   onPreview: () => void;
   onEditColors: () => void;
-  onSave: (input: { greeting?: string | null; posterUrl?: string | null; showPoster?: boolean; holiday?: { enabled?: boolean; startOffsetDays?: number; endOffsetDays?: number; overrideStart?: string | null; overrideEnd?: string | null } }, message: string) => Promise<void>;
+  onSave: (input: { greeting?: string | null; posterUrl?: string | null; showPoster?: boolean; effect?: HolidayEffect; ornament?: HolidayOrnament; holiday?: { enabled?: boolean; startOffsetDays?: number; endOffsetDays?: number; overrideStart?: string | null; overrideEnd?: string | null } }, message: string) => Promise<void>;
   onUpload: (file: File) => Promise<string | null>;
 }) {
   const poster = holiday.showPoster ? holiday.posterUrl ?? holiday.defaultPoster : null;
@@ -230,6 +231,21 @@ function HolidayCard({ holiday, today, look, isNext, isPreviewing, isOpen, busy,
                 Hero-ийн эхний зургийг солих
               </label>
             </div>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="grid gap-1 font-bold">Хөдөлгөөнт чимэглэл (нүүрэнд 15 с)
+                <select value={holiday.effect} disabled={busy} onChange={event => onSave({ effect: event.target.value as HolidayEffect }, `Чимэглэл: ${EFFECT_LABELS[event.target.value as HolidayEffect]}.`)}
+                  className="h-9 min-w-0 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-2">
+                  {HOLIDAY_EFFECTS.map(effect => <option key={effect} value={effect}>{EFFECT_LABELS[effect]}</option>)}
+                </select>
+              </label>
+              <label className="grid gap-1 font-bold">Хээ
+                <select value={holiday.ornament} disabled={busy} onChange={event => onSave({ ornament: event.target.value as HolidayOrnament }, `Хээ: ${ORNAMENT_LABELS[event.target.value as HolidayOrnament]}.`)}
+                  className="h-9 min-w-0 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] px-2">
+                  {HOLIDAY_ORNAMENTS.map(ornament => <option key={ornament} value={ornament}>{ORNAMENT_LABELS[ornament]}</option>)}
+                </select>
+              </label>
+            </div>
+            <p className="text-[var(--a-muted)]">Хөдөлгөөн багасгах тохиргоотой зочинд чимэглэл гарахгүй. Дэнлүү, хас хээ зориуд байхгүй (монгол соёлд харш/буруу ойлгогдох).</p>
             <div className="flex justify-end">
               <button type="button" disabled={busy}
                 onClick={() => {

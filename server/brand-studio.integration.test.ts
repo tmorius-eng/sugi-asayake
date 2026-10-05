@@ -93,6 +93,13 @@ describeWithDatabase("Брэнд студи — хадгалах, AA, түүх, 
     expect((row.look as { light?: Record<string, string> }).light?.primary).toBe(palette.primary);
     expect(row.settings.enabled).toBe(false); // v1 үед унтраалттай байсан — сэргээхэд ч унтраалттай
 
+    // Баярын чимэглэл (A4): хадгалсан эффект/хээ идэвхтэй баярт гарна, үндсэн загварт үргэлж none.
+    await admin().admin.brandStudio.save({ themeKey: KEY, effect: "snow", ornament: "alkhan", holiday: { enabled: true } });
+    invalidateThemeCache();
+    const decorated = await getActiveThemeBundle("2026-12-28");
+    expect([decorated.effect, decorated.ornament]).toEqual(["snow", "alkhan"]);
+    expect((await getActiveThemeBundle("2026-08-01")).effect).toBe("none");
+
     // null = анхдагч мэндчилгээ руу буцаах.
     await admin().admin.brandStudio.save({ themeKey: KEY, greeting: null, holiday: { enabled: true } });
     invalidateThemeCache();

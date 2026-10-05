@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { setHomeLayoutPreview } from "@/lib/homeLayout";
+import { setHolidayDecorPreview } from "@/lib/holidayDecor";
 import { FONT_KEYS, fontFaceCss, fontStack } from "@shared/fonts";
 
 /**
@@ -53,7 +54,7 @@ export default function BrandPreviewBridge() {
 
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin || event.source !== window.parent) return;
-      const data = event.data as { type?: string; mode?: string; vars?: Record<string, unknown>; fontBody?: unknown; fontDisplay?: unknown; greeting?: unknown; posterUrl?: unknown; layout?: unknown } | null;
+      const data = event.data as { type?: string; mode?: string; vars?: Record<string, unknown>; fontBody?: unknown; fontDisplay?: unknown; greeting?: unknown; posterUrl?: unknown; layout?: unknown; effect?: unknown; ornament?: unknown } | null;
       if (!data || data.type !== "brand-preview") return;
       const mode = data.mode === "dark" ? "dark" : "light";
       root.setAttribute("data-storefront-theme", mode);
@@ -74,6 +75,8 @@ export default function BrandPreviewBridge() {
       applyPoster(data.posterUrl);
       // Нүүрний бүтэц (A3): sanitizeHomeLayout-ээр цэвэрлэгдэнэ — үл мэдэх түлхүүр орохгүй.
       if (data.layout !== undefined) setHomeLayoutPreview(data.layout);
+      // Баярын чимэглэл (A4) — isHolidayEffect/Ornament-оор шүүгдэнэ.
+      if (data.effect !== undefined || data.ornament !== undefined) setHolidayDecorPreview(data.effect, data.ornament);
     };
     window.addEventListener("message", onMessage);
     window.parent.postMessage({ type: "brand-preview-ready" }, window.location.origin);

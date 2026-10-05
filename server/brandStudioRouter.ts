@@ -6,6 +6,7 @@ import { checkLookContrast } from "../shared/color/contrast";
 import { derivePalettes, pickBrandColor, quantize, type Rgb } from "../shared/color/palette";
 import { getSiteMediaSlot } from "../shared/site-media";
 import { HOLIDAYS, getHoliday } from "../shared/holidays";
+import { HOLIDAY_EFFECTS, HOLIDAY_ORNAMENTS, isHolidayEffect, isHolidayOrnament } from "../shared/holiday-decor";
 import { holidayOccurrence, holidayWindow, isDateKey, type HolidaySettings } from "../shared/theme-resolver";
 import { ubDateKey } from "../shared/notification-events";
 import { getActiveThemeBundle, getHomeLayout, saveHomeLayout, getSiteMedia, getSiteText, upsertSiteMedia, upsertSiteText, getThemeRows, listThemeVersions, logAdminAction, rollbackTheme, saveTheme } from "./db";
@@ -61,6 +62,8 @@ export const brandStudioRouter = router({
         defaultPoster: def.poster,
         posterUrl: ((readJson(row?.extraJson) as { posterUrl?: string } | null)?.posterUrl) ?? null,
         showPoster: ((readJson(row?.extraJson) as { showPoster?: boolean } | null)?.showPoster) !== false,
+        effect: ((readJson(row?.extraJson) as { effect?: string } | null)?.effect) ?? "none",
+        ornament: ((readJson(row?.extraJson) as { ornament?: string } | null)?.ornament) ?? "none",
         settings: { enabled: settings.enabled === true, startOffsetDays: settings.startOffsetDays ?? null, endOffsetDays: settings.endOffsetDays ?? null, overrideStart: settings.overrideStart ?? null, overrideEnd: settings.overrideEnd ?? null },
         defaultOffsets: { start: def.startOffsetDays, end: def.endOffsetDays },
         window,
@@ -87,6 +90,8 @@ export const brandStudioRouter = router({
     // Постер: дотоод зам (/cdn/…, /images/…) эсвэл https; null = анхдагч постер
     posterUrl: z.string().max(500).nullable().optional(),
     showPoster: z.boolean().optional(),
+    effect: z.enum(HOLIDAY_EFFECTS).optional(),
+    ornament: z.enum(HOLIDAY_ORNAMENTS).optional(),
     holiday: holidaySchema.optional(),
     note: z.string().max(200).nullable().optional(),
   })).mutation(async ({ ctx, input }) => {
@@ -118,7 +123,9 @@ export const brandStudioRouter = router({
     const row = await saveTheme({
       themeKey: input.themeKey,
       look: input.look,
-      extra: input.greeting !== undefined || input.posterUrl !== undefined || input.showPoster !== undefined ? {
+      extra: input.greeting !== undefined || input.posterUrl !== undefined || input.showPoster !== undefined || input.effect !== undefined || input.ornament !== undefined ? {
+        ...(input.effect !== undefined ? { effect: input.effect } : {}),
+        ...(input.ornament !== undefined ? { ornament: input.ornament } : {}),
         ...(input.greeting !== undefined ? { greeting: input.greeting === null ? undefined : input.greeting } : {}),
         ...(input.posterUrl !== undefined ? { posterUrl: input.posterUrl } : {}),
         ...(input.showPoster !== undefined ? { showPoster: input.showPoster } : {}),
@@ -203,7 +210,7 @@ export const brandStudioRouter = router({
       if (!known.has(theme.themeKey)) { skipped.push(`загвар ${theme.themeKey}`); continue; }
       const merged = theme.themeKey === "base" ? baseLook : mergeLook(baseLook, theme.look);
       if (checkLookContrast(merged).some(result => !result.ok)) { skipped.push(`загвар ${theme.themeKey} (AA)`); continue; }
-      const extra = (theme.extra && typeof theme.extra === "object" ? theme.extra : {}) as { greeting?: unknown; posterUrl?: unknown; showPoster?: unknown };
+      const extra = (theme.extra && typeof theme.extra === "object" ? theme.extra : {}) as { greeting?: unknown; posterUrl?: unknown; showPoster?: unknown; effect?: unknown; ornament?: unknown };
       const holiday = theme.holiday && typeof theme.holiday === "object" ? holidaySchema.safeParse(theme.holiday) : null;
       await saveTheme({
         themeKey: theme.themeKey,
@@ -213,6 +220,8 @@ export const brandStudioRouter = router({
           greeting: typeof extra.greeting === "string" ? extra.greeting.slice(0, 200) : undefined,
           posterUrl: typeof extra.posterUrl === "string" ? extra.posterUrl : null,
           showPoster: extra.showPoster === false ? false : undefined,
+          effect: isHolidayEffect(extra.effect) ? extra.effect : undefined,
+          ornament: isHolidayOrnament(extra.ornament) ? extra.ornament : undefined,
         },
         holiday: holiday?.success ? holiday.data : undefined,
         note: "Брэнд багцаас импортлов",

@@ -12,6 +12,7 @@ import { BASE_THEME, mergeLook, sanitizeLookPatch, type ThemeLook } from "../../
 import { HOLIDAY_KEYS, getHoliday } from "../../shared/holidays";
 import { activeHoliday, isDateKey, nextHoliday, type ActiveHoliday, type HolidaySettings } from "../../shared/theme-resolver";
 import { getDb } from "./connection";
+import { isHolidayEffect, isHolidayOrnament, type HolidayEffect, type HolidayOrnament } from "../../shared/holiday-decor";
 
 const THEMES_CACHE_KEY = "storefront:themes";
 const THEMES_CACHE_TTL_MS = 30_000;
@@ -45,6 +46,9 @@ export interface ThemeExtra {
   posterUrl?: string | null;
   /** false = баярын үед hero-ийн зургийг солихгүй */
   showPoster?: boolean;
+  /** Хөдөлгөөнт чимэглэл ба хээ (A4, shared/holiday-decor.ts) — анхдагч "none" */
+  effect?: HolidayEffect;
+  ornament?: HolidayOrnament;
 }
 
 // Постер нь сайтын дотоод зам эсвэл https хаяг л (CSP-ийн img-src-д багтах, `javascript:` биш).
@@ -54,7 +58,13 @@ const safeImageUrl = (value: unknown): string | null =>
 const readExtra = (row: SiteThemeRow | undefined): ThemeExtra => {
   const raw = parseJson(row?.extraJson) as Record<string, unknown> | null;
   const greeting = typeof raw?.greeting === "string" ? raw.greeting.trim().slice(0, 200) : raw?.greeting === null ? null : undefined;
-  return { greeting, posterUrl: safeImageUrl(raw?.posterUrl), showPoster: raw?.showPoster === false ? false : undefined };
+  return {
+    greeting,
+    posterUrl: safeImageUrl(raw?.posterUrl),
+    showPoster: raw?.showPoster === false ? false : undefined,
+    effect: isHolidayEffect(raw?.effect) ? raw.effect : undefined,
+    ornament: isHolidayOrnament(raw?.ornament) ? raw.ornament : undefined,
+  };
 };
 
 const readHolidaySettings = (row: SiteThemeRow): HolidaySettings => {
@@ -78,6 +88,9 @@ export interface ActiveThemeBundle {
   greeting: string | null;
   /** Баярын постер — hero-ийн эхний зургийг солино (indexHtml + content.siteMedia ижил газраас) */
   poster: string | null;
+  /** Баярын чимэглэл (A4) — үндсэн загварт үргэлж "none" */
+  effect: HolidayEffect;
+  ornament: HolidayOrnament;
   holiday: ActiveHoliday | null;
   next: ActiveHoliday | null;
 }
@@ -101,7 +114,7 @@ export async function getActiveThemeBundle(dateKey: string, previewKey?: string 
     // Мэндчилгээ: хадгалаагүй бол баярын анхдагч, "" хадгалсан бол байхгүй.
     const greeting = extra.greeting === undefined ? def?.greeting ?? null : extra.greeting || null;
     const poster = def && extra.showPoster !== false ? extra.posterUrl ?? def.poster : null;
-    return { greeting, poster };
+    return { greeting, poster, effect: extra.effect ?? "none", ornament: extra.ornament ?? "none" };
   };
 
   const previewRow = previewKey ? rows.find(row => row.themeKey === previewKey) : undefined;
@@ -113,7 +126,7 @@ export async function getActiveThemeBundle(dateKey: string, previewKey?: string 
     return { dateKey, activeKey: holiday.key, reason: "holiday", look: mergeLook(baseLook, parseJson(row?.lookJson)), ...decorate(holiday.key, row), holiday, next };
   }
   const baseExtra = readExtra(baseRow);
-  return { dateKey, activeKey: "base", reason: "base", look: baseLook, greeting: baseExtra.greeting || null, poster: null, holiday: null, next };
+  return { dateKey, activeKey: "base", reason: "base", look: baseLook, greeting: baseExtra.greeting || null, poster: null, effect: "none", ornament: "none", holiday: null, next };
 }
 
 export interface SaveThemeInput {

@@ -44,6 +44,7 @@ import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { useSiteText } from "@/hooks/useSiteText";
 import { trpc } from "@/lib/trpc";
 import { useHomeLayout } from "@/lib/homeLayout";
+import { HolidayEffectMount, HolidayOrnamentBand } from "@/components/holiday/HolidayDecor";
 import type { HomeSectionKey } from "@shared/home-sections";
 import { brandName } from "@/lib/brand";
 
@@ -297,6 +298,9 @@ export default function Home() {
             slide ... daraa n suuld nemegdsen slide garj irj baina, lag").
             The hero reserves the exact height meanwhile, so nothing shifts. */}
         <HeroSection imageFor={imageFor} mediaReady={!siteMediaQuery.isLoading} />
+        {/* Баярын хээ (Брэнд студи A4) — hero-ийн ДАРАА тул hero shell-тэй зөрөхгүй. */}
+        <HolidayOrnamentBand />
+        <HolidayEffectMount />
 
         {homeLayout.filter(entry => entry.visible).map(entry => <Fragment key={entry.key}>{sections[entry.key]}</Fragment>)}
       </main>

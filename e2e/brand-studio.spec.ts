@@ -89,6 +89,26 @@ test.describe("Брэнд студи", () => {
     }
   });
 
+  test("баярын чимэглэл: preview-д цас ба алхан хээ, хөдөлгөөн багасгавал гарахгүй", async ({ page, context, baseURL }) => {
+    await signInAs(context, "admin", baseURL!);
+    await page.goto("/admin");
+    await openAdminSection(page, "Брэнд студи");
+    const frame = page.frameLocator('iframe[title="Сайтын урьдчилан харах"]');
+    await expect(frame.locator(".hero-copy h1")).toBeVisible({ timeout: 30_000 });
+    const post = (effect: string, ornament: string) => page.evaluate(([e, o]) => {
+      const iframe = document.querySelector<HTMLIFrameElement>('iframe[title="Сайтын урьдчилан харах"]')!;
+      iframe.contentWindow!.postMessage({ type: "brand-preview", mode: "light", vars: {}, effect: e, ornament: o }, window.location.origin);
+    }, [effect, ornament]);
+    await post("snow", "alkhan");
+    await expect(frame.locator('[data-holiday-effect="snow"] i').first()).toBeAttached({ timeout: 10_000 });
+    await expect(frame.locator('[data-holiday-ornament="alkhan"]')).toBeVisible();
+    await page.waitForTimeout(2500);
+    await page.locator('iframe[title="Сайтын урьдчилан харах"]').screenshot({ path: test.info().outputPath("holiday-decor.png") });
+    await post("none", "none");
+    await expect(frame.locator("[data-holiday-effect]")).toHaveCount(0);
+    await expect(frame.locator("[data-holiday-ornament]")).toHaveCount(0);
+  });
+
   test("таб/апп дүрс ба manifest тохиргооноос (асаагаагүй үед статик дүрс хэвээр)", async ({ request }) => {
     const icon = await request.get("/brand-icon/icon-192.png");
     expect(icon.status()).toBe(200);

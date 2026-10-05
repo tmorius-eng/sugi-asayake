@@ -48,7 +48,7 @@ export function bootstrapSlice<T>(key: string): { data: T; at: number } | null {
 }
 
 /** Брэнд студийн идэвхтэй загвар (2026-10-05) — indexHtml.ts-ийн `theme` хэсэг. Хуудас ачаалах бүрт тогтмол. */
-export type StorefrontThemeInfo = { key: string; reason: "base" | "holiday" | "preview"; greeting: string | null; holiday: string | null; productAspect: string };
+export type StorefrontThemeInfo = { key: string; reason: "base" | "holiday" | "preview"; greeting: string | null; holiday: string | null; productAspect: string; effect?: string; ornament?: string };
 export function storefrontThemeInfo(): StorefrontThemeInfo | null {
   return bootstrapSlice<StorefrontThemeInfo>("theme")?.data ?? null;
 }

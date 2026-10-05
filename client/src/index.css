@@ -3251,6 +3251,8 @@ body:has(.auth-shell) { background: var(--ck-page); }
    so these two marks opt back in explicitly. */
 /* No gap: the two marks sit tight against the slash between them (Tom), so
    the whole line reads as one lockup rather than three floating pieces. */
+/* Баярын хээний зурвас (Брэнд студи A4) — SVG mask, өнгө нь алтлаг токен. */
+.sugi-site .holiday-ornament { height: 20px; margin: 4px auto 0; width: min(1180px, calc(100% - 32px)); background-color: var(--ck-gold); -webkit-mask-repeat: repeat-x; mask-repeat: repeat-x; -webkit-mask-position: center; mask-position: center; opacity: .85; }
 /* Брэнд студийн iframe preview-д күүкийн самбар сайтыг хаахгүй (BrandPreviewBridge тэмдэглэнэ). */
 html[data-brand-preview] #silktide-wrapper, html[data-brand-preview] #silktide-banner { display: none !important; }
 /* Баярын мэндчилгээ (Брэнд студи, 2026-10-05) — heroShell.ts-тэй ижил. Алтлаг токен нь AA (5.8:1). */

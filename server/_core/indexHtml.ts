@@ -164,7 +164,7 @@ async function computeValues(dateKey: string): Promise<Map<string, string>> {
     promo,
     // Брэнд студи (2026-10-05): идэвхтэй загвар — токенууд нь `<style id="brand-tokens">`-д,
     // энд зөвхөн клиентэд хэрэгтэй мэдээлэл (баярын мэндчилгээ, аль загвар, яагаад).
-    theme: { key: theme.activeKey, reason: theme.reason, greeting: theme.greeting, holiday: theme.holiday?.key ?? null, productAspect: theme.look.productAspect },
+    theme: { key: theme.activeKey, reason: theme.reason, greeting: theme.greeting, holiday: theme.holiday?.key ?? null, productAspect: theme.look.productAspect, effect: theme.effect, ornament: theme.ornament },
     // Брэнд студи A3: нүүрний хэсгүүдийн дараалал (client/src/lib/homeLayout.ts).
     layout: homeLayout,
   }).replace(/</g, "\\u003c");

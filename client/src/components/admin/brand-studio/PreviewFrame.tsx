@@ -13,7 +13,7 @@ export type PreviewDevice = "desktop" | "mobile";
 const DEVICE_WIDTH: Record<PreviewDevice, number> = { desktop: 1366, mobile: 390 };
 const FRAME_HEIGHT = 860;
 
-export default function PreviewFrame({ look, mode, onModeChange, greeting, posterUrl, layout }: {
+export default function PreviewFrame({ look, mode, onModeChange, greeting, posterUrl, layout, effect, ornament }: {
   look: ThemeLook;
   mode: "light" | "dark";
   onModeChange: (mode: "light" | "dark") => void;
@@ -23,6 +23,9 @@ export default function PreviewFrame({ look, mode, onModeChange, greeting, poste
   posterUrl?: string | null;
   /** Нүүрний бүтцийн ноорог (A3) — undefined = хуудасны өөрийнх */
   layout?: unknown;
+  /** Баярын чимэглэл (A4) — undefined = хуудасны өөрийнх */
+  effect?: string;
+  ornament?: string;
 }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -49,7 +52,7 @@ export default function PreviewFrame({ look, mode, onModeChange, greeting, poste
 
   // Хамгийн сүүлийн утгыг ref-д — iframe "ready" гэж хэлэхэд ч, өнгө хөдлөхөд ч ижил мессеж.
   const payloadRef = useRef<unknown>(null);
-  payloadRef.current = { type: "brand-preview", mode, vars: previewVars(look, mode), fontBody: look.fontBody, fontDisplay: look.fontDisplay, greeting, posterUrl, layout };
+  payloadRef.current = { type: "brand-preview", mode, vars: previewVars(look, mode), fontBody: look.fontBody, fontDisplay: look.fontDisplay, greeting, posterUrl, layout, effect, ornament };
   const post = () => frameRef.current?.contentWindow?.postMessage(payloadRef.current, window.location.origin);
 
   const payloadKey = JSON.stringify(payloadRef.current);
