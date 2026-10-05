@@ -100,7 +100,7 @@ export async function cancelOwnOrder(orderId: number, userId: number) {
   }
   // `allowedFromStatuses`: дээрх уншилт ба төлөв солих хоёрын хооронд агуулах
   // "савласан" болговол цуцлалт давж, савласан илгээмжийн нөөц буцаж ордог байв.
-  const result = await updateAdminOrder({ id: orderId, status: "cancelled", allowedFromStatuses: ["pending", "confirmed"] });
+  const result = await updateAdminOrder({ id: orderId, status: "cancelled", allowedFromStatuses: ["pending", "confirmed"], actor: { kind: "customer", userId } });
   // The warehouse may already be picking this order -- tell them (2026-09-11).
   const [itemCount] = await db.select({ total: sql<number>`COALESCE(SUM(${orderItems.quantity}), 0)` }).from(orderItems).where(eq(orderItems.orderId, orderId));
   await recordNotification("order.cancelled_by_customer", { orderNumber: current[0].orderNumber, totalMnt: current[0].totalMnt, itemCount: Number(itemCount?.total ?? 0) }, `order:${orderId}`);

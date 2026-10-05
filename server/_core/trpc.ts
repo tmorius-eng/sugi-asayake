@@ -56,6 +56,7 @@ export function userFacingMessage(error: unknown, fallback: string): string {
  * өгүүлбэр болгоно; танихгүй тохиолдолд zod-ийн өөрийн мессежийг үлдээнэ.
  */
 const FIELD_LABELS_MN: Record<string, string> = {
+  stuckHours: "гацсан гэж тооцох цаг",
   customerName: "нэр",
   customerPhone: "утасны дугаар",
   customerEmail: "имэйл хаяг",

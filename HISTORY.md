@@ -4,6 +4,86 @@
 
 ---
 
+## /admin → Процесс самбар + сайтын бодит төлөвийн шинжилгээ (2026-10-05)
+
+Tom Facebook-оор **NEXUS demo** artifact (Аксиллион ХХК, "Худалдан авалт PR → PO": BPMN диаграм,
+агент алхам бүрийг гүйцэтгэж, хүн батлаж, аудит append-only) үзээд: *"sugi.karkaron.com маань яг
+юу болж байна, энэ шиг лаг юм болох боломж байна уу, өөр ямар шинжилгээ/алдаа засвал хүнд зарах
+боломжтой болох вэ"* → *"sugi.karkaron.com дээр л шинжилгээ хий"*, *"дотор талаас кодыг бас шалга"*.
+
+**Artifact юу байсан**: `project/Main.dc.html` уншихад бүх алхам, үнийн санал, "итгэл 0.93", аудитын
+мөр **JS массивт хатуу бичсэн зохиомол өгөгдөл** (толгойд нь "Demo — өгөгдөл зохиомол"); backend, Odoo,
+AI, DB алга — товшигддог презентаци. SUGI эсрэгээрээ: 9 scheduler job, нөөцийн ledger, вендорын
+батлах дэлгэц, ~100 төрлийн аудит бодитоор ажилладаг ч түүнийг ХАРУУЛДАГ дэлгэц байгаагүй.
+
+**Бодит сайтын шинжилгээ (гаднаас, read-only)**: `/health` 200 `database: up`, бүх нийтийн хуудас
+200 (0.18–0.6 с), sitemap 1008, CSP/HSTS/PWA зөв. ⚠️ **Prod дээр 09-23-ны `2abe751` ажиллаж байгааг**
+`/api/trpc/x/catalog.list` хариу өгснөөр баталгаажуулав (10-01-ний `trpcBatchGuard` энэ замыг 404
+болгодог) — 29 commit / 206 файл / ~7,400 мөр (09-24→29 аудит, 09-29 хямдрал, 10-01 аюулгүй байдал)
+deploy хийгдээгүй; `db-migration-status.ts` prod-д **0096–0100 дутуу**, staging 101/101.
+`sugi-staging.karkaron.com` DNS байхгүй (NXDOMAIN). Энэ лаптопын `oci-ca.pem` хуучин CA хэвээр —
+VM-ээс scratchpad руу `scp`-дээд `DATABASE_CA_CERT_PATH` орчны хувьсагчаар бүх скрипт/тестийг
+ажиллуулав (`.env`/`*.pem`-д бичих эрх хаалттай; Tom өөрөө солино).
+
+**Дотоод аудит (HEAD)**: tsc ✅, lint ✅, unit 850/0 бодит уналт, build ✅ 166 KB gzip, TODO/`as any` 0.
+Олдсон: `pnpm audit --prod` 4 high/2 moderate (`brace-expansion`, exceljs гинж) → override, одоо 0;
+admin Q&A 200-ийн хатуу cap → хуудаслалт; `schema-drift-check` зөвхөн баганын нэр → төрөл/null/default;
+`inventorySync.ts` `onlineBranchIds` `isActive`-гүй → нэмэв; **кодоос баталгаажсан deploy эрсдэл**:
+0099-гүй deploy = бүх сешн `null` (`getUserById` `select()` бүх баганыг уншдаг), 0098-гүй = бүх
+checkout унана (`order_items.listPriceMnt` болзолгүй) — fallback алга. Тиймээс **boot-ийн
+хамгаалалт** `server/_core/migrationCheck.ts`: `REQUIRED_MIGRATIONS` жагсаалтыг `schema_migrations`-тэй
+тулгаж production-д дутуу бол сервер ЭХЛЭХГҮЙ (тод монгол алдаа + ажиллуулах команд), dev-д
+анхааруулна; `migrationCheck.test.ts` сүүлийн мөр = drizzle/-ийн сүүлийн файл гэдгийг шаардана
+(VM дээр drizzle/ байдаггүй тул диск биш жагсаалт). `MIGRATION_CHECK=0` унтраана.
+
+**"Процесс" самбар (Tom: бодит өгөгдөлтэй, AI алхамгүй)**:
+- **Migration 0101 `order_events`** (append-only; `actorKind` customer|staff|job|webhook|system,
+  actorUserId SET NULL, payloadJson — нэр/утас/хаяг хэзээ ч биш; orderId CASCADE) ба **0102
+  `job_runs`** (ажиллалт бүрийн startedAt/finishedAt/ok/error/affectedCount/claimedBy). Яагаад тусдаа:
+  `admin_audit_logs.actorUserId NOT NULL` тул job/webhook/харилцагчийн үйлдэл хэзээ ч бүртгэгддэггүй
+  байв; ~100 дуудагчтай хүснэгтийг HeatWave дээр ALTER хийхийг сонгосонгүй.
+- `server/db/order-events.ts`: `recordOrderEvent(dbOrTx, …)` — **захиалга бичдэг 10 функц (13 дуудлагын цэг)** ижил tx
+  дотор дуудна: checkout (`cart-orders.ts`, зочин бол "Зочин"; store-credit-ээр төлөгдвөл +paid
+  +pending→confirmed), POS, `createManualOrder`, `updateAdminOrder` (status.changed/payment.paid
+  (COD дууссанд)/tracking.set/note.set; шинэ `actor`/`eventMeta` параметр — `cancelOwnOrder`
+  `{kind:"customer"}` дамжуулна, bulk `{bulk:true}`), `requestOrderReturn`, `refundOrder`,
+  `editAdminOrder`, `markQPayPaymentAttemptPaid` (webhook актор = провайдер; at-least-once callback
+  давхар мөр бичихгүй; `payment.duplicate`), `markReviewRequested` (job), роутерийн
+  `notifyOrderStatusChange` дараах `notify.customer` (систем). `deleteAdminOrder` cascade.
+  Уншигч: `getOrderTrail` (event + `stock_movements refType=order` + `payment_attempts` +
+  `notification_outbox dedupeKey LIKE '%|order:<id>'` + аудит (зөвхөн admin) → `shared/process-timeline.ts`
+  `mergeTimeline`: нэг секундын тэнцвэрийг эх сурвалжийн давуу эрх → id-аар), `getProcessOverview`
+  (эгнээ бүрийн тоо/гацсан/хамгийн хуучин, хүний шийдвэр хүлээж буй 4 тоо, Smart Software push
+  cursor-оос хоцрол, `missingTrail` — event-гүй захиалгын тоо = алдсан бичих замын илрүүлэгч,
+  24 цагийн акторын тоо), `getStageOrders`, `getAuditFeed` (аудит + event + job_runs нэг урсгал).
+- Scheduler: `job.run()` бүр `job_runs`-д (хост#pid), `run()` `{affectedCount}` буцааж болно,
+  `data-retention` 30 хоногоор цэвэрлэнэ; `listRegisteredJobs()`.
+- API `admin.process.*` (overview/stageOrders/returnRequests/orderTrail — `ordersReadProcedure`;
+  jobs/auditFeed — admin; `admin.` угтвар хэвээр тул `trpcBatchGuard`/`splitLink` хөндөгдөөгүй);
+  `jobs` нь `schedulerActive` буцаана — staging/cluster instance≠0 дээр scheduler зориуд
+  ажилладаггүйг самбар тайлбарлана (E2E-д ингэж илэрсэн).
+- UI: sidebar "Процесс" (warehouse/finance/admin), 3 tab — **Гинж** (5 эгнээ + цуцлагдсан/буцаагдсан
+  + Smart Software sync карт, "Гацсан N", 24 цагийн акторын chip, эгнээ товших → жагсаалт → "Түүх"),
+  **Захиалгын түүх** (дугаараар/id-аар, дугаарласан timeline, актор chip, deep link
+  `?adminSection=process&orderId=`; Захиалгын картанд ч "Түүх" toggle — `admin.orderDetail`-ийн анхны
+  клиент), **Ажлууд ба аудит** (admin). Хүний шийдвэрийн карт зөвхөн байгаа дэлгэцүүд рүү холбоно.
+- Backfill `scripts/backfill-order-events.ts` (`--dry-run`, `--staging`, idempotent): staging-д 6
+  захиалга → 7 event, дахин ажиллуулахад 0.
+- Хөтөч дээр (Playwright, компьютер + Pixel 7) олдсон бодит алдаа: эгнээний `.sr-only` span
+  (absolute) эгнээ `position: relative` биш байснаас хуудсыг **376px тэлдэг** байв (ямар ч элемент
+  ил харагдахгүй — устгалтын аргаар олсон) → зассан; `admin.process.jobs` staging дээр хоосон →
+  тайлбар. `e2e/admin-process.spec.ts` (4 тест, хэвтээ scroll-ын offender-уудыг нэрлэдэг диагностиктай).
+- Тест: `server/order-events.integration.test.ts` 12/12 (зам бүрээр actorKind/from→to, trail-д
+  ledger+outbox, cascade), `process-timeline.test.ts`, `scheduler.test.ts` (+job_runs),
+  `migrationCheck.test.ts`; `price-campaign-report.integration.test.ts` 2/2 (SALE-PLAN §4 тайлан —
+  `admin.priceCampaignReport`: хямдралын цонхны захиалга/борлуулалт/хөнгөлсөн дүн `settledSaleSql`-ээр,
+  өмнөх ижил цонхтой харьцуулалт, өдрөөр, топ 5 — `AdminPriceCampaignCard`-д "Тайлан").
+- Баримт: PROJECT-GUIDE (6 шийдвэр ✅, тестийн тоо), OWNER-HANDOVER тоо, SALE-PLAN header.
+
+⛔ **Tom-ийн гар**: prod-д 0096→0100, дараа нь **0101, 0102** → deploy → `backfill-order-events.ts
+--i-know-this-is-production` (idempotent) → `/admin → Процесс`. Deploy-ийн дараа
+`/api/trpc/x/catalog.list` 404 "Олдсонгүй." буцаавал шинэ код батлагдсан.
+
 ## asayake.mn 2026-ийн төлөвлөгөө + Messenger бот v4 (2026-10-05, сайтын кодтой холбоогүй)
 
 Tom: *"asayake.mn-ийг улам сайн төгс болгох план, бас FB чат template сайжруулалт өнөөдөр — 2026 оны тренд, олон улсын жишиг"*. asayake.mn = Zochil дэлгүүр, бүх ажил `zochil-studio` repo-д (v0.14.0). Төлөвлөгөө (3 хэсэг: ӨНӨӨДӨР бот v4 / 7 хоног сайт / 30 хоног модулиуд, Tom-ийн 6 шийдвэр) `~/.claude/plans/nadaa-asayake-mn-iig-ulam-fancy-aurora.md`-д, судалгаа нь NielsenIQ State of Beauty 2026, Olive Young 2026 trend, @cosme awards, Matsukiyo апп, ORBIS/Kosé LINE, Meta developer docs 2026, DataReportal Mongolia 2025 эх сурвалжтай.

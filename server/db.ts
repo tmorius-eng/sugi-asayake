@@ -26,3 +26,4 @@ export * from "./db/face"; // Admin царайны бүртгэл/challenge/ор
 export * from "./db/questions"; // Асуулт, хариулт
 export * from "./db/gift-cards"; // Бэлгийн карт
 export * from "./db/price-campaigns"; // Бүх барааны нийтийн хямдрал (2026-09-29)
+export * from "./db/order-events"; // Захиалгын үйл явдлын append-only бүртгэл — /admin → Процесс (2026-10-05)

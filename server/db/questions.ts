@@ -122,10 +122,15 @@ export async function createQuestionAnswer(input: { questionId: number; userId: 
 }
 
 /** Admin moderation: newest first, with product name and answer count, hidden rows included. */
-export async function getAdminQuestions(limit = 200) {
+/** Хуудаслалттай (2026-10-05, AUDIT-09-27 D11): өмнө нь 200-ийн хатуу хязгаар — түүнээс цаашхи асуулт admin-д хэзээ ч харагддаггүй байв. */
+export async function getAdminQuestions(input: { page: number; pageSize: number }) {
   const db = await getDb();
-  if (!db) return [];
-  return db
+  if (!db) return { items: [], total: 0, page: input.page, pageSize: input.pageSize };
+  const pageSize = Math.max(1, Math.min(200, input.pageSize));
+  const page = Math.max(1, input.page);
+  const [[countRow], items] = await Promise.all([
+    db.select({ total: sql<number>`COUNT(*)` }).from(productQuestions),
+    db
     .select({
       id: productQuestions.id,
       productId: productQuestions.productId,
@@ -139,8 +144,12 @@ export async function getAdminQuestions(limit = 200) {
     .from(productQuestions)
     .innerJoin(products, eq(products.id, productQuestions.productId))
     .innerJoin(users, eq(users.id, productQuestions.userId))
-    .orderBy(desc(productQuestions.createdAt))
-    .limit(limit);
+    // Нэг секундэд үүссэн асуултуудын дарааллыг MySQL баталгаажуулдаггүй — id-аар тогтвортой тэнцвэр (PROJECT-GUIDE).
+    .orderBy(desc(productQuestions.createdAt), desc(productQuestions.id))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize),
+  ]);
+  return { items, total: Number(countRow?.total ?? 0), page, pageSize };
 }
 
 export async function setQuestionApproved(questionId: number, isApproved: boolean) {

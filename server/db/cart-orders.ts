@@ -13,6 +13,7 @@ import { recordStockMovement } from "../stockLedger";
 import { getInventoryReservationFailure } from "../commerce-lifecycle";
 import { escapeLike, generateOrderNumber, getDb, isDuplicateKeyError, isDuplicateOrderNumberError } from "./connection";
 import { DbOrTx, decrementBranchStock } from "./admin-orders";
+import { recordOrderEvent } from "./order-events";
 import { getActiveBranches } from "./site";
 import { getStoreSettingNumber } from "./ops";
 import { getApplicableRoutineDiscount } from "./routines-promotions";
@@ -453,6 +454,16 @@ export async function createOrderFromActiveCart(input: {
       ...(settledAtCheckout ? { paymentStatus: "paid" as const, status: "confirmed" as const } : {}),
     });
     orderId = Number(inserted[0].insertId);
+    // Процессын бүртгэл (2026-10-05, 0101): захиалга бичдэг зам бүр ижил tx дотор. Зочин бол userId null.
+    const checkoutActor = { kind: "customer" as const, userId: input.owner.userId ?? null, label: input.owner.userId ? null : "Зочин" };
+    await recordOrderEvent(tx, {
+      orderId, kind: "order.created", toStatus: settledAtCheckout ? "confirmed" : "pending", actor: checkoutActor,
+      payload: { orderNumber, totalMnt: orderTotalMnt, paymentMethod: input.paymentMethod, deliveryMethod: input.deliveryMethod, itemCount: cart.items.reduce((sum, item) => sum + item.quantity, 0), channel: "online" },
+    });
+    if (settledAtCheckout) {
+      await recordOrderEvent(tx, { orderId, kind: "payment.paid", actor: { kind: "system", label: "Дэлгүүрийн зээл" }, payload: { paymentMethod: "store_credit", amountMnt: storeCreditAppliedMnt } });
+      await recordOrderEvent(tx, { orderId, kind: "status.changed", fromStatus: "pending", toStatus: "confirmed", actor: { kind: "system", label: "Дэлгүүрийн зээл" }, payload: { reason: "settled_at_checkout" } });
+    }
     // Нэг хэрэглэгчийн купон хязгаарын АТОМИК хамгаалалт (2026-09-16, migration
     // 0084). Дээрх validateDiscountCode-ийн тоолол нь гүйлгээнээс ГАДНА явдаг
     // тул хоёр зэрэгцээ checkout хоёулаа "хараахан ашиглаагүй" гэж уншиж
@@ -697,6 +708,10 @@ export async function recordInStoreSale(input: InStoreSaleInput) {
       completedAt: new Date(),
     });
     orderId = Number(inserted[0].insertId);
+    // Процессын бүртгэл (2026-10-05): кассын борлуулалт нэг алхамд үүсч, дууссан, төлөгдсөн.
+    const posActor = { kind: "staff" as const, userId: input.actorUserId ?? null };
+    await recordOrderEvent(tx, { orderId, kind: "order.created", toStatus: "completed", actor: posActor, payload: { orderNumber, totalMnt: subtotalMnt, paymentMethod: "in_store", branchId: input.branchId, itemCount: input.items.reduce((sum, item) => sum + item.quantity, 0), channel: "in_store" } });
+    await recordOrderEvent(tx, { orderId, kind: "payment.paid", actor: posActor, payload: { paymentMethod: "in_store", amountMnt: subtotalMnt } });
     await tx.insert(orderItems).values(input.items.map(item => {
       const variant = variantsById.get(item.variantId)!;
       return {

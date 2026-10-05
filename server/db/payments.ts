@@ -8,6 +8,7 @@ import { invalidateCachedByPrefix } from "../_core/ttlCache";
 import { getDb } from "./connection";
 import { announceIssuedGiftCards, issueGiftCardsForPaidOrder, type IssuedGiftCard } from "./gift-cards";
 import { recordNotification } from "./notifications";
+import { recordOrderEvent } from "./order-events";
 
 /**
  * Нэг захиалгын төлбөрийн хүсэлтийг (QPay нэхэмжлэл / StorePay зээл) зэрэг хоёр
@@ -136,10 +137,25 @@ export async function markQPayPaymentAttemptPaid(input: { id: number; orderId: n
   const attemptFlip = await db.update(paymentAttempts).set({ status: "paid", providerPaymentId: input.providerPaymentId, updatedAt: new Date() })
     .where(and(eq(paymentAttempts.id, input.id), ne(paymentAttempts.status, "paid")));
   const attemptNewlyPaid = Number(attemptFlip[0].affectedRows ?? 0) === 1;
+  // Процессын бүртгэл (2026-10-05): callback-ийн ӨМНӨХ төлөвийг нэг удаа уншина — status.changed
+  // event-д fromStatus хэрэгтэй (доорх UPDATE нь pending→confirmed-ийг SQL IF-ээр хийдэг).
+  const [before] = await db.select({ status: orders.status }).from(orders).where(eq(orders.id, input.orderId)).limit(1);
+  const [attemptForEvent] = await db.select({ provider: paymentAttempts.provider }).from(paymentAttempts).where(eq(paymentAttempts.id, input.id)).limit(1);
+  const webhookActor = { kind: "webhook" as const, label: attemptForEvent?.provider ?? "qpay" };
   const updated = await db.update(orders)
     .set({ paymentStatus: "paid", status: sql`IF(${orders.status} = 'pending', 'confirmed', ${orders.status})`, updatedAt: new Date() })
     .where(and(eq(orders.id, input.orderId), eq(orders.paymentStatus, "unpaid"), sql`${orders.status} NOT IN ('cancelled', 'returned')`));
   const orderUpdated = Number(updated[0].affectedRows ?? 0) === 1;
+  // Транзакцаас гадна (энэ функц өөрөө нэг tx биш) — алдаа гарвал callback-ийг унагаахгүй:
+  // payment_attempts мөр эх сурвалж хэвээр, timeline түүнийг ч харуулдаг.
+  if (attemptNewlyPaid) {
+    try {
+      await recordOrderEvent(db, { orderId: input.orderId, kind: "payment.paid", actor: webhookActor, payload: { provider: webhookActor.label, providerPaymentId: input.providerPaymentId, orderUpdated } });
+      if (orderUpdated && before?.status === "pending") await recordOrderEvent(db, { orderId: input.orderId, kind: "status.changed", fromStatus: "pending", toStatus: "confirmed", actor: webhookActor, payload: { reason: "payment_confirmed" } });
+    } catch (error) {
+      console.error("[payments] order_events бичигдсэнгүй:", error);
+    }
+  }
   // 2026-09-23: карт үүсгэх нь `orderUpdated` дээр л явдаг байсан тул эхний
   // callback дээр захиалга "paid" болоод карт үүсгэх нь уначихвал (DB-ийн
   // түр зуурын алдаа) провайдерийн дахин илгээлт `orderUpdated=false` авч
@@ -177,6 +193,7 @@ export async function markQPayPaymentAttemptPaid(input: { id: number; orderId: n
     const [attemptRow] = await db.select({ provider: paymentAttempts.provider }).from(paymentAttempts).where(eq(paymentAttempts.id, input.id)).limit(1);
     if (otherPaid) {
       await recordNotification("payment.duplicate", { orderNumber: order.orderNumber, provider: attemptRow?.provider ?? "qpay", totalMnt: order.totalMnt }, `attempt:${input.id}`);
+      await recordOrderEvent(db, { orderId: input.orderId, kind: "payment.duplicate", actor: webhookActor, payload: { provider: attemptRow?.provider ?? "qpay", attemptId: input.id } }).catch(error => console.error("[payments] order_events бичигдсэнгүй:", error));
     }
   } else if (order && (order.status === "cancelled" || order.status === "returned" || order.paymentStatus === "refunded")) {
     // Money arrived for an order that is closed -- someone has to give it

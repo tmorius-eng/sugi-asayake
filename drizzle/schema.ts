@@ -1620,6 +1620,36 @@ export const adminAuditLogs = mysqlTable("admin_audit_logs", {
   index("admin_audit_created_idx").on(table.createdAt),
 ]);
 
+/**
+ * Захиалгын үйл явдлын append-only бүртгэл (2026-10-05, migration 0101,
+ * server/db/order-events.ts). adminAuditLogs дээрх actorUserId NOT NULL
+ * нь автомат акторыг (scheduler job, төлбөрийн callback, харилцагчийн
+ * өөрийн үйлдэл) бүртгэх боломжгүй болгодог тул захиалгын амьдралын
+ * мөчлөг тусдаа: захиалга бичдэг ЗАМ БҮР ижил транзакц дотор энд мөр
+ * нэмнэ (recordOrderEvent). /admin → Процесс самбарын эх сурвалж.
+ * Аппын код энд хэзээ ч UPDATE/DELETE хийдэггүй; захиалга устахад cascade.
+ * payloadJson-д харилцагчийн нэр/утас/хаяг хэзээ ч бичигдэхгүй.
+ */
+export const ORDER_EVENT_ACTOR_KINDS = ["customer", "staff", "job", "webhook", "system"] as const;
+export const orderEvents = mysqlTable("order_events", {
+  id: int("id").autoincrement().primaryKey(),
+  orderId: int("orderId").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  kind: varchar("kind", { length: 40 }).notNull(),
+  fromStatus: varchar("fromStatus", { length: 20 }),
+  toStatus: varchar("toStatus", { length: 20 }),
+  actorKind: mysqlEnum("actorKind", ORDER_EVENT_ACTOR_KINDS).notNull(),
+  actorUserId: int("actorUserId").references(() => users.id, { onDelete: "set null" }),
+  actorLabel: varchar("actorLabel", { length: 80 }),
+  jobName: varchar("jobName", { length: 80 }),
+  payloadJson: text("payloadJson"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  index("order_events_order_idx").on(table.orderId, table.id),
+  index("order_events_kind_created_idx").on(table.kind, table.createdAt),
+  index("order_events_created_idx").on(table.createdAt),
+]);
+export type OrderEvent = typeof orderEvents.$inferSelect;
+
 export const staffInvitations = mysqlTable("staff_invitations", {
   id: int("id").autoincrement().primaryKey(),
   email: varchar("email", { length: 320 }).notNull(),
@@ -1953,6 +1983,28 @@ export const scheduledJobRuns = mysqlTable("scheduled_job_runs", {
   claimedAt: timestamp("claimedAt"),
 });
 export type ScheduledJobRun = typeof scheduledJobRuns.$inferSelect;
+
+/**
+ * Ажиллалт бүрийн түүх (2026-10-05, migration 0102): scheduledJobRuns нь job
+ * бүрт нэг мөр л тул унасан/үргэлжилсэн/аль хост гэдэг нь console-д л
+ * үлддэг байв. server/_core/scheduler.ts ажиллалт бүрийн эхлэл-төгсгөлийг
+ * энд бичнэ (startJobRun/finishJobRun); data-retention 30 хоногоос хуучныг
+ * устгана. /admin → Процесс → Ажлууд.
+ */
+export const jobRuns = mysqlTable("job_runs", {
+  id: int("id").autoincrement().primaryKey(),
+  jobName: varchar("jobName", { length: 80 }).notNull(),
+  startedAt: timestamp("startedAt").defaultNow().notNull(),
+  finishedAt: timestamp("finishedAt"),
+  ok: boolean("ok"),
+  error: varchar("error", { length: 500 }),
+  affectedCount: int("affectedCount"),
+  claimedBy: varchar("claimedBy", { length: 80 }),
+}, table => [
+  index("job_runs_job_started_idx").on(table.jobName, table.startedAt),
+  index("job_runs_started_idx").on(table.startedAt),
+]);
+export type JobRun = typeof jobRuns.$inferSelect;
 
 /**
  * "Controls everything" admin overhaul (2026-09-08, Phase G): the actual

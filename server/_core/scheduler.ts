@@ -1,6 +1,7 @@
 import { and, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { scheduledJobRuns } from "../../drizzle/schema";
-import { getDb, getScheduledJobLastRun, markScheduledJobRun } from "../db";
+import { hostname } from "node:os";
+import { finishJobRun, getDb, getScheduledJobLastRun, markScheduledJobRun, startJobRun } from "../db";
 
 /**
  * "Controls everything" admin overhaul (2026-09-08, Phase D): the ONLY
@@ -26,7 +27,9 @@ import { getDb, getScheduledJobLastRun, markScheduledJobRun } from "../db";
  * claimedAt`) on top of the in-process guard, which stays as cheap
  * insurance against the same job overlapping itself within one process.
  */
-export type ScheduledJob = { name: string; intervalMs: number; run: () => Promise<void> };
+/** `run` нь сонголтоор `{ affectedCount }` буцаавал job_runs-д (0102) бичигдэж /admin → Процесс дээр харагдана. */
+export type JobRunResult = { affectedCount?: number | null } | void;
+export type ScheduledJob = { name: string; intervalMs: number; run: () => Promise<JobRunResult> };
 
 const jobs: ScheduledJob[] = [];
 const runningJobNames = new Set<string>();
@@ -35,6 +38,13 @@ let tickHandle: ReturnType<typeof setInterval> | null = null;
 export function registerJob(job: ScheduledJob) {
   jobs.push(job);
 }
+
+/** Бүртгэгдсэн job-уудын нэр/интервал — /admin → Процесс дараагийн ажиллалтыг бодоход (2026-10-05). */
+export function listRegisteredJobs(): ReadonlyArray<{ name: string; intervalMs: number }> {
+  return jobs.map(job => ({ name: job.name, intervalMs: job.intervalMs }));
+}
+
+const JOB_RUNNER_ID = `${hostname()}#${process.pid}`;
 
 // A crashed/killed process can leave a job claimed forever -- reclaim once
 // the claim is older than the job's own interval (an interval shorter than
@@ -119,11 +129,21 @@ export async function runDueJobsOnce(): Promise<void> {
     if (!claimed) continue; // another process already holds a fresh claim
 
     runningJobNames.add(job.name);
+    // 2026-10-05: ажиллалт бүрийн түүх (job_runs, 0102). Түүх бичигдэхгүй байх нь
+    // job-ийн өөрийн ажлыг хэзээ ч зогсоохгүй — startJobRun null буцаавал алгасна.
+    let runId: number | null = null;
     try {
-      await job.run();
+      runId = await startJobRun(job.name, JOB_RUNNER_ID);
+    } catch (error) {
+      console.error(`[Scheduler] Failed to open job_runs row for "${job.name}":`, error);
+    }
+    try {
+      const result = await job.run();
       await markScheduledJobRun(job.name);
+      if (runId) await finishJobRun(runId, { ok: true, affectedCount: result?.affectedCount ?? null }).catch(() => undefined);
     } catch (error) {
       console.error(`[Scheduler] Job "${job.name}" failed (will retry next tick):`, error);
+      if (runId) await finishJobRun(runId, { ok: false, error: error instanceof Error ? error.message : String(error) }).catch(() => undefined);
     } finally {
       runningJobNames.delete(job.name);
       await releaseJobClaim(job.name);

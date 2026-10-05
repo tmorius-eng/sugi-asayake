@@ -330,4 +330,19 @@ html[data-admin-theme="dark"] .tox .tox-edit-area__iframe { background-color: #1
   .admin-card-hover:hover, .admin-kpi:hover, .admin-nav-item:hover, .admin-icon-btn:hover { transform: none !important; }
 }
 
+  /* /admin -> Процесс (2026-10-05): захиалгын гинжний самбар. */
+  .a-actor-chip { display: inline-flex; align-items: center; gap: .3rem; border-radius: 999px; padding: .1rem .55rem; font-size: 11px; font-weight: 700; background: var(--a-soft); color: var(--a-text-soft); }
+  .a-actor-chip-customer { background: var(--a-info-soft); color: var(--a-info); }
+  .a-actor-chip-staff { background: var(--a-accent-violet-soft); color: var(--a-accent-violet); }
+  .a-actor-chip-job { background: var(--a-pos-soft); color: var(--a-pos); }
+  .a-actor-chip-webhook { background: var(--a-warn-soft); color: var(--a-warn); }
+  .a-actor-chip-system { background: var(--a-soft); color: var(--a-muted); }
+  /* position: relative — дотоод .sr-only (absolute) span эгнээний ДОТОР байрлаж, хэвтээ scroll-той мөрөнд клиплэгдэнэ; эс бөгөөс баруун талын эгнээний sr-only нь хуудсыг 376px тэлдэг байв (2026-10-05, утасны E2E). */
+  .a-process-lane { position: relative; display: block; width: 11rem; min-width: 11rem; flex-shrink: 0; text-align: left; border-radius: 1rem; border: 1px solid var(--a-border); background: var(--a-soft); padding: .9rem; color: var(--a-text); transition: border-color .15s, background-color .15s; }
+  button.a-process-lane:hover { background: var(--a-soft-hover); }
+  .a-process-lane-active { border-color: var(--a-info); }
+  .a-process-lane-terminal { width: 13rem; min-width: 13rem; border-style: dashed; background: var(--a-card); }
+  .a-process-connector { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 1.75rem; color: var(--a-faint); }
+  @media (max-width: 639px) { .a-process-connector { display: none; } .a-process-lane { margin-right: .5rem; } }
+
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CheckCircle2, EyeOff, LoaderCircle, MessageCircleQuestion, MessageSquareOff, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -11,12 +11,15 @@ import { useConfirm } from "@/components/ConfirmDialog";
 // through the storefront thread or by deleting the whole question (cascade).
 const formatDateTime = (date: Date) => new Date(date).toLocaleString("mn-MN", { dateStyle: "medium", timeStyle: "short" });
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Үйлдэл амжилтгүй боллоо.";
+const QUESTIONS_PAGE_SIZE = 50;
 
 export default function AdminQuestionsPanel() {
   const { confirm } = useConfirm();
   const utils = trpc.useUtils();
   const [statusFilter, setStatusFilter] = useState<"all" | "approved" | "hidden">("all");
-  const query = trpc.admin.questions.useQuery();
+  // Хуудаслалт (2026-10-05): 200-ийн хатуу хязгаар байсан — түүнээс цаашхи асуулт хэзээ ч харагддаггүй байв.
+  const [page, setPage] = useState(1);
+  const query = trpc.admin.questions.useQuery({ page, pageSize: QUESTIONS_PAGE_SIZE });
   const setApproved = trpc.admin.setQuestionApproved.useMutation({
     onSuccess: (_result, variables) => { toast.success(variables.isApproved ? "Асуулт харагдах боллоо." : "Асуулт нуугдлаа."); utils.admin.questions.invalidate(); },
     onError: error => toast.error(messageFrom(error)),
@@ -26,7 +29,11 @@ export default function AdminQuestionsPanel() {
     onError: error => toast.error(messageFrom(error)),
   });
 
-  const questions = (query.data ?? []).filter(q => statusFilter === "all" ? true : statusFilter === "approved" ? q.isApproved : !q.isApproved);
+  const questions = (query.data?.items ?? []).filter(q => statusFilter === "all" ? true : statusFilter === "approved" ? q.isApproved : !q.isApproved);
+  const total = query.data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / QUESTIONS_PAGE_SIZE));
+  // Сүүлийн хуудасны сүүлийн мөрийг устгахад хуудас pageCount-аас хэтэрч хоосон үлддэг байв.
+  useEffect(() => { if (page > pageCount) setPage(pageCount); }, [page, pageCount]);
   type Question = (typeof questions)[number];
   const headerCell = "border-b border-[var(--a-border)] pb-2";
   const bodyCell = "border-b border-[var(--a-border)] py-3";
@@ -81,6 +88,15 @@ export default function AdminQuestionsPanel() {
               </>
             )}
           />
+          {total > QUESTIONS_PAGE_SIZE && (
+            <nav className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs" aria-label="Асуултын хуудаслалт">
+              <span className="text-[var(--a-muted)]">{(page - 1) * QUESTIONS_PAGE_SIZE + 1}–{Math.min(page * QUESTIONS_PAGE_SIZE, total)} / {total}</span>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="rounded-full border border-[var(--a-border)] px-3 py-1.5 font-bold hover:bg-[var(--a-soft)] disabled:opacity-40">Өмнөх</button>
+                <button type="button" onClick={() => setPage(p => Math.min(pageCount, p + 1))} disabled={page >= pageCount} className="rounded-full border border-[var(--a-border)] px-3 py-1.5 font-bold hover:bg-[var(--a-soft)] disabled:opacity-40">Дараах</button>
+              </div>
+            </nav>
+          )}
         </div>
       )}
     </div>

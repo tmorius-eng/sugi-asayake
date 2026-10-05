@@ -334,9 +334,11 @@ export async function runPullSnapshot(provider: InventorySyncProvider, options: 
   // the failure this prevents (mapping refused going forward). Checked
   // again here too, because a branch already mapped before this guard
   // shipped, or toggled online AFTER being mapped, would otherwise still
-  // auto-apply.
+  // auto-apply. Requires isActive too -- the same predicate stockLedger's two
+  // online-stock sums use, so a closed branch (which no longer counts toward
+  // what the site sells) is not blocked from auto-apply.
   const onlineBranchIds = new Set(
-    (await db.select({ id: branches.id }).from(branches).where(eq(branches.countsTowardOnlineStock, true))).map(row => row.id),
+    (await db.select({ id: branches.id }).from(branches).where(and(eq(branches.countsTowardOnlineStock, true), eq(branches.isActive, true)))).map(row => row.id),
   );
   let branchAttempts = 0;
   let branchFailures = 0;

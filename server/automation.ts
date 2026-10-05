@@ -7,7 +7,7 @@ import { emailConfigured, sendAccountEmail, notifyOwner } from "./_core/notifica
 import { sendPushToUser } from "./_core/webPush";
 import { registerJob } from "./_core/scheduler";
 import { purgeExpiredFaceHandoffs } from "./faceHandoff";
-import { purgeExpiredFaceChallenges, purgeExpiredSessionRevocations } from "./db";
+import { purgeExpiredFaceChallenges, purgeExpiredSessionRevocations, purgeJobRuns } from "./db";
 import { purgeSearchQueries } from "./search/searchAnalytics";
 
 /**
@@ -232,7 +232,7 @@ export async function runNotificationOutboxPurgeJob(): Promise<void> {
 
 // 2026-09-12: bounded growth for the two tables that had none -- see
 // purgeStaleTelemetry for the retention periods and why they are safe.
-export async function runDataRetentionJob(): Promise<void> {
+export async function runDataRetentionJob(): Promise<{ affectedCount: number }> {
   const { visitorSessions, loginAttempts } = await purgeStaleTelemetry();
   // QR handoff-ийн хүсэлтүүд 90 секундын настай — нэг өдрөөс хуучин мөр нь
   // зөвхөн аудитын хог (жинхэнэ түүх нь admin_audit_logs-д үлддэг).
@@ -244,7 +244,10 @@ export async function runDataRetentionJob(): Promise<void> {
   const searches = await purgeSearchQueries(90);
   // Logout-ийн хар жагсаалт (2026-10-01): токены хугацаа дууссан мөр хэрэггүй.
   const revocations = await purgeExpiredSessionRevocations();
-  if (visitorSessions || loginAttempts || handoffs || challenges || searches || revocations) console.log(`[retention] removed ${visitorSessions} visitor session(s) older than 24 months, ${loginAttempts} login attempt(s) older than 12 months, ${handoffs} face handoff request(s) older than 24 hours, ${challenges} face challenge(s) expired over 24 hours ago, ${searches} search log row(s) older than 90 days, ${revocations} expired session revocation(s)`);
+  // Хуваарьт ажлын ажиллалтын түүх 30 хоног (2026-10-05, 0102) — самбарт сүүлийн 50 л хэрэгтэй.
+  const jobRunsPurged = await purgeJobRuns(30);
+  if (visitorSessions || loginAttempts || handoffs || challenges || searches || revocations || jobRunsPurged) console.log(`[retention] removed ${visitorSessions} visitor session(s) older than 24 months, ${loginAttempts} login attempt(s) older than 12 months, ${handoffs} face handoff request(s) older than 24 hours, ${challenges} face challenge(s) expired over 24 hours ago, ${searches} search log row(s) older than 90 days, ${revocations} expired session revocation(s), ${jobRunsPurged} job run row(s) older than 30 days`);
+  return { affectedCount: visitorSessions + loginAttempts + handoffs + challenges + searches + revocations + jobRunsPurged };
 }
 
 export function registerDataRetentionJob() {

@@ -18,6 +18,7 @@ import { findOrderForClientRequest } from "./cart-orders";
 import { getStoreSettingNumber } from "./ops";
 import { forgetSessionUser } from "./users";
 import { getLivePriceCampaign, priceLinesForOrder } from "./price-campaigns";
+import { recordOrderEvent, type OrderEventActor } from "./order-events";
 
 /**
  * Төлбөрөө ЗӨВХӨН провайдерийн callback-оор баталгаажуулдаг аргууд
@@ -427,7 +428,12 @@ async function reverseStoreCreditForOrder(tx: OrderTx, orderId: number, reason: 
   return orderRow.storeCreditAppliedMnt;
 }
 
-export async function updateAdminOrder(input: { id: number; status?: FulfilmentStatus; deliveryTrackingRef?: string | null; adminNote?: string | null; actorUserId?: number | null; allowedFromStatuses?: readonly FulfilmentStatus[] }) {
+/**
+ * `actor` (2026-10-05): хэн төлөв солиж буйг order_events-д бичих — анхдагч нь ажилтан (actorUserId).
+ * Харилцагчийн өөрийн цуцлалт (cancelOwnOrder) `{ kind: "customer" }` дамжуулна. `eventMeta` нь
+ * payload-д нэмэгдэнэ (bulk: true гэх мэт). Харилцагчийн нэр/утас оруулахгүй.
+ */
+export async function updateAdminOrder(input: { id: number; status?: FulfilmentStatus; deliveryTrackingRef?: string | null; adminNote?: string | null; actorUserId?: number | null; allowedFromStatuses?: readonly FulfilmentStatus[]; actor?: OrderEventActor; eventMeta?: Record<string, unknown> }) {
   invalidateCachedByPrefix("storefront:bestsellers:");
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
@@ -459,6 +465,8 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
   // одоогийн мөрд таарна) тул bulk-аар "shipped" тавихад аль хэдийн
   // илгээгдсэн захиалгын эзэд хоёр дахь имэйл/push/SMS (төлбөртэй) авдаг байв.
   const statusChanged = input.status !== undefined && input.status !== current[0].status;
+  const eventActor: OrderEventActor = input.actor ?? { kind: "staff", userId: input.actorUserId ?? null };
+  const becomesPaidHere = input.status === "completed" && !WEBHOOK_PAID_METHODS.includes(current[0].paymentMethod as (typeof WEBHOOK_PAID_METHODS)[number]) && current[0].paymentStatus !== "paid";
   await db.transaction(async tx => {
     // Audit 2026-09-09: the ladder checks above are a plain read, not a
     // lock -- two concurrent cancels (a double-clicked button, or a customer
@@ -473,6 +481,9 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
       const flipped = await tx.update(orders).set({ status: input.status, ...(input.status === "returned" ? { returnedAt: new Date() } : {}), updatedAt: new Date() })
         .where(and(eq(orders.id, input.id), eq(orders.status, current[0].status)));
       if (Number(flipped[0].affectedRows ?? 0) !== 1) throw new Error("Энэ захиалга яг одоо өөр хэн нэгний үйлдлээр өөрчлөгдлөө. Хуудсаа шинэчлээд дахин оролдоно уу.");
+      if (statusChanged) {
+        await recordOrderEvent(tx, { orderId: input.id, kind: "status.changed", fromStatus: current[0].status, toStatus: input.status, actor: eventActor, payload: { ...(input.eventMeta ?? {}), restocked: shouldRestoreStock(current[0].status as FulfilmentStatus, input.status) } });
+      }
     }
     if (shouldRestoreStock(current[0].status as FulfilmentStatus, input.status)) {
       await restoreStockForOrder(tx, input.id, { type: "order_restock", actorUserId: input.actorUserId ?? null });
@@ -538,6 +549,10 @@ export async function updateAdminOrder(input: { id: number; status?: FulfilmentS
       ...(input.adminNote !== undefined ? { adminNote: input.adminNote } : {}),
       updatedAt: new Date(),
     }).where(eq(orders.id, input.id));
+    // Процессын бүртгэл (2026-10-05): "дууссан" мөч нь бэлэн/банк/картын төлбөр бодитоор орсон мөч.
+    if (becomesPaidHere) await recordOrderEvent(tx, { orderId: input.id, kind: "payment.paid", actor: eventActor, payload: { paymentMethod: current[0].paymentMethod, amountMnt: current[0].totalMnt, reason: "completed" } });
+    if (input.deliveryTrackingRef !== undefined && input.deliveryTrackingRef !== current[0].deliveryTrackingRef) await recordOrderEvent(tx, { orderId: input.id, kind: "tracking.set", actor: eventActor, payload: { deliveryTrackingRef: input.deliveryTrackingRef } });
+    if (input.adminNote !== undefined && input.adminNote !== current[0].adminNote) await recordOrderEvent(tx, { orderId: input.id, kind: "note.set", actor: eventActor, payload: { length: input.adminNote?.length ?? 0 } });
     // "Completed" is the moment a cash/bank order counts as paid (above), so
     // it is also the moment its gift cards exist. Idempotent: an order the
     // QPay webhook already paid (and issued for) gets nothing twice.
@@ -613,7 +628,11 @@ export async function markReviewRequested(orderId: number): Promise<boolean> {
   if (!db) return false;
   const claimed = await db.update(orders).set({ reviewRequestedAt: new Date() })
     .where(and(eq(orders.id, orderId), isNull(orders.reviewRequestedAt)));
-  return Number(claimed[0].affectedRows ?? 0) === 1;
+  const won = Number(claimed[0].affectedRows ?? 0) === 1;
+  // Процессын бүртгэл (2026-10-05): автомат ажлын алхам — хүн биш, job актортой.
+  // Транзакцаас гадна — event бичигдэхгүй байх нь илгээлтийг зогсоох ёсгүй (claim аль хэдийн эзэмшсэн).
+  if (won) await recordOrderEvent(db, { orderId, kind: "review.requested", actor: { kind: "job", jobName: "review-request", label: "Сэтгэгдэл хүсэх ажил" } }).catch(error => console.error("[order-events] review.requested бичигдсэнгүй:", error));
+  return won;
 }
 
 /**
@@ -637,6 +656,8 @@ export async function requestOrderReturn(input: { orderId: number; userId: numbe
   const flipped = await db.update(orders).set({ returnRequestedAt: new Date(), returnRequestReason: input.reason.trim().slice(0, 500), updatedAt: new Date() })
     .where(and(eq(orders.id, input.orderId), isNull(orders.returnRequestedAt)));
   if (Number(flipped[0].affectedRows ?? 0) !== 1) throw new Error("Энэ захиалгад буцаалтын хүсэлт аль хэдийн илгээгдсэн байна.");
+  // Транзакцаас гадна — хүсэлт аль хэдийн хадгалагдсан тул event-ийн алдаа харилцагчид алдаа болж очихгүй.
+  await recordOrderEvent(db, { orderId: input.orderId, kind: "return.requested", actor: { kind: "customer", userId: input.userId }, payload: { reasonLength: input.reason.trim().length, windowDays: input.windowDays } }).catch(error => console.error("[order-events] return.requested бичигдсэнгүй:", error));
   const [updated] = await db.select().from(orders).where(eq(orders.id, input.orderId)).limit(1);
   return updated;
 }
@@ -752,6 +773,7 @@ export async function createManualOrder(input: ManualOrderInput) {
       subtotalMnt, deliveryFeeMnt, discountMnt: 0, couponDiscountMnt: 0, loyaltyDiscountMnt: 0, storeCreditAppliedMnt: 0, totalMnt,
     });
     orderId = Number(inserted[0].insertId);
+    await recordOrderEvent(tx, { orderId, kind: "order.created", toStatus: "pending", actor: { kind: "staff", userId: input.actorUserId ?? null }, payload: { orderNumber, totalMnt, paymentMethod: input.paymentMethod, deliveryMethod: input.deliveryMethod, salesChannel: input.salesChannel, itemCount: lines.reduce((sum, line) => sum + line.quantity, 0), channel: "manual" } });
     await tx.insert(orderItems).values(lines.map(line => ({ orderId, productId: line.productId, variantId: line.variantId, productName: line.productName, sku: line.sku, unitPriceMnt: line.priceMnt, listPriceMnt: line.listPriceMnt, quantity: line.quantity })));
     for (const line of lines) {
       if (line.kind === "gift_card") continue;
@@ -935,6 +957,7 @@ export async function editAdminOrder(input: OrderEditInput) {
       ...(isPaid ? {} : { subtotalMnt, deliveryFeeMnt, discountMnt, couponDiscountMnt, loyaltyDiscountMnt, totalMnt }),
       updatedAt: new Date(),
     }).where(eq(orders.id, input.id));
+    await recordOrderEvent(tx, { orderId: input.id, kind: "order.edited", actor: { kind: "staff", userId: input.actorUserId ?? null }, payload: { deliveryMethod, fulfillingBranchId: branch.fulfillingBranchId, totalsRecomputed: !isPaid, ...(isPaid ? {} : { totalMnt }) } });
   });
   invalidateCachedByPrefix("storefront:bestsellers:");
   const [updated] = await db.select().from(orders).where(eq(orders.id, input.id)).limit(1);
@@ -1001,6 +1024,7 @@ export async function refundOrder(input: { id: number; refundAmountMnt: number; 
       updatedAt: new Date(),
     }).where(and(eq(orders.id, input.id), eq(orders.paymentStatus, "paid")));
     if (Number(flipped[0].affectedRows ?? 0) !== 1) throw new Error("This order has already been refunded.");
+    await recordOrderEvent(tx, { orderId: input.id, kind: "payment.refunded", actor: { kind: "staff", userId: input.actorUserId ?? null }, payload: { refundAmountMnt: input.refundAmountMnt, restockItems: input.restockItems, paymentMethod: current[0].paymentMethod } });
     // Захиалгын мөрийг (guarded flip) ЭХЛЭЭД, картуудыг дараа нь цоожилно — цуцлалт
     // (updateAdminOrder) ижил дарааллаар цоожилдог тул deadlock үүсэхгүй; шидвэл бүгд буцна.
     const redeemedMnt = await lockGiftCardsAndSumRedeemed(tx, input.id);

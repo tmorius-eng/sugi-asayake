@@ -128,6 +128,7 @@ browser → /api/trpc/<router>.<procedure>
 | `face.ts` | admin царай: enrollment (**шифрлэгдсэн**, `enc1:` AES-GCM, хуучин plaintext мөр амжилттай шалгалтын дараа шифрлэгдэнэ)/challenge (24 ц retention)/attempt, `countRecentFailedFaceAttempts` (данс тус бүрийн lockout) |
 | `questions.ts` | асуулт/хариулт |
 | `gift-cards.ts` | бэлгийн карт (үүсгэх, хүчингүй, redeem) |
+| `order-events.ts` | (2026-10-05, 0101) захиалгын үйл явдлын append-only бүртгэл: `recordOrderEvent` (захиалга бичдэг 10 функц (13 дуудлагын цэг) ижил tx-д дуудна; актор customer/staff/job/webhook/system), `getOrderTrail` (event + ledger + төлбөр + outbox + аудит → `shared/process-timeline.ts` `mergeTimeline`), `getProcessOverview`/`getStageOrders`/`getAuditFeed` — /admin → Процесс |
 | `price-campaigns.ts` | (2026-09-29, 0098) бүх барааны нийтийн хямдрал: `withLiveCampaign`/`priceLinesForOrder` (кэшээс уншсаны ДАРАА), admin CRUD, урьдчилан харах. Дүрэм `shared/price-campaign.ts` |
 
 
@@ -260,7 +261,7 @@ browser → /api/trpc/<router>.<procedure>
 
 ---
 
-## 6. Өгөгдлийн сан — 68 хүснэгт (2026-09-20: + `searchSynonyms`, `brandAliases`, `searchQueries`; `products` + `nameMn`/`searchKeywords`/`productType`/`skinTypes`/`bodySkinType`/`bodyConcerns`; `users` + `bodySkinType`/`bodyConcerns`)
+## 6. Өгөгдлийн сан — 70+ хүснэгт (2026-10-05: + `order_events` (0101), `job_runs` (0102); 2026-09-20: + `searchSynonyms`, `brandAliases`, `searchQueries`; `products` + `nameMn`/`searchKeywords`/`productType`/`skinTypes`/`bodySkinType`/`bodyConcerns`; `users` + `bodySkinType`/`bodyConcerns`)
 
 | Бүлэг | Хүснэгтүүд |
 |---|---|
@@ -289,6 +290,8 @@ browser → /api/trpc/<router>.<procedure>
 | `inventory-sync-smartsoftware` | 15 мин | Smart POS-ын үлдэгдэл → батлах тооллого (идэвхтэй үед л) |
 | `data-retention` | 24 цаг | `visitor_sessions` 24 сараас, `login_attempts` 12 сараас хуучин мөрийг устгана (`purgeStaleTelemetry`) |
 | `notification-outbox-purge` | 20 цаг | тестийн болон 90 хоногоос хуучин мөрүүд |
+
+2026-10-05 (0102): ажиллалт бүр `job_runs`-д (startedAt/finishedAt/ok/error/affectedCount/claimedBy=хост#pid) — `scheduler.ts` `startJobRun`/`finishJobRun`; `run()` `{ affectedCount }` буцааж болно; `data-retention` 30 хоногоос хуучныг устгана; `listRegisteredJobs()` → /admin → Процесс → Ажлууд. Staging болон cluster instance ≠ 0 дээр scheduler огт ажилладаггүй (`clusterRole.ts`) — самбар үүнийг `schedulerActive`-аар тайлбарлана.
 
 ---
 
@@ -323,7 +326,7 @@ browser → /api/trpc/<router>.<procedure>
 
 ---
 
-## 9. Тест (115 vitest файл, 1112 тест — 2026-09-22; **E2E 19 файл / 192 тест — 2026-09-21**; царайны хаалганы E2E `E2E_FACE_GATE=1`-ээр л: `face-gate.spec.ts`, `face-handoff.spec.ts`)
+## 9. Тест (137 vitest файл — 2026-10-05, 1281 passed 2026-10-01 `sugi_staging`; **E2E 33 файл / 243 тест — 2026-10-05**; царайны хаалганы E2E `E2E_FACE_GATE=1`-ээр л: `face-gate.spec.ts`, `face-handoff.spec.ts`)
 
 ```powershell
 $env:RUN_AUTH_INTEGRATION_TESTS="1"; $env:COMMERCE_INTEGRATION_TESTS="1"; $env:RUN_MEDIA_INTEGRATION_TESTS="1"

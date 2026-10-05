@@ -5,11 +5,11 @@
 // дуусах мөч кэшийн TTL-ээс үл хамааран яг тухайн хүсэлт дээр шийдэгдэнэ).
 // Дүрэм: shared/price-campaign.ts. Tom-ийн шийдвэр: docs/SITEWIDE-SALE-PLAN.md.
 
-import { and, desc, eq, gt, isNull, lt, ne, sql } from "drizzle-orm";
-import { priceCampaigns } from "../../drizzle/schema";
+import { and, desc, eq, gt, gte, isNotNull, isNull, lt, ne, sql } from "drizzle-orm";
+import { orderItems, orders, priceCampaigns } from "../../drizzle/schema";
 import { getOrSetCached, invalidateCached, invalidateCachedByPrefix } from "../_core/ttlCache";
 import { applyCampaignToRows, campaignPriceFor, isCampaignLive, PRICE_CAMPAIGN_MAX_PERCENT, PRICE_CAMPAIGN_MIN_PERCENT, type PriceCampaignWindow } from "../../shared/price-campaign";
-import { getDb } from "./connection";
+import { getDb, settledSaleSql, storeDaySql } from "./connection";
 import { getPublishedCatalog } from "./catalog";
 
 const CAMPAIGNS_CACHE_KEY = "storefront:priceCampaigns";
@@ -197,4 +197,59 @@ export async function previewPriceCampaign(percentOff: number) {
     if (examples.length < 6) examples.push({ id: row.id, name: row.name, fromMnt: row.priceMnt, toMnt: priced.priceMnt });
   }
   return { total: rows.length, affected, alreadyDiscounted, giftCards, lowestMnt, examples };
+}
+
+/** Нэг хямдралын тайлан (SITEWIDE-SALE-PLAN §4). Цонх = [startsAt, min(endsAt, stoppedAt, одоо)). */
+export async function getPriceCampaignReport(campaignId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const [campaign] = await db.select().from(priceCampaigns).where(eq(priceCampaigns.id, campaignId)).limit(1);
+  if (!campaign) return null;
+
+  const startsAt = campaign.startsAt;
+  const endCandidates = [campaign.endsAt.getTime(), Date.now()];
+  if (campaign.stoppedAt) endCandidates.push(campaign.stoppedAt.getTime());
+  const endsAt = new Date(Math.max(startsAt.getTime(), Math.min(...endCandidates)));
+  const prevStart = new Date(startsAt.getTime() - (endsAt.getTime() - startsAt.getTime()));
+
+  const inWindow = and(settledSaleSql, gte(orders.createdAt, startsAt), lt(orders.createdAt, endsAt));
+  const ofCampaign = and(inWindow, eq(orders.priceCampaignId, campaignId));
+  const discountExpr = sql<number>`COALESCE(SUM((${orderItems.listPriceMnt} - ${orderItems.unitPriceMnt}) * ${orderItems.quantity}), 0)`;
+  const listed = isNotNull(orderItems.listPriceMnt);
+
+  const summarize = async (where: ReturnType<typeof and>) => {
+    const [row] = await db.select({ count: sql<number>`COUNT(*)`, revenue: sql<number>`COALESCE(SUM(${orders.totalMnt}), 0)` }).from(orders).where(where);
+    const count = Number(row?.count ?? 0);
+    const revenueMnt = Number(row?.revenue ?? 0);
+    return { orders: count, revenueMnt, avgOrderMnt: count > 0 ? Math.round(revenueMnt / count) : 0 };
+  };
+
+  const current = await summarize(ofCampaign);
+  const [discountRow] = await db.select({ discount: discountExpr, lines: sql<number>`COUNT(*)` })
+    .from(orderItems).innerJoin(orders, eq(orders.id, orderItems.orderId)).where(and(ofCampaign, listed));
+  const previous = await summarize(and(settledSaleSql, gte(orders.createdAt, prevStart), lt(orders.createdAt, startsAt)));
+  const pct = (now: number, before: number) => (before > 0 ? Math.round(((now - before) / before) * 1000) / 10 : null);
+
+  const dayOrders = await db.select({ day: storeDaySql(orders.createdAt), orders: sql<number>`COUNT(*)`, revenue: sql<number>`COALESCE(SUM(${orders.totalMnt}), 0)` })
+    .from(orders).where(ofCampaign).groupBy(storeDaySql(orders.createdAt));
+  const dayDiscounts = await db.select({ day: storeDaySql(orders.createdAt), discount: discountExpr })
+    .from(orderItems).innerJoin(orders, eq(orders.id, orderItems.orderId)).where(and(ofCampaign, listed)).groupBy(storeDaySql(orders.createdAt));
+  const discountByDay = new Map(dayDiscounts.map(row => [String(row.day), Number(row.discount)]));
+  const byDay = dayOrders
+    .map(row => ({ day: String(row.day), orders: Number(row.orders), revenueMnt: Number(row.revenue), discountMnt: discountByDay.get(String(row.day)) ?? 0 }))
+    .sort((a, b) => a.day.localeCompare(b.day));
+
+  const top = await db.select({ productName: orderItems.productName, sku: orderItems.sku, quantity: sql<number>`SUM(${orderItems.quantity})`, discount: discountExpr })
+    .from(orderItems).innerJoin(orders, eq(orders.id, orderItems.orderId)).where(and(ofCampaign, listed))
+    .groupBy(orderItems.productName, orderItems.sku)
+    .orderBy(desc(sql`SUM(${orderItems.quantity})`), orderItems.sku).limit(5);
+
+  return {
+    campaign: { id: campaign.id, name: campaign.name, percentOff: campaign.percentOff },
+    window: { startsAt, endsAt },
+    orders: { ...current, discountMnt: Number(discountRow?.discount ?? 0), itemsDiscounted: Number(discountRow?.lines ?? 0) },
+    previous: { ...previous, deltaPct: { orders: pct(current.orders, previous.orders), revenueMnt: pct(current.revenueMnt, previous.revenueMnt) } },
+    byDay,
+    topProducts: top.map(row => ({ productName: row.productName, sku: row.sku, quantity: Number(row.quantity), discountMnt: Number(row.discount) })),
+  };
 }

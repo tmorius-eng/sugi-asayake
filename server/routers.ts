@@ -19,7 +19,7 @@ import { z } from "zod";
 import { getGuestCartCookieOptions, getSessionCookieOptions, getVisitorSessionCookieOptions } from "./_core/cookies";
 import { listRecentHoneybadgerFaults } from "./_core/honeybadgerReadApi";
 import { getRecentSqlQueries } from "./_core/sqlQueryLog";
-import { getOrSetCached } from "./_core/ttlCache";
+import { getOrSetCached, invalidateCached } from "./_core/ttlCache";
 import { sendAccountEmail, sendAccountSms } from "./_core/notification";
 import { ENV } from "./_core/env";
 import { directStorageUrl, storageKeyOf } from "./_core/publicUrl";
@@ -196,7 +196,7 @@ import {
   upsertSiteText,
   upsertMarketingSpend,
   updateAdminCategory,
-  cancelOwnOrder, toCustomerOrder, listPriceCampaigns, previewPriceCampaign, createPriceCampaign, updatePriceCampaign, stopPriceCampaign, deletePriceCampaign,
+  cancelOwnOrder, toCustomerOrder, listPriceCampaigns, getPriceCampaignReport, previewPriceCampaign, createPriceCampaign, updatePriceCampaign, stopPriceCampaign, deletePriceCampaign,
   getOrderForTracking,
   getUsersForCampaignSend,
   refundOrder,
@@ -231,6 +231,9 @@ import { classifyImageSafety, formatScores, IMAGE_SAFETY_REJECT_MESSAGE, REVIEW_
 import { MODERATION_REJECT_MESSAGE, screenText } from "./_core/moderation";
 import { canReplyToReview, createReviewReply, deleteAdminReviewReply, getAdminReviewReplies, toggleReviewLike, updateAdminReview, updateAdminReviewReply } from "./db";
 import { canAnswerQuestion, createProductQuestion, createQuestionAnswer, deleteQuestion, deleteQuestionAnswer, getAdminQuestions, getProductQuestions, countProductQuestions, setQuestionApproved } from "./db";
+import { recordOrderEventOutsideTx, getProcessOverview, getStageOrders, getOpenReturnRequests, getOrderTrail, getAuditFeed, getRecentJobRuns, getScheduledJobStates } from "./db";
+import { listRegisteredJobs } from "./_core/scheduler";
+import { isBackgroundJobRunner } from "./_core/clusterRole";
 import { renderOrderInvoice, renderOrderInvoiceForStaff, renderPackingSlip } from "./invoice";
 import { deletePushSubscription, hasPushSubscription, issueGiftCards, listGiftCards, redeemGiftCard, upsertPushSubscription, voidGiftCard } from "./db";
 import { sendOrderStatusPush, sendPushToUser, webPushEnabled } from "./_core/webPush";
@@ -734,12 +737,12 @@ async function sendOrderPlacedSms(order: { orderNumber: string; customerPhone: s
 const ORDER_STATUS_SMS_LABEL: Record<string, string> = {
   confirmed: "баталгаажлаа", packed: "бэлтгэгдлээ", out_for_delivery: "хүргэлтэд гарлаа", completed: "амжилттай дууслаа", cancelled: "цуцлагдлаа", returned: "буцаагдлаа",
 };
-async function sendOrderStatusSms(order: { orderNumber: string; customerPhone: string; status: string }): Promise<void> {
-  if (!(await orderSmsEnabled())) return;
+async function sendOrderStatusSms(order: { orderNumber: string; customerPhone: string; status: string }): Promise<boolean> {
+  if (!(await orderSmsEnabled())) return false;
   const label = ORDER_STATUS_SMS_LABEL[order.status];
-  if (!label) return;
+  if (!label) return false;
   const body = fillTemplate(await getStoreSettingValue("sms-body-order-status"), { "{захиалга}": order.orderNumber, "{төлөв}": label });
-  await sendAccountSms({ to: order.customerPhone, content: body }).catch(error => console.warn("[sms] order status", error instanceof Error ? error.message : error));
+  return sendAccountSms({ to: order.customerPhone, content: body }).then(() => true).catch(error => { console.warn("[sms] order status", error instanceof Error ? error.message : error); return false; });
 }
 
 /**
@@ -816,22 +819,35 @@ async function requireCheckoutPhoneVerification(ctx: TrpcContext, customerPhone:
  * байсан тул Brevo имэйлийн нэг алдаа push болон SMS-ийг бүхэлд нь алгасдаг
  * байв (SMS бол энд бүх худалдан авагчид байдаг цорын ганц суваг).
  */
-async function notifyOrderStatusChange(order: OrderStatusNotifiable, context: string) {
+/** Буцаах утга (2026-10-05): БОДИТООР илгээсэн сувгууд — /admin → Процесс "Харилцагчид мэдэгдэв (…)" мөр үүнийг л харуулна. */
+async function notifyOrderStatusChange(order: OrderStatusNotifiable, context: string): Promise<string[]> {
+  const sent: string[] = [];
   for (const [channel, send] of [["email", sendOrderStatusUpdateEmail], ["push", sendOrderStatusPush], ["sms", sendOrderStatusSms]] as const) {
     try {
-      await send(order);
+      if (await send(order)) sent.push(channel);
     } catch (error) {
       console.error(`[${context}] Failed to send status update (${channel})`, error);
     }
   }
+  return sent;
 }
 
 type OrderStatusNotifiable = { id: number; orderNumber: string; customerEmail: string | null; customerName: string; customerPhone: string; status: string; paymentStatus: string; deliveryTrackingRef: string | null; userId: number | null; deliveryMethod?: string | null };
 
-async function sendOrderStatusUpdateEmail(order: { orderNumber: string; customerEmail: string | null; customerName: string; status: string; paymentStatus: string; deliveryTrackingRef: string | null }) {
-  if (!order.customerEmail) return;
+/** Процессын бүртгэл (2026-10-05): харилцагчид төлөвийн мэдэгдэл явуулсан алхам — БОДИТООР илгээсэн сувгууд л (нэр/утас биш). Суваг нэг ч илгээгдээгүй бол мөр бичихгүй. */
+async function recordCustomerNotified(order: OrderStatusNotifiable, context: string, channels: string[]) {
+  if (!channels.length) return;
+  try {
+    await recordOrderEventOutsideTx({ orderId: order.id, kind: "notify.customer", actor: { kind: "system", label: "Систем" }, payload: { context, status: order.status, channels } });
+  } catch (error) {
+    console.error(`[${context}] order_events бичигдсэнгүй:`, error);
+  }
+}
+
+async function sendOrderStatusUpdateEmail(order: { orderNumber: string; customerEmail: string | null; customerName: string; status: string; paymentStatus: string; deliveryTrackingRef: string | null }): Promise<boolean> {
+  if (!order.customerEmail) return false;
   const messageKey = orderStatusMessageKeys[order.status];
-  if (!messageKey) return; // "pending" (initial state) has no transition to announce.
+  if (!messageKey) return false; // "pending" (initial state) has no transition to announce.
   const message = await getStoreSettingValue(messageKey);
   const trackingLine = order.deliveryTrackingRef ? `\nХүргэлтийн дугаар: ${order.deliveryTrackingRef}` : "";
   // Audit 2026-09-09 (R2): a cancelled order whose payment was already
@@ -843,6 +859,7 @@ async function sendOrderStatusUpdateEmail(order: { orderNumber: string; customer
     subject: fillTemplate(await getStoreSettingValue("email-subject-order-status"), { "{захиалга}": order.orderNumber }),
     content: `Сайн байна уу, ${order.customerName}!\n\n${message}${trackingLine}${refundLine}\n\nЗахиалгын дугаар: ${order.orderNumber}`,
   });
+  return true;
 }
 
 // assertImageSignature / processUploadedImageOrThrow moved to
@@ -2112,7 +2129,7 @@ export const appRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Захиалгыг цуцалж чадсангүй." });
       }
       // 2026-09-23: суваг бүр тусдаа — имэйлийн алдаа push/SMS-ийг тасалдаг байв.
-      await notifyOrderStatusChange(order, "orders.cancel");
+      await recordCustomerNotified(order, "orders.cancel", await notifyOrderStatusChange(order, "orders.cancel"));
       return toCustomerOrder(order);
     }),
   }),
@@ -3442,6 +3459,45 @@ export const appRouter = router({
     // audit log is never urgent (nothing here is a live-incident view). The
     // cache key includes every filter param so switching filters can never
     // return a different filter's stale result.
+    // /admin → Процесс (2026-10-05): захиалгын бодит гинж (checkout → төлбөр → нөөц →
+    // баталгаажуулалт → … → Smart Software), хэн/юу хийснийг (order_events, 0101),
+    // хүний шийдвэр хүлээж буй алхмууд, job-уудын түүх (job_runs, 0102). `admin.`
+    // угтвар хэвээр тул trpcBatchGuard-ийн PRIVILEGED_PREFIXES, клиентийн splitLink
+    // өөрчлөгдөхгүй. Батлах дэлгэцүүдийг ДАХИН хийхгүй — байгаа хэсгүүд рүү холбоос.
+    process: router({
+      overview: ordersReadProcedure.input(z.object({ stuckHours: z.number().int().min(1).max(168).default(24) }))
+        .query(({ input }) => getOrSetCached(`process:overview:${input.stuckHours}`, 30_000, () => getProcessOverview(input.stuckHours))),
+      stageOrders: ordersReadProcedure.input(z.object({
+        status: orderStatusSchema,
+        stuckOnly: z.boolean().default(false),
+        stuckHours: z.number().int().min(1).max(168).default(24),
+        limit: z.number().int().positive().max(100).default(50),
+      })).query(({ input }) => getStageOrders(input)),
+      returnRequests: ordersReadProcedure.query(() => getOpenReturnRequests(20)),
+      // Аудитын мөрүүд (ажилтны нэр) зөвхөн admin-д — AdminHistoryPanel-тэй ижил тиер.
+      orderTrail: ordersReadProcedure.input(z.object({ orderId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+        const order = await getAdminOrderWithItems(input.orderId);
+        if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "Захиалга олдсонгүй." });
+        const timeline = await getOrderTrail(input.orderId, { includeAudit: ctx.user.role === "admin" });
+        return { order, timeline };
+      }),
+      jobs: adminProcedure.query(() => getOrSetCached("process:jobs", 15_000, async () => {
+        const [runs, states] = await Promise.all([getRecentJobRuns(50), getScheduledJobStates()]);
+        const stateByName = new Map(states.map(state => [state.jobName, state]));
+        const jobs = listRegisteredJobs().map(job => {
+          const state = stateByName.get(job.name);
+          const lastRunAt = state?.lastRunAt ?? null;
+          return { name: job.name, intervalMs: job.intervalMs, lastRunAt, claimedAt: state?.claimedAt ?? null, nextDueAt: lastRunAt ? new Date(lastRunAt.getTime() + job.intervalMs) : null };
+        });
+        // Staging болон cluster-ийн instance ≠ 0 дээр scheduler огт ажилладаггүй (clusterRole.ts) —
+        // "жагсаалт хоосон" нь алдаа биш гэдгийг самбар тайлбарлана.
+        return { runs, jobs, schedulerActive: isBackgroundJobRunner() };
+      })),
+      auditFeed: adminProcedure.input(z.object({
+        limit: z.number().int().positive().max(200).default(100),
+        actorKind: z.enum(["customer", "staff", "job", "webhook", "system"]).optional(),
+      })).query(({ input }) => getOrSetCached(`process:auditFeed:${input.limit}:${input.actorKind ?? ""}`, 30_000, () => getAuditFeed({ limit: input.limit, actorKind: input.actorKind ?? null }))),
+    }),
     auditLogs: adminProcedure.input(z.object({
       action: z.string().trim().max(100).optional(),
       actorEmail: z.string().trim().max(320).optional(),
@@ -3585,7 +3641,7 @@ export const appRouter = router({
       // (`statusChanged`). `updateAdminOrder` ижил төлөвөөр шинэчлэхийг
       // зөвшөөрдөг тул аль хэдийн "shipped" захиалгыг дахин "shipped" болгоход
       // худалдан авагч хоёр дахь имэйл/push/SMS авдаг байв.
-      if (order.statusChanged) await notifyOrderStatusChange(order, "admin.updateOrder");
+      if (order.statusChanged) await recordCustomerNotified(order, "admin.updateOrder", await notifyOrderStatusChange(order, "admin.updateOrder"));
       return order;
     }),
     // TIER 5: bulk status change. Re-runs the exact same per-order rules as
@@ -3600,14 +3656,14 @@ export const appRouter = router({
       const failed: { id: number; message: string }[] = [];
       for (const id of input.ids) {
         try {
-          const order = await updateAdminOrder({ id, status: input.status, actorUserId: ctx.user.id });
+          const order = await updateAdminOrder({ id, status: input.status, actorUserId: ctx.user.id, eventMeta: { bulk: true } });
           await logAdminAction({ actorUserId: ctx.user.id, action: "order.updated", entityType: "order", entityId: order.id, metadata: { status: order.status, bulk: true } });
           succeeded.push(id);
           // 2026-09-23: `statusChanged` (updateAdminOrder-ийн буцаалт) — өмнө нь
           // "status дамжуулсан эсэх"-ийг хардаг байсан тул bulk-аар 30 захиалгад
           // "shipped" тавихад аль хэдийн илгээгдсэн захиалгын эзэд хоёр дахь
           // имэйл/push/SMS (төлбөртэй) авдаг байв.
-          if (order.statusChanged) await notifyOrderStatusChange(order, "admin.bulkUpdateOrderStatus");
+          if (order.statusChanged) await recordCustomerNotified(order, "admin.bulkUpdateOrderStatus", await notifyOrderStatusChange(order, "admin.bulkUpdateOrderStatus"));
         } catch (error) {
           failed.push({ id, message: userFacingMessage(error, "Захиалгыг шинэчилж чадсангүй.") });
         }
@@ -3923,7 +3979,10 @@ export const appRouter = router({
       return { ok: true };
     }),
     // Product Q&A moderation (2026-09-13).
-    questions: marketingProcedure.query(() => getAdminQuestions()),
+    questions: marketingProcedure.input(z.object({
+      page: z.number().int().positive().default(1),
+      pageSize: z.number().int().positive().max(200).default(50),
+    })).query(({ input }) => getAdminQuestions(input)),
     setQuestionApproved: marketingProcedure.input(z.object({ id: z.number().int().positive(), isApproved: z.boolean() })).mutation(async ({ ctx, input }) => {
       await setQuestionApproved(input.id, input.isApproved);
       await logAdminAction({ actorUserId: ctx.user.id, action: input.isApproved ? "question.show" : "question.hide", entityType: "product_question", entityId: input.id });
@@ -4031,6 +4090,15 @@ export const appRouter = router({
     // ---- Бүх барааны нийтийн хямдрал (2026-09-29, docs/SITEWIDE-SALE-PLAN.md) ----
     // Tom: "зөвхөн admin асааж, унтрааж, засна". Үнэ DB-д хөндөгдөхгүй.
     priceCampaigns: adminProcedure.query(() => listPriceCampaigns()),
+    priceCampaignReport: adminProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ input }) => {
+      // NOT_FOUND-ыг compute ДОТОР шиднэ — ttlCache шидсэн үр дүнг хадгалдаггүй тул дурын id-гаар
+      // кэш дүүргэх боломжгүй (PROJECT-GUIDE: хэрэглэгчийн түлхүүрээр 404 кэшлэхгүй).
+      return getOrSetCached(`priceCampaignReport:${input.id}`, 60_000, async () => {
+        const report = await getPriceCampaignReport(input.id);
+        if (!report) throw new TRPCError({ code: "NOT_FOUND", message: "Хямдрал олдсонгүй." });
+        return report;
+      });
+    }),
     previewPriceCampaign: adminProcedure.input(z.object({ percentOff: z.number().int().min(1).max(90) })).query(({ input }) => previewPriceCampaign(input.percentOff)),
     savePriceCampaign: adminProcedure.input(z.object({
       id: z.number().int().positive().optional(),
@@ -4044,6 +4112,7 @@ export const appRouter = router({
           ? await updatePriceCampaign({ id: input.id, name: input.name, percentOff: input.percentOff, startsAt: input.startsAt, endsAt: input.endsAt, actorUserId: ctx.user.id })
           : await createPriceCampaign({ name: input.name, percentOff: input.percentOff, startsAt: input.startsAt, endsAt: input.endsAt, actorUserId: ctx.user.id });
         await logAdminAction({ actorUserId: ctx.user.id, action: input.id ? "price_campaign.updated" : "price_campaign.created", entityType: "price_campaign", entityId: saved?.id ?? input.id ?? null, metadata: { percentOff: input.percentOff, startsAt: input.startsAt.toISOString(), endsAt: input.endsAt.toISOString() } });
+        if (input.id) invalidateCached(`priceCampaignReport:${input.id}`);
         return saved;
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: userFacingMessage(error, "Хямдрал хадгалж чадсангүй.") });
@@ -4053,6 +4122,7 @@ export const appRouter = router({
       try {
         const result = await stopPriceCampaign({ id: input.id, actorUserId: ctx.user.id });
         await logAdminAction({ actorUserId: ctx.user.id, action: "price_campaign.stopped", entityType: "price_campaign", entityId: input.id });
+        invalidateCached(`priceCampaignReport:${input.id}`); // цонх stoppedAt-аар хаагдсан — 60 с хуучин тайлан үлдээхгүй
         return result;
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: userFacingMessage(error, "Хямдрал зогсоож чадсангүй.") });
@@ -4062,6 +4132,7 @@ export const appRouter = router({
       try {
         const result = await deletePriceCampaign(input.id);
         await logAdminAction({ actorUserId: ctx.user.id, action: "price_campaign.deleted", entityType: "price_campaign", entityId: input.id });
+        invalidateCached(`priceCampaignReport:${input.id}`);
         return result;
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: userFacingMessage(error, "Хямдрал устгаж чадсангүй.") });

@@ -120,19 +120,20 @@ export function templateKeyForOrderStatus(status: string, deliveryMethod?: strin
  * болдог"*. Унтраах хоёр зам: `push-order-notifications = 0` (бүгд), эсвэл
  * тухайн төлөвийн **биеийг хоосон болгох** (зөвхөн тэр нэг).
  */
-export async function sendOrderStatusPush(order: { id: number; userId: number | null; orderNumber: string; status: string; deliveryMethod?: string | null }): Promise<void> {
-  if (!order.userId) return;
+/** Буцаах утга (2026-10-05): бодитоор илгээхийг оролдсон бол true — /admin → Процесс-ийн "notify.customer" мөрд. */
+export async function sendOrderStatusPush(order: { id: number; userId: number | null; orderNumber: string; status: string; deliveryMethod?: string | null }): Promise<boolean> {
+  if (!order.userId) return false;
   const templateKey = templateKeyForOrderStatus(order.status, order.deliveryMethod);
-  if (!templateKey) return;
+  if (!templateKey) return false;
   try {
-    if ((await getStoreSettingValue("push-order-notifications")).trim() === "0") return;
+    if ((await getStoreSettingValue("push-order-notifications")).trim() === "0") return false;
     const [title, body] = await Promise.all([
       getStoreSettingValue(`push-title-order-${templateKey}` as StoreSettingKey),
       getStoreSettingValue(`push-body-order-${templateKey}` as StoreSettingKey),
     ]);
     // Хоосон бие = энэ төлөвийг унтраасан. Гарчиг нь хоосон бол мэдэгдэл
     // нэргүй гарах тул мөн илгээхгүй.
-    if (!body.trim() || !title.trim()) return;
+    if (!body.trim() || !title.trim()) return false;
     const values = { "{захиалга}": order.orderNumber };
     await sendPushToUser(order.userId, {
       title: fillTemplate(title, values),
@@ -140,7 +141,9 @@ export async function sendOrderStatusPush(order: { id: number; userId: number | 
       url: "/profile?tab=orders",
       tag: `order-${order.id}`,
     });
+    return true;
   } catch (error) {
     console.warn("[push] order status push failed", error instanceof Error ? error.message : error);
+    return false;
   }
 }

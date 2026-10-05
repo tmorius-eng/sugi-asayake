@@ -3,6 +3,7 @@ import { Banknote, Download, FileText, LayoutGrid, List, LoaderCircle, PackageCh
 import { savePdfBase64 } from "@/lib/pdf";
 import ManualOrderForm from "./admin/ManualOrderForm";
 import OrderEditForm from "./admin/OrderEditForm";
+import ProcessOrderTrail from "./admin/process/ProcessOrderTrail";
 import { toast } from "sonner";
 import { downloadCsv } from "@/lib/csv";
 // 2026-09-23: огноо ОРОН НУТГИЙН өдрөөр (UTC+8) — toISOString нь 08:00-аас өмнөх захиалгыг өмнөх өдөрт тавьдаг байв.
@@ -59,6 +60,7 @@ export default function AdminOperationsPanel({ preview = false, query = "", role
   // Staff-side order writes (2026-09-14): manual order form + in-place edit + PDFs.
   const [showManualOrder, setShowManualOrder] = useState(false);
   const [editingOrderId, setEditingOrderId] = useState<number | null>(null);
+  const [trailOrderId, setTrailOrderId] = useState<number | null>(null);
   const packingSlip = trpc.admin.packingSlipPdf.useMutation({ onSuccess: ({ fileName, base64 }) => savePdfBase64(fileName, base64), onError: error => toast.error(messageFrom(error)) });
   const staffInvoice = trpc.admin.orderInvoicePdf.useMutation({ onSuccess: ({ fileName, base64 }) => savePdfBase64(fileName, base64), onError: error => toast.error(messageFrom(error)) });
   const isOpenOrder = (status: string) => status !== "completed" && status !== "cancelled" && status !== "returned";
@@ -223,6 +225,8 @@ export default function AdminOperationsPanel({ preview = false, query = "", role
               <button type="button" disabled={preview || staffInvoice.isPending} onClick={() => staffInvoice.mutate({ orderId: order.id })} className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--a-border)] px-3 text-[11px] font-bold text-[var(--a-text-soft)] hover:border-[#df1f3d] hover:text-[#df1f3d]"><FileText size={12} />Баримт PDF</button>
             </div>
             {editingOrderId === order.id && <OrderEditForm order={order} onDone={() => setEditingOrderId(null)} />}
+            {!preview && <button type="button" aria-expanded={trailOrderId === order.id} onClick={() => setTrailOrderId(current => current === order.id ? null : order.id)} className="mt-2 inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--a-border)] px-3 text-[11px] font-bold text-[var(--a-text-soft)]">Түүх</button>}
+            {trailOrderId === order.id && <ProcessOrderTrail compact orderId={order.id} />}
             <p className="mt-2 text-[11px] text-[var(--a-faint)]">И-баримт: {order.ebarimtStatus === "issued" ? order.ebarimtReceiptId : order.ebarimtStatus === "failed" ? <span className="font-bold text-[#df1f3d]">Алдаа гарсан</span> : "—"}</p>
             {/* Admin overhaul (2026-09-08, Phase E): refund is deliberately its
                 own action, not a 3rd option folded into the status <select>

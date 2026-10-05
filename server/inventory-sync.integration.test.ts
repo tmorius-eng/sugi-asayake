@@ -230,6 +230,25 @@ describeWithDatabase("inventory sync runners (fake provider)", () => {
     }
   });
 
+  it("does not block auto-apply at a closed branch flagged online: it no longer counts toward online stock", async () => {
+    const database = await db();
+    await database.update(branches).set({ countsTowardOnlineStock: true, isActive: false }).where(eq(branches.id, branchId));
+    try {
+      const provider = new FakeInventorySyncProvider();
+      const before = await shelf(variantA);
+      provider.snapshot = snapshotOf({ [skuA]: { [locationId]: before + 3 } });
+      const result = await runPullSnapshot(provider, autoOptions);
+      expect(result.ran).toBe(true);
+      if (!result.ran) return;
+      // Хаагдсан салбар онлайн нөөцөд тоологдохгүй тул "онлайн гэж хаагдсан" мөр үүсэх ёсгүй —
+      // салбар огт алгасагдсан (мөргүй) эсвэл мөртэй ч блоклоогүй, аль аль нь зөв.
+      const row = result.branches.find(branch => branch.branchId === branchId);
+      expect(row?.onlineAutoApplyBlocked ?? false).toBe(false);
+    } finally {
+      await database.update(branches).set({ countsTowardOnlineStock: false, isActive: true }).where(eq(branches.id, branchId));
+    }
+  });
+
   it("leaves a product the vendor did not send completely alone", async () => {
     const database = await db();
     await applyBranchStockDelta(database, branchId, variantB, 6, { type: "receipt", note: `${marker} keep` });

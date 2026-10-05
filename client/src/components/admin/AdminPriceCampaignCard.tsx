@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { LoaderCircle, Percent } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -53,6 +53,7 @@ export default function AdminPriceCampaignCard() {
   const utils = trpc.useUtils();
   const { fieldProps, errorFor, showErrors, clearError } = useFieldErrors();
 
+  const [reportId, setReportId] = useState<number | null>(null);
   const campaignsQuery = trpc.admin.priceCampaigns.useQuery();
   const [form, setForm] = useState<CampaignForm>(emptyForm());
   const [now, setNow] = useState(() => Date.now());
@@ -246,7 +247,8 @@ export default function AdminPriceCampaignCard() {
                 const editable = !campaign.stoppedAt;
                 const notYetStarted = new Date(campaign.startsAt).getTime() > now;
                 return (
-                  <tr key={campaign.id}>
+                  <Fragment key={campaign.id}>
+                  <tr>
                     <td className="border-b border-[var(--a-border)] py-3">
                       {editable ? (
                         <button type="button" onClick={() => editCampaign(campaign)} className="text-left font-bold hover:text-[#df1f3d]">{campaign.name}</button>
@@ -259,11 +261,16 @@ export default function AdminPriceCampaignCard() {
                     <td className="border-b border-[var(--a-border)] py-3"><span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${toneClass}`}>{status.label}</span></td>
                     <td className="border-b border-[var(--a-border)] py-3 text-right">
                       <div className="flex justify-end gap-2">
+                        {!notYetStarted && <button type="button" aria-expanded={reportId === campaign.id} onClick={() => setReportId(reportId === campaign.id ? null : campaign.id)} className="text-[10px] font-bold text-[var(--a-text)] hover:text-[#df1f3d]">Тайлан</button>}
                         {status.tone === "pos" && <button type="button" onClick={() => doStop(campaign)} className="text-[10px] font-bold text-[#df1f3d]">Одоо зогсоох</button>}
                         {notYetStarted && !campaign.stoppedAt && <button type="button" onClick={() => doDelete(campaign)} className="text-[10px] font-bold text-[var(--a-muted)] hover:text-[#df1f3d]">Устгах</button>}
                       </div>
                     </td>
                   </tr>
+                  {reportId === campaign.id && (
+                    <tr><td colSpan={5} className="border-b border-[var(--a-border)] pb-4"><CampaignReport id={campaign.id} /></td></tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>
@@ -284,4 +291,61 @@ function useDebouncedNumber(value: number, delayMs: number): number {
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, [value, delayMs]);
   return debounced;
+}
+
+function DeltaPct({ value }: { value: number | null }) {
+  if (value === null) return <span className="text-[10px] text-[var(--a-muted)]">өмнөх үеэс харьцуулах өгөгдөлгүй</span>;
+  const up = value >= 0;
+  return <span className={`text-[10px] font-bold ${up ? "text-[var(--a-pos)]" : "text-[#df1f3d]"}`}>{`${up ? "▲" : "▼"} ${Math.abs(value)}% өмнөх үеэс`}</span>;
+}
+
+/** Нэг хямдралын тайлан (SITEWIDE-SALE-PLAN §4): 4 үзүүлэлт, өдрөөр, тэргүүлэх 5 бараа. */
+function CampaignReport({ id }: { id: number }) {
+  const reportQuery = trpc.admin.priceCampaignReport.useQuery({ id });
+  if (reportQuery.isLoading) return <div className="flex items-center gap-2 py-3 text-xs text-[var(--a-muted)]"><LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />Тайлан бэлтгэж байна…</div>;
+  if (reportQuery.error || !reportQuery.data) return <p role="alert" className="py-3 text-xs text-[#df1f3d]">{reportQuery.error?.message ?? "Тайлан уншигдсангүй."}</p>;
+  const report = reportQuery.data;
+  const tiles = [
+    { label: "ЗАХИАЛГА", value: report.orders.orders.toLocaleString("en-US"), delta: report.previous.deltaPct.orders },
+    { label: "БОРЛУУЛАЛТ", value: `${report.orders.revenueMnt.toLocaleString("en-US")}₮`, delta: report.previous.deltaPct.revenueMnt },
+    { label: "ХӨНГӨЛСӨН ДҮН", value: `${report.orders.discountMnt.toLocaleString("en-US")}₮`, delta: undefined },
+    { label: "ДУНДАЖ ЗАХИАЛГА", value: `${report.orders.avgOrderMnt.toLocaleString("en-US")}₮`, delta: undefined },
+  ];
+  return (
+    <div className="mt-3 min-w-0 space-y-4">
+      <div className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-4">
+        {tiles.map(tile => (
+          <div key={tile.label} className="min-w-0 rounded-xl bg-[var(--a-soft)] p-3">
+            <p className="text-[10px] font-extrabold tracking-wide text-[var(--a-muted)]">{tile.label}</p>
+            <p className="mt-1 break-words text-sm font-extrabold">{tile.value}</p>
+            {tile.delta !== undefined && <div className="mt-1"><DeltaPct value={tile.delta} /></div>}
+          </div>
+        ))}
+      </div>
+      <div className="grid min-w-0 gap-4 md:grid-cols-2">
+        <div className="min-w-0 overflow-x-auto">
+          <table className="w-full min-w-[320px] border-separate border-spacing-0 text-left text-xs">
+            <thead><tr><th className="border-b border-[var(--a-border)] pb-2">ӨДӨР</th><th className="border-b border-[var(--a-border)] pb-2 text-right">ЗАХИАЛГА</th><th className="border-b border-[var(--a-border)] pb-2 text-right">БОРЛУУЛАЛТ</th><th className="border-b border-[var(--a-border)] pb-2 text-right">ХӨНГӨЛӨЛТ</th></tr></thead>
+            <tbody>
+              {report.byDay.length === 0 && <tr><td colSpan={4} className="py-3 text-[var(--a-muted)]">Энэ хугацаанд хямдралтай захиалга ороогүй.</td></tr>}
+              {report.byDay.map(row => (
+                <tr key={row.day}><td className="border-b border-[var(--a-border)] py-2">{row.day}</td><td className="border-b border-[var(--a-border)] py-2 text-right">{row.orders}</td><td className="border-b border-[var(--a-border)] py-2 text-right">{row.revenueMnt.toLocaleString("en-US")}₮</td><td className="border-b border-[var(--a-border)] py-2 text-right">{row.discountMnt.toLocaleString("en-US")}₮</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="min-w-0 overflow-x-auto">
+          <table className="w-full min-w-[320px] border-separate border-spacing-0 text-left text-xs">
+            <thead><tr><th className="border-b border-[var(--a-border)] pb-2">ТЭРГҮҮЛЭХ 5 БАРАА</th><th className="border-b border-[var(--a-border)] pb-2 text-right">ШИРХЭГ</th><th className="border-b border-[var(--a-border)] pb-2 text-right">ХӨНГӨЛӨЛТ</th></tr></thead>
+            <tbody>
+              {report.topProducts.length === 0 && <tr><td colSpan={3} className="py-3 text-[var(--a-muted)]">Бараа зарагдаагүй.</td></tr>}
+              {report.topProducts.map(row => (
+                <tr key={`${row.sku}-${row.productName}`}><td className="border-b border-[var(--a-border)] py-2"><span className="font-bold">{row.productName}</span> <span className="text-[var(--a-muted)]">{row.sku}</span></td><td className="border-b border-[var(--a-border)] py-2 text-right">{row.quantity}</td><td className="border-b border-[var(--a-border)] py-2 text-right">{row.discountMnt.toLocaleString("en-US")}₮</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
 }

@@ -5,7 +5,7 @@
 import { randomBytes } from "node:crypto";
 import { sqlInt } from "../_core/sqlSafe";
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lt, lte, ne, or, sql } from "drizzle-orm";
-import { adminAuditLogs, campaignSendClaims, cartItems, carts, loginAttempts, marketingSpend, productCategories, products, pushSubscriptions, scheduledJobRuns, storeCreditLedger, storeSettings, users, visitorSessions } from "../../drizzle/schema";
+import { adminAuditLogs, campaignSendClaims, cartItems, carts, jobRuns, loginAttempts, marketingSpend, productCategories, products, pushSubscriptions, scheduledJobRuns, storeCreditLedger, storeSettings, users, visitorSessions } from "../../drizzle/schema";
 import { getStoreSettingSlot, type StoreSettingKey } from "../../shared/store-settings";
 import { getOrSetCached } from "../_core/ttlCache";
 import { STOREFRONT_CACHE_KEYS, STOREFRONT_CACHE_TTL_MS, invalidateStorefront } from "./site";
@@ -127,6 +127,73 @@ export async function markScheduledJobRun(jobName: string): Promise<void> {
   const db = await getDb();
   if (!db) return;
   await db.insert(scheduledJobRuns).values({ jobName, lastRunAt: new Date() }).onDuplicateKeyUpdate({ set: { lastRunAt: new Date() } });
+}
+
+/**
+ * Ажиллалт бүрийн түүх (2026-10-05, migration 0102, `job_runs`): scheduler
+ * job эхлэхэд мөр нээж, дуусахад (амжилттай ч, унасан ч) хаана. Хүснэгт
+ * хараахан үүсээгүй DB-д (migration ажиллаагүй) чимээгүй алгасна — түүх нь
+ * job-ийн өөрийн ажлыг хэзээ ч зогсоох ёсгүй.
+ */
+export async function startJobRun(jobName: string, claimedBy: string): Promise<number | null> {
+  const db = await getDb();
+  if (!db) return null;
+  try {
+    const inserted = await db.insert(jobRuns).values({ jobName, claimedBy: claimedBy.slice(0, 80) });
+    return Number(inserted[0].insertId) || null;
+  } catch (error) {
+    if (isMissingTableError(error)) return null;
+    throw error;
+  }
+}
+
+export async function finishJobRun(runId: number, result: { ok: boolean; error?: string | null; affectedCount?: number | null }): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(jobRuns).set({
+    finishedAt: new Date(),
+    ok: result.ok,
+    error: result.error ? result.error.slice(0, 500) : null,
+    affectedCount: result.affectedCount ?? null,
+  }).where(eq(jobRuns.id, runId));
+}
+
+/** Job бүрийн сүүлийн ажиллалтууд (шинэ нь эхэнд). */
+export async function getRecentJobRuns(limit = 50) {
+  const db = await getDb();
+  if (!db) return [];
+  try {
+    return await db.select().from(jobRuns).orderBy(desc(jobRuns.id)).limit(Math.max(1, Math.min(500, limit)));
+  } catch (error) {
+    if (isMissingTableError(error)) return [];
+    throw error;
+  }
+}
+
+/** Бүртгэгдсэн job бүрийн lastRunAt/claimedAt (nextDueAt-ийг дуудагч интервалаар бодно). */
+export async function getScheduledJobStates() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(scheduledJobRuns);
+}
+
+/** data-retention: `days`-аас хуучин ажиллалтын мөрийг устгана; устгасан тоо. */
+export async function purgeJobRuns(days: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const cutoff = new Date(Date.now() - days * 86_400_000);
+  try {
+    const deleted = await db.delete(jobRuns).where(lt(jobRuns.startedAt, cutoff));
+    return Number(deleted[0]?.affectedRows ?? 0);
+  } catch (error) {
+    if (isMissingTableError(error)) return 0;
+    throw error;
+  }
+}
+
+function isMissingTableError(error: unknown): boolean {
+  const text = String((error as { cause?: { message?: string } })?.cause?.message ?? (error as Error)?.message ?? "");
+  return /doesn't exist|ER_NO_SUCH_TABLE/.test(text);
 }
 
 /**

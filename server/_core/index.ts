@@ -38,6 +38,7 @@ import { trpcBatchGuard } from "./trpcBatchGuard";
 import { serveStatic, setupVite } from "./vite";
 import { describeClusterRole, isBackgroundJobRunner } from "./clusterRole";
 import { planMysqlConnection } from "./dbConnection";
+import { assertMigrationsApplied } from "./migrationCheck";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -117,6 +118,9 @@ async function startServer() {
   // getDb() залгидаг тул DB-ийн буруу тохиргоо (production-д CA байхгүй гэх мэт)
   // чимээгүй DB-гүй асахын оронд эхлэхээс татгалзана (pm2 алдааг харуулна).
   if (process.env.DATABASE_URL) planMysqlConnection(process.env.DATABASE_URL);
+  // 2026-10-05: кодын шаарддаг migration DB-д ороогүй бол production-д ЭХЛЭХГҮЙ —
+  // 0098/0099-гүй deploy checkout болон сешн бүрийг чимээгүй унагаадаг байв (migrationCheck.ts).
+  await assertMigrationsApplied();
   const app = express();
   const server = createServer(app);
   app.set("trust proxy", 1);

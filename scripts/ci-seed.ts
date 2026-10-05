@@ -4,7 +4,9 @@
 // дараа ажиллуулна. Idempotent: байгаа slug-ийг хөндөхгүй.
 import "dotenv/config";
 import { eq } from "drizzle-orm";
-import { branches, productCategories } from "../drizzle/schema";
+import { randomBytes } from "node:crypto";
+import { branches, productCategories, users } from "../drizzle/schema";
+import { hashPassword } from "../server/_core/password";
 import { getDb } from "../server/db";
 import { refuseProductionDatabase } from "./_refuse-production";
 
@@ -37,6 +39,18 @@ async function main() {
     created += 1;
   }
   console.log(`branches: ${created} created, ${STORES.length - created} already present`);
+
+  // Лавлах ажилтан (2026-10-05): хэд хэдэн integration тест `actorUserId: 1`-ээр бичдэг
+  // (стaging/prod дээр #1 = эзэн тул ногоон). `order_events.actorUserId` FK (0101)-тэй
+  // болсноор хоосон CI схемд тэр id байхгүй бол захиалгын бичилт бүр унадаг байв.
+  // Хоосон users хүснэгтэд энэ мөр #1 болно; байвал дахин үүсгэхгүй.
+  const [existingStaff] = await db.select({ id: users.id }).from(users).where(eq(users.phone, "ci-reference-staff")).limit(1);
+  if (existingStaff) {
+    console.log(`users: reference staff already present (#${existingStaff.id})`);
+  } else {
+    const inserted = await db.insert(users).values({ name: "CI reference staff", phone: "ci-reference-staff", email: "ci-reference-staff@example.invalid", role: "admin", passwordHash: await hashPassword(randomBytes(24).toString("hex")) });
+    console.log(`users: reference staff created (#${Number(inserted[0].insertId)})`);
+  }
 
   const [existingCategory] = await db.select({ id: productCategories.id }).from(productCategories).where(eq(productCategories.slug, CATEGORY.slug)).limit(1);
   if (existingCategory) {

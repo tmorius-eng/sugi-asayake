@@ -1,4 +1,4 @@
-import { LayoutDashboard, LineChart, PackagePlus, CheckCircle2, CreditCard, FilePenLine, FileText, Star, ListChecks, Megaphone, Tag, Tags, ImageUp, UsersRound, ChartColumnIncreasing, ShieldAlert, Plug, CalendarDays, Send, Settings, MapPin, ShoppingBag, Smartphone, ScanBarcode, Search, LogOut, Menu, type LucideIcon } from "lucide-react";
+import { Workflow, LayoutDashboard, LineChart, PackagePlus, CheckCircle2, CreditCard, FilePenLine, FileText, Star, ListChecks, Megaphone, Tag, Tags, ImageUp, UsersRound, ChartColumnIncreasing, ShieldAlert, Plug, CalendarDays, Send, Settings, MapPin, ShoppingBag, Smartphone, ScanBarcode, Search, LogOut, Menu, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import type { AdminSection } from "../AdminWorkspace";
@@ -23,6 +23,7 @@ export type NavItem = { key: AdminSection; label: string; Icon: LucideIcon };
 const nestedGroup: NavItem[] = [
   { key: "dashboard", label: "Хянах самбар", Icon: LayoutDashboard },
   { key: "analytics", label: "Аналитик", Icon: ChartColumnIncreasing },
+  { key: "process", label: "Процесс", Icon: Workflow },
   { key: "security", label: "Аюулгүй байдал", Icon: ShieldAlert },
 ];
 const flatGroup: NavItem[] = [
@@ -63,10 +64,11 @@ const adminOnlyFlatGroup: NavItem[] = [
 // section). "calendar" is the shared Content Calendar reading both posts and
 // promotions (contentReadProcedure), open to staff AND marketing even though
 // neither can write both halves of what it displays.
-const SECTION_ROLES: Record<AdminSection, ReadonlySet<string>> = {
+export const SECTION_ROLES: Record<AdminSection, ReadonlySet<string>> = {
   dashboard: new Set(["staff", "finance", "marketing", "warehouse", "admin"]),
   analytics: new Set(["finance", "admin"]),
   security: new Set(["admin"]),
+  process: new Set(["warehouse", "finance", "admin"]),
   products: new Set(["warehouse", "admin"]),
   // Phase E: finance needs to find a returned-but-unrefunded order before it
   // can call admin.refundOrder on it (see ordersReadProcedure in

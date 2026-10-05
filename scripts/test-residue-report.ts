@@ -42,6 +42,7 @@ export const TEST_PRODUCT_PATTERNS = [
   "Branches checkout test product",
   "Guest checkout test product",
   "Transfer test product%",
+  "Trail product",
   "Alert test product%",
   // 2026-09-23: тасалсан run-аас үлдэж, дараагийн run-уудыг унагаж байсан
   // хоёр fixture (хайлтын тест "Gokujyun" гэж хайхад хуучин бараа гарч ирсэн).

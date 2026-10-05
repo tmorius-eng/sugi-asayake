@@ -15,6 +15,8 @@ const state = new Map<string, Date>();
 vi.mock("../db", () => ({
   getScheduledJobLastRun: vi.fn(async (jobName: string) => state.get(jobName) ?? null),
   markScheduledJobRun: vi.fn(async (jobName: string) => { state.set(jobName, new Date()); }),
+  startJobRun: vi.fn(async () => 1),
+  finishJobRun: vi.fn(async () => undefined),
   getDb: vi.fn(async () => ({
     execute: vi.fn(async () => [[]]),
     update: vi.fn(() => ({
@@ -70,6 +72,20 @@ describe("scheduler", () => {
     expect(run).toHaveBeenCalledTimes(1);
     expect(markScheduledJobRun).not.toHaveBeenCalledWith(name);
     expect(state.has(name)).toBe(false);
+  });
+
+  it("writes a job_runs row for every run: ok with affectedCount, failed with the error text (2026-10-05)", async () => {
+    const { registerJob, runDueJobsOnce } = await import("./scheduler");
+    const { startJobRun, finishJobRun } = await import("../db");
+    const okName = `test-job-ok-${Date.now()}`;
+    const badName = `test-job-bad-${Date.now()}`;
+    registerJob({ name: okName, intervalMs: 10_000, run: vi.fn(async () => ({ affectedCount: 3 })) });
+    registerJob({ name: badName, intervalMs: 10_000, run: vi.fn(async () => { throw new Error("boom"); }) });
+    await runDueJobsOnce();
+    expect(startJobRun).toHaveBeenCalledWith(okName, expect.stringMatching(/#\d+$/));
+    expect(startJobRun).toHaveBeenCalledWith(badName, expect.any(String));
+    expect(finishJobRun).toHaveBeenCalledWith(1, { ok: true, affectedCount: 3 });
+    expect(finishJobRun).toHaveBeenCalledWith(1, { ok: false, error: "boom" });
   });
 
   it("keeps two different job names from interfering with each other", async () => {
