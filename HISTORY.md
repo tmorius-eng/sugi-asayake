@@ -80,9 +80,12 @@ checkout унана (`order_items.listPriceMnt` болзолгүй) — fallback
   өмнөх ижил цонхтой харьцуулалт, өдрөөр, топ 5 — `AdminPriceCampaignCard`-д "Тайлан").
 - Баримт: PROJECT-GUIDE (6 шийдвэр ✅, тестийн тоо), OWNER-HANDOVER тоо, SALE-PLAN header.
 
-⛔ **Tom-ийн гар**: prod-д 0096→0100, дараа нь **0101, 0102** → deploy → `backfill-order-events.ts
---i-know-this-is-production` (idempotent) → `/admin → Процесс`. Deploy-ийн дараа
-`/api/trpc/x/catalog.list` 404 "Олдсонгүй." буцаавал шинэ код батлагдсан.
+✅ **Deploy хийгдсэн (20:54)**: Tom гэртээ prod-д 0096→0102 (103/103) → `deploy.ps1` (`d91b9fd`) →
+шинэ код амьд (`/api/trpc/x/catalog.list` 404, /health up, үндсэн хуудсууд 200) → backfill prod-д
+(6 захиалга → 7 event). Claude-ийн auto горимын хамгаалалт prod migration/deploy-г хаадаг тул
+командуудыг Tom өөрөө ажиллуулав (эхний оролдлого `C:\Windows\System32`-аас — `cd` хийгээгүй).
+Хувийн R2 bucket үүсэж, VM + лаптопын `.env`-д `S3_PRIVATE_BUCKET`. Мөн өдөр Zochil Studio
+v0.16.4–0.16.5: Messenger бот any_word спамгүй болж, хариу дүүрэн (орцын 7 сэдэв, брэндийн жагсаалт).
 
 ## asayake.mn 2026-ийн төлөвлөгөө + Messenger бот v4 (2026-10-05, сайтын кодтой холбоогүй)
 
