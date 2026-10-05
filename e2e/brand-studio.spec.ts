@@ -58,6 +58,11 @@ test.describe("Брэнд студи", () => {
     await page.getByRole("button", { name: /Ангиллууд — нуух/ }).click();
     await expect.poll(async () => frame.locator("main > *").evaluateAll(nodes => nodes.findIndex(n => n.id === "stores" || n.querySelector("#stores"))), { timeout: 5_000 }).toBe(1);
     await expect(frame.locator("#collection")).toHaveCount(0);
+    // Чөлөөт зурвас 1: гарчиг бичиж, харуулахад preview-д гарна.
+    await page.getByRole("button", { name: "Чөлөөт зурвас 1 — засах" }).click();
+    await page.getByLabel(/Гарчиг \(заавал/).fill("Намрын шинэ ирэлт");
+    await page.getByRole("button", { name: "Чөлөөт зурвас 1 — харуулах" }).click();
+    await expect(frame.locator(".free-block h2")).toHaveText("Намрын шинэ ирэлт", { timeout: 5_000 });
     await page.screenshot({ path: testInfo.outputPath("brand-studio-layout.png"), fullPage: false });
     await page.getByRole("button", { name: "Цуцлах" }).click();
     await expect.poll(async () => frame.locator("#stores").count()).toBe(1);

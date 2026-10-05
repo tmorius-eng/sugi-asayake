@@ -1,14 +1,16 @@
-import { ArrowDown, ArrowUp, Eye, EyeOff, LoaderCircle, Lock } from "lucide-react";
+import { useState } from "react";
+import { ArrowDown, ArrowUp, Eye, EyeOff, LoaderCircle, Lock, PencilLine } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { DEFAULT_HOME_LAYOUT, HOME_SECTIONS, type HomeSectionEntry } from "@shared/home-sections";
+import { DEFAULT_HOME_LAYOUT, HOME_SECTIONS, isFreeBlockKey, type FreeBlockProps, type HomeSectionEntry } from "@shared/home-sections";
 
 /**
  * Брэнд студи → Нүүрний бүтэц (A3, 2026-10-05). Hero тогтмол эхэнд (hero shell-ийн дүрэм), бусад
  * хэсгийг дээш/доош, нуух, хувилбар. Сум товчоор (гар болон дэлгэц уншигчид ч ажиллана) — DnD
  * сан нэмээгүй. Ноорог нь баруун талын preview-д шууд харагдана.
  */
-const VARIANT_LABELS: Record<string, string> = { default: "Үндсэн", "image-left": "Зураг зүүн талд", "image-right": "Зураг баруун талд" };
+const VARIANT_LABELS: Record<string, string> = { default: "Үндсэн", "image-left": "Зураг зүүн талд", "image-right": "Зураг баруун талд", "text-only": "Зөвхөн текст", rail: "Гүйдэг мөр", grid: "Сүлжээ (бүгд нэг дор)" };
+const EMPTY_FREE: FreeBlockProps = { heading: "", text: "", ctaLabel: "", ctaHref: "" };
 
 export default function LayoutTab({ saved, draft, onDraft }: {
   saved: HomeSectionEntry[];
@@ -16,6 +18,7 @@ export default function LayoutTab({ saved, draft, onDraft }: {
   onDraft: (layout: HomeSectionEntry[] | null) => void;
 }) {
   const utils = trpc.useUtils();
+  const [editing, setEditing] = useState<string | null>(null);
   const save = trpc.admin.brandStudio.saveHomeLayout.useMutation({
     onSuccess: async () => { await utils.admin.brandStudio.homeLayout.invalidate(); onDraft(null); toast.success("Нүүрний бүтэц хадгалагдлаа. Сайтад 1 минутын дотор хүрнэ."); },
     onError: error => toast.error(error.message),
@@ -53,12 +56,31 @@ export default function LayoutTab({ saved, draft, onDraft }: {
                   {def.variants.map(variant => <option key={variant} value={variant}>{VARIANT_LABELS[variant] ?? variant}</option>)}
                 </select>
               )}
+              {isFreeBlockKey(entry.key) && (
+                <button type="button" onClick={() => setEditing(current => (current === entry.key ? null : entry.key))} aria-expanded={editing === entry.key} aria-label={`${def.label} — засах`}
+                  className="grid size-8 place-items-center rounded-full border border-[var(--a-border)] transition hover:bg-[var(--a-soft)]"><PencilLine size={14} /></button>
+              )}
               <button type="button" onClick={() => patch(index, { visible: !entry.visible })} aria-pressed={!entry.visible} aria-label={`${def.label} — ${entry.visible ? "нуух" : "харуулах"}`}
                 className="grid size-8 place-items-center rounded-full border border-[var(--a-border)] transition hover:bg-[var(--a-soft)]">
                 {entry.visible ? <Eye size={14} /> : <EyeOff size={14} />}
               </button>
               <button type="button" onClick={() => move(index, -1)} disabled={index === 0} aria-label={`${def.label} — дээш`} className="grid size-8 place-items-center rounded-full border border-[var(--a-border)] transition hover:bg-[var(--a-soft)] disabled:opacity-30"><ArrowUp size={14} /></button>
               <button type="button" onClick={() => move(index, 1)} disabled={index === draft.length - 1} aria-label={`${def.label} — доош`} className="grid size-8 place-items-center rounded-full border border-[var(--a-border)] transition hover:bg-[var(--a-soft)] disabled:opacity-30"><ArrowDown size={14} /></button>
+              {isFreeBlockKey(entry.key) && editing === entry.key && (
+                <div className="grid w-full gap-2 rounded-xl bg-[var(--a-soft)] p-3 text-[11px]">
+                  {([["heading", "Гарчиг (заавал — хоосон бол харагдахгүй)", 120], ["ctaLabel", "Товчны нэр", 40], ["ctaHref", "Товчны холбоос (/shop, /about, #stores…)", 200]] as const).map(([field, label, max]) => (
+                    <label key={field} className="grid gap-1 font-bold">{label}
+                      <input value={(entry.props ?? EMPTY_FREE)[field]} maxLength={max} onChange={event => patch(index, { props: { ...(entry.props ?? EMPTY_FREE), [field]: event.target.value } })}
+                        className="h-9 min-w-0 rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] px-2 font-normal" />
+                    </label>
+                  ))}
+                  <label className="grid gap-1 font-bold">Текст
+                    <textarea value={(entry.props ?? EMPTY_FREE).text} maxLength={600} rows={3} onChange={event => patch(index, { props: { ...(entry.props ?? EMPTY_FREE), text: event.target.value } })}
+                      className="min-w-0 rounded-lg border border-[var(--a-border)] bg-[var(--a-card)] p-2 font-normal" />
+                  </label>
+                  <p className="text-[var(--a-muted)]">Зураг: Content & Media → "Нүүр — чөлөөт зурвас {entry.key.slice(-1)}-ийн зураг". Харуулахын тулд нүдний товчийг асаана.</p>
+                </div>
+              )}
             </li>
           );
         })}

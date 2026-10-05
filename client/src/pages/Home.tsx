@@ -45,6 +45,8 @@ import { useSiteText } from "@/hooks/useSiteText";
 import { trpc } from "@/lib/trpc";
 import { useHomeLayout } from "@/lib/homeLayout";
 import { HolidayEffectMount, HolidayOrnamentBand } from "@/components/holiday/HolidayDecor";
+import FreeBlock from "@/components/home/FreeBlock";
+import { freeBlockMediaSlot, type FreeBlockKey } from "@shared/home-sections";
 import type { HomeSectionKey } from "@shared/home-sections";
 import { brandName } from "@/lib/brand";
 
@@ -153,7 +155,14 @@ export default function Home() {
   // Брэнд студи A3 (2026-10-05): хэсгүүдийн дараалал/нуулт/хувилбар админаас (shared/home-sections.ts).
   // Hero тогтмол эхэнд (hero shell), бусад нь layout-ын дарааллаар.
   const variantOf = (key: HomeSectionKey) => homeLayout.find(entry => entry.key === key)?.variant;
+  const freeBlock = (key: FreeBlockKey) => {
+    const entry = homeLayout.find(row => row.key === key);
+    return <FreeBlock variant={entry?.variant ?? "image-left"} props={entry?.props} imageUrl={imageFor(freeBlockMediaSlot(key), null)} />;
+  };
   const sections: Record<HomeSectionKey, ReactNode> = {
+    "free-1": freeBlock("free-1"),
+    "free-2": freeBlock("free-2"),
+    "free-3": freeBlock("free-3"),
     chips: (
       <>
         {/* The reference's popular-keyword box, built from this shop's own
@@ -172,7 +181,13 @@ export default function Home() {
             ProductDetail already uses, so the site has one product-card
             treatment rather than two. emptyState={null} keeps the existing
             rule: hidden entirely once loaded with zero results. */}
-        {(bestsellersQuery.isLoading || bestsellers.length > 0) && (
+        {variantOf("bestsellers") === "grid" && bestsellers.length > 0 ? (
+          // Брэнд студи A3: "сүлжээ" хувилбар — бүх их зарагддаг барааг нэг дор (гүйлгэхгүй).
+          <section className="carousel-shelf-section bestseller-grid-section" data-reveal>
+            <div className="carousel-shelf-heading"><h2>{textFor("home-text-bestseller-heading", "Их зарагддаг\nбараанууд").split("\n").join(" ")}</h2></div>
+            <div className="bestseller-grid">{bestsellers.map((product, index) => <ShelfProductCard product={product} rank={index + 1} key={product.id} />)}</div>
+          </section>
+        ) : (bestsellersQuery.isLoading || bestsellers.length > 0) && (
           <CarouselShelf
             title={textFor("home-text-bestseller-heading", "Их зарагддаг\nбараанууд").split("\n").join(" ")}
             viewAllHref="/shop"

@@ -165,7 +165,11 @@ export const brandStudioRouter = router({
   /** Нүүрний бүтэц (A3): hero тогтмол эхэнд, бусад хэсгийн дараалал/нуулт/хувилбар. */
   homeLayout: marketingProcedure.query(() => getHomeLayout()),
   saveHomeLayout: marketingProcedure.input(z.object({
-    sections: z.array(z.object({ key: z.string().max(40), visible: z.boolean(), variant: z.string().max(40) })).max(40),
+    sections: z.array(z.object({
+      key: z.string().max(40), visible: z.boolean(), variant: z.string().max(40),
+      // Чөлөөт зурвас (free-1..3) — sanitizeFreeBlockProps дахин цэвэрлэнэ (дотоод холбоос л).
+      props: z.object({ heading: z.string().max(200), text: z.string().max(1000), ctaLabel: z.string().max(80), ctaHref: z.string().max(300) }).partial().optional(),
+    })).max(40),
   })).mutation(async ({ ctx, input }) => {
     const saved = await saveHomeLayout(input.sections, ctx.user.id);
     invalidateIndexHtmlCache();
@@ -198,7 +202,7 @@ export const brandStudioRouter = router({
   importPack: adminProcedure.input(z.object({
     format: z.literal("brand-pack.v1"),
     themes: z.array(z.object({ themeKey: z.string(), name: z.string().max(120).optional(), look: z.unknown(), extra: z.unknown().optional(), holiday: z.unknown().optional() })).max(40),
-    homeLayout: z.array(z.object({ key: z.string(), visible: z.boolean(), variant: z.string() })).max(40),
+    homeLayout: z.array(z.object({ key: z.string(), visible: z.boolean(), variant: z.string() }).passthrough()).max(40),
     siteText: z.array(z.object({ slotKey: z.string(), textValue: z.string().nullable() })).max(1000),
     siteMedia: z.array(z.object({ slotKey: z.string(), imageUrl: z.string(), altText: z.string().nullable().optional() })).max(200),
   }).passthrough()).mutation(async ({ ctx, input }) => {

@@ -124,6 +124,9 @@ describeWithDatabase("Брэнд студи — хадгалах, AA, түүх, 
       expect(saved.slice(0, 3).map(s => `${s.visible ? "" : "-"}${s.key}:${s.variant}`)).toEqual(["stores:default", "editorial:image-right", "-categories:default"]);
       expect(saved.some(s => (s.key as string) === "hero")).toBe(false);
       expect((await getHomeLayout())[0].key).toBe("stores");
+      // Чөлөөт зурвас: props хадгалагдаж, гадаад/javascript холбоос хасагдана.
+      const withFree = await admin().admin.brandStudio.saveHomeLayout({ sections: [{ key: "free-1", visible: true, variant: "text-only", props: { heading: "Тест зурвас", text: "Сайн уу", ctaLabel: "Үзэх", ctaHref: "javascript:alert(1)" } }] });
+      expect(withFree[0]).toEqual({ key: "free-1", visible: true, variant: "text-only", props: { heading: "Тест зурвас", text: "Сайн уу", ctaLabel: "Үзэх", ctaHref: "" } });
     } finally {
       if (before) await db.update(siteLayouts).set({ sectionsJson: before.sectionsJson, updatedByUserId: before.updatedByUserId }).where(eq(siteLayouts.id, before.id));
       else await db.delete(siteLayouts).where(eq(siteLayouts.pageKey, "home"));
