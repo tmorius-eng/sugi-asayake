@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { orderItems, orders, productCategories, productVariants, products, stockMovements } from "../drizzle/schema";
+import { orderItems, orders, productCategories, productVariants, products, stockMovements, users } from "../drizzle/schema";
+import { hashPassword } from "./_core/password";
 import { createManualOrder, editAdminOrder, getDb, updateAdminOrder } from "./db";
 import { renderPackingSlip } from "./invoice";
 
@@ -14,6 +15,7 @@ const describeWithDatabase = process.env.RUN_AUTH_INTEGRATION_TESTS === "1" && p
 describeWithDatabase("staff-created and staff-edited orders", () => {
   const marker = `staff${Date.now().toString(36)}`;
   let categoryId = 0;
+  let staffId = 0;
   let creamId = 0, creamVariantId = 0;
   let serumId = 0, serumVariantId = 0;
   const orderIds: number[] = [];
@@ -31,6 +33,9 @@ describeWithDatabase("staff-created and staff-edited orders", () => {
   beforeAll(async () => {
     const db = await getDb();
     if (!db) throw new Error("DATABASE_URL is required.");
+    // Өөрийн ажилтан (2026-10-05): өмнө нь `actorUserId: 1` байсан — staging/prod дээр #1 = эзэн тул
+    // ногоон, харин order_events.actorUserId FK (0101)-тэй болсноор хоосон CI схемд унадаг болов.
+    staffId = Number((await db.insert(users).values({ email: `${marker}-staff@example.invalid`, passwordHash: await hashPassword("StaffPassw0rd!"), name: "Staff order test staff", role: "warehouse", emailVerifiedAt: new Date() }))[0].insertId);
     const category = await db.insert(productCategories).values({ name: "Staff order test category", slug: `${marker}-category`, sortOrder: 99999, isActive: true });
     categoryId = Number(category[0].insertId);
     const cream = await db.insert(products).values({ categoryId, name: "Staff test cream", slug: `${marker}-cream`, sku: `${marker}-CREAM`, priceMnt: 20_000, stockQuantity: 10, isPublished: true });
@@ -52,12 +57,13 @@ describeWithDatabase("staff-created and staff-edited orders", () => {
     }
     for (const id of [creamId, serumId]) if (id) await db.delete(products).where(eq(products.id, id));
     if (categoryId) await db.delete(productCategories).where(eq(productCategories.id, categoryId));
+    if (staffId) await db.delete(users).where(eq(users.id, staffId)); // order_events нь захиалгатай хамт cascade-аар устсан
   }, 60_000);
 
   it("a phone order takes stock from the fulfilling branch, charges delivery by the shared rule and records its channel", async () => {
     const order = await createManualOrder({
       customerName: "Phone Customer", customerPhone: "88123456", deliveryMethod: "ub_delivery", deliveryAddress: "Test street 5", district: "bayanzurkh",
-      paymentMethod: "cash_on_delivery", salesChannel: "phone", items: [{ variantId: creamVariantId, quantity: 2 }, { variantId: serumVariantId, quantity: 1 }], actorUserId: 1, adminNote: "Called at 10:00",
+      paymentMethod: "cash_on_delivery", salesChannel: "phone", items: [{ variantId: creamVariantId, quantity: 2 }, { variantId: serumVariantId, quantity: 1 }], actorUserId: staffId, adminNote: "Called at 10:00",
     });
     orderIds.push(order.id);
     expect(order.replayed).toBe(false);
@@ -77,12 +83,12 @@ describeWithDatabase("staff-created and staff-edited orders", () => {
   it("editing lines moves stock by the difference, keeps snapshot prices, and re-prices delivery; a paid order refuses line edits", async () => {
     const created = await createManualOrder({
       customerName: "Edit Customer", customerPhone: "88123457", deliveryMethod: "store_pickup", pickupBranch: "Орос элчингийн салбар",
-      paymentMethod: "cash_on_delivery", salesChannel: "messenger", items: [{ variantId: creamVariantId, quantity: 3 }], actorUserId: 1,
+      paymentMethod: "cash_on_delivery", salesChannel: "messenger", items: [{ variantId: creamVariantId, quantity: 3 }], actorUserId: staffId,
     });
     orderIds.push(created.id);
     expect(await stockOf(creamVariantId)).toBe(5);
     // 3 cream -> 1 cream + 2 serum, and switch to delivery.
-    const edited = await editAdminOrder({ id: created.id, actorUserId: 1, deliveryMethod: "ub_delivery", deliveryAddress: "New address 7", items: [{ variantId: creamVariantId, quantity: 1 }, { variantId: serumVariantId, quantity: 2 }] });
+    const edited = await editAdminOrder({ id: created.id, actorUserId: staffId, deliveryMethod: "ub_delivery", deliveryAddress: "New address 7", items: [{ variantId: creamVariantId, quantity: 1 }, { variantId: serumVariantId, quantity: 2 }] });
     expect(await stockOf(creamVariantId)).toBe(7);
     expect(await stockOf(serumVariantId)).toBe(2);
     expect(edited.deliveryMethod).toBe("ub_delivery");
@@ -92,7 +98,7 @@ describeWithDatabase("staff-created and staff-edited orders", () => {
     expect(edited.totalMnt).toBe(edited.subtotalMnt + edited.deliveryFeeMnt);
     expect((await linesOf(created.id)).map(line => [line.variantId, line.quantity])).toEqual([[creamVariantId, 1], [serumVariantId, 2]]);
     // Removing the serum line gives it all back.
-    await editAdminOrder({ id: created.id, actorUserId: 1, items: [{ variantId: creamVariantId, quantity: 1 }] });
+    await editAdminOrder({ id: created.id, actorUserId: staffId, items: [{ variantId: creamVariantId, quantity: 1 }] });
     expect(await stockOf(serumVariantId)).toBe(4);
     expect((await linesOf(created.id)).length).toBe(1);
     // Contact edits are fine after payment; line edits are not.
@@ -100,13 +106,13 @@ describeWithDatabase("staff-created and staff-edited orders", () => {
     await updateAdminOrder({ id: created.id, status: "packed" });
     await updateAdminOrder({ id: created.id, status: "out_for_delivery" });
     await updateAdminOrder({ id: created.id, status: "completed" });
-    await expect(editAdminOrder({ id: created.id, actorUserId: 1, customerName: "Closed" })).rejects.toThrow(/Хаагдсан/);
-    const paid = await createManualOrder({ customerName: "Paid Customer", customerPhone: "88123458", deliveryMethod: "store_pickup", pickupBranch: "Орос элчингийн салбар", paymentMethod: "cash_on_delivery", salesChannel: "phone", items: [{ variantId: creamVariantId, quantity: 1 }], actorUserId: 1 });
+    await expect(editAdminOrder({ id: created.id, actorUserId: staffId, customerName: "Closed" })).rejects.toThrow(/Хаагдсан/);
+    const paid = await createManualOrder({ customerName: "Paid Customer", customerPhone: "88123458", deliveryMethod: "store_pickup", pickupBranch: "Орос элчингийн салбар", paymentMethod: "cash_on_delivery", salesChannel: "phone", items: [{ variantId: creamVariantId, quantity: 1 }], actorUserId: staffId });
     orderIds.push(paid.id);
     const db = await getDb();
     await db!.update(orders).set({ paymentStatus: "paid" }).where(eq(orders.id, paid.id));
-    await expect(editAdminOrder({ id: paid.id, actorUserId: 1, items: [{ variantId: creamVariantId, quantity: 2 }] })).rejects.toThrow(/Төлбөр төлөгдсөн/);
-    const contact = await editAdminOrder({ id: paid.id, actorUserId: 1, customerPhone: "99887766" });
+    await expect(editAdminOrder({ id: paid.id, actorUserId: staffId, items: [{ variantId: creamVariantId, quantity: 2 }] })).rejects.toThrow(/Төлбөр төлөгдсөн/);
+    const contact = await editAdminOrder({ id: paid.id, actorUserId: staffId, customerPhone: "99887766" });
     expect(contact.customerPhone).toBe("99887766");
     // 2026-09-23: 45 → 90 с. Хүргэлтийн арга солигдож захиалгын салбар
     // өөрчлөгдөхөд `editAdminOrder` одоо нөөцийг ЗӨӨДӨГ (хуучин салбарт буцааж,
@@ -115,7 +121,7 @@ describeWithDatabase("staff-created and staff-edited orders", () => {
   }, 90_000);
 
   it("an unknown variant or an empty line list is refused before anything is written", async () => {
-    await expect(createManualOrder({ customerName: "X Y", customerPhone: "88000001", deliveryMethod: "store_pickup", pickupBranch: "Орос элчингийн салбар", paymentMethod: "cash_on_delivery", salesChannel: "phone", items: [{ variantId: 999_999_999, quantity: 1 }], actorUserId: 1 })).rejects.toThrow(/олдсонгүй/);
-    await expect(createManualOrder({ customerName: "X Y", customerPhone: "88000001", deliveryMethod: "store_pickup", pickupBranch: "Орос элчингийн салбар", paymentMethod: "cash_on_delivery", salesChannel: "phone", items: [], actorUserId: 1 })).rejects.toThrow(/нэг бараа/);
+    await expect(createManualOrder({ customerName: "X Y", customerPhone: "88000001", deliveryMethod: "store_pickup", pickupBranch: "Орос элчингийн салбар", paymentMethod: "cash_on_delivery", salesChannel: "phone", items: [{ variantId: 999_999_999, quantity: 1 }], actorUserId: staffId })).rejects.toThrow(/олдсонгүй/);
+    await expect(createManualOrder({ customerName: "X Y", customerPhone: "88000001", deliveryMethod: "store_pickup", pickupBranch: "Орос элчингийн салбар", paymentMethod: "cash_on_delivery", salesChannel: "phone", items: [], actorUserId: staffId })).rejects.toThrow(/нэг бараа/);
   });
 });
