@@ -81,7 +81,7 @@ export default function Legal() {
       <CommerceHeader />
       <main className="doc-main">
         <div className="doc-head">
-          <p className="doc-kicker">{brandName()}</p>
+          <p className="doc-kicker">{`${brandName().toUpperCase()} MONGOLIA`}</p>
           <h1>{title}</h1>
           {lead && <p>{lead}</p>}
           <span className="doc-updated">Сүүлд шинэчилсэн: {updatedLabel}</span>

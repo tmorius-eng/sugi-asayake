@@ -44,7 +44,7 @@ export default function Help() {
       <CommerceHeader />
       <main className="doc-main help-main">
         <div className="doc-head">
-          <p className="doc-kicker">{brandName()}</p>
+          <p className="doc-kicker">{`${brandName().toUpperCase()} MONGOLIA`}</p>
           <h1>Тусламж, холбоо барих</h1>
           <p>Захиалга, хүргэлт, буцаалтын талаар асуух зүйл байвал шууд холбогдоорой — ажлын цагаар хариулна.</p>
         </div>

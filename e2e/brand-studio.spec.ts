@@ -121,7 +121,10 @@ test.describe("Брэнд студи", () => {
     expect((await request.get("/brand-icon/evil.png")).status()).toBe(404);
     const manifest = await (await request.get("/manifest.webmanifest")).json() as { name: string; short_name: string; icons: Array<{ src: string }> };
     expect(manifest.name.length).toBeGreaterThan(0);
-    expect(manifest.icons.every(i => i.src.startsWith("/brand-icon/"))).toBe(true);
+    // Тохиргоо (brand-icons-from-symbol) асаагаагүй — статик дүрс хэвээр, 302-гүй.
+    expect(manifest.icons.every(i => i.src.startsWith("/icons/"))).toBe(true);
+    const html = await (await request.get("/")).text();
+    expect(html).toContain('href="/icons/favicon-64.png"');
   });
 
   test("энгийн хэрэглэгчийн iframe-гүй хуудсанд гүүр юу ч хийхгүй", async ({ page }) => {

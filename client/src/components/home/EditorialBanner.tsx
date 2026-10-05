@@ -53,7 +53,8 @@ export default function EditorialBanner({
   imageAlt: string;
 }): ReactNode {
   const heading = <h2>{headingLine1}{headingLine2 ? <>{" "}{headingLine2}</> : null}</h2>;
-  const cta = ctaLabel && ctaHref ? <Link className="inline-link" href={ctaHref}>{ctaLabel} <ArrowUpRight size={16} /></Link> : null;
+  // "#хэсэг" холбоос wouter Link-ээр pushState хийгээд гүйлгэдэггүй — ердийн <a> (CommerceHeader-тэй ижил).
+  const cta = ctaLabel && ctaHref ? (ctaHref.startsWith("#") ? <a className="inline-link" href={ctaHref}>{ctaLabel} <ArrowUpRight size={16} /></a> : <Link className="inline-link" href={ctaHref}>{ctaLabel} <ArrowUpRight size={16} /></Link>) : null;
 
   if (variant === "full-bleed-dark") {
     return (

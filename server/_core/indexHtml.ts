@@ -118,7 +118,8 @@ async function computeValues(dateKey: string): Promise<Map<string, string>> {
   const media = withHolidayPoster(mediaRows.map(row => ({ ...row, imageUrl: directStorageUrl(row.imageUrl) })), theme.poster && directStorageUrl(theme.poster));
   // Measurement ids (2026-09-14): handed to /vendor/analytics-init.js as a
   // JSON data block; the tags themselves load only after cookie consent.
-  const [ga4Id, pixelId] = await Promise.all([getStoreSettingValue("analytics-ga4-measurement-id"), getStoreSettingValue("analytics-meta-pixel-id")]);
+  const [ga4Id, pixelId, iconSetting] = await Promise.all([getStoreSettingValue("analytics-ga4-measurement-id"), getStoreSettingValue("analytics-meta-pixel-id"), getStoreSettingValue("brand-icons-from-symbol")]);
+  const iconsFromSymbol = iconSetting.trim() === "1";
   // The format lives in shared/store-settings.ts so the admin screen, the
   // save mutation and this renderer cannot disagree. Blanking a malformed id
   // stays as defence in depth -- a row saved before the format existed is
@@ -171,8 +172,12 @@ async function computeValues(dateKey: string): Promise<Map<string, string>> {
 
   const saved = new Map(rows.map(row => [row.slotKey, row.textValue]));
   const branchCount = String(branches.length);
+  // Эзэн солих (2026-10-06): засварлаагүй slot-ийн fallback дахь "SUGI ASAYAKE"-г богино нэрээр —
+  // React талын `${brandName()} …` анхдагчтай ижил (hero shell ↔ React зөрөхгүй, <title>/OG шинэ нэртэй).
+  const shortName = saved.get("brand-text-short-name")?.trim();
+  const withBrand = (fallback: string) => (shortName ? fallback.replaceAll("SUGI ASAYAKE", shortName) : fallback);
   const textFor = (key: SiteTextSlotKey) =>
-    (saved.get(key) || getSiteTextSlot(key).fallbackValue).replaceAll("{N}", branchCount);
+    (saved.get(key) || withBrand(getSiteTextSlot(key).fallbackValue)).replaceAll("{N}", branchCount);
 
   const siteName = textFor("seo-text-site-name");
   // A social URL is "not set" unless it really is a link -- same rule as the
@@ -234,6 +239,9 @@ async function computeValues(dateKey: string): Promise<Map<string, string>> {
     ["STOREFRONT_BOOTSTRAP_JSON", bootstrapJson],
     ["STOREFRONT_CDN_PRECONNECT", cdnPreconnectTag()],
     ["SITE_SHORT_NAME", escapeAttribute(textFor("brand-text-short-name"))],
+    // Таб/апп дүрс: тохиргоо асаалттай бол логоноос (/brand-icon), эс бөгөөс статик — анхдагчид 302 үгүй.
+    ["SITE_ICON_SMALL", iconsFromSymbol ? "/brand-icon/favicon-64.png" : "/icons/favicon-64.png"],
+    ["SITE_APPLE_ICON", iconsFromSymbol ? "/brand-icon/apple-touch-icon.png" : "/icons/apple-touch-icon.png"],
     ["STOREFRONT_BRAND_TOKENS", renderBrandTokensStyle(theme.look)],
     ["STOREFRONT_THEME_COLOR", escapeAttribute(theme.look.light.primary)],
     // Нүүрний дээд хэсэг серверээс (heroShell.ts). `HERO_SHELL=0` = унтраах
@@ -343,6 +351,8 @@ function fallbackFor(key: string): string | undefined {
     case "STOREFRONT_CDN_PRECONNECT": return cdnPreconnectTag();
     // DB унтарсан ч index.css-тэй ижил кодын суурь загвар — өнгө хэвээр.
     case "SITE_SHORT_NAME": return escapeAttribute(getSiteTextSlot("brand-text-short-name").fallbackValue);
+    case "SITE_ICON_SMALL": return "/icons/favicon-64.png";
+    case "SITE_APPLE_ICON": return "/icons/apple-touch-icon.png";
     case "STOREFRONT_BRAND_TOKENS": return renderBrandTokensStyle(BASE_THEME);
     case "STOREFRONT_THEME_COLOR": return BASE_THEME.light.primary;
     case "SITE_HERO_SHELL": return "";

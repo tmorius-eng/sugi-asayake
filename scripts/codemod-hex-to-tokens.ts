@@ -54,7 +54,8 @@ const HEX_RE = new RegExp(`#(${Object.keys(HEX_TO_TOKEN).join("|")})(?![0-9a-f])
 const RGBA_RE = /rgba\(\s*223\s*,\s*31\s*,\s*61\s*,\s*(0?\.\d+|1|0)\s*\)/gi;
 // Брэнд студийн токен бүрийн ТОДОРХОЙЛОЛТ hex хэвээр (theme-tokens.test.ts index.css ↔ BASE_THEME тулгана).
 const TOKEN_DEF_RE = new RegExp(`(^|[{;])\\s*--(${[...LIGHT_TOKEN_KEYS, ...DARK_TOKEN_KEYS, "primary-strong"].join("|")})\\s*:`);
-const SVG_ATTR_RE = /\b(fill|stroke|stopColor|stop-color)=\{?["']?[^"'}]*#/i;
+// SVG presentation attribute: `fill="#…"` ба `fill={x ? "#…" : "none"}` (шалгагчийн олдвор 2026-10-06 — Safari-д var() найдваргүй).
+const SVG_ATTR_RE = /\b(fill|stroke|stopColor|stop-color)=(\{[^}]*#|["'][^"']*#)/i;
 
 export function transformLine(line: string): string {
   if (line.includes("url(") || TOKEN_DEF_RE.test(line) || SVG_ATTR_RE.test(line)) return line;

@@ -36,6 +36,7 @@ import { currentPushSubscription, pushSupport, subscribeToPush, unsubscribeFromP
 import type { RouterOutputs } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
 import { brandName } from "@/lib/brand";
+import { useStoreSetting } from "@/hooks/useStoreSetting";
 
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Гүйцэтгэж чадсангүй. Дахин оролдоно уу.";
 
@@ -1174,6 +1175,8 @@ function SupportTab() {
 const TIER_CARD_CLASS: Record<string, string> = { "Хүрэл": "tier-bronze", "Мөнгөн": "tier-silver", "Алтан": "tier-gold" };
 
 function GiftCardRedeem() {
+  // Угтвар нь store setting (эзэн солих) — анхдагч SUGI, placeholder өмнөхтэй ижил.
+  const giftPrefix = useStoreSetting()("gift-card-prefix", "SUGI");
   const utils = trpc.useUtils();
   const [code, setCode] = useState("");
   const redeem = trpc.giftCards.redeem.useMutation({
@@ -1184,7 +1187,7 @@ function GiftCardRedeem() {
     <form onSubmit={event => { event.preventDefault(); if (code.trim().length >= 8) redeem.mutate({ code: code.trim() }); }} className="gift-redeem">
       <div><strong>Бэлгийн карт ашиглах</strong><span>Кодоо оруулахад дүн нь дэлгүүрийн зээл болж, дараагийн захиалгад ашиглагдана.</span></div>
       <div className="gift-redeem-row">
-        <input value={code} onChange={event => setCode(event.target.value)} placeholder="XXXX-XXXX-XXXX" maxLength={24} autoComplete="off" spellCheck={false} aria-label="Бэлгийн картын код" />
+        <input value={code} onChange={event => setCode(event.target.value)} placeholder={`${giftPrefix}-XXXX-XXXX-XXXX`} maxLength={24} autoComplete="off" spellCheck={false} aria-label="Бэлгийн картын код" />
         <button type="submit" className="order-buy-again" disabled={redeem.isPending || code.trim().length < 8}>{redeem.isPending ? <Loader2 className="animate-spin" size={14} /> : <Gift size={14} />} Ашиглах</button>
       </div>
     </form>

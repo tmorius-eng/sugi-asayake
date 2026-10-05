@@ -61,7 +61,7 @@ export async function brandIconSource(): Promise<string | null> {
 
 export async function serveBrandIcon(req: Request, res: Response) {
   const name = String(req.params.name ?? "") as BrandIconName;
-  if (!(name in BRAND_ICONS)) { res.status(404).end(); return; }
+  if (!Object.hasOwn(BRAND_ICONS, name)) { res.status(404).end(); return; }
   const fallback = `/icons/${name}.png`;
   try {
     const source = await brandIconSource();

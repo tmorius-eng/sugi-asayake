@@ -434,7 +434,14 @@ export async function getSiteTextValue(key: SiteTextSlotKey): Promise<string> {
   const db = await getDb();
   if (!db) return fallback;
   const row = await db.select({ textValue: siteText.textValue }).from(siteText).where(eq(siteText.slotKey, key)).limit(1);
-  return row[0]?.textValue?.trim() || fallback;
+  const saved = row[0]?.textValue?.trim();
+  if (saved) return saved;
+  // Эзэн солих (2026-10-06): засварлаагүй slot-ийн "SUGI ASAYAKE"-г богино нэрээр (indexHtml-тэй ижил дүрэм).
+  if (key !== "brand-text-short-name" && fallback.includes("SUGI ASAYAKE")) {
+    const [short] = await db.select({ textValue: siteText.textValue }).from(siteText).where(eq(siteText.slotKey, "brand-text-short-name")).limit(1);
+    if (short?.textValue?.trim()) return fallback.replaceAll("SUGI ASAYAKE", short.textValue.trim());
+  }
+  return fallback;
 }
 
 /** Баримт, имэйл, тайлан дээр гарах дэлгүүрийн нэр (`seo-text-site-name`). */

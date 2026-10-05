@@ -29,7 +29,7 @@ export default function FreeBlock({ variant, props, imageUrl }: { variant: strin
     <section className="free-block page-section" data-reveal>
       <h2>{props.heading}</h2>
       {props.text ? <p>{props.text}</p> : null}
-      {cta ? <Link className="inline-link" href={cta.href}>{cta.label} <ArrowUpRight size={16} /></Link> : null}
+      {cta ? (cta.href.startsWith("#") ? <a className="inline-link" href={cta.href}>{cta.label} <ArrowUpRight size={16} /></a> : <Link className="inline-link" href={cta.href}>{cta.label} <ArrowUpRight size={16} /></Link>) : null}
     </section>
   );
 }

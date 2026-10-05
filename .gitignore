@@ -121,6 +121,8 @@ backups/
 # Aiven CA certificate (per docs/PROJECT-GUIDE.md: never commit)
 aiven-ca.pem
 *.pem
+# CA-гийн нөөц хуулбар (oci-ca.pem.bak-YYYYMMDD) — 2026-10-06
+*.pem.bak*
 
 # throwaway helper scripts a session writes and deletes
 scripts/tmp-*.ts

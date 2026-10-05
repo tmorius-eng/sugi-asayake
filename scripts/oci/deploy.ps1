@@ -35,14 +35,14 @@
 #>
 # Эзэн солих (2026-10-05): хост/домэйн параметр — шинэ эзний VM ба домэйнд скриптийг засахгүйгээр.
 #   -SshHost     ~/.ssh/config-ийн Host нэр (анхдагч sugi-oci, эсвэл $env:DEPLOY_SSH_HOST)
-#   -PublicHost  health шалгах домэйн (анхдагч sugi.karkaron.com / sugi-staging…, эсвэл $env:DEPLOY_PUBLIC_HOST)
-param([switch]$Staging, [int]$Instances = 1, [switch]$AllowDirty, [string]$SshHost = $(if ($env:DEPLOY_SSH_HOST) { $env:DEPLOY_SSH_HOST } else { "sugi-oci" }), [string]$PublicHost = $env:DEPLOY_PUBLIC_HOST)
+#   -PublicHost  health шалгах домэйн (анхдагч sugi.karkaron.com / sugi-staging…, эсвэл $env:DEPLOY_PUBLIC_HOST, staging-д $env:DEPLOY_STAGING_PUBLIC_HOST)
+param([switch]$Staging, [int]$Instances = 1, [switch]$AllowDirty, [string]$SshHost = $(if ($env:DEPLOY_SSH_HOST) { $env:DEPLOY_SSH_HOST } else { "sugi-oci" }), [string]$PublicHost = "")
 if ($Instances -lt 1) { throw "-Instances must be at least 1" }
 $ErrorActionPreference = "Stop"
 $app = if ($Staging) { "sugi-staging" } else { "sugi" }
 $dir = if ($Staging) { "sugi-asayake-staging" } else { "sugi-asayake" }
 $port = if ($Staging) { 3001 } else { 3000 }
-$publicHost = if ($PublicHost) { $PublicHost } elseif ($Staging) { "sugi-staging.karkaron.com" } else { "sugi.karkaron.com" }
+$publicHost = if ($PublicHost) { $PublicHost } elseif ($Staging) { $(if ($env:DEPLOY_STAGING_PUBLIC_HOST) { $env:DEPLOY_STAGING_PUBLIC_HOST } else { "sugi-staging.karkaron.com" }) } elseif ($env:DEPLOY_PUBLIC_HOST) { $env:DEPLOY_PUBLIC_HOST } else { "sugi.karkaron.com" }
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location $root
 

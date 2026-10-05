@@ -62,7 +62,7 @@ export default function Journal() {
       <main className="mx-auto max-w-6xl px-4 py-10 sm:px-8 sm:py-14">
         <p className="flex items-center gap-3 text-[10px] font-extrabold tracking-[.18em] text-[var(--primary-strong)]">
           <span className="h-px w-10 bg-[var(--primary)]" />
-          <Newspaper size={13} /> {`${brandName()} JOURNAL`}
+          <Newspaper size={13} /> {textFor("journal-text-kicker", `${brandName().split(" ")[0]} JOURNAL`)}
         </p>
         <h1 className="mt-4 font-[var(--font-display)] text-4xl font-semibold tracking-[-.07em] sm:text-5xl">
           {journalLine1} <em className="text-[var(--primary)] not-italic">{journalLine2}</em>

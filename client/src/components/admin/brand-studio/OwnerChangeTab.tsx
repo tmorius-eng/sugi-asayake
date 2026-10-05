@@ -87,7 +87,7 @@ export default function OwnerChangeTab({ isAdmin, onNavigate, onColors }: { isAd
       <div className="admin-card p-5">
         <p className="text-[10px] font-extrabold tracking-[.14em] text-[var(--a-info)]">ЭЗЭН СОЛИХ · 1</p>
         <h3 className="mt-1 font-[var(--font-display)] text-base font-semibold tracking-[-.03em]">Брэндийн нэр</h3>
-        <p className="mt-1 text-xs text-[var(--a-muted)]">Сайтыг өөр компани/хүнд шилжүүлэхэд эхэлж солино. Код дотор нэр хатуу бичигдээгүй — бүх газар эндээс уншина.</p>
+        <p className="mt-1 text-xs text-[var(--a-muted)]">Сайтыг өөр компани/хүнд шилжүүлэхэд эхэлж солино. Богино нэрийг солиход засварлаагүй бүх текст (SEO гарчиг, hero, хөл, тайлбарууд) шинэ нэрийг дагана; тус бүрийг Content & Media → Текст-ээс дарж бичиж болно. Англи/япон орчуулга шинэ нэртэй мөрөнд монголоороо үлдэнэ.</p>
         <div className="mt-3 grid gap-2 md:grid-cols-2">
           {NAME_SLOTS.map(slot => (
             <label key={slot.key} className="grid gap-1 text-[11px] font-bold">{slot.label}

@@ -45,7 +45,7 @@ const reviewMessageFrom = (error: unknown) => error instanceof Error ? error.mes
 // 1-5 picker in the review form below.
 function StarRating({ value, size = 14 }: { value: number; size?: number }) {
   const rounded = Math.round(value);
-  return <span className="inline-flex items-center gap-0.5" aria-label={`${value} од`}>{[1, 2, 3, 4, 5].map(n => <Star key={n} size={size} fill={n <= rounded ? "var(--accent)" : "none"} stroke={n <= rounded ? "var(--accent)" : "#c7c8cc"} />)}</span>;
+  return <span className="inline-flex items-center gap-0.5" aria-label={`${value} од`}>{[1, 2, 3, 4, 5].map(n => <Star key={n} size={size} fill={n <= rounded ? "#f0b52d" : "none"} stroke={n <= rounded ? "#f0b52d" : "#c7c8cc"} />)}</span>;
 }
 
 // PREMIUM-FEATURES.md TIER 4: "Хамт авбал тохирно" / "Routine-оо дуусга" —
@@ -186,7 +186,7 @@ function ReviewsSection({ productId }: { productId: number }) {
     {!isAuthenticated ? <p className="mt-7 text-sm text-muted-foreground"><Link href="/login" className="font-bold text-[var(--primary)]">Нэвтэрч</Link> сэтгэгдэл үлдээгээрэй.</p>
       : eligibility?.canReview ? <form onSubmit={event => { event.preventDefault(); createReview.mutate({ productId, rating, comment: comment.trim() || null, imageUrl: photoUrl }); }} className="mt-8 max-w-lg rounded-2xl border border-border bg-muted p-6">
         <p className="text-sm font-bold text-foreground">Сэтгэгдэл үлдээх</p>{reviewRewardMnt > 0 ? <p className="mt-1 text-xs font-bold text-[#2c7650]">{`Сэтгэгдэл бичвэл ${formatMnt(reviewRewardMnt)} дэлгүүрийн зээл бэлэглэнэ.`}</p> : null}
-        <div className="mt-3 flex items-center gap-1">{[1, 2, 3, 4, 5].map(n => <button type="button" key={n} onClick={() => setRating(n)} aria-label={`${n} од өгөх`} aria-pressed={rating === n}><Star size={24} fill={n <= rating ? "var(--accent)" : "none"} stroke={n <= rating ? "var(--accent)" : "#c7c8cc"} /></button>)}</div>
+        <div className="mt-3 flex items-center gap-1">{[1, 2, 3, 4, 5].map(n => <button type="button" key={n} onClick={() => setRating(n)} aria-label={`${n} од өгөх`} aria-pressed={rating === n}><Star size={24} fill={n <= rating ? "#f0b52d" : "none"} stroke={n <= rating ? "#f0b52d" : "#c7c8cc"} /></button>)}</div>
         {/* translate="no" (2026-09-27): TranslateSurface л дэлгэрэнгүй
             байрладаг тул худалдан авагч гадаад хэлээр бичиж байхад тэдний
             бичсэн текстийг дунд нь орчуулж эхэлдэггүй байх ёстой. */}

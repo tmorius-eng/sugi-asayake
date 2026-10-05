@@ -1185,6 +1185,20 @@ export const siteTextSlots = [
     fallbackValue: "SUGI ASAYAKE",
   },
   {
+    key: "journal-text-kicker",
+    group: "Брэнд",
+    label: "Зөвлөгөө хуудасны дээд шошго",
+    description: "/journal хуудасны гарчгийн дээрх жижиг шошго. Хоосон бол брэндийн нэрний эхний үг + JOURNAL.",
+    fallbackValue: "SUGI JOURNAL",
+  },
+  {
+    key: "shop-text-category-kicker",
+    group: "Брэнд",
+    label: "Дэлгүүрийн ангиллын картын шошго",
+    description: "/shop хуудасны ангиллын картууд дээрх жижиг шошго. Хоосон бол брэндийн нэрний эхний үг + DAILY CARE.",
+    fallbackValue: "SUGI DAILY CARE",
+  },
+  {
     key: "brand-text-supplier",
     group: "Брэнд",
     label: "Албан ёсны нийлүүлэгч",

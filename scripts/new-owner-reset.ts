@@ -188,8 +188,9 @@ export async function applyReset(conn: Conn, options: ResetOptions): Promise<Res
     await conn.commit();
     return { schema: plan.schema, deleted, usersDeleted: (usersResult as { affectedRows: number }).affectedRows, keptUserIds: keptIds, reassigned, orphans };
   } catch (error) {
-    await conn.rollback();
-    await conn.query("SET FOREIGN_KEY_CHECKS = 1");
+    // Холболт тасарсан бол rollback ч шидэж болно — анхны алдааг нуухгүй.
+    await conn.rollback().catch(() => undefined);
+    await conn.query("SET FOREIGN_KEY_CHECKS = 1").catch(() => undefined);
     throw error;
   }
 }
@@ -220,10 +221,13 @@ async function main() {
       process.env[key] = staged.toString();
     }
   }
-  refuseProductionDatabase("new-owner-reset");
   const args = parseArgs(process.argv.slice(2));
   const url = process.env.DATABASE_ADMIN_URL || process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL тохируулаагүй.");
+  // Хамгаалалт ЯГ холбогдох URL-ийг шалгана (DATABASE_URL-ийг staging болгоод .env-ийн
+  // DATABASE_ADMIN_URL production хэвээр байсан ч production руу орохгүй) — шалгагчийн олдвор 2026-10-06.
+  refuseProductionDatabase("new-owner-reset", url);
+  if (process.env.DATABASE_URL && url !== process.env.DATABASE_URL) refuseProductionDatabase("new-owner-reset", process.env.DATABASE_URL);
   const conn = await mysql.createConnection({ ...planMysqlConnection(url).options, multipleStatements: false });
   try {
     const plan = await planReset(conn, args.options);
