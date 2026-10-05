@@ -1,5 +1,6 @@
 import { expect, test } from "./helpers/fixtures";
 import { signInAs } from "./helpers/session";
+import { HOLIDAY_PALETTES } from "../shared/holiday-palettes";
 
 /**
  * Storefront-ийн жижиг текстийн контраст (WCAG 2.2 AA) — гэрэл ба харанхуй
@@ -111,6 +112,29 @@ for (const theme of ["light", "dark"] as const) {
         await expect(page.locator("#root")).not.toBeEmpty();
         const failures = await page.evaluate(CONTRAST_PROBE) as Array<Record<string, unknown>>;
         expect(failures, `${theme} ${path}: ${JSON.stringify(failures.slice(0, 8), null, 1)}`).toEqual([]);
+      });
+    }
+  });
+}
+
+/**
+ * Брэнд студийн баярын санал болгох палитр (2026-10-05): сервер 22 токены хосыг шалгадаг ч хуудсан
+ * дээрх бусад элемент (хатуу цагаан текст гэх мэт) өнгөт дэвсгэр дээр уншигдах эсэхийг зөвхөн энэ барина.
+ * Палитрыг `<style>`-ээр серверийн brand-tokens-ийн ДАРАА тавина (ижил `html:root` specificity → сүүлийнх ялна).
+ */
+const THEME_PAGES = ["/", "/shop", "/checkout"];
+for (const [key, { palette }] of Object.entries(HOLIDAY_PALETTES)) {
+  test.describe(`баярын палитр: ${key}`, () => {
+    for (const path of THEME_PAGES) {
+      test(`${path}: AA контраст`, async ({ page }) => {
+        await page.addInitScript(() => { try { localStorage.setItem("sugi-storefront-theme", "light"); } catch { /* хувийн цонх */ } });
+        await page.goto(path);
+        await page.waitForLoadState("networkidle");
+        const css = `html:root{${Object.entries(palette).map(([token, value]) => `--${token}:${value};`).join("")}}`;
+        await page.addStyleTag({ content: css });
+        await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--primary").trim())).toBe(palette.primary);
+        const failures = await page.evaluate(CONTRAST_PROBE) as Array<Record<string, unknown>>;
+        expect(failures, `${key} ${path}: ${JSON.stringify(failures.slice(0, 8), null, 1)}`).toEqual([]);
       });
     }
   });
