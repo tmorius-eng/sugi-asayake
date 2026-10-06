@@ -254,7 +254,8 @@ export default function BrandStudioPanel({ preview, isAdmin = false, onNavigate 
               )}
             <div className="xl:sticky xl:top-4 xl:self-start">
               <PreviewFrame look={previewLook} mode={mode} onModeChange={setMode} greeting={previewGreeting} posterUrl={previewPoster} layout={tab === "layout" ? layoutDraft ?? layoutQuery.data : undefined}
-                effect={previewHoliday ? previewHoliday.effect : "none"} ornament={previewHoliday ? previewHoliday.ornament : "none"} />
+                effect={previewHoliday ? previewHoliday.effect : "none"} ornament={previewHoliday ? previewHoliday.ornament : "none"}
+                skin={previewHoliday ? previewHoliday.key : (tab === "colors" && target === "base") || tab === "layout" ? null : undefined} />
             </div>
           </div>
         )}

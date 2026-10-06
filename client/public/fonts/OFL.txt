@@ -24,6 +24,9 @@ Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-gree
 Roboto Flex (roboto-flex/*.woff2)
 Copyright 2017 The Roboto Flex Project Authors (https://github.com/googlefonts/roboto-flex)
 
+Cormorant Garamond (cormorant-garamond/*.woff2) — Шинэ жилийн баярын загварын гарчиг
+Copyright 2015 The Cormorant Project Authors (https://github.com/CatharsisFonts/Cormorant)
+
 The per-subset files (cyrillic-ext, cyrillic, latin-ext, latin) are the subsets
 distributed by Google Fonts; they are unmodified otherwise.
 

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="mn">
+<html lang="mn" %STOREFRONT_HTML_ATTRS%>
 
   <head>
     <meta charset="UTF-8" />
@@ -15,6 +15,9 @@
     <!-- Брэнд студийн загвар (2026-10-05): server/_core/themeCss.ts — index.css-ийн токенуудыг
          эхний зурагдалтаас өмнө дарна (html:root specificity-гээр, дарааллаас үл хамааран). -->
     %STOREFRONT_BRAND_TOKENS%
+    <!-- Баярын бүтэн-сайтын загвар (2026-10-06): идэвхтэй баяр skin-тэй бол энд
+         `<link>` орно, эс бөгөөс хоосон. index.css-ийн ДАРАА ачаалагдаж дардаг. -->
+    %STOREFRONT_SKIN_STYLE%
     <link rel="canonical" href="%SEO_CANONICAL%" />
     <meta property="og:type" content="%SEO_OG_TYPE%" />
     <meta property="og:url" content="%SEO_CANONICAL%" />

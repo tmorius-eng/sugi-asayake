@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { setHomeLayoutPreview } from "@/lib/homeLayout";
 import { setHolidayDecorPreview } from "@/lib/holidayDecor";
 import { FONT_KEYS, fontFaceCss, fontStack } from "@shared/fonts";
+import { HOLIDAY_SKINS, holidaySkinHref } from "@shared/holidays";
 
 /**
  * Брэнд студийн амьд preview-ийн storefront тал (2026-10-05). Зөвхөн `?brandPreview=1` бөгөөд
@@ -52,9 +53,28 @@ export default function BrandPreviewBridge() {
       });
     };
 
+    // Баярын бүтэн-сайтын загвар (skin) урьдчилан харалт (2026-10-06): `<html>`-д
+    // data-skin/data-holiday + skin CSS-ийн `<link>`. Зөвхөн бүртгэлтэй баярын түлхүүр.
+    const applySkin = (skin: unknown) => {
+      if (skin === undefined) return;
+      const key = typeof skin === "string" && HOLIDAY_SKINS.has(skin) ? skin : null;
+      let link = document.getElementById("holiday-skin-preview") as HTMLLinkElement | null;
+      if (!key) {
+        root.removeAttribute("data-skin");
+        root.removeAttribute("data-holiday");
+        link?.remove();
+        return;
+      }
+      root.setAttribute("data-skin", key);
+      root.setAttribute("data-holiday", key);
+      if (!link) { link = document.createElement("link"); link.id = "holiday-skin-preview"; link.rel = "stylesheet"; document.head.appendChild(link); }
+      const href = holidaySkinHref(key);
+      if (link.getAttribute("href") !== href) link.setAttribute("href", href);
+    };
+
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin || event.source !== window.parent) return;
-      const data = event.data as { type?: string; mode?: string; vars?: Record<string, unknown>; fontBody?: unknown; fontDisplay?: unknown; greeting?: unknown; posterUrl?: unknown; layout?: unknown; effect?: unknown; ornament?: unknown } | null;
+      const data = event.data as { type?: string; mode?: string; vars?: Record<string, unknown>; fontBody?: unknown; fontDisplay?: unknown; greeting?: unknown; posterUrl?: unknown; layout?: unknown; effect?: unknown; ornament?: unknown; skin?: unknown } | null;
       if (!data || data.type !== "brand-preview") return;
       const mode = data.mode === "dark" ? "dark" : "light";
       root.setAttribute("data-storefront-theme", mode);
@@ -73,6 +93,7 @@ export default function BrandPreviewBridge() {
       }
       applyGreeting(data.greeting);
       applyPoster(data.posterUrl);
+      applySkin(data.skin);
       // Нүүрний бүтэц (A3): sanitizeHomeLayout-ээр цэвэрлэгдэнэ — үл мэдэх түлхүүр орохгүй.
       if (data.layout !== undefined) setHomeLayoutPreview(data.layout);
       // Баярын чимэглэл (A4) — isHolidayEffect/Ornament-оор шүүгдэнэ.

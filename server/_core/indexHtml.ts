@@ -2,6 +2,7 @@ import { getActiveSitePromotion, getActiveThemeBundle, getHomeLayout, getSiteMed
 import { renderBrandTokensStyle } from "./themeCss";
 import { withHolidayPoster } from "./holidayHero";
 import { BASE_THEME } from "../../shared/theme-tokens";
+import { hasHolidaySkin, holidaySkinHref } from "../../shared/holidays";
 import { ubDateKey } from "../../shared/notification-events";
 import { renderHeroShell } from "./heroShell";
 import { getOrSetCached, invalidateCachedByPrefix } from "./ttlCache";
@@ -159,13 +160,18 @@ async function computeValues(dateKey: string): Promise<Map<string, string>> {
   // the saved site text (no fallback-then-admin-wording swap) and the
   // active promo (its banner used to arrive a round trip later and push the
   // whole page down). A few KB; Date columns travel as ISO strings.
+  // Баярын бүтэн-сайтын загвар (2026-10-06): идэвхтэй баяр skin-тэй бол түүний түлхүүр.
+  // getActiveThemeBundle нь ЗӨВХӨН идэвхжүүлсэн (enabled) баярыг буцаадаг тул энэ нь
+  // "идэвхтэй баяр + skin файлтай" гэсэн үг. /admin дээр доорх replace-д хүчингүй болгоно.
+  const skinKey = hasHolidaySkin(theme.holiday?.key) ? theme.holiday!.key : null;
+
   const bootstrapJson = JSON.stringify({
     siteMedia: media,
     siteText: rows,
     promo,
     // Брэнд студи (2026-10-05): идэвхтэй загвар — токенууд нь `<style id="brand-tokens">`-д,
     // энд зөвхөн клиентэд хэрэгтэй мэдээлэл (баярын мэндчилгээ, аль загвар, яагаад).
-    theme: { key: theme.activeKey, reason: theme.reason, greeting: theme.greeting, holiday: theme.holiday?.key ?? null, productAspect: theme.look.productAspect, effect: theme.effect, ornament: theme.ornament },
+    theme: { key: theme.activeKey, reason: theme.reason, greeting: theme.greeting, holiday: theme.holiday?.key ?? null, skin: skinKey, productAspect: theme.look.productAspect, effect: theme.effect, ornament: theme.ornament },
     // Брэнд студи A3: нүүрний хэсгүүдийн дараалал (client/src/lib/homeLayout.ts).
     layout: homeLayout,
   }).replace(/</g, "\\u003c");
@@ -244,6 +250,10 @@ async function computeValues(dateKey: string): Promise<Map<string, string>> {
     ["SITE_APPLE_ICON", iconsFromSymbol ? "/brand-icon/apple-touch-icon.png" : "/icons/apple-touch-icon.png"],
     ["STOREFRONT_BRAND_TOKENS", renderBrandTokensStyle(theme.look)],
     ["STOREFRONT_THEME_COLOR", escapeAttribute(theme.look.light.primary)],
+    // Баярын skin (2026-10-06): идэвхтэй баяр skin-тэй бол `<html>`-д data-skin/
+    // data-holiday + skin CSS-ийн `<link>`; эс бөгөөс хоосон. Админ дээр доор хүчингүй.
+    ["STOREFRONT_HTML_ATTRS", skinKey ? `data-skin="${escapeAttribute(skinKey)}" data-holiday="${escapeAttribute(skinKey)}"` : ""],
+    ["STOREFRONT_SKIN_STYLE", skinKey ? `<link rel="stylesheet" href="${escapeAttribute(holidaySkinHref(skinKey))}" />` : ""],
     // Нүүрний дээд хэсэг серверээс (heroShell.ts). `HERO_SHELL=0` = унтраах
     // (kill switch); renderIndexHtml нь зөвхөн "/" дээр л оруулна.
     ["SITE_HERO_SHELL", process.env.HERO_SHELL === "0" ? "" : await renderHeroShell({
@@ -308,6 +318,8 @@ export async function renderIndexHtml(template: string, pathname = "/"): Promise
     // токен уншдаг тул баярын цэнхэр/дөрвөлжин загвар admin-ийг ч солих байсан.
     if (key === "STOREFRONT_BRAND_TOKENS" && isAdminPath) return renderBrandTokensStyle(BASE_THEME);
     if (key === "STOREFRONT_THEME_COLOR" && isAdminPath) return BASE_THEME.light.primary;
+    // Баярын skin admin-ийг ХЭЗЭЭ Ч солихгүй (admin UI ижил токен уншдаг).
+    if ((key === "STOREFRONT_HTML_ATTRS" || key === "STOREFRONT_SKIN_STYLE") && isAdminPath) return "";
     return routeMeta?.get(key) ?? values.get(key) ?? fallbackFor(key) ?? match;
   });
 }
@@ -355,6 +367,9 @@ function fallbackFor(key: string): string | undefined {
     case "SITE_APPLE_ICON": return "/icons/apple-touch-icon.png";
     case "STOREFRONT_BRAND_TOKENS": return renderBrandTokensStyle(BASE_THEME);
     case "STOREFRONT_THEME_COLOR": return BASE_THEME.light.primary;
+    // DB унтарсан үед баяр тодорхойлогдохгүй — skin-гүй (энгийн өдрийн дүр).
+    case "STOREFRONT_HTML_ATTRS": return "";
+    case "STOREFRONT_SKIN_STYLE": return "";
     case "SITE_HERO_SHELL": return "";
     case "SEO_OG_TYPE": return "website";
     case "SEO_OG_IMAGE_META": return "";

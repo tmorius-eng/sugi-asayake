@@ -52,6 +52,19 @@ export const LUNAR_DATES: Record<"tsagaan-sar" | "duichin" | "chinggis", Record<
  */
 export const HOLIDAY_POSTER_VERSION = "v1";
 
+/**
+ * Баярын БҮТЭН-САЙТЫН загвар (skin, 2026-10-06). Энд жагсаасан баяр идэвхтэй үед сервер
+ * `<html data-skin="<key>">` тавьж, `client/public/holiday-skins/<key>.css`-ийг `<link>`-ээр
+ * нэмнэ — тэр CSS нь index.css-ийн токен болон класс-уудыг `html[data-skin="<key>"]` угтвараар
+ * дарж, толгой/нүүр/дэлгүүр/бараа/сагс/checkout бүгдийг тухайн баярын харагдацад оруулна.
+ * index.css томрохгүй: skin CSS зөвхөн идэвхтэй баярын үед татагдана. R2 постер шиг immutable
+ * кэштэй тул файл солих бүрт VERSION-ийг ахиулна.
+ */
+export const HOLIDAY_SKIN_VERSION = "v1";
+export const HOLIDAY_SKINS = new Set<string>(["new-year"]);
+export const hasHolidaySkin = (key: string | null | undefined): key is string => Boolean(key && HOLIDAY_SKINS.has(key));
+export const holidaySkinHref = (key: string) => `/holiday-skins/${key}.css?v=${HOLIDAY_SKIN_VERSION}`;
+
 export const HOLIDAYS: readonly HolidayDefinition[] = [
   { key: "new-year", name: "Шинэ жил", official: true, rule: { type: "fixed", month: 1, day: 1 }, startOffsetDays: -14, endOffsetDays: 1, priority: 50, greeting: "Шинэ оны мэнд хүргэе!", poster: `/cdn/themes/holidays/${HOLIDAY_POSTER_VERSION}/new-year.webp` },
   { key: "tsagaan-sar", name: "Цагаан сар", official: true, rule: { type: "lunar", table: "tsagaan-sar", durationDays: 3 }, startOffsetDays: -14, endOffsetDays: 1, priority: 90, greeting: "Сар шинэдээ сайхан шинэлээрэй!", poster: `/cdn/themes/holidays/${HOLIDAY_POSTER_VERSION}/tsagaan-sar.webp` },
