@@ -13,6 +13,10 @@ import { expect, test } from "./helpers/fixtures";
  *
  * "JS-гүй" төлөвийг аппын JS chunk-ийг хааж (route abort) авна — shell бол
  * тэр үед дэлгэц дээр байгаа цорын ганц зүйл.
+ *
+ * Баярын skin идэвхтэй үед (`<html data-skin>`) hero нь нэг бүтэн дэвсгэр зураг, rail нуугдсан
+ * (client/public/holiday-skins/*.css) тул rail-ийн зураг биш hero-ийн ТЕКСТИЙН блок
+ * (`.hero-copy`) хэмжигдэнэ — shell ↔ React үсрэхгүй гэдэг ижил зорилго.
  */
 const rectOf = (page: Page, selector: string) => page.evaluate(sel => {
   const el = document.querySelector(sel);
@@ -29,13 +33,14 @@ for (const [name, viewport] of [["утас", { width: 390, height: 844 }], ["к�
     await noJs.route(/\/assets\/.*\.js$/, route => route.abort());
     const shellPage = await noJs.newPage();
     await shellPage.goto("/");
-    await shellPage.waitForSelector("#hero-shell .hero-rail-slide img");
+    const skinned = await shellPage.evaluate(() => document.documentElement.hasAttribute("data-skin"));
+    await shellPage.waitForSelector(skinned ? "#hero-shell .hero-copy h1" : "#hero-shell .hero-rail-slide img");
     await shellPage.waitForFunction(() => document.fonts.status === "loaded");
     // Rail-ийн зүүн захаас эхний БҮТЭН харагдах хавтан (marquee/scroll-аас
     // хамааралгүй): React 3 хуулбар зурж дундахыг нь харуулдаг тул "DOM-ийн эхний
     // img" биш, харагдаж буйг нь харьцуулна.
     const firstVisibleTile = (root: string) => `${root} .hero-rail-slide img`;
-    const shellTile = await shellPage.evaluate(sel => {
+    const shellTile = skinned ? { src: "skin", rect: await rectOf(shellPage, "#hero-shell .hero-copy") } : await shellPage.evaluate(sel => {
       const tiles = Array.from(document.querySelectorAll<HTMLImageElement>(sel)).map(img => ({ img, box: img.getBoundingClientRect() })).filter(t => t.box.left >= -1).sort((a, b) => a.box.left - b.box.left)[0];
       return tiles ? { src: tiles.img.getAttribute("src"), rect: { top: Math.round(tiles.box.top + window.scrollY), left: Math.round(tiles.box.left), width: Math.round(tiles.box.width), height: Math.round(tiles.box.height) } } : null;
     }, firstVisibleTile("#hero-shell"));
@@ -60,12 +65,13 @@ for (const [name, viewport] of [["утас", { width: 390, height: 844 }], ["к�
       const observer = new MutationObserver(() => {
         // Shell нуугдсан (Home.tsx-ийн layout effect) ба React-ийн rail орсон мөч.
         const shell = document.getElementById("hero-shell");
-        if (!shell || !shell.hidden || !document.querySelector("#root .hero-rail-slide img")) return;
-        const tile = Array.from(document.querySelectorAll("#root .hero-rail-slide img")).map(img => ({ img, box: img.getBoundingClientRect() })).filter(t => t.box.left >= -1).sort((a, b) => a.box.left - b.box.left)[0];
+        const skinned = document.documentElement.hasAttribute("data-skin");
+        if (!shell || !shell.hidden || !document.querySelector(skinned ? "#root .hero-copy h1" : "#root .hero-rail-slide img")) return;
+        const tile = skinned ? null : Array.from(document.querySelectorAll("#root .hero-rail-slide img")).map(img => ({ img, box: img.getBoundingClientRect() })).filter(t => t.box.left >= -1).sort((a, b) => a.box.left - b.box.left)[0];
         (window as unknown as { __swap: unknown }).__swap = {
-          img: rect(tile?.img ?? null),
+          img: skinned ? rect(document.querySelector("#root .hero-copy")) : rect(tile?.img ?? null),
           header: rect(document.querySelector("#root .commerce-header")),
-          src: tile?.img.getAttribute("src") ?? null,
+          src: skinned ? "skin" : tile?.img.getAttribute("src") ?? null,
         };
         observer.disconnect();
       });

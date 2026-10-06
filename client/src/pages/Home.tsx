@@ -44,7 +44,7 @@ import { useDocumentMeta } from "@/lib/useDocumentMeta";
 import { useSiteText } from "@/hooks/useSiteText";
 import { trpc } from "@/lib/trpc";
 import { useHomeLayout } from "@/lib/homeLayout";
-import { HolidayEffectMount, HolidayOrnamentBand } from "@/components/holiday/HolidayDecor";
+import { HolidayOrnamentBand } from "@/components/holiday/HolidayDecor";
 import FreeBlock from "@/components/home/FreeBlock";
 import { freeBlockMediaSlot, type FreeBlockKey } from "@shared/home-sections";
 import type { HomeSectionKey } from "@shared/home-sections";
@@ -315,7 +315,6 @@ export default function Home() {
         <HeroSection imageFor={imageFor} mediaReady={!siteMediaQuery.isLoading} />
         {/* Баярын хээ (Брэнд студи A4) — hero-ийн ДАРАА тул hero shell-тэй зөрөхгүй. */}
         <HolidayOrnamentBand />
-        <HolidayEffectMount />
 
         {homeLayout.filter(entry => entry.visible).map(entry => <Fragment key={entry.key}>{sections[entry.key]}</Fragment>)}
       </main>

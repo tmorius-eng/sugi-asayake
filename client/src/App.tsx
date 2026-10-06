@@ -3,6 +3,7 @@ import { useScrollToTopOnNavigate } from "./hooks/useScrollToTopOnNavigate";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Suspense, useEffect } from "react";
 import BrandPreviewBridge from "./components/BrandPreviewBridge";
+import { HolidayEffectMount } from "./components/holiday/HolidayDecor";
 import { lazyRetry } from "./lib/lazyRetry";
 import { Route, Switch, useLocation } from "wouter";
 import AddedToCartToast from "./components/AddedToCartToast";
@@ -79,8 +80,13 @@ function Router() {
   // hairline гадаргууг storefront даяар хүргэнэ. Admin панель өөрийн палитр,
   // токенуудаа хөндөгдөөгүй хэвээр хадгална.
   const storefront = !location.startsWith("/admin");
+  // Баярын хөдөлгөөнт чимэглэл БҮХ storefront хуудсанд (2026-10-06; өмнө нь зөвхөн нүүрэнд).
+  // App-д нэг удаа mount хийгддэг тул хуудас солигдоход 15 секундийн эффект дахин эхлэхгүй.
+  // Admin ба царайн баталгаажуулалтад хэзээ ч гарахгүй.
+  const showHolidayEffect = storefront && !location.startsWith("/face-approve");
   return <div className={storefront ? "sugi-site" : undefined}>
     <DocumentTitleRouteReset location={location} />
+    {showHolidayEffect && <HolidayEffectMount />}
     <div id="main-content" tabIndex={-1}><Suspense fallback={<RouteLoadingFallback />}><Switch>
     <Route path={"/"} component={Home} />
     <Route path={"/product/:slug"} component={ProductDetail} />

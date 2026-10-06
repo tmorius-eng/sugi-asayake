@@ -12,15 +12,29 @@ import { DEFAULT_HOME_LAYOUT, HOME_SECTIONS, isFreeBlockKey, type FreeBlockProps
 const VARIANT_LABELS: Record<string, string> = { default: "Үндсэн", "image-left": "Зураг зүүн талд", "image-right": "Зураг баруун талд", "text-only": "Зөвхөн текст", rail: "Гүйдэг мөр", grid: "Сүлжээ (бүгд нэг дор)" };
 const EMPTY_FREE: FreeBlockProps = { heading: "", text: "", ctaLabel: "", ctaHref: "" };
 
-export default function LayoutTab({ saved, draft, onDraft }: {
+export default function LayoutTab({ saved, draft, onDraft, themeKey, onThemeKey, holidays, custom, preset }: {
   saved: HomeSectionEntry[];
   draft: HomeSectionEntry[];
   onDraft: (layout: HomeSectionEntry[] | null) => void;
+  /** "base" = бүх өдрийн (глобал) бүтэц, баярын түлхүүр = тэр баярын бүтэц */
+  themeKey: string;
+  onThemeKey: (key: string) => void;
+  holidays: { key: string; name: string }[];
+  /** Сонгосон баярт өөрийн бүтэц байгаа эсэх (false = глобал руу fallback) */
+  custom: boolean;
+  /** Баярт бэлэн бүтэц (код) бий эсэх — өөрийн бүтэцгүй үед тэр хэрэглэгдэнэ */
+  preset: boolean;
 }) {
   const utils = trpc.useUtils();
   const [editing, setEditing] = useState<string | null>(null);
+  const isHoliday = themeKey !== "base";
+  const holidayName = holidays.find(h => h.key === themeKey)?.name ?? themeKey;
   const save = trpc.admin.brandStudio.saveHomeLayout.useMutation({
-    onSuccess: async () => { await utils.admin.brandStudio.homeLayout.invalidate(); onDraft(null); toast.success("Нүүрний бүтэц хадгалагдлаа. Сайтад 1 минутын дотор хүрнэ."); },
+    onSuccess: async () => { await utils.admin.brandStudio.homeLayout.invalidate(); onDraft(null); toast.success(isHoliday ? `${holidayName}: нүүрний бүтэц хадгалагдлаа. Баяр идэвхтэй үед харагдана.` : "Нүүрний бүтэц хадгалагдлаа. Сайтад 1 минутын дотор хүрнэ."); },
+    onError: error => toast.error(error.message),
+  });
+  const reset = trpc.admin.brandStudio.resetHolidayHomeLayout.useMutation({
+    onSuccess: async () => { await utils.admin.brandStudio.homeLayout.invalidate(); onDraft(null); toast.success(`${holidayName}: бүх өдрийн бүтэц рүү буцлаа.`); },
     onError: error => toast.error(error.message),
   });
   const dirty = JSON.stringify(saved) !== JSON.stringify(draft);
@@ -38,6 +52,15 @@ export default function LayoutTab({ saved, draft, onDraft }: {
       <div>
         <h3 className="font-[var(--font-display)] text-base font-semibold tracking-[-.03em]">Нүүр хуудасны хэсгүүд</h3>
         <p className="mt-1 text-xs text-[var(--a-muted)]">Дарааллыг сумаар сольж, хэрэггүй хэсгийг нууна. Өөрчлөлт баруун талд шууд харагдана.</p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <label className="text-[11px] font-bold text-[var(--a-muted)]" htmlFor="layout-target">Засах загвар</label>
+          <select id="layout-target" value={themeKey} onChange={event => onThemeKey(event.target.value)} className="h-9 min-w-0 rounded-full border border-[var(--a-border)] bg-[var(--a-card)] px-3 text-xs font-bold">
+            <option value="base">Бүх өдөр (үндсэн)</option>
+            {holidays.map(holiday => <option key={holiday.key} value={holiday.key}>{holiday.name}</option>)}
+          </select>
+          {isHoliday && custom && <span className="rounded-full bg-[var(--a-pos-soft)] px-2.5 py-1 text-[10px] font-extrabold text-[var(--a-pos)]">Өөрийн бүтэцтэй</span>}
+        </div>
+        {isHoliday && !custom && <p className="mt-2 rounded-xl bg-[var(--a-info-soft)] p-2.5 text-[11px] leading-4 text-[var(--a-info)]">{preset ? `${holidayName}-д бэлэн баярын бүтэц (богино нүүр) ашиглагдаж байна.` : `${holidayName} өөрийн бүтэцгүй тул одоогоор бүх өдрийн бүтцийг ашиглаж байна.`} Доор өөрчлөөд хадгалбал зөвхөн энэ баяр идэвхтэй үед л хэрэглэгдэнэ.</p>}
       </div>
       <ol className="grid gap-2" aria-live="polite">
         <li className="flex items-center gap-3 rounded-xl border border-dashed border-[var(--a-border-strong)] px-3 py-2.5 text-xs text-[var(--a-muted)]">
@@ -87,8 +110,9 @@ export default function LayoutTab({ saved, draft, onDraft }: {
       </ol>
       <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[var(--a-border)] pt-3">
         <button type="button" onClick={() => onDraft(DEFAULT_HOME_LAYOUT)} className="mr-auto text-[11px] font-extrabold text-[var(--a-muted)]">Анхны дараалал</button>
+        {isHoliday && custom && <button type="button" onClick={() => reset.mutate({ themeKey })} disabled={reset.isPending} className="text-[11px] font-extrabold text-[var(--a-neg)] disabled:opacity-40">{preset ? "Бэлэн бүтэц рүү буцаах" : "Бүх өдрийн бүтэц рүү буцаах"}</button>}
         {dirty && <button type="button" onClick={() => onDraft(null)} className="text-[11px] font-extrabold text-[var(--a-muted)]">Цуцлах</button>}
-        <button type="button" onClick={() => save.mutate({ sections: draft })} disabled={!dirty || save.isPending}
+        <button type="button" onClick={() => save.mutate({ sections: draft, themeKey: isHoliday ? themeKey : undefined })} disabled={(!dirty && !(isHoliday && !custom)) || save.isPending}
           className="inline-flex items-center gap-2 rounded-full bg-[var(--a-pos)] px-5 py-2.5 text-[11px] font-extrabold text-[var(--a-invert-text)] transition disabled:opacity-40">
           {save.isPending && <LoaderCircle className="animate-spin" size={13} />}Хадгалах
         </button>

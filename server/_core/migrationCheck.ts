@@ -25,6 +25,7 @@ export const REQUIRED_MIGRATIONS = [
   "0103_site_themes.sql",
   "0104_site_theme_versions.sql",
   "0105_site_layouts.sql",
+  "0107_holiday_layouts.sql",
 ] as const;
 
 export async function findMissingMigrations(): Promise<string[] | null> {

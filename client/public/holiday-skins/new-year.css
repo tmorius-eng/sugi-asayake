@@ -69,12 +69,17 @@
 /* -----------------------------------------------------------------------------
    1. Токенууд — бүх сайтын өнгө.
    -------------------------------------------------------------------------- */
+/* Өнгө (--primary, --background, --ck-* …) ЭНД БИЧИГДЭХГҮЙ: тэдгээр нь баярын загварын look-ийн
+   анхдагч утга (shared/holiday-skin-looks.ts) бөгөөд серверийн brand-tokens-оор ирдэг — ингэснээр
+   админ Брэнд студийн "Өнгө" табаас засахад бодитоор үйлчилнэ. Энд зөвхөн токенд ордоггүй зүйл. */
 :root[data-skin="new-year"] {
   --ny-green: #2f5b43;
   --ny-green-deep: #244634;
   --ny-red: #c6453f;
   --ny-gold: #c69a4c;
-  --ny-gold-text: #8f6520;      /* цайр дээрх алтан ТЕКСТ — AA (том үсэгт 3:1+) */
+  --ny-gold-text: var(--ck-gold);        /* алтан ТЕКСТ = AA-д шалгагддаг токен (админ засахад дагана) */
+  --ny-green-text: var(--primary-text);  /* ногоон ТЕКСТ = AA-д шалгагддаг токен */
+  --ny-red-text: #b3382f;       /* улаан ТЕКСТ — AA */
   --ny-gold-button: #94691f;    /* цагаан текстэй алтан товч — 4.5:1+ */
   --ny-gold-soft: #e8c97a;
   --ny-cream: #f7f1e8;
@@ -83,72 +88,34 @@
   --ny-ink: #2b2620;
   --ny-line: #e6dcc9;
   --ny-serif: "SA Festive Serif", "Cormorant Garamond", Georgia, "Times New Roman", serif;
-
-  --ck-page: var(--ny-cream);
-  --ck-surface: var(--ny-cream-card);
-  --ck-cream: var(--ny-cream-band);
-  --ck-chip: #efe7d8;
-  --ck-ink: var(--ny-ink);
-  --ck-muted: #6c6357;
-  --ck-line: var(--ny-line);
-  --ck-gold: var(--ny-gold-text);
-
-  --background: var(--ny-cream);
-  --card: var(--ny-cream-card);
-  --secondary: #ece3d4;
-  --muted: #efe8db;
-  --muted-foreground: #6c6357;
-  --foreground: var(--ny-ink);
-  --card-foreground: var(--ny-ink);
-  --popover: var(--ny-cream-card);
-  --popover-foreground: var(--ny-ink);
-  --border: var(--ny-line);
-  --input: var(--ny-line);
-
-  --primary: var(--ny-green);
-  --primary-hover: var(--ny-green-deep);
-  --primary-strong: var(--ny-green-deep);
-  --primary-text: var(--ny-green-deep);
-  --primary-foreground: #fdfaf3;
-  --ring: var(--ny-green);
+  /* Сагсны товч нь --cart-blue токен уншдаг (ThemeLook-д ордоггүй). */
   --cart-blue: var(--ny-green);
   --cart-blue-hover: var(--ny-green-deep);
-  --accent: var(--ny-gold-soft);
-  --accent-foreground: var(--ny-ink);
-  --sky: var(--ny-gold);
-
-  --promo-bar-bg: var(--ny-green);
-  --promo-bar-fg: var(--ny-gold-soft);
 }
 
-/* Харанхуй горим — гэрэл зургийн чимгүүдийг нууж, гүн ногоон/алтаар. */
+/* Харанхуй горим — гэрэл горимын токен (shadcn) дахин, ck-* нь look-оос ирнэ.
+   Товчнууд `text-white` тул --primary харанхуйд ч ГҮН ногоон (цагаан текст 5:1+), харин ногоон ТЕКСТ
+   (--ny-green-text, --primary-text) цайвар. Дэвсгэр нь анхны харанхуй загвартай ижил гүн (#8a8a8a
+   тексттэй товч AA хэвээр). */
 html[data-storefront-theme="dark"][data-skin="new-year"] {
-  --ny-cream-card: #1c2a22;
-  --ny-gold-text: #e3c27a;
-  --ny-line: #33463a;
-  --ck-page: #15201a;
-  --ck-surface: #1c2a22;
-  --ck-cream: #182219;
-  --ck-chip: #22332a;
-  --ck-ink: #f1ece0;
-  --ck-muted: #b2a894;
-  --ck-line: #33463a;
-  --background: #15201a;
-  --card: #1c2a22;
-  --secondary: #22332a;
-  --muted: #22332a;
+  --ny-cream-card: #1a241e;
+  --ny-red-text: #f0877f;
+  --ny-line: #2e4035;
+  --background: #121a15;
+  --card: #1a241e;
+  --secondary: #1f2a23;
+  --muted: #1f2a23;
   --muted-foreground: #b2a894;
   --foreground: #f1ece0;
   --card-foreground: #f1ece0;
-  --border: #33463a;
-  --primary: #6fae88;
-  --primary-hover: #84c29d;
-  --primary-strong: #84c29d;
-  --primary-text: #84c29d;
-  --primary-foreground: #0f1813;
-  --cart-blue: #6fae88;
-  --cart-blue-hover: #84c29d;
-  --promo-bar-bg: #1c2a22;
+  --border: #2e4035;
+  --primary: #3f7a58;
+  --primary-hover: #4a8c66;
+  --primary-text: #8fc5a4;
+  --primary-foreground: #fdfaf3;
+  --cart-blue: #3f7a58;
+  --cart-blue-hover: #4a8c66;
+  --promo-bar-bg: #1a241e;
 }
 
 /* Хуудас хажуу тийш гүйлгэгдэхгүй (захын чимэг viewport-оос гарвал). sticky-г эвдэхгүй. */
@@ -175,7 +142,7 @@ html[data-storefront-theme="dark"][data-skin="new-year"] {
   font-weight: 600;
   letter-spacing: .02em;
 }
-[data-skin="new-year"] .commerce-marketing-nav a:hover { color: var(--ny-green); }
+[data-skin="new-year"] .commerce-marketing-nav a:hover { color: var(--ny-green-text); }
 
 /* -----------------------------------------------------------------------------
    3. Hero — нэг бүтэн өргөн баярын зураг, голдоо том алтан мэндчилгээ.
@@ -270,7 +237,7 @@ html[data-storefront-theme="dark"][data-skin="new-year"] {
 [data-skin="new-year"] .sugi-site .kw-box h2,
 [data-skin="new-year"] .sugi-site .footer-cta-banner h2,
 [data-skin="new-year"] .sugi-site .cat-mosaic-heading-block h2 {
-  color: var(--ny-green);
+  color: var(--ny-green-text);
   font-family: var(--ny-serif);
   font-size: clamp(30px, 3.1vw, 44px);
   font-weight: 600;
@@ -279,7 +246,7 @@ html[data-storefront-theme="dark"][data-skin="new-year"] {
   text-transform: uppercase;
 }
 [data-skin="new-year"] .sugi-site .editorial-heading em,
-[data-skin="new-year"] .sugi-site .carousel-shelf-heading h2 em { color: var(--ny-red); font-style: italic; }
+[data-skin="new-year"] .sugi-site .carousel-shelf-heading h2 em { color: var(--ny-red-text); font-style: italic; }
 [data-skin="new-year"] .sugi-site .carousel-shelf-heading h2::after,
 [data-skin="new-year"] .sugi-site .fbrand-title::after,
 [data-skin="new-year"] .sugi-site .kw-box h2::after,
@@ -354,7 +321,7 @@ html[data-storefront-theme="dark"][data-skin="new-year"] {
 [data-skin="new-year"] .shelf-card-price strong { font-size: 19px; color: var(--ny-ink); }
 [data-skin="new-year"] .shelf-card-rating { justify-content: center; }
 [data-skin="new-year"] .shelf-card-rank {
-  color: var(--ny-red);
+  color: var(--ny-red-text);
   font-family: var(--ny-serif);
   font-size: 22px;
   font-style: italic;
@@ -401,16 +368,16 @@ html[data-storefront-theme="dark"][data-skin="new-year"] .sugi-site .hero-sectio
   overflow: hidden;
   border-radius: 14px;
 }
-[data-skin="new-year"] .sugi-site .cat-mosaic-item-title { font-family: var(--ny-serif); font-size: 20px; font-weight: 600; color: var(--ny-green); text-transform: uppercase; letter-spacing: .03em; }
+[data-skin="new-year"] .sugi-site .cat-mosaic-item-title { font-family: var(--ny-serif); font-size: 20px; font-weight: 600; color: var(--ny-green-text); text-transform: uppercase; letter-spacing: .03em; }
 [data-skin="new-year"] .sugi-site .button-primary { background: var(--ny-green); }
-[data-skin="new-year"] .sugi-site .carousel-shelf-all-link { border-color: var(--ny-green); color: var(--ny-green); }
+[data-skin="new-year"] .sugi-site .carousel-shelf-all-link { border-color: var(--ny-green); color: var(--ny-green-text); }
 
 [data-skin="new-year"] .site-footer {
   background: var(--ny-cream-band);
   border-top: 1px solid color-mix(in srgb, var(--ny-gold) 50%, var(--ck-line));
 }
 [data-skin="new-year"] .site-footer .footer-column > span:first-child:not(.footer-plain) {
-  color: var(--ny-green);
+  color: var(--ny-green-text);
   font-family: var(--ny-serif);
   font-size: 22px;
   font-weight: 600;
@@ -418,7 +385,7 @@ html[data-storefront-theme="dark"][data-skin="new-year"] .sugi-site .hero-sectio
   text-transform: none;
 }
 [data-skin="new-year"] .footer-cta-banner { background: var(--ny-cream-card); }
-[data-skin="new-year"] .footer-social-link svg { color: var(--ny-green); }
+[data-skin="new-year"] .footer-social-link svg { color: var(--ny-green-text); }
 
 /* -----------------------------------------------------------------------------
    8. /shop — mockup-ын "Дэлгүүр" хуудас: serif гарчиг + гацуур-туузан хуваагч,
@@ -432,7 +399,7 @@ html[data-storefront-theme="dark"][data-skin="new-year"] .sugi-site .hero-sectio
 }
 [data-skin="new-year"] .sugi-site .shop-hero h1,
 [data-skin="new-year"] .sugi-site .shop-discovery h2 {
-  color: var(--ny-green);
+  color: var(--ny-green-text);
   font-family: var(--ny-serif);
   font-size: clamp(36px, 4.2vw, 60px);
   font-weight: 600;
@@ -449,10 +416,10 @@ html[data-storefront-theme="dark"][data-skin="new-year"] .sugi-site .hero-sectio
   background: url("new-year/divider.webp") left center / contain no-repeat;
 }
 [data-skin="new-year"] .sugi-site .shop-hero h1 em,
-[data-skin="new-year"] .sugi-site .shop-discovery h2 em { color: var(--ny-red); font-style: italic; }
+[data-skin="new-year"] .sugi-site .shop-discovery h2 em { color: var(--ny-red-text); font-style: italic; }
 [data-skin="new-year"] .sugi-site .shop-kicker { color: var(--ny-gold-text); font-family: var(--ny-serif); font-size: 17px; font-style: italic; font-weight: 500; letter-spacing: .02em; text-transform: lowercase; }
 [data-skin="new-year"] .sugi-site .shop-hero-signature { background: var(--ny-cream-band); color: var(--ny-gold-text); }
-[data-skin="new-year"] .sugi-site .shop-hero-delivery { background: color-mix(in srgb, var(--ny-green) 10%, var(--ny-cream-card)); color: var(--ny-green); }
-[data-skin="new-year"] .sugi-site .shop-hero-delivery svg { color: var(--ny-green); }
+[data-skin="new-year"] .sugi-site .shop-hero-delivery { background: color-mix(in srgb, var(--ny-green) 10%, var(--ny-cream-card)); color: var(--ny-green-text); }
+[data-skin="new-year"] .sugi-site .shop-hero-delivery svg { color: var(--ny-green-text); }
 [data-skin="new-year"] .shop-brand-chip,
 [data-skin="new-year"] .shop-filter-pills button { border-color: color-mix(in srgb, var(--ny-gold) 45%, var(--ny-line)); }

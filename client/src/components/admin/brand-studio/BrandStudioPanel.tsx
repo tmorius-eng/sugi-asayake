@@ -32,7 +32,9 @@ export default function BrandStudioPanel({ preview, isAdmin = false, onNavigate 
   const { confirm } = useConfirm();
   const overviewQuery = trpc.admin.brandStudio.overview.useQuery(undefined, { enabled: !preview });
   const save = trpc.admin.brandStudio.save.useMutation();
-  const layoutQuery = trpc.admin.brandStudio.homeLayout.useQuery(undefined, { enabled: !preview });
+  // "base" = бүх өдрийн (глобал) бүтэц; баярын түлхүүр = тэр баярын өөрийн бүтэц (migration 0107).
+  const [layoutTarget, setLayoutTarget] = useState("base");
+  const layoutQuery = trpc.admin.brandStudio.homeLayout.useQuery({ themeKey: layoutTarget }, { enabled: !preview });
   const [layoutDraft, setLayoutDraft] = useState<HomeSectionEntry[] | null>(null);
   const [tab, setTab] = useState<Tab>("colors");
   const [target, setTarget] = useState("base");
@@ -105,8 +107,10 @@ export default function BrandStudioPanel({ preview, isAdmin = false, onNavigate 
   };
 
   const targetName = target === "base" ? "Үндсэн загвар" : holidayRow(target)?.name ?? target;
-  const previewLook = tab === "colors" ? draft : previewKey ? drafts[previewKey] ?? savedLook(previewKey) : savedBase;
-  const previewHoliday = tab === "colors" ? (target === "base" ? null : holidayRow(target)) : previewKey ? holidayRow(previewKey) : null;
+  // Нүүрний бүтцийн табд баярын бүтэц засахад preview нь тэр баярын өнгө/skin-тэй харагдана.
+  const stagedKey = tab === "layout" && layoutTarget !== "base" ? layoutTarget : previewKey;
+  const previewLook = tab === "colors" ? draft : stagedKey ? drafts[stagedKey] ?? savedLook(stagedKey) : savedBase;
+  const previewHoliday = tab === "colors" ? (target === "base" ? null : holidayRow(target)) : stagedKey ? holidayRow(stagedKey) : null;
   // Баярын урьдчилан харалтад тэр баярын постер/мэндчилгээ; бусад үед хуудасны өөрийнх (null = байхгүй болгох).
   const previewGreeting = previewHoliday ? (previewHoliday.greeting ?? previewHoliday.defaultGreeting) || null : tab === "colors" && target === "base" ? null : undefined;
   const previewPoster = previewHoliday ? (previewHoliday.showPoster ? previewHoliday.posterUrl ?? previewHoliday.defaultPoster : null) : tab !== "history" ? null : undefined;
@@ -139,7 +143,8 @@ export default function BrandStudioPanel({ preview, isAdmin = false, onNavigate 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] [&>*]:min-w-0">
             {tab === "layout"
               ? layoutQuery.data
-                ? <LayoutTab saved={layoutQuery.data} draft={layoutDraft ?? layoutQuery.data} onDraft={setLayoutDraft} />
+                ? <LayoutTab saved={layoutQuery.data.sections} draft={layoutDraft ?? layoutQuery.data.sections} onDraft={setLayoutDraft}
+                    themeKey={layoutTarget} onThemeKey={key => { setLayoutTarget(key); setLayoutDraft(null); }} holidays={overview.holidays.map(h => ({ key: h.key, name: h.name }))} custom={layoutQuery.data.custom} preset={layoutQuery.data.preset} />
                 : <p className="flex items-center gap-2 text-xs text-[var(--a-muted)]"><LoaderCircle className="animate-spin" size={15} />Уншиж байна…</p>
               : tab === "holidays"
               ? <HolidaysTab overview={overview} baseLook={savedBase} previewKey={previewKey} onPreview={setPreviewKey} onEditColors={key => { setTarget(key); setTab("colors"); }} />
@@ -253,9 +258,9 @@ export default function BrandStudioPanel({ preview, isAdmin = false, onNavigate 
                 </div>
               )}
             <div className="xl:sticky xl:top-4 xl:self-start">
-              <PreviewFrame look={previewLook} mode={mode} onModeChange={setMode} greeting={previewGreeting} posterUrl={previewPoster} layout={tab === "layout" ? layoutDraft ?? layoutQuery.data : undefined}
+              <PreviewFrame look={previewLook} mode={mode} onModeChange={setMode} greeting={previewGreeting} posterUrl={previewPoster} layout={tab === "layout" ? layoutDraft ?? layoutQuery.data?.sections : undefined}
                 effect={previewHoliday ? previewHoliday.effect : "none"} ornament={previewHoliday ? previewHoliday.ornament : "none"}
-                skin={previewHoliday ? previewHoliday.key : (tab === "colors" && target === "base") || tab === "layout" ? null : undefined} />
+                skin={previewHoliday ? (previewHoliday.hasSkin && previewHoliday.skin ? previewHoliday.key : null) : (tab === "colors" && target === "base") || tab === "layout" ? null : undefined} />
             </div>
           </div>
         )}

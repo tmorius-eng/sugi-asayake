@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { adminAuditLogs, siteLayouts, siteText, siteThemeVersions, siteThemes, users } from "../drizzle/schema";
 import { appRouter } from "./routers";
-import { getActiveThemeBundle, getDb, getHomeLayout, invalidateThemeCache } from "./db";
-import { invalidateCached } from "./_core/ttlCache";
+import { getActiveThemeBundle, getDb, getHomeLayout, hasOwnHomeLayout, invalidateThemeCache } from "./db";
+import { invalidateCachedByPrefix } from "./_core/ttlCache";
 import { testSessionUser } from "./_test-helpers";
 import { hashPassword } from "./_core/password";
 import type { TrpcContext } from "./_core/context";
@@ -113,7 +113,7 @@ describeWithDatabase("Брэнд студи — хадгалах, AA, түүх, 
 
   it("нүүрний бүтэц хадгалагдаж цэвэрлэгдэнэ (snapshot-and-restore)", async () => {
     const db = (await getDb())!;
-    const [before] = await db.select().from(siteLayouts).where(eq(siteLayouts.pageKey, "home")).limit(1);
+    const [before] = await db.select().from(siteLayouts).where(and(eq(siteLayouts.pageKey, "home"), eq(siteLayouts.themeKey, ""))).limit(1);
     try {
       const saved = await admin().admin.brandStudio.saveHomeLayout({ sections: [
         { key: "stores", visible: true, variant: "default" },
@@ -129,8 +129,56 @@ describeWithDatabase("Брэнд студи — хадгалах, AA, түүх, 
       expect(withFree[0]).toEqual({ key: "free-1", visible: true, variant: "text-only", props: { heading: "Тест зурвас", text: "Сайн уу", ctaLabel: "Үзэх", ctaHref: "" } });
     } finally {
       if (before) await db.update(siteLayouts).set({ sectionsJson: before.sectionsJson, updatedByUserId: before.updatedByUserId }).where(eq(siteLayouts.id, before.id));
-      else await db.delete(siteLayouts).where(eq(siteLayouts.pageKey, "home"));
-      invalidateCached("storefront:layout:home");
+      else await db.delete(siteLayouts).where(and(eq(siteLayouts.pageKey, "home"), eq(siteLayouts.themeKey, "")));
+      invalidateCachedByPrefix("storefront:layout:home");
+    }
+  });
+
+  it("баярын нүүрний бүтэц: өөрийн бүтэц байвал тэр, үгүй бол глобал; глобалд нөлөөлөхгүй (snapshot-and-restore)", async () => {
+    const db = (await getDb())!;
+    const KEY = "valentine";
+    const [globalBefore] = await db.select().from(siteLayouts).where(and(eq(siteLayouts.pageKey, "home"), eq(siteLayouts.themeKey, ""))).limit(1);
+    const ownBefore = await db.select().from(siteLayouts).where(and(eq(siteLayouts.pageKey, "home"), eq(siteLayouts.themeKey, KEY)));
+    try {
+      await db.delete(siteLayouts).where(and(eq(siteLayouts.pageKey, "home"), eq(siteLayouts.themeKey, KEY)));
+      invalidateCachedByPrefix("storefront:layout:home");
+      await admin().admin.brandStudio.saveHomeLayout({ sections: [{ key: "stores", visible: true, variant: "default" }] });
+      // Өөрийн бүтэцгүй баяр → глобал (fallback).
+      expect(await hasOwnHomeLayout(KEY)).toBe(false);
+      expect((await getHomeLayout(KEY))[0].key).toBe("stores");
+      const info = await admin().admin.brandStudio.homeLayout({ themeKey: KEY });
+      expect(info.custom).toBe(false);
+      expect(info.sections[0].key).toBe("stores");
+
+      // Баярын бүтэц хадгалбал зөвхөн тэр баярт; глобал хэвээр.
+      await admin().admin.brandStudio.saveHomeLayout({ themeKey: KEY, sections: [{ key: "categories", visible: true, variant: "default" }, { key: "bestsellers", visible: false, variant: "rail" }] });
+      expect(await hasOwnHomeLayout(KEY)).toBe(true);
+      const own = await getHomeLayout(KEY);
+      expect(own[0].key).toBe("categories");
+      expect(own.find(entry => entry.key === "bestsellers")?.visible).toBe(false);
+      expect((await getHomeLayout())[0].key).toBe("stores");
+      expect((await getHomeLayout("tsagaan-sar"))[0].key).toBe("stores");
+      // Идэвхгүй/мэдэгдээгүй түлхүүр глобал руу унана (чөлөөт текст DB-д орохгүй).
+      expect((await getHomeLayout("not a key!"))[0].key).toBe("stores");
+
+      // Мэдэгдэхгүй баяр, глобалыг reset хийх оролдлого татгалзана.
+      await expect(admin().admin.brandStudio.saveHomeLayout({ themeKey: "no-such-holiday", sections: [] })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      await expect(admin().admin.brandStudio.resetHolidayHomeLayout({ themeKey: "base" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+      // Багцад орно, дахин импортлоход сэргэнэ.
+      const pack = await admin().admin.brandStudio.exportPack();
+      expect(pack.holidayLayouts.find(entry => entry.themeKey === KEY)?.sections[0].key).toBe("categories");
+
+      // Reset → глобал руу буцна.
+      await admin().admin.brandStudio.resetHolidayHomeLayout({ themeKey: KEY });
+      expect(await hasOwnHomeLayout(KEY)).toBe(false);
+      expect((await getHomeLayout(KEY))[0].key).toBe("stores");
+    } finally {
+      await db.delete(siteLayouts).where(and(eq(siteLayouts.pageKey, "home"), eq(siteLayouts.themeKey, KEY)));
+      if (ownBefore.length) await db.insert(siteLayouts).values(ownBefore);
+      if (globalBefore) await db.update(siteLayouts).set({ sectionsJson: globalBefore.sectionsJson, updatedByUserId: globalBefore.updatedByUserId }).where(eq(siteLayouts.id, globalBefore.id));
+      else await db.delete(siteLayouts).where(and(eq(siteLayouts.pageKey, "home"), eq(siteLayouts.themeKey, "")));
+      invalidateCachedByPrefix("storefront:layout:home");
     }
   });
 
@@ -138,7 +186,7 @@ describeWithDatabase("Брэнд студи — хадгалах, AA, түүх, 
     const pack = await admin().admin.brandStudio.exportPack();
     expect(pack.format).toBe("brand-pack.v1");
     expect(pack.homeLayout.length).toBeGreaterThan(0);
-    expect(Object.keys(pack).sort()).toEqual(["exportedAt", "format", "homeLayout", "siteMedia", "siteText", "themes"]);
+    expect(Object.keys(pack).sort()).toEqual(["exportedAt", "format", "holidayLayouts", "homeLayout", "siteMedia", "siteText", "themes"]);
     const json = JSON.stringify(pack);
     expect(json).not.toMatch(/passwordHash|apiKey|secret|clientSecret|INTEGRATIONS_ENCRYPTION/i);
   });
@@ -146,7 +194,7 @@ describeWithDatabase("Брэнд студи — хадгалах, AA, түүх, 
   it("брэнд багц импорт: мэдэгдэх slot л, AA унасан загварыг алгасна (snapshot-and-restore)", async () => {
     const db = (await getDb())!;
     const [before] = await db.select().from(siteText).where(eq(siteText.slotKey, "brand-text-short-name")).limit(1);
-    const [layoutBefore] = await db.select().from(siteLayouts).where(eq(siteLayouts.pageKey, "home")).limit(1);
+    const [layoutBefore] = await db.select().from(siteLayouts).where(and(eq(siteLayouts.pageKey, "home"), eq(siteLayouts.themeKey, ""))).limit(1);
     try {
       const result = await admin().admin.brandStudio.importPack({
         format: "brand-pack.v1",
@@ -165,8 +213,8 @@ describeWithDatabase("Брэнд студи — хадгалах, AA, түүх, 
       if (before) await db.update(siteText).set({ textValue: before.textValue, updatedByUserId: before.updatedByUserId }).where(eq(siteText.id, before.id));
       else await db.delete(siteText).where(eq(siteText.slotKey, "brand-text-short-name"));
       if (layoutBefore) await db.update(siteLayouts).set({ sectionsJson: layoutBefore.sectionsJson, updatedByUserId: layoutBefore.updatedByUserId }).where(eq(siteLayouts.id, layoutBefore.id));
-      else await db.delete(siteLayouts).where(eq(siteLayouts.pageKey, "home"));
-      invalidateCached("storefront:layout:home");
+      else await db.delete(siteLayouts).where(and(eq(siteLayouts.pageKey, "home"), eq(siteLayouts.themeKey, "")));
+      invalidateCachedByPrefix("storefront:layout:home");
     }
   });
 });

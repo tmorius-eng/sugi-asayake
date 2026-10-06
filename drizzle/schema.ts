@@ -2315,10 +2315,12 @@ export type SiteThemeVersionRow = typeof siteThemeVersions.$inferSelect;
 export const siteLayouts = mysqlTable("site_layouts", {
   id: int("id").autoincrement().primaryKey(),
   pageKey: varchar("pageKey", { length: 32 }).notNull(),
+  // 0107: '' = бүх өдрийн (глобал) бүтэц, баярын түлхүүр = тэр баяр идэвхтэй үеийн бүтэц.
+  themeKey: varchar("themeKey", { length: 64 }).notNull().default(""),
   sectionsJson: text("sectionsJson").notNull(),
   updatedByUserId: int("updatedByUserId").references(() => users.id, { onDelete: "set null" }),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => [
-  uniqueIndex("site_layouts_page_unique").on(table.pageKey),
+  uniqueIndex("site_layouts_page_theme_unique").on(table.pageKey, table.themeKey),
 ]);
 export type SiteLayoutRow = typeof siteLayouts.$inferSelect;

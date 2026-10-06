@@ -11,7 +11,11 @@ const HolidayEffect = lazy(() => import("./HolidayEffect"));
  */
 export function HolidayEffectMount() {
   const { effect } = useHolidayDecor();
-  const [ready, setReady] = useState(() => typeof document !== "undefined" && document.readyState === "complete");
+  // Брэнд студийн урьдчилан харалт (admin-ий iframe, `?brandPreview`) хуудас ачаалж дуустал хүлээхгүй:
+  // 2026-10-06-аас App-д mount хийгддэг тул Home-д байснаас эрт — `load` (hero-ийн том зураг) хүртэл хүлээвэл
+  // preview-ийн цас хоцорно. Жинхэнэ зочинд LCP-ийн дараа гэсэн дүрэм хэвээр.
+  const inPreview = typeof window !== "undefined" && window.parent !== window && new URLSearchParams(window.location.search).has("brandPreview");
+  const [ready, setReady] = useState(() => inPreview || (typeof document !== "undefined" && document.readyState === "complete"));
   const reduced = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 
   useEffect(() => {

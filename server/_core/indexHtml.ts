@@ -99,7 +99,7 @@ async function resolveValues(): Promise<Map<string, string>> {
 }
 
 async function computeValues(dateKey: string): Promise<Map<string, string>> {
-  const [rows, branches, phoneDigits, facebookUrl, instagramUrl, mediaRows, googleVerification, facebookVerification, promo, theme, homeLayout] = await Promise.all([
+  const [rows, branches, phoneDigits, facebookUrl, instagramUrl, mediaRows, googleVerification, facebookVerification, promo, theme] = await Promise.all([
     getSiteText(),
     getStorefrontBranches(),
     getStoreSettingValue("contact-phone-tel"),
@@ -110,8 +110,9 @@ async function computeValues(dateKey: string): Promise<Map<string, string>> {
     getStoreSettingValue("seo-facebook-domain-verification"),
     getActiveSitePromotion(),
     getActiveThemeBundle(dateKey),
-    getHomeLayout(),
   ]);
+  // Нүүрний бүтэц: идэвхтэй баярын өөрийн бүтэц (байвал), үгүй бол глобал (2026-10-06, migration 0107).
+  const homeLayout = await getHomeLayout(theme.holiday?.key ?? null);
   // 2026-09-21: R2-ийн шууд хаяг (publicUrl.ts-ийн directStorageUrl) — preload, shell,
   // bootstrap, OG бүгд нэг URL: `/cdn/` 302-ын нэг RTT hero-ийн замаас хасагдана.
   // content.siteMedia (routers.ts) ижил хөрвүүлэлт хийдэг тул React дахин татахгүй.
@@ -163,7 +164,7 @@ async function computeValues(dateKey: string): Promise<Map<string, string>> {
   // Баярын бүтэн-сайтын загвар (2026-10-06): идэвхтэй баяр skin-тэй бол түүний түлхүүр.
   // getActiveThemeBundle нь ЗӨВХӨН идэвхжүүлсэн (enabled) баярыг буцаадаг тул энэ нь
   // "идэвхтэй баяр + skin файлтай" гэсэн үг. /admin дээр доорх replace-д хүчингүй болгоно.
-  const skinKey = hasHolidaySkin(theme.holiday?.key) ? theme.holiday!.key : null;
+  const skinKey = theme.skin && hasHolidaySkin(theme.holiday?.key) ? theme.holiday!.key : null;
 
   const bootstrapJson = JSON.stringify({
     siteMedia: media,
@@ -220,7 +221,12 @@ async function computeValues(dateKey: string): Promise<Map<string, string>> {
     // would end the tag early. Escaping the slash keeps it inert and is still
     // valid JSON.
     ["SEO_STRUCTURED_DATA", JSON.stringify(structuredData).replace(/</g, "\\u003c")],
-    ["SEO_HERO_PRELOAD", heroUrl ? await responsiveImagePreload(heroUrl, HERO_FULL_WIDTH, HERO_IMAGE_SIZES) : ""],
+    // Skin идэвхтэй үед hero нь CSS дэвсгэр зураг (client/public/holiday-skins/<key>.css-ийн
+    // @media-тай ЯГ ижил хоёр файл) — LCP-ийн preload хуучин постер биш тэр файлыг заана.
+    ["SEO_HERO_PRELOAD", skinKey
+      ? `<link rel="preload" as="image" href="/holiday-skins/${skinKey}/hero.webp" media="(min-width: 761px)" fetchpriority="high" />
+    <link rel="preload" as="image" href="/holiday-skins/${skinKey}/hero-1200.webp" media="(max-width: 760px)" fetchpriority="high" />`
+      : heroUrl ? await responsiveImagePreload(heroUrl, HERO_FULL_WIDTH, HERO_IMAGE_SIZES) : ""],
     ["SEO_OG_IMAGE", escapeAttribute(absoluteUrl(heroUrl))],
     ["SEO_OG_TYPE", "website"],
     ["SEO_OG_IMAGE_META", ""],
@@ -320,6 +326,8 @@ export async function renderIndexHtml(template: string, pathname = "/"): Promise
     if (key === "STOREFRONT_THEME_COLOR" && isAdminPath) return BASE_THEME.light.primary;
     // Баярын skin admin-ийг ХЭЗЭЭ Ч солихгүй (admin UI ижил токен уншдаг).
     if ((key === "STOREFRONT_HTML_ATTRS" || key === "STOREFRONT_SKIN_STYLE") && isAdminPath) return "";
+    // Admin-д hero зураг огт харагдахгүй — preload нь (skin-ийн хоёр том зураг ч) дэмий татна.
+    if (key === "SEO_HERO_PRELOAD" && isAdminPath) return "";
     return routeMeta?.get(key) ?? values.get(key) ?? fallbackFor(key) ?? match;
   });
 }

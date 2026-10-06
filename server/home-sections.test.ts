@@ -41,3 +41,22 @@ describe("нүүрний хэсгийн layout", () => {
     expect(first).toEqual({ key: "free-1", visible: true, variant: "text-only", props: { heading: "Сайн уу", text: "", ctaLabel: "", ctaHref: "" } });
   });
 });
+
+describe("баярын бэлэн нүүрний бүтэц (HOLIDAY_HOME_PRESETS)", () => {
+  it("Шинэ жилийн бэлэн бүтэц: hero → барааны мөр → ангилал → салбар, бусад нь нуугдсан, бүгд бүрэн", async () => {
+    const { HOLIDAY_HOME_PRESETS, HOME_SECTIONS, holidayHomePreset } = await import("../shared/home-sections");
+    const preset = holidayHomePreset("new-year")!;
+    expect(preset.map(entry => entry.key).sort()).toEqual(HOME_SECTIONS.map(section => section.key).sort());
+    expect(preset.filter(entry => entry.visible).map(entry => `${entry.key}:${entry.variant}`)).toEqual(["bestsellers:grid", "categories:default", "stores:default"]);
+    // Бэлэн бүтэц нь ХУВЬ — нэг баярынхыг засахад нөгөөд нөлөөлөхгүй.
+    expect(HOLIDAY_HOME_PRESETS["new-year"]).toBe(preset);
+    expect(holidayHomePreset("tsagaan-sar")).toBeNull();
+    expect(holidayHomePreset(null)).toBeNull();
+  });
+
+  it("бэлэн бүтэцтэй баяр бүр бодит баяр, түлхүүр нь бүртгэлтэй", async () => {
+    const { HOLIDAY_HOME_PRESETS } = await import("../shared/home-sections");
+    const { HOLIDAYS } = await import("../shared/holidays");
+    for (const key of Object.keys(HOLIDAY_HOME_PRESETS)) expect(HOLIDAYS.some(holiday => holiday.key === key), key).toBe(true);
+  });
+});

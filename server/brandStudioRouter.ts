@@ -1,15 +1,17 @@
 import sharp from "sharp";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { holidayHomePreset } from "../shared/home-sections";
+import { HOLIDAY_SKIN_LOOKS } from "../shared/holiday-skin-looks";
 import { BASE_THEME, mergeLook, sanitizeLookPatch } from "../shared/theme-tokens";
 import { checkLookContrast } from "../shared/color/contrast";
 import { derivePalettes, pickBrandColor, quantize, type Rgb } from "../shared/color/palette";
 import { getSiteMediaSlot } from "../shared/site-media";
-import { HOLIDAYS, getHoliday } from "../shared/holidays";
+import { HOLIDAYS, getHoliday, hasHolidaySkin } from "../shared/holidays";
 import { HOLIDAY_EFFECTS, HOLIDAY_ORNAMENTS, isHolidayEffect, isHolidayOrnament } from "../shared/holiday-decor";
 import { holidayOccurrence, holidayWindow, isDateKey, type HolidaySettings } from "../shared/theme-resolver";
 import { ubDateKey } from "../shared/notification-events";
-import { getActiveThemeBundle, getHomeLayout, saveHomeLayout, getSiteMedia, getSiteText, upsertSiteMedia, upsertSiteText, getThemeRows, listThemeVersions, logAdminAction, rollbackTheme, saveTheme } from "./db";
+import { getActiveThemeBundle, getHomeLayout, hasOwnHomeLayout, listHolidayHomeLayouts, resetHolidayHomeLayout, saveHomeLayout, getSiteMedia, getSiteText, upsertSiteMedia, upsertSiteText, getThemeRows, listThemeVersions, logAdminAction, rollbackTheme, saveTheme } from "./db";
 import { readSiteImageBytes } from "./_core/brandIcons";
 import { invalidateIndexHtmlCache } from "./_core/indexHtml";
 import { adminProcedure, marketingProcedure, router } from "./_core/trpc";
@@ -34,6 +36,18 @@ const holidaySchema = z.object({
 });
 
 const readJson = (json: string | null | undefined): unknown => { if (!json) return null; try { return JSON.parse(json); } catch { return null; } };
+
+/**
+ * Баярын УЧИР ХЭРЭГЖИХ өнгөний patch (суурьтай харьцуулсан): skin асаалттай бол skin-ийн анхдагч
+ * өнгө, түүний дээр админы хадгалсан өөрчлөлт (getActiveThemeBundle-тэй ИЖИЛ дараалал).
+ */
+function effectiveHolidayPatch(themeKey: string, row: { lookJson: string | null; extraJson: string | null } | undefined) {
+  const own = (readJson(row?.lookJson) ?? {}) as { light?: Record<string, unknown>; dark?: Record<string, unknown> };
+  const skinOn = (readJson(row?.extraJson) as { skin?: boolean } | null)?.skin !== false;
+  const skin = skinOn ? HOLIDAY_SKIN_LOOKS[themeKey] : undefined;
+  if (!skin) return own;
+  return { ...own, light: { ...skin.light, ...(own.light ?? {}) }, dark: { ...(skin.dark ?? {}), ...(own.dark ?? {}) } };
+}
 
 export const brandStudioRouter = router({
   /** Бүх загвар + 13 баярын энэ/дараа жилийн цонх, одоо идэвхтэй загвар. */
@@ -64,11 +78,15 @@ export const brandStudioRouter = router({
         showPoster: ((readJson(row?.extraJson) as { showPoster?: boolean } | null)?.showPoster) !== false,
         effect: ((readJson(row?.extraJson) as { effect?: string } | null)?.effect) ?? "none",
         ornament: ((readJson(row?.extraJson) as { ornament?: string } | null)?.ornament) ?? "none",
+        // Бүтэн-сайтын загвар: файлтай эсэх + асаалттай эсэх (унтраасан бол зөвхөн өнгө/постер).
+        hasSkin: hasHolidaySkin(def.key),
+        skin: ((readJson(row?.extraJson) as { skin?: boolean } | null)?.skin) !== false,
         settings: { enabled: settings.enabled === true, startOffsetDays: settings.startOffsetDays ?? null, endOffsetDays: settings.endOffsetDays ?? null, overrideStart: settings.overrideStart ?? null, overrideEnd: settings.overrideEnd ?? null },
         defaultOffsets: { start: def.startOffsetDays, end: def.endOffsetDays },
         window,
         occurrence,
-        look: readJson(row?.lookJson) ?? {},
+        // Skin асаалттай бол skin-ийн анхдагч өнгө + админы хадгалсан өөрчлөлт (админ харахдаа бодит өнгөө харна).
+        look: effectiveHolidayPatch(def.key, row),
         greeting: ((readJson(row?.extraJson) as { greeting?: string } | null)?.greeting) ?? null,
         updatedAt: row?.updatedAt ?? null,
       };
@@ -92,6 +110,7 @@ export const brandStudioRouter = router({
     showPoster: z.boolean().optional(),
     effect: z.enum(HOLIDAY_EFFECTS).optional(),
     ornament: z.enum(HOLIDAY_ORNAMENTS).optional(),
+    skin: z.boolean().optional(),
     holiday: holidaySchema.optional(),
     note: z.string().max(200).nullable().optional(),
   })).mutation(async ({ ctx, input }) => {
@@ -123,7 +142,8 @@ export const brandStudioRouter = router({
     const row = await saveTheme({
       themeKey: input.themeKey,
       look: input.look,
-      extra: input.greeting !== undefined || input.posterUrl !== undefined || input.showPoster !== undefined || input.effect !== undefined || input.ornament !== undefined ? {
+      extra: input.greeting !== undefined || input.posterUrl !== undefined || input.showPoster !== undefined || input.effect !== undefined || input.ornament !== undefined || input.skin !== undefined ? {
+        ...(input.skin !== undefined ? { skin: input.skin } : {}),
         ...(input.effect !== undefined ? { effect: input.effect } : {}),
         ...(input.ornament !== undefined ? { ornament: input.ornament } : {}),
         ...(input.greeting !== undefined ? { greeting: input.greeting === null ? undefined : input.greeting } : {}),
@@ -163,17 +183,31 @@ export const brandStudioRouter = router({
   }),
 
   /** Нүүрний бүтэц (A3): hero тогтмол эхэнд, бусад хэсгийн дараалал/нуулт/хувилбар. */
-  homeLayout: marketingProcedure.query(() => getHomeLayout()),
+  // themeKey: байхгүй/"base" = глобал; баярын түлхүүр = тэр баярын бүтэц (байхгүй бол глобал руу fallback, custom=false).
+  homeLayout: marketingProcedure.input(z.object({ themeKey: themeKeySchema.optional() }).optional()).query(async ({ input }) => {
+    const key = input?.themeKey && input.themeKey !== "base" ? input.themeKey : null;
+    return { sections: await getHomeLayout(key), custom: await hasOwnHomeLayout(key), preset: holidayHomePreset(key) !== null };
+  }),
+  resetHolidayHomeLayout: marketingProcedure.input(z.object({ themeKey: themeKeySchema })).mutation(async ({ ctx, input }) => {
+    if (input.themeKey === "base" || !getHoliday(input.themeKey)) throw new TRPCError({ code: "BAD_REQUEST", message: "Баярын загвар сонгоно уу." });
+    await resetHolidayHomeLayout(input.themeKey);
+    invalidateIndexHtmlCache();
+    await logAdminAction({ actorUserId: ctx.user.id, action: "layout.reset", entityType: "site_layout", entityId: null, metadata: { page: "home", themeKey: input.themeKey } });
+    return { ok: true };
+  }),
   saveHomeLayout: marketingProcedure.input(z.object({
+    themeKey: themeKeySchema.optional(),
     sections: z.array(z.object({
       key: z.string().max(40), visible: z.boolean(), variant: z.string().max(40),
       // Чөлөөт зурвас (free-1..3) — sanitizeFreeBlockProps дахин цэвэрлэнэ (дотоод холбоос л).
       props: z.object({ heading: z.string().max(200), text: z.string().max(1000), ctaLabel: z.string().max(80), ctaHref: z.string().max(300) }).partial().optional(),
     })).max(40),
   })).mutation(async ({ ctx, input }) => {
-    const saved = await saveHomeLayout(input.sections, ctx.user.id);
+    const holidayKey = input.themeKey && input.themeKey !== "base" ? input.themeKey : null;
+    if (holidayKey && !getHoliday(holidayKey)) throw new TRPCError({ code: "BAD_REQUEST", message: "Ийм баяр байхгүй." });
+    const saved = await saveHomeLayout(input.sections, ctx.user.id, holidayKey);
     invalidateIndexHtmlCache();
-    await logAdminAction({ actorUserId: ctx.user.id, action: "layout.saved", entityType: "site_layout", entityId: null, metadata: { page: "home", sections: saved.map(s => `${s.visible ? "" : "-"}${s.key}:${s.variant}`) } });
+    await logAdminAction({ actorUserId: ctx.user.id, action: "layout.saved", entityType: "site_layout", entityId: null, metadata: { page: "home", themeKey: holidayKey, sections: saved.map(s => `${s.visible ? "" : "-"}${s.key}:${s.variant}`) } });
     return saved;
   }),
 
@@ -183,12 +217,14 @@ export const brandStudioRouter = router({
    * Нууц юу ч ОРОХГҮЙ (интеграцийн түлхүүр, хэрэглэгч, захиалга биш).
    */
   exportPack: marketingProcedure.query(async () => {
-    const [rows, layout, media, text] = await Promise.all([getThemeRows(), getHomeLayout(), getSiteMedia(), getSiteText()]);
+    const [rows, layout, holidayLayouts, media, text] = await Promise.all([getThemeRows(), getHomeLayout(), listHolidayHomeLayouts(), getSiteMedia(), getSiteText()]);
     return {
       format: "brand-pack.v1" as const,
       exportedAt: new Date().toISOString(),
       themes: rows.map(row => ({ themeKey: row.themeKey, name: row.name, kind: row.kind, look: readJson(row.lookJson) ?? {}, extra: readJson(row.extraJson) ?? {}, holiday: readJson(row.holidayJson) })),
       homeLayout: layout,
+      // Баярын өөрийн нүүрний бүтэц (migration 0107) — глобалаас ялгаатай баяр бүр.
+      holidayLayouts,
       siteText: text.map(row => ({ slotKey: row.slotKey, textValue: row.textValue })),
       siteMedia: media.map(row => ({ slotKey: row.slotKey, imageUrl: row.imageUrl, altText: row.altText })),
     };
@@ -203,6 +239,7 @@ export const brandStudioRouter = router({
     format: z.literal("brand-pack.v1"),
     themes: z.array(z.object({ themeKey: z.string(), name: z.string().max(120).optional(), look: z.unknown(), extra: z.unknown().optional(), holiday: z.unknown().optional() })).max(40),
     homeLayout: z.array(z.object({ key: z.string(), visible: z.boolean(), variant: z.string() }).passthrough()).max(40),
+    holidayLayouts: z.array(z.object({ themeKey: z.string().max(64), sections: z.array(z.object({ key: z.string(), visible: z.boolean(), variant: z.string() }).passthrough()).max(40) })).max(40).optional(),
     siteText: z.array(z.object({ slotKey: z.string(), textValue: z.string().nullable() })).max(1000),
     siteMedia: z.array(z.object({ slotKey: z.string(), imageUrl: z.string(), altText: z.string().nullable().optional() })).max(200),
   }).passthrough()).mutation(async ({ ctx, input }) => {
@@ -214,7 +251,7 @@ export const brandStudioRouter = router({
       if (!known.has(theme.themeKey)) { skipped.push(`загвар ${theme.themeKey}`); continue; }
       const merged = theme.themeKey === "base" ? baseLook : mergeLook(baseLook, theme.look);
       if (checkLookContrast(merged).some(result => !result.ok)) { skipped.push(`загвар ${theme.themeKey} (AA)`); continue; }
-      const extra = (theme.extra && typeof theme.extra === "object" ? theme.extra : {}) as { greeting?: unknown; posterUrl?: unknown; showPoster?: unknown; effect?: unknown; ornament?: unknown };
+      const extra = (theme.extra && typeof theme.extra === "object" ? theme.extra : {}) as { greeting?: unknown; posterUrl?: unknown; showPoster?: unknown; effect?: unknown; ornament?: unknown; skin?: unknown };
       const holiday = theme.holiday && typeof theme.holiday === "object" ? holidaySchema.safeParse(theme.holiday) : null;
       await saveTheme({
         themeKey: theme.themeKey,
@@ -226,12 +263,17 @@ export const brandStudioRouter = router({
           showPoster: extra.showPoster === false ? false : undefined,
           effect: isHolidayEffect(extra.effect) ? extra.effect : undefined,
           ornament: isHolidayOrnament(extra.ornament) ? extra.ornament : undefined,
+          skin: extra.skin === false ? false : undefined,
         },
         holiday: holiday?.success ? holiday.data : undefined,
         note: "Брэнд багцаас импортлов",
       }, ctx.user.id);
     }
     await saveHomeLayout(input.homeLayout, ctx.user.id);
+    for (const entry of input.holidayLayouts ?? []) {
+      if (!getHoliday(entry.themeKey)) { skipped.push(`баярын бүтэц ${entry.themeKey}`); continue; }
+      await saveHomeLayout(entry.sections, ctx.user.id, entry.themeKey);
+    }
     const textKeys = new Set<string>(siteTextSlotKeys);
     let texts = 0;
     for (const row of input.siteText) {

@@ -1,5 +1,6 @@
 import { expect, test } from "./helpers/fixtures";
 import { signInAs } from "./helpers/session";
+import { HOLIDAY_SKIN_LOOKS } from "../shared/holiday-skin-looks";
 
 /**
  * Баярын бүтэн-сайтын загвар (skin, 2026-10-06). Tom: "баяр бүрт theme ба layout бүтнээрээ
@@ -14,6 +15,10 @@ import { signInAs } from "./helpers/session";
 const SKIN = "new-year";
 
 async function forceSkin(page: import("@playwright/test").Page) {
+  // Өнгө нь skin CSS-д биш баярын загварын look-д (shared/holiday-skin-looks.ts) бөгөөд бодит сайтад серверийн
+  // `<style id="brand-tokens">` (`html:root{…}`)-оор ирдэг. Баяр идэвхжээгүй staging-д ЭЭЛТЭЭР ИЖИЛ дуурайлгана.
+  const tokens = Object.entries(HOLIDAY_SKIN_LOOKS[SKIN].light).map(([name, value]) => `--${name}:${value};`).join("");
+  await page.addStyleTag({ content: `html:root{${tokens}}` });
   await page.evaluate(key => {
     document.documentElement.setAttribute("data-skin", key);
     document.documentElement.setAttribute("data-holiday", key);
@@ -52,7 +57,7 @@ test.describe("баярын skin: Шинэ жил", () => {
     expect(await cssVar(page, "--ck-page")).toBe("#f7f1e8");
     expect(await cssVar(page, "--promo-bar-bg")).toBe("#2f5b43");
     // Hero = нэг бүтэн баярын зураг (өөр дэвсгэр зураг), хүрээгүй rail нуугдсан.
-    const heroBg = await page.locator(".hero-section").evaluate(el => getComputedStyle(el).backgroundImage);
+    const heroBg = await page.locator("#root .hero-section").evaluate(el => getComputedStyle(el).backgroundImage);
     expect(heroBg).toContain("new-year/hero");
     // Гарчиг serif.
     const greetingFont = await page.locator(".hero-greeting").first().evaluate(el => getComputedStyle(el).fontFamily).catch(() => "");

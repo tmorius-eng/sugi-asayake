@@ -100,6 +100,10 @@ test.describe("Брэнд студи", () => {
     await openAdminSection(page, "Брэнд студи");
     const frame = page.frameLocator('iframe[title="Сайтын урьдчилан харах"]');
     await expect(frame.locator(".hero-copy h1")).toBeVisible({ timeout: 30_000 });
+    // iframe-ийн `load` дуусмагц PreviewFrame өөрийн төлөвөө (цасгүй) дахин илгээдэг — тэр болтол хүлээхгүй бол
+    // тестийн "snow" мессежийг дарна. Баярын үед hero-ийн том зураг тул `load` удаан (2026-10-06).
+    await page.waitForFunction(() => document.querySelector<HTMLIFrameElement>('iframe[title="Сайтын урьдчилан харах"]')?.contentDocument?.readyState === "complete", undefined, { timeout: 30_000 });
+    await page.waitForTimeout(400);
     const post = (effect: string, ornament: string) => page.evaluate(([e, o]) => {
       const iframe = document.querySelector<HTMLIFrameElement>('iframe[title="Сайтын урьдчилан харах"]')!;
       iframe.contentWindow!.postMessage({ type: "brand-preview", mode: "light", vars: {}, effect: e, ornament: o }, window.location.origin);

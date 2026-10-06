@@ -70,3 +70,20 @@ export function sanitizeHomeLayout(input: unknown): HomeSectionEntry[] {
   for (const def of HOME_SECTIONS) if (!seen.has(def.key)) out.push({ key: def.key, visible: def.defaultVisible, variant: def.variants[0] });
   return out;
 }
+
+/**
+ * Баярын БЭЛЭН нүүрний бүтэц (2026-10-06). Баяр өөрийн бүтэц хадгалаагүй үед: өөрийн мөр → энэ
+ * бэлэн бүтэц (байвал) → глобал. Эзэн (Tom) Шинэ жилийн дизайны mockup-ыг сонгосон: hero →
+ * барааны мөр → бэлгийн хөтөч (ангилал) — урт нүүрийн оронд богино, баярын нүүр. Админ
+ * "Нүүрний бүтэц → Засах загвар"-аас өөрчилж хадгалбал өөрийнх нь бүтэц энэ бэлэн бүтцийг дарна.
+ */
+function festiveLayout(visible: Partial<Record<HomeSectionKey, string>>): HomeSectionEntry[] {
+  const shown = (Object.entries(visible) as [HomeSectionKey, string][]).map(([key, variant]) => ({ key, visible: true, variant }));
+  const hidden = HOME_SECTIONS.filter(section => !(section.key in visible)).map(section => ({ key: section.key, visible: false, variant: section.variants[0] as string }));
+  return sanitizeHomeLayout([...shown, ...hidden]);
+}
+
+export const HOLIDAY_HOME_PRESETS: Record<string, HomeSectionEntry[]> = {
+  "new-year": festiveLayout({ bestsellers: "grid", categories: "default", stores: "default" }),
+};
+export const holidayHomePreset = (themeKey: string | null | undefined): HomeSectionEntry[] | null => (themeKey ? HOLIDAY_HOME_PRESETS[themeKey] ?? null : null);

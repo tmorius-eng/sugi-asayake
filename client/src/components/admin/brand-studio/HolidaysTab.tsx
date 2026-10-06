@@ -134,7 +134,7 @@ function HolidayCard({ holiday, today, look, isNext, isPreviewing, isOpen, busy,
   onToggleOpen: () => void;
   onPreview: () => void;
   onEditColors: () => void;
-  onSave: (input: { greeting?: string | null; posterUrl?: string | null; showPoster?: boolean; effect?: HolidayEffect; ornament?: HolidayOrnament; holiday?: { enabled?: boolean; startOffsetDays?: number; endOffsetDays?: number; overrideStart?: string | null; overrideEnd?: string | null } }, message: string) => Promise<void>;
+  onSave: (input: { greeting?: string | null; posterUrl?: string | null; showPoster?: boolean; skin?: boolean; effect?: HolidayEffect; ornament?: HolidayOrnament; holiday?: { enabled?: boolean; startOffsetDays?: number; endOffsetDays?: number; overrideStart?: string | null; overrideEnd?: string | null } }, message: string) => Promise<void>;
   onUpload: (file: File) => Promise<string | null>;
 }) {
   const poster = holiday.showPoster ? holiday.posterUrl ?? holiday.defaultPoster : null;
@@ -178,6 +178,7 @@ function HolidayCard({ holiday, today, look, isNext, isPreviewing, isOpen, busy,
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[var(--a-muted)]">
             <span className="inline-flex items-center gap-1"><CalendarClock size={12} />{holiday.window ? `${fmt(holiday.window.start)} – ${fmt(holiday.window.end)}` : "Огноо тодорхойгүй — гараар оруулна"}</span>
             {holiday.official && <span className="rounded-full bg-[var(--a-info-soft)] px-2 py-0.5 font-bold text-[var(--a-info)]">Албан ёсны</span>}
+            {holiday.hasSkin && <span className={`rounded-full px-2 py-0.5 font-bold ${holiday.skin ? "bg-[var(--a-pos-soft)] text-[var(--a-pos)]" : "bg-[var(--a-soft)] text-[var(--a-muted)]"}`}>{holiday.skin ? "Бүтэн загвартай" : "Бүтэн загвар унтраалттай"}</span>}
             {(isNext || activeNow) && <span className={`rounded-full px-2 py-0.5 font-extrabold text-white ${activeNow ? "bg-[var(--a-pos)]" : "bg-[var(--a-info)]"}`}>{activeNow ? "Одоо цонх дотор" : `Удахгүй: ${daysAway} хоног`}</span>}
           </p>
           <div className="flex flex-wrap items-center gap-1.5">
@@ -231,6 +232,15 @@ function HolidayCard({ holiday, today, look, isNext, isPreviewing, isOpen, busy,
                 Hero-ийн эхний зургийг солих
               </label>
             </div>
+            {holiday.hasSkin && (
+              <label className="flex items-start gap-2 rounded-xl border border-[var(--a-border)] bg-[var(--a-card)] p-2.5 font-bold">
+                <input type="checkbox" className="mt-0.5" checked={holiday.skin} disabled={busy}
+                  onChange={event => onSave({ skin: event.target.checked }, event.target.checked ? `${holiday.name}: бүтэн сайтын загвар асаалттай.` : `${holiday.name}: бүтэн сайтын загвар унтраалттай — зөвхөн өнгө, постер.`)} />
+                <span>Бүтэн сайтын загвар (skin)
+                  <span className="block font-normal text-[var(--a-muted)]">Баярын үед толгой, нүүр, дэлгүүр, барааны карт, хөл — бүгд тухайн баярын зохиомж, фонт, чимэгтэй болно. Унтраавал зөвхөн өнгө, постер солигдоно.</span>
+                </span>
+              </label>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <label className="grid gap-1 font-bold">Хөдөлгөөнт чимэглэл (нүүрэнд 15 с)
                 <select value={holiday.effect} disabled={busy} onChange={event => onSave({ effect: event.target.value as HolidayEffect }, `Чимэглэл: ${EFFECT_LABELS[event.target.value as HolidayEffect]}.`)}

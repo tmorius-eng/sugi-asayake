@@ -69,3 +69,28 @@ describe.each([...HOLIDAY_SKINS])("holiday skin CSS: %s", key => {
     for (const brandHex of ["#df1f3d", "#bc1732", "#b01729", "#1e3ad6"]) expect(css.toLowerCase()).not.toContain(brandHex);
   });
 });
+
+describe("holiday skin default colours (shared/holiday-skin-looks.ts)", () => {
+  it("every skin with colours is registered, and its palette keeps every text pair AA on top of the base theme", async () => {
+    const { HOLIDAY_SKIN_LOOKS } = await import("../shared/holiday-skin-looks");
+    const { BASE_THEME, mergeLook } = await import("../shared/theme-tokens");
+    const { checkLookContrast } = await import("../shared/color/contrast");
+    for (const key of Object.keys(HOLIDAY_SKIN_LOOKS)) {
+      expect(HOLIDAY_SKINS.has(key), `${key} has colours but no skin`).toBe(true);
+      const merged = mergeLook(BASE_THEME, HOLIDAY_SKIN_LOOKS[key]);
+      const failing = checkLookContrast(merged).filter(result => !result.ok);
+      expect(failing, `${key}: ${JSON.stringify(failing.map(f => `${f.label} ${f.ratio}`))}`).toEqual([]);
+    }
+  });
+
+  it("skin colours live in the look (editable in Брэнд студи), not in the skin CSS", () => {
+    for (const key of HOLIDAY_SKINS) {
+      const css = skinCss(key).replace(/\/\*[\s\S]*?\*\//g, "");
+      for (const token of ["--primary:", "--background:", "--ck-page:", "--ck-surface:", "--promo-bar-bg:", "--accent:"]) {
+        // Харанхуй горимын блок (html[data-storefront-theme="dark"]) л зарим токеныг өөрөө тавьж болно.
+        const lightBlock = css.split('html[data-storefront-theme="dark"]')[0];
+        expect(lightBlock, `${key}.css sets ${token} — move it to HOLIDAY_SKIN_LOOKS`).not.toContain(token);
+      }
+    }
+  });
+});
