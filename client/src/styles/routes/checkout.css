@@ -18,7 +18,9 @@
   line-height: 1.3;
   overflow-wrap: anywhere;
 }
-.sugi-site .sf-checkout .sf-checkout-head h1 span { color: var(--primary-text); }
+/* `<em>` — харанхуй горимд index.css-ийн `html[data-storefront-theme="dark"] .sugi-site em` (харанхуй
+   дэвсгэрт тохирсон улаан) давамгайлах ёстой тул `:where()`-ээр жинг нь бууруулсан. */
+.sugi-site :where(.sf-checkout-head) h1 em { color: var(--primary-text); font-style: normal; }
 .sugi-site .sf-checkout .sf-checkout-head > p:last-child { margin: 10px 0 0; color: var(--ck-muted); font-size: var(--sf-step-sm); line-height: 1.7; }
 
 .sugi-site .sf-checkout .sf-checkout-grid {

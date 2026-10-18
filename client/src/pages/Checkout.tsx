@@ -415,7 +415,7 @@ export default function Checkout() {
     <main className="sf-checkout">
       <header className="sf-checkout-head">
         <p className="sf-checkout-kicker">02 / ASAYAKE ORDER DESK</p>
-        <h1>{checkoutLine1} <span>{checkoutLine2}</span></h1>
+        <h1>{checkoutLine1} <em>{checkoutLine2}</em></h1>
         <p>{textFor("checkout-text-description", "Захиалгын мэдээллээ баталгаажуулаад, хүргэлт эсвэл салбарынхаа сонголтыг хий. QPay зөвхөн merchant тохиргоо дууссаны дараа идэвхжинэ.")}</p>
       </header>
       <div className="sf-checkout-grid">
