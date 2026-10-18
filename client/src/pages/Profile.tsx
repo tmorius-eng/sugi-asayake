@@ -27,7 +27,10 @@ import CommerceHeader from "@/components/CommerceHeader";
 import PhoneVerificationStep from "@/components/PhoneVerificationStep";
 import ProfileQuizWizard from "@/components/ProfileQuizWizard";
 import SiteFooter from "@/components/SiteFooter";
-import { LineSkeleton, Skeleton } from "@/components/Skeleton";
+import { LineSkeleton, ProductCardSkeleton, Skeleton } from "@/components/Skeleton";
+import ProductCard from "@/components/product/ProductCard";
+import { Button } from "@/components/ui/button";
+import { useProductName } from "@/hooks/useProductName";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import { notifyAddedToCart } from "@/lib/addedToCartToast";
@@ -691,10 +694,9 @@ function PreferencesTab() {
 /* Wishlist                                                                */
 /* ---------------------------------------------------------------------- */
 
-const fallbackImage = "/product-placeholder.svg";
-
 function WishlistTab({ onCartOpen }: { onCartOpen: () => void }) {
   const utils = trpc.useUtils();
+  const displayName = useProductName();
   const wishlist = trpc.profile.wishlist.list.useQuery();
   const toggle = trpc.profile.wishlist.toggle.useMutation({ onSuccess: () => utils.profile.wishlist.list.invalidate() });
   const addItem = trpc.cart.addItem.useMutation({
@@ -707,40 +709,30 @@ function WishlistTab({ onCartOpen }: { onCartOpen: () => void }) {
       <div className="profile-section-head"><div><h2>Хүслийн жагсаалт</h2><p>Таны хадгалсан бүтээгдэхүүнүүд</p></div></div>
       {wishlist.isLoading ? (
         <div className="wishlist-grid" aria-busy="true">
-          {[0, 1, 2].map(index => (
-            <article className="wishlist-card" key={index}>
-              <div className="wishlist-card-image"><Skeleton style={{ position: "absolute", inset: 0, borderRadius: 0 }} /></div>
-              <div className="wishlist-card-body"><LineSkeleton width="50%" height="9px" /><LineSkeleton width="85%" height="14px" style={{ marginTop: "8px" }} /><LineSkeleton width="35%" height="16px" style={{ marginTop: "8px" }} /></div>
-            </article>
-          ))}
+          {[0, 1, 2].map(index => <ProductCardSkeleton key={index} />)}
         </div>
       ) : wishlist.data?.length ? (
         <div className="wishlist-grid">
+          {/* 2026-10-18: хуваалцсан ProductCard — өмнө нь латин `item.name`, шууд `<img>`
+              (useProductName / ResponsivePicture дүрмийн зөрчил) байсан. */}
           {wishlist.data.map(item => (
-            <article className="wishlist-card" key={item.id}>
-              <div className="wishlist-card-image">
-                {item.stockQuantity <= 0 && <span className="wishlist-oos-badge">НӨӨЦ ДУУССАН</span>}
-                <button type="button" className="wishlist-remove" aria-label="Хүслийн жагсаалтаас хасах" onClick={() => toggle.mutate({ productId: item.productId, saved: false })}>
-                  <Heart size={15} fill="currentColor" />
-                </button>
-                <Link href={`/product/${item.slug}`}><img src={item.imageUrl ?? fallbackImage} alt={item.name} /></Link>
-              </div>
-              <div className="wishlist-card-body">
-                <p>{brandName()}</p>
-                <Link href={`/product/${item.slug}`} style={{ color: "inherit" }}><h3>{item.name}</h3></Link>
-                <strong>{formatMnt(item.priceMnt)}</strong>
-                {item.stockQuantity > 0 ? (
-                  <button type="button" onClick={() => addItem.mutate({ productId: item.productId, quantity: 1 }, { onSuccess: () => notifyAddedToCart(`${item.name} сагсанд нэмэгдлээ.`) })} className="button button-primary" style={{ marginTop: "10px", width: "100%", minHeight: "38px", fontSize: "10px" }}>
-                    <ShoppingBag size={13} /> Сагслах
-                  </button>
-                ) : (
-                  <label className="wishlist-notify">
-                    <input type="checkbox" checked={item.notifyOnRestock} onChange={event => toggle.mutate({ productId: item.productId, saved: true, notifyOnRestock: event.target.checked })} />
-                    Ирэхээр мэдэгдэх
-                  </label>
-                )}
-              </div>
-            </article>
+            <ProductCard
+              key={item.id}
+              product={{ ...item, id: item.productId }}
+              variant="grid"
+              imageSizes="(max-width: 760px) 46vw, 220px"
+              wishlist={{ saved: true, onToggle: () => toggle.mutate({ productId: item.productId, saved: false }) }}
+              footer={item.kind === "gift_card" || item.stockQuantity > 0 ? (
+                <Button size="sm" className="sf-product-action" loading={addItem.isPending && addItem.variables?.productId === item.productId} onClick={() => addItem.mutate({ productId: item.productId, quantity: 1 }, { onSuccess: () => notifyAddedToCart(`${displayName(item).primary} сагсанд нэмэгдлээ.`) })}>
+                  <ShoppingBag size={14} aria-hidden="true" /> Сагслах
+                </Button>
+              ) : (
+                <label className="sf-product-notify">
+                  <input type="checkbox" checked={item.notifyOnRestock} onChange={event => toggle.mutate({ productId: item.productId, saved: true, notifyOnRestock: event.target.checked })} />
+                  Ирэхээр мэдэгдэх
+                </label>
+              )}
+            />
           ))}
         </div>
       ) : (

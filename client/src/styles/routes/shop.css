@@ -1,0 +1,107 @@
+/* /shop (2026-10-18) — pages/Shop.tsx-ээс импортлогдоно (lazy, үндсэн CSS-ийн ДАРАА ирнэ).
+ * Гэрээ: styles/storefront.css. Cosme Kitchen-ийн шүүлтүүрийн мөр (Baymard-ын судалгаанд
+ * үндэслэсэн, index.css ~3000) хэвээр; энд утсан дээрх нягтрал ба дугаартай хуудаслалт. */
+
+/* --- Хуудаслалт (uitripled/ShopPagination.tsx) --- */
+.sugi-site .sf-pager {
+  display: grid;
+  grid-template-columns: auto minmax(0, max-content) auto;
+  grid-template-areas: "prev pages next" "summary summary summary";
+  align-items: center;
+  justify-content: center;
+  gap: 14px 12px;
+  padding: 18px 0 48px;
+}
+.sugi-site .sf-pager .sf-pager-step {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  border: var(--sf-line);
+  border-radius: var(--sf-radius-pill);
+  background: var(--ck-surface);
+  color: var(--ck-ink);
+  font-size: var(--sf-step-sm);
+  font-weight: 700;
+  transition: border-color var(--sf-dur-fast) var(--sf-ease), background var(--sf-dur-fast) var(--sf-ease);
+}
+.sugi-site .sf-pager .sf-pager-step:first-child { grid-area: prev; }
+.sugi-site .sf-pager .sf-pager-step:nth-child(3) { grid-area: next; }
+.sugi-site .sf-pager .sf-pager-step:hover:not(:disabled) { border-color: var(--ck-ink); background: var(--ck-chip); }
+.sugi-site .sf-pager .sf-pager-step:disabled { cursor: not-allowed; opacity: .4; }
+.sugi-site .sf-pager .sf-pager-pages {
+  grid-area: pages;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sugi-site .sf-pager .sf-pager-page {
+  position: relative;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ck-ink);
+  font-size: var(--sf-step-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  transition: border-color var(--sf-dur-fast) var(--sf-ease);
+}
+.sugi-site .sf-pager .sf-pager-page:hover:not([aria-current]) { border-color: var(--ck-line); }
+.sugi-site .sf-pager .sf-pager-page .sf-pager-indicator {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--ck-ink);
+}
+.sugi-site .sf-pager .sf-pager-page .sf-pager-label { position: relative; color: var(--ck-ink); }
+.sugi-site .sf-pager .sf-pager-page[aria-current="page"] .sf-pager-label { color: var(--ck-page); }
+.sugi-site .sf-pager .sf-pager-gap { width: 20px; color: var(--ck-muted); text-align: center; }
+.sugi-site .sf-pager .sf-pager-summary {
+  grid-area: summary;
+  margin: 0;
+  color: var(--ck-muted);
+  font-size: var(--sf-step-sm);
+  font-weight: 600;
+  text-align: center;
+}
+.sugi-site .sf-pager .sf-pager-summary em { font-style: normal; }
+
+/* --- Хэрэглэсэн шүүлтүүрийн чип: товших талбай 40px (WCAG 2.5.8) --- */
+.sugi-site .shop-filter .shop-applied .shop-applied-chip { min-height: 40px; }
+
+@media (max-width: 760px) {
+  /* Утсанд дугаарууд дээд мөрөнд, өмнөх/дараах доор хоёр тэнцүү товч. */
+  .sugi-site .sf-pager {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas: "pages pages" "prev next" "summary summary";
+    padding: 12px 16px 36px;
+  }
+  .sugi-site .sf-pager .sf-pager-pages { justify-content: center; }
+  .sugi-site .sf-pager .sf-pager-step { justify-content: center; }
+  .sugi-site .sf-pager .sf-pager-page { width: 38px; height: 38px; }
+
+  /* Утасны эхний дэлгэц нь бараа хайх, шүүхэд зориулагдана: танилцуулгын блок нягт,
+     онцлох мөрүүд (хүргэлт, баталгаа) нэг мөрөнд хэвтээ гүйлгэнэ. */
+  .sugi-site .shop-main .shop-hero { grid-template-columns: minmax(0, 1fr); gap: 16px; margin: 0 16px; padding: 20px 18px; }
+  .sugi-site .shop-main .shop-hero-copy,
+  .sugi-site .shop-main .shop-search-panel { min-width: 0; }
+  .sugi-site .shop-main .shop-hero h1 { font-size: 24px; line-height: 1.35; }
+  .sugi-site .shop-main .shop-hero-copy > p:not(.shop-kicker) { margin-top: 10px; font-size: 14px; line-height: 1.65; }
+  .sugi-site .shop-main .shop-hero-badges { display: flex; gap: 8px; margin-top: 14px; overflow-x: auto; scrollbar-width: none; }
+  .sugi-site .shop-main .shop-hero-badges > div { flex: 0 0 auto; margin: 0; white-space: nowrap; }
+  .sugi-site .shop-main .shop-search-panel { padding: 0; border: 0; background: transparent; }
+  .sugi-site .shop-main .shop-search-panel .shop-search-stamp { display: none; }
+
+  /* Ангилал/арьсны төрлийн мөр — олон мөрөнд нугалахын оронд хэвтээ гүйлгэнэ. */
+  .sugi-site .shop-main .shop-filter { margin: 0 16px; }
+  .sugi-site .shop-main .shop-filter-pills { flex-wrap: nowrap; overflow-x: auto; margin-right: -16px; padding-right: 16px; scrollbar-width: none; }
+  .sugi-site .shop-main .shop-filter-pills button { flex: 0 0 auto; }
+}
