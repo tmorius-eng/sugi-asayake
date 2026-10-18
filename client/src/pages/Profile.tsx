@@ -29,6 +29,7 @@ import ProfileQuizWizard from "@/components/ProfileQuizWizard";
 import SiteFooter from "@/components/SiteFooter";
 import { LineSkeleton, ProductCardSkeleton, Skeleton } from "@/components/Skeleton";
 import ProductCard from "@/components/product/ProductCard";
+import ProgressBar from "@/components/uitripled/ProgressBar";
 import { Button } from "@/components/ui/button";
 import { useProductName } from "@/hooks/useProductName";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -40,6 +41,7 @@ import type { RouterOutputs } from "@/lib/trpc";
 import { formatMnt } from "@shared/format";
 import { brandName } from "@/lib/brand";
 import { useStoreSetting } from "@/hooks/useStoreSetting";
+import PasswordInput from "@/components/uitripled/PasswordInput";
 
 const messageFrom = (error: unknown) => error instanceof Error ? error.message : "Гүйцэтгэж чадсангүй. Дахин оролдоно уу.";
 
@@ -212,7 +214,7 @@ export default function Profile() {
       <div className="account-shell">
         <nav className="account-sidebar" aria-label="Профайлын цэс">
           {NAV_ITEMS.map(item => (
-            <button key={item.key} type="button" className={`account-nav-item${tab === item.key ? " active" : ""}`} onClick={() => goToTab(item.key)}>
+            <button key={item.key} type="button" className={`account-nav-item${tab === item.key ? " active" : ""}`} aria-current={tab === item.key ? "page" : undefined} onClick={() => goToTab(item.key)}>
               <item.icon size={16} aria-hidden="true" /> {item.label}
             </button>
           ))}
@@ -640,7 +642,7 @@ function PreferencesTab() {
               >
                 <label className="auth-field" htmlFor="phone-change-password">
                   Одоогийн нууц үг
-                  <div className="auth-field-shell"><input type="password" value={phonePassword} onChange={event => { setPhonePassword(event.target.value); phoneErrors.clearError("phone-change-password"); }} autoComplete="current-password" maxLength={200} {...phoneErrors.fieldProps("phone-change-password")} /></div>
+                  <div className="auth-field-shell"><PasswordInput value={phonePassword} onChange={event => { setPhonePassword(event.target.value); phoneErrors.clearError("phone-change-password"); }} autoComplete="current-password" maxLength={200} {...phoneErrors.fieldProps("phone-change-password")} /></div>
                   <FieldError field="phone-change-password" message={phoneErrors.errorFor("phone-change-password")} />
                 </label>
                 <div><button type="submit" className="button button-primary">Үргэлжлүүлэх</button></div>
@@ -1055,15 +1057,15 @@ function SecurityTab() {
         <form onSubmit={submitPasswordChange} className="profile-form-grid">
           <label className="auth-field" style={{ gridColumn: "1 / -1" }}>
             Одоогийн нууц үг
-            <div className="auth-field-shell"><input type="password" value={currentPassword} onChange={event => setCurrentPassword(event.target.value)} autoComplete="current-password" /></div>
+            <div className="auth-field-shell"><PasswordInput value={currentPassword} onChange={event => setCurrentPassword(event.target.value)} autoComplete="current-password" /></div>
           </label>
           <label className="auth-field">
             Шинэ нууц үг
-            <div className="auth-field-shell"><input type="password" value={newPassword} onChange={event => setNewPassword(event.target.value)} placeholder="8-с дээш тэмдэгт" autoComplete="new-password" /></div>
+            <div className="auth-field-shell"><PasswordInput value={newPassword} onChange={event => setNewPassword(event.target.value)} placeholder="8-с дээш тэмдэгт" autoComplete="new-password" /></div>
           </label>
           <label className="auth-field">
             Шинэ нууц үг давтах
-            <div className="auth-field-shell"><input type="password" value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} autoComplete="new-password" /></div>
+            <div className="auth-field-shell"><PasswordInput value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} autoComplete="new-password" /></div>
           </label>
           <div style={{ gridColumn: "1 / -1" }}>
             <button type="submit" disabled={changePassword.isPending} className="button button-primary">{changePassword.isPending && <LoaderCircle className="animate-spin" size={15} />} Нууц үг шинэчлэх</button>
@@ -1086,7 +1088,7 @@ function SecurityTab() {
           >
             <label className="auth-field" htmlFor="facebook-password">
               Баталгаажуулахын тулд нууц үгээ оруулна уу
-              <div className="auth-field-shell"><input type="password" value={facebookPassword} onChange={event => { setFacebookPassword(event.target.value); facebookErrors.clearError("facebook-password"); }} autoComplete="current-password" maxLength={200} {...facebookErrors.fieldProps("facebook-password")} /></div>
+              <div className="auth-field-shell"><PasswordInput value={facebookPassword} onChange={event => { setFacebookPassword(event.target.value); facebookErrors.clearError("facebook-password"); }} autoComplete="current-password" maxLength={200} {...facebookErrors.fieldProps("facebook-password")} /></div>
               <FieldError field="facebook-password" message={facebookErrors.errorFor("facebook-password")} />
             </label>
             <div>
@@ -1115,7 +1117,7 @@ function SecurityTab() {
             <form onSubmit={event => { event.preventDefault(); deleteAccount.mutate({ password: deletePassword }); }} style={{ marginTop: "14px", display: "grid", gap: "10px", maxWidth: "320px" }}>
               <label className="auth-field">
                 Баталгаажуулахын тулд нууц үгээ оруулна уу
-                <div className="auth-field-shell"><input type="password" value={deletePassword} onChange={event => setDeletePassword(event.target.value)} autoComplete="current-password" /></div>
+                <div className="auth-field-shell"><PasswordInput value={deletePassword} onChange={event => setDeletePassword(event.target.value)} autoComplete="current-password" /></div>
               </label>
               <div style={{ display: "flex", gap: "10px" }}>
                 <button type="submit" disabled={deleteAccount.isPending} className="danger-button">{deleteAccount.isPending && <LoaderCircle className="animate-spin" size={14} />} Бүрмөсөн устгах</button>
@@ -1211,7 +1213,7 @@ function LoyaltyTab() {
         <div className="loyalty-progress">
           <div className="loyalty-progress-row"><span>Нийт худалдан авалт</span><strong>{formatMnt(data.totalSpendMnt)}</strong></div>
           {data.nextTier ? <>
-            <div className="loyalty-progress-bar"><div className="loyalty-progress-fill" style={{ width: `${Math.min(100, Math.round((data.totalSpendMnt / data.nextTier.minSpendMnt) * 100))}%` }} /></div>
+            <ProgressBar className="loyalty-progress-bar" ratio={data.totalSpendMnt / data.nextTier.minSpendMnt} label={`"${data.nextTier.name}" шат хүртэлх явц`} />
             <p className="loyalty-progress-note">{`"${data.nextTier.name}" шатанд (-${data.nextTier.discountPercent}%) хүрэхэд ${formatMnt(data.amountToNextTierMnt ?? 0)} дутуу байна.`}</p>
           </> : <p className="loyalty-progress-note">Та хамгийн дээд шатанд хүрсэн байна — баярлалаа!</p>}
           {data.manualAdjustmentMnt > 0 && <p className="loyalty-progress-note">{`Үүнд манай салбарт биечлэн хийсэн ${formatMnt(data.manualAdjustmentMnt)} худалдан авалтын түүх багтсан.`}</p>}

@@ -263,3 +263,25 @@
 .sf-portal .sf-notice a { color: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
 .sugi-site .sf-notice .button,
 .sf-portal .sf-notice .button { margin-top: 10px; }
+
+/* --- Нууц үг харуулах товч (uitripled/PasswordInput.tsx), `.auth-field-shell` дотор --- */
+.sugi-site .sf-password-toggle,
+.sf-portal .sf-password-toggle {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  place-items: center;
+  margin-right: -6px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ck-muted);
+}
+.sugi-site .sf-password-toggle:hover,
+.sf-portal .sf-password-toggle:hover,
+.sugi-site .sf-password-toggle[aria-pressed="true"],
+.sf-portal .sf-password-toggle[aria-pressed="true"] { color: var(--ck-ink); }
+.sugi-site .auth-field-shell .sf-password-toggle svg,
+.sf-portal .auth-field-shell .sf-password-toggle svg { color: inherit; }

@@ -19,7 +19,10 @@
 | `native-tabs-shadcnui` | `fba8fe9da59b` | код, өөрчилсөн | `client/src/components/uitripled/ProductInfoTabs.tsx` |
 | `heart-favorite-shadcnui` | `44c5289aea83` | CSS port | `client/src/components/product/WishlistToggle.tsx`, `client/src/styles/primitives.css` (`.sf-wish`) |
 | `animated-progress-shadcnui` | `4e8bee1b9f24` | CSS port | `client/src/components/uitripled/ProgressBar.tsx`, `client/src/styles/cart.css` (`.sf-progress`) |
+| `password-input-shadcnui` | `a460609d8d03` | код, өөрчилсөн | `client/src/components/uitripled/PasswordInput.tsx` |
+| `faq-section-shadcnui` | `cc2cb6831d6a` | CSS port (native `<details>` хэвээр) | `client/src/styles/routes/content.css` |
 | `ecommerce-highlight-card-shadcnui` | `a1f2cf03f9c3` | зөвхөн загварын лавлагаа | PDP-ийн худалдан авах хэсэг (`client/src/styles/routes/product.css`) |
+| `bottom-modal` | `df094210b167` | зөвхөн загварын лавлагаа | QuickView-ийн утасны доод хуудас (`client/src/styles/routes/shop.css`) |
 | `animated-radio-shadcnui` | `a8559f97ca52` | зөвхөн загварын лавлагаа | Checkout-ийн сонголтын карт (`client/src/styles/routes/checkout.css`) |
 
 ```

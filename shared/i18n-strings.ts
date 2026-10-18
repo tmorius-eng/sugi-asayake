@@ -233,6 +233,8 @@ export const UI_STRINGS: Record<string, { en: string; ja: string }> = {
   "Захиалгын хураангуй": { en: "Order summary", ja: "注文内容" },
   "Хүргэлтийн арга": { en: "Delivery method", ja: "受け取り方法" },
   "Төлбөрийн арга": { en: "Payment method", ja: "お支払い方法" },
+  "\"{tier}\" шат хүртэлх явц": { en: "Progress to \"{tier}\"", ja: "「{tier}」までの進み具合" },
+  "Нууц үгийг харуулах": { en: "Show password", ja: "パスワードを表示" },
   "QPay нэхэмжлэл #{order}": { en: "QPay invoice #{order}", ja: "QPay請求書 #{order}" },
   "StorePay хүсэлт #{order}": { en: "StorePay request #{order}", ja: "StorePay申請 #{order}" },
   "Захиалгын мэдээллээ шалгаад үргэлжлүүлнэ үү.": { en: "Check your order details and continue.", ja: "ご注文内容をご確認のうえお進みください。" },

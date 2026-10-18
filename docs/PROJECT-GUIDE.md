@@ -310,6 +310,9 @@ admin-ий бүтээгдэхүүн хадгалах хоёр 500 өгснөөр
 - **`INTEGRATIONS_ENCRYPTION_KEY` бүх машин дээр ИЖИЛ** — царайны загвар үүгээр шифрлэгдэнэ; зөрвөл нөгөө машин "дахин бүртгүүлнэ үү" гэнэ.
 
 **Frontend**
+- **Storefront-ийн шинэ CSS `client/src/styles/`-д (2026-10-18), index.css-д БИШ** — `storefront.css` (main.tsx-ээс index.css-ийн ДАРАА) ба `routes/*.css` (lazy хуудас өөрөө импортлоно). Гэрээ (`server/storefront-ui-guard.test.ts` тулгана): сонгогч `.sugi-site …`/`.sf-portal …`-оор эхэлнэ, класс `sf-` угтвартай ба нэрэнд `-card`/`-panel`/`-dialog`/`-section`/`rounded-`/`shadow-` ОРОХГҮЙ (index.css-ийн `[class*=]` шүүрдэлт), өнгө зөвхөн токен, шинэ хувьсагч `--sf-*`, `font-family` зөвхөн `var(--font-…)`. Eager модуль (Home, толгой, CartDrawer …) CSS импортлохгүй. Бүрэлдэхүүнийг шинэчлэхдээ хуучин дүрмийг нь index.css-ээс УСТГА (5 дахь давхарга бүү нэм).
+- **framer-motion зөвхөн `components/motion/MotionProvider.tsx`-ийн дотор `m.*`** (LazyMotion `strict`) — `motion.*`/`domMax`-ийг ESLint хориглоно; eager графт орвол guard тест унана. `layout`/`layoutId`/`drag` байхгүй (domAnimation). Чухал агуулгад `initial` = харагдах төлөв (`initial={false}`).
+- **Барааны карт НЭГ: `components/product/ProductCard.tsx`** (grid/shelf/compact) — шинэ газар бараа харуулахдаа үүнийг ашигла; нөөц/брэнд/хямдрал `shared/product-card.ts`. UI TripleD-ээс зөөсөн код `components/uitripled/`-д, толгойд эх URL + sha256, `THIRD_PARTY_NOTICES.md`-д мөр.
 - **Шинэ storefront хуудас нэмбэл `server/_core/routeStatus.ts`-ийн `STATIC_ROUTES`-д МӨН нэм** — эс бөгөөс сервер тэр хуудсыг HTTP 404-өөр өгнө (`route-status.test.ts` App.tsx-тэй зөрөхөд унана).
 - **Толгойд `onCartOpen` дамжуулахгүй бол толгой сагсаа өөрөө удирдана** — сагсны тоо/drawer-ийг хуудас бүрт гараар бичих хэрэггүй.
 - **Брэнд лого (Facebook/Instagram/YouTube) `@/components/icons/BrandIcons`-оос**, `lucide-react`-аас биш (1.x-д байхгүй).
